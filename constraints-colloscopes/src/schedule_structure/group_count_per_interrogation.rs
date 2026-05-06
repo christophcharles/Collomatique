@@ -1,6 +1,6 @@
-use crate::native_extras::{MyBundle, V, extra_var, groups_for_interrogation, weeks_for_slot};
+use crate::extras::{MyBundle, V, base_var, extra_var, groups_for_interrogation, weeks_for_slot};
 use crate::types::{ExtraVarName, ProgressiveConstraint, QualityConstraint};
-use crate::vars::VarEnv;
+use crate::vars::{Var, VarEnv};
 use collomatique_ilp::int_linexpr::IntLinExpr;
 
 pub(super) fn build(env: &VarEnv) -> MyBundle {
@@ -27,11 +27,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                 let sum: IntLinExpr<V> = groups
                     .iter()
                     .map(|&group| {
-                        IntLinExpr::var(extra_var(ExtraVarName::GroupInInterrogation {
-                            slot,
-                            week,
-                            group,
-                        }))
+                        IntLinExpr::var(base_var(Var::GroupInInterrogation { slot, week, group }))
                     })
                     .sum();
 

@@ -1,4 +1,4 @@
-use crate::native_extras::{MyBundle, V, extra_var, groups_for_group_list};
+use crate::extras::{MyBundle, V, extra_var, groups_for_group_list};
 use crate::types::{ExtraVarName, PreferenceConstraint};
 use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
@@ -10,7 +10,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         let GroupListFilling::Automatic { .. } = &gl.filling else {
             continue;
         };
-        let groups = groups_for_group_list(gl);
+        let groups = groups_for_group_list(env, group_list);
         if groups.len() < 2 {
             continue;
         }
@@ -21,7 +21,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
             }));
             let next = IntLinExpr::<V>::var(extra_var(ExtraVarName::GroupHasStudents {
                 group_list,
-                group: group.next(),
+                group: group.next().expect("not the last group"),
             }));
             bundle = bundle.with_constraint(
                 current.geq(&next),

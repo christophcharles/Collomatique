@@ -1,4 +1,3 @@
-use collomatique_constraints_colloscopes::ConstraintSource;
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
 use relm4::prelude::FactoryVecDeque;
 use relm4::{
@@ -57,14 +56,14 @@ pub enum ColloscopeOutput {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IlpProblem {
     env: collomatique_state_colloscopes::colloscope_params::Parameters,
-    problem: collomatique_constraints_colloscopes::Problem,
+    problem: collomatique_constraints_colloscopes::ColloscopeModel,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IlpRepr {
     ilp_problem: IlpProblem,
     colloscope: collomatique_state_colloscopes::colloscopes::Colloscope,
-    warnings: Vec<String>,
+    warnings: Vec<(collomatique_constraints_colloscopes::SeverityLevel, String)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -155,6 +154,34 @@ impl Colloscope {
         match self.get_ilp_repr() {
             Some(Ok(ilp_repr)) => format!("<small><i>{}</i></small>", ilp_repr.warnings.len()),
             _ => String::new(),
+        }
+    }
+
+    fn worst_severity_level(&self) -> Option<collomatique_constraints_colloscopes::SeverityLevel> {
+        match self.get_ilp_repr() {
+            Some(Ok(ilp_repr)) => ilp_repr.warnings.first().map(|(s, _)| *s),
+            _ => None,
+        }
+    }
+
+    fn warning_icon_name(&self) -> &'static str {
+        use collomatique_constraints_colloscopes::SeverityLevel;
+        match self.worst_severity_level() {
+            Some(SeverityLevel::Infeasibility) => "computer-fail-symbolic",
+            Some(SeverityLevel::Structural | SeverityLevel::Quality) => "dialog-error-symbolic",
+            Some(SeverityLevel::Progressive) => "dialog-warning-symbolic",
+            Some(SeverityLevel::Preference) => "dialog-information-symbolic",
+            None => "dialog-warning-symbolic",
+        }
+    }
+
+    fn warning_css_class(&self) -> &'static str {
+        use collomatique_constraints_colloscopes::SeverityLevel;
+        match self.worst_severity_level() {
+            Some(
+                SeverityLevel::Infeasibility | SeverityLevel::Structural | SeverityLevel::Quality,
+            ) => "error",
+            _ => "warning",
         }
     }
 }
@@ -273,11 +300,17 @@ impl Component for Colloscope {
                             gtk::Box {
                                 set_orientation: gtk::Orientation::Horizontal,
                                 set_spacing: 5,
-                                add_css_class: "warning",
+                                #[watch]
+                                remove_css_class: "error",
+                                #[watch]
+                                remove_css_class: "warning",
+                                #[watch]
+                                add_css_class: model.warning_css_class(),
                                 #[watch]
                                 set_visible: model.has_warnings(),
                                 gtk::Image {
-                                    set_icon_name: Some("dialog-warning-symbolic"),
+                                    #[watch]
+                                    set_icon_name: Some(model.warning_icon_name()),
                                 },
                                 gtk::Label {
                                     #[watch]
@@ -620,7 +653,7 @@ impl Colloscope {
     fn recompute_warnings(&mut self, sender: ComponentSender<Self>, ilp_problem: IlpProblem) {
         self.update_ilp_repr(ComputationState::RecomputingWarnings, &sender);
 
-        let inner_problem = ilp_problem.problem.get_inner_problem().clone();
+        let inner_problem = ilp_problem.problem.problem().clone();
         sender
             .output(ColloscopeOutput::UpdateIlpProblem(Some(inner_problem)))
             .unwrap();
@@ -635,15 +668,14 @@ impl Colloscope {
             let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::with_disable_logging(true);
             let sol = ilp_problem
                 .problem
-                .solution_from_data(&config_data, &solver)
+                .checker_solution_from_data(&config_data, &solver)
                 .expect("There should be a complete ilp config for the colloscope");
-            let warnings = sol
-                .blame()
-                .filter_map(|(_constraint, desc)| match desc {
-                    ConstraintSource::User(desc) => Some(desc.user_readable(&ilp_problem.env)),
-                    ConstraintSource::DefiningExtra { .. } => None,
-                })
+            let mut warnings: Vec<_> = sol
+                .minimal_blame()
+                .iter()
+                .map(|desc| (desc.severity_level(), desc.user_readable(&ilp_problem.env)))
                 .collect();
+            warnings.sort_by_key(|(s, _)| *s);
             ColloscopeCommandOutput::IlpReprComputed(IlpRepr {
                 ilp_problem,
                 colloscope,
@@ -687,7 +719,7 @@ impl Colloscope {
                     .await
                     .map_err(|e| format!("{}", e))?;
 
-                let problem = collomatique_constraints_colloscopes::build_problem(&pool).await;
+                let problem = collomatique_constraints_colloscopes::build_model(&pool).await;
                 Ok(IlpProblem { env, problem })
             }
             .await;

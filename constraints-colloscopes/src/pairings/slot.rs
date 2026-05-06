@@ -1,10 +1,11 @@
+use crate::extras::{
+    MyBundle, V, base_var, extra_var, groups_for_interrogation, subject_interrogation_params,
+    weeks_for_slot,
+};
 use crate::helpers::merge_objectified;
 use crate::ids::GlobalWeek;
-use crate::native_extras::{
-    MyBundle, V, extra_var, groups_for_interrogation, subject_interrogation_params, weeks_for_slot,
-};
 use crate::types::{ExtraVarName, ProgressiveConstraint, StructuralConstraint};
-use crate::vars::VarEnv;
+use crate::vars::{Var, VarEnv};
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::ids::SlotId;
 use std::collections::BTreeSet;
@@ -18,13 +19,7 @@ fn slot_group_count_expr(
     let groups = groups_for_interrogation(env, subject_id, week);
     groups
         .into_iter()
-        .map(|group| {
-            IntLinExpr::var(extra_var(ExtraVarName::GroupInInterrogation {
-                slot,
-                week,
-                group,
-            }))
-        })
+        .map(|group| IntLinExpr::var(base_var(Var::GroupInInterrogation { slot, week, group })))
         .sum()
 }
 

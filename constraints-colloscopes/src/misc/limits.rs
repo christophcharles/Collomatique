@@ -1,5 +1,5 @@
+use crate::extras::{MyBundle, V, extra_var};
 use crate::ids::GlobalWeek;
-use crate::native_extras::{MyBundle, V, extra_var};
 use crate::types::{ExtraVarName, PreferenceConstraint};
 use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;

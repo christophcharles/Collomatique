@@ -2,7 +2,7 @@ mod incompats;
 mod interrogation_cost;
 mod limits;
 
-use crate::native_extras::MyBundle;
+use crate::extras::MyBundle;
 use crate::vars::VarEnv;
 
 pub fn build(env: &VarEnv) -> MyBundle {

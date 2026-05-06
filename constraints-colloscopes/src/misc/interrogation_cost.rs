@@ -1,4 +1,4 @@
-use crate::native_extras::{MyBundle, extra_var, weeks_for_slot};
+use crate::extras::{MyBundle, extra_var, weeks_for_slot};
 use crate::types::ExtraVarName;
 use crate::vars::VarEnv;
 use collomatique_ilp::linexpr::LinExpr;

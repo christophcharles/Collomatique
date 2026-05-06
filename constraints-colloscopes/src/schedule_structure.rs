@@ -1,7 +1,7 @@
 mod group_count_per_interrogation;
 mod one_interrogation_at_once;
 
-use crate::native_extras::MyBundle;
+use crate::extras::MyBundle;
 use crate::vars::VarEnv;
 
 pub fn build(env: &VarEnv) -> MyBundle {

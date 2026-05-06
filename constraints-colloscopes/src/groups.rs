@@ -4,7 +4,7 @@ mod students_have_groups;
 mod students_per_group;
 mod students_per_group_for_subject;
 
-use crate::native_extras::MyBundle;
+use crate::extras::MyBundle;
 use crate::vars::VarEnv;
 
 pub fn build(env: &VarEnv) -> MyBundle {

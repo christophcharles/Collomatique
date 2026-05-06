@@ -5,7 +5,7 @@ mod rotation;
 mod slot_rotation;
 mod year_rotation;
 
-use crate::native_extras::MyBundle;
+use crate::extras::MyBundle;
 use crate::vars::VarEnv;
 
 pub fn build(env: &VarEnv) -> MyBundle {
