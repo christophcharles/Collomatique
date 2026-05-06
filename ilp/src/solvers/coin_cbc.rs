@@ -9,7 +9,7 @@
 mod tests;
 
 use super::{ProblemRepr, Solver, SolverModel, TimeLimitSolution, TimeLimitSolverModel};
-use crate::{ConfigData, FeasableConfig, ObjectiveSense, Problem, UsableData, linexpr::EqSymbol};
+use crate::{ConfigData, FeasibleConfig, ObjectiveSense, Problem, UsableData, linexpr::EqSymbol};
 
 /// Coin-cbc solver
 ///
@@ -112,7 +112,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Solver<V, C, P> for CbcSol
 impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> SolverModel<'a, V, C, P>
     for CbcBuiltModel<'a, V, C, P>
 {
-    fn solve(self) -> Option<FeasableConfig<'a, V, C, P>> {
+    fn solve(self) -> Option<FeasibleConfig<'a, V, C, P>> {
         self.solve_internal(None).config
     }
 }
@@ -211,7 +211,7 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> CbcBuiltModel<'a, V, C
             }
         };
 
-        if !config.is_feasable()
+        if !config.is_feasible()
             && raw_model.status() == coin_cbc::raw::Status::Finished
             && raw_model.secondary_status() == coin_cbc::raw::SecondaryStatus::HasSolution
         {
@@ -225,10 +225,10 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> CbcBuiltModel<'a, V, C
             );
         }
 
-        let feasable_config = config.into_feasable();
+        let feasible_config = config.into_feasible();
 
         TimeLimitSolution {
-            config: feasable_config,
+            config: feasible_config,
             time_limit_reached,
         }
     }

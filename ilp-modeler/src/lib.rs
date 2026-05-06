@@ -17,7 +17,7 @@ use std::sync::Mutex;
 
 use collomatique_ilp::solvers::{Solver, SolverModel};
 use collomatique_ilp::{
-    Config, ConfigData, Constraint, DefaultRepr, FeasableConfig, LinExpr, Objective,
+    Config, ConfigData, Constraint, DefaultRepr, FeasibleConfig, LinExpr, Objective,
     ObjectiveSense, Problem, ProblemBuilder, UsableData, Variable,
 };
 
@@ -441,25 +441,25 @@ where
     }
 
     /// Solve the full optimization problem.
-    pub fn solve<S>(&self, solver: &S) -> Option<FeasableSolution<'_, B, E, C>>
+    pub fn solve<S>(&self, solver: &S) -> Option<FeasibleSolution<'_, B, E, C>>
     where
         S: Solver<InternalVar<B, E>, ConstraintSource<E, C>, DefaultRepr<InternalVar<B, E>>>,
     {
         solver
             .build_model(&self.problem)
             .solve()
-            .map(|feasable_config| FeasableSolution { feasable_config })
+            .map(|feasible_config| FeasibleSolution { feasible_config })
     }
 
     /// Solve the checker problem (feasibility only, no objective optimization).
-    pub fn solve_checker<S>(&self, solver: &S) -> Option<FeasableSolution<'_, B, E, C>>
+    pub fn solve_checker<S>(&self, solver: &S) -> Option<FeasibleSolution<'_, B, E, C>>
     where
         S: Solver<InternalVar<B, E>, ConstraintSource<E, C>, DefaultRepr<InternalVar<B, E>>>,
     {
         solver
             .build_model(&self.checker_problem)
             .solve()
-            .map(|feasable_config| FeasableSolution { feasable_config })
+            .map(|feasible_config| FeasibleSolution { feasible_config })
     }
 
     /// Build a [`Solution`] by reconstructing extra variable
@@ -558,7 +558,7 @@ where
 }
 
 // ---------------------------------------------------------------------------
-// Solution / FeasableSolution
+// Solution / FeasibleSolution
 // ---------------------------------------------------------------------------
 
 /// A solution (possibly infeasible) evaluated against a [`Model`].
@@ -583,13 +583,13 @@ impl<'a, B: UsableData, E: UsableData, C: UsableData> Solution<'a, B, E, C> {
         ConfigData::from(self.config.get_values())
     }
 
-    pub fn is_feasable(&self) -> bool {
-        self.config.is_feasable()
+    pub fn is_feasible(&self) -> bool {
+        self.config.is_feasible()
     }
 
-    pub fn into_feasable(self) -> Option<FeasableSolution<'a, B, E, C>> {
-        Some(FeasableSolution {
-            feasable_config: self.config.into_feasable()?,
+    pub fn into_feasible(self) -> Option<FeasibleSolution<'a, B, E, C>> {
+        Some(FeasibleSolution {
+            feasible_config: self.config.into_feasible()?,
         })
     }
 
@@ -623,8 +623,8 @@ impl<'a, B: UsableData, E: UsableData, C: UsableData> Solution<'a, B, E, C> {
 
 /// A feasible solution evaluated against a [`Model`].
 #[derive(Debug, Clone)]
-pub struct FeasableSolution<'a, B: UsableData, E: UsableData, C: UsableData> {
-    feasable_config: FeasableConfig<
+pub struct FeasibleSolution<'a, B: UsableData, E: UsableData, C: UsableData> {
+    feasible_config: FeasibleConfig<
         'a,
         InternalVar<B, E>,
         ConstraintSource<E, C>,
@@ -632,16 +632,16 @@ pub struct FeasableSolution<'a, B: UsableData, E: UsableData, C: UsableData> {
     >,
 }
 
-impl<'a, B: UsableData, E: UsableData, C: UsableData> FeasableSolution<'a, B, E, C> {
+impl<'a, B: UsableData, E: UsableData, C: UsableData> FeasibleSolution<'a, B, E, C> {
     pub fn into_solution(self) -> Solution<'a, B, E, C> {
         Solution {
-            config: self.feasable_config.into_inner(),
+            config: self.feasible_config.into_inner(),
         }
     }
 
     /// Extract base variable values only.
     pub fn get_data(&self) -> ConfigData<B> {
-        ConfigData::from(self.feasable_config.get_values().into_iter().filter_map(
+        ConfigData::from(self.feasible_config.get_values().into_iter().filter_map(
             |(var, value)| match var {
                 InternalVar::Base(v) => Some((v, value)),
                 _ => None,
@@ -651,7 +651,7 @@ impl<'a, B: UsableData, E: UsableData, C: UsableData> FeasableSolution<'a, B, E,
 
     /// Get all variable values (base + extra + helper).
     pub fn get_complete_data(&self) -> ConfigData<InternalVar<B, E>> {
-        ConfigData::from(self.feasable_config.get_values())
+        ConfigData::from(self.feasible_config.get_values())
     }
 }
 

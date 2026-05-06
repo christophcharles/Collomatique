@@ -9,7 +9,7 @@
 mod tests;
 
 use super::{ProblemRepr, Solver, SolverModel};
-use crate::{ConfigData, FeasableConfig, ObjectiveSense, Problem, UsableData, linexpr::EqSymbol};
+use crate::{ConfigData, FeasibleConfig, ObjectiveSense, Problem, UsableData, linexpr::EqSymbol};
 
 /// [good_lp] solver
 ///
@@ -90,7 +90,7 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Solver<V, C, P> for GoodSo
 impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> SolverModel<'a, V, C, P>
     for GoodBuiltModel<'a, V, C, P>
 {
-    fn solve(self) -> Option<FeasableConfig<'a, V, C, P>> {
+    fn solve(self) -> Option<FeasibleConfig<'a, V, C, P>> {
         use good_lp::Solution as _;
         use good_lp::SolverModel as _;
 
@@ -122,7 +122,7 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> SolverModel<'a, V, C, 
 
         let config = self.problem.build_config(config_data).ok()?;
 
-        config.into_feasable()
+        config.into_feasible()
     }
 }
 

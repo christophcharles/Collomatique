@@ -12,7 +12,7 @@ pub mod coin_cbc;
 #[cfg(feature = "good_lp")]
 pub mod good_lp;
 
-use super::{FeasableConfig, Problem};
+use super::{FeasibleConfig, Problem};
 
 use super::UsableData;
 use super::mat_repr::ProblemRepr;
@@ -46,7 +46,7 @@ pub trait SolverModel<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>>: Send
     /// Solve the model without any time limit.
     ///
     /// Returns `None` if the problem is infeasible.
-    fn solve(self) -> Option<FeasableConfig<'a, V, C, P>>;
+    fn solve(self) -> Option<FeasibleConfig<'a, V, C, P>>;
 }
 
 /// Result of [TimeLimitSolverModel::solve_with_time_limit].
@@ -61,7 +61,7 @@ pub trait SolverModel<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>>: Send
 /// the time limit was not reached and therefore the solution is indeed optimal.
 pub struct TimeLimitSolution<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> {
     /// The actual solution found by the solver
-    pub config: Option<FeasableConfig<'a, V, C, P>>,
+    pub config: Option<FeasibleConfig<'a, V, C, P>>,
 
     /// Whether the time limit was reached.
     ///

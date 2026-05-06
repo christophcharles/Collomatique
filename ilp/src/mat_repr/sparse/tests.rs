@@ -69,7 +69,7 @@ fn sprs_problem_correctly_builds_matrices() {
 }
 
 #[test]
-fn sprs_repr_checks_is_feasable_on_simple_example() {
+fn sprs_repr_checks_is_feasible_on_simple_example() {
     use crate::LinExpr;
 
     let variables = HashMap::from([
@@ -204,26 +204,26 @@ fn sprs_repr_checks_is_feasable_on_simple_example() {
     let config_e = pb.config_from(&config_e_vars);
     let config_f = pb.config_from(&config_f_vars);
 
-    assert_eq!(config_0.is_feasable(), false);
-    assert_eq!(config_1.is_feasable(), true);
-    assert_eq!(config_2.is_feasable(), false);
-    assert_eq!(config_3.is_feasable(), false);
-    assert_eq!(config_4.is_feasable(), false);
-    assert_eq!(config_5.is_feasable(), true);
-    assert_eq!(config_6.is_feasable(), false);
-    assert_eq!(config_7.is_feasable(), false);
-    assert_eq!(config_8.is_feasable(), true);
-    assert_eq!(config_9.is_feasable(), false);
-    assert_eq!(config_a.is_feasable(), true);
-    assert_eq!(config_b.is_feasable(), false);
-    assert_eq!(config_c.is_feasable(), false);
-    assert_eq!(config_d.is_feasable(), false);
-    assert_eq!(config_e.is_feasable(), false);
-    assert_eq!(config_f.is_feasable(), false);
+    assert_eq!(config_0.is_feasible(), false);
+    assert_eq!(config_1.is_feasible(), true);
+    assert_eq!(config_2.is_feasible(), false);
+    assert_eq!(config_3.is_feasible(), false);
+    assert_eq!(config_4.is_feasible(), false);
+    assert_eq!(config_5.is_feasible(), true);
+    assert_eq!(config_6.is_feasible(), false);
+    assert_eq!(config_7.is_feasible(), false);
+    assert_eq!(config_8.is_feasible(), true);
+    assert_eq!(config_9.is_feasible(), false);
+    assert_eq!(config_a.is_feasible(), true);
+    assert_eq!(config_b.is_feasible(), false);
+    assert_eq!(config_c.is_feasible(), false);
+    assert_eq!(config_d.is_feasible(), false);
+    assert_eq!(config_e.is_feasible(), false);
+    assert_eq!(config_f.is_feasible(), false);
 }
 
 #[test]
-fn sprs_repr_checks_is_feasable_with_no_constraints() {
+fn sprs_repr_checks_is_feasible_with_no_constraints() {
     let variables = HashMap::from([
         (String::from("a"), Variable::binary()),
         (String::from("b"), Variable::binary()),
@@ -255,10 +255,10 @@ fn sprs_repr_checks_is_feasable_with_no_constraints() {
     let config_2 = pb.config_from(&config_2_vars);
     let config_3 = pb.config_from(&config_3_vars);
 
-    assert_eq!(config_0.is_feasable(), true);
-    assert_eq!(config_1.is_feasable(), true);
-    assert_eq!(config_2.is_feasable(), true);
-    assert_eq!(config_3.is_feasable(), true);
+    assert_eq!(config_0.is_feasible(), true);
+    assert_eq!(config_1.is_feasible(), true);
+    assert_eq!(config_2.is_feasible(), true);
+    assert_eq!(config_3.is_feasible(), true);
 }
 
 #[test]
