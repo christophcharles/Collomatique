@@ -9,6 +9,8 @@
 
 #[cfg(feature = "coin_cbc")]
 pub mod coin_cbc;
+#[cfg(feature = "collo_cbc")]
+pub mod collo_cbc;
 #[cfg(feature = "good_lp")]
 pub mod good_lp;
 

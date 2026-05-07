@@ -416,6 +416,7 @@ name = "collomatique-ilp"
 version = "0.1.0"
 dependencies = [
  "coin_cbc",
+ "collo-cbc",
  "gag",
  "good_lp",
  "ndarray 0.15.6",

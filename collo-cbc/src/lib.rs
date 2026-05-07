@@ -92,6 +92,7 @@ pub struct Model {
 }
 
 unsafe impl Send for Model {}
+unsafe impl Sync for Model {}
 
 impl Drop for Model {
     fn drop(&mut self) {
