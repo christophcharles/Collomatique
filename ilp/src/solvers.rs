@@ -158,6 +158,7 @@ pub trait ProgressBounds {
 
 pub trait ProgressStats {
     fn nodes(&self) -> u64;
+    fn solutions(&self) -> u64;
 }
 
 pub struct Incumbent<V: UsableData> {

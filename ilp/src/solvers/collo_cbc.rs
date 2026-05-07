@@ -24,6 +24,7 @@ pub struct Progress {
     best_objective: f64,
     best_bound: f64,
     nodes: u64,
+    solutions: u64,
 }
 
 impl ProgressBounds for Progress {
@@ -38,6 +39,9 @@ impl ProgressBounds for Progress {
 impl ProgressStats for Progress {
     fn nodes(&self) -> u64 {
         self.nodes
+    }
+    fn solutions(&self) -> u64 {
+        self.solutions
     }
 }
 
@@ -281,12 +285,14 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> CallbackSolverModel<'a
             best_objective: f64::INFINITY,
             best_bound: -f64::INFINITY,
             nodes: 0,
+            solutions: 0,
         };
 
         let result = self.model.solve_with_callback(|raw_progress| {
             progress.best_objective = raw_progress.best_obj;
             progress.best_bound = raw_progress.best_bound;
             progress.nodes = raw_progress.node_count as u64;
+            progress.solutions = raw_progress.solutions_found as u64;
             callback(&progress)
         });
 
