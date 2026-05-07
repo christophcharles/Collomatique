@@ -1,4 +1,7 @@
 fn main() {
+    println!("cargo:rerun-if-changed=cpp/collo_cbc.cpp");
+    println!("cargo:rerun-if-changed=cpp/collo_cbc.h");
+
     let cbc = pkg_config::Config::new()
         .atleast_version("2.10")
         .probe("cbc")

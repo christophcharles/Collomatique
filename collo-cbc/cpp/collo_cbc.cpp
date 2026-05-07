@@ -10,12 +10,14 @@
 #include <OsiClpSolverInterface.hpp>
 #include <CbcModel.hpp>
 #include <CbcEventHandler.hpp>
+#include <CbcSolver.hpp>
 #include <CoinPackedMatrix.hpp>
 
 #include <cmath>
 #include <string>
 #include <utility>
 #include <vector>
+#include <iostream>
 
 class ColloEventHandler : public CbcEventHandler {
 public:
@@ -83,7 +85,7 @@ struct ColloCbcModel {
     int32_t num_cols;
     int32_t num_rows;
 
-    std::vector<std::pair<std::string, std::string>> params;
+    std::vector<std::string> cmdargs;
 
     std::vector<double> mip_start;
     bool has_mip_start;
@@ -146,7 +148,15 @@ void collo_cbc_load_problem(
 }
 
 void collo_cbc_set_parameter(ColloCbcModel* m, const char* key, const char* value) {
-    m->params.emplace_back(std::string(key), std::string(value));
+    std::string argname = std::string("-") + key;
+    for (size_t i = 0; i + 1 < m->cmdargs.size(); i++) {
+        if (m->cmdargs[i] == argname) {
+            m->cmdargs[i + 1] = std::string(value);
+            return;
+        }
+    }
+    m->cmdargs.push_back(argname);
+    m->cmdargs.push_back(std::string(value));
 }
 
 void collo_cbc_set_mip_start(ColloCbcModel* m, const double* values, int32_t num_cols) {
@@ -161,19 +171,7 @@ ColloCbcStatus collo_cbc_solve(ColloCbcModel* m, ColloCbcCallback cb, void* user
     m->node_count = 0;
     m->solution.clear();
 
-    // Solve LP relaxation first (warm-start if basis available)
-    if (m->solver->basisIsAvailable()) {
-        m->solver->resolve();
-    } else {
-        m->solver->initialSolve();
-    }
-
-    if (m->solver->isProvenPrimalInfeasible()) {
-        m->status = COLLO_CBC_INFEASIBLE;
-        return m->status;
-    }
-
-    // Check if there are any integer variables
+    // Pure LP path: no integer variables
     bool has_integers = false;
     for (int32_t i = 0; i < m->num_cols; i++) {
         if (m->solver->isInteger(i)) {
@@ -183,41 +181,56 @@ ColloCbcStatus collo_cbc_solve(ColloCbcModel* m, ColloCbcCallback cb, void* user
     }
 
     if (!has_integers) {
-        // Pure LP — already solved
-        m->obj_value = m->solver->getObjValue();
-        m->best_bound = m->obj_value;
-        m->solution.assign(
-            m->solver->getColSolution(),
-            m->solver->getColSolution() + m->num_cols);
-        m->has_solution = true;
+        if (m->solver->basisIsAvailable()) {
+            m->solver->resolve();
+        } else {
+            m->solver->initialSolve();
+        }
+
+        if (m->solver->isProvenPrimalInfeasible()) {
+            m->status = COLLO_CBC_INFEASIBLE;
+            return m->status;
+        }
+
+        if (m->num_cols > 0) {
+            m->obj_value = m->solver->getObjValue();
+            m->best_bound = m->obj_value;
+            m->solution.assign(
+                m->solver->getColSolution(),
+                m->solver->getColSolution() + m->num_cols);
+            m->has_solution = true;
+        }
         m->status = COLLO_CBC_OPTIMAL;
         return m->status;
     }
 
-    // Create CbcModel (clones the solver internally)
+    // MIP path: use CbcMain0/CbcMain1 for full solver setup
+    // (cut generators, heuristics, preprocessing, etc.)
     CbcModel cbcModel(*m->solver);
 
-    // Install event handler
+    CbcSolverUsefulData cbcData;
+    CbcMain0(cbcModel, cbcData);
+
+    // Install event handler (after CbcMain0, before CbcMain1)
     ColloEventHandler handler(&cbcModel, cb, user_data);
     cbcModel.passInEventHandler(&handler);
 
-    // Apply known parameters
-    for (const auto& p : m->params) {
-        if (p.first == "log" || p.first == "slog") {
-            int level = std::stoi(p.second);
-            cbcModel.setLogLevel(level);
-            cbcModel.solver()->messageHandler()->setLogLevel(level);
-        }
-    }
-
-    // Set MIPStart
+    // Set MIPStart (before CbcMain1 so it's available during solve)
     if (m->has_mip_start && (int32_t)m->mip_start.size() == m->num_cols) {
         cbcModel.setBestSolution(
             m->mip_start.data(), m->num_cols, INFINITY, true);
     }
 
-    // Solve
-    cbcModel.branchAndBound();
+    // Build command-line args for CbcMain1
+    std::vector<const char*> argv;
+    argv.push_back("collo_cbc");
+    for (size_t i = 0; i < m->cmdargs.size(); i++) {
+        argv.push_back(m->cmdargs[i].c_str());
+    }
+    argv.push_back("-solve");
+    argv.push_back("-quit");
+
+    CbcMain1((int)argv.size(), argv.data(), cbcModel, NULL, cbcData);
 
     // Extract results
     m->node_count = cbcModel.getNodeCount();
@@ -230,7 +243,6 @@ ColloCbcStatus collo_cbc_solve(ColloCbcModel* m, ColloCbcCallback cb, void* user
             cbcModel.bestSolution() + m->num_cols);
         m->has_solution = true;
 
-        // Save as MIPStart for next solve
         m->mip_start = m->solution;
         m->has_mip_start = true;
     }
@@ -246,7 +258,6 @@ ColloCbcStatus collo_cbc_solve(ColloCbcModel* m, ColloCbcCallback cb, void* user
             m->status = COLLO_CBC_ERROR;
         }
     } else if (cbc_status == 1) {
-        // Stopped (time limit, node limit, user event, etc.)
         m->status = COLLO_CBC_STOPPED;
     } else {
         m->status = COLLO_CBC_ERROR;

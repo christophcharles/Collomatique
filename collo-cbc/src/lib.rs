@@ -2,6 +2,14 @@ pub mod sys;
 
 use std::ffi::CString;
 use std::os::raw::{c_int, c_void};
+use std::sync::Mutex;
+
+static CBC_LOCK: Mutex<()> = Mutex::new(());
+
+fn lock<T, F: FnOnce() -> T>(f: F) -> T {
+    let _guard = CBC_LOCK.lock().unwrap();
+    f()
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Status {
@@ -98,15 +106,15 @@ unsafe impl Send for Model {}
 
 impl Drop for Model {
     fn drop(&mut self) {
-        unsafe {
+        lock(|| unsafe {
             sys::collo_cbc_free(self.ptr);
-        }
+        });
     }
 }
 
 impl Model {
     pub fn new() -> Self {
-        let ptr = unsafe { sys::collo_cbc_new() };
+        let ptr = lock(|| unsafe { sys::collo_cbc_new() });
         assert!(!ptr.is_null(), "collo_cbc_new returned null");
         Model { ptr, num_cols: 0 }
     }
@@ -114,7 +122,7 @@ impl Model {
     pub fn load_problem(&mut self, desc: &ProblemDesc) {
         self.num_cols = desc.num_cols;
         let nnz = desc.mat_value.len() as i32;
-        unsafe {
+        lock(|| unsafe {
             sys::collo_cbc_load_problem(
                 self.ptr,
                 desc.num_cols,
@@ -131,21 +139,21 @@ impl Model {
                 desc.row_lb.as_ptr(),
                 desc.row_ub.as_ptr(),
             );
-        }
+        });
     }
 
     pub fn set_parameter(&mut self, key: &str, value: &str) {
         let key = CString::new(key).expect("key contains null byte");
         let value = CString::new(value).expect("value contains null byte");
-        unsafe {
+        lock(|| unsafe {
             sys::collo_cbc_set_parameter(self.ptr, key.as_ptr(), value.as_ptr());
-        }
+        });
     }
 
     pub fn set_mip_start(&mut self, values: &[f64]) {
-        unsafe {
+        lock(|| unsafe {
             sys::collo_cbc_set_mip_start(self.ptr, values.as_ptr(), values.len() as i32);
-        }
+        });
     }
 
     pub fn solve(&mut self) -> SolveResult {
@@ -165,33 +173,36 @@ impl Model {
             if cb(&rust_progress) { 0 } else { 1 }
         }
 
-        let status = unsafe {
+        let status = lock(|| unsafe {
             sys::collo_cbc_solve(
                 self.ptr,
                 Some(trampoline::<F>),
                 &mut callback as *mut F as *mut c_void,
             )
-        };
+        });
 
         self.build_result(status)
     }
 
     fn build_result(&self, status: sys::ColloCbcStatus) -> SolveResult {
-        let solution = if self.num_cols > 0 {
-            let mut buf = vec![0.0f64; self.num_cols as usize];
-            let ret =
-                unsafe { sys::collo_cbc_get_solution(self.ptr, buf.as_mut_ptr(), self.num_cols) };
-            if ret == 0 { Some(buf) } else { None }
-        } else {
-            None
-        };
+        lock(|| {
+            let solution = if self.num_cols > 0 {
+                let mut buf = vec![0.0f64; self.num_cols as usize];
+                let ret = unsafe {
+                    sys::collo_cbc_get_solution(self.ptr, buf.as_mut_ptr(), self.num_cols)
+                };
+                if ret == 0 { Some(buf) } else { None }
+            } else {
+                None
+            };
 
-        SolveResult {
-            status: Status::from(status),
-            obj_value: unsafe { sys::collo_cbc_get_obj_value(self.ptr) },
-            best_bound: unsafe { sys::collo_cbc_get_best_bound(self.ptr) },
-            node_count: unsafe { sys::collo_cbc_get_node_count(self.ptr) },
-            solution,
-        }
+            SolveResult {
+                status: Status::from(status),
+                obj_value: unsafe { sys::collo_cbc_get_obj_value(self.ptr) },
+                best_bound: unsafe { sys::collo_cbc_get_best_bound(self.ptr) },
+                node_count: unsafe { sys::collo_cbc_get_node_count(self.ptr) },
+                solution,
+            }
+        })
     }
 }
