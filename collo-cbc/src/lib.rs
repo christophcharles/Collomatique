@@ -91,8 +91,10 @@ pub struct Model {
     num_cols: i32,
 }
 
+// Safety: Model owns a heap-allocated C++ object behind a raw pointer.
+// Moving it to another thread is safe because CBC/CLP solvers don't use
+// thread-local state or thread-affine resources.
 unsafe impl Send for Model {}
-unsafe impl Sync for Model {}
 
 impl Drop for Model {
     fn drop(&mut self) {

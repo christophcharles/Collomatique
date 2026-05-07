@@ -44,7 +44,7 @@ pub trait Solver<V: UsableData, C: UsableData, P: ProblemRepr<V>>: Send + Sync {
 ///
 /// Produced by [Solver::build_model]. Call [SolverModel::solve]
 /// to find an optimal solution. The model is consumed in the process.
-pub trait SolverModel<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>>: Send + Sync {
+pub trait SolverModel<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>>: Send {
     /// Solve the model without any time limit.
     ///
     /// Returns `None` if the problem is infeasible.
