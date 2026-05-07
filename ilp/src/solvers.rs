@@ -113,3 +113,38 @@ pub trait WarmSolver<V: UsableData, C: UsableData, P: ProblemRepr<V>>: Solver<V,
         hint: &ConfigData<V>,
     ) -> Self::Model<'a>;
 }
+
+/// Result of [CallbackSolverModel::solve_with_callback].
+///
+/// Similar to [TimeLimitSolution] but does not interpret *why* the solve
+/// stopped — only whether the callback caused it.
+pub struct CallbackSolution<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> {
+    /// The best feasible solution found, if any.
+    pub config: Option<FeasibleConfig<'a, V, C, P>>,
+    /// Whether the solve was stopped by the callback returning `false`.
+    /// If `false`, the solve completed normally (optimal or infeasible).
+    pub stopped_by_callback: bool,
+}
+
+/// A model that supports solving with a progress callback.
+///
+/// The callback is called periodically during solving and when new solutions
+/// are found. It returns `true` to continue solving, `false` to stop.
+///
+/// The associated type [CallbackSolverModel::Progress] is solver-specific:
+/// each backend exposes whatever progress data it can actually provide
+/// (e.g. best objective, bound, node count, incumbent solution).
+pub trait CallbackSolverModel<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>>:
+    SolverModel<'a, V, C, P>
+{
+    /// Solver-specific progress information passed to the callback.
+    type Progress;
+
+    /// Solve the model with a progress callback.
+    ///
+    /// The callback receives a solver-specific [Self::Progress] reference
+    /// and returns `true` to continue, `false` to stop.
+    fn solve_with_callback<F>(self, callback: F) -> CallbackSolution<'a, V, C, P>
+    where
+        F: FnMut(&Self::Progress) -> bool;
+}
