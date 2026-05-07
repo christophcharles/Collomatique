@@ -4,8 +4,8 @@ mod tests;
 use std::collections::HashMap;
 
 use super::{
-    CallbackSolution, CallbackSolverModel, ProblemRepr, Solver, SolverModel, TimeLimitSolution,
-    TimeLimitSolverModel, WarmSolver,
+    CallbackSolution, CallbackSolverModel, ProblemRepr, ProgressBounds, ProgressStats, Solver,
+    SolverModel, TimeLimitSolution, TimeLimitSolverModel, WarmSolver,
 };
 use crate::{ConfigData, FeasibleConfig, ObjectiveSense, Problem, UsableData, linexpr::EqSymbol};
 
@@ -20,8 +20,26 @@ pub struct ColloCbcBuiltModel<'a, V: UsableData, C: UsableData, P: ProblemRepr<V
     disable_logging: bool,
 }
 
-/// Empty progress struct — will gain accessor methods later.
-pub struct Progress;
+pub struct Progress {
+    best_objective: f64,
+    best_bound: f64,
+    nodes: u64,
+}
+
+impl ProgressBounds for Progress {
+    fn best_bound(&self) -> f64 {
+        self.best_bound
+    }
+    fn best_objective(&self) -> f64 {
+        self.best_objective
+    }
+}
+
+impl ProgressStats for Progress {
+    fn nodes(&self) -> u64 {
+        self.nodes
+    }
+}
 
 impl Default for ColloCbcSolver {
     fn default() -> Self {
@@ -259,9 +277,18 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> CallbackSolverModel<'a
             }
         }
 
-        let result = self
-            .model
-            .solve_with_callback(|_raw_progress| callback(&Progress));
+        let mut progress = Progress {
+            best_objective: f64::INFINITY,
+            best_bound: -f64::INFINITY,
+            nodes: 0,
+        };
+
+        let result = self.model.solve_with_callback(|raw_progress| {
+            progress.best_objective = raw_progress.best_obj;
+            progress.best_bound = raw_progress.best_bound;
+            progress.nodes = raw_progress.node_count as u64;
+            callback(&progress)
+        });
 
         let stopped_by_callback = result.status == collo_cbc::Status::Stopped;
 
