@@ -150,3 +150,21 @@ pub trait CallbackSolverModel<'a, V: UsableData, C: UsableData, P: ProblemRepr<V
     where
         F: FnMut(&Self::Progress) -> bool;
 }
+
+pub trait ProgressBounds {
+    fn best_bound(&self) -> f64;
+    fn best_objective(&self) -> f64;
+}
+
+pub trait ProgressStats {
+    fn nodes(&self) -> u64;
+}
+
+pub struct Incumbent<V: UsableData> {
+    pub config: ConfigData<V>,
+    pub feasible: bool,
+}
+
+pub trait ProgressIncumbent<V: UsableData> {
+    fn incumbent(&self) -> Option<&Incumbent<V>>;
+}
