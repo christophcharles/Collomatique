@@ -17,6 +17,7 @@ pub struct ColloCbcBuiltModel<'a, V: UsableData, C: UsableData, P: ProblemRepr<V
     model: collo_cbc::Model,
     col_indices: HashMap<V, usize>,
     problem: &'a Problem<V, C, P>,
+    disable_logging: bool,
 }
 
 /// Empty progress struct — will gain accessor methods later.
@@ -153,6 +154,7 @@ impl ColloCbcSolver {
             model,
             col_indices,
             problem,
+            disable_logging: self.disable_logging,
         }
     }
 }
@@ -250,6 +252,13 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> CallbackSolverModel<'a
     where
         F: FnMut(&Self::Progress) -> bool,
     {
+        let stdout_gag = gag::Gag::stdout();
+        if !self.disable_logging {
+            if let Ok(gag) = stdout_gag {
+                drop(gag);
+            }
+        }
+
         let result = self
             .model
             .solve_with_callback(|_raw_progress| callback(&Progress));
