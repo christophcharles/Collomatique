@@ -1,6 +1,7 @@
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 
@@ -49,30 +50,17 @@ enum ChildHandle {
 }
 
 impl ChildHandle {
-    /// Returns Ok(None) if still running, Ok(Some(exit_code)) if exited.
-    /// exit_code is None for success, Some(code) for non-zero exit.
+    /// Returns Ok(None) if still running, Ok(Some(code)) if exited.
+    /// code is None if the exit code couldn't be determined, Some(n) otherwise.
     fn try_wait(&mut self) -> std::io::Result<Option<Option<u32>>> {
         match self {
             ChildHandle::Pty { child, .. } => match child.try_wait() {
-                Ok(Some(status)) => {
-                    let code = if status.success() {
-                        None
-                    } else {
-                        Some(status.exit_code())
-                    };
-                    Ok(Some(code))
-                }
+                Ok(Some(status)) => Ok(Some(Some(status.exit_code()))),
                 Ok(None) => Ok(None),
                 Err(e) => Err(std::io::Error::other(e.to_string())),
             },
             ChildHandle::Pipe { child } => match child.try_wait() {
-                Ok(Some(status)) => {
-                    let code = match status.code() {
-                        Some(0) | None => None,
-                        Some(c) => Some(c as u32),
-                    };
-                    Ok(Some(code))
-                }
+                Ok(Some(status)) => Ok(Some(status.code().map(|c| c as u32))),
                 Ok(None) => Ok(None),
                 Err(e) => Err(e),
             },
@@ -88,25 +76,16 @@ impl ChildHandle {
         }
     }
 
-    /// Returns None for success, Some(code) for non-zero exit.
+    /// Returns the exit code, or None if it couldn't be determined.
     fn wait(&mut self) -> std::io::Result<Option<u32>> {
         match self {
             ChildHandle::Pty { child, .. } => match child.wait() {
-                Ok(status) => {
-                    if status.success() {
-                        Ok(None)
-                    } else {
-                        Ok(Some(status.exit_code()))
-                    }
-                }
+                Ok(status) => Ok(Some(status.exit_code())),
                 Err(e) => Err(std::io::Error::other(e.to_string())),
             },
             ChildHandle::Pipe { child } => {
                 let status = child.wait()?;
-                match status.code() {
-                    Some(0) | None => Ok(None),
-                    Some(c) => Ok(Some(c as u32)),
-                }
+                Ok(status.code().map(|c| c as u32))
             }
         }
     }
@@ -181,8 +160,14 @@ impl GenericProcess {
         let child_arc = Arc::new(Mutex::new(child_handle));
         let stdin: StdinWriter = Arc::new(Mutex::new(Some(writer)));
 
-        let reader_handle =
-            Self::spawn_reader_thread(reader, Arc::clone(&child_arc), callback, false);
+        let exit_emitted = Arc::new(AtomicBool::new(false));
+        let reader_handle = Self::spawn_reader_thread(
+            reader,
+            Arc::clone(&child_arc),
+            exit_emitted,
+            callback,
+            false,
+        );
 
         Ok(GenericProcess {
             state: GenericProcessState {
@@ -224,12 +209,18 @@ impl GenericProcess {
         let child_arc = Arc::new(Mutex::new(child_handle));
         let stdin: StdinWriter = Arc::new(Mutex::new(Some(Box::new(stdin_pipe))));
 
+        let exit_emitted = Arc::new(AtomicBool::new(false));
         let stdout_callback = callback.clone();
-        let stdout_handle =
-            Self::spawn_reader_thread(stdout, Arc::clone(&child_arc), stdout_callback, false);
+        let stdout_handle = Self::spawn_reader_thread(
+            stdout,
+            Arc::clone(&child_arc),
+            Arc::clone(&exit_emitted),
+            stdout_callback,
+            false,
+        );
 
         let stderr_handle =
-            Self::spawn_reader_thread(stderr, Arc::clone(&child_arc), callback, true);
+            Self::spawn_reader_thread(stderr, Arc::clone(&child_arc), exit_emitted, callback, true);
 
         Ok(GenericProcess {
             state: GenericProcessState {
@@ -245,6 +236,7 @@ impl GenericProcess {
     fn spawn_reader_thread<R, F>(
         reader: R,
         child: Arc<Mutex<ChildHandle>>,
+        exit_emitted: Arc<AtomicBool>,
         callback: F,
         is_stderr: bool,
     ) -> JoinHandle<()>
@@ -254,15 +246,20 @@ impl GenericProcess {
     {
         std::thread::spawn(move || {
             let mut buf_reader = BufReader::new(reader);
+            let emit_exit = |code| {
+                if !exit_emitted.swap(true, Ordering::AcqRel) {
+                    callback(GenericProcessEvent::ProcessExited(code));
+                }
+            };
             loop {
                 let mut buf = Vec::new();
                 match buf_reader.read_until(b'\n', &mut buf) {
                     Ok(0) => {
-                        let exit_code = match child.lock().unwrap().try_wait() {
-                            Ok(Some(code)) => code,
-                            _ => None,
+                        let exit_code = match child.lock().unwrap().wait() {
+                            Ok(code) => code,
+                            Err(_) => None,
                         };
-                        callback(GenericProcessEvent::ProcessExited(exit_code));
+                        emit_exit(exit_code);
                         break;
                     }
                     Ok(_) => {
@@ -279,7 +276,7 @@ impl GenericProcess {
                     }
                     Err(_) => match child.lock().unwrap().try_wait() {
                         Ok(Some(code)) => {
-                            callback(GenericProcessEvent::ProcessExited(code));
+                            emit_exit(code);
                             break;
                         }
                         _ => {

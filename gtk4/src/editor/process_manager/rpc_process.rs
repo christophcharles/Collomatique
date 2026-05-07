@@ -140,7 +140,7 @@ impl RpcProcess {
             }
             RpcProcessEvent::RpcCommand(Ok(_)) => {}
             RpcProcessEvent::GracefulExit => {
-                self.state.status = ProcessStatus::Exited(None);
+                self.state.status = ProcessStatus::Exited(Some(0));
             }
             RpcProcessEvent::ProcessExited(code) => {
                 self.state.status = ProcessStatus::Exited(*code);
