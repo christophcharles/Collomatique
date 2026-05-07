@@ -15,7 +15,7 @@ collo-cbc = { path = "../collo-cbc", optional = true }
 good_lp = { version = "1.13.0", features = ["lp-solvers"], optional = true }
 
 [features]
-default = ["coin_cbc","good_lp"]
+default = ["collo_cbc"]
 coin_cbc = ["dep:coin_cbc","dep:gag"]
 collo_cbc = ["dep:collo-cbc"]
 good_lp = ["dep:good_lp"]
