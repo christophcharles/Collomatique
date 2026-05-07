@@ -192,14 +192,14 @@ ColloCbcStatus collo_cbc_solve(ColloCbcModel* m, ColloCbcCallback cb, void* user
             return m->status;
         }
 
+        m->obj_value = m->solver->getObjValue();
+        m->best_bound = m->obj_value;
         if (m->num_cols > 0) {
-            m->obj_value = m->solver->getObjValue();
-            m->best_bound = m->obj_value;
             m->solution.assign(
                 m->solver->getColSolution(),
                 m->solver->getColSolution() + m->num_cols);
-            m->has_solution = true;
         }
+        m->has_solution = true;
         m->status = COLLO_CBC_OPTIMAL;
         return m->status;
     }

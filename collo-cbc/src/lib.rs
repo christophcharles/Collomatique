@@ -193,7 +193,7 @@ impl Model {
                 };
                 if ret == 0 { Some(buf) } else { None }
             } else {
-                None
+                Some(vec![])
             };
 
             SolveResult {
