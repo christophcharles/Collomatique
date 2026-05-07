@@ -361,6 +361,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "collo-cbc"
+version = "0.1.0"
+dependencies = [
+ "cc",
+ "pkg-config",
+]
+
+[[package]]
 name = "collomatique-constraints-colloscopes"
 version = "0.1.0"
 dependencies = [
