@@ -124,8 +124,8 @@ fn recon(
     };
 
     match sol {
-        Some(_) => eprintln!("  Reconstruction SUCCEEDED in {:.2?}", t.elapsed()),
-        None => eprintln!("  Reconstruction FAILED in {:.2?}", t.elapsed()),
+        Ok(_) => eprintln!("  Reconstruction SUCCEEDED in {:.2?}", t.elapsed()),
+        Err(e) => eprintln!("  Reconstruction FAILED in {:.2?}: {e}", t.elapsed()),
     }
 }
 
@@ -156,7 +156,7 @@ fn blame(
         model.solution_from_data(&config_data, &solver)
     };
 
-    let Some(solution) = sol else {
+    let Ok(solution) = sol else {
         eprintln!(
             "  Reconstruction failed in {:.2?}. \
              Use '--debug {label}-recon' to diagnose.",
@@ -279,7 +279,7 @@ fn objective(
     let solver = collomatique_ilp::solvers::collo_cbc::ColloCbcSolver::with_disable_logging(true);
     let sol = model.solution_from_data(&config_data, &solver);
 
-    let Some(solution) = sol else {
+    let Ok(solution) = sol else {
         eprintln!(
             "  Reconstruction failed in {:.2?}. \
              Use '--debug full-recon' to diagnose.",

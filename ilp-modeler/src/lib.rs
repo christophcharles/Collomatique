@@ -17,8 +17,8 @@ use std::sync::Mutex;
 
 use collomatique_ilp::solvers::{Solver, SolverModel};
 use collomatique_ilp::{
-    Config, ConfigData, Constraint, DefaultRepr, FeasibleConfig, LinExpr, Objective,
-    ObjectiveSense, Problem, ProblemBuilder, UsableData, Variable,
+    Config, ConfigData, ConfigDataVarCheck, Constraint, DefaultRepr, FeasibleConfig, LinExpr,
+    Objective, ObjectiveSense, Problem, ProblemBuilder, UsableData, Variable,
 };
 
 pub mod bundle;
@@ -210,6 +210,20 @@ pub struct DuplicateExtra<E: UsableData>(pub E);
 #[derive(Debug, Clone, thiserror::Error)]
 #[error("base variable `{0:?}` is required for reconstruction but no value was provided")]
 pub struct ReconstructionError<B: UsableData>(pub B);
+
+/// Errors that can occur when reconstructing a [`Solution`] from base variable data.
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum SolutionFromDataError<B: UsableData, E: UsableData> {
+    /// The provided config data has invalid variables (unknown, missing, or non-conforming).
+    #[error("config data has invalid variables for reconstruction")]
+    MissingVariables,
+    /// The solver did not produce a feasible solution for the reconstruction problem.
+    #[error("reconstruction solver did not produce a feasible solution")]
+    NoSolutionFromSolver,
+    /// The reconstructed complete configuration failed validation against the problem.
+    #[error("reconstructed configuration failed validation: {0:?}")]
+    BuildConfigError(ConfigDataVarCheck<InternalVar<B, E>>),
+}
 
 /// Errors surfaced by [`Modeler::build`].
 #[derive(Debug, thiserror::Error)]
@@ -510,15 +524,16 @@ where
                 DefaultRepr<InternalVar<B, E>>,
             >,
         >,
-    ) -> Option<Solution<'_, B, E, C>> {
+    ) -> Result<Solution<'_, B, E, C>, SolutionFromDataError<B, E>> {
         if !self.check_no_missing_variables(config_data) {
-            return None;
+            return Err(SolutionFromDataError::MissingVariables);
         }
 
         let base_values: HashMap<B, f64> = config_data.get_values().into_iter().collect();
-        let recon_problem = self.reconstruction_problem(&base_values).ok()?;
-        let recon_sol = f(&recon_problem)
-            .expect("There should always be a (unique!) solution to the reconstruction problem");
+        let recon_problem = self
+            .reconstruction_problem(&base_values)
+            .map_err(|_| SolutionFromDataError::MissingVariables)?;
+        let recon_sol = f(&recon_problem).ok_or(SolutionFromDataError::NoSolutionFromSolver)?;
 
         let mut complete_values: HashMap<InternalVar<B, E>, f64> = base_values
             .into_iter()
@@ -527,10 +542,11 @@ where
         complete_values.extend(recon_sol.get_values());
         let new_config_data = ConfigData::from(complete_values);
 
-        Some(
-            self.solution_from_complete_data(new_config_data)
-                .expect("The configuration data should be valid!"),
-        )
+        let config = self
+            .problem
+            .build_config(new_config_data)
+            .map_err(SolutionFromDataError::BuildConfigError)?;
+        Ok(Solution { config })
     }
 
     /// Build a [`Solution`] by reconstructing extra variable
@@ -539,7 +555,7 @@ where
         &self,
         config_data: &ConfigData<B>,
         solver: &S,
-    ) -> Option<Solution<'_, B, E, C>>
+    ) -> Result<Solution<'_, B, E, C>, SolutionFromDataError<B, E>>
     where
         S: Solver<InternalVar<B, E>, ConstraintSource<E, C>, DefaultRepr<InternalVar<B, E>>>,
     {
@@ -562,16 +578,16 @@ where
                 DefaultRepr<InternalVar<B, E>>,
             >,
         >,
-    ) -> Option<Solution<'_, B, E, C>> {
+    ) -> Result<Solution<'_, B, E, C>, SolutionFromDataError<B, E>> {
         if !self.check_no_missing_variables(config_data) {
-            return None;
+            return Err(SolutionFromDataError::MissingVariables);
         }
 
         let base_values: HashMap<B, f64> = config_data.get_values().into_iter().collect();
-        let recon_problem = self.checker_reconstruction_problem(&base_values).ok()?;
-        let recon_sol = f(&recon_problem).expect(
-            "There should always be a (unique!) solution to the checker reconstruction problem",
-        );
+        let recon_problem = self
+            .checker_reconstruction_problem(&base_values)
+            .map_err(|_| SolutionFromDataError::MissingVariables)?;
+        let recon_sol = f(&recon_problem).ok_or(SolutionFromDataError::NoSolutionFromSolver)?;
 
         let mut complete_values: HashMap<InternalVar<B, E>, f64> = base_values
             .into_iter()
@@ -580,9 +596,11 @@ where
         complete_values.extend(recon_sol.get_values());
         let new_config_data = ConfigData::from(complete_values);
 
-        Some(Solution {
-            config: self.checker_problem.build_config(new_config_data).ok()?,
-        })
+        let config = self
+            .checker_problem
+            .build_config(new_config_data)
+            .map_err(SolutionFromDataError::BuildConfigError)?;
+        Ok(Solution { config })
     }
 
     /// Build a [`Solution`] by reconstructing only the extra
@@ -591,7 +609,7 @@ where
         &self,
         config_data: &ConfigData<B>,
         solver: &S,
-    ) -> Option<Solution<'_, B, E, C>>
+    ) -> Result<Solution<'_, B, E, C>, SolutionFromDataError<B, E>>
     where
         S: Solver<InternalVar<B, E>, ConstraintSource<E, C>, DefaultRepr<InternalVar<B, E>>>,
     {
