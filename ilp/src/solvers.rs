@@ -161,11 +161,11 @@ pub trait ProgressStats {
     fn solutions(&self) -> u64;
 }
 
-pub struct Incumbent<V: UsableData> {
-    pub config: ConfigData<V>,
+pub struct IncumbentInfo {
+    pub objective: f64,
     pub feasible: bool,
 }
 
-pub trait ProgressIncumbent<V: UsableData> {
-    fn incumbent(&self) -> Option<&Incumbent<V>>;
+pub trait ProgressIncumbentInfo {
+    fn incumbent_info(&self) -> Option<&IncumbentInfo>;
 }

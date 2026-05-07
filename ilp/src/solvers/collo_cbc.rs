@@ -4,8 +4,9 @@ mod tests;
 use std::collections::HashMap;
 
 use super::{
-    CallbackSolution, CallbackSolverModel, ProblemRepr, ProgressBounds, ProgressStats, Solver,
-    SolverModel, TimeLimitSolution, TimeLimitSolverModel, WarmSolver,
+    CallbackSolution, CallbackSolverModel, IncumbentInfo, ProblemRepr, ProgressBounds,
+    ProgressIncumbentInfo, ProgressStats, Solver, SolverModel, TimeLimitSolution,
+    TimeLimitSolverModel, WarmSolver,
 };
 use crate::{ConfigData, FeasibleConfig, ObjectiveSense, Problem, UsableData, linexpr::EqSymbol};
 
@@ -25,6 +26,7 @@ pub struct Progress {
     best_bound: f64,
     nodes: u64,
     solutions: u64,
+    incumbent: Option<IncumbentInfo>,
 }
 
 impl ProgressBounds for Progress {
@@ -42,6 +44,12 @@ impl ProgressStats for Progress {
     }
     fn solutions(&self) -> u64 {
         self.solutions
+    }
+}
+
+impl ProgressIncumbentInfo for Progress {
+    fn incumbent_info(&self) -> Option<&IncumbentInfo> {
+        self.incumbent.as_ref()
     }
 }
 
@@ -286,6 +294,7 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> CallbackSolverModel<'a
             best_bound: -f64::INFINITY,
             nodes: 0,
             solutions: 0,
+            incumbent: None,
         };
 
         let result = self.model.solve_with_callback(|raw_progress| {
@@ -293,6 +302,12 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> CallbackSolverModel<'a
             progress.best_bound = raw_progress.best_bound;
             progress.nodes = raw_progress.node_count as u64;
             progress.solutions = raw_progress.solutions_found as u64;
+            if raw_progress.solution.is_some() {
+                progress.incumbent = Some(IncumbentInfo {
+                    objective: raw_progress.best_obj,
+                    feasible: true,
+                });
+            }
             callback(&progress)
         });
 
