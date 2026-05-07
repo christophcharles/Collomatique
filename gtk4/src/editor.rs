@@ -71,7 +71,6 @@ pub enum EditorInput {
     ExportSqliteAs(PathBuf),
     ExportMpsAs(PathBuf, export_panel::IlpInnerProblem),
     UpdateIlpProblem(Option<export_panel::IlpInnerProblem>),
-    TestProcessEvent(process_manager::GenericProcessEvent),
 }
 
 #[derive(Debug)]
@@ -941,20 +940,7 @@ impl Component for EditorPanel {
                 self.dirty = dirty;
                 self.show_particular_panel = Some(PanelNumbers::GeneralPlanning);
                 self.update_data(DataUpdate::Replace(AppState::new(data)));
-                self.send_msg_for_interface_update(sender.clone());
-
-                // TODO: temporary test — remove
-                let input_sender = sender.input_sender().clone();
-                match self.process_manager.spawn_generic_pipes(
-                    "/usr/bin/env",
-                    &["whoami"],
-                    move |event| {
-                        input_sender.emit(EditorInput::TestProcessEvent(event));
-                    },
-                ) {
-                    Ok(id) => eprintln!("[test] Spawned whoami process {:?}", id),
-                    Err(e) => eprintln!("[test] Failed to spawn whoami: {}", e),
-                }
+                self.send_msg_for_interface_update(sender);
             }
             EditorInput::SaveClicked => match &self.file_name {
                 Some(path) => {
@@ -1141,17 +1127,6 @@ impl Component for EditorPanel {
             EditorInput::UpdateIlpProblem(problem) => {
                 self.export_panel
                     .emit(ExportPanelInput::UpdateIlpProblem(problem));
-            }
-            EditorInput::TestProcessEvent(event) => {
-                use process_manager::GenericProcessEvent;
-                match &event {
-                    GenericProcessEvent::Stdout(data) => eprintln!("[test] stdout: {:?}", data),
-                    GenericProcessEvent::Stderr(data) => eprintln!("[test] stderr: {:?}", data),
-                    GenericProcessEvent::ProcessExited(code) => {
-                        eprintln!("[test] process exited: {:?}", code)
-                    }
-                    GenericProcessEvent::Error(e) => eprintln!("[test] error: {}", e),
-                }
             }
         }
     }
