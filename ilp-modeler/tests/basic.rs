@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use collomatique_ilp::linexpr::LinExpr;
-use collomatique_ilp::solvers::{Solver, SolverModel, coin_cbc::CbcSolver};
+use collomatique_ilp::solvers::{Solver, SolverModel, collo_cbc::ColloCbcSolver};
 use collomatique_ilp::{Objective, ObjectiveSense, Variable};
 
 use collomatique_ilp_modeler::{
@@ -42,7 +42,7 @@ fn trivial_problem() {
     m.add_constraint((&a + &b).leq(&LinExpr::constant(1.0)), "a+b<=1".into());
     m.add_objective(1.0, Objective::new(a + b, ObjectiveSense::Maximize));
     let model = m.build(&()).unwrap();
-    let solver = CbcSolver::new();
+    let solver = ColloCbcSolver::new();
     let cfg = solver
         .build_model(model.problem())
         .solve()
@@ -80,7 +80,7 @@ fn referenced_extra_runs() {
     );
     let model = m.build(&()).unwrap();
     assert!(*ran.lock().unwrap());
-    let cfg = CbcSolver::new()
+    let cfg = ColloCbcSolver::new()
         .build_model(model.problem())
         .solve()
         .expect("solvable");
@@ -142,7 +142,7 @@ fn extra_chain() {
         "ax=1".into(),
     );
     let model = m.build(&()).unwrap();
-    let cfg = CbcSolver::new()
+    let cfg = ColloCbcSolver::new()
         .build_model(model.problem())
         .solve()
         .expect("solvable");
@@ -343,7 +343,7 @@ fn fix_undeclared_variable() {
         },
     );
     let model = m.build(&()).unwrap();
-    let cfg = CbcSolver::new()
+    let cfg = ColloCbcSolver::new()
         .build_model(model.problem())
         .solve()
         .expect("solvable");
@@ -373,7 +373,7 @@ fn fixer_chain_first_wins() {
         },
     );
     let model = m.build(&()).unwrap();
-    let cfg = CbcSolver::new()
+    let cfg = ColloCbcSolver::new()
         .build_model(model.problem())
         .solve()
         .expect("solvable");
@@ -410,7 +410,7 @@ fn fix_in_extra_closure() {
         },
     );
     let model = m.build(&()).unwrap();
-    let cfg = CbcSolver::new()
+    let cfg = ColloCbcSolver::new()
         .build_model(model.problem())
         .solve()
         .expect("solvable");
@@ -447,7 +447,7 @@ fn reconstruction_basic() {
     let model = m.build(&()).unwrap();
 
     // Solve the main problem.
-    let cfg = CbcSolver::new()
+    let cfg = ColloCbcSolver::new()
         .build_model(model.problem())
         .solve()
         .expect("solvable");
@@ -457,7 +457,7 @@ fn reconstruction_basic() {
     // Reconstruct from base values.
     let base_values = HashMap::from([("a".to_string(), av), ("b".to_string(), bv)]);
     let recon_pb = model.reconstruction_problem(&base_values).unwrap();
-    let recon_cfg = CbcSolver::new()
+    let recon_cfg = ColloCbcSolver::new()
         .build_model(&recon_pb)
         .solve()
         .expect("solvable");
@@ -516,7 +516,7 @@ fn reconstruction_with_fixed_vars() {
     // Reconstruct with a=1 only (c was fixed, not a base var).
     let base_values = HashMap::from([("a".to_string(), 1.0)]);
     let recon_pb = model.reconstruction_problem(&base_values).unwrap();
-    let recon_cfg = CbcSolver::new()
+    let recon_cfg = ColloCbcSolver::new()
         .build_model(&recon_pb)
         .solve()
         .expect("solvable");
@@ -645,7 +645,7 @@ fn from_described_creates_modeler_testvar() {
     m.add_constraint((&x + &y).leq(&LinExpr::constant(1.0)), "x+y<=1".into());
     m.add_objective(1.0, Objective::new(x + y, ObjectiveSense::Maximize));
     let model = m.build(&()).unwrap();
-    let cfg = CbcSolver::new()
+    let cfg = ColloCbcSolver::new()
         .build_model(model.problem())
         .solve()
         .expect("solvable");
@@ -665,7 +665,7 @@ fn from_described_auto_fixes_via_check_fix() {
     m.add_constraint((&x + &z).leq(&LinExpr::constant(1.0)), "x+z<=1".into());
     m.add_objective(1.0, Objective::new(x, ObjectiveSense::Maximize));
     let model = m.build(&()).unwrap();
-    let cfg = CbcSolver::new()
+    let cfg = ColloCbcSolver::new()
         .build_model(model.problem())
         .solve()
         .expect("solvable");
@@ -687,7 +687,7 @@ fn from_described_additional_fixer_composes() {
     // Shouldn't break anything — the check_fix fixer handles Z.
     m.add_fixer(|_b: &TestVar, _env: &()| None);
     let model = m.build(&()).unwrap();
-    let cfg = CbcSolver::new()
+    let cfg = ColloCbcSolver::new()
         .build_model(model.problem())
         .solve()
         .expect("solvable");
@@ -736,7 +736,7 @@ fn from_described_creates_modeler() {
     m.add_constraint((&a + &b).leq(&LinExpr::constant(1.0)), "a+b<=1".into());
     m.add_objective(1.0, Objective::new(a + b, ObjectiveSense::Maximize));
     let model = m.build(&env).unwrap();
-    let cfg = CbcSolver::new()
+    let cfg = ColloCbcSolver::new()
         .build_model(model.problem())
         .solve()
         .expect("solvable");
@@ -756,7 +756,7 @@ fn from_described_fixes_via_env() {
     m.add_constraint((&a + &c).leq(&LinExpr::constant(1.0)), "a+c<=1".into());
     m.add_objective(1.0, Objective::new(a, ObjectiveSense::Maximize));
     let model = m.build(&env).unwrap();
-    let cfg = CbcSolver::new()
+    let cfg = ColloCbcSolver::new()
         .build_model(model.problem())
         .solve()
         .expect("solvable");
@@ -774,7 +774,7 @@ fn describe_var_via_from_described() {
     m.add_constraint((&a + &c).leq(&LinExpr::constant(1.0)), "a+c<=1".into());
     m.add_objective(1.0, Objective::new(a, ObjectiveSense::Maximize));
     let model = m.build(&env).unwrap();
-    let cfg = CbcSolver::new()
+    let cfg = ColloCbcSolver::new()
         .build_model(model.problem())
         .solve()
         .expect("solvable");
@@ -899,7 +899,7 @@ fn derive_integration_from_described() {
     m.add_constraint((&s0 + &s1).leq(&LinExpr::constant(1.0)), "s0+s1<=1".into());
     m.add_objective(1.0, Objective::new(s0 + s1, ObjectiveSense::Maximize));
     let model = m.build(&env).unwrap();
-    let cfg = CbcSolver::new()
+    let cfg = ColloCbcSolver::new()
         .build_model(model.problem())
         .solve()
         .expect("solvable");
@@ -1072,7 +1072,7 @@ fn checker_reconstruction_basic() {
 
     let base_values = HashMap::from([("a".to_string(), 0.0), ("b".to_string(), 1.0)]);
     let checker_recon = model.checker_reconstruction_problem(&base_values).unwrap();
-    let recon_cfg = CbcSolver::new()
+    let recon_cfg = ColloCbcSolver::new()
         .build_model(&checker_recon)
         .solve()
         .expect("solvable");

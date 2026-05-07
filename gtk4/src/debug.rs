@@ -116,7 +116,7 @@ fn recon(
 
     let t = Instant::now();
     eprintln!("Running {label} reconstruction (CBC logging enabled)...");
-    let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::with_disable_logging(false);
+    let solver = collomatique_ilp::solvers::collo_cbc::ColloCbcSolver::with_disable_logging(false);
     let sol = if checker {
         model.checker_solution_from_data(&config_data, &solver)
     } else {
@@ -149,7 +149,7 @@ fn blame(
 
     let t = Instant::now();
     eprintln!("Running {label} reconstruction (silent)...");
-    let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::with_disable_logging(true);
+    let solver = collomatique_ilp::solvers::collo_cbc::ColloCbcSolver::with_disable_logging(true);
     let sol = if checker {
         model.checker_solution_from_data(&config_data, &solver)
     } else {
@@ -246,7 +246,7 @@ fn solve(model: &collomatique_constraints_colloscopes::ColloscopeModel, checker:
 
     let t = Instant::now();
     eprintln!("Solving {label} ILP (CBC logging enabled)...");
-    let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::with_disable_logging(false);
+    let solver = collomatique_ilp::solvers::collo_cbc::ColloCbcSolver::with_disable_logging(false);
     let sol = if checker {
         model.solve_checker(&solver)
     } else {
@@ -276,7 +276,7 @@ fn objective(
 
     let t = Instant::now();
     eprintln!("Running full reconstruction (silent)...");
-    let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::with_disable_logging(true);
+    let solver = collomatique_ilp::solvers::collo_cbc::ColloCbcSolver::with_disable_logging(true);
     let sol = model.solution_from_data(&config_data, &solver);
 
     let Some(solution) = sol else {

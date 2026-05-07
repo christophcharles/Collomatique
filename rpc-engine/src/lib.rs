@@ -58,7 +58,7 @@ async fn try_solve() -> Result<(), anyhow::Error> {
     );
 
     println!("Solving ILP problem...");
-    let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::with_disable_logging(false);
+    let solver = collomatique_ilp::solvers::collo_cbc::ColloCbcSolver::with_disable_logging(false);
     let sol_opt = problem.solve(&solver);
     let Some(sol) = sol_opt else {
         println!("No solution found");

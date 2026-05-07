@@ -9,6 +9,8 @@
 
 #[cfg(feature = "coin_cbc")]
 pub mod coin_cbc;
+#[cfg(feature = "collo_cbc")]
+pub mod collo_cbc;
 #[cfg(feature = "good_lp")]
 pub mod good_lp;
 
@@ -42,7 +44,7 @@ pub trait Solver<V: UsableData, C: UsableData, P: ProblemRepr<V>>: Send + Sync {
 ///
 /// Produced by [Solver::build_model]. Call [SolverModel::solve]
 /// to find an optimal solution. The model is consumed in the process.
-pub trait SolverModel<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>>: Send + Sync {
+pub trait SolverModel<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>>: Send {
     /// Solve the model without any time limit.
     ///
     /// Returns `None` if the problem is infeasible.
@@ -112,4 +114,58 @@ pub trait WarmSolver<V: UsableData, C: UsableData, P: ProblemRepr<V>>: Solver<V,
         problem: &'a Problem<V, C, P>,
         hint: &ConfigData<V>,
     ) -> Self::Model<'a>;
+}
+
+/// Result of [CallbackSolverModel::solve_with_callback].
+///
+/// Similar to [TimeLimitSolution] but does not interpret *why* the solve
+/// stopped — only whether the callback caused it.
+pub struct CallbackSolution<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> {
+    /// The best feasible solution found, if any.
+    pub config: Option<FeasibleConfig<'a, V, C, P>>,
+    /// Whether the solve was stopped by the callback returning `false`.
+    /// If `false`, the solve completed normally (optimal or infeasible).
+    pub stopped_by_callback: bool,
+}
+
+/// A model that supports solving with a progress callback.
+///
+/// The callback is called periodically during solving and when new solutions
+/// are found. It returns `true` to continue solving, `false` to stop.
+///
+/// The associated type [CallbackSolverModel::Progress] is solver-specific:
+/// each backend exposes whatever progress data it can actually provide
+/// (e.g. best objective, bound, node count, incumbent solution).
+pub trait CallbackSolverModel<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>>:
+    SolverModel<'a, V, C, P>
+{
+    /// Solver-specific progress information passed to the callback.
+    type Progress;
+
+    /// Solve the model with a progress callback.
+    ///
+    /// The callback receives a solver-specific [Self::Progress] reference
+    /// and returns `true` to continue, `false` to stop.
+    fn solve_with_callback<F>(self, callback: F) -> CallbackSolution<'a, V, C, P>
+    where
+        F: FnMut(&Self::Progress) -> bool;
+}
+
+pub trait ProgressBounds {
+    fn best_bound(&self) -> f64;
+    fn best_objective(&self) -> f64;
+}
+
+pub trait ProgressStats {
+    fn nodes(&self) -> u64;
+    fn solutions(&self) -> u64;
+}
+
+pub struct IncumbentInfo {
+    pub objective: f64,
+    pub feasible: bool,
+}
+
+pub trait ProgressIncumbentInfo {
+    fn incumbent_info(&self) -> Option<&IncumbentInfo>;
 }

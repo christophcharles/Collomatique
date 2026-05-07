@@ -665,7 +665,8 @@ impl Colloscope {
                 &ilp_problem.env,
                 &colloscope,
             );
-            let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::with_disable_logging(true);
+            let solver =
+                collomatique_ilp::solvers::collo_cbc::ColloCbcSolver::with_disable_logging(true);
             let sol = ilp_problem
                 .problem
                 .checker_solution_from_data(&config_data, &solver)

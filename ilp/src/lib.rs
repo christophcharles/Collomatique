@@ -143,7 +143,7 @@
 //!
 //! // Now pb represents our ILP problem. We can solve it using a solver
 //! # use collomatique_ilp::solvers;
-//! let solver = solvers::coin_cbc::CbcSolver::new();
+//! let solver = solvers::collo_cbc::ColloCbcSolver::new();
 //!
 //! use solvers::{Solver, SolverModel};
 //! // SolverModel::solve returns None when there is no solution
