@@ -168,6 +168,8 @@ impl ColloCbcSolver {
         if self.disable_logging {
             model.set_parameter("log", "0");
             model.set_parameter("slog", "0");
+        } else {
+            model.set_parameter("log", "1");
         }
 
         if let Some(hint) = hint {

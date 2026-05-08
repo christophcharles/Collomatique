@@ -217,8 +217,14 @@ ColloCbcStatus collo_cbc_solve(ColloCbcModel* m, ColloCbcCallback cb, void* user
 
     // Set MIPStart (before CbcMain1 so it's available during solve)
     if (m->has_mip_start && (int32_t)m->mip_start.size() == m->num_cols) {
+        // We need to manually compute the objective here for some reason
+        const double *objvec = m->solver->getObjCoefficients();
+        double objval = 0;
+        for (int i = 0; i < m->num_cols; i++) {
+            objval += objvec[i] * m->mip_start[i];
+        }
         cbcModel.setBestSolution(
-            m->mip_start.data(), m->num_cols, INFINITY, true);
+            m->mip_start.data(), m->num_cols, objval, true);
     }
 
     // Build command-line args for CbcMain1
