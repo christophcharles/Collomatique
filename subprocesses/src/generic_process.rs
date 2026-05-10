@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct GenericProcessId(pub(crate) u64);
+pub struct ProcessId(pub(crate) u64);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProcessStatus {
@@ -27,14 +27,14 @@ pub enum OutputEntry {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum GenericProcessEvent {
+pub enum ProcessEvent {
     Stdout(OutputData),
     Stderr(OutputData),
     ProcessExited(Option<u32>),
     Error(String),
 }
 
-pub struct GenericProcessState {
+pub struct ProcessState {
     pub status: ProcessStatus,
     pub output_log: Vec<OutputEntry>,
 }
@@ -93,17 +93,17 @@ impl ChildHandle {
 
 type StdinWriter = Arc<Mutex<Option<Box<dyn Write + Send>>>>;
 
-pub struct GenericProcess {
-    state: GenericProcessState,
+pub struct Process {
+    state: ProcessState,
     child: Arc<Mutex<ChildHandle>>,
     stdin: StdinWriter,
     _reader_handles: Vec<JoinHandle<()>>,
 }
 
-impl GenericProcess {
+impl Process {
     pub(crate) fn spawn_pty<F>(command: &str, args: &[&str], callback: F) -> Result<Self, String>
     where
-        F: Fn(GenericProcessEvent) + Send + 'static,
+        F: Fn(ProcessEvent) + Send + 'static,
     {
         let pty_system = native_pty_system();
 
@@ -169,8 +169,8 @@ impl GenericProcess {
             false,
         );
 
-        Ok(GenericProcess {
-            state: GenericProcessState {
+        Ok(Process {
+            state: ProcessState {
                 status: ProcessStatus::Running,
                 output_log: Vec::new(),
             },
@@ -182,7 +182,7 @@ impl GenericProcess {
 
     pub(crate) fn spawn_pipes<F>(command: &str, args: &[&str], callback: F) -> Result<Self, String>
     where
-        F: Fn(GenericProcessEvent) + Send + Clone + 'static,
+        F: Fn(ProcessEvent) + Send + Clone + 'static,
     {
         let mut child = Command::new(command)
             .args(args)
@@ -222,8 +222,8 @@ impl GenericProcess {
         let stderr_handle =
             Self::spawn_reader_thread(stderr, Arc::clone(&child_arc), exit_emitted, callback, true);
 
-        Ok(GenericProcess {
-            state: GenericProcessState {
+        Ok(Process {
+            state: ProcessState {
                 status: ProcessStatus::Running,
                 output_log: Vec::new(),
             },
@@ -242,13 +242,13 @@ impl GenericProcess {
     ) -> JoinHandle<()>
     where
         R: std::io::Read + Send + 'static,
-        F: Fn(GenericProcessEvent) + Send + 'static,
+        F: Fn(ProcessEvent) + Send + 'static,
     {
         std::thread::spawn(move || {
             let mut buf_reader = BufReader::new(reader);
             let emit_exit = |code| {
                 if !exit_emitted.swap(true, Ordering::AcqRel) {
-                    callback(GenericProcessEvent::ProcessExited(code));
+                    callback(ProcessEvent::ProcessExited(code));
                 }
             };
             loop {
@@ -268,9 +268,9 @@ impl GenericProcess {
                             Err(e) => OutputData::Raw(e.into_bytes()),
                         };
                         let event = if is_stderr {
-                            GenericProcessEvent::Stderr(data)
+                            ProcessEvent::Stderr(data)
                         } else {
-                            GenericProcessEvent::Stdout(data)
+                            ProcessEvent::Stdout(data)
                         };
                         callback(event);
                     }
@@ -321,26 +321,26 @@ impl GenericProcess {
         Ok(())
     }
 
-    pub fn state(&self) -> &GenericProcessState {
+    pub fn state(&self) -> &ProcessState {
         &self.state
     }
 
-    pub fn handle_event(&mut self, event: &GenericProcessEvent) {
+    pub fn handle_event(&mut self, event: &ProcessEvent) {
         match event {
-            GenericProcessEvent::Stdout(data) => {
+            ProcessEvent::Stdout(data) => {
                 self.state
                     .output_log
                     .push(OutputEntry::Stdout(data.clone()));
             }
-            GenericProcessEvent::Stderr(data) => {
+            ProcessEvent::Stderr(data) => {
                 self.state
                     .output_log
                     .push(OutputEntry::Stderr(data.clone()));
             }
-            GenericProcessEvent::ProcessExited(code) => {
+            ProcessEvent::ProcessExited(code) => {
                 self.state.status = ProcessStatus::Exited(*code);
             }
-            GenericProcessEvent::Error(_) => {}
+            ProcessEvent::Error(_) => {}
         }
     }
 }
