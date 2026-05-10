@@ -2,10 +2,10 @@ use std::sync::Mutex;
 
 use collomatique_rpc::{CmdMsg, CompleteCmdMsg, EncodedMsg, InitMsg, ResultMsg};
 
-use super::generic_process::{GenericProcess, GenericProcessEvent, OutputData, ProcessStatus};
+use crate::generic_process::{GenericProcess, GenericProcessEvent, OutputData, ProcessStatus};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct RpcProcessId(pub(super) u64);
+pub struct RpcProcessId(pub(crate) u64);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RpcProcessEvent {
@@ -29,7 +29,7 @@ pub struct RpcProcess {
 }
 
 impl RpcProcess {
-    pub(super) fn spawn<F>(init_msg: InitMsg, callback: F) -> Result<Self, String>
+    pub(crate) fn spawn<F>(init_msg: InitMsg, callback: F) -> Result<Self, String>
     where
         F: Fn(RpcProcessEvent) + Send + 'static,
     {

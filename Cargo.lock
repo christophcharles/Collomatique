@@ -397,6 +397,7 @@ dependencies = [
  "collomatique-state",
  "collomatique-state-colloscopes",
  "collomatique-storage",
+ "collomatique-subprocesses",
  "collomatique-time",
  "collomatique-xlsx",
  "gtk4",
@@ -551,6 +552,15 @@ dependencies = [
  "serde_with",
  "thiserror 1.0.69",
  "tokio",
+]
+
+[[package]]
+name = "collomatique-subprocesses"
+version = "0.1.0"
+dependencies = [
+ "collomatique-rpc",
+ "libc",
+ "portable-pty",
 ]
 
 [[package]]

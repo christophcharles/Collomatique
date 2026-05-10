@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct GenericProcessId(pub(super) u64);
+pub struct GenericProcessId(pub(crate) u64);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProcessStatus {
@@ -101,7 +101,7 @@ pub struct GenericProcess {
 }
 
 impl GenericProcess {
-    pub(super) fn spawn_pty<F>(command: &str, args: &[&str], callback: F) -> Result<Self, String>
+    pub(crate) fn spawn_pty<F>(command: &str, args: &[&str], callback: F) -> Result<Self, String>
     where
         F: Fn(GenericProcessEvent) + Send + 'static,
     {
@@ -180,7 +180,7 @@ impl GenericProcess {
         })
     }
 
-    pub(super) fn spawn_pipes<F>(command: &str, args: &[&str], callback: F) -> Result<Self, String>
+    pub(crate) fn spawn_pipes<F>(command: &str, args: &[&str], callback: F) -> Result<Self, String>
     where
         F: Fn(GenericProcessEvent) + Send + Clone + 'static,
     {

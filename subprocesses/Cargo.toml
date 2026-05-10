@@ -1,0 +1,12 @@
+[package]
+name = "collomatique-subprocesses"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+collomatique-rpc = { path = "../rpc" }
+portable-pty = "0.9"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

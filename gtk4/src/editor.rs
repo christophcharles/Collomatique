@@ -41,7 +41,6 @@ mod subjects;
 mod teachers;
 mod week_patterns;
 
-mod process_manager;
 mod warning_op;
 
 #[derive(Debug)]
@@ -227,7 +226,7 @@ pub struct EditorPanel {
     check_script_dialog: Controller<check_script::Dialog>,
     run_second_instance_dialog: Controller<run_second_instance::Dialog>,
     warning_op_dialog: Controller<warning_op::Dialog>,
-    process_manager: process_manager::ProcessManager,
+    process_manager: collomatique_subprocesses::ProcessManager,
 }
 
 impl EditorPanel {
@@ -897,7 +896,7 @@ impl Component for EditorPanel {
             check_script_dialog,
             run_second_instance_dialog,
             warning_op_dialog,
-            process_manager: process_manager::ProcessManager::new(),
+            process_manager: collomatique_subprocesses::ProcessManager::new(),
         };
         let widgets = view_output!();
 
