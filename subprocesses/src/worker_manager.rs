@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 use crate::ProcessManager;
-use crate::generic_process::{OutputData, ProcessEvent, ProcessStatus};
+use crate::process::{OutputData, ProcessEvent, ProcessStatus};
 use crate::worker::{Worker, WorkerEvent, WorkerId, WorkerState};
 
 pub struct WorkerManager {

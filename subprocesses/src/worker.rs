@@ -1,6 +1,6 @@
 use collomatique_rpc::{CmdMsg, InitMsg};
 
-use crate::generic_process::{ProcessId, ProcessStatus};
+use crate::process::{ProcessId, ProcessStatus};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct WorkerId(pub(crate) u64);
