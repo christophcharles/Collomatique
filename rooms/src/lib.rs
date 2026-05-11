@@ -1,4 +1,5 @@
 pub mod data_model;
+pub mod types;
 
 use std::path::Path;
 

@@ -6,6 +6,8 @@ use non_empty_string::NonEmptyString;
 use thiserror::Error;
 use unicode_normalization::UnicodeNormalization;
 
+use crate::types::Hour;
+
 const ROOMS_COLUMNS: &[&str] = &[
     "Salle",
     "Étage",
@@ -32,6 +34,35 @@ const REQUESTS_COLUMNS: &[&str] = &[
     "Nb prep",
     "Salle",
     "Prep",
+];
+
+const ALLOWED_SUBJECTS: &[&str] = &[
+    "mathématiques",
+    "physique",
+    "chimie",
+    "physique-chimie",
+    "si",
+    "svt",
+    "informatique",
+    "français",
+    "lettres",
+    "philosophie",
+    "lettres-philosophie",
+    "histoire",
+    "géographie",
+    "hgg",
+    "esh",
+    "anglais",
+    "espagnol",
+    "allemand",
+    "italien",
+    "latin",
+    "grec",
+];
+
+const ALLOWED_CLASSES: &[&str] = &[
+    "MPSI", "MP2I", "MP", "MPI", "MP*", "MPI*", "PCSI 1", "PCSI 2", "PC", "PC*", "PCC", "BCPST 1",
+    "BCPST 2", "ECG 1A", "ECG 1B", "ECG 2A", "ECG 2B", "LS 1", "LS 2",
 ];
 
 /// Errors that can occur while parsing schedule CSV files.
@@ -89,16 +120,16 @@ pub struct Request {
     pub p3: bool,
     /// Day of the week.
     pub day: Weekday,
-    /// Hour of the interrogation (between 8 and 19 inclusive).
-    pub hour: u32,
-    /// Discipline name (normalized: NFC, trimmed, lowercased).
-    pub discipline: String,
+    /// Hour of the interrogation.
+    pub hour: Hour,
+    /// Subject name (normalized: NFC, trimmed, lowercased).
+    pub subject: NonEmptyString,
     /// Classes that can attend this interrogation slot (e.g. "MP", "PC").
-    pub classes: Vec<String>,
+    pub classes: Vec<NonEmptyString>,
     /// Name of the person requesting the room.
-    pub responsible: String,
+    pub requester: NonEmptyString,
     /// Name of the teacher that will use the room.
-    pub colleur: String,
+    pub teacher: NonEmptyString,
     /// Minimum number of blackboards needed.
     pub blackboards: u32,
     /// Whether a window is required.
@@ -223,24 +254,47 @@ pub fn parse_requests(path: &Path) -> Result<Vec<Request>, ScheduleError> {
             value: day_str.to_string(),
         })?;
 
-        let hour = parse_field::<u32>(&record, 4, row, "requests", "Heure")?;
-        if !(8..=19).contains(&hour) {
-            return Err(ScheduleError::InvalidHour { row, value: hour });
+        let hour_val = parse_field::<u32>(&record, 4, row, "requests", "Heure")?;
+        let hour = Hour::new(hour_val).ok_or(ScheduleError::InvalidHour {
+            row,
+            value: hour_val,
+        })?;
+
+        let subject_raw = record.get(5).unwrap().trim();
+        let subject_normalized: String = subject_raw.nfc().collect::<String>().to_lowercase();
+        if !ALLOWED_SUBJECTS.contains(&subject_normalized.as_str()) {
+            return Err(ScheduleError::RequestsRowError {
+                row,
+                message: format!("unknown subject \"{subject_raw}\""),
+            });
+        }
+        let subject = NonEmptyString::try_from(subject_normalized.as_str()).unwrap();
+
+        let classes_raw = record.get(6).unwrap();
+        let classes: Vec<NonEmptyString> = classes_raw
+            .split(';')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(|s| {
+                if !ALLOWED_CLASSES.contains(&s) {
+                    Err(ScheduleError::RequestsRowError {
+                        row,
+                        message: format!("unknown class \"{s}\" in column \"Classes\""),
+                    })
+                } else {
+                    Ok(NonEmptyString::try_from(s).unwrap())
+                }
+            })
+            .collect::<Result<_, _>>()?;
+        if classes.is_empty() {
+            return Err(ScheduleError::RequestsRowError {
+                row,
+                message: "column \"Classes\": must have at least one class".to_string(),
+            });
         }
 
-        let discipline_raw = record.get(5).unwrap().trim();
-        let discipline: String = discipline_raw.nfc().collect::<String>().to_lowercase();
-
-        let classes: Vec<String> = record
-            .get(6)
-            .unwrap()
-            .split(';')
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect();
-
-        let responsible = record.get(7).unwrap().trim().to_string();
-        let colleur = record.get(8).unwrap().trim().to_string();
+        let requester = parse_non_empty_field(&record, 7, row, "requests", "Responsable")?;
+        let teacher = parse_non_empty_field(&record, 8, row, "requests", "Colleur")?;
         let blackboards = parse_field::<u32>(&record, 9, row, "requests", "Tableaux")?;
         let window = parse_bool_field(&record, 10, row, "requests", "Fenêtre")?;
         let students = parse_field::<NonZeroU32>(&record, 11, row, "requests", "Nb élèves")?;
@@ -254,10 +308,10 @@ pub fn parse_requests(path: &Path) -> Result<Vec<Request>, ScheduleError> {
             p3,
             day,
             hour,
-            discipline,
+            subject,
             classes,
-            responsible,
-            colleur,
+            requester,
+            teacher,
             blackboards,
             window,
             students,

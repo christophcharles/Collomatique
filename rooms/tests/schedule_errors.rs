@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use collomatique_rooms::ScheduleError;
 use collomatique_rooms::data_model;
+use collomatique_rooms::types::Hour;
 use collomatique_time::Weekday;
 use non_empty_string::NonEmptyString;
 
@@ -111,6 +112,36 @@ fn requests_bad_bool() {
     ));
 }
 
+#[test]
+fn requests_bad_subject() {
+    let err = run("valid_rooms.csv", "requests_bad_subject.csv").unwrap_err();
+    assert!(matches!(
+        err,
+        ScheduleError::RequestsRowError { row: 1, ref message }
+        if message.contains("unknown subject")
+    ));
+}
+
+#[test]
+fn requests_bad_class() {
+    let err = run("valid_rooms.csv", "requests_bad_class.csv").unwrap_err();
+    assert!(matches!(
+        err,
+        ScheduleError::RequestsRowError { row: 1, ref message }
+        if message.contains("unknown class")
+    ));
+}
+
+#[test]
+fn requests_empty_classes() {
+    let err = run("valid_rooms.csv", "requests_empty_classes.csv").unwrap_err();
+    assert!(matches!(
+        err,
+        ScheduleError::RequestsRowError { row: 1, ref message }
+        if message.contains("at least one class")
+    ));
+}
+
 // --- Happy-path parsing ---
 
 #[test]
@@ -135,11 +166,11 @@ fn parse_requests_valid() {
     assert!(!r.p2);
     assert!(r.p3);
     assert_eq!(r.day, Weekday(chrono::Weekday::Mon));
-    assert_eq!(r.hour, 8);
-    assert_eq!(r.discipline, "maths");
-    assert_eq!(r.classes, vec!["MP", "PC"]);
-    assert_eq!(r.responsible, "Dupont");
-    assert_eq!(r.colleur, "Martin");
+    assert_eq!(r.hour, Hour::new(8).unwrap());
+    assert_eq!(r.subject, nes("mathématiques"));
+    assert_eq!(r.classes, vec![nes("MP"), nes("PC")]);
+    assert_eq!(r.requester, nes("Dupont"));
+    assert_eq!(r.teacher, nes("Martin"));
     assert_eq!(r.blackboards, 1);
     assert!(!r.window);
     assert_eq!(r.students.get(), 3);
