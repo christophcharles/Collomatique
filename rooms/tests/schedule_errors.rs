@@ -123,6 +123,16 @@ fn requests_bad_subject() {
 }
 
 #[test]
+fn requests_bad_subject_case() {
+    let err = run("valid_rooms.csv", "requests_bad_subject_case.csv").unwrap_err();
+    assert!(matches!(
+        err,
+        ScheduleError::RequestsRowError { row: 1, ref message }
+        if message.contains("unknown subject")
+    ));
+}
+
+#[test]
 fn requests_bad_class() {
     let err = run("valid_rooms.csv", "requests_bad_class.csv").unwrap_err();
     assert!(matches!(
@@ -167,7 +177,7 @@ fn parse_requests_valid() {
     assert!(r.p3);
     assert_eq!(r.day, Weekday(chrono::Weekday::Mon));
     assert_eq!(r.hour, Hour::new(8).unwrap());
-    assert_eq!(r.subject, nes("mathématiques"));
+    assert_eq!(r.subject, nes("Mathématiques"));
     assert_eq!(r.classes, vec![nes("MP"), nes("PC")]);
     assert_eq!(r.requester, nes("Dupont"));
     assert_eq!(r.teacher, nes("Martin"));

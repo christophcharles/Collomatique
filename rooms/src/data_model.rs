@@ -37,27 +37,27 @@ const REQUESTS_COLUMNS: &[&str] = &[
 ];
 
 const ALLOWED_SUBJECTS: &[&str] = &[
-    "mathématiques",
-    "physique",
-    "chimie",
-    "physique-chimie",
-    "si",
-    "svt",
-    "informatique",
-    "français",
-    "lettres",
-    "philosophie",
-    "lettres-philosophie",
-    "histoire",
-    "géographie",
-    "hgg",
-    "esh",
-    "anglais",
-    "espagnol",
-    "allemand",
-    "italien",
-    "latin",
-    "grec",
+    "Mathématiques",
+    "Physique",
+    "Chimie",
+    "Physique-Chimie",
+    "Sciences de l'ingénieur",
+    "Sciences de la Vie et de la Terre",
+    "Informatique",
+    "Français",
+    "Lettres",
+    "Philosophie",
+    "Lettres-Philosophie",
+    "Histoire",
+    "Géographie",
+    "Histoire-Géographie-Géopolitique",
+    "Économie, Sociologie et Histoire du monde contemporain",
+    "Anglais",
+    "Espagnol",
+    "Allemand",
+    "Italien",
+    "Latin",
+    "Grec",
 ];
 
 const ALLOWED_CLASSES: &[&str] = &[
@@ -261,7 +261,7 @@ pub fn parse_requests(path: &Path) -> Result<Vec<Request>, ScheduleError> {
         })?;
 
         let subject_raw = record.get(5).unwrap().trim();
-        let subject_normalized: String = subject_raw.nfc().collect::<String>().to_lowercase();
+        let subject_normalized: String = subject_raw.nfc().collect();
         if !ALLOWED_SUBJECTS.contains(&subject_normalized.as_str()) {
             return Err(ScheduleError::RequestsRowError {
                 row,
