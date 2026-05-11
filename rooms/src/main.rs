@@ -22,16 +22,6 @@ fn main() -> Result<(), anyhow::Error> {
         return Ok(());
     }
 
-    if args.files.len() != 2 {
-        anyhow::bail!("Schedule mode requires exactly 2 CSV file arguments (rooms, requests)");
-    }
-
-    let data = schedule::parse_schedule(&args.files[0], &args.files[1])?;
-    eprintln!(
-        "Parsed {} rooms and {} requests with characteristics: {:?}",
-        data.rooms.len(),
-        data.requests.len(),
-        data.characteristics,
-    );
+    schedule::run(&args.files)?;
     Ok(())
 }

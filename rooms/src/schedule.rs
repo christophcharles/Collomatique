@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use collomatique_time::Weekday;
 use thiserror::Error;
@@ -52,6 +52,8 @@ pub enum ScheduleError {
     },
     #[error("In requests file, row {row}: invalid day \"{value}\"")]
     InvalidDay { row: usize, value: String },
+    #[error("Schedule mode requires exactly 2 CSV file arguments (rooms, requests), got {0}")]
+    WrongFileCount(usize),
 }
 
 #[derive(Debug, Clone)]
@@ -91,17 +93,28 @@ pub struct RoomScheduleData {
     pub requests: Vec<Request>,
 }
 
-pub fn parse_schedule(
-    rooms_path: &Path,
-    requests_path: &Path,
-) -> Result<RoomScheduleData, ScheduleError> {
-    let (characteristics, rooms) = parse_rooms(rooms_path)?;
-    let requests = parse_requests(requests_path, &characteristics)?;
-    Ok(RoomScheduleData {
+pub fn run(files: &[PathBuf]) -> Result<(), ScheduleError> {
+    if files.len() != 2 {
+        return Err(ScheduleError::WrongFileCount(files.len()));
+    }
+
+    let (characteristics, rooms) = parse_rooms(&files[0])?;
+    let requests = parse_requests(&files[1], &characteristics)?;
+
+    let data = RoomScheduleData {
         characteristics,
         rooms,
         requests,
-    })
+    };
+
+    eprintln!(
+        "Parsed {} rooms and {} requests with characteristics: {:?}",
+        data.rooms.len(),
+        data.requests.len(),
+        data.characteristics,
+    );
+
+    Ok(())
 }
 
 fn parse_rooms(path: &Path) -> Result<(Vec<String>, Vec<Room>), ScheduleError> {
