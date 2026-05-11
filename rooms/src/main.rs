@@ -1,6 +1,8 @@
 use clap::Parser;
 use std::path::PathBuf;
 
+mod schedule;
+
 #[derive(Parser, Debug)]
 #[command(author, version, about = "Room scheduling tool")]
 struct Args {
@@ -8,7 +10,7 @@ struct Args {
     #[arg(long)]
     convert: Option<PathBuf>,
 
-    /// Input CSV files for schedule mode (required when not using --convert)
+    /// Input CSV files for schedule mode: rooms file first, then requests file
     files: Vec<PathBuf>,
 }
 
@@ -21,8 +23,15 @@ fn main() -> Result<(), anyhow::Error> {
     }
 
     if args.files.len() != 2 {
-        anyhow::bail!("Schedule mode requires exactly 2 CSV file arguments");
+        anyhow::bail!("Schedule mode requires exactly 2 CSV file arguments (rooms, requests)");
     }
-    eprintln!("Schedule mode: files {:?} and {:?}", args.files[0], args.files[1]);
+
+    let data = schedule::parse_schedule(&args.files[0], &args.files[1])?;
+    eprintln!(
+        "Parsed {} rooms and {} requests with characteristics: {:?}",
+        data.rooms.len(),
+        data.requests.len(),
+        data.characteristics,
+    );
     Ok(())
 }

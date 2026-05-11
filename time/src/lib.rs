@@ -252,6 +252,34 @@ impl Weekday {
         }
     }
 
+    /// Parses a French weekday name (case-insensitive) into a `Weekday`.
+    ///
+    /// The input is lowercased and compared against the uncapitalized French
+    /// names ("lundi", "mardi", ..., "dimanche").
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use collomatique_time::Weekday;
+    /// use chrono::Weekday as ChronoWeekday;
+    ///
+    /// assert_eq!(Weekday::from_french("Lundi"), Some(Weekday(ChronoWeekday::Mon)));
+    /// assert_eq!(Weekday::from_french("MARDI"), Some(Weekday(ChronoWeekday::Tue)));
+    /// assert_eq!(Weekday::from_french("invalid"), None);
+    /// ```
+    pub fn from_french(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "lundi" => Some(Weekday(chrono::Weekday::Mon)),
+            "mardi" => Some(Weekday(chrono::Weekday::Tue)),
+            "mercredi" => Some(Weekday(chrono::Weekday::Wed)),
+            "jeudi" => Some(Weekday(chrono::Weekday::Thu)),
+            "vendredi" => Some(Weekday(chrono::Weekday::Fri)),
+            "samedi" => Some(Weekday(chrono::Weekday::Sat)),
+            "dimanche" => Some(Weekday(chrono::Weekday::Sun)),
+            _ => None,
+        }
+    }
+
     /// Returns an iterator over all weekdays in order (Monday through Sunday)
     ///
     /// # Example

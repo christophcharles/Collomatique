@@ -8,3 +8,7 @@ authors.workspace = true
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 calamine = "0.26"
+csv = "1.3"
+thiserror = { workspace = true }
+collomatique-time = { path = "../time" }
+chrono = { workspace = true }
