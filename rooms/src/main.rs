@@ -1,7 +1,7 @@
 use clap::Parser;
 use std::path::PathBuf;
 
-mod schedule;
+use collomatique_rooms::schedule;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about = "Room scheduling tool")]
