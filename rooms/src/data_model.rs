@@ -124,17 +124,6 @@ pub struct ScheduleData {
     pub requests: Vec<Request>,
 }
 
-/// Parse both CSV files and print summary statistics.
-pub fn run(rooms: &Path, requests: &Path) -> Result<(), ScheduleError> {
-    let data = parse_schedule(rooms, requests)?;
-    eprintln!(
-        "Parsed {} rooms and {} requests",
-        data.rooms.len(),
-        data.requests.len(),
-    );
-    Ok(())
-}
-
 /// Parse a rooms CSV and a requests CSV into a [`ScheduleData`].
 pub fn parse_schedule(
     rooms_path: &Path,

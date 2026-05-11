@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
-use collomatique_rooms::schedule::{self, ScheduleError};
+use collomatique_rooms::ScheduleError;
+use collomatique_rooms::data_model;
 use collomatique_time::Weekday;
 use non_empty_string::NonEmptyString;
 
@@ -11,7 +12,7 @@ fn fixture(name: &str) -> PathBuf {
 }
 
 fn run(rooms: &str, requests: &str) -> Result<(), ScheduleError> {
-    schedule::run(&fixture(rooms), &fixture(requests))
+    collomatique_rooms::run(&fixture(rooms), &fixture(requests))
 }
 
 fn nes(s: &str) -> NonEmptyString {
@@ -114,7 +115,7 @@ fn requests_bad_bool() {
 
 #[test]
 fn parse_rooms_valid() {
-    let rooms = schedule::parse_rooms(&fixture("valid_rooms.csv")).unwrap();
+    let rooms = data_model::parse_rooms(&fixture("valid_rooms.csv")).unwrap();
     assert_eq!(rooms.len(), 1);
     assert_eq!(rooms[0].name, nes("A101"));
     assert_eq!(rooms[0].floor, 1);
@@ -127,7 +128,7 @@ fn parse_rooms_valid() {
 
 #[test]
 fn parse_requests_valid() {
-    let requests = schedule::parse_requests(&fixture("valid_requests.csv")).unwrap();
+    let requests = data_model::parse_requests(&fixture("valid_requests.csv")).unwrap();
     assert_eq!(requests.len(), 1);
     let r = &requests[0];
     assert!(r.p1);
@@ -150,7 +151,7 @@ fn parse_requests_valid() {
 #[test]
 fn parse_schedule_valid() {
     let data =
-        schedule::parse_schedule(&fixture("valid_rooms.csv"), &fixture("valid_requests.csv"))
+        data_model::parse_schedule(&fixture("valid_rooms.csv"), &fixture("valid_requests.csv"))
             .unwrap();
     assert_eq!(data.rooms.len(), 1);
     assert_eq!(data.requests.len(), 1);

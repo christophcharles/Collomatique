@@ -1,8 +1,6 @@
 use clap::Parser;
 use std::path::PathBuf;
 
-use collomatique_rooms::schedule;
-
 #[derive(Parser, Debug)]
 #[command(author, version, about = "Assign rooms to scheduling requests")]
 struct Args {
@@ -15,6 +13,6 @@ struct Args {
 
 fn main() -> Result<(), anyhow::Error> {
     let args = Args::parse();
-    schedule::run(&args.rooms, &args.requests)?;
+    collomatique_rooms::run(&args.rooms, &args.requests)?;
     Ok(())
 }
