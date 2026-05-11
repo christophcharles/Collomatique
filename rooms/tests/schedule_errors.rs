@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use collomatique_rooms::schedule::{self, ScheduleError};
+use collomatique_time::Weekday;
 
 fn fixture(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -75,4 +76,48 @@ fn requests_bad_prep() {
         err,
         ScheduleError::RequestsRowError { row: 1, .. }
     ));
+}
+
+#[test]
+fn parse_rooms_valid() {
+    let (characteristics, rooms) = schedule::parse_rooms(&fixture("valid_rooms.csv")).unwrap();
+    assert_eq!(characteristics, vec!["Tableaux"]);
+    assert_eq!(rooms.len(), 1);
+    assert_eq!(rooms[0].name, "A101");
+    assert_eq!(rooms[0].floor, 1);
+    assert_eq!(rooms[0].x, 2.5);
+    assert_eq!(rooms[0].y, 3.0);
+    assert_eq!(rooms[0].characteristic_values, vec![2]);
+}
+
+#[test]
+fn parse_requests_valid() {
+    let characteristics = vec!["Tableaux".to_string()];
+    let requests =
+        schedule::parse_requests(&fixture("valid_requests.csv"), &characteristics).unwrap();
+    assert_eq!(requests.len(), 1);
+    let r = &requests[0];
+    assert_eq!(r.period, 1);
+    assert_eq!(r.day, Weekday(chrono::Weekday::Mon));
+    assert_eq!(r.hour, 8);
+    assert_eq!(r.subject, "Maths");
+    assert_eq!(r.responsible, "Dupont");
+    assert_eq!(r.colleur, "Martin");
+    assert_eq!(r.floor, 1);
+    assert_eq!(r.x, 2.5);
+    assert_eq!(r.y, 3.0);
+    assert!(!r.prep);
+    assert_eq!(r.constraints.len(), 1);
+    assert_eq!(r.constraints[0].min, Some(1));
+    assert_eq!(r.constraints[0].max, Some(3));
+}
+
+#[test]
+fn parse_schedule_valid() {
+    let data =
+        schedule::parse_schedule(&fixture("valid_rooms.csv"), &fixture("valid_requests.csv"))
+            .unwrap();
+    assert_eq!(data.characteristics, vec!["Tableaux"]);
+    assert_eq!(data.rooms.len(), 1);
+    assert_eq!(data.requests.len(), 1);
 }

@@ -98,14 +98,7 @@ pub fn run(files: &[PathBuf]) -> Result<(), ScheduleError> {
         return Err(ScheduleError::WrongFileCount(files.len()));
     }
 
-    let (characteristics, rooms) = parse_rooms(&files[0])?;
-    let requests = parse_requests(&files[1], &characteristics)?;
-
-    let data = RoomScheduleData {
-        characteristics,
-        rooms,
-        requests,
-    };
+    let data = parse_schedule(&files[0], &files[1])?;
 
     eprintln!(
         "Parsed {} rooms and {} requests with characteristics: {:?}",
@@ -117,7 +110,20 @@ pub fn run(files: &[PathBuf]) -> Result<(), ScheduleError> {
     Ok(())
 }
 
-fn parse_rooms(path: &Path) -> Result<(Vec<String>, Vec<Room>), ScheduleError> {
+pub fn parse_schedule(
+    rooms_path: &Path,
+    requests_path: &Path,
+) -> Result<RoomScheduleData, ScheduleError> {
+    let (characteristics, rooms) = parse_rooms(rooms_path)?;
+    let requests = parse_requests(requests_path, &characteristics)?;
+    Ok(RoomScheduleData {
+        characteristics,
+        rooms,
+        requests,
+    })
+}
+
+pub fn parse_rooms(path: &Path) -> Result<(Vec<String>, Vec<Room>), ScheduleError> {
     let mut reader = csv::ReaderBuilder::new()
         .has_headers(true)
         .from_path(path)?;
@@ -181,7 +187,10 @@ fn parse_rooms(path: &Path) -> Result<(Vec<String>, Vec<Room>), ScheduleError> {
     Ok((characteristics, rooms))
 }
 
-fn parse_requests(path: &Path, characteristics: &[String]) -> Result<Vec<Request>, ScheduleError> {
+pub fn parse_requests(
+    path: &Path,
+    characteristics: &[String],
+) -> Result<Vec<Request>, ScheduleError> {
     let mut reader = csv::ReaderBuilder::new()
         .has_headers(true)
         .from_path(path)?;
