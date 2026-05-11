@@ -1,0 +1,10 @@
+[package]
+name = "collomatique-rooms"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+calamine = "0.26"
