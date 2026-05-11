@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use collomatique_time::Weekday;
 use thiserror::Error;
@@ -52,8 +52,6 @@ pub enum ScheduleError {
     },
     #[error("In requests file, row {row}: invalid day \"{value}\"")]
     InvalidDay { row: usize, value: String },
-    #[error("Schedule mode requires exactly 2 CSV file arguments (rooms, requests), got {0}")]
-    WrongFileCount(usize),
 }
 
 #[derive(Debug, Clone)]
@@ -93,12 +91,8 @@ pub struct RoomScheduleData {
     pub requests: Vec<Request>,
 }
 
-pub fn run(files: &[PathBuf]) -> Result<(), ScheduleError> {
-    if files.len() != 2 {
-        return Err(ScheduleError::WrongFileCount(files.len()));
-    }
-
-    let data = parse_schedule(&files[0], &files[1])?;
+pub fn run(rooms: &Path, requests: &Path) -> Result<(), ScheduleError> {
+    let data = parse_schedule(rooms, requests)?;
 
     eprintln!(
         "Parsed {} rooms and {} requests with characteristics: {:?}",

@@ -10,7 +10,7 @@ fn fixture(name: &str) -> PathBuf {
 }
 
 fn run(rooms: &str, requests: &str) -> Result<(), ScheduleError> {
-    schedule::run(&[fixture(rooms), fixture(requests)])
+    schedule::run(&fixture(rooms), &fixture(requests))
 }
 
 #[test]
