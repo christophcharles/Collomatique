@@ -488,7 +488,9 @@ dependencies = [
  "clap",
  "collomatique-time",
  "csv",
+ "non-empty-string",
  "thiserror 1.0.69",
+ "unicode-normalization",
 ]
 
 [[package]]

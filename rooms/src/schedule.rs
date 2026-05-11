@@ -1,23 +1,40 @@
+use std::num::NonZeroU32;
 use std::path::Path;
 
 use collomatique_time::Weekday;
+use non_empty_string::NonEmptyString;
 use thiserror::Error;
+use unicode_normalization::UnicodeNormalization;
 
-const ROOMS_FIXED_COLUMNS: &[&str] = &["Salle", "Étage", "X", "Y"];
-
-const REQUESTS_FIXED_COLUMNS: &[&str] = &[
-    "Période",
-    "Jour",
-    "Heure",
-    "Matière",
-    "Responsable",
-    "Colleur",
+const ROOMS_COLUMNS: &[&str] = &[
+    "Salle",
     "Étage",
     "X",
     "Y",
+    "Tableaux",
+    "Capacité",
+    "Fenêtre",
+];
+
+const REQUESTS_COLUMNS: &[&str] = &[
+    "P1",
+    "P2",
+    "P3",
+    "Jour",
+    "Heure",
+    "Discipline",
+    "Classes",
+    "Responsable",
+    "Colleur",
+    "Tableaux",
+    "Fenêtre",
+    "Nb élèves",
+    "Nb prep",
+    "Salle",
     "Prep",
 ];
 
+/// Errors that can occur while parsing schedule CSV files.
 #[derive(Debug, Error)]
 pub enum ScheduleError {
     #[error("Error reading CSV: {0}")]
@@ -28,303 +45,268 @@ pub enum ScheduleError {
     RoomsMissingColumn(String),
     #[error("In requests file: missing expected column \"{0}\"")]
     RequestsMissingColumn(String),
-    #[error("In rooms file: unknown column \"{0}\"")]
+    #[error("In rooms file: unexpected column \"{0}\"")]
     RoomsUnknownColumn(String),
-    #[error("In requests file: unknown column \"{0}\"")]
+    #[error("In requests file: unexpected column \"{0}\"")]
     RequestsUnknownColumn(String),
-    #[error(
-        "Characteristic columns mismatch: rooms file has {expected:?} but requests file has {actual:?}"
-    )]
-    CharacteristicsMismatch {
-        expected: Vec<String>,
-        actual: Vec<String>,
-    },
     #[error("In rooms file, row {row}: {message}")]
     RoomsRowError { row: usize, message: String },
     #[error("In requests file, row {row}: {message}")]
     RequestsRowError { row: usize, message: String },
-    #[error("In requests file, row {row}, characteristic \"{name}\": min ({min}) > max ({max})")]
-    MinGreaterThanMax {
-        row: usize,
-        name: String,
-        min: i32,
-        max: i32,
-    },
     #[error("In requests file, row {row}: invalid day \"{value}\"")]
     InvalidDay { row: usize, value: String },
+    #[error("In requests file, row {row}: hour must be between 8 and 19, got {value}")]
+    InvalidHour { row: usize, value: u32 },
 }
 
+/// A room available for scheduling.
 #[derive(Debug, Clone)]
 pub struct Room {
-    pub name: String,
-    pub floor: i32,
-    pub x: f64,
-    pub y: f64,
-    pub characteristic_values: Vec<i32>,
+    /// Name of the room (e.g. "A101").
+    pub name: NonEmptyString,
+    /// Floor number.
+    pub floor: u32,
+    /// X coordinate on the floor plan.
+    pub x: f32,
+    /// Y coordinate on the floor plan.
+    pub y: f32,
+    /// Number of blackboards in the room.
+    pub blackboards: u32,
+    /// Maximum number of students the room can accommodate.
+    pub capacity: NonZeroU32,
+    /// Whether the room has a window.
+    pub window: bool,
 }
 
-#[derive(Debug, Clone, Copy, Default)]
-pub struct CharacteristicConstraint {
-    pub min: Option<i32>,
-    pub max: Option<i32>,
-}
-
+/// A scheduling request for a room.
 #[derive(Debug, Clone)]
 pub struct Request {
-    pub period: i32,
+    /// Whether the interrogation is needed in period 1.
+    pub p1: bool,
+    /// Whether the interrogation is needed in period 2.
+    pub p2: bool,
+    /// Whether the interrogation is needed in period 3.
+    pub p3: bool,
+    /// Day of the week.
     pub day: Weekday,
-    pub hour: i32,
-    pub subject: String,
+    /// Hour of the interrogation (between 8 and 19 inclusive).
+    pub hour: u32,
+    /// Discipline name (normalized: NFC, trimmed, lowercased).
+    pub discipline: String,
+    /// Classes that can attend this interrogation slot (e.g. "MP", "PC").
+    pub classes: Vec<String>,
+    /// Name of the person requesting the room.
     pub responsible: String,
+    /// Name of the teacher that will use the room.
     pub colleur: String,
-    pub floor: i32,
-    pub x: f64,
-    pub y: f64,
-    pub prep: bool,
-    pub constraints: Vec<CharacteristicConstraint>,
+    /// Minimum number of blackboards needed.
+    pub blackboards: u32,
+    /// Whether a window is required.
+    pub window: bool,
+    /// Number of students to seat in the room.
+    pub students: NonZeroU32,
+    /// Number of students to seat in the prep room.
+    pub prep_students: u32,
+    /// Suggested room name. If absent, no preference. If the name is not in
+    /// the rooms CSV, the teacher vouches for the (unmanaged) room being
+    /// available.
+    pub room_suggestion: Option<NonEmptyString>,
+    /// Suggested prep room name. Same semantics as `room_suggestion`.
+    pub prep_suggestion: Option<NonEmptyString>,
 }
 
+/// Parsed schedule data: rooms and requests.
 #[derive(Debug, Clone)]
-pub struct RoomScheduleData {
-    pub characteristics: Vec<String>,
+pub struct ScheduleData {
+    /// Available rooms.
     pub rooms: Vec<Room>,
+    /// Scheduling requests.
     pub requests: Vec<Request>,
 }
 
+/// Parse both CSV files and print summary statistics.
 pub fn run(rooms: &Path, requests: &Path) -> Result<(), ScheduleError> {
     let data = parse_schedule(rooms, requests)?;
-
     eprintln!(
-        "Parsed {} rooms and {} requests with characteristics: {:?}",
+        "Parsed {} rooms and {} requests",
         data.rooms.len(),
         data.requests.len(),
-        data.characteristics,
     );
-
     Ok(())
 }
 
+/// Parse a rooms CSV and a requests CSV into a [`ScheduleData`].
 pub fn parse_schedule(
     rooms_path: &Path,
     requests_path: &Path,
-) -> Result<RoomScheduleData, ScheduleError> {
-    let (characteristics, rooms) = parse_rooms(rooms_path)?;
-    let requests = parse_requests(requests_path, &characteristics)?;
-    Ok(RoomScheduleData {
-        characteristics,
-        rooms,
-        requests,
-    })
+) -> Result<ScheduleData, ScheduleError> {
+    let rooms = parse_rooms(rooms_path)?;
+    let requests = parse_requests(requests_path)?;
+    Ok(ScheduleData { rooms, requests })
 }
 
-pub fn parse_rooms(path: &Path) -> Result<(Vec<String>, Vec<Room>), ScheduleError> {
+/// Parse a rooms CSV file.
+///
+/// Expected columns: Salle, Étage, X, Y, Tableaux, Capacité, Fenêtre.
+pub fn parse_rooms(path: &Path) -> Result<Vec<Room>, ScheduleError> {
     let mut reader = csv::ReaderBuilder::new()
         .has_headers(true)
+        .flexible(true)
         .from_path(path)?;
     let headers = reader.headers()?.clone();
+    validate_headers(&headers, ROOMS_COLUMNS, "rooms")?;
 
-    for (i, expected) in ROOMS_FIXED_COLUMNS.iter().enumerate() {
-        match headers.get(i) {
-            Some(h) if h.trim() == *expected => {}
-            _ => return Err(ScheduleError::RoomsMissingColumn(expected.to_string())),
-        }
-    }
-
-    let mut characteristics = Vec::new();
-    for i in ROOMS_FIXED_COLUMNS.len()..headers.len() {
-        let name = headers.get(i).unwrap_or("").trim();
-        if name.is_empty() {
-            return Err(ScheduleError::RoomsUnknownColumn(String::new()));
-        }
-        characteristics.push(name.to_string());
-    }
-
-    let expected_len = ROOMS_FIXED_COLUMNS.len() + characteristics.len();
     let mut rooms = Vec::new();
 
     for (idx, result) in reader.records().enumerate() {
         let record = result?;
         let row = idx + 1;
 
-        if record.len() != expected_len {
+        if record.len() != ROOMS_COLUMNS.len() {
             return Err(ScheduleError::RoomsRowError {
                 row,
-                message: format!("expected {} columns, got {}", expected_len, record.len()),
+                message: format!(
+                    "expected {} columns, got {}",
+                    ROOMS_COLUMNS.len(),
+                    record.len()
+                ),
             });
         }
 
-        let name = record.get(0).unwrap().trim().to_string();
-        let floor = parse_field::<i32>(&record, 1, row, "rooms", "Étage")?;
-        let x = parse_field::<f64>(&record, 2, row, "rooms", "X")?;
-        let y = parse_field::<f64>(&record, 3, row, "rooms", "Y")?;
-
-        let mut characteristic_values = Vec::with_capacity(characteristics.len());
-        for (i, char_name) in characteristics.iter().enumerate() {
-            characteristic_values.push(parse_field::<i32>(
-                &record,
-                ROOMS_FIXED_COLUMNS.len() + i,
-                row,
-                "rooms",
-                char_name,
-            )?);
-        }
+        let name = parse_non_empty_field(&record, 0, row, "rooms", "Salle")?;
+        let floor = parse_field::<u32>(&record, 1, row, "rooms", "Étage")?;
+        let x = parse_field::<f32>(&record, 2, row, "rooms", "X")?;
+        let y = parse_field::<f32>(&record, 3, row, "rooms", "Y")?;
+        let blackboards = parse_field::<u32>(&record, 4, row, "rooms", "Tableaux")?;
+        let capacity = parse_field::<NonZeroU32>(&record, 5, row, "rooms", "Capacité")?;
+        let window = parse_bool_field(&record, 6, row, "rooms", "Fenêtre")?;
 
         rooms.push(Room {
             name,
             floor,
             x,
             y,
-            characteristic_values,
+            blackboards,
+            capacity,
+            window,
         });
     }
 
-    Ok((characteristics, rooms))
+    Ok(rooms)
 }
 
-pub fn parse_requests(
-    path: &Path,
-    characteristics: &[String],
-) -> Result<Vec<Request>, ScheduleError> {
+/// Parse a requests CSV file.
+///
+/// Expected columns: P1, P2, P3, Jour, Heure, Discipline, Classes,
+/// Responsable, Colleur, Tableaux, Fenêtre, Nb élèves, Nb prep, Salle, Prep.
+pub fn parse_requests(path: &Path) -> Result<Vec<Request>, ScheduleError> {
     let mut reader = csv::ReaderBuilder::new()
         .has_headers(true)
+        .flexible(true)
         .from_path(path)?;
     let headers = reader.headers()?.clone();
+    validate_headers(&headers, REQUESTS_COLUMNS, "requests")?;
 
-    for (i, expected) in REQUESTS_FIXED_COLUMNS.iter().enumerate() {
-        match headers.get(i) {
-            Some(h) if h.trim() == *expected => {}
-            _ => return Err(ScheduleError::RequestsMissingColumn(expected.to_string())),
-        }
-    }
-
-    let expected_extra: Vec<String> = characteristics
-        .iter()
-        .flat_map(|name| [format!("{name} Min"), format!("{name} Max")])
-        .collect();
-
-    let actual_extra: Vec<String> = (REQUESTS_FIXED_COLUMNS.len()..headers.len())
-        .map(|i| headers.get(i).unwrap_or("").trim().to_string())
-        .collect();
-
-    if actual_extra != expected_extra {
-        let actual_chars: Vec<String> = actual_extra
-            .chunks(2)
-            .filter_map(|pair| {
-                pair.first()
-                    .and_then(|s| s.strip_suffix(" Min"))
-                    .map(|s| s.to_string())
-            })
-            .collect();
-
-        for col in &actual_extra {
-            if !expected_extra.contains(col) {
-                return Err(ScheduleError::RequestsUnknownColumn(col.clone()));
-            }
-        }
-        for col in &expected_extra {
-            if !actual_extra.contains(col) {
-                return Err(ScheduleError::RequestsMissingColumn(col.clone()));
-            }
-        }
-
-        return Err(ScheduleError::CharacteristicsMismatch {
-            expected: characteristics.to_vec(),
-            actual: actual_chars,
-        });
-    }
-
-    let expected_len = REQUESTS_FIXED_COLUMNS.len() + 2 * characteristics.len();
     let mut requests = Vec::new();
 
     for (idx, result) in reader.records().enumerate() {
         let record = result?;
         let row = idx + 1;
 
-        if record.len() != expected_len {
+        if record.len() != REQUESTS_COLUMNS.len() {
             return Err(ScheduleError::RequestsRowError {
                 row,
-                message: format!("expected {} columns, got {}", expected_len, record.len()),
+                message: format!(
+                    "expected {} columns, got {}",
+                    REQUESTS_COLUMNS.len(),
+                    record.len()
+                ),
             });
         }
 
-        let period = parse_field::<i32>(&record, 0, row, "requests", "Période")?;
+        let p1 = parse_bool_field(&record, 0, row, "requests", "P1")?;
+        let p2 = parse_bool_field(&record, 1, row, "requests", "P2")?;
+        let p3 = parse_bool_field(&record, 2, row, "requests", "P3")?;
 
-        let day_str = record.get(1).unwrap().trim();
+        let day_str = record.get(3).unwrap().trim();
         let day = Weekday::from_french(day_str).ok_or_else(|| ScheduleError::InvalidDay {
             row,
             value: day_str.to_string(),
         })?;
 
-        let hour = parse_field::<i32>(&record, 2, row, "requests", "Heure")?;
-        let subject = record.get(3).unwrap().trim().to_string();
-        let responsible = record.get(4).unwrap().trim().to_string();
-        let colleur = record.get(5).unwrap().trim().to_string();
-        let floor = parse_field::<i32>(&record, 6, row, "requests", "Étage")?;
-        let x = parse_field::<f64>(&record, 7, row, "requests", "X")?;
-        let y = parse_field::<f64>(&record, 8, row, "requests", "Y")?;
-
-        let prep_val = parse_field::<i32>(&record, 9, row, "requests", "Prep")?;
-        let prep = match prep_val {
-            0 => false,
-            1 => true,
-            other => {
-                return Err(ScheduleError::RequestsRowError {
-                    row,
-                    message: format!("Prep must be 0 or 1, got {other}"),
-                });
-            }
-        };
-
-        let mut constraints = Vec::with_capacity(characteristics.len());
-        for (i, char_name) in characteristics.iter().enumerate() {
-            let min_idx = REQUESTS_FIXED_COLUMNS.len() + 2 * i;
-            let max_idx = min_idx + 1;
-
-            let min = parse_optional_field::<i32>(
-                &record,
-                min_idx,
-                row,
-                "requests",
-                &format!("{char_name} Min"),
-            )?;
-            let max = parse_optional_field::<i32>(
-                &record,
-                max_idx,
-                row,
-                "requests",
-                &format!("{char_name} Max"),
-            )?;
-
-            if let (Some(min_v), Some(max_v)) = (min, max) {
-                if min_v > max_v {
-                    return Err(ScheduleError::MinGreaterThanMax {
-                        row,
-                        name: char_name.clone(),
-                        min: min_v,
-                        max: max_v,
-                    });
-                }
-            }
-
-            constraints.push(CharacteristicConstraint { min, max });
+        let hour = parse_field::<u32>(&record, 4, row, "requests", "Heure")?;
+        if !(8..=19).contains(&hour) {
+            return Err(ScheduleError::InvalidHour { row, value: hour });
         }
 
+        let discipline_raw = record.get(5).unwrap().trim();
+        let discipline: String = discipline_raw.nfc().collect::<String>().to_lowercase();
+
+        let classes: Vec<String> = record
+            .get(6)
+            .unwrap()
+            .split(';')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+
+        let responsible = record.get(7).unwrap().trim().to_string();
+        let colleur = record.get(8).unwrap().trim().to_string();
+        let blackboards = parse_field::<u32>(&record, 9, row, "requests", "Tableaux")?;
+        let window = parse_bool_field(&record, 10, row, "requests", "Fenêtre")?;
+        let students = parse_field::<NonZeroU32>(&record, 11, row, "requests", "Nb élèves")?;
+        let prep_students = parse_field::<u32>(&record, 12, row, "requests", "Nb prep")?;
+        let room_suggestion = parse_optional_non_empty(&record, 13);
+        let prep_suggestion = parse_optional_non_empty(&record, 14);
+
         requests.push(Request {
-            period,
+            p1,
+            p2,
+            p3,
             day,
             hour,
-            subject,
+            discipline,
+            classes,
             responsible,
             colleur,
-            floor,
-            x,
-            y,
-            prep,
-            constraints,
+            blackboards,
+            window,
+            students,
+            prep_students,
+            room_suggestion,
+            prep_suggestion,
         });
     }
 
     Ok(requests)
+}
+
+fn validate_headers(
+    headers: &csv::StringRecord,
+    expected: &[&str],
+    file: &str,
+) -> Result<(), ScheduleError> {
+    for (i, &col) in expected.iter().enumerate() {
+        match headers.get(i) {
+            Some(h) if h.trim() == col => {}
+            _ => {
+                return Err(if file == "rooms" {
+                    ScheduleError::RoomsMissingColumn(col.to_string())
+                } else {
+                    ScheduleError::RequestsMissingColumn(col.to_string())
+                });
+            }
+        }
+    }
+    for i in expected.len()..headers.len() {
+        let name = headers.get(i).unwrap_or("").trim().to_string();
+        return Err(if file == "rooms" {
+            ScheduleError::RoomsUnknownColumn(name)
+        } else {
+            ScheduleError::RequestsUnknownColumn(name)
+        });
+    }
+    Ok(())
 }
 
 fn parse_field<T: std::str::FromStr>(
@@ -336,30 +318,69 @@ fn parse_field<T: std::str::FromStr>(
 ) -> Result<T, ScheduleError> {
     let value = record.get(index).unwrap().trim();
     value.parse::<T>().map_err(|_| {
-        let err = match file {
-            "rooms" => ScheduleError::RoomsRowError {
+        if file == "rooms" {
+            ScheduleError::RoomsRowError {
                 row,
                 message: format!("cannot parse \"{value}\" in column \"{column}\""),
-            },
-            _ => ScheduleError::RequestsRowError {
+            }
+        } else {
+            ScheduleError::RequestsRowError {
                 row,
                 message: format!("cannot parse \"{value}\" in column \"{column}\""),
-            },
-        };
-        err
+            }
+        }
     })
 }
 
-fn parse_optional_field<T: std::str::FromStr>(
+fn parse_bool_field(
     record: &csv::StringRecord,
     index: usize,
     row: usize,
     file: &str,
     column: &str,
-) -> Result<Option<T>, ScheduleError> {
+) -> Result<bool, ScheduleError> {
     let value = record.get(index).unwrap().trim();
-    if value.is_empty() {
-        return Ok(None);
+    match value {
+        "0" => Ok(false),
+        "1" => Ok(true),
+        _ => Err(if file == "rooms" {
+            ScheduleError::RoomsRowError {
+                row,
+                message: format!("column \"{column}\": expected 0 or 1, got \"{value}\""),
+            }
+        } else {
+            ScheduleError::RequestsRowError {
+                row,
+                message: format!("column \"{column}\": expected 0 or 1, got \"{value}\""),
+            }
+        }),
     }
-    parse_field::<T>(record, index, row, file, column).map(Some)
+}
+
+fn parse_non_empty_field(
+    record: &csv::StringRecord,
+    index: usize,
+    row: usize,
+    file: &str,
+    column: &str,
+) -> Result<NonEmptyString, ScheduleError> {
+    let value = record.get(index).unwrap().trim();
+    NonEmptyString::try_from(value).map_err(|_| {
+        if file == "rooms" {
+            ScheduleError::RoomsRowError {
+                row,
+                message: format!("column \"{column}\": value must not be empty"),
+            }
+        } else {
+            ScheduleError::RequestsRowError {
+                row,
+                message: format!("column \"{column}\": value must not be empty"),
+            }
+        }
+    })
+}
+
+fn parse_optional_non_empty(record: &csv::StringRecord, index: usize) -> Option<NonEmptyString> {
+    let value = record.get(index).unwrap_or("").trim();
+    NonEmptyString::try_from(value).ok()
 }
