@@ -1,4 +1,4 @@
-use collomatique_rooms_model::ScheduleData;
+use collomatique_rooms_model::{RoomPreference, ScheduleData};
 use non_empty_string::NonEmptyString;
 
 pub const PERIOD_COUNT: usize = 3;
@@ -24,19 +24,19 @@ impl VarEnv {
 
     pub(crate) fn has_interrogation_var(&self, request: usize, room: &NonEmptyString) -> bool {
         self.managed_rooms.contains(room)
-            || self.data.requests[request]
-                .room_preference
-                .as_ref()
-                .is_some_and(|p| p.room_name() == room)
+            || matches!(
+                &self.data.requests[request].room_preference,
+                Some(RoomPreference::Demand(name)) if name == room
+            )
     }
 
     pub(crate) fn has_prep_var(&self, request: usize, room: &NonEmptyString) -> bool {
         self.data.requests[request].prep_students >= 1
             && (self.managed_rooms.contains(room)
-                || self.data.requests[request]
-                    .prep_preference
-                    .as_ref()
-                    .is_some_and(|p| p.room_name() == room))
+                || matches!(
+                    &self.data.requests[request].prep_preference,
+                    Some(RoomPreference::Demand(name)) if name == room
+                ))
     }
 }
 
@@ -76,8 +76,7 @@ impl Var {
 
     pub fn compute_interrogation_room_range(env: &VarEnv, request: &usize) -> Vec<NonEmptyString> {
         let mut rooms = env.managed_rooms.clone();
-        if let Some(pref) = env.data.requests[*request].room_preference.as_ref() {
-            let name = pref.room_name();
+        if let Some(RoomPreference::Demand(name)) = &env.data.requests[*request].room_preference {
             if !rooms.contains(name) {
                 rooms.push(name.clone());
             }
@@ -87,8 +86,7 @@ impl Var {
 
     pub fn compute_prep_room_range(env: &VarEnv, request: &usize) -> Vec<NonEmptyString> {
         let mut rooms = env.managed_rooms.clone();
-        if let Some(pref) = env.data.requests[*request].prep_preference.as_ref() {
-            let name = pref.room_name();
+        if let Some(RoomPreference::Demand(name)) = &env.data.requests[*request].prep_preference {
             if !rooms.contains(name) {
                 rooms.push(name.clone());
             }

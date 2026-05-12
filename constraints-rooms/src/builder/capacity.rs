@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use collomatique_ilp::int_linexpr::IntLinExpr;
-use collomatique_rooms_model::{Hour, Request};
+use collomatique_rooms_model::{Hour, Request, RoomPreference};
 use collomatique_time::Weekday;
 use non_empty_string::NonEmptyString;
 
@@ -101,17 +101,15 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
         }
     }
 
-    // Undeclared rooms (in suggestions but not in rooms.csv)
+    // Undeclared rooms (in demands but not in rooms.csv)
     let mut undeclared_rooms: BTreeSet<NonEmptyString> = BTreeSet::new();
     for req in &env.data.requests {
-        if let Some(pref) = &req.room_preference {
-            let name = pref.room_name();
+        if let Some(RoomPreference::Demand(name)) = &req.room_preference {
             if !env.data.rooms.contains_key(name) {
                 undeclared_rooms.insert(name.clone());
             }
         }
-        if let Some(pref) = &req.prep_preference {
-            let name = pref.room_name();
+        if let Some(RoomPreference::Demand(name)) = &req.prep_preference {
             if !env.data.rooms.contains_key(name) {
                 undeclared_rooms.insert(name.clone());
             }
