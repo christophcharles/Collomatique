@@ -14,6 +14,12 @@ impl Hour {
     }
 }
 
+impl std::fmt::Display for Hour {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}h", self.0)
+    }
+}
+
 impl std::ops::Deref for Hour {
     type Target = u32;
 
@@ -135,6 +141,34 @@ pub struct ScheduleData {
     pub config: Config,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DemandKind {
+    Interrogation,
+    Prep,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DemandConflictKind {
+    InterrogationInterrogation,
+    InterrogationPrep,
+    PrepOverCapacity {
+        total_students: u32,
+        capacity: NonZeroU32,
+    },
+    PrepUnknownCapacity {
+        total_students: u32,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DemandConflict {
+    pub room: NonEmptyString,
+    pub day: Weekday,
+    pub hour: Hour,
+    pub kind: DemandConflictKind,
+    pub requests: Vec<(usize, DemandKind)>,
+}
+
 impl ScheduleData {
     pub fn unregistered_rooms(&self) -> Vec<&str> {
         let mut unregistered: Vec<&str> = self
@@ -152,5 +186,133 @@ impl ScheduleData {
             .collect();
         unregistered.sort();
         unregistered
+    }
+
+    pub fn demand_conflicts(&self) -> Vec<DemandConflict> {
+        struct Demand {
+            request: usize,
+            interrogation: bool,
+            periods: Periods,
+        }
+
+        let mut groups: BTreeMap<(NonEmptyString, Weekday, Hour), Vec<Demand>> = BTreeMap::new();
+
+        for (req_idx, req) in self.requests.iter().enumerate() {
+            if let Some(RoomPreference::Demand(room)) = &req.room_preference {
+                groups
+                    .entry((room.clone(), req.day, req.hour))
+                    .or_default()
+                    .push(Demand {
+                        request: req_idx,
+                        interrogation: true,
+                        periods: req.periods,
+                    });
+            }
+            if let Some(RoomPreference::Demand(room)) = &req.prep_preference {
+                groups
+                    .entry((room.clone(), req.day, req.hour))
+                    .or_default()
+                    .push(Demand {
+                        request: req_idx,
+                        interrogation: false,
+                        periods: req.periods,
+                    });
+            }
+        }
+
+        let mut conflicts = Vec::new();
+
+        for ((room, day, hour), demands) in &groups {
+            if demands.len() < 2 {
+                continue;
+            }
+
+            let interro: Vec<_> = demands.iter().filter(|d| d.interrogation).collect();
+            let prep: Vec<_> = demands.iter().filter(|d| !d.interrogation).collect();
+
+            for i in 0..interro.len() {
+                for j in (i + 1)..interro.len() {
+                    if interro[i].periods.overlaps_with(&interro[j].periods) {
+                        conflicts.push(DemandConflict {
+                            room: room.clone(),
+                            day: *day,
+                            hour: *hour,
+                            kind: DemandConflictKind::InterrogationInterrogation,
+                            requests: vec![
+                                (interro[i].request, DemandKind::Interrogation),
+                                (interro[j].request, DemandKind::Interrogation),
+                            ],
+                        });
+                    }
+                }
+            }
+
+            for i_demand in &interro {
+                for p_demand in &prep {
+                    if i_demand.periods.overlaps_with(&p_demand.periods) {
+                        conflicts.push(DemandConflict {
+                            room: room.clone(),
+                            day: *day,
+                            hour: *hour,
+                            kind: DemandConflictKind::InterrogationPrep,
+                            requests: vec![
+                                (i_demand.request, DemandKind::Interrogation),
+                                (p_demand.request, DemandKind::Prep),
+                            ],
+                        });
+                    }
+                }
+            }
+
+            if prep.len() >= 2 {
+                for period_idx in 0..3u8 {
+                    let active: Vec<_> = prep
+                        .iter()
+                        .filter(|d| match period_idx {
+                            0 => d.periods.p1,
+                            1 => d.periods.p2,
+                            _ => d.periods.p3,
+                        })
+                        .collect();
+
+                    if active.len() < 2 {
+                        continue;
+                    }
+
+                    let total_students: u32 = active
+                        .iter()
+                        .map(|d| self.requests[d.request].prep_students)
+                        .sum();
+
+                    let capacity = self.rooms.get(room).map(|r| r.capacity);
+
+                    let kind = match capacity {
+                        Some(cap) if total_students > cap.get() => {
+                            Some(DemandConflictKind::PrepOverCapacity {
+                                total_students,
+                                capacity: cap,
+                            })
+                        }
+                        Some(_) => None,
+                        None => Some(DemandConflictKind::PrepUnknownCapacity { total_students }),
+                    };
+
+                    if let Some(kind) = kind {
+                        conflicts.push(DemandConflict {
+                            room: room.clone(),
+                            day: *day,
+                            hour: *hour,
+                            kind,
+                            requests: active
+                                .iter()
+                                .map(|d| (d.request, DemandKind::Prep))
+                                .collect(),
+                        });
+                    }
+                }
+            }
+        }
+
+        conflicts
     }
 }

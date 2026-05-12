@@ -1,8 +1,14 @@
 use std::path::PathBuf;
 
+use std::collections::BTreeMap;
+use std::num::NonZeroU32;
+
 use collomatique_rooms::ScheduleError;
 use collomatique_rooms::parsing;
-use collomatique_rooms::{Hour, RoomPreference, Window};
+use collomatique_rooms::{
+    Config, DemandConflictKind, DemandKind, Hour, Periods, Request, Room, RoomPreference,
+    ScheduleData, Window,
+};
 use collomatique_time::Weekday;
 use non_empty_string::NonEmptyString;
 
@@ -389,4 +395,294 @@ fn incompats_undeclared_room() {
         ScheduleError::IncompatsUndeclaredRoom { row: 1, ref room }
         if room == "Z999"
     ));
+}
+
+// --- Demand conflict detection ---
+
+fn default_config() -> Config {
+    Config {
+        oral_exam_periods: Periods {
+            p1: false,
+            p2: false,
+            p3: false,
+        },
+        time_zones: vec![],
+        max_priority: None,
+    }
+}
+
+fn make_room(capacity: u32) -> Room {
+    Room {
+        floor: 0,
+        x: 0.0,
+        y: 0.0,
+        blackboards: 0,
+        whiteboards: 0,
+        capacity: NonZeroU32::new(capacity).unwrap(),
+        window: Window::None,
+        priority: Some(0),
+        reserved: false,
+    }
+}
+
+fn make_request(
+    day: chrono::Weekday,
+    hour: u32,
+    periods: (bool, bool, bool),
+    room_preference: Option<RoomPreference>,
+    prep_preference: Option<RoomPreference>,
+    prep_students: u32,
+) -> Request {
+    Request {
+        periods: Periods {
+            p1: periods.0,
+            p2: periods.1,
+            p3: periods.2,
+        },
+        day: Weekday(day),
+        hour: Hour::new(hour).unwrap(),
+        subject: nes("Mathématiques"),
+        classes: vec![nes("MP")],
+        requester: nes("Dupont"),
+        teacher: nes("Martin"),
+        blackboards: 0,
+        window: false,
+        students: NonZeroU32::new(3).unwrap(),
+        prep_students,
+        room_preference,
+        prep_preference,
+    }
+}
+
+#[test]
+fn demand_no_conflict_non_overlapping_periods() {
+    let mut rooms = BTreeMap::new();
+    rooms.insert(nes("A101"), make_room(30));
+    let data = ScheduleData {
+        rooms,
+        requests: vec![
+            make_request(
+                chrono::Weekday::Mon,
+                8,
+                (true, false, false),
+                Some(RoomPreference::Demand(nes("A101"))),
+                None,
+                0,
+            ),
+            make_request(
+                chrono::Weekday::Mon,
+                8,
+                (false, true, false),
+                Some(RoomPreference::Demand(nes("A101"))),
+                None,
+                0,
+            ),
+        ],
+        incompats: vec![],
+        config: default_config(),
+    };
+    assert!(data.demand_conflicts().is_empty());
+}
+
+#[test]
+fn demand_interro_interro_conflict() {
+    let mut rooms = BTreeMap::new();
+    rooms.insert(nes("A101"), make_room(30));
+    let data = ScheduleData {
+        rooms,
+        requests: vec![
+            make_request(
+                chrono::Weekday::Mon,
+                8,
+                (true, false, false),
+                Some(RoomPreference::Demand(nes("A101"))),
+                None,
+                0,
+            ),
+            make_request(
+                chrono::Weekday::Mon,
+                8,
+                (true, true, false),
+                Some(RoomPreference::Demand(nes("A101"))),
+                None,
+                0,
+            ),
+        ],
+        incompats: vec![],
+        config: default_config(),
+    };
+    let conflicts = data.demand_conflicts();
+    assert_eq!(conflicts.len(), 1);
+    assert_eq!(
+        conflicts[0].kind,
+        DemandConflictKind::InterrogationInterrogation
+    );
+    assert_eq!(conflicts[0].requests.len(), 2);
+    assert_eq!(conflicts[0].requests[0], (0, DemandKind::Interrogation));
+    assert_eq!(conflicts[0].requests[1], (1, DemandKind::Interrogation));
+}
+
+#[test]
+fn demand_interro_prep_conflict() {
+    let mut rooms = BTreeMap::new();
+    rooms.insert(nes("A101"), make_room(30));
+    let data = ScheduleData {
+        rooms,
+        requests: vec![
+            make_request(
+                chrono::Weekday::Mon,
+                8,
+                (true, false, false),
+                Some(RoomPreference::Demand(nes("A101"))),
+                None,
+                0,
+            ),
+            make_request(
+                chrono::Weekday::Mon,
+                8,
+                (true, true, false),
+                None,
+                Some(RoomPreference::Demand(nes("A101"))),
+                5,
+            ),
+        ],
+        incompats: vec![],
+        config: default_config(),
+    };
+    let conflicts = data.demand_conflicts();
+    assert_eq!(conflicts.len(), 1);
+    assert_eq!(conflicts[0].kind, DemandConflictKind::InterrogationPrep);
+    assert_eq!(conflicts[0].requests[0], (0, DemandKind::Interrogation));
+    assert_eq!(conflicts[0].requests[1], (1, DemandKind::Prep));
+}
+
+#[test]
+fn demand_prep_prep_over_capacity() {
+    let mut rooms = BTreeMap::new();
+    rooms.insert(nes("A101"), make_room(10));
+    let data = ScheduleData {
+        rooms,
+        requests: vec![
+            make_request(
+                chrono::Weekday::Mon,
+                8,
+                (true, false, false),
+                None,
+                Some(RoomPreference::Demand(nes("A101"))),
+                6,
+            ),
+            make_request(
+                chrono::Weekday::Mon,
+                8,
+                (true, false, false),
+                None,
+                Some(RoomPreference::Demand(nes("A101"))),
+                7,
+            ),
+        ],
+        incompats: vec![],
+        config: default_config(),
+    };
+    let conflicts = data.demand_conflicts();
+    assert_eq!(conflicts.len(), 1);
+    assert_eq!(
+        conflicts[0].kind,
+        DemandConflictKind::PrepOverCapacity {
+            total_students: 13,
+            capacity: NonZeroU32::new(10).unwrap(),
+        }
+    );
+}
+
+#[test]
+fn demand_prep_prep_fits() {
+    let mut rooms = BTreeMap::new();
+    rooms.insert(nes("A101"), make_room(20));
+    let data = ScheduleData {
+        rooms,
+        requests: vec![
+            make_request(
+                chrono::Weekday::Mon,
+                8,
+                (true, false, false),
+                None,
+                Some(RoomPreference::Demand(nes("A101"))),
+                6,
+            ),
+            make_request(
+                chrono::Weekday::Mon,
+                8,
+                (true, false, false),
+                None,
+                Some(RoomPreference::Demand(nes("A101"))),
+                7,
+            ),
+        ],
+        incompats: vec![],
+        config: default_config(),
+    };
+    assert!(data.demand_conflicts().is_empty());
+}
+
+#[test]
+fn demand_prep_prep_unlisted_room() {
+    let data = ScheduleData {
+        rooms: BTreeMap::new(),
+        requests: vec![
+            make_request(
+                chrono::Weekday::Mon,
+                8,
+                (true, false, false),
+                None,
+                Some(RoomPreference::Demand(nes("Z999"))),
+                3,
+            ),
+            make_request(
+                chrono::Weekday::Mon,
+                8,
+                (true, false, false),
+                None,
+                Some(RoomPreference::Demand(nes("Z999"))),
+                4,
+            ),
+        ],
+        incompats: vec![],
+        config: default_config(),
+    };
+    let conflicts = data.demand_conflicts();
+    assert_eq!(conflicts.len(), 1);
+    assert_eq!(
+        conflicts[0].kind,
+        DemandConflictKind::PrepUnknownCapacity { total_students: 7 }
+    );
+}
+
+#[test]
+fn demand_suggestions_ignored() {
+    let mut rooms = BTreeMap::new();
+    rooms.insert(nes("A101"), make_room(30));
+    let data = ScheduleData {
+        rooms,
+        requests: vec![
+            make_request(
+                chrono::Weekday::Mon,
+                8,
+                (true, false, false),
+                Some(RoomPreference::Suggestion(nes("A101"))),
+                None,
+                0,
+            ),
+            make_request(
+                chrono::Weekday::Mon,
+                8,
+                (true, false, false),
+                Some(RoomPreference::Suggestion(nes("A101"))),
+                None,
+                0,
+            ),
+        ],
+        incompats: vec![],
+        config: default_config(),
+    };
+    assert!(data.demand_conflicts().is_empty());
 }

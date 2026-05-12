@@ -3,7 +3,8 @@ pub mod parsing;
 use std::path::Path;
 
 pub use collomatique_rooms_model::{
-    Config, Hour, Incompat, Periods, Request, Room, RoomPreference, ScheduleData, TimeZone, Window,
+    Config, DemandConflict, DemandConflictKind, DemandKind, Hour, Incompat, Periods, Request, Room,
+    RoomPreference, ScheduleData, TimeZone, Window,
 };
 pub use parsing::ScheduleError;
 
@@ -20,6 +21,9 @@ pub fn run(rooms: &Path, requests: &Path, incompats: Option<&Path>) -> Result<()
             "Warning: room \"{name}\" is not registered in the rooms file. \
              In case of double occupancy, we will not be able to find the closest available room."
         );
+    }
+    for conflict in data.demand_conflicts() {
+        print_demand_conflict(&data, &conflict);
     }
 
     eprintln!("Building ILP model...");
@@ -69,4 +73,78 @@ pub fn run(rooms: &Path, requests: &Path, incompats: Option<&Path>) -> Result<()
     }
 
     Ok(())
+}
+
+fn print_demand_conflict(data: &ScheduleData, conflict: &DemandConflict) {
+    let room: &str = conflict.room.as_ref();
+    match &conflict.kind {
+        DemandConflictKind::InterrogationInterrogation => {
+            eprintln!(
+                "Warning: room \"{room}\" demanded for interrogation \
+                 by conflicting requests on {} at {}:",
+                conflict.day, conflict.hour,
+            );
+            for &(req_idx, _) in &conflict.requests {
+                print_demand_request(data, req_idx, "interrogation");
+            }
+        }
+        DemandConflictKind::InterrogationPrep => {
+            eprintln!(
+                "Warning: room \"{room}\" demanded for both interrogation \
+                 and prep on {} at {}:",
+                conflict.day, conflict.hour,
+            );
+            for &(req_idx, ref kind) in &conflict.requests {
+                let label = match kind {
+                    DemandKind::Interrogation => "interrogation",
+                    DemandKind::Prep => "prep",
+                };
+                print_demand_request(data, req_idx, label);
+            }
+        }
+        DemandConflictKind::PrepOverCapacity {
+            total_students,
+            capacity,
+        } => {
+            eprintln!(
+                "Warning: prep demands for room \"{room}\" on {} at {} \
+                 exceed capacity ({total_students} students for {capacity} seats):",
+                conflict.day, conflict.hour,
+            );
+            for &(req_idx, _) in &conflict.requests {
+                print_prep_demand_request(data, req_idx);
+            }
+        }
+        DemandConflictKind::PrepUnknownCapacity { total_students } => {
+            eprintln!(
+                "Warning: multiple prep demands for unlisted room \"{room}\" \
+                 on {} at {} ({total_students} students total, capacity unknown):",
+                conflict.day, conflict.hour,
+            );
+            for &(req_idx, _) in &conflict.requests {
+                print_prep_demand_request(data, req_idx);
+            }
+        }
+    }
+}
+
+fn print_demand_request(data: &ScheduleData, request: usize, kind: &str) {
+    let req = &data.requests[request];
+    eprintln!(
+        "  - Request {request} ({kind}): {}, teacher: {}, requester: {}",
+        req.subject.as_ref() as &str,
+        req.teacher.as_ref() as &str,
+        req.requester.as_ref() as &str,
+    );
+}
+
+fn print_prep_demand_request(data: &ScheduleData, request: usize) {
+    let req = &data.requests[request];
+    eprintln!(
+        "  - Request {request} ({} prep students): {}, teacher: {}, requester: {}",
+        req.prep_students,
+        req.subject.as_ref() as &str,
+        req.teacher.as_ref() as &str,
+        req.requester.as_ref() as &str,
+    );
 }
