@@ -386,6 +386,8 @@ version = "0.1.0"
 dependencies = [
  "collomatique-ilp",
  "collomatique-ilp-modeler",
+ "collomatique-rooms-model",
+ "collomatique-time",
  "non-empty-string",
 ]
 
@@ -498,11 +500,20 @@ dependencies = [
  "collomatique-constraints-rooms",
  "collomatique-ilp",
  "collomatique-ilp-modeler",
+ "collomatique-rooms-model",
  "collomatique-time",
  "csv",
  "non-empty-string",
  "thiserror 1.0.69",
  "unicode-normalization",
+]
+
+[[package]]
+name = "collomatique-rooms-model"
+version = "0.1.0"
+dependencies = [
+ "collomatique-time",
+ "non-empty-string",
 ]
 
 [[package]]

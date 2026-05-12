@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
 use collomatique_rooms::ScheduleError;
-use collomatique_rooms::data_model::{self, Window};
-use collomatique_rooms::types::Hour;
+use collomatique_rooms::parsing;
+use collomatique_rooms::{Hour, Window};
 use collomatique_time::Weekday;
 use non_empty_string::NonEmptyString;
 
@@ -68,7 +68,7 @@ fn rooms_bad_priority() {
 
 #[test]
 fn rooms_priority_minus_one() {
-    let rooms = data_model::parse_rooms(&fixture("rooms_priority_minus_one.csv")).unwrap();
+    let rooms = parsing::parse_rooms(&fixture("rooms_priority_minus_one.csv")).unwrap();
     assert_eq!(rooms.len(), 1);
     assert_eq!(rooms[0].priority, None);
 }
@@ -169,7 +169,7 @@ fn requests_empty_classes() {
 
 #[test]
 fn parse_rooms_valid() {
-    let rooms = data_model::parse_rooms(&fixture("valid_rooms.csv")).unwrap();
+    let rooms = parsing::parse_rooms(&fixture("valid_rooms.csv")).unwrap();
     assert_eq!(rooms.len(), 1);
     assert_eq!(rooms[0].name, nes("A101"));
     assert_eq!(rooms[0].floor, 1);
@@ -184,7 +184,7 @@ fn parse_rooms_valid() {
 
 #[test]
 fn parse_requests_valid() {
-    let requests = data_model::parse_requests(&fixture("valid_requests.csv")).unwrap();
+    let requests = parsing::parse_requests(&fixture("valid_requests.csv")).unwrap();
     assert_eq!(requests.len(), 1);
     let r = &requests[0];
     assert!(r.p1);
@@ -206,9 +206,8 @@ fn parse_requests_valid() {
 
 #[test]
 fn parse_schedule_valid() {
-    let data =
-        data_model::parse_schedule(&fixture("valid_rooms.csv"), &fixture("valid_requests.csv"))
-            .unwrap();
+    let data = parsing::parse_schedule(&fixture("valid_rooms.csv"), &fixture("valid_requests.csv"))
+        .unwrap();
     assert_eq!(data.rooms.len(), 1);
     assert_eq!(data.requests.len(), 1);
     assert!(data.unregistered_rooms().is_empty());
@@ -216,7 +215,7 @@ fn parse_schedule_valid() {
 
 #[test]
 fn unregistered_room_detected() {
-    let data = data_model::parse_schedule(
+    let data = parsing::parse_schedule(
         &fixture("valid_rooms.csv"),
         &fixture("requests_unregistered_room.csv"),
     )

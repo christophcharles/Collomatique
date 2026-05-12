@@ -1,14 +1,12 @@
-pub mod data_model;
-pub mod types;
+pub mod parsing;
 
 use std::path::Path;
 
-use collomatique_constraints_rooms::{RequestInput, RoomScheduleInput};
-
-pub use data_model::ScheduleError;
+pub use collomatique_rooms_model::{Hour, Request, Room, ScheduleData, Window};
+pub use parsing::ScheduleError;
 
 pub fn run(rooms: &Path, requests: &Path) -> Result<(), ScheduleError> {
-    let data = data_model::parse_schedule(rooms, requests)?;
+    let data = parsing::parse_schedule(rooms, requests)?;
     eprintln!(
         "Parsed {} rooms and {} requests",
         data.rooms.len(),
@@ -21,26 +19,8 @@ pub fn run(rooms: &Path, requests: &Path) -> Result<(), ScheduleError> {
         );
     }
 
-    let input = RoomScheduleInput {
-        managed_rooms: data
-            .rooms
-            .iter()
-            .filter(|r| r.priority.is_some())
-            .map(|r| r.name.clone())
-            .collect(),
-        requests: data
-            .requests
-            .iter()
-            .map(|req| RequestInput {
-                needs_prep: req.prep_students >= 1,
-                room_suggestion: req.room_suggestion.clone(),
-                prep_suggestion: req.prep_suggestion.clone(),
-            })
-            .collect(),
-    };
-
     eprintln!("Building ILP model...");
-    let model = collomatique_constraints_rooms::build_model(input.clone());
+    let model = collomatique_constraints_rooms::build_model(&data);
     let stats = model.stats();
     eprintln!(
         "  {} base variables, {} constraints",
@@ -52,7 +32,7 @@ pub fn run(rooms: &Path, requests: &Path) -> Result<(), ScheduleError> {
     match model.solve(&solver) {
         Some(solution) => {
             let config = solution.get_data();
-            let assignments = collomatique_constraints_rooms::extract_assignments(&input, &config);
+            let assignments = collomatique_constraints_rooms::extract_assignments(&data, &config);
             for assignment in &assignments {
                 let req = &data.requests[assignment.request];
                 let room_str: &str = assignment.room.as_ref();

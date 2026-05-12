@@ -1,12 +1,11 @@
 use std::num::NonZeroU32;
 use std::path::Path;
 
+use collomatique_rooms_model::{Hour, Request, Room, ScheduleData, Window};
 use collomatique_time::Weekday;
 use non_empty_string::NonEmptyString;
 use thiserror::Error;
 use unicode_normalization::UnicodeNormalization;
-
-use crate::types::Hour;
 
 const ROOMS_COLUMNS: &[&str] = &[
     "Salle",
@@ -67,14 +66,6 @@ const ALLOWED_CLASSES: &[&str] = &[
     "BCPST 2", "ECG 1A", "ECG 1B", "ECG 2A", "ECG 2B", "LS 1", "LS 2",
 ];
 
-/// Type of window in a room.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Window {
-    None,
-    Interior,
-    Exterior,
-}
-
 /// Errors that can occur while parsing schedule CSV files.
 #[derive(Debug, Error)]
 pub enum ScheduleError {
@@ -100,104 +91,6 @@ pub enum ScheduleError {
     InvalidHour { row: usize, value: u32 },
 }
 
-/// A room available for scheduling.
-#[derive(Debug, Clone)]
-pub struct Room {
-    /// Name of the room (e.g. "A101").
-    pub name: NonEmptyString,
-    /// Floor number.
-    pub floor: u32,
-    /// X coordinate on the floor plan.
-    pub x: f32,
-    /// Y coordinate on the floor plan.
-    pub y: f32,
-    /// Number of blackboards in the room.
-    pub blackboards: u32,
-    /// Number of whiteboards in the room.
-    pub whiteboards: u32,
-    /// Maximum number of students the room can accommodate.
-    pub capacity: NonZeroU32,
-    /// Type of window in the room.
-    pub window: Window,
-    /// Priority rank for room selection (0 = use first). None = never use unless explicitly requested.
-    pub priority: Option<u32>,
-}
-
-/// A scheduling request for a room.
-#[derive(Debug, Clone)]
-pub struct Request {
-    /// Whether the interrogation is needed in period 1.
-    pub p1: bool,
-    /// Whether the interrogation is needed in period 2.
-    pub p2: bool,
-    /// Whether the interrogation is needed in period 3.
-    pub p3: bool,
-    /// Day of the week.
-    pub day: Weekday,
-    /// Hour of the interrogation.
-    pub hour: Hour,
-    /// Subject name (normalized: NFC, trimmed, lowercased).
-    pub subject: NonEmptyString,
-    /// Classes that can attend this interrogation slot (e.g. "MP", "PC").
-    pub classes: Vec<NonEmptyString>,
-    /// Name of the person requesting the room.
-    pub requester: NonEmptyString,
-    /// Name of the teacher that will use the room.
-    pub teacher: NonEmptyString,
-    /// Minimum number of blackboards needed.
-    pub blackboards: u32,
-    /// Whether a window is required.
-    pub window: bool,
-    /// Number of students to seat in the room.
-    pub students: NonZeroU32,
-    /// Number of students to seat in the prep room.
-    pub prep_students: u32,
-    /// Suggested room name. If absent, no preference. Unregistered room names are allowed but
-    /// will trigger a warning.
-    pub room_suggestion: Option<NonEmptyString>,
-    /// Suggested prep room name. Same semantics as `room_suggestion`.
-    pub prep_suggestion: Option<NonEmptyString>,
-}
-
-/// Parsed schedule data: rooms and requests.
-#[derive(Debug, Clone)]
-pub struct ScheduleData {
-    /// Available rooms.
-    pub rooms: Vec<Room>,
-    /// Scheduling requests.
-    pub requests: Vec<Request>,
-}
-
-impl ScheduleData {
-    /// Returns a sorted, deduplicated list of room names referenced in requests
-    /// but not present in the rooms file.
-    pub fn unregistered_rooms(&self) -> Vec<&str> {
-        use std::collections::HashSet;
-
-        let room_names: HashSet<&str> = self
-            .rooms
-            .iter()
-            .map(|r| AsRef::<str>::as_ref(&r.name))
-            .collect();
-
-        let mut unregistered: Vec<&str> = self
-            .requests
-            .iter()
-            .flat_map(|req| {
-                [req.room_suggestion.as_ref(), req.prep_suggestion.as_ref()]
-                    .into_iter()
-                    .flatten()
-            })
-            .map(|name| AsRef::<str>::as_ref(name))
-            .filter(|name| !room_names.contains(name))
-            .collect::<HashSet<&str>>()
-            .into_iter()
-            .collect();
-        unregistered.sort();
-        unregistered
-    }
-}
-
 /// Parse a rooms CSV and a requests CSV into a [`ScheduleData`].
 pub fn parse_schedule(
     rooms_path: &Path,
@@ -209,8 +102,6 @@ pub fn parse_schedule(
 }
 
 /// Parse a rooms CSV file.
-///
-/// Expected columns: Salle, Étage, X, Y, Tableaux, Capacité, Fenêtre.
 pub fn parse_rooms(path: &Path) -> Result<Vec<Room>, ScheduleError> {
     let mut reader = csv::ReaderBuilder::new()
         .has_headers(true)
@@ -263,9 +154,6 @@ pub fn parse_rooms(path: &Path) -> Result<Vec<Room>, ScheduleError> {
 }
 
 /// Parse a requests CSV file.
-///
-/// Expected columns: P1, P2, P3, Jour, Heure, Discipline, Classes,
-/// Responsable, Colleur, Tableaux, Fenêtre, Nb élèves, Nb prep, Salle, Prep.
 pub fn parse_requests(path: &Path) -> Result<Vec<Request>, ScheduleError> {
     let mut reader = csv::ReaderBuilder::new()
         .has_headers(true)

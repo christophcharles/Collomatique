@@ -8,6 +8,7 @@ authors.workspace = true
 anyhow = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
+collomatique-rooms-model = { path = "../rooms-model" }
 collomatique-time = { path = "../time" }
 csv = "1.3"
 non-empty-string = { workspace = true }

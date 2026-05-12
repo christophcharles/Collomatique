@@ -1,25 +1,25 @@
+use collomatique_rooms_model::ScheduleData;
 use non_empty_string::NonEmptyString;
 
-#[derive(Clone)]
-pub struct RequestInput {
-    pub needs_prep: bool,
-    pub room_suggestion: Option<NonEmptyString>,
-    pub prep_suggestion: Option<NonEmptyString>,
-}
-
-#[derive(Clone)]
-pub struct RoomScheduleInput {
-    pub managed_rooms: Vec<NonEmptyString>,
-    pub requests: Vec<RequestInput>,
-}
+pub const PERIOD_COUNT: usize = 3;
 
 pub struct VarEnv {
-    pub input: RoomScheduleInput,
+    pub data: ScheduleData,
+    pub managed_rooms: Vec<NonEmptyString>,
 }
 
 impl VarEnv {
-    pub fn new(input: RoomScheduleInput) -> Self {
-        VarEnv { input }
+    pub fn new(data: &ScheduleData) -> Self {
+        let managed_rooms = data
+            .rooms
+            .iter()
+            .filter(|r| r.priority.is_some())
+            .map(|r| r.name.clone())
+            .collect();
+        VarEnv {
+            data: data.clone(),
+            managed_rooms,
+        }
     }
 }
 
@@ -44,22 +44,22 @@ pub enum Var {
 
 impl Var {
     pub fn compute_all_request_range(env: &VarEnv) -> Vec<usize> {
-        (0..env.input.requests.len()).collect()
+        (0..env.data.requests.len()).collect()
     }
 
     pub fn compute_prep_request_range(env: &VarEnv) -> Vec<usize> {
-        env.input
+        env.data
             .requests
             .iter()
             .enumerate()
-            .filter(|(_, req)| req.needs_prep)
+            .filter(|(_, req)| req.prep_students >= 1)
             .map(|(i, _)| i)
             .collect()
     }
 
     pub fn compute_interrogation_room_range(env: &VarEnv, request: &usize) -> Vec<NonEmptyString> {
-        let mut rooms = env.input.managed_rooms.clone();
-        if let Some(suggestion) = env.input.requests[*request].room_suggestion.as_ref() {
+        let mut rooms = env.managed_rooms.clone();
+        if let Some(suggestion) = env.data.requests[*request].room_suggestion.as_ref() {
             if !rooms.contains(suggestion) {
                 rooms.push(suggestion.clone());
             }
@@ -68,8 +68,8 @@ impl Var {
     }
 
     pub fn compute_prep_room_range(env: &VarEnv, request: &usize) -> Vec<NonEmptyString> {
-        let mut rooms = env.input.managed_rooms.clone();
-        if let Some(suggestion) = env.input.requests[*request].prep_suggestion.as_ref() {
+        let mut rooms = env.managed_rooms.clone();
+        if let Some(suggestion) = env.data.requests[*request].prep_suggestion.as_ref() {
             if !rooms.contains(suggestion) {
                 rooms.push(suggestion.clone());
             }

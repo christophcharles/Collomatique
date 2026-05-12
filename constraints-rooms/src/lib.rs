@@ -1,13 +1,15 @@
 mod builder;
+mod capacity;
 mod constraints;
 mod types;
 pub mod vars;
 
 pub use builder::build_model;
 pub use types::{ConstraintDesc, ExtraVarName};
-pub use vars::{RequestInput, RoomScheduleInput, Var};
+pub use vars::Var;
 
 use collomatique_ilp::ConfigData;
+use collomatique_rooms_model::ScheduleData;
 use non_empty_string::NonEmptyString;
 
 pub type RoomModel = collomatique_ilp_modeler::Model<Var, ExtraVarName, ConstraintDesc>;
@@ -18,8 +20,8 @@ pub struct Assignment {
     pub prep_room: Option<NonEmptyString>,
 }
 
-pub fn extract_assignments(input: &RoomScheduleInput, config: &ConfigData<Var>) -> Vec<Assignment> {
-    let env = vars::VarEnv::new(input.clone());
+pub fn extract_assignments(data: &ScheduleData, config: &ConfigData<Var>) -> Vec<Assignment> {
+    let env = vars::VarEnv::new(data);
     let mut assignments = Vec::new();
 
     for request in Var::compute_all_request_range(&env) {
