@@ -1,6 +1,5 @@
 pub mod parsing;
 
-use std::collections::BTreeMap;
 use std::path::Path;
 use std::time::Instant;
 
@@ -27,8 +26,6 @@ pub fn run(rooms: &Path, requests: &Path, incompats: Option<&Path>) -> Result<()
     for conflict in data.demand_conflicts() {
         print_demand_conflict(&data, &conflict);
     }
-
-    print_busiest_slot(&data);
 
     eprintln!("Building ILP model...");
     let start = Instant::now();
@@ -153,69 +150,4 @@ fn print_prep_demand_request(data: &ScheduleData, request: usize) {
         req.teacher.as_ref() as &str,
         req.requester.as_ref() as &str,
     );
-}
-
-fn print_busiest_slot(data: &ScheduleData) {
-    let mut slot_counts: BTreeMap<(collomatique_time::Weekday, Hour), Vec<usize>> = BTreeMap::new();
-    for (i, req) in data.requests.iter().enumerate() {
-        slot_counts.entry((req.day, req.hour)).or_default().push(i);
-    }
-
-    let (busiest_slot, busiest_reqs) = match slot_counts.iter().max_by_key(|(_, reqs)| {
-        reqs.iter()
-            .map(|&i| {
-                let req = &data.requests[i];
-                1u32 + if req.prep_students >= 1 { 1 } else { 0 }
-            })
-            .sum::<u32>()
-    }) {
-        Some(entry) => entry,
-        None => return,
-    };
-
-    let total_rooms: u32 = busiest_reqs
-        .iter()
-        .map(|&i| {
-            let req = &data.requests[i];
-            1 + if req.prep_students >= 1 { 1 } else { 0 }
-        })
-        .sum();
-
-    eprintln!(
-        "Busiest slot: {} {}h — {} requests, {} room needs:",
-        busiest_slot.0,
-        *busiest_slot.1,
-        busiest_reqs.len(),
-        total_rooms,
-    );
-    for &req_idx in busiest_reqs {
-        let req = &data.requests[req_idx];
-        let pref_str = match &req.room_preference {
-            Some(RoomPreference::Demand(r)) => format!(", demand={}", r.as_ref() as &str),
-            Some(RoomPreference::Suggestion(r)) => format!(", suggest={}", r.as_ref() as &str),
-            None => String::new(),
-        };
-        let prep_str = if req.prep_students >= 1 {
-            let prep_pref = match &req.prep_preference {
-                Some(RoomPreference::Demand(r)) => format!(" demand={}", r.as_ref() as &str),
-                Some(RoomPreference::Suggestion(r)) => format!(" suggest={}", r.as_ref() as &str),
-                None => String::new(),
-            };
-            format!(", prep={}{}", req.prep_students, prep_pref)
-        } else {
-            String::new()
-        };
-        eprintln!(
-            "  [{req_idx}] {}: {} students, teacher={}, window={}{}{} [p1={} p2={} p3={}]",
-            req.subject.as_ref() as &str,
-            req.students.get(),
-            req.teacher.as_ref() as &str,
-            req.window,
-            pref_str,
-            prep_str,
-            req.periods.p1,
-            req.periods.p2,
-            req.periods.p3,
-        );
-    }
 }
