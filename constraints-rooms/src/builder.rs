@@ -31,6 +31,10 @@ pub(crate) fn base_var(v: Var) -> V {
     ModelerVar::Base(v)
 }
 
+pub(crate) fn extra_var(e: ExtraVarName) -> V {
+    ModelerVar::Extra(e)
+}
+
 pub fn build_model(data: &ScheduleData) -> RoomModel {
     let env = VarEnv::new(data);
     let mut modeler: MyModeler<'_> = Modeler::from_described(&env);

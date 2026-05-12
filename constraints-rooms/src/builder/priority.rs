@@ -5,8 +5,8 @@ use collomatique_rooms_model::{Hour, Periods, Request, RoomPreference};
 use collomatique_time::Weekday;
 use non_empty_string::NonEmptyString;
 
-use super::{MyBundle, V, base_var};
-use crate::types::ConstraintDesc;
+use super::{MyBundle, V, base_var, extra_var};
+use crate::types::{ConstraintDesc, ExtraVarName};
 use crate::vars::{PERIOD_COUNT, Var, VarEnv};
 
 fn period_active(periods: &Periods, period: usize) -> bool {
@@ -142,28 +142,26 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
                 continue;
             }
 
-            for (p_idx, &current_priority) in priorities.iter().enumerate() {
+            for (p_idx, &priority) in priorities.iter().enumerate() {
                 if let Some(max_p) = max_priority {
-                    if current_priority > max_p {
+                    if priority > max_p {
                         continue;
                     }
                 }
 
-                let lower_rooms: Vec<&NonEmptyString> = priorities[..p_idx]
-                    .iter()
-                    .flat_map(|p| rooms_by_priority.get(p).into_iter().flatten())
+                let available_rooms: Vec<&NonEmptyString> = rooms_by_priority
+                    .get(&priority)
+                    .into_iter()
+                    .flatten()
                     .filter(|room_name| !is_room_blocked(env, room_name, period, &day, &hour))
                     .collect();
 
-                let available_count = lower_rooms.len();
-                if available_count == 0 {
-                    continue;
-                }
+                let mut reify_constraints = Vec::new();
 
-                let lin_expr: IntLinExpr<V> = lower_rooms
-                    .iter()
-                    .flat_map(|room_name| {
-                        active_requests.iter().filter_map(|&req_idx| {
+                for room_name in &available_rooms {
+                    let sum: IntLinExpr<V> = active_requests
+                        .iter()
+                        .filter_map(|&req_idx| {
                             let mut expr = IntLinExpr::constant(0);
                             let mut has_any = false;
 
@@ -187,15 +185,63 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
 
                             has_any.then_some(expr)
                         })
-                    })
-                    .sum();
+                        .sum();
+
+                    reify_constraints.push(sum.geq(&IntLinExpr::constant(1)));
+                }
+
+                if p_idx > 0 {
+                    reify_constraints.push(
+                        IntLinExpr::var(extra_var(ExtraVarName::PriorityExhausted {
+                            period,
+                            day,
+                            hour,
+                            priority: priorities[p_idx - 1],
+                        }))
+                        .geq(&IntLinExpr::constant(1)),
+                    );
+                }
+
+                if reify_constraints.is_empty() {
+                    reify_constraints.push(IntLinExpr::constant(0).leq(&IntLinExpr::constant(0)));
+                }
+
+                bundle = bundle
+                    .and_reified(
+                        ExtraVarName::PriorityExhausted {
+                            period,
+                            day,
+                            hour,
+                            priority,
+                        },
+                        move || reify_constraints,
+                    )
+                    .expect("no duplicate extras");
+            }
+
+            for (p_idx, &current_priority) in priorities.iter().enumerate() {
+                if p_idx == 0 {
+                    continue;
+                }
+                if let Some(max_p) = max_priority {
+                    if current_priority > max_p {
+                        continue;
+                    }
+                }
+
+                let prev_priority = priorities[p_idx - 1];
 
                 let current_rooms = match rooms_by_priority.get(&current_priority) {
                     Some(rooms) => rooms,
                     None => continue,
                 };
 
-                let available_count_i64 = available_count as i64;
+                let exhausted_var = extra_var(ExtraVarName::PriorityExhausted {
+                    period,
+                    day,
+                    hour,
+                    priority: prev_priority,
+                });
 
                 for room_name in current_rooms {
                     for &req_idx in &active_requests {
@@ -204,13 +250,12 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
                         if env.has_interrogation_var(req_idx, room_name)
                             && !is_interrogation_demand(req, room_name)
                         {
-                            let lhs = available_count_i64
-                                * IntLinExpr::var(base_var(Var::RoomForInterrogation {
+                            bundle = bundle.with_constraint(
+                                IntLinExpr::var(base_var(Var::RoomForInterrogation {
                                     request: req_idx,
                                     room: room_name.clone(),
-                                }));
-                            bundle = bundle.with_constraint(
-                                lhs.leq(&lin_expr),
+                                }))
+                                .leq(&IntLinExpr::var(exhausted_var.clone())),
                                 ConstraintDesc::PriorityInterrogation {
                                     request: req_idx,
                                     room: room_name.clone(),
@@ -222,13 +267,12 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
                         }
 
                         if env.has_prep_var(req_idx, room_name) && !is_prep_demand(req, room_name) {
-                            let lhs = available_count_i64
-                                * IntLinExpr::var(base_var(Var::RoomForPrep {
+                            bundle = bundle.with_constraint(
+                                IntLinExpr::var(base_var(Var::RoomForPrep {
                                     request: req_idx,
                                     room: room_name.clone(),
-                                }));
-                            bundle = bundle.with_constraint(
-                                lhs.leq(&lin_expr),
+                                }))
+                                .leq(&IntLinExpr::var(exhausted_var.clone())),
                                 ConstraintDesc::PriorityPrep {
                                     request: req_idx,
                                     room: room_name.clone(),

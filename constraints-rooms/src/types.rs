@@ -3,7 +3,14 @@ use collomatique_time::Weekday;
 use non_empty_string::NonEmptyString;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub enum ExtraVarName {}
+pub enum ExtraVarName {
+    PriorityExhausted {
+        period: usize,
+        day: Weekday,
+        hour: Hour,
+        priority: u32,
+    },
+}
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum ConstraintDesc {
