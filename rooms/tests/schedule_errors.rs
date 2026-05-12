@@ -708,3 +708,11 @@ fn priority_base_feasible() {
 fn priority_demand_feasible() {
     assert_checker_feasible("priority_demand_rooms.csv", "priority_demand_requests.csv");
 }
+
+#[test]
+fn priority_overflow_feasible() {
+    assert_checker_feasible(
+        "priority_overflow_rooms.csv",
+        "priority_overflow_requests.csv",
+    );
+}
