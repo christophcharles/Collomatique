@@ -59,9 +59,10 @@ impl Var {
 
     pub fn compute_interrogation_room_range(env: &VarEnv, request: &usize) -> Vec<NonEmptyString> {
         let mut rooms = env.managed_rooms.clone();
-        if let Some(suggestion) = env.data.requests[*request].room_suggestion.as_ref() {
-            if !rooms.contains(suggestion) {
-                rooms.push(suggestion.clone());
+        if let Some(pref) = env.data.requests[*request].room_preference.as_ref() {
+            let name = pref.room_name();
+            if !rooms.contains(name) {
+                rooms.push(name.clone());
             }
         }
         rooms
@@ -69,9 +70,10 @@ impl Var {
 
     pub fn compute_prep_room_range(env: &VarEnv, request: &usize) -> Vec<NonEmptyString> {
         let mut rooms = env.managed_rooms.clone();
-        if let Some(suggestion) = env.data.requests[*request].prep_suggestion.as_ref() {
-            if !rooms.contains(suggestion) {
-                rooms.push(suggestion.clone());
+        if let Some(pref) = env.data.requests[*request].prep_preference.as_ref() {
+            let name = pref.room_name();
+            if !rooms.contains(name) {
+                rooms.push(name.clone());
             }
         }
         rooms

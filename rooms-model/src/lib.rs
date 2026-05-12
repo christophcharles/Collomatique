@@ -43,6 +43,21 @@ pub struct Room {
     pub priority: Option<u32>,
 }
 
+/// Whether a room preference is a suggestion or a demand.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RoomPreference {
+    Suggestion(NonEmptyString),
+    Demand(NonEmptyString),
+}
+
+impl RoomPreference {
+    pub fn room_name(&self) -> &NonEmptyString {
+        match self {
+            RoomPreference::Suggestion(name) | RoomPreference::Demand(name) => name,
+        }
+    }
+}
+
 /// A scheduling request for a room.
 #[derive(Debug, Clone)]
 pub struct Request {
@@ -59,8 +74,8 @@ pub struct Request {
     pub window: bool,
     pub students: NonZeroU32,
     pub prep_students: u32,
-    pub room_suggestion: Option<NonEmptyString>,
-    pub prep_suggestion: Option<NonEmptyString>,
+    pub room_preference: Option<RoomPreference>,
+    pub prep_preference: Option<RoomPreference>,
 }
 
 /// Parsed schedule data: rooms and requests.
@@ -76,11 +91,11 @@ impl ScheduleData {
             .requests
             .iter()
             .flat_map(|req| {
-                [req.room_suggestion.as_ref(), req.prep_suggestion.as_ref()]
+                [req.room_preference.as_ref(), req.prep_preference.as_ref()]
                     .into_iter()
                     .flatten()
             })
-            .map(|name| AsRef::<str>::as_ref(name))
+            .map(|pref| AsRef::<str>::as_ref(pref.room_name()))
             .filter(|name| !self.rooms.contains_key(*name))
             .collect::<HashSet<&str>>()
             .into_iter()

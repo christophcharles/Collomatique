@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::num::NonZeroU32;
 use std::path::Path;
 
-use collomatique_rooms_model::{Hour, Request, Room, ScheduleData, Window};
+use collomatique_rooms_model::{Hour, Request, Room, RoomPreference, ScheduleData, Window};
 use collomatique_time::Weekday;
 use non_empty_string::NonEmptyString;
 use thiserror::Error;
@@ -256,8 +256,8 @@ pub fn parse_requests(path: &Path) -> Result<Vec<Request>, ScheduleError> {
         let window = parse_bool_field(&record, 10, row, "requests", "Fenêtre")?;
         let students = parse_field::<NonZeroU32>(&record, 11, row, "requests", "Nb élèves")?;
         let prep_students = parse_field::<u32>(&record, 12, row, "requests", "Nb prep")?;
-        let room_suggestion = parse_optional_non_empty(&record, 13);
-        let prep_suggestion = parse_optional_non_empty(&record, 14);
+        let room_preference = parse_room_preference(&record, 13);
+        let prep_preference = parse_room_preference(&record, 14);
 
         requests.push(Request {
             p1,
@@ -273,8 +273,8 @@ pub fn parse_requests(path: &Path) -> Result<Vec<Request>, ScheduleError> {
             window,
             students,
             prep_students,
-            room_suggestion,
-            prep_suggestion,
+            room_preference,
+            prep_preference,
         });
     }
 
@@ -417,7 +417,19 @@ fn parse_priority_field(
         })
 }
 
-fn parse_optional_non_empty(record: &csv::StringRecord, index: usize) -> Option<NonEmptyString> {
+fn parse_room_preference(record: &csv::StringRecord, index: usize) -> Option<RoomPreference> {
     let value = record.get(index).unwrap_or("").trim();
-    NonEmptyString::try_from(value).ok()
+    if value.is_empty() {
+        return None;
+    }
+    if let Some(name) = value.strip_prefix('!') {
+        let name = name.trim();
+        NonEmptyString::try_from(name)
+            .ok()
+            .map(RoomPreference::Demand)
+    } else {
+        NonEmptyString::try_from(value)
+            .ok()
+            .map(RoomPreference::Suggestion)
+    }
 }

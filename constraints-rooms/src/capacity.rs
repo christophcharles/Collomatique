@@ -22,18 +22,18 @@ fn request_active_at(req: &Request, period: usize, day: &Weekday, hour: &Hour) -
 fn has_interrogation_var(env: &VarEnv, request: usize, room: &NonEmptyString) -> bool {
     env.managed_rooms.contains(room)
         || env.data.requests[request]
-            .room_suggestion
+            .room_preference
             .as_ref()
-            .is_some_and(|s| s == room)
+            .is_some_and(|p| p.room_name() == room)
 }
 
 fn has_prep_var(env: &VarEnv, request: usize, room: &NonEmptyString) -> bool {
     env.data.requests[request].prep_students >= 1
         && (env.managed_rooms.contains(room)
             || env.data.requests[request]
-                .prep_suggestion
+                .prep_preference
                 .as_ref()
-                .is_some_and(|s| s == room))
+                .is_some_and(|p| p.room_name() == room))
 }
 
 pub(crate) fn build(env: &VarEnv) -> MyBundle {
@@ -121,14 +121,16 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
     // Undeclared rooms (in suggestions but not in rooms.csv)
     let mut undeclared_rooms: BTreeSet<NonEmptyString> = BTreeSet::new();
     for req in &env.data.requests {
-        if let Some(sug) = &req.room_suggestion {
-            if !env.data.rooms.contains_key(sug) {
-                undeclared_rooms.insert(sug.clone());
+        if let Some(pref) = &req.room_preference {
+            let name = pref.room_name();
+            if !env.data.rooms.contains_key(name) {
+                undeclared_rooms.insert(name.clone());
             }
         }
-        if let Some(sug) = &req.prep_suggestion {
-            if !env.data.rooms.contains_key(sug) {
-                undeclared_rooms.insert(sug.clone());
+        if let Some(pref) = &req.prep_preference {
+            let name = pref.room_name();
+            if !env.data.rooms.contains_key(name) {
+                undeclared_rooms.insert(name.clone());
             }
         }
     }

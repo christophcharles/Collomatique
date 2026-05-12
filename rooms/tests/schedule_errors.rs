@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use collomatique_rooms::ScheduleError;
 use collomatique_rooms::parsing;
-use collomatique_rooms::{Hour, Window};
+use collomatique_rooms::{Hour, RoomPreference, Window};
 use collomatique_time::Weekday;
 use non_empty_string::NonEmptyString;
 
@@ -214,8 +214,21 @@ fn parse_requests_valid() {
     assert!(!r.window);
     assert_eq!(r.students.get(), 3);
     assert_eq!(r.prep_students, 2);
-    assert_eq!(r.room_suggestion, Some(nes("A101")));
-    assert!(r.prep_suggestion.is_none());
+    assert_eq!(
+        r.room_preference,
+        Some(RoomPreference::Suggestion(nes("A101")))
+    );
+    assert!(r.prep_preference.is_none());
+}
+
+#[test]
+fn parse_requests_room_demand() {
+    let requests = parsing::parse_requests(&fixture("requests_room_demand.csv")).unwrap();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(
+        requests[0].room_preference,
+        Some(RoomPreference::Demand(nes("A101")))
+    );
 }
 
 #[test]

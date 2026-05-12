@@ -2,7 +2,7 @@ pub mod parsing;
 
 use std::path::Path;
 
-pub use collomatique_rooms_model::{Hour, Request, Room, ScheduleData, Window};
+pub use collomatique_rooms_model::{Hour, Request, Room, RoomPreference, ScheduleData, Window};
 pub use parsing::ScheduleError;
 
 pub fn run(rooms: &Path, requests: &Path) -> Result<(), ScheduleError> {
