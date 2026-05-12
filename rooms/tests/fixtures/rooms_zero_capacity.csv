@@ -1,2 +1,2 @@
-Salle,Étage,X,Y,Tableaux noirs,Tableaux blancs,Capacité,Fenêtre
-A101,1,2.5,3.0,2,1,0,Extérieur
+Salle,Étage,X,Y,Tableaux noirs,Tableaux blancs,Capacité,Fenêtre,Priorité
+A101,1,2.5,3.0,2,1,0,Extérieur,0

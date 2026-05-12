@@ -61,6 +61,12 @@ fn rooms_zero_capacity() {
 }
 
 #[test]
+fn rooms_bad_priority() {
+    let err = run("rooms_bad_priority.csv", "valid_requests.csv").unwrap_err();
+    assert!(matches!(err, ScheduleError::RoomsRowError { row: 1, .. }));
+}
+
+#[test]
 fn rooms_bad_window() {
     let err = run("rooms_bad_window.csv", "valid_requests.csv").unwrap_err();
     assert!(matches!(err, ScheduleError::RoomsRowError { row: 1, .. }));
@@ -166,6 +172,7 @@ fn parse_rooms_valid() {
     assert_eq!(rooms[0].whiteboards, 1);
     assert_eq!(rooms[0].capacity.get(), 30);
     assert_eq!(rooms[0].window, Window::Exterior);
+    assert_eq!(rooms[0].priority, 0);
 }
 
 #[test]

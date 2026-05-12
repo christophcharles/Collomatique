@@ -17,6 +17,7 @@ const ROOMS_COLUMNS: &[&str] = &[
     "Tableaux blancs",
     "Capacité",
     "Fenêtre",
+    "Priorité",
 ];
 
 const REQUESTS_COLUMNS: &[&str] = &[
@@ -118,6 +119,8 @@ pub struct Room {
     pub capacity: NonZeroU32,
     /// Type of window in the room.
     pub window: Window,
+    /// Priority rank for room selection (0 = use first).
+    pub priority: u32,
 }
 
 /// A scheduling request for a room.
@@ -212,6 +215,7 @@ pub fn parse_rooms(path: &Path) -> Result<Vec<Room>, ScheduleError> {
         let whiteboards = parse_field::<u32>(&record, 5, row, "rooms", "Tableaux blancs")?;
         let capacity = parse_field::<NonZeroU32>(&record, 6, row, "rooms", "Capacité")?;
         let window = parse_window_field(&record, 7, row)?;
+        let priority = parse_field::<u32>(&record, 8, row, "rooms", "Priorité")?;
 
         rooms.push(Room {
             name,
@@ -222,6 +226,7 @@ pub fn parse_rooms(path: &Path) -> Result<Vec<Room>, ScheduleError> {
             whiteboards,
             capacity,
             window,
+            priority,
         });
     }
 
