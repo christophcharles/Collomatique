@@ -33,4 +33,12 @@ pub enum ConstraintDesc {
         request: usize,
         room: NonEmptyString,
     },
+    ReservedInterrogation {
+        request: usize,
+        room: NonEmptyString,
+    },
+    ReservedPrep {
+        request: usize,
+        room: NonEmptyString,
+    },
 }
