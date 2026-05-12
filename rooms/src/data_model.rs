@@ -119,8 +119,8 @@ pub struct Room {
     pub capacity: NonZeroU32,
     /// Type of window in the room.
     pub window: Window,
-    /// Priority rank for room selection (0 = use first).
-    pub priority: u32,
+    /// Priority rank for room selection (0 = use first). None = never use unless explicitly requested.
+    pub priority: Option<u32>,
 }
 
 /// A scheduling request for a room.
@@ -215,7 +215,7 @@ pub fn parse_rooms(path: &Path) -> Result<Vec<Room>, ScheduleError> {
         let whiteboards = parse_field::<u32>(&record, 5, row, "rooms", "Tableaux blancs")?;
         let capacity = parse_field::<NonZeroU32>(&record, 6, row, "rooms", "Capacité")?;
         let window = parse_window_field(&record, 7, row)?;
-        let priority = parse_field::<u32>(&record, 8, row, "rooms", "Priorité")?;
+        let priority = parse_priority_field(&record, 8, row)?;
 
         rooms.push(Room {
             name,
@@ -458,6 +458,24 @@ fn parse_window_field(
             ),
         }),
     }
+}
+
+fn parse_priority_field(
+    record: &csv::StringRecord,
+    index: usize,
+    row: usize,
+) -> Result<Option<u32>, ScheduleError> {
+    let value = record.get(index).unwrap().trim();
+    if value == "-1" {
+        return Ok(None);
+    }
+    value
+        .parse::<u32>()
+        .map(Some)
+        .map_err(|_| ScheduleError::RoomsRowError {
+            row,
+            message: format!("cannot parse \"{value}\" in column \"Priorité\""),
+        })
 }
 
 fn parse_optional_non_empty(record: &csv::StringRecord, index: usize) -> Option<NonEmptyString> {
