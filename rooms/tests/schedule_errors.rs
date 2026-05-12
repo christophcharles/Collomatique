@@ -70,13 +70,27 @@ fn rooms_bad_priority() {
 fn rooms_priority_minus_one() {
     let rooms = parsing::parse_rooms(&fixture("rooms_priority_minus_one.csv")).unwrap();
     assert_eq!(rooms.len(), 1);
-    assert_eq!(rooms[0].priority, None);
+    let (_, room) = rooms.iter().next().unwrap();
+    assert_eq!(room.priority, None);
 }
 
 #[test]
 fn rooms_bad_window() {
     let err = run("rooms_bad_window.csv", "valid_requests.csv").unwrap_err();
     assert!(matches!(err, ScheduleError::RoomsRowError { row: 1, .. }));
+}
+
+#[test]
+fn rooms_duplicate_name() {
+    let err = run("rooms_duplicate_name.csv", "valid_requests.csv").unwrap_err();
+    assert!(matches!(
+        err,
+        ScheduleError::RoomsDuplicateName {
+            first_row: 1,
+            duplicate_row: 2,
+            ..
+        }
+    ));
 }
 
 // --- Requests header errors ---
@@ -171,15 +185,15 @@ fn requests_empty_classes() {
 fn parse_rooms_valid() {
     let rooms = parsing::parse_rooms(&fixture("valid_rooms.csv")).unwrap();
     assert_eq!(rooms.len(), 1);
-    assert_eq!(rooms[0].name, nes("A101"));
-    assert_eq!(rooms[0].floor, 1);
-    assert_eq!(rooms[0].x, 2.5);
-    assert_eq!(rooms[0].y, 3.0);
-    assert_eq!(rooms[0].blackboards, 2);
-    assert_eq!(rooms[0].whiteboards, 1);
-    assert_eq!(rooms[0].capacity.get(), 30);
-    assert_eq!(rooms[0].window, Window::Exterior);
-    assert_eq!(rooms[0].priority, Some(0));
+    let room = &rooms[&nes("A101")];
+    assert_eq!(room.floor, 1);
+    assert_eq!(room.x, 2.5);
+    assert_eq!(room.y, 3.0);
+    assert_eq!(room.blackboards, 2);
+    assert_eq!(room.whiteboards, 1);
+    assert_eq!(room.capacity.get(), 30);
+    assert_eq!(room.window, Window::Exterior);
+    assert_eq!(room.priority, Some(0));
 }
 
 #[test]

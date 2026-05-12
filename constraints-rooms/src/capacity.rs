@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashSet};
+use std::collections::BTreeSet;
 
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_rooms_model::{Hour, Request};
@@ -46,15 +46,8 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
         .map(|req| (req.day, req.hour))
         .collect();
 
-    let declared_room_names: HashSet<&str> = env
-        .data
-        .rooms
-        .iter()
-        .map(|r| r.name.as_ref() as &str)
-        .collect();
-
     // Declared rooms (managed or not)
-    for room in &env.data.rooms {
+    for (room_name, room) in &env.data.rooms {
         let capacity = room.capacity.get();
         let is_managed = room.priority.is_some();
 
@@ -72,8 +65,8 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
                         if is_managed {
                             true
                         } else {
-                            has_interrogation_var(env, *i, &room.name)
-                                || has_prep_var(env, *i, &room.name)
+                            has_interrogation_var(env, *i, room_name)
+                                || has_prep_var(env, *i, room_name)
                         }
                     })
                     .map(|(i, _)| i)
@@ -89,22 +82,22 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
                         let req_data = &env.data.requests[req];
                         let mut expr = IntLinExpr::constant(0);
 
-                        if has_interrogation_var(env, req, &room.name) {
+                        if has_interrogation_var(env, req, room_name) {
                             let coeff = std::cmp::max(capacity, req_data.students.get()) as i64;
                             expr = expr
                                 + coeff
                                     * IntLinExpr::var(base_var(Var::RoomForInterrogation {
                                         request: req,
-                                        room: room.name.clone(),
+                                        room: room_name.clone(),
                                     }));
                         }
 
-                        if has_prep_var(env, req, &room.name) {
+                        if has_prep_var(env, req, room_name) {
                             expr = expr
                                 + req_data.prep_students as i64
                                     * IntLinExpr::var(base_var(Var::RoomForPrep {
                                         request: req,
-                                        room: room.name.clone(),
+                                        room: room_name.clone(),
                                     }));
                         }
 
@@ -115,7 +108,7 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
                 bundle = bundle.with_constraint(
                     sum.leq(&IntLinExpr::constant(capacity as i64)),
                     ConstraintDesc::RoomNotOverused {
-                        room: room.name.clone(),
+                        room: room_name.clone(),
                         period,
                         day,
                         hour,
@@ -129,12 +122,12 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
     let mut undeclared_rooms: BTreeSet<NonEmptyString> = BTreeSet::new();
     for req in &env.data.requests {
         if let Some(sug) = &req.room_suggestion {
-            if !declared_room_names.contains(sug.as_ref() as &str) {
+            if !env.data.rooms.contains_key(sug) {
                 undeclared_rooms.insert(sug.clone());
             }
         }
         if let Some(sug) = &req.prep_suggestion {
-            if !declared_room_names.contains(sug.as_ref() as &str) {
+            if !env.data.rooms.contains_key(sug) {
                 undeclared_rooms.insert(sug.clone());
             }
         }

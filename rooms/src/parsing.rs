@@ -1,3 +1,4 @@
+use std::collections::{BTreeMap, HashMap};
 use std::num::NonZeroU32;
 use std::path::Path;
 
@@ -89,6 +90,14 @@ pub enum ScheduleError {
     InvalidDay { row: usize, value: String },
     #[error("In requests file, row {row}: hour must be between 8 and 19, got {value}")]
     InvalidHour { row: usize, value: u32 },
+    #[error(
+        "In rooms file: duplicate room name \"{name}\" (first defined at row {first_row}, duplicated at row {duplicate_row})"
+    )]
+    RoomsDuplicateName {
+        name: String,
+        first_row: usize,
+        duplicate_row: usize,
+    },
 }
 
 /// Parse a rooms CSV and a requests CSV into a [`ScheduleData`].
@@ -102,7 +111,7 @@ pub fn parse_schedule(
 }
 
 /// Parse a rooms CSV file.
-pub fn parse_rooms(path: &Path) -> Result<Vec<Room>, ScheduleError> {
+pub fn parse_rooms(path: &Path) -> Result<BTreeMap<NonEmptyString, Room>, ScheduleError> {
     let mut reader = csv::ReaderBuilder::new()
         .has_headers(true)
         .flexible(true)
@@ -110,7 +119,8 @@ pub fn parse_rooms(path: &Path) -> Result<Vec<Room>, ScheduleError> {
     let headers = reader.headers()?.clone();
     validate_headers(&headers, ROOMS_COLUMNS, "rooms")?;
 
-    let mut rooms = Vec::new();
+    let mut rooms = BTreeMap::new();
+    let mut seen: HashMap<NonEmptyString, usize> = HashMap::new();
 
     for (idx, result) in reader.records().enumerate() {
         let record = result?;
@@ -128,6 +138,16 @@ pub fn parse_rooms(path: &Path) -> Result<Vec<Room>, ScheduleError> {
         }
 
         let name = parse_non_empty_field(&record, 0, row, "rooms", "Salle")?;
+
+        if let Some(&first_row) = seen.get(&name) {
+            return Err(ScheduleError::RoomsDuplicateName {
+                name: name.to_string(),
+                first_row,
+                duplicate_row: row,
+            });
+        }
+        seen.insert(name.clone(), row);
+
         let floor = parse_field::<u32>(&record, 1, row, "rooms", "Étage")?;
         let x = parse_field::<f32>(&record, 2, row, "rooms", "X")?;
         let y = parse_field::<f32>(&record, 3, row, "rooms", "Y")?;
@@ -137,17 +157,19 @@ pub fn parse_rooms(path: &Path) -> Result<Vec<Room>, ScheduleError> {
         let window = parse_window_field(&record, 7, row)?;
         let priority = parse_priority_field(&record, 8, row)?;
 
-        rooms.push(Room {
+        rooms.insert(
             name,
-            floor,
-            x,
-            y,
-            blackboards,
-            whiteboards,
-            capacity,
-            window,
-            priority,
-        });
+            Room {
+                floor,
+                x,
+                y,
+                blackboards,
+                whiteboards,
+                capacity,
+                window,
+                priority,
+            },
+        );
     }
 
     Ok(rooms)

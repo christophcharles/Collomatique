@@ -13,8 +13,8 @@ impl VarEnv {
         let managed_rooms = data
             .rooms
             .iter()
-            .filter(|r| r.priority.is_some())
-            .map(|r| r.name.clone())
+            .filter(|(_, r)| r.priority.is_some())
+            .map(|(name, _)| name.clone())
             .collect();
         VarEnv {
             data: data.clone(),

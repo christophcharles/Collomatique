@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::num::NonZeroU32;
 
 use collomatique_time::Weekday;
@@ -33,7 +33,6 @@ pub enum Window {
 /// A room available for scheduling.
 #[derive(Debug, Clone)]
 pub struct Room {
-    pub name: NonEmptyString,
     pub floor: u32,
     pub x: f32,
     pub y: f32,
@@ -67,18 +66,12 @@ pub struct Request {
 /// Parsed schedule data: rooms and requests.
 #[derive(Debug, Clone)]
 pub struct ScheduleData {
-    pub rooms: Vec<Room>,
+    pub rooms: BTreeMap<NonEmptyString, Room>,
     pub requests: Vec<Request>,
 }
 
 impl ScheduleData {
     pub fn unregistered_rooms(&self) -> Vec<&str> {
-        let room_names: HashSet<&str> = self
-            .rooms
-            .iter()
-            .map(|r| AsRef::<str>::as_ref(&r.name))
-            .collect();
-
         let mut unregistered: Vec<&str> = self
             .requests
             .iter()
@@ -88,7 +81,7 @@ impl ScheduleData {
                     .flatten()
             })
             .map(|name| AsRef::<str>::as_ref(name))
-            .filter(|name| !room_names.contains(name))
+            .filter(|name| !self.rooms.contains_key(*name))
             .collect::<HashSet<&str>>()
             .into_iter()
             .collect();
