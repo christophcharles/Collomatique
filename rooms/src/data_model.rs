@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::num::NonZeroU32;
 use std::path::Path;
 
@@ -153,7 +152,8 @@ pub struct Request {
     pub students: NonZeroU32,
     /// Number of students to seat in the prep room.
     pub prep_students: u32,
-    /// Suggested room name. If absent, no preference. Must match a room name from the rooms CSV.
+    /// Suggested room name. If absent, no preference. Unregistered room names are allowed but
+    /// will trigger a warning.
     pub room_suggestion: Option<NonEmptyString>,
     /// Suggested prep room name. Same semantics as `room_suggestion`.
     pub prep_suggestion: Option<NonEmptyString>,
@@ -168,6 +168,36 @@ pub struct ScheduleData {
     pub requests: Vec<Request>,
 }
 
+impl ScheduleData {
+    /// Returns a sorted, deduplicated list of room names referenced in requests
+    /// but not present in the rooms file.
+    pub fn unregistered_rooms(&self) -> Vec<&str> {
+        use std::collections::HashSet;
+
+        let room_names: HashSet<&str> = self
+            .rooms
+            .iter()
+            .map(|r| AsRef::<str>::as_ref(&r.name))
+            .collect();
+
+        let mut unregistered: Vec<&str> = self
+            .requests
+            .iter()
+            .flat_map(|req| {
+                [req.room_suggestion.as_ref(), req.prep_suggestion.as_ref()]
+                    .into_iter()
+                    .flatten()
+            })
+            .map(|name| AsRef::<str>::as_ref(name))
+            .filter(|name| !room_names.contains(name))
+            .collect::<HashSet<&str>>()
+            .into_iter()
+            .collect();
+        unregistered.sort();
+        unregistered
+    }
+}
+
 /// Parse a rooms CSV and a requests CSV into a [`ScheduleData`].
 pub fn parse_schedule(
     rooms_path: &Path,
@@ -175,31 +205,6 @@ pub fn parse_schedule(
 ) -> Result<ScheduleData, ScheduleError> {
     let rooms = parse_rooms(rooms_path)?;
     let requests = parse_requests(requests_path)?;
-
-    let room_names: HashSet<&str> = rooms
-        .iter()
-        .map(|r| AsRef::<str>::as_ref(&r.name))
-        .collect();
-    for (idx, req) in requests.iter().enumerate() {
-        let row = idx + 1;
-        if let Some(ref name) = req.room_suggestion {
-            if !room_names.contains(AsRef::<str>::as_ref(name)) {
-                return Err(ScheduleError::RequestsRowError {
-                    row,
-                    message: format!("room \"{name}\" in column \"Salle\" not found in rooms file"),
-                });
-            }
-        }
-        if let Some(ref name) = req.prep_suggestion {
-            if !room_names.contains(AsRef::<str>::as_ref(name)) {
-                return Err(ScheduleError::RequestsRowError {
-                    row,
-                    message: format!("room \"{name}\" in column \"Prep\" not found in rooms file"),
-                });
-            }
-        }
-    }
-
     Ok(ScheduleData { rooms, requests })
 }
 

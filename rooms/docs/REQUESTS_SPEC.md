@@ -23,7 +23,7 @@ Each row describes one interrogation slot that needs a room assigned to it.
 | 11 | Fenêtre | 0 or 1 | Whether a window is required. 1 = required, 0 = no preference. |
 | 12 | Nb élèves | integer ≥ 1 | Number of students who need to fit in the assigned room. Must be strictly positive. |
 | 13 | Nb prep | integer ≥ 0 | Number of students who need to fit in a prep room for this slot. 0 means no prep room is needed. |
-| 14 | Salle | string or empty | Suggested room for the interrogation. If empty, no preference. If set, must match a room name from the rooms CSV. To request an unmanaged room, list it in the rooms CSV with Priorité = -1; the requester vouches for the room being available at the corresponding time slot. |
+| 14 | Salle | string or empty | Suggested room for the interrogation. If empty, no preference. If the name matches a room in the rooms CSV, it is a preference for that room. Unregistered room names are allowed but will trigger a warning: closest-room resolution will not be available in case of double occupancy. To avoid warnings, list the room in the rooms CSV with Priorité = -1. |
 | 15 | Prep | string or empty | Suggested prep room. Same semantics as the Salle column. |
 
 ### Example

@@ -165,18 +165,6 @@ fn requests_empty_classes() {
     ));
 }
 
-// --- Cross-validation errors ---
-
-#[test]
-fn requests_unknown_room() {
-    let err = run("valid_rooms.csv", "requests_unknown_room.csv").unwrap_err();
-    assert!(matches!(
-        err,
-        ScheduleError::RequestsRowError { row: 1, ref message }
-        if message.contains("not found in rooms file")
-    ));
-}
-
 // --- Happy-path parsing ---
 
 #[test]
@@ -223,4 +211,15 @@ fn parse_schedule_valid() {
             .unwrap();
     assert_eq!(data.rooms.len(), 1);
     assert_eq!(data.requests.len(), 1);
+    assert!(data.unregistered_rooms().is_empty());
+}
+
+#[test]
+fn unregistered_room_detected() {
+    let data = data_model::parse_schedule(
+        &fixture("valid_rooms.csv"),
+        &fixture("requests_unregistered_room.csv"),
+    )
+    .unwrap();
+    assert_eq!(data.unregistered_rooms(), vec!["Z999"]);
 }

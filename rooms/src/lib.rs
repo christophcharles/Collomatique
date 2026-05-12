@@ -13,5 +13,11 @@ pub fn run(rooms: &Path, requests: &Path) -> Result<(), ScheduleError> {
         data.rooms.len(),
         data.requests.len(),
     );
+    for name in data.unregistered_rooms() {
+        eprintln!(
+            "Warning: room \"{name}\" is not registered in the rooms file. \
+             In case of double occupancy, we will not be able to find the closest available room."
+        );
+    }
     Ok(())
 }
