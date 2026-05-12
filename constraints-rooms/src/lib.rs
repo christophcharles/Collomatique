@@ -1,7 +1,4 @@
 mod builder;
-mod capacity;
-mod constraints;
-mod incompats;
 mod types;
 pub mod vars;
 

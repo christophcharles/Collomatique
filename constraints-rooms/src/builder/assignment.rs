@@ -1,6 +1,6 @@
 use collomatique_ilp::int_linexpr::IntLinExpr;
 
-use crate::builder::{MyBundle, V, base_var};
+use super::{MyBundle, V, base_var};
 use crate::types::ConstraintDesc;
 use crate::vars::{Var, VarEnv};
 

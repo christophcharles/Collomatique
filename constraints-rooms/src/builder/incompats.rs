@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use non_empty_string::NonEmptyString;
 
-use crate::builder::{MyBundle, base_var};
+use super::{MyBundle, base_var};
 use crate::types::ConstraintDesc;
 use crate::vars::{Var, VarEnv};
 

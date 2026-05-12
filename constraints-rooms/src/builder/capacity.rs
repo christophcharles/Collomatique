@@ -5,7 +5,7 @@ use collomatique_rooms_model::{Hour, Request};
 use collomatique_time::Weekday;
 use non_empty_string::NonEmptyString;
 
-use crate::builder::{MyBundle, V, base_var};
+use super::{MyBundle, V, base_var};
 use crate::types::ConstraintDesc;
 use crate::vars::{PERIOD_COUNT, Var, VarEnv};
 

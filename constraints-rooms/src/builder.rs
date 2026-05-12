@@ -1,3 +1,7 @@
+mod assignment;
+mod capacity;
+mod incompats;
+
 use collomatique_ilp_modeler::bundle::ReifyError;
 use collomatique_ilp_modeler::{IntConstraintBundle, Modeler, Var as ModelerVar};
 use collomatique_rooms_model::ScheduleData;
@@ -29,13 +33,13 @@ pub fn build_model(data: &ScheduleData) -> RoomModel {
     let mut modeler: MyModeler<'_> = Modeler::from_described(&env);
 
     modeler
-        .apply_bundle(crate::constraints::build(&env).into_general())
+        .apply_bundle(assignment::build(&env).into_general())
         .expect("no duplicate extras");
     modeler
-        .apply_bundle(crate::capacity::build(&env).into_general())
+        .apply_bundle(capacity::build(&env).into_general())
         .expect("no duplicate extras");
     modeler
-        .apply_bundle(crate::incompats::build(&env).into_general())
+        .apply_bundle(incompats::build(&env).into_general())
         .expect("no duplicate extras");
 
     modeler
