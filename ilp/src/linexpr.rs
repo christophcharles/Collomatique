@@ -804,13 +804,15 @@ impl<V: UsableData> LinExpr<V> {
     ///
     /// Works like [Self::transmute] but consumes the expression
     pub fn into_transmuted<U: UsableData, F: FnMut(V) -> U>(self, mut f: F) -> LinExpr<U> {
-        let mut expr = LinExpr::constant(self.get_constant());
-
+        let mut coefs: HashMap<U, ordered_float::OrderedFloat<f64>> =
+            HashMap::with_capacity(self.coefs.len());
         for (v, c) in self.coefs {
-            expr = expr + c.into_inner() * LinExpr::var(f(v));
+            *coefs.entry(f(v)).or_default() += c;
         }
-
-        expr
+        LinExpr {
+            coefs,
+            constant: self.constant,
+        }
     }
 
     /// Transmute variables
@@ -888,13 +890,15 @@ impl<V: UsableData> LinExpr<V> {
         &self,
         mut f: F,
     ) -> Option<LinExpr<U>> {
-        let mut expr = LinExpr::constant(self.get_constant());
-
+        let mut coefs: HashMap<U, ordered_float::OrderedFloat<f64>> =
+            HashMap::with_capacity(self.coefs.len());
         for (v, c) in &self.coefs {
-            expr = expr + c.into_inner() * LinExpr::var(f(v)?);
+            *coefs.entry(f(v)?).or_default() += *c;
         }
-
-        Some(expr)
+        Some(LinExpr {
+            coefs,
+            constant: self.constant,
+        })
     }
 }
 
