@@ -716,3 +716,8 @@ fn priority_overflow_feasible() {
         "priority_overflow_requests.csv",
     );
 }
+
+#[test]
+fn priority_many_rooms_feasible() {
+    assert_checker_feasible("priority_many_rooms.csv", "priority_many_requests.csv");
+}
