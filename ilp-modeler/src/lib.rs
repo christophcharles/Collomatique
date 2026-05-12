@@ -1244,6 +1244,69 @@ where
             t_step.elapsed()
         ));
 
+        // Fast path: no extras means no DFS, no reconstruction.
+        if extras.is_empty() {
+            log("[Modeler::build] Steps 2-3: Skipped (no extras)");
+
+            let t_step = Instant::now();
+            let mut all_vars: HashMap<InternalVar<B, E>, Variable> = HashMap::new();
+            for (b, kind) in &base_vars {
+                all_vars.insert(InternalVar::Base(b.clone()), kind.clone());
+            }
+
+            let checker_constraints = user_constraints.clone();
+            let checker_vars = all_vars.clone();
+
+            log(&format!(
+                "[Modeler::build] Step 4: Constraint cloning ({:.2?})",
+                t_step.elapsed()
+            ));
+
+            let t_step = Instant::now();
+            let builder: ProblemBuilder<InternalVar<B, E>, ConstraintSource<E, C>> =
+                ProblemBuilder::new()
+                    .set_variables(all_vars)
+                    .add_constraints(user_constraints)
+                    .set_objective(folded_obj);
+            let problem = builder.build().map_err(BuildError::Ilp)?;
+            log(&format!(
+                "[Modeler::build] Step 5a: Main problem ({:.2?})",
+                t_step.elapsed()
+            ));
+
+            let t_step = Instant::now();
+            let checker_builder: ProblemBuilder<InternalVar<B, E>, ConstraintSource<E, C>> =
+                ProblemBuilder::new()
+                    .set_variables(checker_vars)
+                    .add_constraints(checker_constraints)
+                    .set_objective(Objective::new(
+                        LinExpr::constant(0.0),
+                        ObjectiveSense::Minimize,
+                    ));
+            let checker_problem = checker_builder.build().map_err(BuildError::Ilp)?;
+            log(&format!(
+                "[Modeler::build] Step 5b: Checker problem ({:.2?})",
+                t_step.elapsed()
+            ));
+
+            log(&format!(
+                "[Modeler::build] Total ({:.2?})",
+                t_total.elapsed()
+            ));
+
+            return Ok(Model {
+                problem,
+                reconstruction_constraints: Vec::new(),
+                reconstruction_variables: HashMap::new(),
+                base_variable_set: HashSet::new(),
+                checker_problem,
+                checker_reconstruction_constraints: Vec::new(),
+                checker_reconstruction_variables: HashMap::new(),
+                checker_base_variable_set: HashSet::new(),
+                base_var_list: base_vars,
+            });
+        }
+
         // Step 2: collect initial roots (two passes).
         let t_step = Instant::now();
         let mut constraint_roots: Vec<E> = Vec::new();
@@ -1430,7 +1493,12 @@ where
                 .add_constraints(state.out_constraints)
                 .set_objective(folded_obj);
         let problem = builder.build().map_err(BuildError::Ilp)?;
+        log(&format!(
+            "[Modeler::build] Step 5a: Main problem ({:.2?})",
+            t_step.elapsed()
+        ));
 
+        let t_step = Instant::now();
         let checker_builder: ProblemBuilder<InternalVar<B, E>, ConstraintSource<E, C>> =
             ProblemBuilder::new()
                 .set_variables(checker_vars)
@@ -1440,9 +1508,8 @@ where
                     ObjectiveSense::Minimize,
                 ));
         let checker_problem = checker_builder.build().map_err(BuildError::Ilp)?;
-
         log(&format!(
-            "[Modeler::build] Step 5: Problem assembly ({:.2?})",
+            "[Modeler::build] Step 5b: Checker problem ({:.2?})",
             t_step.elapsed()
         ));
         log(&format!(

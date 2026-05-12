@@ -55,6 +55,6 @@ pub fn build_model(data: &ScheduleData) -> RoomModel {
         .expect("no duplicate extras");
 
     modeler
-        .build(&env)
+        .build_with_log(&env, &mut |msg| eprintln!("{msg}"))
         .unwrap_or_else(|e| panic!("model build should succeed: {:?}", e))
 }
