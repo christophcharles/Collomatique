@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = [ "gtk4", "state", "ilp", "ilp-modeler", "ilp-modeler-derive", "time" , "storage", "state-colloscopes" , "python", "ops", "rpc", "rpc-engine", "constraints-colloscopes", "sqlite-state", "xlsx", "mps", "collo-cbc", "subprocesses", "rooms"]
+members = [ "gtk4", "state", "ilp", "ilp-modeler", "ilp-modeler-derive", "time" , "storage", "state-colloscopes" , "python", "ops", "rpc", "rpc-engine", "constraints-colloscopes", "sqlite-state", "xlsx", "mps", "collo-cbc", "subprocesses", "rooms", "constraints-rooms"]
 default-members = ["gtk4"]
 
 [workspace.package]
