@@ -34,6 +34,9 @@ pub fn build_model(data: &ScheduleData) -> RoomModel {
     modeler
         .apply_bundle(crate::capacity::build(&env).into_general())
         .expect("no duplicate extras");
+    modeler
+        .apply_bundle(crate::incompats::build(&env).into_general())
+        .expect("no duplicate extras");
 
     modeler
         .build(&env)

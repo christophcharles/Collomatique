@@ -25,4 +25,12 @@ pub enum ConstraintDesc {
         day: Weekday,
         hour: Hour,
     },
+    IncompatInterrogation {
+        request: usize,
+        room: NonEmptyString,
+    },
+    IncompatPrep {
+        request: usize,
+        room: NonEmptyString,
+    },
 }

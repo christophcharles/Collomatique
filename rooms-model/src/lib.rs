@@ -66,6 +66,12 @@ pub struct Periods {
     pub p3: bool,
 }
 
+impl Periods {
+    pub fn overlaps_with(&self, other: &Self) -> bool {
+        (self.p1 && other.p1) || (self.p2 && other.p2) || (self.p3 && other.p3)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TimeZone {
     start: Hour,

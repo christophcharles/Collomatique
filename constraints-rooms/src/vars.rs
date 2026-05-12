@@ -21,6 +21,23 @@ impl VarEnv {
             managed_rooms,
         }
     }
+
+    pub(crate) fn has_interrogation_var(&self, request: usize, room: &NonEmptyString) -> bool {
+        self.managed_rooms.contains(room)
+            || self.data.requests[request]
+                .room_preference
+                .as_ref()
+                .is_some_and(|p| p.room_name() == room)
+    }
+
+    pub(crate) fn has_prep_var(&self, request: usize, room: &NonEmptyString) -> bool {
+        self.data.requests[request].prep_students >= 1
+            && (self.managed_rooms.contains(room)
+                || self.data.requests[request]
+                    .prep_preference
+                    .as_ref()
+                    .is_some_and(|p| p.room_name() == room))
+    }
 }
 
 #[derive(

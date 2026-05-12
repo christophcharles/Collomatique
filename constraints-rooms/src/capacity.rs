@@ -19,23 +19,6 @@ fn request_active_at(req: &Request, period: usize, day: &Weekday, hour: &Hour) -
     in_period && req.day == *day && req.hour == *hour
 }
 
-fn has_interrogation_var(env: &VarEnv, request: usize, room: &NonEmptyString) -> bool {
-    env.managed_rooms.contains(room)
-        || env.data.requests[request]
-            .room_preference
-            .as_ref()
-            .is_some_and(|p| p.room_name() == room)
-}
-
-fn has_prep_var(env: &VarEnv, request: usize, room: &NonEmptyString) -> bool {
-    env.data.requests[request].prep_students >= 1
-        && (env.managed_rooms.contains(room)
-            || env.data.requests[request]
-                .prep_preference
-                .as_ref()
-                .is_some_and(|p| p.room_name() == room))
-}
-
 pub(crate) fn build(env: &VarEnv) -> MyBundle {
     let mut bundle = MyBundle::new();
 
@@ -65,8 +48,8 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
                         if is_managed {
                             true
                         } else {
-                            has_interrogation_var(env, *i, room_name)
-                                || has_prep_var(env, *i, room_name)
+                            env.has_interrogation_var(*i, room_name)
+                                || env.has_prep_var(*i, room_name)
                         }
                     })
                     .map(|(i, _)| i)
@@ -82,7 +65,7 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
                         let req_data = &env.data.requests[req];
                         let mut expr = IntLinExpr::constant(0);
 
-                        if has_interrogation_var(env, req, room_name) {
+                        if env.has_interrogation_var(req, room_name) {
                             let coeff = std::cmp::max(capacity, req_data.students.get()) as i64;
                             expr = expr
                                 + coeff
@@ -92,7 +75,7 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
                                     }));
                         }
 
-                        if has_prep_var(env, req, room_name) {
+                        if env.has_prep_var(req, room_name) {
                             expr = expr
                                 + req_data.prep_students as i64
                                     * IntLinExpr::var(base_var(Var::RoomForPrep {
@@ -145,7 +128,7 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
                     .enumerate()
                     .filter(|(i, req)| {
                         request_active_at(req, period, &day, &hour)
-                            && (has_interrogation_var(env, *i, room) || has_prep_var(env, *i, room))
+                            && (env.has_interrogation_var(*i, room) || env.has_prep_var(*i, room))
                     })
                     .map(|(i, _)| i)
                     .collect();
@@ -159,7 +142,7 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
                     .map(|&req| {
                         let mut expr = IntLinExpr::constant(0);
 
-                        if has_interrogation_var(env, req, room) {
+                        if env.has_interrogation_var(req, room) {
                             expr = expr
                                 + IntLinExpr::var(base_var(Var::RoomForInterrogation {
                                     request: req,
@@ -167,7 +150,7 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
                                 }));
                         }
 
-                        if has_prep_var(env, req, room) {
+                        if env.has_prep_var(req, room) {
                             expr = expr
                                 + IntLinExpr::var(base_var(Var::RoomForPrep {
                                     request: req,
