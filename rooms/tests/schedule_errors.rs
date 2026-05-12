@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 
+use collomatique_ilp::solvers::collo_cbc::ColloCbcSolver;
 use collomatique_rooms::ScheduleError;
 use collomatique_rooms::parsing;
 use collomatique_rooms::{
@@ -686,4 +687,24 @@ fn demand_suggestions_ignored() {
         config: default_config(),
     };
     assert!(data.demand_conflicts().is_empty());
+}
+
+fn assert_checker_feasible(rooms: &str, requests: &str) {
+    let data = parsing::parse_schedule(&fixture(rooms), &fixture(requests), None).unwrap();
+    let model = collomatique_constraints_rooms::build_model(&data);
+    let solver = ColloCbcSolver::with_disable_logging(true);
+    assert!(
+        model.solve_checker(&solver).is_some(),
+        "expected feasible checker problem for {rooms} + {requests}"
+    );
+}
+
+#[test]
+fn priority_base_feasible() {
+    assert_checker_feasible("priority_base_rooms.csv", "priority_base_requests.csv");
+}
+
+#[test]
+fn priority_demand_feasible() {
+    assert_checker_feasible("priority_demand_rooms.csv", "priority_demand_requests.csv");
 }
