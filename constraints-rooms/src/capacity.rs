@@ -11,9 +11,9 @@ use crate::vars::{PERIOD_COUNT, Var, VarEnv};
 
 fn request_active_at(req: &Request, period: usize, day: &Weekday, hour: &Hour) -> bool {
     let in_period = match period {
-        0 => req.p1,
-        1 => req.p2,
-        2 => req.p3,
+        0 => req.periods.p1,
+        1 => req.periods.p2,
+        2 => req.periods.p3,
         _ => false,
     };
     in_period && req.day == *day && req.hour == *hour

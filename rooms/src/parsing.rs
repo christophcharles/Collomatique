@@ -3,7 +3,7 @@ use std::num::NonZeroU32;
 use std::path::Path;
 
 use collomatique_rooms_model::{
-    Hour, Incompat, Request, Room, RoomPreference, ScheduleData, Window,
+    Config, Hour, Incompat, Periods, Request, Room, RoomPreference, ScheduleData, TimeZone, Window,
 };
 use collomatique_time::Weekday;
 use non_empty_string::NonEmptyString;
@@ -135,10 +135,25 @@ pub fn parse_schedule(
         }
     }
 
+    let config = Config {
+        oral_exam_periods: Periods {
+            p1: false,
+            p2: false,
+            p3: true,
+        },
+        time_zones: vec![
+            TimeZone::new(Hour::new(8).unwrap(), Hour::new(9).unwrap()).unwrap(),
+            TimeZone::new(Hour::new(10).unwrap(), Hour::new(15).unwrap()).unwrap(),
+            TimeZone::new(Hour::new(16).unwrap(), Hour::new(19).unwrap()).unwrap(),
+        ],
+        max_priority: None,
+    };
+
     Ok(ScheduleData {
         rooms,
         requests,
         incompats,
+        config,
     })
 }
 
@@ -294,9 +309,7 @@ pub fn parse_requests(path: &Path) -> Result<Vec<Request>, ScheduleError> {
         let prep_preference = parse_room_preference(&record, 14);
 
         requests.push(Request {
-            p1,
-            p2,
-            p3,
+            periods: Periods { p1, p2, p3 },
             day,
             hour,
             subject,
@@ -494,9 +507,7 @@ pub fn parse_incompats(path: &Path) -> Result<Vec<Incompat>, ScheduleError> {
 
         incompats.push(Incompat {
             room,
-            p1,
-            p2,
-            p3,
+            periods: Periods { p1, p2, p3 },
             day,
             hour,
         });

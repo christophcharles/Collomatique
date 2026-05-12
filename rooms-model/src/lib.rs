@@ -59,13 +59,45 @@ impl RoomPreference {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Periods {
+    pub p1: bool,
+    pub p2: bool,
+    pub p3: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TimeZone {
+    start: Hour,
+    end: Hour,
+}
+
+impl TimeZone {
+    pub fn new(start: Hour, end: Hour) -> Option<TimeZone> {
+        (*start <= *end).then_some(TimeZone { start, end })
+    }
+
+    pub fn start(&self) -> Hour {
+        self.start
+    }
+
+    pub fn end(&self) -> Hour {
+        self.end
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Config {
+    pub oral_exam_periods: Periods,
+    pub time_zones: Vec<TimeZone>,
+    pub max_priority: Option<u32>,
+}
+
 /// A room incompatibility: the room is unavailable at this day/hour for the given periods.
 #[derive(Debug, Clone)]
 pub struct Incompat {
     pub room: NonEmptyString,
-    pub p1: bool,
-    pub p2: bool,
-    pub p3: bool,
+    pub periods: Periods,
     pub day: Weekday,
     pub hour: Hour,
 }
@@ -73,9 +105,7 @@ pub struct Incompat {
 /// A scheduling request for a room.
 #[derive(Debug, Clone)]
 pub struct Request {
-    pub p1: bool,
-    pub p2: bool,
-    pub p3: bool,
+    pub periods: Periods,
     pub day: Weekday,
     pub hour: Hour,
     pub subject: NonEmptyString,
@@ -96,6 +126,7 @@ pub struct ScheduleData {
     pub rooms: BTreeMap<NonEmptyString, Room>,
     pub requests: Vec<Request>,
     pub incompats: Vec<Incompat>,
+    pub config: Config,
 }
 
 impl ScheduleData {

@@ -218,9 +218,9 @@ fn parse_requests_valid() {
     let requests = parsing::parse_requests(&fixture("valid_requests.csv")).unwrap();
     assert_eq!(requests.len(), 1);
     let r = &requests[0];
-    assert!(r.p1);
-    assert!(!r.p2);
-    assert!(r.p3);
+    assert!(r.periods.p1);
+    assert!(!r.periods.p2);
+    assert!(r.periods.p3);
     assert_eq!(r.day, Weekday(chrono::Weekday::Mon));
     assert_eq!(r.hour, Hour::new(8).unwrap());
     assert_eq!(r.subject, nes("Mathématiques"));
@@ -280,9 +280,9 @@ fn parse_incompats_valid() {
     assert_eq!(incompats.len(), 1);
     let i = &incompats[0];
     assert_eq!(i.room, nes("A101"));
-    assert!(i.p1);
-    assert!(!i.p2);
-    assert!(i.p3);
+    assert!(i.periods.p1);
+    assert!(!i.periods.p2);
+    assert!(i.periods.p3);
     assert_eq!(i.day, Weekday(chrono::Weekday::Mon));
     assert_eq!(i.hour, Hour::new(8).unwrap());
 }

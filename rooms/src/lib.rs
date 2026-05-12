@@ -3,7 +3,7 @@ pub mod parsing;
 use std::path::Path;
 
 pub use collomatique_rooms_model::{
-    Hour, Incompat, Request, Room, RoomPreference, ScheduleData, Window,
+    Config, Hour, Incompat, Periods, Request, Room, RoomPreference, ScheduleData, TimeZone, Window,
 };
 pub use parsing::ScheduleError;
 
