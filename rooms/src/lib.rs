@@ -9,7 +9,12 @@ pub use collomatique_rooms_model::{
 };
 pub use parsing::ScheduleError;
 
-pub fn run(rooms: &Path, requests: &Path, incompats: Option<&Path>) -> Result<(), ScheduleError> {
+pub fn run(
+    rooms: &Path,
+    requests: &Path,
+    incompats: Option<&Path>,
+    checker_only: bool,
+) -> Result<(), ScheduleError> {
     let data = parsing::parse_schedule(rooms, requests, incompats)?;
     eprintln!(
         "Parsed {} rooms, {} requests, and {} incompatibilities",
@@ -37,11 +42,19 @@ pub fn run(rooms: &Path, requests: &Path, incompats: Option<&Path>) -> Result<()
         stats.base_variable_count, stats.user_constraint_count, elapsed,
     );
 
-    eprintln!("Solving...");
+    if checker_only {
+        eprintln!("Solving (checker only, no objective)...");
+    } else {
+        eprintln!("Solving...");
+    }
     let solver = collomatique_ilp::solvers::collo_cbc::ColloCbcSolver::with_disable_logging(false);
-    match model.solve(&solver) {
-        Some(solution) => {
-            let config = solution.get_data();
+    let solved = if checker_only {
+        model.solve_checker(&solver).map(|s| s.get_data())
+    } else {
+        model.solve(&solver).map(|s| s.get_data())
+    };
+    match solved {
+        Some(config) => {
             let assignments = collomatique_constraints_rooms::extract_assignments(&data, &config);
             for assignment in &assignments {
                 let req = &data.requests[assignment.request];

@@ -13,10 +13,19 @@ struct Args {
     /// CSV file describing room incompatibilities (optional)
     #[arg(long)]
     incompats: Option<PathBuf>,
+
+    /// Solve only feasibility (no objective optimization)
+    #[arg(long)]
+    checker_only: bool,
 }
 
 fn main() -> Result<(), anyhow::Error> {
     let args = Args::parse();
-    collomatique_rooms::run(&args.rooms, &args.requests, args.incompats.as_deref())?;
+    collomatique_rooms::run(
+        &args.rooms,
+        &args.requests,
+        args.incompats.as_deref(),
+        args.checker_only,
+    )?;
     Ok(())
 }

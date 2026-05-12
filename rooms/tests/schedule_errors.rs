@@ -19,7 +19,7 @@ fn fixture(name: &str) -> PathBuf {
 }
 
 fn run(rooms: &str, requests: &str) -> Result<(), ScheduleError> {
-    collomatique_rooms::run(&fixture(rooms), &fixture(requests), None)
+    collomatique_rooms::run(&fixture(rooms), &fixture(requests), None, false)
 }
 
 fn run_with_incompats(rooms: &str, requests: &str, incompats: &str) -> Result<(), ScheduleError> {
@@ -27,6 +27,7 @@ fn run_with_incompats(rooms: &str, requests: &str, incompats: &str) -> Result<()
         &fixture(rooms),
         &fixture(requests),
         Some(&fixture(incompats)),
+        false,
     )
 }
 
