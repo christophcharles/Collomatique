@@ -13,7 +13,8 @@ const ROOMS_COLUMNS: &[&str] = &[
     "Étage",
     "X",
     "Y",
-    "Tableaux",
+    "Tableaux noirs",
+    "Tableaux blancs",
     "Capacité",
     "Fenêtre",
 ];
@@ -65,6 +66,14 @@ const ALLOWED_CLASSES: &[&str] = &[
     "BCPST 2", "ECG 1A", "ECG 1B", "ECG 2A", "ECG 2B", "LS 1", "LS 2",
 ];
 
+/// Type of window in a room.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Window {
+    None,
+    Interior,
+    Exterior,
+}
+
 /// Errors that can occur while parsing schedule CSV files.
 #[derive(Debug, Error)]
 pub enum ScheduleError {
@@ -103,10 +112,12 @@ pub struct Room {
     pub y: f32,
     /// Number of blackboards in the room.
     pub blackboards: u32,
+    /// Number of whiteboards in the room.
+    pub whiteboards: u32,
     /// Maximum number of students the room can accommodate.
     pub capacity: NonZeroU32,
-    /// Whether the room has a window.
-    pub window: bool,
+    /// Type of window in the room.
+    pub window: Window,
 }
 
 /// A scheduling request for a room.
@@ -197,9 +208,10 @@ pub fn parse_rooms(path: &Path) -> Result<Vec<Room>, ScheduleError> {
         let floor = parse_field::<u32>(&record, 1, row, "rooms", "Étage")?;
         let x = parse_field::<f32>(&record, 2, row, "rooms", "X")?;
         let y = parse_field::<f32>(&record, 3, row, "rooms", "Y")?;
-        let blackboards = parse_field::<u32>(&record, 4, row, "rooms", "Tableaux")?;
-        let capacity = parse_field::<NonZeroU32>(&record, 5, row, "rooms", "Capacité")?;
-        let window = parse_bool_field(&record, 6, row, "rooms", "Fenêtre")?;
+        let blackboards = parse_field::<u32>(&record, 4, row, "rooms", "Tableaux noirs")?;
+        let whiteboards = parse_field::<u32>(&record, 5, row, "rooms", "Tableaux blancs")?;
+        let capacity = parse_field::<NonZeroU32>(&record, 6, row, "rooms", "Capacité")?;
+        let window = parse_window_field(&record, 7, row)?;
 
         rooms.push(Room {
             name,
@@ -207,6 +219,7 @@ pub fn parse_rooms(path: &Path) -> Result<Vec<Room>, ScheduleError> {
             x,
             y,
             blackboards,
+            whiteboards,
             capacity,
             window,
         });
@@ -421,6 +434,25 @@ fn parse_non_empty_field(
             }
         }
     })
+}
+
+fn parse_window_field(
+    record: &csv::StringRecord,
+    index: usize,
+    row: usize,
+) -> Result<Window, ScheduleError> {
+    let value = record.get(index).unwrap().trim();
+    match value {
+        "Non" => Ok(Window::None),
+        "Intérieur" => Ok(Window::Interior),
+        "Extérieur" => Ok(Window::Exterior),
+        _ => Err(ScheduleError::RoomsRowError {
+            row,
+            message: format!(
+                "column \"Fenêtre\": expected Non, Intérieur or Extérieur, got \"{value}\""
+            ),
+        }),
+    }
 }
 
 fn parse_optional_non_empty(record: &csv::StringRecord, index: usize) -> Option<NonEmptyString> {

@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use collomatique_rooms::ScheduleError;
-use collomatique_rooms::data_model;
+use collomatique_rooms::data_model::{self, Window};
 use collomatique_rooms::types::Hour;
 use collomatique_time::Weekday;
 use non_empty_string::NonEmptyString;
@@ -61,8 +61,8 @@ fn rooms_zero_capacity() {
 }
 
 #[test]
-fn rooms_bad_bool() {
-    let err = run("rooms_bad_bool.csv", "valid_requests.csv").unwrap_err();
+fn rooms_bad_window() {
+    let err = run("rooms_bad_window.csv", "valid_requests.csv").unwrap_err();
     assert!(matches!(err, ScheduleError::RoomsRowError { row: 1, .. }));
 }
 
@@ -163,8 +163,9 @@ fn parse_rooms_valid() {
     assert_eq!(rooms[0].x, 2.5);
     assert_eq!(rooms[0].y, 3.0);
     assert_eq!(rooms[0].blackboards, 2);
+    assert_eq!(rooms[0].whiteboards, 1);
     assert_eq!(rooms[0].capacity.get(), 30);
-    assert!(rooms[0].window);
+    assert_eq!(rooms[0].window, Window::Exterior);
 }
 
 #[test]
