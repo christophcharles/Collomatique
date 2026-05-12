@@ -17,6 +17,7 @@ Each row describes one room that can be assigned to requests.
 | 7 | Capacité | integer ≥ 1 | Maximum number of students the room can seat. Must be strictly positive. |
 | 8 | Fenêtre | Non, Intérieur, or Extérieur | Type of window in the room. Non = no window, Intérieur = interior-facing window, Extérieur = exterior-facing window. |
 | 9 | Priorité | integer ≥ 0 or -1 | Priority rank for room selection. 0 = use first, 1 = use second, etc. -1 = never use unless explicitly requested (see below). |
+| 10 | Réservée | 0 or 1 | Whether this room is reserved for oral exam preparation. 0 = no, 1 = yes. |
 
 ### Unmanaged rooms (Priorité = -1)
 
@@ -25,8 +26,8 @@ Rooms with Priorité = -1 are never assigned automatically. They can only be use
 ## Example
 
 ```csv
-Salle,Étage,X,Y,Tableaux noirs,Tableaux blancs,Capacité,Fenêtre,Priorité
-A101,1,2.5,3.0,2,1,30,Extérieur,0
-B203,2,10.0,5.5,1,0,15,Non,2
-C001,0,0.0,1.0,0,0,10,Intérieur,-1
+Salle,Étage,X,Y,Tableaux noirs,Tableaux blancs,Capacité,Fenêtre,Priorité,Réservée
+A101,1,2.5,3.0,2,1,30,Extérieur,0,0
+B203,2,10.0,5.5,1,0,15,Non,2,1
+C001,0,0.0,1.0,0,0,10,Intérieur,-1,0
 ```

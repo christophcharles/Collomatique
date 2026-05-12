@@ -202,6 +202,15 @@ fn parse_rooms_valid() {
     assert_eq!(room.capacity.get(), 30);
     assert_eq!(room.window, Window::Exterior);
     assert_eq!(room.priority, Some(0));
+    assert!(!room.reserved);
+}
+
+#[test]
+fn rooms_reserved() {
+    let rooms = parsing::parse_rooms(&fixture("rooms_reserved.csv")).unwrap();
+    assert_eq!(rooms.len(), 1);
+    let (_, room) = rooms.iter().next().unwrap();
+    assert!(room.reserved);
 }
 
 #[test]

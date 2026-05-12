@@ -20,6 +20,7 @@ const ROOMS_COLUMNS: &[&str] = &[
     "Capacité",
     "Fenêtre",
     "Priorité",
+    "Réservée",
 ];
 
 const REQUESTS_COLUMNS: &[&str] = &[
@@ -187,6 +188,7 @@ pub fn parse_rooms(path: &Path) -> Result<BTreeMap<NonEmptyString, Room>, Schedu
         let capacity = parse_field::<NonZeroU32>(&record, 6, row, "rooms", "Capacité")?;
         let window = parse_window_field(&record, 7, row)?;
         let priority = parse_priority_field(&record, 8, row)?;
+        let reserved = parse_bool_field(&record, 9, row, "rooms", "Réservée")?;
 
         rooms.insert(
             name,
@@ -199,6 +201,7 @@ pub fn parse_rooms(path: &Path) -> Result<BTreeMap<NonEmptyString, Room>, Schedu
                 capacity,
                 window,
                 priority,
+                reserved,
             },
         );
     }

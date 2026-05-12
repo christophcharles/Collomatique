@@ -41,6 +41,7 @@ pub struct Room {
     pub capacity: NonZeroU32,
     pub window: Window,
     pub priority: Option<u32>,
+    pub reserved: bool,
 }
 
 /// Whether a room preference is a suggestion or a demand.
