@@ -222,7 +222,8 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
                     .expect("no duplicate extras");
             }
 
-            // Phase 2: soft usage constraints
+            // Phase 2: priority usage constraints
+            // Hard for period 0, soft (objectified) for other periods
             for (p_idx, &current_priority) in priorities.iter().enumerate() {
                 if p_idx == 0 {
                     continue;
@@ -251,39 +252,41 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
                     for &req_idx in &active_requests {
                         let req = &env.data.requests[req_idx];
 
+                        let desc = ConstraintDesc::Priority {
+                            request: req_idx,
+                            room: room_name.clone(),
+                            period,
+                            day,
+                            hour,
+                        };
+
+                        let target = if period == 0 {
+                            &mut bundle
+                        } else {
+                            &mut soft_bundle
+                        };
+
                         if env.has_interrogation_var(req_idx, room_name)
                             && !is_interrogation_demand(req, room_name)
                         {
-                            soft_bundle = soft_bundle.with_constraint(
+                            *target = std::mem::take(target).with_constraint(
                                 IntLinExpr::var(base_var(Var::RoomForInterrogation {
                                     request: req_idx,
                                     room: room_name.clone(),
                                 }))
                                 .leq(&IntLinExpr::var(exhausted_var.clone())),
-                                ConstraintDesc::PriorityInterrogation {
-                                    request: req_idx,
-                                    room: room_name.clone(),
-                                    period,
-                                    day,
-                                    hour,
-                                },
+                                desc.clone(),
                             );
                         }
 
                         if env.has_prep_var(req_idx, room_name) && !is_prep_demand(req, room_name) {
-                            soft_bundle = soft_bundle.with_constraint(
+                            *target = std::mem::take(target).with_constraint(
                                 IntLinExpr::var(base_var(Var::RoomForPrep {
                                     request: req_idx,
                                     room: room_name.clone(),
                                 }))
                                 .leq(&IntLinExpr::var(exhausted_var.clone())),
-                                ConstraintDesc::PriorityPrep {
-                                    request: req_idx,
-                                    room: room_name.clone(),
-                                    period,
-                                    day,
-                                    hour,
-                                },
+                                desc,
                             );
                         }
                     }

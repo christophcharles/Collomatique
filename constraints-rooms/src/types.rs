@@ -57,14 +57,7 @@ pub enum ConstraintDesc {
         request: usize,
         room: NonEmptyString,
     },
-    PriorityInterrogation {
-        request: usize,
-        room: NonEmptyString,
-        period: usize,
-        day: Weekday,
-        hour: Hour,
-    },
-    PriorityPrep {
+    Priority {
         request: usize,
         room: NonEmptyString,
         period: usize,
