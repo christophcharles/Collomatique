@@ -1,6 +1,7 @@
 pub mod parsing;
 
 use std::path::Path;
+use std::time::Instant;
 
 pub use collomatique_rooms_model::{
     Config, DemandConflict, DemandConflictKind, DemandKind, Hour, Incompat, Periods, Request, Room,
@@ -27,11 +28,13 @@ pub fn run(rooms: &Path, requests: &Path, incompats: Option<&Path>) -> Result<()
     }
 
     eprintln!("Building ILP model...");
+    let start = Instant::now();
     let model = collomatique_constraints_rooms::build_model(&data);
+    let elapsed = start.elapsed();
     let stats = model.stats();
     eprintln!(
-        "  {} base variables, {} constraints",
-        stats.base_variable_count, stats.user_constraint_count,
+        "  {} base variables, {} constraints (built in {:.2?})",
+        stats.base_variable_count, stats.user_constraint_count, elapsed,
     );
 
     eprintln!("Solving...");
