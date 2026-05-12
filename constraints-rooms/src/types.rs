@@ -41,4 +41,12 @@ pub enum ConstraintDesc {
         request: usize,
         room: NonEmptyString,
     },
+    WindowInterrogation {
+        request: usize,
+        room: NonEmptyString,
+    },
+    WindowPrep {
+        request: usize,
+        room: NonEmptyString,
+    },
 }

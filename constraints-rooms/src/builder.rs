@@ -2,6 +2,7 @@ mod assignment;
 mod capacity;
 mod incompats;
 mod reservation;
+mod windows;
 
 use collomatique_ilp_modeler::bundle::ReifyError;
 use collomatique_ilp_modeler::{IntConstraintBundle, Modeler, Var as ModelerVar};
@@ -44,6 +45,9 @@ pub fn build_model(data: &ScheduleData) -> RoomModel {
         .expect("no duplicate extras");
     modeler
         .apply_bundle(reservation::build(&env).into_general())
+        .expect("no duplicate extras");
+    modeler
+        .apply_bundle(windows::build(&env).into_general())
         .expect("no duplicate extras");
 
     modeler
