@@ -731,3 +731,11 @@ fn priority_prep_feasible() {
 fn priority_prep_full_feasible() {
     assert_checker_feasible("priority_prep_rooms.csv", "priority_prep_full_requests.csv");
 }
+
+#[test]
+fn priority_reserved_feasible() {
+    assert_checker_feasible(
+        "priority_reserved_rooms.csv",
+        "priority_prep_full_requests.csv",
+    );
+}
