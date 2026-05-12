@@ -165,6 +165,18 @@ fn requests_empty_classes() {
     ));
 }
 
+// --- Cross-validation errors ---
+
+#[test]
+fn requests_unknown_room() {
+    let err = run("valid_rooms.csv", "requests_unknown_room.csv").unwrap_err();
+    assert!(matches!(
+        err,
+        ScheduleError::RequestsRowError { row: 1, ref message }
+        if message.contains("not found in rooms file")
+    ));
+}
+
 // --- Happy-path parsing ---
 
 #[test]

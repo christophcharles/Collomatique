@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::num::NonZeroU32;
 use std::path::Path;
 
@@ -152,9 +153,7 @@ pub struct Request {
     pub students: NonZeroU32,
     /// Number of students to seat in the prep room.
     pub prep_students: u32,
-    /// Suggested room name. If absent, no preference. If the name is not in
-    /// the rooms CSV, the teacher vouches for the (unmanaged) room being
-    /// available.
+    /// Suggested room name. If absent, no preference. Must match a room name from the rooms CSV.
     pub room_suggestion: Option<NonEmptyString>,
     /// Suggested prep room name. Same semantics as `room_suggestion`.
     pub prep_suggestion: Option<NonEmptyString>,
@@ -176,6 +175,31 @@ pub fn parse_schedule(
 ) -> Result<ScheduleData, ScheduleError> {
     let rooms = parse_rooms(rooms_path)?;
     let requests = parse_requests(requests_path)?;
+
+    let room_names: HashSet<&str> = rooms
+        .iter()
+        .map(|r| AsRef::<str>::as_ref(&r.name))
+        .collect();
+    for (idx, req) in requests.iter().enumerate() {
+        let row = idx + 1;
+        if let Some(ref name) = req.room_suggestion {
+            if !room_names.contains(AsRef::<str>::as_ref(name)) {
+                return Err(ScheduleError::RequestsRowError {
+                    row,
+                    message: format!("room \"{name}\" in column \"Salle\" not found in rooms file"),
+                });
+            }
+        }
+        if let Some(ref name) = req.prep_suggestion {
+            if !room_names.contains(AsRef::<str>::as_ref(name)) {
+                return Err(ScheduleError::RequestsRowError {
+                    row,
+                    message: format!("room \"{name}\" in column \"Prep\" not found in rooms file"),
+                });
+            }
+        }
+    }
+
     Ok(ScheduleData { rooms, requests })
 }
 

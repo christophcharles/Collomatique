@@ -16,7 +16,11 @@ Each row describes one room that can be assigned to requests.
 | 6 | Tableaux blancs | integer ≥ 0 | Number of whiteboards available in the room. |
 | 7 | Capacité | integer ≥ 1 | Maximum number of students the room can seat. Must be strictly positive. |
 | 8 | Fenêtre | Non, Intérieur, or Extérieur | Type of window in the room. Non = no window, Intérieur = interior-facing window, Extérieur = exterior-facing window. |
-| 9 | Priorité | integer ≥ 0 or -1 | Priority rank for room selection. 0 = use first, 1 = use second, etc. -1 = never use unless explicitly requested. |
+| 9 | Priorité | integer ≥ 0 or -1 | Priority rank for room selection. 0 = use first, 1 = use second, etc. -1 = never use unless explicitly requested (see below). |
+
+### Unmanaged rooms (Priorité = -1)
+
+Rooms with Priorité = -1 are never assigned automatically. They can only be used when a request explicitly names them in its Salle or Prep column. The requester vouches for the room being available at the corresponding time slot.
 
 ## Example
 
