@@ -2,7 +2,9 @@ use std::collections::{BTreeMap, HashMap};
 use std::num::NonZeroU32;
 use std::path::Path;
 
-use collomatique_rooms_model::{Hour, Request, Room, RoomPreference, ScheduleData, Window};
+use collomatique_rooms_model::{
+    Hour, Incompat, Request, Room, RoomPreference, ScheduleData, Window,
+};
 use collomatique_time::Weekday;
 use non_empty_string::NonEmptyString;
 use thiserror::Error;
@@ -37,6 +39,8 @@ const REQUESTS_COLUMNS: &[&str] = &[
     "Salle",
     "Prep",
 ];
+
+const INCOMPATS_COLUMNS: &[&str] = &["Salle", "P1", "P2", "P3", "Jour", "Heure"];
 
 const ALLOWED_SUBJECTS: &[&str] = &[
     "Mathématiques",
@@ -98,16 +102,43 @@ pub enum ScheduleError {
         first_row: usize,
         duplicate_row: usize,
     },
+    #[error("In incompats file: missing expected column \"{0}\"")]
+    IncompatsMissingColumn(String),
+    #[error("In incompats file: unexpected column \"{0}\"")]
+    IncompatsUnknownColumn(String),
+    #[error("In incompats file, row {row}: {message}")]
+    IncompatsRowError { row: usize, message: String },
+    #[error("In incompats file, row {row}: room \"{room}\" is not declared in the rooms file")]
+    IncompatsUndeclaredRoom { row: usize, room: String },
 }
 
 /// Parse a rooms CSV and a requests CSV into a [`ScheduleData`].
 pub fn parse_schedule(
     rooms_path: &Path,
     requests_path: &Path,
+    incompats_path: Option<&Path>,
 ) -> Result<ScheduleData, ScheduleError> {
     let rooms = parse_rooms(rooms_path)?;
     let requests = parse_requests(requests_path)?;
-    Ok(ScheduleData { rooms, requests })
+    let incompats = match incompats_path {
+        Some(path) => parse_incompats(path)?,
+        None => Vec::new(),
+    };
+
+    for (idx, incompat) in incompats.iter().enumerate() {
+        if !rooms.contains_key(&incompat.room) {
+            return Err(ScheduleError::IncompatsUndeclaredRoom {
+                row: idx + 1,
+                room: incompat.room.to_string(),
+            });
+        }
+    }
+
+    Ok(ScheduleData {
+        rooms,
+        requests,
+        incompats,
+    })
 }
 
 /// Parse a rooms CSV file.
@@ -292,6 +323,8 @@ fn validate_headers(
             _ => {
                 return Err(if file == "rooms" {
                     ScheduleError::RoomsMissingColumn(col.to_string())
+                } else if file == "incompats" {
+                    ScheduleError::IncompatsMissingColumn(col.to_string())
                 } else {
                     ScheduleError::RequestsMissingColumn(col.to_string())
                 });
@@ -302,6 +335,8 @@ fn validate_headers(
         let name = headers.get(i).unwrap_or("").trim().to_string();
         return Err(if file == "rooms" {
             ScheduleError::RoomsUnknownColumn(name)
+        } else if file == "incompats" {
+            ScheduleError::IncompatsUnknownColumn(name)
         } else {
             ScheduleError::RequestsUnknownColumn(name)
         });
@@ -318,16 +353,13 @@ fn parse_field<T: std::str::FromStr>(
 ) -> Result<T, ScheduleError> {
     let value = record.get(index).unwrap().trim();
     value.parse::<T>().map_err(|_| {
+        let message = format!("cannot parse \"{value}\" in column \"{column}\"");
         if file == "rooms" {
-            ScheduleError::RoomsRowError {
-                row,
-                message: format!("cannot parse \"{value}\" in column \"{column}\""),
-            }
+            ScheduleError::RoomsRowError { row, message }
+        } else if file == "incompats" {
+            ScheduleError::IncompatsRowError { row, message }
         } else {
-            ScheduleError::RequestsRowError {
-                row,
-                message: format!("cannot parse \"{value}\" in column \"{column}\""),
-            }
+            ScheduleError::RequestsRowError { row, message }
         }
     })
 }
@@ -343,17 +375,16 @@ fn parse_bool_field(
     match value {
         "0" => Ok(false),
         "1" => Ok(true),
-        _ => Err(if file == "rooms" {
-            ScheduleError::RoomsRowError {
-                row,
-                message: format!("column \"{column}\": expected 0 or 1, got \"{value}\""),
-            }
-        } else {
-            ScheduleError::RequestsRowError {
-                row,
-                message: format!("column \"{column}\": expected 0 or 1, got \"{value}\""),
-            }
-        }),
+        _ => {
+            let message = format!("column \"{column}\": expected 0 or 1, got \"{value}\"");
+            Err(if file == "rooms" {
+                ScheduleError::RoomsRowError { row, message }
+            } else if file == "incompats" {
+                ScheduleError::IncompatsRowError { row, message }
+            } else {
+                ScheduleError::RequestsRowError { row, message }
+            })
+        }
     }
 }
 
@@ -366,16 +397,13 @@ fn parse_non_empty_field(
 ) -> Result<NonEmptyString, ScheduleError> {
     let value = record.get(index).unwrap().trim();
     NonEmptyString::try_from(value).map_err(|_| {
+        let message = format!("column \"{column}\": value must not be empty");
         if file == "rooms" {
-            ScheduleError::RoomsRowError {
-                row,
-                message: format!("column \"{column}\": value must not be empty"),
-            }
+            ScheduleError::RoomsRowError { row, message }
+        } else if file == "incompats" {
+            ScheduleError::IncompatsRowError { row, message }
         } else {
-            ScheduleError::RequestsRowError {
-                row,
-                message: format!("column \"{column}\": value must not be empty"),
-            }
+            ScheduleError::RequestsRowError { row, message }
         }
     })
 }
@@ -415,6 +443,63 @@ fn parse_priority_field(
             row,
             message: format!("cannot parse \"{value}\" in column \"Priorité\""),
         })
+}
+
+/// Parse an incompats CSV file.
+pub fn parse_incompats(path: &Path) -> Result<Vec<Incompat>, ScheduleError> {
+    let mut reader = csv::ReaderBuilder::new()
+        .has_headers(true)
+        .flexible(true)
+        .from_path(path)?;
+    let headers = reader.headers()?.clone();
+    validate_headers(&headers, INCOMPATS_COLUMNS, "incompats")?;
+
+    let mut incompats = Vec::new();
+
+    for (idx, result) in reader.records().enumerate() {
+        let record = result?;
+        let row = idx + 1;
+
+        if record.len() != INCOMPATS_COLUMNS.len() {
+            return Err(ScheduleError::IncompatsRowError {
+                row,
+                message: format!(
+                    "expected {} columns, got {}",
+                    INCOMPATS_COLUMNS.len(),
+                    record.len()
+                ),
+            });
+        }
+
+        let room = parse_non_empty_field(&record, 0, row, "incompats", "Salle")?;
+        let p1 = parse_bool_field(&record, 1, row, "incompats", "P1")?;
+        let p2 = parse_bool_field(&record, 2, row, "incompats", "P2")?;
+        let p3 = parse_bool_field(&record, 3, row, "incompats", "P3")?;
+
+        let day_str = record.get(4).unwrap().trim();
+        let day =
+            Weekday::from_french(day_str).ok_or_else(|| ScheduleError::IncompatsRowError {
+                row,
+                message: format!("invalid day \"{day_str}\""),
+            })?;
+
+        let hour_val = parse_field::<u32>(&record, 5, row, "incompats", "Heure")?;
+        let hour = Hour::new(hour_val).ok_or(ScheduleError::IncompatsRowError {
+            row,
+            message: format!("hour must be between 8 and 19, got {hour_val}"),
+        })?;
+
+        incompats.push(Incompat {
+            room,
+            p1,
+            p2,
+            p3,
+            day,
+            hour,
+        });
+    }
+
+    Ok(incompats)
 }
 
 fn parse_room_preference(record: &csv::StringRecord, index: usize) -> Option<RoomPreference> {

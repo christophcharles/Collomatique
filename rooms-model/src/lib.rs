@@ -58,6 +58,17 @@ impl RoomPreference {
     }
 }
 
+/// A room incompatibility: the room is unavailable at this day/hour for the given periods.
+#[derive(Debug, Clone)]
+pub struct Incompat {
+    pub room: NonEmptyString,
+    pub p1: bool,
+    pub p2: bool,
+    pub p3: bool,
+    pub day: Weekday,
+    pub hour: Hour,
+}
+
 /// A scheduling request for a room.
 #[derive(Debug, Clone)]
 pub struct Request {
@@ -83,6 +94,7 @@ pub struct Request {
 pub struct ScheduleData {
     pub rooms: BTreeMap<NonEmptyString, Room>,
     pub requests: Vec<Request>,
+    pub incompats: Vec<Incompat>,
 }
 
 impl ScheduleData {

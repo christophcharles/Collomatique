@@ -9,10 +9,14 @@ struct Args {
 
     /// CSV file describing scheduling requests and their constraints
     requests: PathBuf,
+
+    /// CSV file describing room incompatibilities (optional)
+    #[arg(long)]
+    incompats: Option<PathBuf>,
 }
 
 fn main() -> Result<(), anyhow::Error> {
     let args = Args::parse();
-    collomatique_rooms::run(&args.rooms, &args.requests)?;
+    collomatique_rooms::run(&args.rooms, &args.requests, args.incompats.as_deref())?;
     Ok(())
 }

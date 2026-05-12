@@ -2,15 +2,18 @@ pub mod parsing;
 
 use std::path::Path;
 
-pub use collomatique_rooms_model::{Hour, Request, Room, RoomPreference, ScheduleData, Window};
+pub use collomatique_rooms_model::{
+    Hour, Incompat, Request, Room, RoomPreference, ScheduleData, Window,
+};
 pub use parsing::ScheduleError;
 
-pub fn run(rooms: &Path, requests: &Path) -> Result<(), ScheduleError> {
-    let data = parsing::parse_schedule(rooms, requests)?;
+pub fn run(rooms: &Path, requests: &Path, incompats: Option<&Path>) -> Result<(), ScheduleError> {
+    let data = parsing::parse_schedule(rooms, requests, incompats)?;
     eprintln!(
-        "Parsed {} rooms and {} requests",
+        "Parsed {} rooms, {} requests, and {} incompatibilities",
         data.rooms.len(),
         data.requests.len(),
+        data.incompats.len(),
     );
     for name in data.unregistered_rooms() {
         eprintln!(

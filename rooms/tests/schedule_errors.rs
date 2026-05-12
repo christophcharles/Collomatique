@@ -13,7 +13,15 @@ fn fixture(name: &str) -> PathBuf {
 }
 
 fn run(rooms: &str, requests: &str) -> Result<(), ScheduleError> {
-    collomatique_rooms::run(&fixture(rooms), &fixture(requests))
+    collomatique_rooms::run(&fixture(rooms), &fixture(requests), None)
+}
+
+fn run_with_incompats(rooms: &str, requests: &str, incompats: &str) -> Result<(), ScheduleError> {
+    collomatique_rooms::run(
+        &fixture(rooms),
+        &fixture(requests),
+        Some(&fixture(incompats)),
+    )
 }
 
 fn nes(s: &str) -> NonEmptyString {
@@ -233,8 +241,12 @@ fn parse_requests_room_demand() {
 
 #[test]
 fn parse_schedule_valid() {
-    let data = parsing::parse_schedule(&fixture("valid_rooms.csv"), &fixture("valid_requests.csv"))
-        .unwrap();
+    let data = parsing::parse_schedule(
+        &fixture("valid_rooms.csv"),
+        &fixture("valid_requests.csv"),
+        None,
+    )
+    .unwrap();
     assert_eq!(data.rooms.len(), 1);
     assert_eq!(data.requests.len(), 1);
     assert!(data.unregistered_rooms().is_empty());
@@ -245,7 +257,127 @@ fn unregistered_room_detected() {
     let data = parsing::parse_schedule(
         &fixture("valid_rooms.csv"),
         &fixture("requests_unregistered_room.csv"),
+        None,
     )
     .unwrap();
     assert_eq!(data.unregistered_rooms(), vec!["Z999"]);
+}
+
+// --- Incompats happy path ---
+
+#[test]
+fn parse_incompats_valid() {
+    let incompats = parsing::parse_incompats(&fixture("valid_incompats.csv")).unwrap();
+    assert_eq!(incompats.len(), 1);
+    let i = &incompats[0];
+    assert_eq!(i.room, nes("A101"));
+    assert!(i.p1);
+    assert!(!i.p2);
+    assert!(i.p3);
+    assert_eq!(i.day, Weekday(chrono::Weekday::Mon));
+    assert_eq!(i.hour, Hour::new(8).unwrap());
+}
+
+#[test]
+fn parse_schedule_with_incompats() {
+    let data = parsing::parse_schedule(
+        &fixture("valid_rooms.csv"),
+        &fixture("valid_requests.csv"),
+        Some(&fixture("valid_incompats.csv")),
+    )
+    .unwrap();
+    assert_eq!(data.incompats.len(), 1);
+}
+
+// --- Incompats header errors ---
+
+#[test]
+fn incompats_missing_column() {
+    let err = run_with_incompats(
+        "valid_rooms.csv",
+        "valid_requests.csv",
+        "incompats_missing_column.csv",
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        ScheduleError::IncompatsMissingColumn(col) if col == "Jour"
+    ));
+}
+
+#[test]
+fn incompats_unknown_column() {
+    let err = run_with_incompats(
+        "valid_rooms.csv",
+        "valid_requests.csv",
+        "incompats_unknown_column.csv",
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        ScheduleError::IncompatsUnknownColumn(col) if col == "Extra"
+    ));
+}
+
+// --- Incompats row errors ---
+
+#[test]
+fn incompats_bad_bool() {
+    let err = run_with_incompats(
+        "valid_rooms.csv",
+        "valid_requests.csv",
+        "incompats_bad_bool.csv",
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        ScheduleError::IncompatsRowError { row: 1, .. }
+    ));
+}
+
+#[test]
+fn incompats_bad_day() {
+    let err = run_with_incompats(
+        "valid_rooms.csv",
+        "valid_requests.csv",
+        "incompats_bad_day.csv",
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        ScheduleError::IncompatsRowError { row: 1, ref message }
+        if message.contains("invalid day")
+    ));
+}
+
+#[test]
+fn incompats_bad_hour() {
+    let err = run_with_incompats(
+        "valid_rooms.csv",
+        "valid_requests.csv",
+        "incompats_bad_hour.csv",
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        ScheduleError::IncompatsRowError { row: 1, ref message }
+        if message.contains("hour must be between 8 and 19")
+    ));
+}
+
+// --- Incompats cross-file validation ---
+
+#[test]
+fn incompats_undeclared_room() {
+    let err = run_with_incompats(
+        "valid_rooms.csv",
+        "valid_requests.csv",
+        "incompats_undeclared_room.csv",
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        ScheduleError::IncompatsUndeclaredRoom { row: 1, ref room }
+        if room == "Z999"
+    ));
 }
