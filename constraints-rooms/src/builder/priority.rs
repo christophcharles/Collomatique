@@ -127,6 +127,8 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
         }
     }
 
+    let mut soft_bundle = MyBundle::new();
+
     for period in 0..PERIOD_COUNT {
         for &(day, hour) in &time_slots {
             let active_requests: Vec<usize> = env
@@ -142,6 +144,7 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
                 continue;
             }
 
+            // Phase 1: define PriorityExhausted extras
             for (p_idx, &priority) in priorities.iter().enumerate() {
                 if let Some(max_p) = max_priority {
                     if priority > max_p {
@@ -219,6 +222,7 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
                     .expect("no duplicate extras");
             }
 
+            // Phase 2: soft usage constraints
             for (p_idx, &current_priority) in priorities.iter().enumerate() {
                 if p_idx == 0 {
                     continue;
@@ -250,7 +254,7 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
                         if env.has_interrogation_var(req_idx, room_name)
                             && !is_interrogation_demand(req, room_name)
                         {
-                            bundle = bundle.with_constraint(
+                            soft_bundle = soft_bundle.with_constraint(
                                 IntLinExpr::var(base_var(Var::RoomForInterrogation {
                                     request: req_idx,
                                     room: room_name.clone(),
@@ -267,7 +271,7 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
                         }
 
                         if env.has_prep_var(req_idx, room_name) && !is_prep_demand(req, room_name) {
-                            bundle = bundle.with_constraint(
+                            soft_bundle = soft_bundle.with_constraint(
                                 IntLinExpr::var(base_var(Var::RoomForPrep {
                                     request: req_idx,
                                     room: room_name.clone(),
@@ -286,6 +290,10 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
                 }
             }
         }
+    }
+
+    if let Ok(objectified) = soft_bundle.objectify(ExtraVarName::PriorityPenalty) {
+        bundle = bundle.merge(objectified).expect("no duplicate extras");
     }
 
     bundle

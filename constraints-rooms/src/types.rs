@@ -10,6 +10,7 @@ pub enum ExtraVarName {
         hour: Hour,
         priority: u32,
     },
+    PriorityPenalty,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
