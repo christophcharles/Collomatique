@@ -68,20 +68,26 @@ pub enum ConstraintDesc {
         period: usize,
         day: Weekday,
         hour: Hour,
+        priority: u32,
     },
     GlobalPriority {
         request: usize,
         room: NonEmptyString,
         day: Weekday,
         hour: Hour,
+        priority: u32,
     },
     MaxPriorityInterrogation {
         request: usize,
         room: NonEmptyString,
+        priority: u32,
+        max_priority: u32,
     },
     MaxPriorityPrep {
         request: usize,
         room: NonEmptyString,
+        priority: u32,
+        max_priority: u32,
     },
     OneInterrogationPerRoom {
         room: NonEmptyString,
@@ -139,7 +145,7 @@ impl ConstraintDesc {
                 hour,
             } => {
                 format!(
-                    "Salle \"{}\" sur-utilisée le {} à {} (P{})",
+                    "Capacité de la salle \"{}\" dépassée le {} à {} (P{})",
                     <NonEmptyString as AsRef<str>>::as_ref(room),
                     day,
                     hour,
@@ -153,7 +159,8 @@ impl ConstraintDesc {
                 hour,
             } => {
                 format!(
-                    "Salle non-déclarée \"{}\" utilisée par plusieurs requêtes le {} à {} (P{})",
+                    "Capacité de la salle \"{}\" dépassée le {} à {} (P{}) \
+                     (capacité inconnue - impossible d'avoir une gestion plus fine)",
                     <NonEmptyString as AsRef<str>>::as_ref(room),
                     day,
                     hour,
@@ -161,30 +168,35 @@ impl ConstraintDesc {
                 )
             }
             ConstraintDesc::IncompatInterrogation { request, room } => {
+                let req = &data.requests[*request];
                 format!(
-                    "{} : salle \"{}\" incompatible pour l'interrogation",
+                    "{} : salle \"{}\" déjà utilisée le {} à {} (incompats)",
                     format_request(data, *request),
                     <NonEmptyString as AsRef<str>>::as_ref(room),
+                    req.day,
+                    req.hour,
                 )
             }
             ConstraintDesc::IncompatPrep { request, room } => {
+                let req = &data.requests[*request];
                 format!(
-                    "{} : salle \"{}\" incompatible pour la préparation",
+                    "{} : salle de préparation \"{}\" déjà utilisée le {} à {} (incompats)",
                     format_request(data, *request),
                     <NonEmptyString as AsRef<str>>::as_ref(room),
+                    req.day,
+                    req.hour,
                 )
             }
             ConstraintDesc::ReservedInterrogation { request, room } => {
                 format!(
-                    "{} : salle \"{}\" ne satisfait pas les contraintes de capacité/équipement \
-                     pour l'interrogation",
+                    "{} : salle \"{}\" réservée pour les oraux blancs de fin d'année",
                     format_request(data, *request),
                     <NonEmptyString as AsRef<str>>::as_ref(room),
                 )
             }
             ConstraintDesc::ReservedPrep { request, room } => {
                 format!(
-                    "{} : salle \"{}\" ne satisfait pas les contraintes pour la préparation",
+                    "{} : salle de préparation \"{}\" réservée pour les oraux blancs de fin d'année",
                     format_request(data, *request),
                     <NonEmptyString as AsRef<str>>::as_ref(room),
                 )
@@ -209,14 +221,17 @@ impl ConstraintDesc {
                 period,
                 day,
                 hour,
+                priority,
             } => {
                 format!(
-                    "{} : salle \"{}\" non prioritaire le {} à {} (P{})",
+                    "{} : salle \"{}\" utilisée sans avoir épuisé les salles \
+                     de priorité {} pour la période P{} le {} à {}",
                     format_request(data, *request),
                     <NonEmptyString as AsRef<str>>::as_ref(room),
+                    priority,
+                    period + 1,
                     day,
                     hour,
-                    period + 1,
                 )
             }
             ConstraintDesc::GlobalPriority {
@@ -224,27 +239,44 @@ impl ConstraintDesc {
                 room,
                 day,
                 hour,
+                priority,
             } => {
                 format!(
-                    "{} : salle \"{}\" non prioritaire le {} à {}",
+                    "{} : salle \"{}\" utilisée sans avoir épuisé les salles \
+                     de priorité {} disponibles sur l'année le {} à {}",
                     format_request(data, *request),
                     <NonEmptyString as AsRef<str>>::as_ref(room),
+                    priority,
                     day,
                     hour,
                 )
             }
-            ConstraintDesc::MaxPriorityInterrogation { request, room } => {
+            ConstraintDesc::MaxPriorityInterrogation {
+                request,
+                room,
+                priority,
+                max_priority,
+            } => {
                 format!(
-                    "{} : salle \"{}\" dépasse la priorité max pour l'interrogation",
+                    "{} : la salle \"{}\" a une priorité trop élevée ({} > {})",
                     format_request(data, *request),
                     <NonEmptyString as AsRef<str>>::as_ref(room),
+                    priority,
+                    max_priority,
                 )
             }
-            ConstraintDesc::MaxPriorityPrep { request, room } => {
+            ConstraintDesc::MaxPriorityPrep {
+                request,
+                room,
+                priority,
+                max_priority,
+            } => {
                 format!(
-                    "{} : salle \"{}\" dépasse la priorité max pour la préparation",
+                    "{} : la salle de préparation \"{}\" a une priorité trop élevée ({} > {})",
                     format_request(data, *request),
                     <NonEmptyString as AsRef<str>>::as_ref(room),
+                    priority,
+                    max_priority,
                 )
             }
             ConstraintDesc::OneInterrogationPerRoom {
@@ -254,7 +286,8 @@ impl ConstraintDesc {
                 hour,
             } => {
                 format!(
-                    "Salle \"{}\" : plusieurs interrogations le {} à {} (P{})",
+                    "La salle \"{}\" est utilisée simultanément par plusieurs colleurs \
+                     le {} à {} (P{})",
                     <NonEmptyString as AsRef<str>>::as_ref(room),
                     day,
                     hour,
@@ -262,9 +295,12 @@ impl ConstraintDesc {
                 )
             }
             ConstraintDesc::ExcludedInterrogation { request, room } => {
+                let req = &data.requests[*request];
                 format!(
-                    "{} : salle \"{}\" est exclue pour l'interrogation",
+                    "{} : l'enseignant {} a demandé à ne pas avoir la salle \"{}\" \
+                     de manière catégorique",
                     format_request(data, *request),
+                    <NonEmptyString as AsRef<str>>::as_ref(&req.teacher),
                     <NonEmptyString as AsRef<str>>::as_ref(room),
                 )
             }
@@ -274,7 +310,8 @@ impl ConstraintDesc {
                 room,
             } => {
                 format!(
-                    "Continuité de salle : les requêtes {} et {} devraient partager la salle \"{}\"",
+                    "Continuité de l'utilisation de la salle : les requêtes {} et {} \
+                     devraient utiliser la même salle. Une seule utilise la salle \"{}\"",
                     request_a,
                     request_b,
                     <NonEmptyString as AsRef<str>>::as_ref(room),
@@ -286,8 +323,8 @@ impl ConstraintDesc {
                 neighbor_request,
             } => {
                 format!(
-                    "Continuité de salle : {} ne devrait pas utiliser \"{}\" \
-                     (conflit avec requête {})",
+                    "Continuité de l'utilisation de la salle : {} ne peut utiliser \
+                     la salle \"{}\" car elle est indisponible pour la requête {}",
                     format_request(data, *request),
                     <NonEmptyString as AsRef<str>>::as_ref(room),
                     neighbor_request,

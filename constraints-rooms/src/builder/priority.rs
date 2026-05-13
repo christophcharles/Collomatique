@@ -121,6 +121,8 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
                             ConstraintDesc::MaxPriorityInterrogation {
                                 request: req_idx,
                                 room: room_name.clone(),
+                                priority: prio,
+                                max_priority: max_p,
                             },
                         );
                     }
@@ -134,6 +136,8 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
                             ConstraintDesc::MaxPriorityPrep {
                                 request: req_idx,
                                 room: room_name.clone(),
+                                priority: prio,
+                                max_priority: max_p,
                             },
                         );
                     }
@@ -273,6 +277,7 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
                             period,
                             day,
                             hour,
+                            priority: prev_priority,
                         };
 
                         let target =
@@ -435,6 +440,7 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
                         room: room_name.clone(),
                         day,
                         hour,
+                        priority: prev_priority,
                     };
 
                     if env.has_interrogation_var(req_idx, room_name)
