@@ -263,16 +263,26 @@ pub fn run(
             );
 
             let warm_hint = if warm {
+                eprintln!("Reconstructing warm start hint from SolSalle/SolPrep...");
                 let recon =
                     collomatique_constraints_rooms::reconstruct_solution(&data, &solution_columns);
                 for w in &recon.warnings {
                     eprintln!("Warning: {w}");
                 }
-                Some(
-                    recon
-                        .full_config
-                        .transmute(|v| collomatique_ilp_modeler::InternalVar::Base(v.clone())),
-                )
+                let recon_solver =
+                    collomatique_ilp::solvers::collo_cbc::ColloCbcSolver::with_disable_logging(
+                        true,
+                    );
+                match model.solution_from_data(&recon.full_config, &recon_solver) {
+                    Ok(solution) => {
+                        eprintln!("  Warm start hint ready.");
+                        Some(solution.get_complete_data())
+                    }
+                    Err(e) => {
+                        eprintln!("Warning: warm start reconstruction failed: {e}");
+                        None
+                    }
+                }
             } else {
                 None
             };

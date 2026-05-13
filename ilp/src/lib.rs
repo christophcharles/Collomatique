@@ -210,6 +210,16 @@ pub fn f64_equals(v1: f64, v2: f64) -> bool {
     f64_is_zero(v1 - v2)
 }
 
+/// Tests if `v1 > v2` with [TOLERANCE].
+pub fn f64_gt(v1: f64, v2: f64) -> bool {
+    v1 > v2 + TOLERANCE
+}
+
+/// Tests if `v1 < v2` with [TOLERANCE].
+pub fn f64_lt(v1: f64, v2: f64) -> bool {
+    v1 < v2 - TOLERANCE
+}
+
 /// Default matrix representation for [Problem].
 ///
 /// In most cases, the default representation is just fine
@@ -520,13 +530,13 @@ impl Variable {
         }
 
         if let Some(m) = self.max
-            && value > m.0
+            && f64_gt(value, m.0)
         {
             return false;
         }
 
         if let Some(m) = self.min
-            && value < m.0
+            && f64_lt(value, m.0)
         {
             return false;
         }
@@ -1724,12 +1734,12 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> Config<'a, V, C, P> {
             let v = value.into_inner();
 
             if let Some(m) = desc.get_min()
-                && v < m
+                && f64_lt(v, m)
             {
                 return false;
             }
             if let Some(m) = desc.get_max()
-                && v > m
+                && f64_gt(v, m)
             {
                 return false;
             }

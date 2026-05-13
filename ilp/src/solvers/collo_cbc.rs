@@ -228,11 +228,15 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> ColloCbcBuiltModel<'a,
 
         let config = match self.problem.build_config(config_data) {
             Ok(c) => c,
-            Err(_) => {
+            Err(check) => {
                 if result.status == collo_cbc::Status::Optimal {
                     panic!(
-                        "CBC reported optimal but build_config failed (missing variables). \
-                         This should never happen."
+                        "CBC reported optimal but build_config failed. \
+                         missing={}, excess={}, non_conforming={}. \
+                         This should never happen.",
+                        check.missing_variables.len(),
+                        check.excess_variables.len(),
+                        check.non_conforming_variables.len(),
                     );
                 }
                 return None;
