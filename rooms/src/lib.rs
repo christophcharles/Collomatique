@@ -1,5 +1,6 @@
 pub mod parsing;
 
+use std::collections::HashSet;
 use std::path::Path;
 use std::time::Instant;
 
@@ -15,6 +16,7 @@ pub fn run(
     requests: &Path,
     incompats: Option<&Path>,
     no_objective: bool,
+    check: bool,
     out: Option<&Path>,
     config: Config,
     timeout_minutes: u32,
@@ -120,6 +122,39 @@ pub fn run(
         "  {} base variables, {} constraints (built in {:.2?})",
         stats.base_variable_count, stats.user_constraint_count, elapsed,
     );
+
+    if check {
+        eprintln!("Checking solution from SolSalle/SolPrep columns...");
+        let config_data = collomatique_constraints_rooms::build_config_from_solution(
+            &data,
+            &data.solution_columns,
+        )?;
+
+        let solver =
+            collomatique_ilp::solvers::collo_cbc::ColloCbcSolver::with_disable_logging(true);
+        let solution = model
+            .checker_solution_from_data(&config_data, &solver)
+            .map_err(|e| ScheduleError::CheckReconstructionFailed(e.to_string()))?;
+
+        if solution.is_feasible() {
+            eprintln!("Solution is feasible. No constraint violations found.");
+            return Ok(());
+        }
+
+        let mut violations: HashSet<&collomatique_constraints_rooms::ConstraintDesc> =
+            HashSet::new();
+        for (_constraint, source) in solution.blame() {
+            if let collomatique_ilp_modeler::ConstraintSource::User(desc) = source {
+                violations.insert(desc);
+            }
+        }
+
+        eprintln!("{} constraint violation(s):", violations.len());
+        for desc in &violations {
+            eprintln!("  - {}", desc.user_readable(&data));
+        }
+        return Ok(());
+    }
 
     if no_objective {
         eprintln!("Solving (checker only, no objective)...");

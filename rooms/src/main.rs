@@ -18,6 +18,10 @@ struct Args {
     #[arg(long)]
     no_objective: bool,
 
+    /// Validate an existing solution from SolSalle/SolPrep columns
+    #[arg(long)]
+    check: bool,
+
     /// Output CSV file for the solution (defaults to stdout)
     #[arg(long, short)]
     out: Option<PathBuf>,
@@ -34,6 +38,7 @@ fn main() -> Result<(), anyhow::Error> {
         &args.requests,
         args.incompats.as_deref(),
         args.no_objective,
+        args.check,
         args.out.as_deref(),
         collomatique_rooms_model::Config {
             enforce_period_exhaustions: collomatique_rooms_model::Periods {

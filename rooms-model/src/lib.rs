@@ -218,6 +218,7 @@ pub struct ScheduleData {
     pub rooms: BTreeMap<NonEmptyString, Room>,
     pub requests: Vec<Request>,
     pub raw_request_rows: Vec<Vec<String>>,
+    pub solution_columns: Vec<(Option<NonEmptyString>, Option<NonEmptyString>)>,
     pub incompats: Vec<Incompat>,
     pub config: Config,
 }

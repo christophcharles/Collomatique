@@ -119,6 +119,10 @@ pub enum ScheduleError {
     ConflictingRoomPreferences(Vec<String>),
     #[error("{}", format_teacher_conflicts(.0))]
     TeacherConflicts(Vec<TeacherConflict>),
+    #[error("Check mode: {0}")]
+    CheckUnknownRoom(#[from] collomatique_constraints_rooms::CheckError),
+    #[error("Check mode: failed to reconstruct extra variables: {0}")]
+    CheckReconstructionFailed(String),
 }
 
 fn format_unregistered_suggested(rooms: &[String]) -> String {
@@ -164,7 +168,7 @@ pub fn parse_schedule(
     config: Config,
 ) -> Result<(ScheduleData, Vec<RoomPreferenceWarning>), ScheduleError> {
     let rooms = parse_rooms(rooms_path)?;
-    let (requests, raw_request_rows, warnings) = parse_requests(requests_path)?;
+    let (requests, raw_request_rows, solution_columns, warnings) = parse_requests(requests_path)?;
     let incompats = match incompats_path {
         Some(path) => parse_incompats(path)?,
         None => Vec::new(),
@@ -184,6 +188,7 @@ pub fn parse_schedule(
             rooms,
             requests,
             raw_request_rows,
+            solution_columns,
             incompats,
             config,
         },
@@ -261,7 +266,15 @@ pub fn parse_rooms(path: &Path) -> Result<BTreeMap<NonEmptyString, Room>, Schedu
 /// Parse a requests CSV file.
 pub fn parse_requests(
     path: &Path,
-) -> Result<(Vec<Request>, Vec<Vec<String>>, Vec<RoomPreferenceWarning>), ScheduleError> {
+) -> Result<
+    (
+        Vec<Request>,
+        Vec<Vec<String>>,
+        Vec<(Option<NonEmptyString>, Option<NonEmptyString>)>,
+        Vec<RoomPreferenceWarning>,
+    ),
+    ScheduleError,
+> {
     let mut reader = csv::ReaderBuilder::new()
         .has_headers(true)
         .flexible(true)
@@ -271,6 +284,7 @@ pub fn parse_requests(
 
     let mut requests = Vec::new();
     let mut raw_rows = Vec::new();
+    let mut solutions = Vec::new();
     let mut all_warnings = Vec::new();
 
     for (idx, result) in reader.records().enumerate() {
@@ -292,6 +306,19 @@ pub fn parse_requests(
             .map(|i| record.get(i).unwrap_or("").to_string())
             .collect();
         raw_rows.push(raw_row);
+
+        let sol_salle = if expected_columns > REQUESTS_COLUMNS.len() {
+            NonEmptyString::try_from(record.get(REQUESTS_COLUMNS.len()).unwrap_or("").trim()).ok()
+        } else {
+            None
+        };
+        let sol_prep = if expected_columns > REQUESTS_COLUMNS.len() + 1 {
+            NonEmptyString::try_from(record.get(REQUESTS_COLUMNS.len() + 1).unwrap_or("").trim())
+                .ok()
+        } else {
+            None
+        };
+        solutions.push((sol_salle, sol_prep));
 
         let p1 = parse_bool_field(&record, 0, row, "requests", "P1")?;
         let p2 = parse_bool_field(&record, 1, row, "requests", "P2")?;
@@ -408,7 +435,7 @@ pub fn parse_requests(
         });
     }
 
-    Ok((requests, raw_rows, all_warnings))
+    Ok((requests, raw_rows, solutions, all_warnings))
 }
 
 fn validate_headers(
