@@ -744,3 +744,8 @@ fn priority_reserved_feasible() {
         "priority_prep_full_requests.csv",
     );
 }
+
+#[test]
+fn priority_global_feasible() {
+    assert_checker_feasible("priority_global_rooms.csv", "priority_global_requests.csv");
+}
