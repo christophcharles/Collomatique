@@ -46,8 +46,24 @@ pub fn run(
                      but is not marked for sharing (+). Did you mean to add + to enable sharing?",
                 );
             }
+            RoomPreferenceWarning::ConflictingPreferences {
+                row,
+                room,
+                positive_entries,
+                negative_entries,
+            } => {
+                eprintln!(
+                    "Error: request row {row}, column \"Salle\": room \"{room}\" has both \
+                     positive ({pos}) and negative ({neg}) preferences",
+                    pos = positive_entries.join(", "),
+                    neg = negative_entries.join(", "),
+                );
+            }
         }
     }
+    let has_conflicts = pref_warnings
+        .iter()
+        .any(|w| matches!(w, RoomPreferenceWarning::ConflictingPreferences { .. }));
     let unreg = data.unregistered_rooms();
     for name in &unreg.demanded {
         eprintln!(
@@ -63,6 +79,17 @@ pub fn run(
     }
     for conflict in data.demand_conflicts() {
         print_demand_conflict(&data, &conflict);
+    }
+    if has_conflicts {
+        let rooms: Vec<String> = pref_warnings
+            .iter()
+            .filter_map(|w| match w {
+                RoomPreferenceWarning::ConflictingPreferences { room, .. } => Some(room.clone()),
+                RoomPreferenceWarning::Redundancy { .. }
+                | RoomPreferenceWarning::InterrogationAndPrepWithoutSharing { .. } => None,
+            })
+            .collect();
+        return Err(ScheduleError::ConflictingRoomPreferences(rooms));
     }
     if !unreg.suggested.is_empty() {
         return Err(ScheduleError::UnregisteredSuggestedRooms(

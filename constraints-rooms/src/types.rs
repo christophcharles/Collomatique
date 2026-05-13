@@ -89,4 +89,8 @@ pub enum ConstraintDesc {
         day: Weekday,
         hour: Hour,
     },
+    ExcludedInterrogation {
+        request: usize,
+        room: NonEmptyString,
+    },
 }

@@ -114,12 +114,21 @@ pub enum ScheduleError {
     IncompatsUndeclaredRoom { row: usize, room: String },
     #[error("{}", format_unregistered_suggested(.0))]
     UnregisteredSuggestedRooms(Vec<String>),
+    #[error("{}", format_conflicting_preferences(.0))]
+    ConflictingRoomPreferences(Vec<String>),
 }
 
 fn format_unregistered_suggested(rooms: &[String]) -> String {
     format!(
         "Suggested room(s) not found in rooms file: {}. \
          Use '!' prefix to demand a room, or register it in the rooms file.",
+        rooms.join(", ")
+    )
+}
+
+fn format_conflicting_preferences(rooms: &[String]) -> String {
+    format!(
+        "Room(s) with conflicting positive and negative preferences: {}",
         rooms.join(", ")
     )
 }
@@ -318,7 +327,14 @@ pub fn parse_requests(
 
         for prep in &prep_preference {
             let prep_name = prep.room_name();
-            if let Some(interro) = room_preference.iter().find(|p| p.room_name() == prep_name) {
+            let interro = room_preference.iter().find(|p| {
+                matches!(
+                    p,
+                    InterrogationRoomPreference::Suggestion { .. }
+                        | InterrogationRoomPreference::Demand { .. }
+                ) && p.room_name() == prep_name
+            });
+            if let Some(interro) = interro {
                 if !interro.can_share_with_prep() {
                     all_warnings.push(RoomPreferenceWarning::InterrogationAndPrepWithoutSharing {
                         row,
@@ -541,6 +557,14 @@ fn parse_single_interrogation_room_preference(entry: &str) -> Option<Interrogati
     if value.is_empty() {
         return None;
     }
+    if let Some(rest) = value.strip_prefix('~') {
+        let room = NonEmptyString::try_from(rest.trim()).ok()?;
+        return Some(InterrogationRoomPreference::Exclusion { room });
+    }
+    if let Some(rest) = value.strip_prefix('-') {
+        let room = NonEmptyString::try_from(rest.trim()).ok()?;
+        return Some(InterrogationRoomPreference::Avoidance { room });
+    }
     let (is_demand, rest) = match value.strip_prefix('!') {
         Some(s) => (true, s.trim()),
         None => (false, value),
@@ -592,6 +616,8 @@ fn format_interrogation_pref(pref: &InterrogationRoomPreference) -> String {
             ..
         } => ("", "+"),
         InterrogationRoomPreference::Suggestion { .. } => ("", ""),
+        InterrogationRoomPreference::Avoidance { .. } => ("-", ""),
+        InterrogationRoomPreference::Exclusion { .. } => ("~", ""),
     };
     format!("{prefix}{}{suffix}", pref.room_name().as_ref() as &str)
 }
@@ -615,6 +641,12 @@ pub enum RoomPreferenceWarning {
     InterrogationAndPrepWithoutSharing {
         row: usize,
         room: String,
+    },
+    ConflictingPreferences {
+        row: usize,
+        room: String,
+        positive_entries: Vec<String>,
+        negative_entries: Vec<String>,
     },
 }
 
@@ -645,38 +677,103 @@ fn parse_interrogation_room_preferences(
     let mut warnings = Vec::new();
 
     for (room_name, entries) in &by_room {
-        let is_demand = entries
+        let positive: Vec<_> = entries
             .iter()
-            .any(|p| matches!(p, InterrogationRoomPreference::Demand { .. }));
-        let can_share = entries.iter().any(|p| p.can_share_with_prep());
-        let room = entries[0].room_name().clone();
+            .filter(|p| {
+                matches!(
+                    p,
+                    InterrogationRoomPreference::Suggestion { .. }
+                        | InterrogationRoomPreference::Demand { .. }
+                )
+            })
+            .collect();
+        let negative: Vec<_> = entries
+            .iter()
+            .filter(|p| {
+                matches!(
+                    p,
+                    InterrogationRoomPreference::Avoidance { .. }
+                        | InterrogationRoomPreference::Exclusion { .. }
+                )
+            })
+            .collect();
 
-        let merged = if is_demand {
-            InterrogationRoomPreference::Demand {
-                room,
-                can_share_with_prep: can_share,
-            }
-        } else {
-            InterrogationRoomPreference::Suggestion {
-                room,
-                can_share_with_prep: can_share,
-            }
-        };
-
-        if entries.len() > 1 {
-            warnings.push(RoomPreferenceWarning::Redundancy {
+        if !positive.is_empty() && !negative.is_empty() {
+            warnings.push(RoomPreferenceWarning::ConflictingPreferences {
                 row,
-                column: "Salle",
                 room: room_name.to_string(),
-                original_entries: entries
+                positive_entries: positive
                     .iter()
                     .map(|p| format_interrogation_pref(p))
                     .collect(),
-                merged_result: format_interrogation_pref(&merged),
+                negative_entries: negative
+                    .iter()
+                    .map(|p| format_interrogation_pref(p))
+                    .collect(),
             });
+            continue;
         }
 
-        result.push(merged);
+        let room = entries[0].room_name().clone();
+
+        if !positive.is_empty() {
+            let is_demand = positive
+                .iter()
+                .any(|p| matches!(p, InterrogationRoomPreference::Demand { .. }));
+            let can_share = positive.iter().any(|p| p.can_share_with_prep());
+
+            let merged = if is_demand {
+                InterrogationRoomPreference::Demand {
+                    room,
+                    can_share_with_prep: can_share,
+                }
+            } else {
+                InterrogationRoomPreference::Suggestion {
+                    room,
+                    can_share_with_prep: can_share,
+                }
+            };
+
+            if entries.len() > 1 {
+                warnings.push(RoomPreferenceWarning::Redundancy {
+                    row,
+                    column: "Salle",
+                    room: room_name.to_string(),
+                    original_entries: entries
+                        .iter()
+                        .map(|p| format_interrogation_pref(p))
+                        .collect(),
+                    merged_result: format_interrogation_pref(&merged),
+                });
+            }
+
+            result.push(merged);
+        } else {
+            let is_exclusion = negative
+                .iter()
+                .any(|p| matches!(p, InterrogationRoomPreference::Exclusion { .. }));
+
+            let merged = if is_exclusion {
+                InterrogationRoomPreference::Exclusion { room }
+            } else {
+                InterrogationRoomPreference::Avoidance { room }
+            };
+
+            if entries.len() > 1 {
+                warnings.push(RoomPreferenceWarning::Redundancy {
+                    row,
+                    column: "Salle",
+                    room: room_name.to_string(),
+                    original_entries: entries
+                        .iter()
+                        .map(|p| format_interrogation_pref(p))
+                        .collect(),
+                    merged_result: format_interrogation_pref(&merged),
+                });
+            }
+
+            result.push(merged);
+        }
     }
 
     (result, warnings)

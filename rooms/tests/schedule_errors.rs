@@ -965,3 +965,94 @@ fn parse_requests_interro_prep_with_sharing_no_warning() {
     assert_eq!(requests.len(), 1);
     assert!(warnings.is_empty());
 }
+
+// --- Avoidance and exclusion ---
+
+#[test]
+fn parse_requests_avoidance() {
+    let (requests, warnings) = parsing::parse_requests(&fixture("requests_avoidance.csv")).unwrap();
+    assert_eq!(requests.len(), 1);
+    assert!(warnings.is_empty());
+    assert_eq!(
+        requests[0].room_preference,
+        vec![InterrogationRoomPreference::Avoidance { room: nes("A101") }]
+    );
+}
+
+#[test]
+fn parse_requests_exclusion() {
+    let (requests, warnings) = parsing::parse_requests(&fixture("requests_exclusion.csv")).unwrap();
+    assert_eq!(requests.len(), 1);
+    assert!(warnings.is_empty());
+    assert_eq!(
+        requests[0].room_preference,
+        vec![InterrogationRoomPreference::Exclusion { room: nes("A101") }]
+    );
+}
+
+#[test]
+fn parse_requests_conflicting_prefs() {
+    let (requests, warnings) =
+        parsing::parse_requests(&fixture("requests_conflicting_prefs.csv")).unwrap();
+    assert_eq!(requests.len(), 1);
+    assert!(requests[0].room_preference.is_empty());
+    assert_eq!(warnings.len(), 1);
+    assert!(matches!(
+        &warnings[0],
+        RoomPreferenceWarning::ConflictingPreferences {
+            row: 1,
+            room,
+            ..
+        } if room == "A101"
+    ));
+}
+
+#[test]
+fn parse_requests_negative_merge() {
+    let (requests, warnings) =
+        parsing::parse_requests(&fixture("requests_negative_merge.csv")).unwrap();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(
+        requests[0].room_preference,
+        vec![InterrogationRoomPreference::Exclusion { room: nes("A101") }]
+    );
+    assert_eq!(warnings.len(), 1);
+    assert!(matches!(
+        &warnings[0],
+        RoomPreferenceWarning::Redundancy {
+            column: "Salle",
+            room,
+            merged_result,
+            ..
+        } if room == "A101" && merged_result == "~A101"
+    ));
+}
+
+#[test]
+fn conflicting_prefs_is_fatal_error() {
+    let err = run("valid_rooms.csv", "requests_conflicting_prefs.csv").unwrap_err();
+    assert!(matches!(err, ScheduleError::ConflictingRoomPreferences(_)));
+}
+
+#[test]
+fn exclusion_constraint_feasible() {
+    assert_checker_feasible("exclusion_rooms.csv", "exclusion_requests.csv");
+}
+
+#[test]
+fn exclusion_constraint_assigns_other_room() {
+    let (data, _) = parsing::parse_schedule(
+        &fixture("exclusion_rooms.csv"),
+        &fixture("exclusion_requests.csv"),
+        None,
+        Default::default(),
+    )
+    .unwrap();
+    let model = collomatique_constraints_rooms::build_model(&data);
+    let solver = ColloCbcSolver::with_disable_logging(true);
+    let solved = model.solve_checker(&solver).unwrap();
+    let config = solved.get_data();
+    let assignments = collomatique_constraints_rooms::extract_assignments(&data, &config);
+    assert_eq!(assignments.len(), 1);
+    assert_eq!(assignments[0].room, nes("ROOM_B"));
+}

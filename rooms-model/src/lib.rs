@@ -66,6 +66,7 @@ impl PrepRoomPreference {
 }
 
 /// Room preference for interrogation: suggestion or demand, with optional prep sharing.
+/// Also supports negative preferences: avoidance (soft) and exclusion (hard).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InterrogationRoomPreference {
     Suggestion {
@@ -76,13 +77,21 @@ pub enum InterrogationRoomPreference {
         room: NonEmptyString,
         can_share_with_prep: bool,
     },
+    Avoidance {
+        room: NonEmptyString,
+    },
+    Exclusion {
+        room: NonEmptyString,
+    },
 }
 
 impl InterrogationRoomPreference {
     pub fn room_name(&self) -> &NonEmptyString {
         match self {
             InterrogationRoomPreference::Suggestion { room, .. }
-            | InterrogationRoomPreference::Demand { room, .. } => room,
+            | InterrogationRoomPreference::Demand { room, .. }
+            | InterrogationRoomPreference::Avoidance { room }
+            | InterrogationRoomPreference::Exclusion { room } => room,
         }
     }
 
@@ -96,6 +105,8 @@ impl InterrogationRoomPreference {
                 can_share_with_prep,
                 ..
             } => *can_share_with_prep,
+            InterrogationRoomPreference::Avoidance { .. }
+            | InterrogationRoomPreference::Exclusion { .. } => false,
         }
     }
 }
@@ -251,6 +262,8 @@ impl ScheduleData {
                         InterrogationRoomPreference::Demand { .. } => {
                             demanded.insert(name);
                         }
+                        InterrogationRoomPreference::Avoidance { .. }
+                        | InterrogationRoomPreference::Exclusion { .. } => {}
                     }
                 }
             }
