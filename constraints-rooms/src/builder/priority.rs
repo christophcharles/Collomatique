@@ -48,6 +48,15 @@ fn is_room_blocked(
     false
 }
 
+fn is_room_blocked_any_period(
+    env: &VarEnv,
+    room_name: &NonEmptyString,
+    day: &Weekday,
+    hour: &Hour,
+) -> bool {
+    (0..PERIOD_COUNT).any(|period| is_room_blocked(env, room_name, period, day, hour))
+}
+
 fn is_interrogation_demand(req: &Request, room_name: &NonEmptyString) -> bool {
     matches!(&req.room_preference, Some(RoomPreference::Demand(name)) if name == room_name)
 }
@@ -260,11 +269,12 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
                             hour,
                         };
 
-                        let target = if period == 0 {
-                            &mut bundle
-                        } else {
-                            &mut soft_bundle
-                        };
+                        let target =
+                            if period_active(&env.data.config.enforce_period_exhaustions, period) {
+                                &mut bundle
+                            } else {
+                                &mut soft_bundle
+                            };
 
                         if env.has_interrogation_var(req_idx, room_name)
                             && !is_interrogation_demand(req, room_name)
@@ -289,6 +299,160 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
                                 desc,
                             );
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    // Global (period-independent) priority enforcement.
+    // Only counts rooms available in ALL periods — always hard.
+    for &(day, hour) in &time_slots {
+        let all_requests_at_slot: Vec<usize> = env
+            .data
+            .requests
+            .iter()
+            .enumerate()
+            .filter(|(_, req)| req.day == day && req.hour == hour)
+            .map(|(i, _)| i)
+            .collect();
+
+        if all_requests_at_slot.is_empty() {
+            continue;
+        }
+
+        for (p_idx, &priority) in priorities.iter().enumerate() {
+            if let Some(max_p) = max_priority {
+                if priority > max_p {
+                    continue;
+                }
+            }
+
+            let available_rooms: Vec<&NonEmptyString> = rooms_by_priority
+                .get(&priority)
+                .into_iter()
+                .flatten()
+                .filter(|room_name| !is_room_blocked_any_period(env, room_name, &day, &hour))
+                .collect();
+
+            let mut reify_constraints = Vec::new();
+
+            for room_name in &available_rooms {
+                let sum: IntLinExpr<V> = all_requests_at_slot
+                    .iter()
+                    .filter_map(|&req_idx| {
+                        let mut expr = IntLinExpr::constant(0);
+                        let mut has_any = false;
+
+                        if env.has_interrogation_var(req_idx, room_name) {
+                            expr = expr
+                                + IntLinExpr::var(base_var(Var::RoomForInterrogation {
+                                    request: req_idx,
+                                    room: (*room_name).clone(),
+                                }));
+                            has_any = true;
+                        }
+
+                        if env.has_prep_var(req_idx, room_name) {
+                            expr = expr
+                                + IntLinExpr::var(base_var(Var::RoomForPrep {
+                                    request: req_idx,
+                                    room: (*room_name).clone(),
+                                }));
+                            has_any = true;
+                        }
+
+                        has_any.then_some(expr)
+                    })
+                    .sum();
+
+                reify_constraints.push(sum.geq(&IntLinExpr::constant(1)));
+            }
+
+            if p_idx > 0 {
+                reify_constraints.push(
+                    IntLinExpr::var(extra_var(ExtraVarName::GlobalPriorityExhausted {
+                        day,
+                        hour,
+                        priority: priorities[p_idx - 1],
+                    }))
+                    .geq(&IntLinExpr::constant(1)),
+                );
+            }
+
+            if reify_constraints.is_empty() {
+                reify_constraints.push(IntLinExpr::constant(0).leq(&IntLinExpr::constant(0)));
+            }
+
+            bundle = bundle
+                .and_reified(
+                    ExtraVarName::GlobalPriorityExhausted {
+                        day,
+                        hour,
+                        priority,
+                    },
+                    move || reify_constraints,
+                )
+                .expect("no duplicate extras");
+        }
+
+        // Global priority usage constraints (always hard)
+        for (p_idx, &current_priority) in priorities.iter().enumerate() {
+            if p_idx == 0 {
+                continue;
+            }
+            if let Some(max_p) = max_priority {
+                if current_priority > max_p {
+                    continue;
+                }
+            }
+
+            let prev_priority = priorities[p_idx - 1];
+
+            let current_rooms = match rooms_by_priority.get(&current_priority) {
+                Some(rooms) => rooms,
+                None => continue,
+            };
+
+            let exhausted_var = extra_var(ExtraVarName::GlobalPriorityExhausted {
+                day,
+                hour,
+                priority: prev_priority,
+            });
+
+            for room_name in current_rooms {
+                for &req_idx in &all_requests_at_slot {
+                    let req = &env.data.requests[req_idx];
+
+                    let desc = ConstraintDesc::GlobalPriority {
+                        request: req_idx,
+                        room: room_name.clone(),
+                        day,
+                        hour,
+                    };
+
+                    if env.has_interrogation_var(req_idx, room_name)
+                        && !is_interrogation_demand(req, room_name)
+                    {
+                        bundle = bundle.with_constraint(
+                            IntLinExpr::var(base_var(Var::RoomForInterrogation {
+                                request: req_idx,
+                                room: room_name.clone(),
+                            }))
+                            .leq(&IntLinExpr::var(exhausted_var.clone())),
+                            desc.clone(),
+                        );
+                    }
+
+                    if env.has_prep_var(req_idx, room_name) && !is_prep_demand(req, room_name) {
+                        bundle = bundle.with_constraint(
+                            IntLinExpr::var(base_var(Var::RoomForPrep {
+                                request: req_idx,
+                                room: room_name.clone(),
+                            }))
+                            .leq(&IntLinExpr::var(exhausted_var.clone())),
+                            desc,
+                        );
                     }
                 }
             }

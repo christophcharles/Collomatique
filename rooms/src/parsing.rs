@@ -141,6 +141,11 @@ pub fn parse_schedule(
             p2: false,
             p3: true,
         },
+        enforce_period_exhaustions: Periods {
+            p1: false,
+            p2: false,
+            p3: false,
+        },
         time_zones: vec![
             TimeZone::new(Hour::new(8).unwrap(), Hour::new(9).unwrap()).unwrap(),
             TimeZone::new(Hour::new(10).unwrap(), Hour::new(15).unwrap()).unwrap(),

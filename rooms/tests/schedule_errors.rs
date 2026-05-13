@@ -408,6 +408,11 @@ fn default_config() -> Config {
             p2: false,
             p3: false,
         },
+        enforce_period_exhaustions: Periods {
+            p1: false,
+            p2: false,
+            p3: false,
+        },
         time_zones: vec![],
         max_priority: None,
     }

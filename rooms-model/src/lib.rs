@@ -101,6 +101,7 @@ impl TimeZone {
 #[derive(Debug, Clone)]
 pub struct Config {
     pub oral_exam_periods: Periods,
+    pub enforce_period_exhaustions: Periods,
     pub time_zones: Vec<TimeZone>,
     pub max_priority: Option<u32>,
 }

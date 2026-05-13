@@ -10,6 +10,11 @@ pub enum ExtraVarName {
         hour: Hour,
         priority: u32,
     },
+    GlobalPriorityExhausted {
+        day: Weekday,
+        hour: Hour,
+        priority: u32,
+    },
     PriorityPenalty,
 }
 
@@ -61,6 +66,12 @@ pub enum ConstraintDesc {
         request: usize,
         room: NonEmptyString,
         period: usize,
+        day: Weekday,
+        hour: Hour,
+    },
+    GlobalPriority {
+        request: usize,
+        room: NonEmptyString,
         day: Weekday,
         hour: Hour,
     },
