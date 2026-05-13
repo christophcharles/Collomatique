@@ -65,6 +65,8 @@ unsafe extern "C" {
         value: *const c_char,
     );
 
+    pub fn collo_cbc_set_log_level(model: *mut ColloCbcModel, level: i32);
+
     pub fn collo_cbc_set_mip_start(model: *mut ColloCbcModel, values: *const f64, num_cols: i32);
 
     pub fn collo_cbc_solve(

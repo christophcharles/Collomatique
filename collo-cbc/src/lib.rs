@@ -150,6 +150,12 @@ impl Model {
         });
     }
 
+    pub fn set_log_level(&mut self, level: i32) {
+        lock(|| unsafe {
+            sys::collo_cbc_set_log_level(self.ptr, level);
+        });
+    }
+
     pub fn set_mip_start(&mut self, values: &[f64]) {
         lock(|| unsafe {
             sys::collo_cbc_set_mip_start(self.ptr, values.as_ptr(), values.len() as i32);

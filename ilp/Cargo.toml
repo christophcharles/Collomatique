@@ -17,5 +17,5 @@ good_lp = { version = "1.13.0", features = ["lp-solvers"], optional = true }
 [features]
 default = ["collo_cbc"]
 coin_cbc = ["dep:coin_cbc","dep:gag"]
-collo_cbc = ["dep:collo-cbc","dep:gag"]
+collo_cbc = ["dep:collo-cbc"]
 good_lp = ["dep:good_lp"]

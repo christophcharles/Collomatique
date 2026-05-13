@@ -96,6 +96,7 @@ struct ColloCbcModel {
     int32_t node_count;
     std::vector<double> solution;
     bool has_solution;
+    int32_t log_level;
 };
 
 extern "C" {
@@ -111,6 +112,7 @@ ColloCbcModel* collo_cbc_new(void) {
     model->best_bound = -INFINITY;
     model->node_count = 0;
     model->has_solution = false;
+    model->log_level = -1;
     return model;
 }
 
@@ -157,6 +159,11 @@ void collo_cbc_set_parameter(ColloCbcModel* m, const char* key, const char* valu
     }
     m->cmdargs.push_back(argname);
     m->cmdargs.push_back(std::string(value));
+}
+
+void collo_cbc_set_log_level(ColloCbcModel* m, int32_t level) {
+    m->log_level = level;
+    m->solver->messageHandler()->setLogLevel(level);
 }
 
 void collo_cbc_set_mip_start(ColloCbcModel* m, const double* values, int32_t num_cols) {
@@ -210,6 +217,10 @@ ColloCbcStatus collo_cbc_solve(ColloCbcModel* m, ColloCbcCallback cb, void* user
 
     CbcSolverUsefulData cbcData;
     CbcMain0(cbcModel, cbcData);
+
+    if (m->log_level >= 0) {
+        cbcModel.setLogLevel(m->log_level);
+    }
 
     // Install event handler (after CbcMain0, before CbcMain1)
     ColloEventHandler handler(&cbcModel, cb, user_data);

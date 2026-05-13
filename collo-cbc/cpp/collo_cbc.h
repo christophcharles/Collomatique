@@ -55,6 +55,7 @@ void collo_cbc_load_problem(
 );
 
 void collo_cbc_set_parameter(ColloCbcModel* m, const char* key, const char* value);
+void collo_cbc_set_log_level(ColloCbcModel* m, int32_t level);
 void collo_cbc_set_mip_start(ColloCbcModel* m, const double* values, int32_t num_cols);
 
 ColloCbcStatus collo_cbc_solve(ColloCbcModel* m, ColloCbcCallback cb, void* user_data);
