@@ -240,7 +240,7 @@ fn parse_requests_valid() {
     assert!(r.periods.p3);
     assert_eq!(r.day, Weekday(chrono::Weekday::Mon));
     assert_eq!(r.hour, Hour::new(8).unwrap());
-    assert_eq!(r.subject, nes("Mathématiques"));
+    assert_eq!(r.subjects, vec![nes("Mathématiques")]);
     assert_eq!(r.classes, vec![nes("MP"), nes("PC")]);
     assert_eq!(r.requester, nes("Dupont"));
     assert_eq!(r.teacher, nes("Martin"));
@@ -467,7 +467,7 @@ fn make_request(
         },
         day: Weekday(day),
         hour: Hour::new(hour).unwrap(),
-        subject: nes("Mathématiques"),
+        subjects: vec![nes("Mathématiques")],
         classes: vec![nes("MP")],
         requester: nes("Dupont"),
         teacher: nes("Martin"),
@@ -476,6 +476,7 @@ fn make_request(
         students: NonZeroU32::new(3).unwrap(),
         prep_students,
         room_preference,
+        floor_suggestions: vec![],
         prep_preference,
     }
 }
@@ -1055,4 +1056,64 @@ fn exclusion_constraint_assigns_other_room() {
     let assignments = collomatique_constraints_rooms::extract_assignments(&data, &config);
     assert_eq!(assignments.len(), 1);
     assert_eq!(assignments[0].room, nes("ROOM_B"));
+}
+
+#[test]
+fn parse_requests_multi_subject() {
+    let (requests, _) = parsing::parse_requests(&fixture("requests_multi_subject.csv")).unwrap();
+    assert_eq!(requests.len(), 1);
+    let r = &requests[0];
+    assert_eq!(r.subjects, vec![nes("Physique"), nes("Chimie")]);
+}
+
+#[test]
+fn parse_requests_floor_suggestion_with_room() {
+    let (requests, _) = parsing::parse_requests(&fixture("requests_floor_suggestion.csv")).unwrap();
+    assert_eq!(requests.len(), 1);
+    let r = &requests[0];
+    assert_eq!(
+        r.room_preference,
+        vec![InterrogationRoomPreference::Suggestion {
+            room: nes("A101"),
+            can_share_with_prep: false,
+        }]
+    );
+    assert_eq!(r.floor_suggestions, vec![2]);
+}
+
+#[test]
+fn parse_requests_floor_only() {
+    let (requests, _) = parsing::parse_requests(&fixture("requests_floor_only.csv")).unwrap();
+    assert_eq!(requests.len(), 1);
+    let r = &requests[0];
+    assert!(r.room_preference.is_empty());
+    assert_eq!(r.floor_suggestions, vec![2]);
+}
+
+#[test]
+fn parse_requests_floor_multiple() {
+    let (requests, _) = parsing::parse_requests(&fixture("requests_floor_multiple.csv")).unwrap();
+    assert_eq!(requests.len(), 1);
+    let r = &requests[0];
+    assert_eq!(r.floor_suggestions, vec![2, 3]);
+}
+
+#[test]
+fn parse_requests_floor_bad() {
+    let err = parsing::parse_requests(&fixture("requests_floor_bad.csv")).unwrap_err();
+    assert!(matches!(
+        err,
+        ScheduleError::RequestsRowError { row: 1, ref message }
+        if message.contains("invalid floor suggestion")
+    ));
+}
+
+#[test]
+fn parse_requests_floor_empty() {
+    let err = parsing::parse_requests(&fixture("requests_floor_empty.csv")).unwrap_err();
+    assert!(matches!(
+        err,
+        ScheduleError::RequestsRowError { row: 1, ref message }
+        if message.contains("invalid floor suggestion")
+    ));
 }

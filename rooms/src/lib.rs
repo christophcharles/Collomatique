@@ -144,25 +144,22 @@ pub fn run(
             for assignment in &assignments {
                 let req = &data.requests[assignment.request];
                 let room_str: &str = assignment.room.as_ref();
+                let subjects_str: String = req
+                    .subjects
+                    .iter()
+                    .map(|s| s.as_ref() as &str)
+                    .collect::<Vec<&str>>()
+                    .join(";");
                 if let Some(prep) = &assignment.prep_room {
                     let prep_str: &str = prep.as_ref();
                     println!(
                         "Request {}: {} {}h {} — Room: {}, Prep: {}",
-                        assignment.request,
-                        req.day,
-                        *req.hour,
-                        req.subject.as_ref() as &str,
-                        room_str,
-                        prep_str,
+                        assignment.request, req.day, *req.hour, subjects_str, room_str, prep_str,
                     );
                 } else {
                     println!(
                         "Request {}: {} {}h {} — Room: {}",
-                        assignment.request,
-                        req.day,
-                        *req.hour,
-                        req.subject.as_ref() as &str,
-                        room_str,
+                        assignment.request, req.day, *req.hour, subjects_str, room_str,
                     );
                 }
             }
@@ -239,11 +236,19 @@ fn print_demand_conflict(data: &ScheduleData, conflict: &DemandConflict) {
     }
 }
 
+fn format_subjects(req: &Request) -> String {
+    req.subjects
+        .iter()
+        .map(|s| s.as_ref() as &str)
+        .collect::<Vec<&str>>()
+        .join(";")
+}
+
 fn print_demand_request(data: &ScheduleData, request: usize, kind: &str) {
     let req = &data.requests[request];
     eprintln!(
         "  - Request {request} ({kind}): {}, teacher: {}, requester: {}",
-        req.subject.as_ref() as &str,
+        format_subjects(req),
         req.teacher.as_ref() as &str,
         req.requester.as_ref() as &str,
     );
@@ -254,7 +259,7 @@ fn print_prep_demand_request(data: &ScheduleData, request: usize) {
     eprintln!(
         "  - Request {request} ({} prep students): {}, teacher: {}, requester: {}",
         req.prep_students,
-        req.subject.as_ref() as &str,
+        format_subjects(req),
         req.teacher.as_ref() as &str,
         req.requester.as_ref() as &str,
     );

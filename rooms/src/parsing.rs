@@ -279,15 +279,29 @@ pub fn parse_requests(
             value: hour_val,
         })?;
 
-        let subject_raw = record.get(5).unwrap().trim();
-        let subject_normalized: String = subject_raw.nfc().collect();
-        if !ALLOWED_SUBJECTS.contains(&subject_normalized.as_str()) {
+        let subjects_raw = record.get(5).unwrap();
+        let subjects: Vec<NonEmptyString> = subjects_raw
+            .split(';')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(|s| {
+                let normalized: String = s.nfc().collect();
+                if !ALLOWED_SUBJECTS.contains(&normalized.as_str()) {
+                    Err(ScheduleError::RequestsRowError {
+                        row,
+                        message: format!("unknown subject \"{s}\" in column \"Discipline\""),
+                    })
+                } else {
+                    Ok(NonEmptyString::try_from(normalized.as_str()).unwrap())
+                }
+            })
+            .collect::<Result<_, _>>()?;
+        if subjects.is_empty() {
             return Err(ScheduleError::RequestsRowError {
                 row,
-                message: format!("unknown subject \"{subject_raw}\""),
+                message: "column \"Discipline\": must have at least one subject".to_string(),
             });
         }
-        let subject = NonEmptyString::try_from(subject_normalized.as_str()).unwrap();
 
         let classes_raw = record.get(6).unwrap();
         let classes: Vec<NonEmptyString> = classes_raw
@@ -319,8 +333,8 @@ pub fn parse_requests(
         let students = parse_field::<NonZeroU32>(&record, 11, row, "requests", "Nb élèves")?;
         let prep_students = parse_field::<u32>(&record, 12, row, "requests", "Nb prep")?;
 
-        let (room_preference, room_warnings) =
-            parse_interrogation_room_preferences(&record, 13, row);
+        let (room_preference, floor_suggestions, room_warnings) =
+            parse_interrogation_room_preferences(&record, 13, row)?;
         let (prep_preference, prep_warnings) = parse_prep_room_preferences(&record, 14, row);
         all_warnings.extend(room_warnings);
         all_warnings.extend(prep_warnings);
@@ -348,7 +362,7 @@ pub fn parse_requests(
             periods: Periods { p1, p2, p3 },
             day,
             hour,
-            subject,
+            subjects,
             classes,
             requester,
             teacher,
@@ -357,6 +371,7 @@ pub fn parse_requests(
             students,
             prep_students,
             room_preference,
+            floor_suggestions,
             prep_preference,
         });
     }
@@ -654,16 +669,45 @@ fn parse_interrogation_room_preferences(
     record: &csv::StringRecord,
     index: usize,
     row: usize,
-) -> (Vec<InterrogationRoomPreference>, Vec<RoomPreferenceWarning>) {
+) -> Result<
+    (
+        Vec<InterrogationRoomPreference>,
+        Vec<u32>,
+        Vec<RoomPreferenceWarning>,
+    ),
+    ScheduleError,
+> {
     let value = record.get(index).unwrap_or("").trim();
     if value.is_empty() {
-        return (vec![], vec![]);
+        return Ok((vec![], vec![], vec![]));
     }
 
-    let parsed: Vec<InterrogationRoomPreference> = value
-        .split(';')
-        .filter_map(parse_single_interrogation_room_preference)
-        .collect();
+    let mut parsed: Vec<InterrogationRoomPreference> = Vec::new();
+    let mut floor_suggestions: Vec<u32> = Vec::new();
+
+    for entry in value.split(';') {
+        let trimmed = entry.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if let Some(floor_str) = trimmed.strip_prefix('=') {
+            let floor_str = floor_str.trim();
+            let floor: u32 = floor_str
+                .parse()
+                .map_err(|_| ScheduleError::RequestsRowError {
+                    row,
+                    message: format!(
+                        "column \"Salle\": invalid floor suggestion \"={floor_str}\", \
+                     expected a non-negative integer after '='"
+                    ),
+                })?;
+            if !floor_suggestions.contains(&floor) {
+                floor_suggestions.push(floor);
+            }
+        } else if let Some(pref) = parse_single_interrogation_room_preference(trimmed) {
+            parsed.push(pref);
+        }
+    }
 
     let mut by_room: BTreeMap<&str, Vec<&InterrogationRoomPreference>> = BTreeMap::new();
     for pref in &parsed {
@@ -776,7 +820,7 @@ fn parse_interrogation_room_preferences(
         }
     }
 
-    (result, warnings)
+    Ok((result, floor_suggestions, warnings))
 }
 
 fn parse_prep_room_preferences(

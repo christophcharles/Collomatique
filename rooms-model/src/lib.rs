@@ -190,7 +190,7 @@ pub struct Request {
     pub periods: Periods,
     pub day: Weekday,
     pub hour: Hour,
-    pub subject: NonEmptyString,
+    pub subjects: Vec<NonEmptyString>,
     pub classes: Vec<NonEmptyString>,
     pub requester: NonEmptyString,
     pub teacher: NonEmptyString,
@@ -199,6 +199,7 @@ pub struct Request {
     pub students: NonZeroU32,
     pub prep_students: u32,
     pub room_preference: Vec<InterrogationRoomPreference>,
+    pub floor_suggestions: Vec<u32>,
     pub prep_preference: Vec<PrepRoomPreference>,
 }
 
