@@ -167,6 +167,24 @@ fn undeclared_extra() {
 }
 
 #[test]
+fn undeclared_extra_slow_path() {
+    let mut m = fresh();
+    m.declare_extra("real".to_string(), Variable::integer(), |_f, _ctx, _e| {
+        Ok(vec![])
+    })
+    .unwrap();
+    m.add_constraint(
+        LinExpr::var(xtra("ghost")).eq(&LinExpr::constant(0.0)),
+        "ghost".into(),
+    );
+    let err = m.build(&()).unwrap_err();
+    match err {
+        BuildError::UndeclaredExtra(e) => assert_eq!(e, "ghost"),
+        other => panic!("expected UndeclaredExtra, got {:?}", other),
+    }
+}
+
+#[test]
 fn extra_returns_error() {
     let mut m = fresh();
     m.declare_extra("bad".to_string(), Variable::integer(), |_f, _ctx, _e| {

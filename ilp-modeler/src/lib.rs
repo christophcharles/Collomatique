@@ -1253,6 +1253,19 @@ where
         if extras.is_empty() {
             log("[Modeler::build] Steps 2-3: Skipped (no extras)");
 
+            for (c, _) in &user_constraints {
+                for v in c.variable_refs() {
+                    if let InternalVar::Extra(e) = v {
+                        return Err(BuildError::UndeclaredExtra(e.clone()));
+                    }
+                }
+            }
+            for v in folded_obj.get_function().variable_refs() {
+                if let InternalVar::Extra(e) = v {
+                    return Err(BuildError::UndeclaredExtra(e.clone()));
+                }
+            }
+
             let t_step = Instant::now();
             let mut all_vars: HashMap<InternalVar<B, E>, Variable> = HashMap::new();
             for (b, kind) in &base_vars {
