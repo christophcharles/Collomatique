@@ -6,7 +6,7 @@ use std::time::Instant;
 pub use collomatique_rooms_model::{
     Config, DemandConflict, DemandConflictKind, DemandKind, Hour, Incompat,
     InterrogationRoomPreference, Periods, PrepRoomPreference, Request, Room, ScheduleData,
-    TimeZone, Window,
+    TimeZones, Window,
 };
 pub use parsing::{RoomPreferenceWarning, ScheduleError};
 

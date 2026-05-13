@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::num::NonZeroU32;
 
 use collomatique_time::Weekday;
@@ -124,23 +124,27 @@ impl Periods {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct TimeZone {
-    start: Hour,
-    end: Hour,
+#[derive(Debug, Clone)]
+pub struct TimeZones {
+    cuts: BTreeSet<Hour>,
 }
 
-impl TimeZone {
-    pub fn new(start: Hour, end: Hour) -> Option<TimeZone> {
-        (*start <= *end).then_some(TimeZone { start, end })
+impl TimeZones {
+    pub fn new(cuts: BTreeSet<Hour>) -> Option<TimeZones> {
+        let invalid_cut = Hour::new(8).unwrap();
+        (!cuts.contains(&invalid_cut)).then_some(TimeZones { cuts })
     }
 
-    pub fn start(&self) -> Hour {
-        self.start
+    pub fn cuts(&self) -> &BTreeSet<Hour> {
+        &self.cuts
     }
+}
 
-    pub fn end(&self) -> Hour {
-        self.end
+impl Default for TimeZones {
+    fn default() -> Self {
+        TimeZones {
+            cuts: BTreeSet::from([Hour::new(10).unwrap(), Hour::new(16).unwrap()]),
+        }
     }
 }
 
@@ -148,7 +152,7 @@ impl TimeZone {
 pub struct Config {
     pub oral_exam_periods: Periods,
     pub enforce_period_exhaustions: Periods,
-    pub time_zones: Vec<TimeZone>,
+    pub time_zones: TimeZones,
     pub max_priority: Option<u32>,
 }
 
@@ -165,11 +169,7 @@ impl Default for Config {
                 p2: false,
                 p3: false,
             },
-            time_zones: vec![
-                TimeZone::new(Hour::new(8).unwrap(), Hour::new(9).unwrap()).unwrap(),
-                TimeZone::new(Hour::new(10).unwrap(), Hour::new(15).unwrap()).unwrap(),
-                TimeZone::new(Hour::new(16).unwrap(), Hour::new(19).unwrap()).unwrap(),
-            ],
+            time_zones: TimeZones::default(),
             max_priority: None,
         }
     }
