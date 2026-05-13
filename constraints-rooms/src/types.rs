@@ -58,10 +58,6 @@ pub enum ConstraintDesc {
         request: usize,
         room: NonEmptyString,
     },
-    WindowPrep {
-        request: usize,
-        room: NonEmptyString,
-    },
     Priority {
         request: usize,
         room: NonEmptyString,
@@ -204,13 +200,6 @@ impl ConstraintDesc {
             ConstraintDesc::WindowInterrogation { request, room } => {
                 format!(
                     "{} : salle \"{}\" n'a pas de fenêtre (fenêtre requise)",
-                    format_request(data, *request),
-                    <NonEmptyString as AsRef<str>>::as_ref(room),
-                )
-            }
-            ConstraintDesc::WindowPrep { request, room } => {
-                format!(
-                    "{} : salle \"{}\" n'a pas de fenêtre pour la préparation",
                     format_request(data, *request),
                     <NonEmptyString as AsRef<str>>::as_ref(room),
                 )

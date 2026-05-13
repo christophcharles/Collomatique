@@ -31,20 +31,6 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
                     },
                 );
             }
-
-            if env.has_prep_var(req_idx, room_name) {
-                bundle = bundle.with_constraint(
-                    IntLinExpr::var(base_var(Var::RoomForPrep {
-                        request: req_idx,
-                        room: room_name.clone(),
-                    }))
-                    .leq(&IntLinExpr::constant(0)),
-                    ConstraintDesc::WindowPrep {
-                        request: req_idx,
-                        room: room_name.clone(),
-                    },
-                );
-            }
         }
     }
 
