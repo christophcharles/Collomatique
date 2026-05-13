@@ -4,7 +4,7 @@ use std::path::Path;
 
 use collomatique_rooms_model::{
     Config, Hour, Incompat, InterrogationRoomPreference, Periods, PrepRoomPreference, Request,
-    Room, RoomSol, ScheduleData, TeacherConflict, Window,
+    Room, RoomSol, ScheduleData, SolutionColumns, TeacherConflict, Window,
 };
 use collomatique_time::Weekday;
 use non_empty_string::NonEmptyString;
@@ -166,7 +166,15 @@ pub fn parse_schedule(
     requests_path: &Path,
     incompats_path: Option<&Path>,
     config: Config,
-) -> Result<(ScheduleData, Vec<RoomPreferenceWarning>), ScheduleError> {
+) -> Result<
+    (
+        ScheduleData,
+        Vec<Vec<String>>,
+        SolutionColumns,
+        Vec<RoomPreferenceWarning>,
+    ),
+    ScheduleError,
+> {
     let rooms = parse_rooms(rooms_path)?;
     let (requests, raw_request_rows, solution_columns, warnings) = parse_requests(requests_path)?;
     let incompats = match incompats_path {
@@ -187,11 +195,11 @@ pub fn parse_schedule(
         ScheduleData {
             rooms,
             requests,
-            raw_request_rows,
-            solution_columns,
             incompats,
             config,
         },
+        raw_request_rows,
+        solution_columns,
         warnings,
     ))
 }

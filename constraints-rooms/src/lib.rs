@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 use collomatique_ilp::ConfigData;
 use collomatique_ilp_modeler::bundle::ReifyError;
-use collomatique_rooms_model::{RoomSol, ScheduleData};
+use collomatique_rooms_model::{ScheduleData, SolutionColumns};
 use non_empty_string::NonEmptyString;
 
 pub type RoomModel = collomatique_ilp_modeler::Model<Var, ExtraVarName, ConstraintDesc>;
@@ -77,7 +77,7 @@ pub struct SolutionReconstruction {
 
 pub fn reconstruct_solution(
     data: &ScheduleData,
-    solutions: &[(Option<RoomSol>, Option<RoomSol>)],
+    solutions: &SolutionColumns,
 ) -> SolutionReconstruction {
     let env = vars::VarEnv::new(data);
     let mut full_values: HashMap<Var, f64> = HashMap::new();
@@ -209,7 +209,7 @@ pub fn reconstruct_solution(
 
 pub fn build_config_from_solution(
     data: &ScheduleData,
-    solutions: &[(Option<RoomSol>, Option<RoomSol>)],
+    solutions: &SolutionColumns,
 ) -> Result<ConfigData<Var>, SolutionWarning> {
     let recon = reconstruct_solution(data, solutions);
     if let Some(w) = recon.warnings.into_iter().next() {
@@ -224,10 +224,7 @@ pub struct PinningBundles {
     pub warnings: Vec<SolutionWarning>,
 }
 
-pub fn build_pinning_bundles(
-    data: &ScheduleData,
-    solutions: &[(Option<RoomSol>, Option<RoomSol>)],
-) -> PinningBundles {
+pub fn build_pinning_bundles(data: &ScheduleData, solutions: &SolutionColumns) -> PinningBundles {
     let recon = reconstruct_solution(data, solutions);
     let desc_fn = |var: &Var, _value: f64| match var {
         Var::RoomForInterrogation { request, room } => ConstraintDesc::PinnedInterrogation {

@@ -280,7 +280,7 @@ fn parse_requests_room_demand() {
 
 #[test]
 fn parse_schedule_valid() {
-    let (data, _) = parsing::parse_schedule(
+    let (data, _, _, _) = parsing::parse_schedule(
         &fixture("valid_rooms.csv"),
         &fixture("valid_requests.csv"),
         None,
@@ -296,7 +296,7 @@ fn parse_schedule_valid() {
 
 #[test]
 fn unregistered_suggested_room_detected() {
-    let (data, _) = parsing::parse_schedule(
+    let (data, _, _, _) = parsing::parse_schedule(
         &fixture("valid_rooms.csv"),
         &fixture("requests_unregistered_room.csv"),
         None,
@@ -310,7 +310,7 @@ fn unregistered_suggested_room_detected() {
 
 #[test]
 fn unregistered_demanded_room_detected() {
-    let (data, _) = parsing::parse_schedule(
+    let (data, _, _, _) = parsing::parse_schedule(
         &fixture("valid_rooms.csv"),
         &fixture("requests_unregistered_demanded_room.csv"),
         None,
@@ -339,7 +339,7 @@ fn parse_incompats_valid() {
 
 #[test]
 fn parse_schedule_with_incompats() {
-    let (data, _) = parsing::parse_schedule(
+    let (data, _, _, _) = parsing::parse_schedule(
         &fixture("valid_rooms.csv"),
         &fixture("valid_requests.csv"),
         Some(&fixture("valid_incompats.csv")),
@@ -519,8 +519,6 @@ fn demand_no_conflict_non_overlapping_periods() {
                 0,
             ),
         ],
-        raw_request_rows: vec![],
-        solution_columns: vec![],
         incompats: vec![],
         config: Config::default(),
     };
@@ -557,8 +555,6 @@ fn demand_interro_interro_conflict() {
                 0,
             ),
         ],
-        raw_request_rows: vec![],
-        solution_columns: vec![],
         incompats: vec![],
         config: Config::default(),
     };
@@ -600,8 +596,6 @@ fn demand_interro_prep_conflict() {
                 5,
             ),
         ],
-        raw_request_rows: vec![],
-        solution_columns: vec![],
         incompats: vec![],
         config: Config::default(),
     };
@@ -641,8 +635,6 @@ fn demand_prep_prep_over_capacity() {
                 7,
             ),
         ],
-        raw_request_rows: vec![],
-        solution_columns: vec![],
         incompats: vec![],
         config: Config::default(),
     };
@@ -681,8 +673,6 @@ fn demand_prep_prep_fits() {
                 7,
             ),
         ],
-        raw_request_rows: vec![],
-        solution_columns: vec![],
         incompats: vec![],
         config: Config::default(),
     };
@@ -711,8 +701,6 @@ fn demand_prep_prep_unlisted_room() {
                 4,
             ),
         ],
-        raw_request_rows: vec![],
-        solution_columns: vec![],
         incompats: vec![],
         config: Config::default(),
     };
@@ -754,8 +742,6 @@ fn demand_suggestions_ignored() {
                 0,
             ),
         ],
-        raw_request_rows: vec![],
-        solution_columns: vec![],
         incompats: vec![],
         config: Config::default(),
     };
@@ -763,7 +749,7 @@ fn demand_suggestions_ignored() {
 }
 
 fn assert_checker_feasible(rooms: &str, requests: &str) {
-    let (data, _) = parsing::parse_schedule(
+    let (data, _, _, _) = parsing::parse_schedule(
         &fixture(rooms),
         &fixture(requests),
         None,
@@ -886,8 +872,6 @@ fn demand_interro_prep_conflict_with_sharing() {
                 5,
             ),
         ],
-        raw_request_rows: vec![],
-        solution_columns: vec![],
         incompats: vec![],
         config: Config::default(),
     };
@@ -1068,7 +1052,7 @@ fn exclusion_constraint_feasible() {
 
 #[test]
 fn exclusion_constraint_assigns_other_room() {
-    let (data, _) = parsing::parse_schedule(
+    let (data, _, _, _) = parsing::parse_schedule(
         &fixture("exclusion_rooms.csv"),
         &fixture("exclusion_requests.csv"),
         None,
@@ -1151,7 +1135,7 @@ fn parse_requests_floor_empty() {
 
 #[test]
 fn continuity_same_room() {
-    let (data, _) = parsing::parse_schedule(
+    let (data, _, _, _) = parsing::parse_schedule(
         &fixture("continuity_rooms.csv"),
         &fixture("continuity_requests.csv"),
         None,
@@ -1196,8 +1180,6 @@ fn teacher_conflict_detected() {
                 0,
             ),
         ],
-        raw_request_rows: vec![],
-        solution_columns: vec![],
         incompats: vec![],
         config: Config::default(),
     };
@@ -1232,8 +1214,6 @@ fn teacher_conflict_no_overlap() {
                 0,
             ),
         ],
-        raw_request_rows: vec![],
-        solution_columns: vec![],
         incompats: vec![],
         config: Config::default(),
     };
@@ -1265,8 +1245,6 @@ fn teacher_conflict_skipped_when_isolated() {
     let data = ScheduleData {
         rooms,
         requests: vec![req1, req2],
-        raw_request_rows: vec![],
-        solution_columns: vec![],
         incompats: vec![],
         config: Config::default(),
     };

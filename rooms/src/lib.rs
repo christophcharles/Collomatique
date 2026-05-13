@@ -7,7 +7,7 @@ use std::time::Instant;
 pub use collomatique_rooms_model::{
     Config, DemandConflict, DemandConflictKind, DemandKind, Hour, Incompat,
     InterrogationRoomPreference, Periods, PrepRoomPreference, Request, Room, RoomSol, ScheduleData,
-    TeacherConflict, TimeZones, Window,
+    SolutionColumns, TeacherConflict, TimeZones, Window,
 };
 pub use parsing::{RoomPreferenceWarning, ScheduleError};
 
@@ -27,7 +27,8 @@ pub fn run(
     config: Config,
     timeout_minutes: u32,
 ) -> Result<(), ScheduleError> {
-    let (data, pref_warnings) = parsing::parse_schedule(rooms, requests, incompats, config)?;
+    let (data, raw_request_rows, solution_columns, pref_warnings) =
+        parsing::parse_schedule(rooms, requests, incompats, config)?;
     eprintln!(
         "Parsed {} rooms, {} requests, and {} incompatibilities",
         data.rooms.len(),
@@ -135,7 +136,7 @@ pub fn run(
             eprintln!("Checking solution from SolSalle/SolPrep columns...");
             let config_data = collomatique_constraints_rooms::build_config_from_solution(
                 &data,
-                &data.solution_columns,
+                &solution_columns,
             )?;
 
             let solver =
@@ -168,10 +169,8 @@ pub fn run(
             eprintln!("Building ILP model...");
             let start = Instant::now();
             let (mut modeler, env) = collomatique_constraints_rooms::build_modeler(&data);
-            let pinning = collomatique_constraints_rooms::build_pinning_bundles(
-                &data,
-                &data.solution_columns,
-            );
+            let pinning =
+                collomatique_constraints_rooms::build_pinning_bundles(&data, &solution_columns);
             for w in &pinning.warnings {
                 eprintln!("Warning: {w}");
             }
@@ -199,17 +198,23 @@ pub fn run(
                 stats.base_variable_count, stats.user_constraint_count, elapsed,
             );
 
-            solve_and_output(&model, &data, out, false, timeout_minutes)
+            solve_and_output(
+                &model,
+                &data,
+                &raw_request_rows,
+                &solution_columns,
+                out,
+                false,
+                timeout_minutes,
+            )
         }
 
         SolveMode::Complete { no_objective } => {
             eprintln!("Building ILP model...");
             let start = Instant::now();
             let (mut modeler, env) = collomatique_constraints_rooms::build_modeler(&data);
-            let pinning = collomatique_constraints_rooms::build_pinning_bundles(
-                &data,
-                &data.solution_columns,
-            );
+            let pinning =
+                collomatique_constraints_rooms::build_pinning_bundles(&data, &solution_columns);
             for w in &pinning.warnings {
                 eprintln!("Warning: {w}");
             }
@@ -233,7 +238,15 @@ pub fn run(
                 stats.base_variable_count, stats.user_constraint_count, elapsed,
             );
 
-            solve_and_output(&model, &data, out, no_objective, timeout_minutes)
+            solve_and_output(
+                &model,
+                &data,
+                &raw_request_rows,
+                &solution_columns,
+                out,
+                no_objective,
+                timeout_minutes,
+            )
         }
 
         SolveMode::Solve { no_objective } => {
@@ -247,7 +260,15 @@ pub fn run(
                 stats.base_variable_count, stats.user_constraint_count, elapsed,
             );
 
-            solve_and_output(&model, &data, out, no_objective, timeout_minutes)
+            solve_and_output(
+                &model,
+                &data,
+                &raw_request_rows,
+                &solution_columns,
+                out,
+                no_objective,
+                timeout_minutes,
+            )
         }
     }
 }
@@ -255,6 +276,8 @@ pub fn run(
 fn solve_and_output(
     model: &collomatique_constraints_rooms::RoomModel,
     data: &ScheduleData,
+    raw_request_rows: &[Vec<String>],
+    solution_columns: &SolutionColumns,
     out: Option<&Path>,
     no_objective: bool,
     timeout_minutes: u32,
@@ -295,10 +318,15 @@ fn solve_and_output(
             let assignments = collomatique_constraints_rooms::extract_assignments(data, &config);
             if let Some(path) = out {
                 let file = std::fs::File::create(path).map_err(ScheduleError::Io)?;
-                write_solution_csv(file, data, &assignments);
+                write_solution_csv(file, raw_request_rows, solution_columns, &assignments);
                 eprintln!("Solution saved to {}", path.display());
             } else {
-                write_solution_csv(std::io::stdout(), data, &assignments);
+                write_solution_csv(
+                    std::io::stdout(),
+                    raw_request_rows,
+                    solution_columns,
+                    &assignments,
+                );
             }
             eprintln!("Solved: {} assignments", assignments.len());
         }
@@ -312,7 +340,8 @@ fn solve_and_output(
 
 fn write_solution_csv(
     writer: impl std::io::Write,
-    data: &ScheduleData,
+    raw_request_rows: &[Vec<String>],
+    solution_columns: &SolutionColumns,
     assignments: &[collomatique_constraints_rooms::Assignment],
 ) {
     let mut wtr = csv::Writer::from_writer(writer);
@@ -323,17 +352,17 @@ fn write_solution_csv(
     wtr.write_record(&header).unwrap();
 
     let mut assignment_by_request: Vec<Option<&collomatique_constraints_rooms::Assignment>> =
-        vec![None; data.requests.len()];
+        vec![None; raw_request_rows.len()];
     for assignment in assignments {
         assignment_by_request[assignment.request] = Some(assignment);
     }
 
-    for (i, raw_row) in data.raw_request_rows.iter().enumerate() {
+    for (i, raw_row) in raw_request_rows.iter().enumerate() {
         let mut fields: Vec<&str> = raw_row.iter().map(|s| s.as_str()).collect();
         let (sol_salle, sol_prep);
         if let Some(assignment) = assignment_by_request[i] {
             let room_str: &str = assignment.room.as_ref();
-            let orig_salle = data.solution_columns[i].0.as_ref();
+            let orig_salle = solution_columns[i].0.as_ref();
             sol_salle = if orig_salle.is_some_and(|s| s.mark_fixed && s.room == assignment.room) {
                 format!("!{room_str}")
             } else {
@@ -342,7 +371,7 @@ fn write_solution_csv(
             sol_prep = match &assignment.prep_room {
                 Some(prep_room) => {
                     let prep_str: &str = prep_room.as_ref();
-                    let orig_prep = data.solution_columns[i].1.as_ref();
+                    let orig_prep = solution_columns[i].1.as_ref();
                     if orig_prep.is_some_and(|s| s.mark_fixed && s.room == *prep_room) {
                         format!("!{prep_str}")
                     } else {

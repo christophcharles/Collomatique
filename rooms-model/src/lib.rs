@@ -218,13 +218,13 @@ pub struct RoomSol {
     pub mark_fixed: bool,
 }
 
+pub type SolutionColumns = Vec<(Option<RoomSol>, Option<RoomSol>)>;
+
 /// Parsed schedule data: rooms and requests.
 #[derive(Debug, Clone)]
 pub struct ScheduleData {
     pub rooms: BTreeMap<NonEmptyString, Room>,
     pub requests: Vec<Request>,
-    pub raw_request_rows: Vec<Vec<String>>,
-    pub solution_columns: Vec<(Option<RoomSol>, Option<RoomSol>)>,
     pub incompats: Vec<Incompat>,
     pub config: Config,
 }
