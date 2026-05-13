@@ -24,8 +24,9 @@ fn run(rooms: &str, requests: &str) -> Result<(), ScheduleError> {
         &fixture(rooms),
         &fixture(requests),
         None,
-        false,
-        false,
+        collomatique_rooms::SolveMode::Solve {
+            no_objective: false,
+        },
         None,
         Default::default(),
         0,
@@ -37,8 +38,9 @@ fn run_with_incompats(rooms: &str, requests: &str, incompats: &str) -> Result<()
         &fixture(rooms),
         &fixture(requests),
         Some(&fixture(incompats)),
-        false,
-        false,
+        collomatique_rooms::SolveMode::Solve {
+            no_objective: false,
+        },
         None,
         Default::default(),
         0,

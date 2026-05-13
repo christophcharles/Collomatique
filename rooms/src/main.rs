@@ -15,12 +15,20 @@ struct Args {
     incompats: Option<PathBuf>,
 
     /// Solve only feasibility (no objective optimization)
-    #[arg(long)]
+    #[arg(long, conflicts_with_all = ["check", "fix"])]
     no_objective: bool,
 
     /// Validate an existing solution from SolSalle/SolPrep columns
-    #[arg(long)]
+    #[arg(long, conflicts_with_all = ["fix", "complete", "no_objective"])]
     check: bool,
+
+    /// Find the closest feasible solution to the one in SolSalle/SolPrep
+    #[arg(long, conflicts_with_all = ["check", "complete", "no_objective"])]
+    fix: bool,
+
+    /// Complete empty SolSalle/SolPrep assignments, keeping filled ones fixed
+    #[arg(long, conflicts_with_all = ["check", "fix"])]
+    complete: bool,
 
     /// Output CSV file for the solution (defaults to stdout)
     #[arg(long, short)]
@@ -33,12 +41,26 @@ struct Args {
 
 fn main() -> Result<(), anyhow::Error> {
     let args = Args::parse();
+
+    let mode = if args.check {
+        collomatique_rooms::SolveMode::Check
+    } else if args.fix {
+        collomatique_rooms::SolveMode::Fix
+    } else if args.complete {
+        collomatique_rooms::SolveMode::Complete {
+            no_objective: args.no_objective,
+        }
+    } else {
+        collomatique_rooms::SolveMode::Solve {
+            no_objective: args.no_objective,
+        }
+    };
+
     collomatique_rooms::run(
         &args.rooms,
         &args.requests,
         args.incompats.as_deref(),
-        args.no_objective,
-        args.check,
+        mode,
         args.out.as_deref(),
         collomatique_rooms_model::Config {
             enforce_period_exhaustions: collomatique_rooms_model::Periods {

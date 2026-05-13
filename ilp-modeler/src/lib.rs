@@ -999,6 +999,11 @@ where
         self.add_objective(coef, Objective::new(expr, ObjectiveSense::Maximize));
     }
 
+    /// Remove all accumulated objectives.
+    pub fn clear_objectives(&mut self) {
+        self.objectives.clear();
+    }
+
     /// Register a fixer closure. At build time, for every
     /// undeclared base variable found in constraints/objectives,
     /// fixers are called in registration order; the first to return

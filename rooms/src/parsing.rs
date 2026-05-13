@@ -120,7 +120,7 @@ pub enum ScheduleError {
     #[error("{}", format_teacher_conflicts(.0))]
     TeacherConflicts(Vec<TeacherConflict>),
     #[error("Check mode: {0}")]
-    CheckUnknownRoom(#[from] collomatique_constraints_rooms::CheckError),
+    CheckUnknownRoom(#[from] collomatique_constraints_rooms::SolutionWarning),
     #[error("Check mode: failed to reconstruct extra variables: {0}")]
     CheckReconstructionFailed(String),
 }

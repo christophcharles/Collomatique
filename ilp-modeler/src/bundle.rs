@@ -148,6 +148,28 @@ where
         }
     }
 
+    /// Construct equality constraints from a [`ConfigData`]: for
+    /// each `(var, value)` entry, add `var == value`.
+    pub fn from_config_data(
+        config: &collomatique_ilp::ConfigData<B>,
+        desc_fn: impl Fn(&B, f64) -> C,
+    ) -> Self
+    where
+        B: Clone,
+    {
+        let constraints: Vec<_> = config
+            .get_values()
+            .into_iter()
+            .map(|(var, value)| {
+                let expr = LinExpr::var(Var::Base(var.clone()));
+                let constraint = expr.eq(&LinExpr::constant(value));
+                let desc = desc_fn(&var, value);
+                (constraint, desc)
+            })
+            .collect();
+        Self::from_constraints(constraints)
+    }
+
     /// Add a constraint with description.
     pub fn with_constraint(mut self, constraint: Constraint<Var<B, E>>, desc: C) -> Self {
         self.constraints.push((constraint, desc));

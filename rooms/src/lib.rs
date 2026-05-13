@@ -11,12 +11,18 @@ pub use collomatique_rooms_model::{
 };
 pub use parsing::{RoomPreferenceWarning, ScheduleError};
 
+pub enum SolveMode {
+    Solve { no_objective: bool },
+    Check,
+    Fix,
+    Complete { no_objective: bool },
+}
+
 pub fn run(
     rooms: &Path,
     requests: &Path,
     incompats: Option<&Path>,
-    no_objective: bool,
-    check: bool,
+    mode: SolveMode,
     out: Option<&Path>,
     config: Config,
     timeout_minutes: u32,
@@ -36,6 +42,7 @@ pub fn run(
                 room,
                 original_entries,
                 merged_result,
+                ..
             } => {
                 eprintln!(
                     "Warning: request row {row}, column \"{column}\": room \"{room}\" \
@@ -113,49 +120,133 @@ pub fn run(
         return Err(ScheduleError::TeacherConflicts(teacher_conflicts));
     }
 
-    eprintln!("Building ILP model...");
-    let start = Instant::now();
-    let model = collomatique_constraints_rooms::build_model(&data);
-    let elapsed = start.elapsed();
-    let stats = model.stats();
-    eprintln!(
-        "  {} base variables, {} constraints (built in {:.2?})",
-        stats.base_variable_count, stats.user_constraint_count, elapsed,
-    );
+    match mode {
+        SolveMode::Check => {
+            eprintln!("Building ILP model...");
+            let start = Instant::now();
+            let model = collomatique_constraints_rooms::build_model(&data);
+            let elapsed = start.elapsed();
+            let stats = model.stats();
+            eprintln!(
+                "  {} base variables, {} constraints (built in {:.2?})",
+                stats.base_variable_count, stats.user_constraint_count, elapsed,
+            );
 
-    if check {
-        eprintln!("Checking solution from SolSalle/SolPrep columns...");
-        let config_data = collomatique_constraints_rooms::build_config_from_solution(
-            &data,
-            &data.solution_columns,
-        )?;
+            eprintln!("Checking solution from SolSalle/SolPrep columns...");
+            let config_data = collomatique_constraints_rooms::build_config_from_solution(
+                &data,
+                &data.solution_columns,
+            )?;
 
-        let solver =
-            collomatique_ilp::solvers::collo_cbc::ColloCbcSolver::with_disable_logging(true);
-        let solution = model
-            .checker_solution_from_data(&config_data, &solver)
-            .map_err(|e| ScheduleError::CheckReconstructionFailed(e.to_string()))?;
+            let solver =
+                collomatique_ilp::solvers::collo_cbc::ColloCbcSolver::with_disable_logging(true);
+            let solution = model
+                .checker_solution_from_data(&config_data, &solver)
+                .map_err(|e| ScheduleError::CheckReconstructionFailed(e.to_string()))?;
 
-        if solution.is_feasible() {
-            eprintln!("Solution is feasible. No constraint violations found.");
-            return Ok(());
-        }
-
-        let mut violations: HashSet<&collomatique_constraints_rooms::ConstraintDesc> =
-            HashSet::new();
-        for (_constraint, source) in solution.blame() {
-            if let collomatique_ilp_modeler::ConstraintSource::User(desc) = source {
-                violations.insert(desc);
+            if solution.is_feasible() {
+                eprintln!("Solution is feasible. No constraint violations found.");
+                return Ok(());
             }
+
+            let mut violations: HashSet<&collomatique_constraints_rooms::ConstraintDesc> =
+                HashSet::new();
+            for (_constraint, source) in solution.blame() {
+                if let collomatique_ilp_modeler::ConstraintSource::User(desc) = source {
+                    violations.insert(desc);
+                }
+            }
+
+            eprintln!("{} constraint violation(s):", violations.len());
+            for desc in &violations {
+                eprintln!("  - {}", desc.user_readable(&data));
+            }
+            Ok(())
         }
 
-        eprintln!("{} constraint violation(s):", violations.len());
-        for desc in &violations {
-            eprintln!("  - {}", desc.user_readable(&data));
+        SolveMode::Fix => {
+            eprintln!("Building ILP model...");
+            let start = Instant::now();
+            let (mut modeler, env) = collomatique_constraints_rooms::build_modeler(&data);
+            let (bundle, warnings) =
+                collomatique_constraints_rooms::build_pinning_bundle(&data, &data.solution_columns);
+            for w in &warnings {
+                eprintln!("Warning: {w}");
+            }
+
+            modeler.clear_objectives();
+            if let Ok(objectified) =
+                bundle.objectify(collomatique_constraints_rooms::ExtraVarName::FixPenalty)
+            {
+                modeler
+                    .apply_bundle(objectified.into_general())
+                    .expect("no duplicate extras");
+            }
+
+            let model = modeler
+                .build_with_log(&env, &mut |msg| eprintln!("{msg}"))
+                .unwrap_or_else(|e| panic!("model build should succeed: {:?}", e));
+            let elapsed = start.elapsed();
+            let stats = model.stats();
+            eprintln!(
+                "  {} base variables, {} constraints (built in {:.2?})",
+                stats.base_variable_count, stats.user_constraint_count, elapsed,
+            );
+
+            solve_and_output(&model, &data, out, false, timeout_minutes)
         }
-        return Ok(());
+
+        SolveMode::Complete { no_objective } => {
+            eprintln!("Building ILP model...");
+            let start = Instant::now();
+            let (mut modeler, env) = collomatique_constraints_rooms::build_modeler(&data);
+            let (bundle, warnings) =
+                collomatique_constraints_rooms::build_pinning_bundle(&data, &data.solution_columns);
+            for w in &warnings {
+                eprintln!("Warning: {w}");
+            }
+
+            if no_objective {
+                modeler.clear_objectives();
+            }
+            modeler.apply_bundle(bundle).expect("no duplicate extras");
+
+            let model = modeler
+                .build_with_log(&env, &mut |msg| eprintln!("{msg}"))
+                .unwrap_or_else(|e| panic!("model build should succeed: {:?}", e));
+            let elapsed = start.elapsed();
+            let stats = model.stats();
+            eprintln!(
+                "  {} base variables, {} constraints (built in {:.2?})",
+                stats.base_variable_count, stats.user_constraint_count, elapsed,
+            );
+
+            solve_and_output(&model, &data, out, no_objective, timeout_minutes)
+        }
+
+        SolveMode::Solve { no_objective } => {
+            eprintln!("Building ILP model...");
+            let start = Instant::now();
+            let model = collomatique_constraints_rooms::build_model(&data);
+            let elapsed = start.elapsed();
+            let stats = model.stats();
+            eprintln!(
+                "  {} base variables, {} constraints (built in {:.2?})",
+                stats.base_variable_count, stats.user_constraint_count, elapsed,
+            );
+
+            solve_and_output(&model, &data, out, no_objective, timeout_minutes)
+        }
     }
+}
 
+fn solve_and_output(
+    model: &collomatique_constraints_rooms::RoomModel,
+    data: &ScheduleData,
+    out: Option<&Path>,
+    no_objective: bool,
+    timeout_minutes: u32,
+) -> Result<(), ScheduleError> {
     if no_objective {
         eprintln!("Solving (checker only, no objective)...");
     } else {
@@ -189,13 +280,13 @@ pub fn run(
     };
     match solved {
         Some(config) => {
-            let assignments = collomatique_constraints_rooms::extract_assignments(&data, &config);
+            let assignments = collomatique_constraints_rooms::extract_assignments(data, &config);
             if let Some(path) = out {
                 let file = std::fs::File::create(path).map_err(ScheduleError::Io)?;
-                write_solution_csv(file, &data, &assignments);
+                write_solution_csv(file, data, &assignments);
                 eprintln!("Solution saved to {}", path.display());
             } else {
-                write_solution_csv(std::io::stdout(), &data, &assignments);
+                write_solution_csv(std::io::stdout(), data, &assignments);
             }
             eprintln!("Solved: {} assignments", assignments.len());
         }

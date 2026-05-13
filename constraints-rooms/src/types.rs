@@ -16,6 +16,7 @@ pub enum ExtraVarName {
         priority: u32,
     },
     PriorityPenalty,
+    FixPenalty,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -104,6 +105,14 @@ pub enum ConstraintDesc {
         request: usize,
         room: NonEmptyString,
         neighbor_request: usize,
+    },
+    PinnedInterrogation {
+        request: usize,
+        room: NonEmptyString,
+    },
+    PinnedPrep {
+        request: usize,
+        room: NonEmptyString,
     },
 }
 
@@ -317,6 +326,20 @@ impl ConstraintDesc {
                     format_request(data, *request),
                     <NonEmptyString as AsRef<str>>::as_ref(room),
                     neighbor_request,
+                )
+            }
+            ConstraintDesc::PinnedInterrogation { request, room } => {
+                format!(
+                    "{} : salle d'interrogation \"{}\" fixée par l'utilisateur",
+                    format_request(data, *request),
+                    <NonEmptyString as AsRef<str>>::as_ref(room),
+                )
+            }
+            ConstraintDesc::PinnedPrep { request, room } => {
+                format!(
+                    "{} : salle de préparation \"{}\" fixée par l'utilisateur",
+                    format_request(data, *request),
+                    <NonEmptyString as AsRef<str>>::as_ref(room),
                 )
             }
         }

@@ -38,7 +38,7 @@ pub(crate) fn extra_var(e: ExtraVarName) -> V {
     ModelerVar::Extra(e)
 }
 
-pub fn build_model(data: &ScheduleData) -> RoomModel {
+pub fn build_modeler(data: &ScheduleData) -> (MyModeler<'static>, VarEnv) {
     let env = VarEnv::new(data);
     let mut modeler: MyModeler<'_> = Modeler::from_described(&env);
 
@@ -70,6 +70,11 @@ pub fn build_model(data: &ScheduleData) -> RoomModel {
         .apply_bundle(continuity::build(&env).into_general())
         .expect("no duplicate extras");
 
+    (modeler, env)
+}
+
+pub fn build_model(data: &ScheduleData) -> RoomModel {
+    let (modeler, env) = build_modeler(data);
     modeler
         .build_with_log(&env, &mut |msg| eprintln!("{msg}"))
         .unwrap_or_else(|e| panic!("model build should succeed: {:?}", e))

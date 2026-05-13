@@ -2,17 +2,36 @@ mod builder;
 mod types;
 pub mod vars;
 
-pub use builder::build_model;
+pub use builder::{build_model, build_modeler};
 pub use types::{ConstraintDesc, ExtraVarName};
 pub use vars::Var;
 
 use std::collections::HashMap;
 
 use collomatique_ilp::ConfigData;
+use collomatique_ilp_modeler::bundle::ReifyError;
 use collomatique_rooms_model::ScheduleData;
 use non_empty_string::NonEmptyString;
 
 pub type RoomModel = collomatique_ilp_modeler::Model<Var, ExtraVarName, ConstraintDesc>;
+
+pub type RoomModeler<'m> = collomatique_ilp_modeler::Modeler<
+    'm,
+    Var,
+    ExtraVarName,
+    ConstraintDesc,
+    vars::VarEnv,
+    ReifyError<Var, ExtraVarName>,
+>;
+
+pub type RoomConstraintBundle = collomatique_ilp_modeler::ConstraintBundle<
+    'static,
+    Var,
+    ExtraVarName,
+    ConstraintDesc,
+    vars::VarEnv,
+    ReifyError<Var, ExtraVarName>,
+>;
 
 pub struct Assignment {
     pub request: usize,
@@ -21,22 +40,22 @@ pub struct Assignment {
 }
 
 #[derive(Debug, Clone)]
-pub enum CheckError {
+pub enum SolutionWarning {
     UnknownInterrogationRoom { request: usize, room: String },
     UnknownPrepRoom { request: usize, room: String },
 }
 
-impl std::fmt::Display for CheckError {
+impl std::fmt::Display for SolutionWarning {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CheckError::UnknownInterrogationRoom { request, room } => {
+            SolutionWarning::UnknownInterrogationRoom { request, room } => {
                 write!(
                     f,
                     "request {request}: SolSalle room \"{room}\" is not a valid \
                      interrogation room for this request"
                 )
             }
-            CheckError::UnknownPrepRoom { request, room } => {
+            SolutionWarning::UnknownPrepRoom { request, room } => {
                 write!(
                     f,
                     "request {request}: SolPrep room \"{room}\" is not a valid \
@@ -47,39 +66,64 @@ impl std::fmt::Display for CheckError {
     }
 }
 
-impl std::error::Error for CheckError {}
+impl std::error::Error for SolutionWarning {}
 
-pub fn build_config_from_solution(
+pub struct SolutionReconstruction {
+    pub selected_pins: ConfigData<Var>,
+    pub full_config: ConfigData<Var>,
+    pub warnings: Vec<SolutionWarning>,
+}
+
+pub fn reconstruct_solution(
     data: &ScheduleData,
     solutions: &[(Option<NonEmptyString>, Option<NonEmptyString>)],
-) -> Result<ConfigData<Var>, CheckError> {
+) -> SolutionReconstruction {
     let env = vars::VarEnv::new(data);
-    let mut values: HashMap<Var, f64> = HashMap::new();
+    let mut full_values: HashMap<Var, f64> = HashMap::new();
+    let mut pin_values: HashMap<Var, f64> = HashMap::new();
+    let mut warnings = Vec::new();
 
     for request in Var::compute_all_request_range(&env) {
         let rooms = Var::compute_interrogation_room_range(&env, &request);
         let sol_room = &solutions[request].0;
 
         if let Some(room_name) = sol_room {
-            if !rooms.contains(room_name) {
-                return Err(CheckError::UnknownInterrogationRoom {
+            if rooms.contains(room_name) {
+                pin_values.insert(
+                    Var::RoomForInterrogation {
+                        request,
+                        room: room_name.clone(),
+                    },
+                    1.0,
+                );
+                for room in &rooms {
+                    let val = if room == room_name { 1.0 } else { 0.0 };
+                    full_values.insert(
+                        Var::RoomForInterrogation {
+                            request,
+                            room: room.clone(),
+                        },
+                        val,
+                    );
+                }
+            } else {
+                warnings.push(SolutionWarning::UnknownInterrogationRoom {
                     request,
                     room: <NonEmptyString as AsRef<str>>::as_ref(room_name).to_string(),
                 });
-            }
-            for room in &rooms {
-                let val = if room == room_name { 1.0 } else { 0.0 };
-                values.insert(
-                    Var::RoomForInterrogation {
-                        request,
-                        room: room.clone(),
-                    },
-                    val,
-                );
+                for room in &rooms {
+                    full_values.insert(
+                        Var::RoomForInterrogation {
+                            request,
+                            room: room.clone(),
+                        },
+                        0.0,
+                    );
+                }
             }
         } else {
             for room in &rooms {
-                values.insert(
+                full_values.insert(
                     Var::RoomForInterrogation {
                         request,
                         room: room.clone(),
@@ -95,25 +139,42 @@ pub fn build_config_from_solution(
         let sol_room = &solutions[request].1;
 
         if let Some(room_name) = sol_room {
-            if !rooms.contains(room_name) {
-                return Err(CheckError::UnknownPrepRoom {
+            if rooms.contains(room_name) {
+                pin_values.insert(
+                    Var::RoomForPrep {
+                        request,
+                        room: room_name.clone(),
+                    },
+                    1.0,
+                );
+                for room in &rooms {
+                    let val = if room == room_name { 1.0 } else { 0.0 };
+                    full_values.insert(
+                        Var::RoomForPrep {
+                            request,
+                            room: room.clone(),
+                        },
+                        val,
+                    );
+                }
+            } else {
+                warnings.push(SolutionWarning::UnknownPrepRoom {
                     request,
                     room: <NonEmptyString as AsRef<str>>::as_ref(room_name).to_string(),
                 });
-            }
-            for room in &rooms {
-                let val = if room == room_name { 1.0 } else { 0.0 };
-                values.insert(
-                    Var::RoomForPrep {
-                        request,
-                        room: room.clone(),
-                    },
-                    val,
-                );
+                for room in &rooms {
+                    full_values.insert(
+                        Var::RoomForPrep {
+                            request,
+                            room: room.clone(),
+                        },
+                        0.0,
+                    );
+                }
             }
         } else {
             for room in &rooms {
-                values.insert(
+                full_values.insert(
                     Var::RoomForPrep {
                         request,
                         room: room.clone(),
@@ -124,7 +185,41 @@ pub fn build_config_from_solution(
         }
     }
 
-    Ok(ConfigData::from(values))
+    SolutionReconstruction {
+        selected_pins: ConfigData::from(pin_values),
+        full_config: ConfigData::from(full_values),
+        warnings,
+    }
+}
+
+pub fn build_config_from_solution(
+    data: &ScheduleData,
+    solutions: &[(Option<NonEmptyString>, Option<NonEmptyString>)],
+) -> Result<ConfigData<Var>, SolutionWarning> {
+    let recon = reconstruct_solution(data, solutions);
+    if let Some(w) = recon.warnings.into_iter().next() {
+        return Err(w);
+    }
+    Ok(recon.full_config)
+}
+
+pub fn build_pinning_bundle(
+    data: &ScheduleData,
+    solutions: &[(Option<NonEmptyString>, Option<NonEmptyString>)],
+) -> (RoomConstraintBundle, Vec<SolutionWarning>) {
+    let recon = reconstruct_solution(data, solutions);
+    let bundle =
+        RoomConstraintBundle::from_config_data(&recon.selected_pins, |var, _value| match var {
+            Var::RoomForInterrogation { request, room } => ConstraintDesc::PinnedInterrogation {
+                request: *request,
+                room: room.clone(),
+            },
+            Var::RoomForPrep { request, room } => ConstraintDesc::PinnedPrep {
+                request: *request,
+                room: room.clone(),
+            },
+        });
+    (bundle, recon.warnings)
 }
 
 pub fn extract_assignments(data: &ScheduleData, config: &ConfigData<Var>) -> Vec<Assignment> {
