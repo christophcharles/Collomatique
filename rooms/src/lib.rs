@@ -6,7 +6,7 @@ use std::time::Instant;
 pub use collomatique_rooms_model::{
     Config, DemandConflict, DemandConflictKind, DemandKind, Hour, Incompat,
     InterrogationRoomPreference, Periods, PrepRoomPreference, Request, Room, ScheduleData,
-    TimeZones, Window,
+    TeacherConflict, TimeZones, Window,
 };
 pub use parsing::{RoomPreferenceWarning, ScheduleError};
 
@@ -95,6 +95,19 @@ pub fn run(
         return Err(ScheduleError::UnregisteredSuggestedRooms(
             unreg.suggested.iter().map(|s| s.to_string()).collect(),
         ));
+    }
+
+    let teacher_conflicts = data.teacher_continuity_conflicts();
+    for conflict in &teacher_conflicts {
+        let teacher: &str = conflict.teacher.as_ref();
+        eprintln!(
+            "Error: teacher \"{teacher}\" has multiple non-isolated requests \
+             with overlapping periods on {} at {} (requests: {:?})",
+            conflict.day, conflict.hour, conflict.requests,
+        );
+    }
+    if !teacher_conflicts.is_empty() {
+        return Err(ScheduleError::TeacherConflicts(teacher_conflicts));
     }
 
     eprintln!("Building ILP model...");

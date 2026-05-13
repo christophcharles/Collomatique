@@ -138,6 +138,14 @@ impl TimeZones {
     pub fn cuts(&self) -> &BTreeSet<Hour> {
         &self.cuts
     }
+
+    pub fn zone_label(&self, hour: Hour) -> Hour {
+        self.cuts
+            .range(..=hour)
+            .next_back()
+            .copied()
+            .unwrap_or(Hour::new(8).unwrap())
+    }
 }
 
 impl Default for TimeZones {
@@ -201,6 +209,7 @@ pub struct Request {
     pub room_preference: Vec<InterrogationRoomPreference>,
     pub floor_suggestions: Vec<u32>,
     pub prep_preference: Vec<PrepRoomPreference>,
+    pub skip_room_continuity: bool,
 }
 
 /// Parsed schedule data: rooms and requests.
@@ -240,6 +249,14 @@ pub struct DemandConflict {
     pub hour: Hour,
     pub kind: DemandConflictKind,
     pub requests: Vec<(usize, DemandKind)>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TeacherConflict {
+    pub teacher: NonEmptyString,
+    pub day: Weekday,
+    pub hour: Hour,
+    pub requests: Vec<usize>,
 }
 
 pub struct UnregisteredRooms<'a> {
@@ -432,5 +449,97 @@ impl ScheduleData {
         }
 
         conflicts
+    }
+
+    pub fn teacher_continuity_conflicts(&self) -> Vec<TeacherConflict> {
+        let mut groups: BTreeMap<(NonEmptyString, Weekday, Hour), Vec<usize>> = BTreeMap::new();
+
+        for (req_idx, req) in self.requests.iter().enumerate() {
+            if req.skip_room_continuity {
+                continue;
+            }
+            groups
+                .entry((req.teacher.clone(), req.day, req.hour))
+                .or_default()
+                .push(req_idx);
+        }
+
+        let mut conflicts = Vec::new();
+
+        for ((teacher, day, hour), requests) in &groups {
+            if requests.len() < 2 {
+                continue;
+            }
+
+            let has_overlap = requests.iter().enumerate().any(|(i, &r_i)| {
+                requests[i + 1..].iter().any(|&r_j| {
+                    self.requests[r_i]
+                        .periods
+                        .overlaps_with(&self.requests[r_j].periods)
+                })
+            });
+
+            if has_overlap {
+                conflicts.push(TeacherConflict {
+                    teacher: teacher.clone(),
+                    day: *day,
+                    hour: *hour,
+                    requests: requests.clone(),
+                });
+            }
+        }
+
+        conflicts
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn zone_label_default() {
+        let tz = TimeZones::default();
+        assert_eq!(tz.zone_label(Hour::new(8).unwrap()), Hour::new(8).unwrap());
+        assert_eq!(tz.zone_label(Hour::new(9).unwrap()), Hour::new(8).unwrap());
+        assert_eq!(
+            tz.zone_label(Hour::new(10).unwrap()),
+            Hour::new(10).unwrap()
+        );
+        assert_eq!(
+            tz.zone_label(Hour::new(15).unwrap()),
+            Hour::new(10).unwrap()
+        );
+        assert_eq!(
+            tz.zone_label(Hour::new(16).unwrap()),
+            Hour::new(16).unwrap()
+        );
+        assert_eq!(
+            tz.zone_label(Hour::new(19).unwrap()),
+            Hour::new(16).unwrap()
+        );
+    }
+
+    #[test]
+    fn zone_label_empty_cuts() {
+        let tz = TimeZones::new(BTreeSet::new()).unwrap();
+        for h in 8..=19 {
+            assert_eq!(tz.zone_label(Hour::new(h).unwrap()), Hour::new(8).unwrap());
+        }
+    }
+
+    #[test]
+    fn zone_label_single_cut() {
+        let tz = TimeZones::new(BTreeSet::from([Hour::new(14).unwrap()])).unwrap();
+        assert_eq!(tz.zone_label(Hour::new(8).unwrap()), Hour::new(8).unwrap());
+        assert_eq!(tz.zone_label(Hour::new(13).unwrap()), Hour::new(8).unwrap());
+        assert_eq!(
+            tz.zone_label(Hour::new(14).unwrap()),
+            Hour::new(14).unwrap()
+        );
+        assert_eq!(
+            tz.zone_label(Hour::new(19).unwrap()),
+            Hour::new(14).unwrap()
+        );
     }
 }

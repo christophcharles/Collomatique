@@ -4,7 +4,7 @@ use std::path::Path;
 
 use collomatique_rooms_model::{
     Config, Hour, Incompat, InterrogationRoomPreference, Periods, PrepRoomPreference, Request,
-    Room, ScheduleData, Window,
+    Room, ScheduleData, TeacherConflict, Window,
 };
 use collomatique_time::Weekday;
 use non_empty_string::NonEmptyString;
@@ -40,6 +40,7 @@ const REQUESTS_COLUMNS: &[&str] = &[
     "Nb prep",
     "Salle",
     "Prep",
+    "Isolé",
 ];
 
 const INCOMPATS_COLUMNS: &[&str] = &["Salle", "P1", "P2", "P3", "Jour", "Heure"];
@@ -116,6 +117,8 @@ pub enum ScheduleError {
     UnregisteredSuggestedRooms(Vec<String>),
     #[error("{}", format_conflicting_preferences(.0))]
     ConflictingRoomPreferences(Vec<String>),
+    #[error("{}", format_teacher_conflicts(.0))]
+    TeacherConflicts(Vec<TeacherConflict>),
 }
 
 fn format_unregistered_suggested(rooms: &[String]) -> String {
@@ -130,6 +133,26 @@ fn format_conflicting_preferences(rooms: &[String]) -> String {
     format!(
         "Room(s) with conflicting positive and negative preferences: {}",
         rooms.join(", ")
+    )
+}
+
+fn format_teacher_conflicts(conflicts: &[TeacherConflict]) -> String {
+    let items: Vec<String> = conflicts
+        .iter()
+        .map(|c| {
+            format!(
+                "teacher \"{}\" on {} at {} (requests: {:?})",
+                c.teacher.as_ref() as &str,
+                c.day,
+                c.hour,
+                c.requests
+            )
+        })
+        .collect();
+    format!(
+        "Teacher continuity conflict(s): same teacher has multiple non-isolated requests \
+         at the same time with overlapping periods: {}",
+        items.join("; ")
     )
 }
 
@@ -336,6 +359,7 @@ pub fn parse_requests(
         let (room_preference, floor_suggestions, room_warnings) =
             parse_interrogation_room_preferences(&record, 13, row)?;
         let (prep_preference, prep_warnings) = parse_prep_room_preferences(&record, 14, row);
+        let isolated = parse_bool_field(&record, 15, row, "requests", "Isolé")?;
         all_warnings.extend(room_warnings);
         all_warnings.extend(prep_warnings);
 
@@ -373,6 +397,7 @@ pub fn parse_requests(
             room_preference,
             floor_suggestions,
             prep_preference,
+            skip_room_continuity: isolated,
         });
     }
 

@@ -1,5 +1,6 @@
 mod assignment;
 mod capacity;
+mod continuity;
 mod exclusion;
 mod exclusivity;
 mod incompats;
@@ -64,6 +65,9 @@ pub fn build_model(data: &ScheduleData) -> RoomModel {
         .expect("no duplicate extras");
     modeler
         .apply_bundle(priority::build(&env).into_general())
+        .expect("no duplicate extras");
+    modeler
+        .apply_bundle(continuity::build(&env).into_general())
         .expect("no duplicate extras");
 
     modeler

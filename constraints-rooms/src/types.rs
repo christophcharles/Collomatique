@@ -93,4 +93,14 @@ pub enum ConstraintDesc {
         request: usize,
         room: NonEmptyString,
     },
+    RoomContinuityEqual {
+        request_a: usize,
+        request_b: usize,
+        room: NonEmptyString,
+    },
+    RoomContinuityExcluded {
+        request: usize,
+        room: NonEmptyString,
+        neighbor_request: usize,
+    },
 }

@@ -478,6 +478,7 @@ fn make_request(
         room_preference,
         floor_suggestions: vec![],
         prep_preference,
+        skip_room_continuity: false,
     }
 }
 
@@ -1116,4 +1117,125 @@ fn parse_requests_floor_empty() {
         ScheduleError::RequestsRowError { row: 1, ref message }
         if message.contains("invalid floor suggestion")
     ));
+}
+
+// --- Room continuity ---
+
+#[test]
+fn continuity_same_room() {
+    let (data, _) = parsing::parse_schedule(
+        &fixture("continuity_rooms.csv"),
+        &fixture("continuity_requests.csv"),
+        None,
+        Default::default(),
+    )
+    .unwrap();
+    let model = collomatique_constraints_rooms::build_model(&data);
+    let solver = ColloCbcSolver::with_disable_logging(true);
+    let solved = model.solve_checker(&solver).unwrap();
+    let config = solved.get_data();
+    let assignments = collomatique_constraints_rooms::extract_assignments(&data, &config);
+    assert_eq!(assignments.len(), 2);
+    assert_eq!(assignments[0].room, assignments[1].room);
+}
+
+#[test]
+fn continuity_isolated_feasible() {
+    assert_checker_feasible("continuity_rooms.csv", "continuity_isolated_requests.csv");
+}
+
+#[test]
+fn teacher_conflict_detected() {
+    let mut rooms = BTreeMap::new();
+    rooms.insert(nes("A101"), make_room(30));
+    let data = ScheduleData {
+        rooms,
+        requests: vec![
+            make_request(
+                chrono::Weekday::Mon,
+                10,
+                (true, false, true),
+                vec![],
+                vec![],
+                0,
+            ),
+            make_request(
+                chrono::Weekday::Mon,
+                10,
+                (false, false, true),
+                vec![],
+                vec![],
+                0,
+            ),
+        ],
+        incompats: vec![],
+        config: Config::default(),
+    };
+    let conflicts = data.teacher_continuity_conflicts();
+    assert_eq!(conflicts.len(), 1);
+    assert_eq!(conflicts[0].teacher, nes("Martin"));
+    assert_eq!(conflicts[0].hour, Hour::new(10).unwrap());
+    assert_eq!(conflicts[0].requests, vec![0, 1]);
+}
+
+#[test]
+fn teacher_conflict_no_overlap() {
+    let mut rooms = BTreeMap::new();
+    rooms.insert(nes("A101"), make_room(30));
+    let data = ScheduleData {
+        rooms,
+        requests: vec![
+            make_request(
+                chrono::Weekday::Mon,
+                10,
+                (true, false, false),
+                vec![],
+                vec![],
+                0,
+            ),
+            make_request(
+                chrono::Weekday::Mon,
+                10,
+                (false, false, true),
+                vec![],
+                vec![],
+                0,
+            ),
+        ],
+        incompats: vec![],
+        config: Config::default(),
+    };
+    let conflicts = data.teacher_continuity_conflicts();
+    assert!(conflicts.is_empty());
+}
+
+#[test]
+fn teacher_conflict_skipped_when_isolated() {
+    let mut rooms = BTreeMap::new();
+    rooms.insert(nes("A101"), make_room(30));
+    let mut req1 = make_request(
+        chrono::Weekday::Mon,
+        10,
+        (true, false, true),
+        vec![],
+        vec![],
+        0,
+    );
+    let req2 = make_request(
+        chrono::Weekday::Mon,
+        10,
+        (false, false, true),
+        vec![],
+        vec![],
+        0,
+    );
+    req1.skip_room_continuity = true;
+    let data = ScheduleData {
+        rooms,
+        requests: vec![req1, req2],
+        incompats: vec![],
+        config: Config::default(),
+    };
+    let conflicts = data.teacher_continuity_conflicts();
+    assert!(conflicts.is_empty());
 }
