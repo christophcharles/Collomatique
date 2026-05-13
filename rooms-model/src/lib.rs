@@ -193,23 +193,47 @@ pub struct DemandConflict {
     pub requests: Vec<(usize, DemandKind)>,
 }
 
+pub struct UnregisteredRooms<'a> {
+    pub suggested: Vec<&'a str>,
+    pub demanded: Vec<&'a str>,
+}
+
 impl ScheduleData {
-    pub fn unregistered_rooms(&self) -> Vec<&str> {
-        let mut unregistered: Vec<&str> = self
-            .requests
-            .iter()
-            .flat_map(|req| {
-                [req.room_preference.as_ref(), req.prep_preference.as_ref()]
-                    .into_iter()
-                    .flatten()
-            })
-            .map(|pref| AsRef::<str>::as_ref(pref.room_name()))
-            .filter(|name| !self.rooms.contains_key(*name))
-            .collect::<HashSet<&str>>()
-            .into_iter()
-            .collect();
-        unregistered.sort();
-        unregistered
+    pub fn unregistered_rooms(&self) -> UnregisteredRooms<'_> {
+        let mut suggested = HashSet::new();
+        let mut demanded = HashSet::new();
+
+        for req in &self.requests {
+            for pref in [req.room_preference.as_ref(), req.prep_preference.as_ref()]
+                .into_iter()
+                .flatten()
+            {
+                let name = AsRef::<str>::as_ref(pref.room_name());
+                if self.rooms.contains_key(name) {
+                    continue;
+                }
+                match pref {
+                    RoomPreference::Suggestion(_) => {
+                        suggested.insert(name);
+                    }
+                    RoomPreference::Demand(_) => {
+                        demanded.insert(name);
+                    }
+                }
+            }
+        }
+
+        let demanded = &demanded - &suggested;
+
+        let mut suggested: Vec<&str> = suggested.into_iter().collect();
+        let mut demanded: Vec<&str> = demanded.into_iter().collect();
+        suggested.sort();
+        demanded.sort();
+
+        UnregisteredRooms {
+            suggested,
+            demanded,
+        }
     }
 
     pub fn demand_conflicts(&self) -> Vec<DemandConflict> {

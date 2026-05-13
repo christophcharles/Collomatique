@@ -276,11 +276,13 @@ fn parse_schedule_valid() {
     .unwrap();
     assert_eq!(data.rooms.len(), 1);
     assert_eq!(data.requests.len(), 1);
-    assert!(data.unregistered_rooms().is_empty());
+    let unreg = data.unregistered_rooms();
+    assert!(unreg.suggested.is_empty());
+    assert!(unreg.demanded.is_empty());
 }
 
 #[test]
-fn unregistered_room_detected() {
+fn unregistered_suggested_room_detected() {
     let data = parsing::parse_schedule(
         &fixture("valid_rooms.csv"),
         &fixture("requests_unregistered_room.csv"),
@@ -288,7 +290,23 @@ fn unregistered_room_detected() {
         Default::default(),
     )
     .unwrap();
-    assert_eq!(data.unregistered_rooms(), vec!["Z999"]);
+    let unreg = data.unregistered_rooms();
+    assert_eq!(unreg.suggested, vec!["Z999"]);
+    assert!(unreg.demanded.is_empty());
+}
+
+#[test]
+fn unregistered_demanded_room_detected() {
+    let data = parsing::parse_schedule(
+        &fixture("valid_rooms.csv"),
+        &fixture("requests_unregistered_demanded_room.csv"),
+        None,
+        Default::default(),
+    )
+    .unwrap();
+    let unreg = data.unregistered_rooms();
+    assert!(unreg.suggested.is_empty());
+    assert_eq!(unreg.demanded, vec!["Z999"]);
 }
 
 // --- Incompats happy path ---

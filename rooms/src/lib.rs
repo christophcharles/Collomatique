@@ -24,14 +24,26 @@ pub fn run(
         data.requests.len(),
         data.incompats.len(),
     );
-    for name in data.unregistered_rooms() {
+    let unreg = data.unregistered_rooms();
+    for name in &unreg.demanded {
         eprintln!(
             "Warning: room \"{name}\" is not registered in the rooms file. \
              In case of double occupancy, we will not be able to find the closest available room."
         );
     }
+    for name in &unreg.suggested {
+        eprintln!(
+            "Error: room \"{name}\" is suggested but not registered in the rooms file. \
+             Cannot determine location for proximity matching."
+        );
+    }
     for conflict in data.demand_conflicts() {
         print_demand_conflict(&data, &conflict);
+    }
+    if !unreg.suggested.is_empty() {
+        return Err(ScheduleError::UnregisteredSuggestedRooms(
+            unreg.suggested.iter().map(|s| s.to_string()).collect(),
+        ));
     }
 
     eprintln!("Building ILP model...");

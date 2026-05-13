@@ -111,6 +111,16 @@ pub enum ScheduleError {
     IncompatsRowError { row: usize, message: String },
     #[error("In incompats file, row {row}: room \"{room}\" is not declared in the rooms file")]
     IncompatsUndeclaredRoom { row: usize, room: String },
+    #[error("{}", format_unregistered_suggested(.0))]
+    UnregisteredSuggestedRooms(Vec<String>),
+}
+
+fn format_unregistered_suggested(rooms: &[String]) -> String {
+    format!(
+        "Suggested room(s) not found in rooms file: {}. \
+         Use '!' prefix to demand a room, or register it in the rooms file.",
+        rooms.join(", ")
+    )
 }
 
 /// Parse a rooms CSV and a requests CSV into a [`ScheduleData`].
