@@ -3,7 +3,7 @@ use std::num::NonZeroU32;
 use std::path::Path;
 
 use collomatique_rooms_model::{
-    Config, Hour, Incompat, Periods, Request, Room, RoomPreference, ScheduleData, TimeZone, Window,
+    Config, Hour, Incompat, Periods, Request, Room, RoomPreference, ScheduleData, Window,
 };
 use collomatique_time::Weekday;
 use non_empty_string::NonEmptyString;
@@ -118,6 +118,7 @@ pub fn parse_schedule(
     rooms_path: &Path,
     requests_path: &Path,
     incompats_path: Option<&Path>,
+    config: Config,
 ) -> Result<ScheduleData, ScheduleError> {
     let rooms = parse_rooms(rooms_path)?;
     let requests = parse_requests(requests_path)?;
@@ -134,25 +135,6 @@ pub fn parse_schedule(
             });
         }
     }
-
-    let config = Config {
-        oral_exam_periods: Periods {
-            p1: false,
-            p2: false,
-            p3: true,
-        },
-        enforce_period_exhaustions: Periods {
-            p1: false,
-            p2: false,
-            p3: false,
-        },
-        time_zones: vec![
-            TimeZone::new(Hour::new(8).unwrap(), Hour::new(9).unwrap()).unwrap(),
-            TimeZone::new(Hour::new(10).unwrap(), Hour::new(15).unwrap()).unwrap(),
-            TimeZone::new(Hour::new(16).unwrap(), Hour::new(19).unwrap()).unwrap(),
-        ],
-        max_priority: None,
-    };
 
     Ok(ScheduleData {
         rooms,

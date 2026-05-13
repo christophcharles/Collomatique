@@ -14,8 +14,9 @@ pub fn run(
     requests: &Path,
     incompats: Option<&Path>,
     checker_only: bool,
+    config: Config,
 ) -> Result<(), ScheduleError> {
-    let data = parsing::parse_schedule(rooms, requests, incompats)?;
+    let data = parsing::parse_schedule(rooms, requests, incompats, config)?;
     eprintln!(
         "Parsed {} rooms, {} requests, and {} incompatibilities",
         data.rooms.len(),

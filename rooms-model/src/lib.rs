@@ -106,6 +106,29 @@ pub struct Config {
     pub max_priority: Option<u32>,
 }
 
+impl Default for Config {
+    fn default() -> Self {
+        Config {
+            oral_exam_periods: Periods {
+                p1: false,
+                p2: false,
+                p3: true,
+            },
+            enforce_period_exhaustions: Periods {
+                p1: false,
+                p2: false,
+                p3: false,
+            },
+            time_zones: vec![
+                TimeZone::new(Hour::new(8).unwrap(), Hour::new(9).unwrap()).unwrap(),
+                TimeZone::new(Hour::new(10).unwrap(), Hour::new(15).unwrap()).unwrap(),
+                TimeZone::new(Hour::new(16).unwrap(), Hour::new(19).unwrap()).unwrap(),
+            ],
+            max_priority: None,
+        }
+    }
+}
+
 /// A room incompatibility: the room is unavailable at this day/hour for the given periods.
 #[derive(Debug, Clone)]
 pub struct Incompat {

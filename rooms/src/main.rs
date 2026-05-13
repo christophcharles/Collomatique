@@ -26,6 +26,7 @@ fn main() -> Result<(), anyhow::Error> {
         &args.requests,
         args.incompats.as_deref(),
         args.checker_only,
+        Default::default(),
     )?;
     Ok(())
 }

@@ -20,7 +20,13 @@ fn fixture(name: &str) -> PathBuf {
 }
 
 fn run(rooms: &str, requests: &str) -> Result<(), ScheduleError> {
-    collomatique_rooms::run(&fixture(rooms), &fixture(requests), None, false)
+    collomatique_rooms::run(
+        &fixture(rooms),
+        &fixture(requests),
+        None,
+        false,
+        Default::default(),
+    )
 }
 
 fn run_with_incompats(rooms: &str, requests: &str, incompats: &str) -> Result<(), ScheduleError> {
@@ -29,6 +35,7 @@ fn run_with_incompats(rooms: &str, requests: &str, incompats: &str) -> Result<()
         &fixture(requests),
         Some(&fixture(incompats)),
         false,
+        Default::default(),
     )
 }
 
@@ -262,6 +269,7 @@ fn parse_schedule_valid() {
         &fixture("valid_rooms.csv"),
         &fixture("valid_requests.csv"),
         None,
+        Default::default(),
     )
     .unwrap();
     assert_eq!(data.rooms.len(), 1);
@@ -275,6 +283,7 @@ fn unregistered_room_detected() {
         &fixture("valid_rooms.csv"),
         &fixture("requests_unregistered_room.csv"),
         None,
+        Default::default(),
     )
     .unwrap();
     assert_eq!(data.unregistered_rooms(), vec!["Z999"]);
@@ -301,6 +310,7 @@ fn parse_schedule_with_incompats() {
         &fixture("valid_rooms.csv"),
         &fixture("valid_requests.csv"),
         Some(&fixture("valid_incompats.csv")),
+        Default::default(),
     )
     .unwrap();
     assert_eq!(data.incompats.len(), 1);
@@ -401,23 +411,6 @@ fn incompats_undeclared_room() {
 
 // --- Demand conflict detection ---
 
-fn default_config() -> Config {
-    Config {
-        oral_exam_periods: Periods {
-            p1: false,
-            p2: false,
-            p3: false,
-        },
-        enforce_period_exhaustions: Periods {
-            p1: false,
-            p2: false,
-            p3: false,
-        },
-        time_zones: vec![],
-        max_priority: None,
-    }
-}
-
 fn make_room(capacity: u32) -> Room {
     Room {
         floor: 0,
@@ -486,7 +479,7 @@ fn demand_no_conflict_non_overlapping_periods() {
             ),
         ],
         incompats: vec![],
-        config: default_config(),
+        config: Config::default(),
     };
     assert!(data.demand_conflicts().is_empty());
 }
@@ -516,7 +509,7 @@ fn demand_interro_interro_conflict() {
             ),
         ],
         incompats: vec![],
-        config: default_config(),
+        config: Config::default(),
     };
     let conflicts = data.demand_conflicts();
     assert_eq!(conflicts.len(), 1);
@@ -554,7 +547,7 @@ fn demand_interro_prep_conflict() {
             ),
         ],
         incompats: vec![],
-        config: default_config(),
+        config: Config::default(),
     };
     let conflicts = data.demand_conflicts();
     assert_eq!(conflicts.len(), 1);
@@ -588,7 +581,7 @@ fn demand_prep_prep_over_capacity() {
             ),
         ],
         incompats: vec![],
-        config: default_config(),
+        config: Config::default(),
     };
     let conflicts = data.demand_conflicts();
     assert_eq!(conflicts.len(), 1);
@@ -626,7 +619,7 @@ fn demand_prep_prep_fits() {
             ),
         ],
         incompats: vec![],
-        config: default_config(),
+        config: Config::default(),
     };
     assert!(data.demand_conflicts().is_empty());
 }
@@ -654,7 +647,7 @@ fn demand_prep_prep_unlisted_room() {
             ),
         ],
         incompats: vec![],
-        config: default_config(),
+        config: Config::default(),
     };
     let conflicts = data.demand_conflicts();
     assert_eq!(conflicts.len(), 1);
@@ -689,13 +682,19 @@ fn demand_suggestions_ignored() {
             ),
         ],
         incompats: vec![],
-        config: default_config(),
+        config: Config::default(),
     };
     assert!(data.demand_conflicts().is_empty());
 }
 
 fn assert_checker_feasible(rooms: &str, requests: &str) {
-    let data = parsing::parse_schedule(&fixture(rooms), &fixture(requests), None).unwrap();
+    let data = parsing::parse_schedule(
+        &fixture(rooms),
+        &fixture(requests),
+        None,
+        Default::default(),
+    )
+    .unwrap();
     let model = collomatique_constraints_rooms::build_model(&data);
     let solver = ColloCbcSolver::with_disable_logging(true);
     assert!(
