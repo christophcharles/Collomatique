@@ -459,24 +459,24 @@ where
     /// The callback receives the problem and should return
     /// the solver's result. This allows customizing the solving
     /// strategy (e.g., time limits).
-    pub fn solve_with(
-        &self,
+    pub fn solve_with<'a>(
+        &'a self,
         f: impl FnOnce(
-            &Problem<InternalVar<B, E>, ConstraintSource<E, C>, DefaultRepr<InternalVar<B, E>>>,
+            &'a Problem<InternalVar<B, E>, ConstraintSource<E, C>, DefaultRepr<InternalVar<B, E>>>,
         ) -> Option<
             FeasibleConfig<
-                '_,
+                'a,
                 InternalVar<B, E>,
                 ConstraintSource<E, C>,
                 DefaultRepr<InternalVar<B, E>>,
             >,
         >,
-    ) -> Option<FeasibleSolution<'_, B, E, C>> {
+    ) -> Option<FeasibleSolution<'a, B, E, C>> {
         f(&self.problem).map(|feasible_config| FeasibleSolution { feasible_config })
     }
 
     /// Solve the full optimization problem.
-    pub fn solve<S>(&self, solver: &S) -> Option<FeasibleSolution<'_, B, E, C>>
+    pub fn solve<'a, S>(&'a self, solver: &S) -> Option<FeasibleSolution<'a, B, E, C>>
     where
         S: Solver<InternalVar<B, E>, ConstraintSource<E, C>, DefaultRepr<InternalVar<B, E>>>,
     {
@@ -484,24 +484,24 @@ where
     }
 
     /// Solve the checker problem (feasibility only) using a callback.
-    pub fn solve_checker_with(
-        &self,
+    pub fn solve_checker_with<'a>(
+        &'a self,
         f: impl FnOnce(
-            &Problem<InternalVar<B, E>, ConstraintSource<E, C>, DefaultRepr<InternalVar<B, E>>>,
+            &'a Problem<InternalVar<B, E>, ConstraintSource<E, C>, DefaultRepr<InternalVar<B, E>>>,
         ) -> Option<
             FeasibleConfig<
-                '_,
+                'a,
                 InternalVar<B, E>,
                 ConstraintSource<E, C>,
                 DefaultRepr<InternalVar<B, E>>,
             >,
         >,
-    ) -> Option<FeasibleSolution<'_, B, E, C>> {
+    ) -> Option<FeasibleSolution<'a, B, E, C>> {
         f(&self.checker_problem).map(|feasible_config| FeasibleSolution { feasible_config })
     }
 
     /// Solve the checker problem (feasibility only, no objective optimization).
-    pub fn solve_checker<S>(&self, solver: &S) -> Option<FeasibleSolution<'_, B, E, C>>
+    pub fn solve_checker<'a, S>(&'a self, solver: &S) -> Option<FeasibleSolution<'a, B, E, C>>
     where
         S: Solver<InternalVar<B, E>, ConstraintSource<E, C>, DefaultRepr<InternalVar<B, E>>>,
     {

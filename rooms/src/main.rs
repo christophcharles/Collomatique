@@ -17,6 +17,10 @@ struct Args {
     /// Solve only feasibility (no objective optimization)
     #[arg(long)]
     checker_only: bool,
+
+    /// Solver timeout in minutes (0 = no timeout)
+    #[arg(long, default_value_t = 10)]
+    timeout: u32,
 }
 
 fn main() -> Result<(), anyhow::Error> {
@@ -27,6 +31,7 @@ fn main() -> Result<(), anyhow::Error> {
         args.incompats.as_deref(),
         args.checker_only,
         Default::default(),
+        args.timeout,
     )?;
     Ok(())
 }

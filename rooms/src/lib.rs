@@ -15,6 +15,7 @@ pub fn run(
     incompats: Option<&Path>,
     checker_only: bool,
     config: Config,
+    timeout_minutes: u32,
 ) -> Result<(), ScheduleError> {
     let data = parsing::parse_schedule(rooms, requests, incompats, config)?;
     eprintln!(
@@ -49,10 +50,30 @@ pub fn run(
         eprintln!("Solving...");
     }
     let solver = collomatique_ilp::solvers::collo_cbc::ColloCbcSolver::with_disable_logging(false);
-    let solved = if checker_only {
-        model.solve_checker(&solver).map(|s| s.get_data())
+    let solved = if timeout_minutes == 0 {
+        if checker_only {
+            model.solve_checker(&solver).map(|s| s.get_data())
+        } else {
+            model.solve(&solver).map(|s| s.get_data())
+        }
     } else {
-        model.solve(&solver).map(|s| s.get_data())
+        use collomatique_ilp::solvers::{Solver, TimeLimitSolverModel};
+        let solve_with_timeout = move |pb| {
+            let result = solver
+                .build_model(pb)
+                .solve_with_time_limit(timeout_minutes * 60);
+            if result.time_limit_reached {
+                eprintln!("Warning: solver time limit ({timeout_minutes} min) reached.");
+            }
+            result.config
+        };
+        if checker_only {
+            model
+                .solve_checker_with(solve_with_timeout)
+                .map(|s| s.get_data())
+        } else {
+            model.solve_with(solve_with_timeout).map(|s| s.get_data())
+        }
     };
     match solved {
         Some(config) => {

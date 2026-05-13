@@ -26,6 +26,7 @@ fn run(rooms: &str, requests: &str) -> Result<(), ScheduleError> {
         None,
         false,
         Default::default(),
+        0,
     )
 }
 
@@ -36,6 +37,7 @@ fn run_with_incompats(rooms: &str, requests: &str, incompats: &str) -> Result<()
         Some(&fixture(incompats)),
         false,
         Default::default(),
+        0,
     )
 }
 
