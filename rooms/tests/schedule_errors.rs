@@ -8,7 +8,7 @@ use collomatique_rooms::ScheduleError;
 use collomatique_rooms::parsing;
 use collomatique_rooms::{
     Config, DemandConflictKind, DemandKind, Hour, InterrogationRoomPreference, Periods,
-    PrepRoomPreference, Request, Room, ScheduleData, Window,
+    PrepRoomPreference, Request, Room, RoomPreferenceWarning, ScheduleData, Window,
 };
 use collomatique_time::Weekday;
 use non_empty_string::NonEmptyString;
@@ -925,10 +925,43 @@ fn parse_requests_redundant_merge() {
         vec![PrepRoomPreference::Demand(nes("B302"))]
     );
     assert_eq!(warnings.len(), 2);
-    assert_eq!(warnings[0].column, "Salle");
-    assert_eq!(warnings[0].room, "A101");
-    assert_eq!(warnings[0].merged_result, "!A101+");
-    assert_eq!(warnings[1].column, "Prep");
-    assert_eq!(warnings[1].room, "B302");
-    assert_eq!(warnings[1].merged_result, "!B302");
+    assert!(matches!(
+        &warnings[0],
+        RoomPreferenceWarning::Redundancy {
+            column: "Salle",
+            room,
+            merged_result,
+            ..
+        } if room == "A101" && merged_result == "!A101+"
+    ));
+    assert!(matches!(
+        &warnings[1],
+        RoomPreferenceWarning::Redundancy {
+            column: "Prep",
+            room,
+            merged_result,
+            ..
+        } if room == "B302" && merged_result == "!B302"
+    ));
+}
+
+#[test]
+fn parse_requests_interro_prep_no_sharing_warning() {
+    let (requests, warnings) =
+        parsing::parse_requests(&fixture("requests_interro_prep_no_sharing.csv")).unwrap();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(warnings.len(), 1);
+    assert!(matches!(
+        &warnings[0],
+        RoomPreferenceWarning::InterrogationAndPrepWithoutSharing { row: 1, room }
+        if room == "A101"
+    ));
+}
+
+#[test]
+fn parse_requests_interro_prep_with_sharing_no_warning() {
+    let (requests, warnings) =
+        parsing::parse_requests(&fixture("requests_interro_prep_with_sharing.csv")).unwrap();
+    assert_eq!(requests.len(), 1);
+    assert!(warnings.is_empty());
 }

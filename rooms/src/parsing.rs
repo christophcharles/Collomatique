@@ -316,6 +316,18 @@ pub fn parse_requests(
         all_warnings.extend(room_warnings);
         all_warnings.extend(prep_warnings);
 
+        for prep in &prep_preference {
+            let prep_name = prep.room_name();
+            if let Some(interro) = room_preference.iter().find(|p| p.room_name() == prep_name) {
+                if !interro.can_share_with_prep() {
+                    all_warnings.push(RoomPreferenceWarning::InterrogationAndPrepWithoutSharing {
+                        row,
+                        room: (prep_name.as_ref() as &str).to_string(),
+                    });
+                }
+            }
+        }
+
         requests.push(Request {
             periods: Periods { p1, p2, p3 },
             day,
@@ -592,12 +604,18 @@ fn format_prep_pref(pref: &PrepRoomPreference) -> String {
 }
 
 #[derive(Debug, Clone)]
-pub struct RoomPreferenceWarning {
-    pub row: usize,
-    pub column: &'static str,
-    pub room: String,
-    pub original_entries: Vec<String>,
-    pub merged_result: String,
+pub enum RoomPreferenceWarning {
+    Redundancy {
+        row: usize,
+        column: &'static str,
+        room: String,
+        original_entries: Vec<String>,
+        merged_result: String,
+    },
+    InterrogationAndPrepWithoutSharing {
+        row: usize,
+        room: String,
+    },
 }
 
 fn parse_interrogation_room_preferences(
@@ -646,7 +664,7 @@ fn parse_interrogation_room_preferences(
         };
 
         if entries.len() > 1 {
-            warnings.push(RoomPreferenceWarning {
+            warnings.push(RoomPreferenceWarning::Redundancy {
                 row,
                 column: "Salle",
                 room: room_name.to_string(),
@@ -703,7 +721,7 @@ fn parse_prep_room_preferences(
         };
 
         if entries.len() > 1 {
-            warnings.push(RoomPreferenceWarning {
+            warnings.push(RoomPreferenceWarning::Redundancy {
                 row,
                 column: "Prep",
                 room: room_name.to_string(),

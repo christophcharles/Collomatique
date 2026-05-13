@@ -26,14 +26,27 @@ pub fn run(
         data.incompats.len(),
     );
     for w in &pref_warnings {
-        eprintln!(
-            "Warning: request row {}, column \"{}\": room \"{}\" specified multiple times ({}), merged to {}",
-            w.row,
-            w.column,
-            w.room,
-            w.original_entries.join(", "),
-            w.merged_result,
-        );
+        match w {
+            RoomPreferenceWarning::Redundancy {
+                row,
+                column,
+                room,
+                original_entries,
+                merged_result,
+            } => {
+                eprintln!(
+                    "Warning: request row {row}, column \"{column}\": room \"{room}\" \
+                     specified multiple times ({entries}), merged to {merged_result}",
+                    entries = original_entries.join(", "),
+                );
+            }
+            RoomPreferenceWarning::InterrogationAndPrepWithoutSharing { row, room } => {
+                eprintln!(
+                    "Warning: request row {row}: room \"{room}\" appears in both Salle and Prep \
+                     but is not marked for sharing (+). Did you mean to add + to enable sharing?",
+                );
+            }
+        }
     }
     let unreg = data.unregistered_rooms();
     for name in &unreg.demanded {
