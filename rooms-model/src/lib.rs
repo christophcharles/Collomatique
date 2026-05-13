@@ -217,6 +217,7 @@ pub struct Request {
 pub struct ScheduleData {
     pub rooms: BTreeMap<NonEmptyString, Room>,
     pub requests: Vec<Request>,
+    pub raw_request_rows: Vec<Vec<String>>,
     pub incompats: Vec<Incompat>,
     pub config: Config,
 }

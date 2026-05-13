@@ -2,7 +2,7 @@
 
 The requests CSV file describes the scheduling requests to fill. See [ROOMS_SPEC.md](ROOMS_SPEC.md) for the rooms CSV specification.
 
-The file must be UTF-8 encoded, comma-delimited, with a header row. Columns must appear in the exact order listed below. No extra columns are allowed.
+The file must be UTF-8 encoded, comma-delimited, with a header row. Columns must appear in the exact order listed below. Beyond the 16 base columns, two optional solution columns (`SolSalle`, `SolPrep`) may be appended. No other extra columns are allowed.
 
 ## Requests CSV
 
@@ -26,6 +26,10 @@ Each row describes one interrogation slot that needs a room assigned to it.
 | 14 | Salle | string or empty | Room preference(s) for the interrogation. If empty, no preference. Multiple preferences can be separated by semicolons (e.g. `A101;!B302`). Each preference is parsed independently. Positive prefixes: a plain room name (e.g. `A101`) is a suggestion, `!` (e.g. `!A101`) is a demand. The `+` suffix (e.g. `A101+` or `!A101+`) enables prep sharing: when the solver assigns this interrogation to the named room, prep students from other requests may share the room (capacity permitting). Negative prefixes: `-` (e.g. `-A101`) is an avoidance (solver tries to avoid this room), `~` (e.g. `~A101`) is an exclusion (solver never assigns this room). The `+` suffix is not supported on negative preferences. A floor suggestion `=N` (e.g. `=2`) indicates a soft preference for any room on floor N. Floor suggestions can be combined with room preferences (e.g. `A101;=2` means "prefer room A101, otherwise any room on floor 2"). Multiple floor suggestions are allowed (e.g. `=2;=3`). A room cannot appear with both positive and negative preferences in the same request (this is a fatal error). If the same room appears multiple times with the same polarity, they are merged: demand wins over suggestion, exclusion wins over avoidance, sharing wins over no sharing (a warning is emitted). Unregistered room names in positive preferences are allowed but will trigger a warning: closest-room resolution will not be available in case of double occupancy. To avoid warnings, list the room in the rooms CSV with Priorité = -1. |
 | 15 | Prep | string or empty | Prep room preference(s). Multiple preferences can be separated by semicolons. Same semantics as the Salle column (except the `+` suffix is not supported). If the same room appears multiple times, demand wins over suggestion. |
 | 16 | Isolé | 0 or 1 | Whether this request is isolated from room continuity checks. 0 = the solver enforces that consecutive requests by the same teacher within a time zone get the same interrogation room. 1 = this request is excluded from that constraint (and from the teacher conflict check). |
+| 17 | SolSalle | string or empty | *(Optional)* Assigned interrogation room from a previous solver run. When present, this column is read but does not influence the solver. The solver's output CSV always includes this column with the solution value. |
+| 18 | SolPrep | string or empty | *(Optional)* Assigned prep room from a previous solver run. Can only be present if SolSalle is also present. When present, this column is read but does not influence the solver. The solver's output CSV always includes this column with the solution value. |
+
+Valid column counts: 16 (base only), 17 (base + SolSalle), or 18 (base + SolSalle + SolPrep). Having SolPrep without SolSalle is an error.
 
 ### Example
 
@@ -33,6 +37,14 @@ Each row describes one interrogation slot that needs a room assigned to it.
 P1,P2,P3,Jour,Heure,Discipline,Classes,Responsable,Colleur,Tableaux,Fenêtre,Nb élèves,Nb prep,Salle,Prep,Isolé
 1,0,1,Lundi,8,Mathématiques,MP;PC,Dupont,Martin,1,0,3,2,A101;=1,,0
 0,1,1,Mardi,14,Physique;Chimie,BCPST 1;BCPST 2,Durand,Bernard,2,1,5,0,!B203,,0
+```
+
+With solution columns:
+
+```csv
+P1,P2,P3,Jour,Heure,Discipline,Classes,Responsable,Colleur,Tableaux,Fenêtre,Nb élèves,Nb prep,Salle,Prep,Isolé,SolSalle,SolPrep
+1,0,1,Lundi,8,Mathématiques,MP;PC,Dupont,Martin,1,0,3,2,A101;=1,,0,A101,C205
+0,1,1,Mardi,14,Physique;Chimie,BCPST 1;BCPST 2,Durand,Bernard,2,1,5,0,!B203,,0,B203,
 ```
 
 ## Allowed subject names

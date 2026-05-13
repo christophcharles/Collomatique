@@ -24,7 +24,7 @@ const ROOMS_COLUMNS: &[&str] = &[
     "Réservée",
 ];
 
-const REQUESTS_COLUMNS: &[&str] = &[
+pub(crate) const REQUESTS_COLUMNS: &[&str] = &[
     "P1",
     "P2",
     "P3",
@@ -164,7 +164,7 @@ pub fn parse_schedule(
     config: Config,
 ) -> Result<(ScheduleData, Vec<RoomPreferenceWarning>), ScheduleError> {
     let rooms = parse_rooms(rooms_path)?;
-    let (requests, warnings) = parse_requests(requests_path)?;
+    let (requests, raw_request_rows, warnings) = parse_requests(requests_path)?;
     let incompats = match incompats_path {
         Some(path) => parse_incompats(path)?,
         None => Vec::new(),
@@ -183,6 +183,7 @@ pub fn parse_schedule(
         ScheduleData {
             rooms,
             requests,
+            raw_request_rows,
             incompats,
             config,
         },
@@ -260,31 +261,37 @@ pub fn parse_rooms(path: &Path) -> Result<BTreeMap<NonEmptyString, Room>, Schedu
 /// Parse a requests CSV file.
 pub fn parse_requests(
     path: &Path,
-) -> Result<(Vec<Request>, Vec<RoomPreferenceWarning>), ScheduleError> {
+) -> Result<(Vec<Request>, Vec<Vec<String>>, Vec<RoomPreferenceWarning>), ScheduleError> {
     let mut reader = csv::ReaderBuilder::new()
         .has_headers(true)
         .flexible(true)
         .from_path(path)?;
     let headers = reader.headers()?.clone();
-    validate_headers(&headers, REQUESTS_COLUMNS, "requests")?;
+    let expected_columns = validate_requests_headers(&headers)?;
 
     let mut requests = Vec::new();
+    let mut raw_rows = Vec::new();
     let mut all_warnings = Vec::new();
 
     for (idx, result) in reader.records().enumerate() {
         let record = result?;
         let row = idx + 1;
 
-        if record.len() != REQUESTS_COLUMNS.len() {
+        if record.len() != expected_columns {
             return Err(ScheduleError::RequestsRowError {
                 row,
                 message: format!(
                     "expected {} columns, got {}",
-                    REQUESTS_COLUMNS.len(),
+                    expected_columns,
                     record.len()
                 ),
             });
         }
+
+        let raw_row: Vec<String> = (0..REQUESTS_COLUMNS.len())
+            .map(|i| record.get(i).unwrap_or("").to_string())
+            .collect();
+        raw_rows.push(raw_row);
 
         let p1 = parse_bool_field(&record, 0, row, "requests", "P1")?;
         let p2 = parse_bool_field(&record, 1, row, "requests", "P2")?;
@@ -401,7 +408,7 @@ pub fn parse_requests(
         });
     }
 
-    Ok((requests, all_warnings))
+    Ok((requests, raw_rows, all_warnings))
 }
 
 fn validate_headers(
@@ -434,6 +441,37 @@ fn validate_headers(
         });
     }
     Ok(())
+}
+
+fn validate_requests_headers(headers: &csv::StringRecord) -> Result<usize, ScheduleError> {
+    for (i, &col) in REQUESTS_COLUMNS.iter().enumerate() {
+        match headers.get(i) {
+            Some(h) if h.trim() == col => {}
+            _ => return Err(ScheduleError::RequestsMissingColumn(col.to_string())),
+        }
+    }
+    let extra = headers.len() - REQUESTS_COLUMNS.len();
+    match extra {
+        0 => Ok(REQUESTS_COLUMNS.len()),
+        1 | 2 => {
+            let col16 = headers.get(REQUESTS_COLUMNS.len()).unwrap_or("").trim();
+            if col16 != "SolSalle" {
+                return Err(ScheduleError::RequestsUnknownColumn(col16.to_string()));
+            }
+            if extra == 2 {
+                let col17 = headers.get(REQUESTS_COLUMNS.len() + 1).unwrap_or("").trim();
+                if col17 != "SolPrep" {
+                    return Err(ScheduleError::RequestsUnknownColumn(col17.to_string()));
+                }
+            }
+            Ok(REQUESTS_COLUMNS.len() + extra)
+        }
+        _ => {
+            let first_bad = REQUESTS_COLUMNS.len() + 2;
+            let name = headers.get(first_bad).unwrap_or("").trim().to_string();
+            Err(ScheduleError::RequestsUnknownColumn(name))
+        }
+    }
 }
 
 fn parse_field<T: std::str::FromStr>(

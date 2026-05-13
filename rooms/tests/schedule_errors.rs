@@ -232,7 +232,7 @@ fn rooms_reserved() {
 
 #[test]
 fn parse_requests_valid() {
-    let (requests, _) = parsing::parse_requests(&fixture("valid_requests.csv")).unwrap();
+    let (requests, _, _) = parsing::parse_requests(&fixture("valid_requests.csv")).unwrap();
     assert_eq!(requests.len(), 1);
     let r = &requests[0];
     assert!(r.periods.p1);
@@ -260,7 +260,7 @@ fn parse_requests_valid() {
 
 #[test]
 fn parse_requests_room_demand() {
-    let (requests, _) = parsing::parse_requests(&fixture("requests_room_demand.csv")).unwrap();
+    let (requests, _, _) = parsing::parse_requests(&fixture("requests_room_demand.csv")).unwrap();
     assert_eq!(requests.len(), 1);
     assert_eq!(
         requests[0].room_preference,
@@ -512,6 +512,7 @@ fn demand_no_conflict_non_overlapping_periods() {
                 0,
             ),
         ],
+        raw_request_rows: vec![],
         incompats: vec![],
         config: Config::default(),
     };
@@ -548,6 +549,7 @@ fn demand_interro_interro_conflict() {
                 0,
             ),
         ],
+        raw_request_rows: vec![],
         incompats: vec![],
         config: Config::default(),
     };
@@ -589,6 +591,7 @@ fn demand_interro_prep_conflict() {
                 5,
             ),
         ],
+        raw_request_rows: vec![],
         incompats: vec![],
         config: Config::default(),
     };
@@ -628,6 +631,7 @@ fn demand_prep_prep_over_capacity() {
                 7,
             ),
         ],
+        raw_request_rows: vec![],
         incompats: vec![],
         config: Config::default(),
     };
@@ -666,6 +670,7 @@ fn demand_prep_prep_fits() {
                 7,
             ),
         ],
+        raw_request_rows: vec![],
         incompats: vec![],
         config: Config::default(),
     };
@@ -694,6 +699,7 @@ fn demand_prep_prep_unlisted_room() {
                 4,
             ),
         ],
+        raw_request_rows: vec![],
         incompats: vec![],
         config: Config::default(),
     };
@@ -735,6 +741,7 @@ fn demand_suggestions_ignored() {
                 0,
             ),
         ],
+        raw_request_rows: vec![],
         incompats: vec![],
         config: Config::default(),
     };
@@ -807,7 +814,7 @@ fn priority_global_feasible() {
 
 #[test]
 fn parse_requests_suggestion_sharing() {
-    let (requests, _) =
+    let (requests, _, _) =
         parsing::parse_requests(&fixture("requests_room_suggestion_sharing.csv")).unwrap();
     assert_eq!(requests.len(), 1);
     assert_eq!(
@@ -821,7 +828,7 @@ fn parse_requests_suggestion_sharing() {
 
 #[test]
 fn parse_requests_demand_sharing() {
-    let (requests, _) =
+    let (requests, _, _) =
         parsing::parse_requests(&fixture("requests_room_demand_sharing.csv")).unwrap();
     assert_eq!(requests.len(), 1);
     assert_eq!(
@@ -865,6 +872,7 @@ fn demand_interro_prep_conflict_with_sharing() {
                 5,
             ),
         ],
+        raw_request_rows: vec![],
         incompats: vec![],
         config: Config::default(),
     };
@@ -882,7 +890,7 @@ fn demand_interro_prep_conflict_with_sharing() {
 
 #[test]
 fn parse_requests_multi_room() {
-    let (requests, warnings) =
+    let (requests, _, warnings) =
         parsing::parse_requests(&fixture("requests_multi_room.csv")).unwrap();
     assert_eq!(requests.len(), 1);
     assert!(warnings.is_empty());
@@ -911,7 +919,7 @@ fn parse_requests_multi_room() {
 
 #[test]
 fn parse_requests_redundant_merge() {
-    let (requests, warnings) =
+    let (requests, _, warnings) =
         parsing::parse_requests(&fixture("requests_redundant_room.csv")).unwrap();
     assert_eq!(requests.len(), 1);
     let r = &requests[0];
@@ -949,7 +957,7 @@ fn parse_requests_redundant_merge() {
 
 #[test]
 fn parse_requests_interro_prep_no_sharing_warning() {
-    let (requests, warnings) =
+    let (requests, _, warnings) =
         parsing::parse_requests(&fixture("requests_interro_prep_no_sharing.csv")).unwrap();
     assert_eq!(requests.len(), 1);
     assert_eq!(warnings.len(), 1);
@@ -962,7 +970,7 @@ fn parse_requests_interro_prep_no_sharing_warning() {
 
 #[test]
 fn parse_requests_interro_prep_with_sharing_no_warning() {
-    let (requests, warnings) =
+    let (requests, _, warnings) =
         parsing::parse_requests(&fixture("requests_interro_prep_with_sharing.csv")).unwrap();
     assert_eq!(requests.len(), 1);
     assert!(warnings.is_empty());
@@ -972,7 +980,8 @@ fn parse_requests_interro_prep_with_sharing_no_warning() {
 
 #[test]
 fn parse_requests_avoidance() {
-    let (requests, warnings) = parsing::parse_requests(&fixture("requests_avoidance.csv")).unwrap();
+    let (requests, _, warnings) =
+        parsing::parse_requests(&fixture("requests_avoidance.csv")).unwrap();
     assert_eq!(requests.len(), 1);
     assert!(warnings.is_empty());
     assert_eq!(
@@ -983,7 +992,8 @@ fn parse_requests_avoidance() {
 
 #[test]
 fn parse_requests_exclusion() {
-    let (requests, warnings) = parsing::parse_requests(&fixture("requests_exclusion.csv")).unwrap();
+    let (requests, _, warnings) =
+        parsing::parse_requests(&fixture("requests_exclusion.csv")).unwrap();
     assert_eq!(requests.len(), 1);
     assert!(warnings.is_empty());
     assert_eq!(
@@ -994,7 +1004,7 @@ fn parse_requests_exclusion() {
 
 #[test]
 fn parse_requests_conflicting_prefs() {
-    let (requests, warnings) =
+    let (requests, _, warnings) =
         parsing::parse_requests(&fixture("requests_conflicting_prefs.csv")).unwrap();
     assert_eq!(requests.len(), 1);
     assert!(requests[0].room_preference.is_empty());
@@ -1011,7 +1021,7 @@ fn parse_requests_conflicting_prefs() {
 
 #[test]
 fn parse_requests_negative_merge() {
-    let (requests, warnings) =
+    let (requests, _, warnings) =
         parsing::parse_requests(&fixture("requests_negative_merge.csv")).unwrap();
     assert_eq!(requests.len(), 1);
     assert_eq!(
@@ -1061,7 +1071,7 @@ fn exclusion_constraint_assigns_other_room() {
 
 #[test]
 fn parse_requests_multi_subject() {
-    let (requests, _) = parsing::parse_requests(&fixture("requests_multi_subject.csv")).unwrap();
+    let (requests, _, _) = parsing::parse_requests(&fixture("requests_multi_subject.csv")).unwrap();
     assert_eq!(requests.len(), 1);
     let r = &requests[0];
     assert_eq!(r.subjects, vec![nes("Physique"), nes("Chimie")]);
@@ -1069,7 +1079,8 @@ fn parse_requests_multi_subject() {
 
 #[test]
 fn parse_requests_floor_suggestion_with_room() {
-    let (requests, _) = parsing::parse_requests(&fixture("requests_floor_suggestion.csv")).unwrap();
+    let (requests, _, _) =
+        parsing::parse_requests(&fixture("requests_floor_suggestion.csv")).unwrap();
     assert_eq!(requests.len(), 1);
     let r = &requests[0];
     assert_eq!(
@@ -1084,7 +1095,7 @@ fn parse_requests_floor_suggestion_with_room() {
 
 #[test]
 fn parse_requests_floor_only() {
-    let (requests, _) = parsing::parse_requests(&fixture("requests_floor_only.csv")).unwrap();
+    let (requests, _, _) = parsing::parse_requests(&fixture("requests_floor_only.csv")).unwrap();
     assert_eq!(requests.len(), 1);
     let r = &requests[0];
     assert!(r.room_preference.is_empty());
@@ -1093,7 +1104,8 @@ fn parse_requests_floor_only() {
 
 #[test]
 fn parse_requests_floor_multiple() {
-    let (requests, _) = parsing::parse_requests(&fixture("requests_floor_multiple.csv")).unwrap();
+    let (requests, _, _) =
+        parsing::parse_requests(&fixture("requests_floor_multiple.csv")).unwrap();
     assert_eq!(requests.len(), 1);
     let r = &requests[0];
     assert_eq!(r.floor_suggestions, vec![2, 3]);
@@ -1168,6 +1180,7 @@ fn teacher_conflict_detected() {
                 0,
             ),
         ],
+        raw_request_rows: vec![],
         incompats: vec![],
         config: Config::default(),
     };
@@ -1202,6 +1215,7 @@ fn teacher_conflict_no_overlap() {
                 0,
             ),
         ],
+        raw_request_rows: vec![],
         incompats: vec![],
         config: Config::default(),
     };
@@ -1233,9 +1247,53 @@ fn teacher_conflict_skipped_when_isolated() {
     let data = ScheduleData {
         rooms,
         requests: vec![req1, req2],
+        raw_request_rows: vec![],
         incompats: vec![],
         config: Config::default(),
     };
     let conflicts = data.teacher_continuity_conflicts();
     assert!(conflicts.is_empty());
+}
+
+// --- Optional SolSalle / SolPrep columns ---
+
+#[test]
+fn parse_requests_with_solsalle() {
+    let (requests, raw_rows, _) =
+        parsing::parse_requests(&fixture("valid_requests_with_solsalle.csv")).unwrap();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(raw_rows.len(), 1);
+    assert_eq!(raw_rows[0].len(), 16);
+    assert_eq!(requests[0].subjects, vec![nes("Mathématiques")]);
+}
+
+#[test]
+fn parse_requests_with_both_sol() {
+    let (requests, raw_rows, _) =
+        parsing::parse_requests(&fixture("valid_requests_with_both_sol.csv")).unwrap();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(raw_rows.len(), 1);
+    assert_eq!(raw_rows[0].len(), 16);
+    assert_eq!(requests[0].subjects, vec![nes("Mathématiques")]);
+}
+
+#[test]
+fn parse_requests_solprep_without_solsalle_error() {
+    let err =
+        parsing::parse_requests(&fixture("requests_solprep_without_solsalle.csv")).unwrap_err();
+    assert!(matches!(
+        err,
+        ScheduleError::RequestsUnknownColumn(col) if col == "SolPrep"
+    ));
+}
+
+#[test]
+fn parse_requests_raw_rows_match_input() {
+    let (_, raw_rows, _) = parsing::parse_requests(&fixture("valid_requests.csv")).unwrap();
+    assert_eq!(raw_rows.len(), 1);
+    assert_eq!(raw_rows[0][0], "1");
+    assert_eq!(raw_rows[0][3], "Lundi");
+    assert_eq!(raw_rows[0][5], "Mathématiques");
+    assert_eq!(raw_rows[0][13], "A101");
+    assert_eq!(raw_rows[0][15], "0");
 }

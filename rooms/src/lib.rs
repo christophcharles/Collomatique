@@ -154,28 +154,7 @@ pub fn run(
     match solved {
         Some(config) => {
             let assignments = collomatique_constraints_rooms::extract_assignments(&data, &config);
-            for assignment in &assignments {
-                let req = &data.requests[assignment.request];
-                let room_str: &str = assignment.room.as_ref();
-                let subjects_str: String = req
-                    .subjects
-                    .iter()
-                    .map(|s| s.as_ref() as &str)
-                    .collect::<Vec<&str>>()
-                    .join(";");
-                if let Some(prep) = &assignment.prep_room {
-                    let prep_str: &str = prep.as_ref();
-                    println!(
-                        "Request {}: {} {}h {} — Room: {}, Prep: {}",
-                        assignment.request, req.day, *req.hour, subjects_str, room_str, prep_str,
-                    );
-                } else {
-                    println!(
-                        "Request {}: {} {}h {} — Room: {}",
-                        assignment.request, req.day, *req.hour, subjects_str, room_str,
-                    );
-                }
-            }
+            write_solution_csv(&data, &assignments);
             eprintln!("Solved: {} assignments", assignments.len());
         }
         None => {
@@ -184,6 +163,46 @@ pub fn run(
     }
 
     Ok(())
+}
+
+fn write_solution_csv(
+    data: &ScheduleData,
+    assignments: &[collomatique_constraints_rooms::Assignment],
+) {
+    let mut wtr = csv::Writer::from_writer(std::io::stdout());
+
+    let mut header: Vec<&str> = parsing::REQUESTS_COLUMNS.to_vec();
+    header.push("SolSalle");
+    header.push("SolPrep");
+    wtr.write_record(&header).unwrap();
+
+    let mut assignment_by_request: Vec<Option<&collomatique_constraints_rooms::Assignment>> =
+        vec![None; data.requests.len()];
+    for assignment in assignments {
+        assignment_by_request[assignment.request] = Some(assignment);
+    }
+
+    for (i, raw_row) in data.raw_request_rows.iter().enumerate() {
+        let mut fields: Vec<&str> = raw_row.iter().map(|s| s.as_str()).collect();
+        let (sol_salle, sol_prep);
+        if let Some(assignment) = assignment_by_request[i] {
+            sol_salle = <non_empty_string::NonEmptyString as AsRef<str>>::as_ref(&assignment.room)
+                .to_string();
+            sol_prep = assignment
+                .prep_room
+                .as_ref()
+                .map(|r| <non_empty_string::NonEmptyString as AsRef<str>>::as_ref(r).to_string())
+                .unwrap_or_default();
+        } else {
+            sol_salle = String::new();
+            sol_prep = String::new();
+        }
+        fields.push(&sol_salle);
+        fields.push(&sol_prep);
+        wtr.write_record(&fields).unwrap();
+    }
+
+    wtr.flush().unwrap();
 }
 
 fn print_demand_conflict(data: &ScheduleData, conflict: &DemandConflict) {
