@@ -12,7 +12,7 @@ pub use collomatique_rooms_model::{
 pub use parsing::{RoomPreferenceWarning, ScheduleError};
 
 pub enum SolveMode {
-    Solve { no_objective: bool },
+    Solve { no_objective: bool, warm: bool },
     Check,
     Fix,
     Complete { no_objective: bool },
@@ -206,6 +206,7 @@ pub fn run(
                 out,
                 false,
                 timeout_minutes,
+                None,
             )
         }
 
@@ -246,10 +247,11 @@ pub fn run(
                 out,
                 no_objective,
                 timeout_minutes,
+                None,
             )
         }
 
-        SolveMode::Solve { no_objective } => {
+        SolveMode::Solve { no_objective, warm } => {
             eprintln!("Building ILP model...");
             let start = Instant::now();
             let model = collomatique_constraints_rooms::build_model(&data);
@@ -260,6 +262,21 @@ pub fn run(
                 stats.base_variable_count, stats.user_constraint_count, elapsed,
             );
 
+            let warm_hint = if warm {
+                let recon =
+                    collomatique_constraints_rooms::reconstruct_solution(&data, &solution_columns);
+                for w in &recon.warnings {
+                    eprintln!("Warning: {w}");
+                }
+                Some(
+                    recon
+                        .full_config
+                        .transmute(|v| collomatique_ilp_modeler::InternalVar::Base(v.clone())),
+                )
+            } else {
+                None
+            };
+
             solve_and_output(
                 &model,
                 &data,
@@ -268,10 +285,16 @@ pub fn run(
                 out,
                 no_objective,
                 timeout_minutes,
+                warm_hint.as_ref(),
             )
         }
     }
 }
+
+type InternalVar = collomatique_ilp_modeler::InternalVar<
+    collomatique_constraints_rooms::Var,
+    collomatique_constraints_rooms::ExtraVarName,
+>;
 
 fn solve_and_output(
     model: &collomatique_constraints_rooms::RoomModel,
@@ -281,6 +304,7 @@ fn solve_and_output(
     out: Option<&Path>,
     no_objective: bool,
     timeout_minutes: u32,
+    warm_hint: Option<&collomatique_ilp::ConfigData<InternalVar>>,
 ) -> Result<(), ScheduleError> {
     if no_objective {
         eprintln!("Solving (checker only, no objective)...");
@@ -290,16 +314,37 @@ fn solve_and_output(
     let solver = collomatique_ilp::solvers::collo_cbc::ColloCbcSolver::with_disable_logging(false);
     let solved = if timeout_minutes == 0 {
         if no_objective {
-            model.solve_checker(&solver).map(|s| s.get_data())
+            model
+                .solve_checker_with(|pb| {
+                    use collomatique_ilp::solvers::{Solver, SolverModel, WarmSolver};
+                    if let Some(hint) = warm_hint {
+                        solver.build_warm_model(pb, hint).solve()
+                    } else {
+                        solver.build_model(pb).solve()
+                    }
+                })
+                .map(|s| s.get_data())
         } else {
-            model.solve(&solver).map(|s| s.get_data())
+            model
+                .solve_with(|pb| {
+                    use collomatique_ilp::solvers::{Solver, SolverModel, WarmSolver};
+                    if let Some(hint) = warm_hint {
+                        solver.build_warm_model(pb, hint).solve()
+                    } else {
+                        solver.build_model(pb).solve()
+                    }
+                })
+                .map(|s| s.get_data())
         }
     } else {
-        use collomatique_ilp::solvers::{Solver, TimeLimitSolverModel};
+        use collomatique_ilp::solvers::{Solver, TimeLimitSolverModel, WarmSolver};
         let solve_with_timeout = move |pb| {
-            let result = solver
-                .build_model(pb)
-                .solve_with_time_limit(timeout_minutes * 60);
+            let built = if let Some(hint) = warm_hint {
+                solver.build_warm_model(pb, hint)
+            } else {
+                solver.build_model(pb)
+            };
+            let result = built.solve_with_time_limit(timeout_minutes * 60);
             if result.time_limit_reached {
                 eprintln!("Warning: solver time limit ({timeout_minutes} min) reached.");
             }

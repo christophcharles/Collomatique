@@ -30,6 +30,10 @@ struct Args {
     #[arg(long, conflicts_with_all = ["check", "fix"])]
     complete: bool,
 
+    /// Use existing SolSalle/SolPrep as warm start hint for the solver
+    #[arg(long, conflicts_with_all = ["check", "fix", "complete"])]
+    warm: bool,
+
     /// Output CSV file for the solution (defaults to stdout)
     #[arg(long, short)]
     out: Option<PathBuf>,
@@ -53,6 +57,7 @@ fn main() -> Result<(), anyhow::Error> {
     } else {
         collomatique_rooms::SolveMode::Solve {
             no_objective: args.no_objective,
+            warm: args.warm,
         }
     };
 
