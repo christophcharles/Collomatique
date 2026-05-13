@@ -50,17 +50,52 @@ pub struct Room {
     pub reserved: bool,
 }
 
-/// Whether a room preference is a suggestion or a demand.
+/// Room preference for prep: suggestion or demand.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RoomPreference {
+pub enum PrepRoomPreference {
     Suggestion(NonEmptyString),
     Demand(NonEmptyString),
 }
 
-impl RoomPreference {
+impl PrepRoomPreference {
     pub fn room_name(&self) -> &NonEmptyString {
         match self {
-            RoomPreference::Suggestion(name) | RoomPreference::Demand(name) => name,
+            PrepRoomPreference::Suggestion(name) | PrepRoomPreference::Demand(name) => name,
+        }
+    }
+}
+
+/// Room preference for interrogation: suggestion or demand, with optional prep sharing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InterrogationRoomPreference {
+    Suggestion {
+        room: NonEmptyString,
+        can_share_with_prep: bool,
+    },
+    Demand {
+        room: NonEmptyString,
+        can_share_with_prep: bool,
+    },
+}
+
+impl InterrogationRoomPreference {
+    pub fn room_name(&self) -> &NonEmptyString {
+        match self {
+            InterrogationRoomPreference::Suggestion { room, .. }
+            | InterrogationRoomPreference::Demand { room, .. } => room,
+        }
+    }
+
+    pub fn can_share_with_prep(&self) -> bool {
+        match self {
+            InterrogationRoomPreference::Suggestion {
+                can_share_with_prep,
+                ..
+            }
+            | InterrogationRoomPreference::Demand {
+                can_share_with_prep,
+                ..
+            } => *can_share_with_prep,
         }
     }
 }
@@ -152,8 +187,8 @@ pub struct Request {
     pub window: bool,
     pub students: NonZeroU32,
     pub prep_students: u32,
-    pub room_preference: Option<RoomPreference>,
-    pub prep_preference: Option<RoomPreference>,
+    pub room_preference: Option<InterrogationRoomPreference>,
+    pub prep_preference: Option<PrepRoomPreference>,
 }
 
 /// Parsed schedule data: rooms and requests.
@@ -174,7 +209,9 @@ pub enum DemandKind {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DemandConflictKind {
     InterrogationInterrogation,
-    InterrogationPrep,
+    InterrogationPrep {
+        can_share_with_prep: bool,
+    },
     PrepOverCapacity {
         total_students: u32,
         capacity: NonZeroU32,
@@ -204,20 +241,29 @@ impl ScheduleData {
         let mut demanded = HashSet::new();
 
         for req in &self.requests {
-            for pref in [req.room_preference.as_ref(), req.prep_preference.as_ref()]
-                .into_iter()
-                .flatten()
-            {
+            if let Some(pref) = &req.room_preference {
                 let name = AsRef::<str>::as_ref(pref.room_name());
-                if self.rooms.contains_key(name) {
-                    continue;
-                }
-                match pref {
-                    RoomPreference::Suggestion(_) => {
-                        suggested.insert(name);
+                if !self.rooms.contains_key(name) {
+                    match pref {
+                        InterrogationRoomPreference::Suggestion { .. } => {
+                            suggested.insert(name);
+                        }
+                        InterrogationRoomPreference::Demand { .. } => {
+                            demanded.insert(name);
+                        }
                     }
-                    RoomPreference::Demand(_) => {
-                        demanded.insert(name);
+                }
+            }
+            if let Some(pref) = &req.prep_preference {
+                let name = AsRef::<str>::as_ref(pref.room_name());
+                if !self.rooms.contains_key(name) {
+                    match pref {
+                        PrepRoomPreference::Suggestion(_) => {
+                            suggested.insert(name);
+                        }
+                        PrepRoomPreference::Demand(_) => {
+                            demanded.insert(name);
+                        }
                     }
                 }
             }
@@ -246,7 +292,7 @@ impl ScheduleData {
         let mut groups: BTreeMap<(NonEmptyString, Weekday, Hour), Vec<Demand>> = BTreeMap::new();
 
         for (req_idx, req) in self.requests.iter().enumerate() {
-            if let Some(RoomPreference::Demand(room)) = &req.room_preference {
+            if let Some(InterrogationRoomPreference::Demand { room, .. }) = &req.room_preference {
                 groups
                     .entry((room.clone(), req.day, req.hour))
                     .or_default()
@@ -256,7 +302,7 @@ impl ScheduleData {
                         periods: req.periods,
                     });
             }
-            if let Some(RoomPreference::Demand(room)) = &req.prep_preference {
+            if let Some(PrepRoomPreference::Demand(room)) = &req.prep_preference {
                 groups
                     .entry((room.clone(), req.day, req.hour))
                     .or_default()
@@ -298,11 +344,17 @@ impl ScheduleData {
             for i_demand in &interro {
                 for p_demand in &prep {
                     if i_demand.periods.overlaps_with(&p_demand.periods) {
+                        let can_share = self.requests[i_demand.request]
+                            .room_preference
+                            .as_ref()
+                            .is_some_and(|p| p.can_share_with_prep());
                         conflicts.push(DemandConflict {
                             room: room.clone(),
                             day: *day,
                             hour: *hour,
-                            kind: DemandConflictKind::InterrogationPrep,
+                            kind: DemandConflictKind::InterrogationPrep {
+                                can_share_with_prep: can_share,
+                            },
                             requests: vec![
                                 (i_demand.request, DemandKind::Interrogation),
                                 (p_demand.request, DemandKind::Prep),

@@ -1,7 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use collomatique_ilp::int_linexpr::IntLinExpr;
-use collomatique_rooms_model::{Hour, Periods, Request, RoomPreference};
+use collomatique_rooms_model::{
+    Hour, InterrogationRoomPreference, Periods, PrepRoomPreference, Request,
+};
 use collomatique_time::Weekday;
 use non_empty_string::NonEmptyString;
 
@@ -58,11 +60,17 @@ fn is_room_blocked_any_period(
 }
 
 fn is_interrogation_demand(req: &Request, room_name: &NonEmptyString) -> bool {
-    matches!(&req.room_preference, Some(RoomPreference::Demand(name)) if name == room_name)
+    matches!(
+        &req.room_preference,
+        Some(InterrogationRoomPreference::Demand { room, .. }) if room == room_name
+    )
 }
 
 fn is_prep_demand(req: &Request, room_name: &NonEmptyString) -> bool {
-    matches!(&req.prep_preference, Some(RoomPreference::Demand(name)) if name == room_name)
+    matches!(
+        &req.prep_preference,
+        Some(PrepRoomPreference::Demand(name)) if name == room_name
+    )
 }
 
 pub(crate) fn build(env: &VarEnv) -> MyBundle {

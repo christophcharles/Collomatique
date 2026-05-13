@@ -4,8 +4,9 @@ use std::path::Path;
 use std::time::Instant;
 
 pub use collomatique_rooms_model::{
-    Config, DemandConflict, DemandConflictKind, DemandKind, Hour, Incompat, Periods, Request, Room,
-    RoomPreference, ScheduleData, TimeZone, Window,
+    Config, DemandConflict, DemandConflictKind, DemandKind, Hour, Incompat,
+    InterrogationRoomPreference, Periods, PrepRoomPreference, Request, Room, ScheduleData,
+    TimeZone, Window,
 };
 pub use parsing::ScheduleError;
 
@@ -138,12 +139,22 @@ fn print_demand_conflict(data: &ScheduleData, conflict: &DemandConflict) {
                 print_demand_request(data, req_idx, "interrogation");
             }
         }
-        DemandConflictKind::InterrogationPrep => {
-            eprintln!(
-                "Warning: room \"{room}\" demanded for both interrogation \
-                 and prep on {} at {}:",
-                conflict.day, conflict.hour,
-            );
+        DemandConflictKind::InterrogationPrep {
+            can_share_with_prep,
+        } => {
+            if *can_share_with_prep {
+                eprintln!(
+                    "Warning: room \"{room}\" demanded for interrogation (with prep sharing) \
+                     and prep on {} at {} — might not conflict if capacity allows:",
+                    conflict.day, conflict.hour,
+                );
+            } else {
+                eprintln!(
+                    "Warning: room \"{room}\" demanded for both interrogation \
+                     and prep on {} at {}:",
+                    conflict.day, conflict.hour,
+                );
+            }
             for &(req_idx, ref kind) in &conflict.requests {
                 let label = match kind {
                     DemandKind::Interrogation => "interrogation",

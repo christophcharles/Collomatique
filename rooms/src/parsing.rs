@@ -3,7 +3,8 @@ use std::num::NonZeroU32;
 use std::path::Path;
 
 use collomatique_rooms_model::{
-    Config, Hour, Incompat, Periods, Request, Room, RoomPreference, ScheduleData, Window,
+    Config, Hour, Incompat, InterrogationRoomPreference, Periods, PrepRoomPreference, Request,
+    Room, ScheduleData, Window,
 };
 use collomatique_time::Weekday;
 use non_empty_string::NonEmptyString;
@@ -302,8 +303,8 @@ pub fn parse_requests(path: &Path) -> Result<Vec<Request>, ScheduleError> {
         let window = parse_bool_field(&record, 10, row, "requests", "Fenêtre")?;
         let students = parse_field::<NonZeroU32>(&record, 11, row, "requests", "Nb élèves")?;
         let prep_students = parse_field::<u32>(&record, 12, row, "requests", "Nb prep")?;
-        let room_preference = parse_room_preference(&record, 13);
-        let prep_preference = parse_room_preference(&record, 14);
+        let room_preference = parse_interrogation_room_preference(&record, 13);
+        let prep_preference = parse_prep_room_preference(&record, 14);
 
         requests.push(Request {
             periods: Periods { p1, p2, p3 },
@@ -513,7 +514,40 @@ pub fn parse_incompats(path: &Path) -> Result<Vec<Incompat>, ScheduleError> {
     Ok(incompats)
 }
 
-fn parse_room_preference(record: &csv::StringRecord, index: usize) -> Option<RoomPreference> {
+fn parse_interrogation_room_preference(
+    record: &csv::StringRecord,
+    index: usize,
+) -> Option<InterrogationRoomPreference> {
+    let value = record.get(index).unwrap_or("").trim();
+    if value.is_empty() {
+        return None;
+    }
+    let (is_demand, rest) = match value.strip_prefix('!') {
+        Some(s) => (true, s.trim()),
+        None => (false, value),
+    };
+    let (can_share_with_prep, name) = match rest.strip_suffix('+') {
+        Some(s) => (true, s.trim()),
+        None => (false, rest),
+    };
+    let room = NonEmptyString::try_from(name).ok()?;
+    Some(if is_demand {
+        InterrogationRoomPreference::Demand {
+            room,
+            can_share_with_prep,
+        }
+    } else {
+        InterrogationRoomPreference::Suggestion {
+            room,
+            can_share_with_prep,
+        }
+    })
+}
+
+fn parse_prep_room_preference(
+    record: &csv::StringRecord,
+    index: usize,
+) -> Option<PrepRoomPreference> {
     let value = record.get(index).unwrap_or("").trim();
     if value.is_empty() {
         return None;
@@ -522,10 +556,10 @@ fn parse_room_preference(record: &csv::StringRecord, index: usize) -> Option<Roo
         let name = name.trim();
         NonEmptyString::try_from(name)
             .ok()
-            .map(RoomPreference::Demand)
+            .map(PrepRoomPreference::Demand)
     } else {
         NonEmptyString::try_from(value)
             .ok()
-            .map(RoomPreference::Suggestion)
+            .map(PrepRoomPreference::Suggestion)
     }
 }

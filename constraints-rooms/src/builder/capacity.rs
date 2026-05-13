@@ -1,13 +1,19 @@
 use std::collections::BTreeSet;
 
 use collomatique_ilp::int_linexpr::IntLinExpr;
-use collomatique_rooms_model::{Hour, Request, RoomPreference};
+use collomatique_rooms_model::{Hour, InterrogationRoomPreference, PrepRoomPreference, Request};
 use collomatique_time::Weekday;
 use non_empty_string::NonEmptyString;
 
 use super::{MyBundle, V, base_var};
 use crate::types::ConstraintDesc;
 use crate::vars::{PERIOD_COUNT, Var, VarEnv};
+
+fn shares_with_prep_in_room(req: &Request, room: &NonEmptyString) -> bool {
+    req.room_preference
+        .as_ref()
+        .is_some_and(|p| p.room_name() == room && p.can_share_with_prep())
+}
 
 fn request_active_at(req: &Request, period: usize, day: &Weekday, hour: &Hour) -> bool {
     let in_period = match period {
@@ -66,7 +72,11 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
                         let mut expr = IntLinExpr::constant(0);
 
                         if env.has_interrogation_var(req, room_name) {
-                            let coeff = std::cmp::max(capacity, req_data.students.get()) as i64;
+                            let coeff = if shares_with_prep_in_room(req_data, room_name) {
+                                req_data.students.get() as i64
+                            } else {
+                                std::cmp::max(capacity, req_data.students.get()) as i64
+                            };
                             expr = expr
                                 + coeff
                                     * IntLinExpr::var(base_var(Var::RoomForInterrogation {
@@ -104,12 +114,12 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
     // Undeclared rooms (in demands but not in rooms.csv)
     let mut undeclared_rooms: BTreeSet<NonEmptyString> = BTreeSet::new();
     for req in &env.data.requests {
-        if let Some(RoomPreference::Demand(name)) = &req.room_preference {
+        if let Some(InterrogationRoomPreference::Demand { room: name, .. }) = &req.room_preference {
             if !env.data.rooms.contains_key(name) {
                 undeclared_rooms.insert(name.clone());
             }
         }
-        if let Some(RoomPreference::Demand(name)) = &req.prep_preference {
+        if let Some(PrepRoomPreference::Demand(name)) = &req.prep_preference {
             if !env.data.rooms.contains_key(name) {
                 undeclared_rooms.insert(name.clone());
             }

@@ -1,4 +1,4 @@
-use collomatique_rooms_model::{RoomPreference, ScheduleData};
+use collomatique_rooms_model::{InterrogationRoomPreference, PrepRoomPreference, ScheduleData};
 use non_empty_string::NonEmptyString;
 
 pub const PERIOD_COUNT: usize = 3;
@@ -26,7 +26,7 @@ impl VarEnv {
         self.managed_rooms.contains(room)
             || matches!(
                 &self.data.requests[request].room_preference,
-                Some(RoomPreference::Demand(name)) if name == room
+                Some(InterrogationRoomPreference::Demand { room: name, .. }) if name == room
             )
     }
 
@@ -35,7 +35,7 @@ impl VarEnv {
             && (self.managed_rooms.contains(room)
                 || matches!(
                     &self.data.requests[request].prep_preference,
-                    Some(RoomPreference::Demand(name)) if name == room
+                    Some(PrepRoomPreference::Demand(name)) if name == room
                 ))
     }
 }
@@ -76,7 +76,9 @@ impl Var {
 
     pub fn compute_interrogation_room_range(env: &VarEnv, request: &usize) -> Vec<NonEmptyString> {
         let mut rooms = env.managed_rooms.clone();
-        if let Some(RoomPreference::Demand(name)) = &env.data.requests[*request].room_preference {
+        if let Some(InterrogationRoomPreference::Demand { room: name, .. }) =
+            &env.data.requests[*request].room_preference
+        {
             if !rooms.contains(name) {
                 rooms.push(name.clone());
             }
@@ -86,7 +88,8 @@ impl Var {
 
     pub fn compute_prep_room_range(env: &VarEnv, request: &usize) -> Vec<NonEmptyString> {
         let mut rooms = env.managed_rooms.clone();
-        if let Some(RoomPreference::Demand(name)) = &env.data.requests[*request].prep_preference {
+        if let Some(PrepRoomPreference::Demand(name)) = &env.data.requests[*request].prep_preference
+        {
             if !rooms.contains(name) {
                 rooms.push(name.clone());
             }

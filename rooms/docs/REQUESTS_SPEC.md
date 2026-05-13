@@ -23,8 +23,8 @@ Each row describes one interrogation slot that needs a room assigned to it.
 | 11 | Fenêtre | 0 or 1 | Whether a window is required. 1 = required, 0 = no preference. |
 | 12 | Nb élèves | integer ≥ 1 | Number of students who need to fit in the assigned room. Must be strictly positive. |
 | 13 | Nb prep | integer ≥ 0 | Number of students who need to fit in a prep room for this slot. 0 means no prep room is needed. |
-| 14 | Salle | string or empty | Room preference for the interrogation. If empty, no preference. A plain room name (e.g. `A101`) is a suggestion: the solver will try this room or a nearby one. A name prefixed with `!` (e.g. `!A101`) is a demand: the solver will assign exactly this room if there is no conflict. Unregistered room names are allowed but will trigger a warning: closest-room resolution will not be available in case of double occupancy. To avoid warnings, list the room in the rooms CSV with Priorité = -1. |
-| 15 | Prep | string or empty | Prep room preference. Same semantics as the Salle column. |
+| 14 | Salle | string or empty | Room preference for the interrogation. If empty, no preference. A plain room name (e.g. `A101`) is a suggestion: the solver will try this room or a nearby one. A name prefixed with `!` (e.g. `!A101`) is a demand: the solver will assign exactly this room if there is no conflict. A name suffixed with `+` (e.g. `A101+` or `!A101+`) enables prep sharing: when the solver assigns this interrogation to the named room, prep students from other requests may share the room (capacity permitting). If the solver assigns a different room, the sharing permission does not apply. Unregistered room names are allowed but will trigger a warning: closest-room resolution will not be available in case of double occupancy. To avoid warnings, list the room in the rooms CSV with Priorité = -1. |
+| 15 | Prep | string or empty | Prep room preference. Same semantics as the Salle column (except the `+` suffix is not supported). |
 
 ### Example
 

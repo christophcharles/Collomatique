@@ -83,4 +83,10 @@ pub enum ConstraintDesc {
         request: usize,
         room: NonEmptyString,
     },
+    OneInterrogationPerRoom {
+        room: NonEmptyString,
+        period: usize,
+        day: Weekday,
+        hour: Hour,
+    },
 }
