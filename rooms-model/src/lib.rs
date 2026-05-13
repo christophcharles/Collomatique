@@ -212,13 +212,19 @@ pub struct Request {
     pub skip_room_continuity: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RoomSol {
+    pub room: NonEmptyString,
+    pub mark_fixed: bool,
+}
+
 /// Parsed schedule data: rooms and requests.
 #[derive(Debug, Clone)]
 pub struct ScheduleData {
     pub rooms: BTreeMap<NonEmptyString, Room>,
     pub requests: Vec<Request>,
     pub raw_request_rows: Vec<Vec<String>>,
-    pub solution_columns: Vec<(Option<NonEmptyString>, Option<NonEmptyString>)>,
+    pub solution_columns: Vec<(Option<RoomSol>, Option<RoomSol>)>,
     pub incompats: Vec<Incompat>,
     pub config: Config,
 }

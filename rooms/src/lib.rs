@@ -6,7 +6,7 @@ use std::time::Instant;
 
 pub use collomatique_rooms_model::{
     Config, DemandConflict, DemandConflictKind, DemandKind, Hour, Incompat,
-    InterrogationRoomPreference, Periods, PrepRoomPreference, Request, Room, ScheduleData,
+    InterrogationRoomPreference, Periods, PrepRoomPreference, Request, Room, RoomSol, ScheduleData,
     TeacherConflict, TimeZones, Window,
 };
 pub use parsing::{RoomPreferenceWarning, ScheduleError};
@@ -168,15 +168,21 @@ pub fn run(
             eprintln!("Building ILP model...");
             let start = Instant::now();
             let (mut modeler, env) = collomatique_constraints_rooms::build_modeler(&data);
-            let (bundle, warnings) =
-                collomatique_constraints_rooms::build_pinning_bundle(&data, &data.solution_columns);
-            for w in &warnings {
+            let pinning = collomatique_constraints_rooms::build_pinning_bundles(
+                &data,
+                &data.solution_columns,
+            );
+            for w in &pinning.warnings {
                 eprintln!("Warning: {w}");
             }
 
             modeler.clear_objectives();
-            if let Ok(objectified) =
-                bundle.objectify(collomatique_constraints_rooms::ExtraVarName::FixPenalty)
+            modeler
+                .apply_bundle(pinning.fixed)
+                .expect("no duplicate extras");
+            if let Ok(objectified) = pinning
+                .unfixed
+                .objectify(collomatique_constraints_rooms::ExtraVarName::FixPenalty)
             {
                 modeler
                     .apply_bundle(objectified.into_general())
@@ -200,15 +206,21 @@ pub fn run(
             eprintln!("Building ILP model...");
             let start = Instant::now();
             let (mut modeler, env) = collomatique_constraints_rooms::build_modeler(&data);
-            let (bundle, warnings) =
-                collomatique_constraints_rooms::build_pinning_bundle(&data, &data.solution_columns);
-            for w in &warnings {
+            let pinning = collomatique_constraints_rooms::build_pinning_bundles(
+                &data,
+                &data.solution_columns,
+            );
+            for w in &pinning.warnings {
                 eprintln!("Warning: {w}");
             }
 
             if no_objective {
                 modeler.clear_objectives();
             }
+            let bundle = pinning
+                .fixed
+                .merge(pinning.unfixed)
+                .expect("no duplicate extras");
             modeler.apply_bundle(bundle).expect("no duplicate extras");
 
             let model = modeler
@@ -320,13 +332,25 @@ fn write_solution_csv(
         let mut fields: Vec<&str> = raw_row.iter().map(|s| s.as_str()).collect();
         let (sol_salle, sol_prep);
         if let Some(assignment) = assignment_by_request[i] {
-            sol_salle = <non_empty_string::NonEmptyString as AsRef<str>>::as_ref(&assignment.room)
-                .to_string();
-            sol_prep = assignment
-                .prep_room
-                .as_ref()
-                .map(|r| <non_empty_string::NonEmptyString as AsRef<str>>::as_ref(r).to_string())
-                .unwrap_or_default();
+            let room_str: &str = assignment.room.as_ref();
+            let orig_salle = data.solution_columns[i].0.as_ref();
+            sol_salle = if orig_salle.is_some_and(|s| s.mark_fixed && s.room == assignment.room) {
+                format!("!{room_str}")
+            } else {
+                room_str.to_string()
+            };
+            sol_prep = match &assignment.prep_room {
+                Some(prep_room) => {
+                    let prep_str: &str = prep_room.as_ref();
+                    let orig_prep = data.solution_columns[i].1.as_ref();
+                    if orig_prep.is_some_and(|s| s.mark_fixed && s.room == *prep_room) {
+                        format!("!{prep_str}")
+                    } else {
+                        prep_str.to_string()
+                    }
+                }
+                None => String::new(),
+            };
         } else {
             sol_salle = String::new();
             sol_prep = String::new();

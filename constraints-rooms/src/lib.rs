@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 use collomatique_ilp::ConfigData;
 use collomatique_ilp_modeler::bundle::ReifyError;
-use collomatique_rooms_model::ScheduleData;
+use collomatique_rooms_model::{RoomSol, ScheduleData};
 use non_empty_string::NonEmptyString;
 
 pub type RoomModel = collomatique_ilp_modeler::Model<Var, ExtraVarName, ConstraintDesc>;
@@ -69,27 +69,35 @@ impl std::fmt::Display for SolutionWarning {
 impl std::error::Error for SolutionWarning {}
 
 pub struct SolutionReconstruction {
-    pub selected_pins: ConfigData<Var>,
+    pub marked_pins: ConfigData<Var>,
+    pub unmarked_pins: ConfigData<Var>,
     pub full_config: ConfigData<Var>,
     pub warnings: Vec<SolutionWarning>,
 }
 
 pub fn reconstruct_solution(
     data: &ScheduleData,
-    solutions: &[(Option<NonEmptyString>, Option<NonEmptyString>)],
+    solutions: &[(Option<RoomSol>, Option<RoomSol>)],
 ) -> SolutionReconstruction {
     let env = vars::VarEnv::new(data);
     let mut full_values: HashMap<Var, f64> = HashMap::new();
-    let mut pin_values: HashMap<Var, f64> = HashMap::new();
+    let mut marked_pin_values: HashMap<Var, f64> = HashMap::new();
+    let mut unmarked_pin_values: HashMap<Var, f64> = HashMap::new();
     let mut warnings = Vec::new();
 
     for request in Var::compute_all_request_range(&env) {
         let rooms = Var::compute_interrogation_room_range(&env, &request);
-        let sol_room = &solutions[request].0;
+        let sol_entry = &solutions[request].0;
 
-        if let Some(room_name) = sol_room {
+        if let Some(sol) = sol_entry {
+            let room_name = &sol.room;
             if rooms.contains(room_name) {
-                pin_values.insert(
+                let pin_map = if sol.mark_fixed {
+                    &mut marked_pin_values
+                } else {
+                    &mut unmarked_pin_values
+                };
+                pin_map.insert(
                     Var::RoomForInterrogation {
                         request,
                         room: room_name.clone(),
@@ -136,11 +144,17 @@ pub fn reconstruct_solution(
 
     for request in Var::compute_prep_request_range(&env) {
         let rooms = Var::compute_prep_room_range(&env, &request);
-        let sol_room = &solutions[request].1;
+        let sol_entry = &solutions[request].1;
 
-        if let Some(room_name) = sol_room {
+        if let Some(sol) = sol_entry {
+            let room_name = &sol.room;
             if rooms.contains(room_name) {
-                pin_values.insert(
+                let pin_map = if sol.mark_fixed {
+                    &mut marked_pin_values
+                } else {
+                    &mut unmarked_pin_values
+                };
+                pin_map.insert(
                     Var::RoomForPrep {
                         request,
                         room: room_name.clone(),
@@ -186,7 +200,8 @@ pub fn reconstruct_solution(
     }
 
     SolutionReconstruction {
-        selected_pins: ConfigData::from(pin_values),
+        marked_pins: ConfigData::from(marked_pin_values),
+        unmarked_pins: ConfigData::from(unmarked_pin_values),
         full_config: ConfigData::from(full_values),
         warnings,
     }
@@ -194,7 +209,7 @@ pub fn reconstruct_solution(
 
 pub fn build_config_from_solution(
     data: &ScheduleData,
-    solutions: &[(Option<NonEmptyString>, Option<NonEmptyString>)],
+    solutions: &[(Option<RoomSol>, Option<RoomSol>)],
 ) -> Result<ConfigData<Var>, SolutionWarning> {
     let recon = reconstruct_solution(data, solutions);
     if let Some(w) = recon.warnings.into_iter().next() {
@@ -203,23 +218,34 @@ pub fn build_config_from_solution(
     Ok(recon.full_config)
 }
 
-pub fn build_pinning_bundle(
+pub struct PinningBundles {
+    pub fixed: RoomConstraintBundle,
+    pub unfixed: RoomConstraintBundle,
+    pub warnings: Vec<SolutionWarning>,
+}
+
+pub fn build_pinning_bundles(
     data: &ScheduleData,
-    solutions: &[(Option<NonEmptyString>, Option<NonEmptyString>)],
-) -> (RoomConstraintBundle, Vec<SolutionWarning>) {
+    solutions: &[(Option<RoomSol>, Option<RoomSol>)],
+) -> PinningBundles {
     let recon = reconstruct_solution(data, solutions);
-    let bundle =
-        RoomConstraintBundle::from_config_data(&recon.selected_pins, |var, _value| match var {
-            Var::RoomForInterrogation { request, room } => ConstraintDesc::PinnedInterrogation {
-                request: *request,
-                room: room.clone(),
-            },
-            Var::RoomForPrep { request, room } => ConstraintDesc::PinnedPrep {
-                request: *request,
-                room: room.clone(),
-            },
-        });
-    (bundle, recon.warnings)
+    let desc_fn = |var: &Var, _value: f64| match var {
+        Var::RoomForInterrogation { request, room } => ConstraintDesc::PinnedInterrogation {
+            request: *request,
+            room: room.clone(),
+        },
+        Var::RoomForPrep { request, room } => ConstraintDesc::PinnedPrep {
+            request: *request,
+            room: room.clone(),
+        },
+    };
+    let fixed = RoomConstraintBundle::from_config_data(&recon.marked_pins, &desc_fn);
+    let unfixed = RoomConstraintBundle::from_config_data(&recon.unmarked_pins, &desc_fn);
+    PinningBundles {
+        fixed,
+        unfixed,
+        warnings: recon.warnings,
+    }
 }
 
 pub fn extract_assignments(data: &ScheduleData, config: &ConfigData<Var>) -> Vec<Assignment> {

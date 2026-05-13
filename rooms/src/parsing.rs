@@ -4,7 +4,7 @@ use std::path::Path;
 
 use collomatique_rooms_model::{
     Config, Hour, Incompat, InterrogationRoomPreference, Periods, PrepRoomPreference, Request,
-    Room, ScheduleData, TeacherConflict, Window,
+    Room, RoomSol, ScheduleData, TeacherConflict, Window,
 };
 use collomatique_time::Weekday;
 use non_empty_string::NonEmptyString;
@@ -270,7 +270,7 @@ pub fn parse_requests(
     (
         Vec<Request>,
         Vec<Vec<String>>,
-        Vec<(Option<NonEmptyString>, Option<NonEmptyString>)>,
+        Vec<(Option<RoomSol>, Option<RoomSol>)>,
         Vec<RoomPreferenceWarning>,
     ),
     ScheduleError,
@@ -308,13 +308,12 @@ pub fn parse_requests(
         raw_rows.push(raw_row);
 
         let sol_salle = if expected_columns > REQUESTS_COLUMNS.len() {
-            NonEmptyString::try_from(record.get(REQUESTS_COLUMNS.len()).unwrap_or("").trim()).ok()
+            parse_room_sol(record.get(REQUESTS_COLUMNS.len()).unwrap_or(""))
         } else {
             None
         };
         let sol_prep = if expected_columns > REQUESTS_COLUMNS.len() + 1 {
-            NonEmptyString::try_from(record.get(REQUESTS_COLUMNS.len() + 1).unwrap_or("").trim())
-                .ok()
+            parse_room_sol(record.get(REQUESTS_COLUMNS.len() + 1).unwrap_or(""))
         } else {
             None
         };
@@ -498,6 +497,23 @@ fn validate_requests_headers(headers: &csv::StringRecord) -> Result<usize, Sched
             let name = headers.get(first_bad).unwrap_or("").trim().to_string();
             Err(ScheduleError::RequestsUnknownColumn(name))
         }
+    }
+}
+
+fn parse_room_sol(raw: &str) -> Option<RoomSol> {
+    let trimmed = raw.trim();
+    if let Some(rest) = trimmed.strip_prefix('!') {
+        NonEmptyString::try_from(rest.trim())
+            .ok()
+            .map(|room| RoomSol {
+                room,
+                mark_fixed: true,
+            })
+    } else {
+        NonEmptyString::try_from(trimmed).ok().map(|room| RoomSol {
+            room,
+            mark_fixed: false,
+        })
     }
 }
 

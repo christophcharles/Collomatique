@@ -8,7 +8,7 @@ use collomatique_rooms::ScheduleError;
 use collomatique_rooms::parsing;
 use collomatique_rooms::{
     Config, DemandConflictKind, DemandKind, Hour, InterrogationRoomPreference, Periods,
-    PrepRoomPreference, Request, Room, RoomPreferenceWarning, ScheduleData, Window,
+    PrepRoomPreference, Request, Room, RoomPreferenceWarning, RoomSol, ScheduleData, Window,
 };
 use collomatique_time::Weekday;
 use non_empty_string::NonEmptyString;
@@ -1284,7 +1284,13 @@ fn parse_requests_with_solsalle() {
     assert_eq!(raw_rows.len(), 1);
     assert_eq!(raw_rows[0].len(), 16);
     assert_eq!(requests[0].subjects, vec![nes("Mathématiques")]);
-    assert_eq!(solutions[0].0, Some(nes("B202")));
+    assert_eq!(
+        solutions[0].0,
+        Some(RoomSol {
+            room: nes("B202"),
+            mark_fixed: false,
+        })
+    );
     assert_eq!(solutions[0].1, None);
 }
 
@@ -1296,8 +1302,43 @@ fn parse_requests_with_both_sol() {
     assert_eq!(raw_rows.len(), 1);
     assert_eq!(raw_rows[0].len(), 16);
     assert_eq!(requests[0].subjects, vec![nes("Mathématiques")]);
-    assert_eq!(solutions[0].0, Some(nes("B202")));
-    assert_eq!(solutions[0].1, Some(nes("C303")));
+    assert_eq!(
+        solutions[0].0,
+        Some(RoomSol {
+            room: nes("B202"),
+            mark_fixed: false,
+        })
+    );
+    assert_eq!(
+        solutions[0].1,
+        Some(RoomSol {
+            room: nes("C303"),
+            mark_fixed: false,
+        })
+    );
+}
+
+#[test]
+fn parse_requests_with_fixed_sol() {
+    let (requests, raw_rows, solutions, _) =
+        parsing::parse_requests(&fixture("valid_requests_with_fixed_sol.csv")).unwrap();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(raw_rows.len(), 1);
+    assert_eq!(raw_rows[0].len(), 16);
+    assert_eq!(
+        solutions[0].0,
+        Some(RoomSol {
+            room: nes("B202"),
+            mark_fixed: true,
+        })
+    );
+    assert_eq!(
+        solutions[0].1,
+        Some(RoomSol {
+            room: nes("C303"),
+            mark_fixed: true,
+        })
+    );
 }
 
 #[test]
