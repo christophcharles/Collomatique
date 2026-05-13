@@ -25,13 +25,14 @@ Each row describes one interrogation slot that needs a room assigned to it.
 | 13 | Nb prep | integer ≥ 0 | Number of students who need to fit in a prep room for this slot. 0 means no prep room is needed. |
 | 14 | Salle | string or empty | Room preference(s) for the interrogation. If empty, no preference. Multiple preferences can be separated by semicolons (e.g. `A101;!B302`). Each preference is parsed independently. Positive prefixes: a plain room name (e.g. `A101`) is a suggestion, `!` (e.g. `!A101`) is a demand. The `+` suffix (e.g. `A101+` or `!A101+`) enables prep sharing: when the solver assigns this interrogation to the named room, prep students from other requests may share the room (capacity permitting). Negative prefixes: `-` (e.g. `-A101`) is an avoidance (solver tries to avoid this room), `~` (e.g. `~A101`) is an exclusion (solver never assigns this room). The `+` suffix is not supported on negative preferences. A floor suggestion `=N` (e.g. `=2`) indicates a soft preference for any room on floor N. Floor suggestions can be combined with room preferences (e.g. `A101;=2` means "prefer room A101, otherwise any room on floor 2"). Multiple floor suggestions are allowed (e.g. `=2;=3`). A room cannot appear with both positive and negative preferences in the same request (this is a fatal error). If the same room appears multiple times with the same polarity, they are merged: demand wins over suggestion, exclusion wins over avoidance, sharing wins over no sharing (a warning is emitted). Unregistered room names in positive preferences are allowed but will trigger a warning: closest-room resolution will not be available in case of double occupancy. To avoid warnings, list the room in the rooms CSV with Priorité = -1. |
 | 15 | Prep | string or empty | Prep room preference(s). Multiple preferences can be separated by semicolons. Same semantics as the Salle column (except the `+` suffix is not supported). If the same room appears multiple times, demand wins over suggestion. |
+| 16 | Isolé | 0 or 1 | Whether this request is isolated from room continuity checks. 0 = the solver enforces that consecutive requests by the same teacher within a time zone get the same interrogation room. 1 = this request is excluded from that constraint (and from the teacher conflict check). |
 
 ### Example
 
 ```csv
-P1,P2,P3,Jour,Heure,Discipline,Classes,Responsable,Colleur,Tableaux,Fenêtre,Nb élèves,Nb prep,Salle,Prep
-1,0,1,Lundi,8,Mathématiques,MP;PC,Dupont,Martin,1,0,3,2,A101;=1,
-0,1,1,Mardi,14,Physique;Chimie,BCPST 1;BCPST 2,Durand,Bernard,2,1,5,0,!B203,
+P1,P2,P3,Jour,Heure,Discipline,Classes,Responsable,Colleur,Tableaux,Fenêtre,Nb élèves,Nb prep,Salle,Prep,Isolé
+1,0,1,Lundi,8,Mathématiques,MP;PC,Dupont,Martin,1,0,3,2,A101;=1,,0
+0,1,1,Mardi,14,Physique;Chimie,BCPST 1;BCPST 2,Durand,Bernard,2,1,5,0,!B203,,0
 ```
 
 ## Allowed subject names
