@@ -16,7 +16,11 @@ struct Args {
 
     /// Solve only feasibility (no objective optimization)
     #[arg(long)]
-    checker_only: bool,
+    no_objective: bool,
+
+    /// Output CSV file for the solution (defaults to stdout)
+    #[arg(long, short)]
+    out: Option<PathBuf>,
 
     /// Solver timeout in minutes (0 = no timeout)
     #[arg(long, default_value_t = 10)]
@@ -29,7 +33,8 @@ fn main() -> Result<(), anyhow::Error> {
         &args.rooms,
         &args.requests,
         args.incompats.as_deref(),
-        args.checker_only,
+        args.no_objective,
+        args.out.as_deref(),
         collomatique_rooms_model::Config {
             enforce_period_exhaustions: collomatique_rooms_model::Periods {
                 p1: true,

@@ -14,7 +14,8 @@ pub fn run(
     rooms: &Path,
     requests: &Path,
     incompats: Option<&Path>,
-    checker_only: bool,
+    no_objective: bool,
+    out: Option<&Path>,
     config: Config,
     timeout_minutes: u32,
 ) -> Result<(), ScheduleError> {
@@ -120,14 +121,14 @@ pub fn run(
         stats.base_variable_count, stats.user_constraint_count, elapsed,
     );
 
-    if checker_only {
+    if no_objective {
         eprintln!("Solving (checker only, no objective)...");
     } else {
         eprintln!("Solving...");
     }
     let solver = collomatique_ilp::solvers::collo_cbc::ColloCbcSolver::with_disable_logging(false);
     let solved = if timeout_minutes == 0 {
-        if checker_only {
+        if no_objective {
             model.solve_checker(&solver).map(|s| s.get_data())
         } else {
             model.solve(&solver).map(|s| s.get_data())
@@ -143,7 +144,7 @@ pub fn run(
             }
             result.config
         };
-        if checker_only {
+        if no_objective {
             model
                 .solve_checker_with(solve_with_timeout)
                 .map(|s| s.get_data())
@@ -154,7 +155,13 @@ pub fn run(
     match solved {
         Some(config) => {
             let assignments = collomatique_constraints_rooms::extract_assignments(&data, &config);
-            write_solution_csv(&data, &assignments);
+            if let Some(path) = out {
+                let file = std::fs::File::create(path).map_err(ScheduleError::Io)?;
+                write_solution_csv(file, &data, &assignments);
+                eprintln!("Solution saved to {}", path.display());
+            } else {
+                write_solution_csv(std::io::stdout(), &data, &assignments);
+            }
             eprintln!("Solved: {} assignments", assignments.len());
         }
         None => {
@@ -166,10 +173,11 @@ pub fn run(
 }
 
 fn write_solution_csv(
+    writer: impl std::io::Write,
     data: &ScheduleData,
     assignments: &[collomatique_constraints_rooms::Assignment],
 ) {
-    let mut wtr = csv::Writer::from_writer(std::io::stdout());
+    let mut wtr = csv::Writer::from_writer(writer);
 
     let mut header: Vec<&str> = parsing::REQUESTS_COLUMNS.to_vec();
     header.push("SolSalle");
