@@ -30,7 +30,14 @@ fn main() -> Result<(), anyhow::Error> {
         &args.requests,
         args.incompats.as_deref(),
         args.checker_only,
-        Default::default(),
+        collomatique_rooms_model::Config {
+            enforce_period_exhaustions: collomatique_rooms_model::Periods {
+                p1: true,
+                p2: true,
+                p3: true,
+            },
+            ..Default::default()
+        },
         args.timeout,
     )?;
     Ok(())
