@@ -60,17 +60,15 @@ fn is_room_blocked_any_period(
 }
 
 fn is_interrogation_demand(req: &Request, room_name: &NonEmptyString) -> bool {
-    matches!(
-        &req.room_preference,
-        Some(InterrogationRoomPreference::Demand { room, .. }) if room == room_name
-    )
+    req.room_preference
+        .iter()
+        .any(|p| matches!(p, InterrogationRoomPreference::Demand { room, .. } if room == room_name))
 }
 
 fn is_prep_demand(req: &Request, room_name: &NonEmptyString) -> bool {
-    matches!(
-        &req.prep_preference,
-        Some(PrepRoomPreference::Demand(name)) if name == room_name
-    )
+    req.prep_preference
+        .iter()
+        .any(|p| matches!(p, PrepRoomPreference::Demand(name) if name == room_name))
 }
 
 pub(crate) fn build(env: &VarEnv) -> MyBundle {

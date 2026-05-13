@@ -187,8 +187,8 @@ pub struct Request {
     pub window: bool,
     pub students: NonZeroU32,
     pub prep_students: u32,
-    pub room_preference: Option<InterrogationRoomPreference>,
-    pub prep_preference: Option<PrepRoomPreference>,
+    pub room_preference: Vec<InterrogationRoomPreference>,
+    pub prep_preference: Vec<PrepRoomPreference>,
 }
 
 /// Parsed schedule data: rooms and requests.
@@ -241,7 +241,7 @@ impl ScheduleData {
         let mut demanded = HashSet::new();
 
         for req in &self.requests {
-            if let Some(pref) = &req.room_preference {
+            for pref in &req.room_preference {
                 let name = AsRef::<str>::as_ref(pref.room_name());
                 if !self.rooms.contains_key(name) {
                     match pref {
@@ -254,7 +254,7 @@ impl ScheduleData {
                     }
                 }
             }
-            if let Some(pref) = &req.prep_preference {
+            for pref in &req.prep_preference {
                 let name = AsRef::<str>::as_ref(pref.room_name());
                 if !self.rooms.contains_key(name) {
                     match pref {
@@ -292,25 +292,29 @@ impl ScheduleData {
         let mut groups: BTreeMap<(NonEmptyString, Weekday, Hour), Vec<Demand>> = BTreeMap::new();
 
         for (req_idx, req) in self.requests.iter().enumerate() {
-            if let Some(InterrogationRoomPreference::Demand { room, .. }) = &req.room_preference {
-                groups
-                    .entry((room.clone(), req.day, req.hour))
-                    .or_default()
-                    .push(Demand {
-                        request: req_idx,
-                        interrogation: true,
-                        periods: req.periods,
-                    });
+            for pref in &req.room_preference {
+                if let InterrogationRoomPreference::Demand { room, .. } = pref {
+                    groups
+                        .entry((room.clone(), req.day, req.hour))
+                        .or_default()
+                        .push(Demand {
+                            request: req_idx,
+                            interrogation: true,
+                            periods: req.periods,
+                        });
+                }
             }
-            if let Some(PrepRoomPreference::Demand(room)) = &req.prep_preference {
-                groups
-                    .entry((room.clone(), req.day, req.hour))
-                    .or_default()
-                    .push(Demand {
-                        request: req_idx,
-                        interrogation: false,
-                        periods: req.periods,
-                    });
+            for pref in &req.prep_preference {
+                if let PrepRoomPreference::Demand(room) = pref {
+                    groups
+                        .entry((room.clone(), req.day, req.hour))
+                        .or_default()
+                        .push(Demand {
+                            request: req_idx,
+                            interrogation: false,
+                            periods: req.periods,
+                        });
+                }
             }
         }
 
@@ -346,8 +350,8 @@ impl ScheduleData {
                     if i_demand.periods.overlaps_with(&p_demand.periods) {
                         let can_share = self.requests[i_demand.request]
                             .room_preference
-                            .as_ref()
-                            .is_some_and(|p| p.can_share_with_prep());
+                            .iter()
+                            .any(|p| p.room_name() == room && p.can_share_with_prep());
                         conflicts.push(DemandConflict {
                             room: room.clone(),
                             day: *day,

@@ -8,7 +8,7 @@ pub use collomatique_rooms_model::{
     InterrogationRoomPreference, Periods, PrepRoomPreference, Request, Room, ScheduleData,
     TimeZone, Window,
 };
-pub use parsing::ScheduleError;
+pub use parsing::{RoomPreferenceWarning, ScheduleError};
 
 pub fn run(
     rooms: &Path,
@@ -18,13 +18,23 @@ pub fn run(
     config: Config,
     timeout_minutes: u32,
 ) -> Result<(), ScheduleError> {
-    let data = parsing::parse_schedule(rooms, requests, incompats, config)?;
+    let (data, pref_warnings) = parsing::parse_schedule(rooms, requests, incompats, config)?;
     eprintln!(
         "Parsed {} rooms, {} requests, and {} incompatibilities",
         data.rooms.len(),
         data.requests.len(),
         data.incompats.len(),
     );
+    for w in &pref_warnings {
+        eprintln!(
+            "Warning: request row {}, column \"{}\": room \"{}\" specified multiple times ({}), merged to {}",
+            w.row,
+            w.column,
+            w.room,
+            w.original_entries.join(", "),
+            w.merged_result,
+        );
+    }
     let unreg = data.unregistered_rooms();
     for name in &unreg.demanded {
         eprintln!(

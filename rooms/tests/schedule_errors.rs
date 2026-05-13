@@ -232,7 +232,7 @@ fn rooms_reserved() {
 
 #[test]
 fn parse_requests_valid() {
-    let requests = parsing::parse_requests(&fixture("valid_requests.csv")).unwrap();
+    let (requests, _) = parsing::parse_requests(&fixture("valid_requests.csv")).unwrap();
     assert_eq!(requests.len(), 1);
     let r = &requests[0];
     assert!(r.periods.p1);
@@ -250,30 +250,30 @@ fn parse_requests_valid() {
     assert_eq!(r.prep_students, 2);
     assert_eq!(
         r.room_preference,
-        Some(InterrogationRoomPreference::Suggestion {
+        vec![InterrogationRoomPreference::Suggestion {
             room: nes("A101"),
             can_share_with_prep: false,
-        })
+        }]
     );
-    assert!(r.prep_preference.is_none());
+    assert!(r.prep_preference.is_empty());
 }
 
 #[test]
 fn parse_requests_room_demand() {
-    let requests = parsing::parse_requests(&fixture("requests_room_demand.csv")).unwrap();
+    let (requests, _) = parsing::parse_requests(&fixture("requests_room_demand.csv")).unwrap();
     assert_eq!(requests.len(), 1);
     assert_eq!(
         requests[0].room_preference,
-        Some(InterrogationRoomPreference::Demand {
+        vec![InterrogationRoomPreference::Demand {
             room: nes("A101"),
             can_share_with_prep: false,
-        })
+        }]
     );
 }
 
 #[test]
 fn parse_schedule_valid() {
-    let data = parsing::parse_schedule(
+    let (data, _) = parsing::parse_schedule(
         &fixture("valid_rooms.csv"),
         &fixture("valid_requests.csv"),
         None,
@@ -289,7 +289,7 @@ fn parse_schedule_valid() {
 
 #[test]
 fn unregistered_suggested_room_detected() {
-    let data = parsing::parse_schedule(
+    let (data, _) = parsing::parse_schedule(
         &fixture("valid_rooms.csv"),
         &fixture("requests_unregistered_room.csv"),
         None,
@@ -303,7 +303,7 @@ fn unregistered_suggested_room_detected() {
 
 #[test]
 fn unregistered_demanded_room_detected() {
-    let data = parsing::parse_schedule(
+    let (data, _) = parsing::parse_schedule(
         &fixture("valid_rooms.csv"),
         &fixture("requests_unregistered_demanded_room.csv"),
         None,
@@ -332,7 +332,7 @@ fn parse_incompats_valid() {
 
 #[test]
 fn parse_schedule_with_incompats() {
-    let data = parsing::parse_schedule(
+    let (data, _) = parsing::parse_schedule(
         &fixture("valid_rooms.csv"),
         &fixture("valid_requests.csv"),
         Some(&fixture("valid_incompats.csv")),
@@ -455,8 +455,8 @@ fn make_request(
     day: chrono::Weekday,
     hour: u32,
     periods: (bool, bool, bool),
-    room_preference: Option<InterrogationRoomPreference>,
-    prep_preference: Option<PrepRoomPreference>,
+    room_preference: Vec<InterrogationRoomPreference>,
+    prep_preference: Vec<PrepRoomPreference>,
     prep_students: u32,
 ) -> Request {
     Request {
@@ -491,22 +491,22 @@ fn demand_no_conflict_non_overlapping_periods() {
                 chrono::Weekday::Mon,
                 8,
                 (true, false, false),
-                Some(InterrogationRoomPreference::Demand {
+                vec![InterrogationRoomPreference::Demand {
                     room: nes("A101"),
                     can_share_with_prep: false,
-                }),
-                None,
+                }],
+                vec![],
                 0,
             ),
             make_request(
                 chrono::Weekday::Mon,
                 8,
                 (false, true, false),
-                Some(InterrogationRoomPreference::Demand {
+                vec![InterrogationRoomPreference::Demand {
                     room: nes("A101"),
                     can_share_with_prep: false,
-                }),
-                None,
+                }],
+                vec![],
                 0,
             ),
         ],
@@ -527,22 +527,22 @@ fn demand_interro_interro_conflict() {
                 chrono::Weekday::Mon,
                 8,
                 (true, false, false),
-                Some(InterrogationRoomPreference::Demand {
+                vec![InterrogationRoomPreference::Demand {
                     room: nes("A101"),
                     can_share_with_prep: false,
-                }),
-                None,
+                }],
+                vec![],
                 0,
             ),
             make_request(
                 chrono::Weekday::Mon,
                 8,
                 (true, true, false),
-                Some(InterrogationRoomPreference::Demand {
+                vec![InterrogationRoomPreference::Demand {
                     room: nes("A101"),
                     can_share_with_prep: false,
-                }),
-                None,
+                }],
+                vec![],
                 0,
             ),
         ],
@@ -571,19 +571,19 @@ fn demand_interro_prep_conflict() {
                 chrono::Weekday::Mon,
                 8,
                 (true, false, false),
-                Some(InterrogationRoomPreference::Demand {
+                vec![InterrogationRoomPreference::Demand {
                     room: nes("A101"),
                     can_share_with_prep: false,
-                }),
-                None,
+                }],
+                vec![],
                 0,
             ),
             make_request(
                 chrono::Weekday::Mon,
                 8,
                 (true, true, false),
-                None,
-                Some(PrepRoomPreference::Demand(nes("A101"))),
+                vec![],
+                vec![PrepRoomPreference::Demand(nes("A101"))],
                 5,
             ),
         ],
@@ -613,16 +613,16 @@ fn demand_prep_prep_over_capacity() {
                 chrono::Weekday::Mon,
                 8,
                 (true, false, false),
-                None,
-                Some(PrepRoomPreference::Demand(nes("A101"))),
+                vec![],
+                vec![PrepRoomPreference::Demand(nes("A101"))],
                 6,
             ),
             make_request(
                 chrono::Weekday::Mon,
                 8,
                 (true, false, false),
-                None,
-                Some(PrepRoomPreference::Demand(nes("A101"))),
+                vec![],
+                vec![PrepRoomPreference::Demand(nes("A101"))],
                 7,
             ),
         ],
@@ -651,16 +651,16 @@ fn demand_prep_prep_fits() {
                 chrono::Weekday::Mon,
                 8,
                 (true, false, false),
-                None,
-                Some(PrepRoomPreference::Demand(nes("A101"))),
+                vec![],
+                vec![PrepRoomPreference::Demand(nes("A101"))],
                 6,
             ),
             make_request(
                 chrono::Weekday::Mon,
                 8,
                 (true, false, false),
-                None,
-                Some(PrepRoomPreference::Demand(nes("A101"))),
+                vec![],
+                vec![PrepRoomPreference::Demand(nes("A101"))],
                 7,
             ),
         ],
@@ -679,16 +679,16 @@ fn demand_prep_prep_unlisted_room() {
                 chrono::Weekday::Mon,
                 8,
                 (true, false, false),
-                None,
-                Some(PrepRoomPreference::Demand(nes("Z999"))),
+                vec![],
+                vec![PrepRoomPreference::Demand(nes("Z999"))],
                 3,
             ),
             make_request(
                 chrono::Weekday::Mon,
                 8,
                 (true, false, false),
-                None,
-                Some(PrepRoomPreference::Demand(nes("Z999"))),
+                vec![],
+                vec![PrepRoomPreference::Demand(nes("Z999"))],
                 4,
             ),
         ],
@@ -714,22 +714,22 @@ fn demand_suggestions_ignored() {
                 chrono::Weekday::Mon,
                 8,
                 (true, false, false),
-                Some(InterrogationRoomPreference::Suggestion {
+                vec![InterrogationRoomPreference::Suggestion {
                     room: nes("A101"),
                     can_share_with_prep: false,
-                }),
-                None,
+                }],
+                vec![],
                 0,
             ),
             make_request(
                 chrono::Weekday::Mon,
                 8,
                 (true, false, false),
-                Some(InterrogationRoomPreference::Suggestion {
+                vec![InterrogationRoomPreference::Suggestion {
                     room: nes("A101"),
                     can_share_with_prep: false,
-                }),
-                None,
+                }],
+                vec![],
                 0,
             ),
         ],
@@ -740,7 +740,7 @@ fn demand_suggestions_ignored() {
 }
 
 fn assert_checker_feasible(rooms: &str, requests: &str) {
-    let data = parsing::parse_schedule(
+    let (data, _) = parsing::parse_schedule(
         &fixture(rooms),
         &fixture(requests),
         None,
@@ -805,28 +805,29 @@ fn priority_global_feasible() {
 
 #[test]
 fn parse_requests_suggestion_sharing() {
-    let requests =
+    let (requests, _) =
         parsing::parse_requests(&fixture("requests_room_suggestion_sharing.csv")).unwrap();
     assert_eq!(requests.len(), 1);
     assert_eq!(
         requests[0].room_preference,
-        Some(InterrogationRoomPreference::Suggestion {
+        vec![InterrogationRoomPreference::Suggestion {
             room: nes("A101"),
             can_share_with_prep: true,
-        })
+        }]
     );
 }
 
 #[test]
 fn parse_requests_demand_sharing() {
-    let requests = parsing::parse_requests(&fixture("requests_room_demand_sharing.csv")).unwrap();
+    let (requests, _) =
+        parsing::parse_requests(&fixture("requests_room_demand_sharing.csv")).unwrap();
     assert_eq!(requests.len(), 1);
     assert_eq!(
         requests[0].room_preference,
-        Some(InterrogationRoomPreference::Demand {
+        vec![InterrogationRoomPreference::Demand {
             room: nes("A101"),
             can_share_with_prep: true,
-        })
+        }]
     );
 }
 
@@ -846,19 +847,19 @@ fn demand_interro_prep_conflict_with_sharing() {
                 chrono::Weekday::Mon,
                 8,
                 (true, false, false),
-                Some(InterrogationRoomPreference::Demand {
+                vec![InterrogationRoomPreference::Demand {
                     room: nes("A101"),
                     can_share_with_prep: true,
-                }),
-                None,
+                }],
+                vec![],
                 0,
             ),
             make_request(
                 chrono::Weekday::Mon,
                 8,
                 (true, true, false),
-                None,
-                Some(PrepRoomPreference::Demand(nes("A101"))),
+                vec![],
+                vec![PrepRoomPreference::Demand(nes("A101"))],
                 5,
             ),
         ],
@@ -873,4 +874,61 @@ fn demand_interro_prep_conflict_with_sharing() {
             can_share_with_prep: true,
         }
     );
+}
+
+// --- Multiple room preferences ---
+
+#[test]
+fn parse_requests_multi_room() {
+    let (requests, warnings) =
+        parsing::parse_requests(&fixture("requests_multi_room.csv")).unwrap();
+    assert_eq!(requests.len(), 1);
+    assert!(warnings.is_empty());
+    let r = &requests[0];
+    assert_eq!(
+        r.room_preference,
+        vec![
+            InterrogationRoomPreference::Suggestion {
+                room: nes("A101"),
+                can_share_with_prep: true,
+            },
+            InterrogationRoomPreference::Demand {
+                room: nes("B302"),
+                can_share_with_prep: false,
+            },
+        ]
+    );
+    assert_eq!(
+        r.prep_preference,
+        vec![
+            PrepRoomPreference::Demand(nes("C205")),
+            PrepRoomPreference::Suggestion(nes("D410")),
+        ]
+    );
+}
+
+#[test]
+fn parse_requests_redundant_merge() {
+    let (requests, warnings) =
+        parsing::parse_requests(&fixture("requests_redundant_room.csv")).unwrap();
+    assert_eq!(requests.len(), 1);
+    let r = &requests[0];
+    assert_eq!(
+        r.room_preference,
+        vec![InterrogationRoomPreference::Demand {
+            room: nes("A101"),
+            can_share_with_prep: true,
+        }]
+    );
+    assert_eq!(
+        r.prep_preference,
+        vec![PrepRoomPreference::Demand(nes("B302"))]
+    );
+    assert_eq!(warnings.len(), 2);
+    assert_eq!(warnings[0].column, "Salle");
+    assert_eq!(warnings[0].room, "A101");
+    assert_eq!(warnings[0].merged_result, "!A101+");
+    assert_eq!(warnings[1].column, "Prep");
+    assert_eq!(warnings[1].room, "B302");
+    assert_eq!(warnings[1].merged_result, "!B302");
 }

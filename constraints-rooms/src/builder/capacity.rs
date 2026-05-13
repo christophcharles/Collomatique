@@ -11,8 +11,8 @@ use crate::vars::{PERIOD_COUNT, Var, VarEnv};
 
 fn shares_with_prep_in_room(req: &Request, room: &NonEmptyString) -> bool {
     req.room_preference
-        .as_ref()
-        .is_some_and(|p| p.room_name() == room && p.can_share_with_prep())
+        .iter()
+        .any(|p| p.room_name() == room && p.can_share_with_prep())
 }
 
 fn request_active_at(req: &Request, period: usize, day: &Weekday, hour: &Hour) -> bool {
@@ -114,14 +114,18 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
     // Undeclared rooms (in demands but not in rooms.csv)
     let mut undeclared_rooms: BTreeSet<NonEmptyString> = BTreeSet::new();
     for req in &env.data.requests {
-        if let Some(InterrogationRoomPreference::Demand { room: name, .. }) = &req.room_preference {
-            if !env.data.rooms.contains_key(name) {
-                undeclared_rooms.insert(name.clone());
+        for pref in &req.room_preference {
+            if let InterrogationRoomPreference::Demand { room: name, .. } = pref {
+                if !env.data.rooms.contains_key(name) {
+                    undeclared_rooms.insert(name.clone());
+                }
             }
         }
-        if let Some(PrepRoomPreference::Demand(name)) = &req.prep_preference {
-            if !env.data.rooms.contains_key(name) {
-                undeclared_rooms.insert(name.clone());
+        for pref in &req.prep_preference {
+            if let PrepRoomPreference::Demand(name) = pref {
+                if !env.data.rooms.contains_key(name) {
+                    undeclared_rooms.insert(name.clone());
+                }
             }
         }
     }

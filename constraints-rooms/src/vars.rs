@@ -24,19 +24,21 @@ impl VarEnv {
 
     pub(crate) fn has_interrogation_var(&self, request: usize, room: &NonEmptyString) -> bool {
         self.managed_rooms.contains(room)
-            || matches!(
-                &self.data.requests[request].room_preference,
-                Some(InterrogationRoomPreference::Demand { room: name, .. }) if name == room
-            )
+            || self.data.requests[request]
+                .room_preference
+                .iter()
+                .any(|p| {
+                    matches!(p, InterrogationRoomPreference::Demand { room: name, .. } if name == room)
+                })
     }
 
     pub(crate) fn has_prep_var(&self, request: usize, room: &NonEmptyString) -> bool {
         self.data.requests[request].prep_students >= 1
             && (self.managed_rooms.contains(room)
-                || matches!(
-                    &self.data.requests[request].prep_preference,
-                    Some(PrepRoomPreference::Demand(name)) if name == room
-                ))
+                || self.data.requests[request]
+                    .prep_preference
+                    .iter()
+                    .any(|p| matches!(p, PrepRoomPreference::Demand(name) if name == room)))
     }
 }
 
@@ -76,11 +78,11 @@ impl Var {
 
     pub fn compute_interrogation_room_range(env: &VarEnv, request: &usize) -> Vec<NonEmptyString> {
         let mut rooms = env.managed_rooms.clone();
-        if let Some(InterrogationRoomPreference::Demand { room: name, .. }) =
-            &env.data.requests[*request].room_preference
-        {
-            if !rooms.contains(name) {
-                rooms.push(name.clone());
+        for pref in &env.data.requests[*request].room_preference {
+            if let InterrogationRoomPreference::Demand { room: name, .. } = pref {
+                if !rooms.contains(name) {
+                    rooms.push(name.clone());
+                }
             }
         }
         rooms
@@ -88,10 +90,11 @@ impl Var {
 
     pub fn compute_prep_room_range(env: &VarEnv, request: &usize) -> Vec<NonEmptyString> {
         let mut rooms = env.managed_rooms.clone();
-        if let Some(PrepRoomPreference::Demand(name)) = &env.data.requests[*request].prep_preference
-        {
-            if !rooms.contains(name) {
-                rooms.push(name.clone());
+        for pref in &env.data.requests[*request].prep_preference {
+            if let PrepRoomPreference::Demand(name) = pref {
+                if !rooms.contains(name) {
+                    rooms.push(name.clone());
+                }
             }
         }
         rooms

@@ -32,11 +32,15 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
     let mut all_rooms: BTreeSet<NonEmptyString> = env.data.rooms.keys().cloned().collect();
 
     for req in &env.data.requests {
-        if let Some(InterrogationRoomPreference::Demand { room, .. }) = &req.room_preference {
-            all_rooms.insert(room.clone());
+        for pref in &req.room_preference {
+            if let InterrogationRoomPreference::Demand { room, .. } = pref {
+                all_rooms.insert(room.clone());
+            }
         }
-        if let Some(PrepRoomPreference::Demand(name)) = &req.prep_preference {
-            all_rooms.insert(name.clone());
+        for pref in &req.prep_preference {
+            if let PrepRoomPreference::Demand(name) = pref {
+                all_rooms.insert(name.clone());
+            }
         }
     }
 

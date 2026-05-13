@@ -130,9 +130,9 @@ pub fn parse_schedule(
     requests_path: &Path,
     incompats_path: Option<&Path>,
     config: Config,
-) -> Result<ScheduleData, ScheduleError> {
+) -> Result<(ScheduleData, Vec<RoomPreferenceWarning>), ScheduleError> {
     let rooms = parse_rooms(rooms_path)?;
-    let requests = parse_requests(requests_path)?;
+    let (requests, warnings) = parse_requests(requests_path)?;
     let incompats = match incompats_path {
         Some(path) => parse_incompats(path)?,
         None => Vec::new(),
@@ -147,12 +147,15 @@ pub fn parse_schedule(
         }
     }
 
-    Ok(ScheduleData {
-        rooms,
-        requests,
-        incompats,
-        config,
-    })
+    Ok((
+        ScheduleData {
+            rooms,
+            requests,
+            incompats,
+            config,
+        },
+        warnings,
+    ))
 }
 
 /// Parse a rooms CSV file.
@@ -223,7 +226,9 @@ pub fn parse_rooms(path: &Path) -> Result<BTreeMap<NonEmptyString, Room>, Schedu
 }
 
 /// Parse a requests CSV file.
-pub fn parse_requests(path: &Path) -> Result<Vec<Request>, ScheduleError> {
+pub fn parse_requests(
+    path: &Path,
+) -> Result<(Vec<Request>, Vec<RoomPreferenceWarning>), ScheduleError> {
     let mut reader = csv::ReaderBuilder::new()
         .has_headers(true)
         .flexible(true)
@@ -232,6 +237,7 @@ pub fn parse_requests(path: &Path) -> Result<Vec<Request>, ScheduleError> {
     validate_headers(&headers, REQUESTS_COLUMNS, "requests")?;
 
     let mut requests = Vec::new();
+    let mut all_warnings = Vec::new();
 
     for (idx, result) in reader.records().enumerate() {
         let record = result?;
@@ -303,8 +309,12 @@ pub fn parse_requests(path: &Path) -> Result<Vec<Request>, ScheduleError> {
         let window = parse_bool_field(&record, 10, row, "requests", "Fenêtre")?;
         let students = parse_field::<NonZeroU32>(&record, 11, row, "requests", "Nb élèves")?;
         let prep_students = parse_field::<u32>(&record, 12, row, "requests", "Nb prep")?;
-        let room_preference = parse_interrogation_room_preference(&record, 13);
-        let prep_preference = parse_prep_room_preference(&record, 14);
+
+        let (room_preference, room_warnings) =
+            parse_interrogation_room_preferences(&record, 13, row);
+        let (prep_preference, prep_warnings) = parse_prep_room_preferences(&record, 14, row);
+        all_warnings.extend(room_warnings);
+        all_warnings.extend(prep_warnings);
 
         requests.push(Request {
             periods: Periods { p1, p2, p3 },
@@ -323,7 +333,7 @@ pub fn parse_requests(path: &Path) -> Result<Vec<Request>, ScheduleError> {
         });
     }
 
-    Ok(requests)
+    Ok((requests, all_warnings))
 }
 
 fn validate_headers(
@@ -514,11 +524,8 @@ pub fn parse_incompats(path: &Path) -> Result<Vec<Incompat>, ScheduleError> {
     Ok(incompats)
 }
 
-fn parse_interrogation_room_preference(
-    record: &csv::StringRecord,
-    index: usize,
-) -> Option<InterrogationRoomPreference> {
-    let value = record.get(index).unwrap_or("").trim();
+fn parse_single_interrogation_room_preference(entry: &str) -> Option<InterrogationRoomPreference> {
+    let value = entry.trim();
     if value.is_empty() {
         return None;
     }
@@ -544,11 +551,8 @@ fn parse_interrogation_room_preference(
     })
 }
 
-fn parse_prep_room_preference(
-    record: &csv::StringRecord,
-    index: usize,
-) -> Option<PrepRoomPreference> {
-    let value = record.get(index).unwrap_or("").trim();
+fn parse_single_prep_room_preference(entry: &str) -> Option<PrepRoomPreference> {
+    let value = entry.trim();
     if value.is_empty() {
         return None;
     }
@@ -562,4 +566,154 @@ fn parse_prep_room_preference(
             .ok()
             .map(PrepRoomPreference::Suggestion)
     }
+}
+
+fn format_interrogation_pref(pref: &InterrogationRoomPreference) -> String {
+    let (prefix, suffix) = match pref {
+        InterrogationRoomPreference::Demand {
+            can_share_with_prep: true,
+            ..
+        } => ("!", "+"),
+        InterrogationRoomPreference::Demand { .. } => ("!", ""),
+        InterrogationRoomPreference::Suggestion {
+            can_share_with_prep: true,
+            ..
+        } => ("", "+"),
+        InterrogationRoomPreference::Suggestion { .. } => ("", ""),
+    };
+    format!("{prefix}{}{suffix}", pref.room_name().as_ref() as &str)
+}
+
+fn format_prep_pref(pref: &PrepRoomPreference) -> String {
+    match pref {
+        PrepRoomPreference::Demand(name) => format!("!{}", name.as_ref() as &str),
+        PrepRoomPreference::Suggestion(name) => (name.as_ref() as &str).to_string(),
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct RoomPreferenceWarning {
+    pub row: usize,
+    pub column: &'static str,
+    pub room: String,
+    pub original_entries: Vec<String>,
+    pub merged_result: String,
+}
+
+fn parse_interrogation_room_preferences(
+    record: &csv::StringRecord,
+    index: usize,
+    row: usize,
+) -> (Vec<InterrogationRoomPreference>, Vec<RoomPreferenceWarning>) {
+    let value = record.get(index).unwrap_or("").trim();
+    if value.is_empty() {
+        return (vec![], vec![]);
+    }
+
+    let parsed: Vec<InterrogationRoomPreference> = value
+        .split(';')
+        .filter_map(parse_single_interrogation_room_preference)
+        .collect();
+
+    let mut by_room: BTreeMap<&str, Vec<&InterrogationRoomPreference>> = BTreeMap::new();
+    for pref in &parsed {
+        by_room
+            .entry(pref.room_name().as_ref())
+            .or_default()
+            .push(pref);
+    }
+
+    let mut result = Vec::new();
+    let mut warnings = Vec::new();
+
+    for (room_name, entries) in &by_room {
+        let is_demand = entries
+            .iter()
+            .any(|p| matches!(p, InterrogationRoomPreference::Demand { .. }));
+        let can_share = entries.iter().any(|p| p.can_share_with_prep());
+        let room = entries[0].room_name().clone();
+
+        let merged = if is_demand {
+            InterrogationRoomPreference::Demand {
+                room,
+                can_share_with_prep: can_share,
+            }
+        } else {
+            InterrogationRoomPreference::Suggestion {
+                room,
+                can_share_with_prep: can_share,
+            }
+        };
+
+        if entries.len() > 1 {
+            warnings.push(RoomPreferenceWarning {
+                row,
+                column: "Salle",
+                room: room_name.to_string(),
+                original_entries: entries
+                    .iter()
+                    .map(|p| format_interrogation_pref(p))
+                    .collect(),
+                merged_result: format_interrogation_pref(&merged),
+            });
+        }
+
+        result.push(merged);
+    }
+
+    (result, warnings)
+}
+
+fn parse_prep_room_preferences(
+    record: &csv::StringRecord,
+    index: usize,
+    row: usize,
+) -> (Vec<PrepRoomPreference>, Vec<RoomPreferenceWarning>) {
+    let value = record.get(index).unwrap_or("").trim();
+    if value.is_empty() {
+        return (vec![], vec![]);
+    }
+
+    let parsed: Vec<PrepRoomPreference> = value
+        .split(';')
+        .filter_map(parse_single_prep_room_preference)
+        .collect();
+
+    let mut by_room: BTreeMap<&str, Vec<&PrepRoomPreference>> = BTreeMap::new();
+    for pref in &parsed {
+        by_room
+            .entry(pref.room_name().as_ref())
+            .or_default()
+            .push(pref);
+    }
+
+    let mut result = Vec::new();
+    let mut warnings = Vec::new();
+
+    for (room_name, entries) in &by_room {
+        let is_demand = entries
+            .iter()
+            .any(|p| matches!(p, PrepRoomPreference::Demand(_)));
+        let room = entries[0].room_name().clone();
+
+        let merged = if is_demand {
+            PrepRoomPreference::Demand(room)
+        } else {
+            PrepRoomPreference::Suggestion(room)
+        };
+
+        if entries.len() > 1 {
+            warnings.push(RoomPreferenceWarning {
+                row,
+                column: "Prep",
+                room: room_name.to_string(),
+                original_entries: entries.iter().map(|p| format_prep_pref(p)).collect(),
+                merged_result: format_prep_pref(&merged),
+            });
+        }
+
+        result.push(merged);
+    }
+
+    (result, warnings)
 }
