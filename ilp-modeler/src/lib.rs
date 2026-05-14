@@ -288,6 +288,8 @@ where
         Vec<(Constraint<InternalVar<B, E>>, ConstraintSource<E, C>)>,
     checker_reconstruction_variables: HashMap<InternalVar<B, E>, Variable>,
     checker_base_variable_set: HashSet<B>,
+    reconstruction_objective: Objective<InternalVar<B, E>>,
+    checker_reconstruction_objective: Objective<InternalVar<B, E>>,
     base_var_list: HashMap<B, Variable>,
 }
 
@@ -356,10 +358,7 @@ where
             ProblemBuilder::new()
                 .set_variables(recon_vars)
                 .add_constraints(reduced_constraints)
-                .set_objective(Objective::new(
-                    LinExpr::constant(0.0),
-                    ObjectiveSense::Minimize,
-                ));
+                .set_objective(self.reconstruction_objective.reduce(&fixes));
         Ok(builder
             .build()
             .expect("reconstruction problem should always be valid"))
@@ -445,10 +444,7 @@ where
             ProblemBuilder::new()
                 .set_variables(recon_vars)
                 .add_constraints(reduced_constraints)
-                .set_objective(Objective::new(
-                    LinExpr::constant(0.0),
-                    ObjectiveSense::Minimize,
-                ));
+                .set_objective(self.checker_reconstruction_objective.reduce(&fixes));
         Ok(builder
             .build()
             .expect("checker reconstruction problem should always be valid"))
@@ -1321,6 +1317,8 @@ where
                 checker_reconstruction_constraints: Vec::new(),
                 checker_reconstruction_variables: HashMap::new(),
                 checker_base_variable_set: HashSet::new(),
+                reconstruction_objective: Objective::default(),
+                checker_reconstruction_objective: Objective::default(),
                 base_var_list: base_vars,
             });
         }
@@ -1503,6 +1501,12 @@ where
             t_step.elapsed()
         ));
 
+        // Precompute reconstruction objectives before step 5 consumes folded_obj.
+        let reconstruction_objective = folded_obj.clone();
+        let checker_reconstruction_objective = folded_obj.retained(|v| {
+            matches!(v, InternalVar::Base(_)) || checker_reconstruction_variables.contains_key(v)
+        });
+
         // Step 5: feed everything into ProblemBuilder.
         let t_step = Instant::now();
         let builder: ProblemBuilder<InternalVar<B, E>, ConstraintSource<E, C>> =
@@ -1544,6 +1548,8 @@ where
             checker_reconstruction_constraints,
             checker_reconstruction_variables,
             checker_base_variable_set,
+            reconstruction_objective,
+            checker_reconstruction_objective,
             base_var_list: base_vars,
         })
     }

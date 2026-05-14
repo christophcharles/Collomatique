@@ -404,6 +404,20 @@ impl<V: UsableData> LinExpr<V> {
         output
     }
 
+    /// Keep only variables for which the predicate returns `true`.
+    ///
+    /// Removed terms are effectively set to zero. The constant is unchanged.
+    pub fn retain(&mut self, mut f: impl FnMut(&V) -> bool) {
+        self.coefs.retain(|k, _| f(k));
+    }
+
+    /// Like [`LinExpr::retain`] but returns a new expression instead of mutating.
+    pub fn retained(&self, f: impl FnMut(&V) -> bool) -> LinExpr<V> {
+        let mut output = self.clone();
+        output.retain(f);
+        output
+    }
+
     /// Reduce an expression by replacing part or all
     /// of its variables by values.
     ///
@@ -1311,6 +1325,20 @@ impl<V: UsableData> Constraint<V> {
     pub fn cleaned(&self) -> Constraint<V> {
         let mut output = self.clone();
         output.clean();
+        output
+    }
+
+    /// Keep only variables for which the predicate returns `true`.
+    ///
+    /// Removed terms are effectively set to zero in the constraint.
+    pub fn retain(&mut self, f: impl FnMut(&V) -> bool) {
+        self.expr.retain(f);
+    }
+
+    /// Like [`Constraint::retain`] but returns a new constraint instead of mutating.
+    pub fn retained(&self, f: impl FnMut(&V) -> bool) -> Constraint<V> {
+        let mut output = self.clone();
+        output.retain(f);
         output
     }
 

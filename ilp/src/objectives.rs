@@ -392,6 +392,21 @@ impl<V: UsableData> Objective<V> {
             sense: self.sense,
         }
     }
+
+    /// Keep only variables for which the predicate returns `true`.
+    ///
+    /// Removed terms are effectively set to zero. The sense is unchanged.
+    pub fn retain(&mut self, f: impl FnMut(&V) -> bool) {
+        self.func.retain(f);
+    }
+
+    /// Like [`Objective::retain`] but returns a new objective instead of mutating.
+    pub fn retained(&self, f: impl FnMut(&V) -> bool) -> Objective<V> {
+        Objective {
+            func: self.func.retained(f),
+            sense: self.sense,
+        }
+    }
 }
 
 impl<V: UsableData> std::ops::Add for &Objective<V> {
