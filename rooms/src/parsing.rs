@@ -694,6 +694,10 @@ fn parse_single_interrogation_room_preference(entry: &str) -> Option<Interrogati
         let room = NonEmptyString::try_from(rest.trim()).ok()?;
         return Some(InterrogationRoomPreference::Avoidance { room });
     }
+    if let Some(rest) = value.strip_prefix('@') {
+        let room = NonEmptyString::try_from(rest.trim()).ok()?;
+        return Some(InterrogationRoomPreference::CloseTo { room });
+    }
     let (is_demand, rest) = match value.strip_prefix('!') {
         Some(s) => (true, s.trim()),
         None => (false, value),
@@ -721,7 +725,11 @@ fn parse_single_prep_room_preference(entry: &str) -> Option<PrepRoomPreference> 
     if value.is_empty() {
         return None;
     }
-    if let Some(name) = value.strip_prefix('!') {
+    if let Some(name) = value.strip_prefix('@') {
+        NonEmptyString::try_from(name.trim())
+            .ok()
+            .map(PrepRoomPreference::CloseTo)
+    } else if let Some(name) = value.strip_prefix('!') {
         let name = name.trim();
         NonEmptyString::try_from(name)
             .ok()
@@ -747,12 +755,14 @@ fn format_interrogation_pref(pref: &InterrogationRoomPreference) -> String {
         InterrogationRoomPreference::Suggestion { .. } => ("", ""),
         InterrogationRoomPreference::Avoidance { .. } => ("-", ""),
         InterrogationRoomPreference::Exclusion { .. } => ("~", ""),
+        InterrogationRoomPreference::CloseTo { .. } => ("@", ""),
     };
     format!("{prefix}{}{suffix}", pref.room_name().as_ref() as &str)
 }
 
 fn format_prep_pref(pref: &PrepRoomPreference) -> String {
     match pref {
+        PrepRoomPreference::CloseTo(name) => format!("@{}", name.as_ref() as &str),
         PrepRoomPreference::Demand(name) => format!("!{}", name.as_ref() as &str),
         PrepRoomPreference::Suggestion(name) => (name.as_ref() as &str).to_string(),
     }
@@ -855,6 +865,10 @@ fn parse_interrogation_room_preferences(
                 )
             })
             .collect();
+        let close_to: Vec<_> = entries
+            .iter()
+            .filter(|p| matches!(p, InterrogationRoomPreference::CloseTo { .. }))
+            .collect();
 
         if !positive.is_empty() && !negative.is_empty() {
             warnings.push(RoomPreferenceWarning::ConflictingPreferences {
@@ -906,23 +920,57 @@ fn parse_interrogation_room_preferences(
             }
 
             result.push(merged);
-        } else {
+        } else if !negative.is_empty() {
             let is_exclusion = negative
                 .iter()
                 .any(|p| matches!(p, InterrogationRoomPreference::Exclusion { .. }));
 
-            let merged = if is_exclusion {
-                InterrogationRoomPreference::Exclusion { room }
+            let merged_neg = if is_exclusion {
+                InterrogationRoomPreference::Exclusion { room: room.clone() }
             } else {
-                InterrogationRoomPreference::Avoidance { room }
+                InterrogationRoomPreference::Avoidance { room: room.clone() }
             };
 
-            if entries.len() > 1 {
+            if negative.len() > 1 {
                 warnings.push(RoomPreferenceWarning::Redundancy {
                     row,
                     column: "Salle",
                     room: room_name.to_string(),
-                    original_entries: entries
+                    original_entries: negative
+                        .iter()
+                        .map(|p| format_interrogation_pref(p))
+                        .collect(),
+                    merged_result: format_interrogation_pref(&merged_neg),
+                });
+            }
+
+            result.push(merged_neg);
+
+            if !close_to.is_empty() {
+                let merged_ct = InterrogationRoomPreference::CloseTo { room };
+                if close_to.len() > 1 {
+                    warnings.push(RoomPreferenceWarning::Redundancy {
+                        row,
+                        column: "Salle",
+                        room: room_name.to_string(),
+                        original_entries: close_to
+                            .iter()
+                            .map(|p| format_interrogation_pref(p))
+                            .collect(),
+                        merged_result: format_interrogation_pref(&merged_ct),
+                    });
+                }
+                result.push(merged_ct);
+            }
+        } else {
+            let merged = InterrogationRoomPreference::CloseTo { room };
+
+            if close_to.len() > 1 {
+                warnings.push(RoomPreferenceWarning::Redundancy {
+                    row,
+                    column: "Salle",
+                    room: room_name.to_string(),
+                    original_entries: close_to
                         .iter()
                         .map(|p| format_interrogation_pref(p))
                         .collect(),
@@ -964,28 +1012,59 @@ fn parse_prep_room_preferences(
     let mut warnings = Vec::new();
 
     for (room_name, entries) in &by_room {
-        let is_demand = entries
+        let positive: Vec<_> = entries
             .iter()
-            .any(|p| matches!(p, PrepRoomPreference::Demand(_)));
+            .filter(|p| {
+                matches!(
+                    p,
+                    PrepRoomPreference::Suggestion(_) | PrepRoomPreference::Demand(_)
+                )
+            })
+            .collect();
+        let close_to: Vec<_> = entries
+            .iter()
+            .filter(|p| matches!(p, PrepRoomPreference::CloseTo(_)))
+            .collect();
+
         let room = entries[0].room_name().clone();
 
-        let merged = if is_demand {
-            PrepRoomPreference::Demand(room)
+        if !positive.is_empty() {
+            let is_demand = positive
+                .iter()
+                .any(|p| matches!(p, PrepRoomPreference::Demand(_)));
+
+            let merged = if is_demand {
+                PrepRoomPreference::Demand(room)
+            } else {
+                PrepRoomPreference::Suggestion(room)
+            };
+
+            if entries.len() > 1 {
+                warnings.push(RoomPreferenceWarning::Redundancy {
+                    row,
+                    column: "Prep",
+                    room: room_name.to_string(),
+                    original_entries: entries.iter().map(|p| format_prep_pref(p)).collect(),
+                    merged_result: format_prep_pref(&merged),
+                });
+            }
+
+            result.push(merged);
         } else {
-            PrepRoomPreference::Suggestion(room)
-        };
+            let merged = PrepRoomPreference::CloseTo(room);
 
-        if entries.len() > 1 {
-            warnings.push(RoomPreferenceWarning::Redundancy {
-                row,
-                column: "Prep",
-                room: room_name.to_string(),
-                original_entries: entries.iter().map(|p| format_prep_pref(p)).collect(),
-                merged_result: format_prep_pref(&merged),
-            });
+            if close_to.len() > 1 {
+                warnings.push(RoomPreferenceWarning::Redundancy {
+                    row,
+                    column: "Prep",
+                    room: room_name.to_string(),
+                    original_entries: close_to.iter().map(|p| format_prep_pref(p)).collect(),
+                    merged_result: format_prep_pref(&merged),
+                });
+            }
+
+            result.push(merged);
         }
-
-        result.push(merged);
     }
 
     (result, warnings)

@@ -53,6 +53,7 @@ pub struct Room {
 /// Room preference for prep: suggestion or demand.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PrepRoomPreference {
+    CloseTo(NonEmptyString),
     Suggestion(NonEmptyString),
     Demand(NonEmptyString),
 }
@@ -60,7 +61,9 @@ pub enum PrepRoomPreference {
 impl PrepRoomPreference {
     pub fn room_name(&self) -> &NonEmptyString {
         match self {
-            PrepRoomPreference::Suggestion(name) | PrepRoomPreference::Demand(name) => name,
+            PrepRoomPreference::CloseTo(name)
+            | PrepRoomPreference::Suggestion(name)
+            | PrepRoomPreference::Demand(name) => name,
         }
     }
 }
@@ -83,6 +86,9 @@ pub enum InterrogationRoomPreference {
     Exclusion {
         room: NonEmptyString,
     },
+    CloseTo {
+        room: NonEmptyString,
+    },
 }
 
 impl InterrogationRoomPreference {
@@ -91,7 +97,8 @@ impl InterrogationRoomPreference {
             InterrogationRoomPreference::Suggestion { room, .. }
             | InterrogationRoomPreference::Demand { room, .. }
             | InterrogationRoomPreference::Avoidance { room }
-            | InterrogationRoomPreference::Exclusion { room } => room,
+            | InterrogationRoomPreference::Exclusion { room }
+            | InterrogationRoomPreference::CloseTo { room } => room,
         }
     }
 
@@ -106,7 +113,8 @@ impl InterrogationRoomPreference {
                 ..
             } => *can_share_with_prep,
             InterrogationRoomPreference::Avoidance { .. }
-            | InterrogationRoomPreference::Exclusion { .. } => false,
+            | InterrogationRoomPreference::Exclusion { .. }
+            | InterrogationRoomPreference::CloseTo { .. } => false,
         }
     }
 }
@@ -290,6 +298,9 @@ impl ScheduleData {
                         }
                         InterrogationRoomPreference::Avoidance { .. }
                         | InterrogationRoomPreference::Exclusion { .. } => {}
+                        InterrogationRoomPreference::CloseTo { .. } => {
+                            suggested.insert(name);
+                        }
                     }
                 }
             }
@@ -297,7 +308,7 @@ impl ScheduleData {
                 let name = AsRef::<str>::as_ref(pref.room_name());
                 if !self.rooms.contains_key(name) {
                     match pref {
-                        PrepRoomPreference::Suggestion(_) => {
+                        PrepRoomPreference::CloseTo(_) | PrepRoomPreference::Suggestion(_) => {
                             suggested.insert(name);
                         }
                         PrepRoomPreference::Demand(_) => {
