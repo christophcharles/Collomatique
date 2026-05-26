@@ -4,6 +4,77 @@ use std::num::NonZeroU32;
 use collomatique_time::Weekday;
 use non_empty_string::NonEmptyString;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum BoardRequirement {
+    Zero = 0,
+    One = 1,
+    Two = 2,
+    Three = 3,
+}
+
+impl BoardRequirement {
+    pub fn from_u32(value: u32) -> Option<BoardRequirement> {
+        match value {
+            0 => Some(BoardRequirement::Zero),
+            1 => Some(BoardRequirement::One),
+            2 => Some(BoardRequirement::Two),
+            3 => Some(BoardRequirement::Three),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ProximityType {
+    Floor(u32),
+    Room(NonEmptyString),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ProximityDetails {
+    pub fuzzy: bool,
+    pub level: f32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InterrogationRoomStatus {
+    Accepted { can_share_with_prep: bool },
+    Demanded { can_share_with_prep: bool },
+    Excluded,
+}
+
+impl InterrogationRoomStatus {
+    pub fn can_share_with_prep(&self) -> bool {
+        match self {
+            InterrogationRoomStatus::Accepted {
+                can_share_with_prep,
+            }
+            | InterrogationRoomStatus::Demanded {
+                can_share_with_prep,
+            } => *can_share_with_prep,
+            InterrogationRoomStatus::Excluded => false,
+        }
+    }
+
+    pub fn is_demanded(&self) -> bool {
+        matches!(self, InterrogationRoomStatus::Demanded { .. })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PrepRoomStatus {
+    Accepted,
+    Demanded,
+    Excluded,
+}
+
+impl PrepRoomStatus {
+    pub fn is_demanded(&self) -> bool {
+        matches!(self, PrepRoomStatus::Demanded)
+    }
+}
+
 /// Hour of an interrogation, guaranteed to be between 8 and 19 inclusive.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Hour(u32);
@@ -42,81 +113,12 @@ pub struct Room {
     pub floor: u32,
     pub x: f32,
     pub y: f32,
-    pub blackboards: u32,
-    pub whiteboards: u32,
+    pub blackboards: f32,
+    pub whiteboards: f32,
     pub capacity: NonZeroU32,
     pub window: Window,
     pub priority: Option<u32>,
     pub reserved: bool,
-}
-
-/// Room preference for prep: suggestion or demand.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PrepRoomPreference {
-    CloseTo(NonEmptyString),
-    Suggestion(NonEmptyString),
-    Demand(NonEmptyString),
-}
-
-impl PrepRoomPreference {
-    pub fn room_name(&self) -> &NonEmptyString {
-        match self {
-            PrepRoomPreference::CloseTo(name)
-            | PrepRoomPreference::Suggestion(name)
-            | PrepRoomPreference::Demand(name) => name,
-        }
-    }
-}
-
-/// Room preference for interrogation: suggestion or demand, with optional prep sharing.
-/// Also supports negative preferences: avoidance (soft) and exclusion (hard).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum InterrogationRoomPreference {
-    Suggestion {
-        room: NonEmptyString,
-        can_share_with_prep: bool,
-    },
-    Demand {
-        room: NonEmptyString,
-        can_share_with_prep: bool,
-    },
-    Avoidance {
-        room: NonEmptyString,
-    },
-    Exclusion {
-        room: NonEmptyString,
-    },
-    CloseTo {
-        room: NonEmptyString,
-    },
-}
-
-impl InterrogationRoomPreference {
-    pub fn room_name(&self) -> &NonEmptyString {
-        match self {
-            InterrogationRoomPreference::Suggestion { room, .. }
-            | InterrogationRoomPreference::Demand { room, .. }
-            | InterrogationRoomPreference::Avoidance { room }
-            | InterrogationRoomPreference::Exclusion { room }
-            | InterrogationRoomPreference::CloseTo { room } => room,
-        }
-    }
-
-    pub fn can_share_with_prep(&self) -> bool {
-        match self {
-            InterrogationRoomPreference::Suggestion {
-                can_share_with_prep,
-                ..
-            }
-            | InterrogationRoomPreference::Demand {
-                can_share_with_prep,
-                ..
-            } => *can_share_with_prep,
-            InterrogationRoomPreference::Avoidance { .. }
-            | InterrogationRoomPreference::Exclusion { .. }
-            | InterrogationRoomPreference::CloseTo { .. } => false,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -210,13 +212,14 @@ pub struct Request {
     pub classes: Vec<NonEmptyString>,
     pub requester: NonEmptyString,
     pub teacher: NonEmptyString,
-    pub blackboards: u32,
+    pub boards: BoardRequirement,
     pub window: bool,
     pub students: NonZeroU32,
     pub prep_students: u32,
-    pub room_preference: Vec<InterrogationRoomPreference>,
-    pub floor_suggestions: Vec<u32>,
-    pub prep_preference: Vec<PrepRoomPreference>,
+    pub room_statuses: BTreeMap<NonEmptyString, InterrogationRoomStatus>,
+    pub proximity: BTreeMap<ProximityType, ProximityDetails>,
+    pub prep_statuses: BTreeMap<NonEmptyString, PrepRoomStatus>,
+    pub prep_proximity: BTreeMap<ProximityType, ProximityDetails>,
     pub skip_room_continuity: bool,
 }
 
@@ -286,34 +289,47 @@ impl ScheduleData {
         let mut demanded = HashSet::new();
 
         for req in &self.requests {
-            for pref in &req.room_preference {
-                let name = AsRef::<str>::as_ref(pref.room_name());
-                if !self.rooms.contains_key(name) {
-                    match pref {
-                        InterrogationRoomPreference::Suggestion { .. } => {
-                            suggested.insert(name);
+            for (name, status) in &req.room_statuses {
+                let name_str: &str = name.as_ref();
+                if !self.rooms.contains_key(name_str) {
+                    match status {
+                        InterrogationRoomStatus::Accepted { .. } => {
+                            suggested.insert(name_str);
                         }
-                        InterrogationRoomPreference::Demand { .. } => {
-                            demanded.insert(name);
+                        InterrogationRoomStatus::Demanded { .. } => {
+                            demanded.insert(name_str);
                         }
-                        InterrogationRoomPreference::Avoidance { .. }
-                        | InterrogationRoomPreference::Exclusion { .. } => {}
-                        InterrogationRoomPreference::CloseTo { .. } => {
-                            suggested.insert(name);
-                        }
+                        InterrogationRoomStatus::Excluded => {}
                     }
                 }
             }
-            for pref in &req.prep_preference {
-                let name = AsRef::<str>::as_ref(pref.room_name());
-                if !self.rooms.contains_key(name) {
-                    match pref {
-                        PrepRoomPreference::CloseTo(_) | PrepRoomPreference::Suggestion(_) => {
-                            suggested.insert(name);
+            for key in req.proximity.keys() {
+                if let ProximityType::Room(name) = key {
+                    let name_str: &str = name.as_ref();
+                    if !self.rooms.contains_key(name_str) {
+                        suggested.insert(name_str);
+                    }
+                }
+            }
+            for (name, status) in &req.prep_statuses {
+                let name_str: &str = name.as_ref();
+                if !self.rooms.contains_key(name_str) {
+                    match status {
+                        PrepRoomStatus::Accepted => {
+                            suggested.insert(name_str);
                         }
-                        PrepRoomPreference::Demand(_) => {
-                            demanded.insert(name);
+                        PrepRoomStatus::Demanded => {
+                            demanded.insert(name_str);
                         }
+                        PrepRoomStatus::Excluded => {}
+                    }
+                }
+            }
+            for key in req.prep_proximity.keys() {
+                if let ProximityType::Room(name) = key {
+                    let name_str: &str = name.as_ref();
+                    if !self.rooms.contains_key(name_str) {
+                        suggested.insert(name_str);
                     }
                 }
             }
@@ -342,8 +358,8 @@ impl ScheduleData {
         let mut groups: BTreeMap<(NonEmptyString, Weekday, Hour), Vec<Demand>> = BTreeMap::new();
 
         for (req_idx, req) in self.requests.iter().enumerate() {
-            for pref in &req.room_preference {
-                if let InterrogationRoomPreference::Demand { room, .. } = pref {
+            for (room, status) in &req.room_statuses {
+                if status.is_demanded() {
                     groups
                         .entry((room.clone(), req.day, req.hour))
                         .or_default()
@@ -354,8 +370,8 @@ impl ScheduleData {
                         });
                 }
             }
-            for pref in &req.prep_preference {
-                if let PrepRoomPreference::Demand(room) = pref {
+            for (room, status) in &req.prep_statuses {
+                if status.is_demanded() {
                     groups
                         .entry((room.clone(), req.day, req.hour))
                         .or_default()
@@ -399,9 +415,9 @@ impl ScheduleData {
                 for p_demand in &prep {
                     if i_demand.periods.overlaps_with(&p_demand.periods) {
                         let can_share = self.requests[i_demand.request]
-                            .room_preference
-                            .iter()
-                            .any(|p| p.room_name() == room && p.can_share_with_prep());
+                            .room_statuses
+                            .get(room)
+                            .map_or(false, |s| s.can_share_with_prep());
                         conflicts.push(DemandConflict {
                             room: room.clone(),
                             day: *day,

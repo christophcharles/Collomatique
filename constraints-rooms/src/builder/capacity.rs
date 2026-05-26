@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use collomatique_ilp::int_linexpr::IntLinExpr;
-use collomatique_rooms_model::{Hour, InterrogationRoomPreference, PrepRoomPreference, Request};
+use collomatique_rooms_model::{Hour, Request};
 use collomatique_time::Weekday;
 use non_empty_string::NonEmptyString;
 
@@ -10,9 +10,9 @@ use crate::types::ConstraintDesc;
 use crate::vars::{PERIOD_COUNT, Var, VarEnv};
 
 fn shares_with_prep_in_room(req: &Request, room: &NonEmptyString) -> bool {
-    req.room_preference
-        .iter()
-        .any(|p| p.room_name() == room && p.can_share_with_prep())
+    req.room_statuses
+        .get(room)
+        .map_or(false, |s| s.can_share_with_prep())
 }
 
 fn request_active_at(req: &Request, period: usize, day: &Weekday, hour: &Hour) -> bool {
@@ -114,18 +114,14 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
     // Undeclared rooms (in demands but not in rooms.csv)
     let mut undeclared_rooms: BTreeSet<NonEmptyString> = BTreeSet::new();
     for req in &env.data.requests {
-        for pref in &req.room_preference {
-            if let InterrogationRoomPreference::Demand { room: name, .. } = pref {
-                if !env.data.rooms.contains_key(name) {
-                    undeclared_rooms.insert(name.clone());
-                }
+        for (name, status) in &req.room_statuses {
+            if status.is_demanded() && !env.data.rooms.contains_key(name) {
+                undeclared_rooms.insert(name.clone());
             }
         }
-        for pref in &req.prep_preference {
-            if let PrepRoomPreference::Demand(name) = pref {
-                if !env.data.rooms.contains_key(name) {
-                    undeclared_rooms.insert(name.clone());
-                }
+        for (name, status) in &req.prep_statuses {
+            if status.is_demanded() && !env.data.rooms.contains_key(name) {
+                undeclared_rooms.insert(name.clone());
             }
         }
     }

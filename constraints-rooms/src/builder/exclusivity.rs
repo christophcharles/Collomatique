@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use collomatique_ilp::int_linexpr::IntLinExpr;
-use collomatique_rooms_model::{Hour, InterrogationRoomPreference, PrepRoomPreference, Request};
+use collomatique_rooms_model::{Hour, Request};
 use collomatique_time::Weekday;
 use non_empty_string::NonEmptyString;
 
@@ -32,13 +32,13 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
     let mut all_rooms: BTreeSet<NonEmptyString> = env.data.rooms.keys().cloned().collect();
 
     for req in &env.data.requests {
-        for pref in &req.room_preference {
-            if let InterrogationRoomPreference::Demand { room, .. } = pref {
-                all_rooms.insert(room.clone());
+        for (name, status) in &req.room_statuses {
+            if status.is_demanded() {
+                all_rooms.insert(name.clone());
             }
         }
-        for pref in &req.prep_preference {
-            if let PrepRoomPreference::Demand(name) = pref {
+        for (name, status) in &req.prep_statuses {
+            if status.is_demanded() {
                 all_rooms.insert(name.clone());
             }
         }

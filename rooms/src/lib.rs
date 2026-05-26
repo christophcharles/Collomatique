@@ -5,9 +5,9 @@ use std::path::Path;
 use std::time::Instant;
 
 pub use collomatique_rooms_model::{
-    Config, DemandConflict, DemandConflictKind, DemandKind, Hour, Incompat,
-    InterrogationRoomPreference, Periods, PrepRoomPreference, Request, Room, RoomSol, ScheduleData,
-    SolutionColumns, TeacherConflict, TimeZones, Window,
+    BoardRequirement, Config, DemandConflict, DemandConflictKind, DemandKind, Hour, Incompat,
+    InterrogationRoomStatus, Periods, PrepRoomStatus, ProximityDetails, ProximityType, Request,
+    Room, RoomSol, ScheduleData, SolutionColumns, TeacherConflict, TimeZones, Window,
 };
 pub use parsing::{RoomPreferenceWarning, ScheduleError};
 

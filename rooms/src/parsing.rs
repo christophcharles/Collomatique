@@ -3,8 +3,9 @@ use std::num::NonZeroU32;
 use std::path::Path;
 
 use collomatique_rooms_model::{
-    Config, Hour, Incompat, InterrogationRoomPreference, Periods, PrepRoomPreference, Request,
-    Room, RoomSol, ScheduleData, SolutionColumns, TeacherConflict, Window,
+    BoardRequirement, Config, Hour, Incompat, InterrogationRoomStatus, Periods, PrepRoomStatus,
+    ProximityDetails, ProximityType, Request, Room, RoomSol, ScheduleData, SolutionColumns,
+    TeacherConflict, Window,
 };
 use collomatique_time::Weekday;
 use non_empty_string::NonEmptyString;
@@ -245,8 +246,8 @@ pub fn parse_rooms(path: &Path) -> Result<BTreeMap<NonEmptyString, Room>, Schedu
         let floor = parse_field::<u32>(&record, 1, row, "rooms", "Étage")?;
         let x = parse_field::<f32>(&record, 2, row, "rooms", "X")?;
         let y = parse_field::<f32>(&record, 3, row, "rooms", "Y")?;
-        let blackboards = parse_field::<u32>(&record, 4, row, "rooms", "Tableaux noirs")?;
-        let whiteboards = parse_field::<u32>(&record, 5, row, "rooms", "Tableaux blancs")?;
+        let blackboards = parse_field::<f32>(&record, 4, row, "rooms", "Tableaux noirs")?;
+        let whiteboards = parse_field::<f32>(&record, 5, row, "rooms", "Tableaux blancs")?;
         let capacity = parse_field::<NonZeroU32>(&record, 6, row, "rooms", "Capacité")?;
         let window = parse_window_field(&record, 7, row)?;
         let priority = parse_priority_field(&record, 8, row)?;
@@ -392,33 +393,39 @@ pub fn parse_requests(
 
         let requester = parse_non_empty_field(&record, 7, row, "requests", "Responsable")?;
         let teacher = parse_non_empty_field(&record, 8, row, "requests", "Colleur")?;
-        let blackboards = parse_field::<u32>(&record, 9, row, "requests", "Tableaux")?;
+        let boards_raw = parse_field::<u32>(&record, 9, row, "requests", "Tableaux")?;
+        let boards = BoardRequirement::from_u32(boards_raw).ok_or_else(|| {
+            ScheduleError::RequestsRowError {
+                row,
+                message: format!("column \"Tableaux\": expected 0, 1, 2 or 3, got {boards_raw}"),
+            }
+        })?;
         let window = parse_bool_field(&record, 10, row, "requests", "Fenêtre")?;
         let students = parse_field::<NonZeroU32>(&record, 11, row, "requests", "Nb élèves")?;
         let prep_students = parse_field::<u32>(&record, 12, row, "requests", "Nb prep")?;
 
-        let (room_preference, floor_suggestions, room_warnings) =
+        let (room_statuses, proximity, room_warnings) =
             parse_interrogation_room_preferences(&record, 13, row)?;
-        let (prep_preference, prep_warnings) = parse_prep_room_preferences(&record, 14, row);
+        let (prep_statuses, prep_proximity, prep_warnings) =
+            parse_prep_room_preferences(&record, 14, row);
         let isolated = parse_bool_field(&record, 15, row, "requests", "Isolé")?;
         all_warnings.extend(room_warnings);
         all_warnings.extend(prep_warnings);
 
-        for prep in &prep_preference {
-            let prep_name = prep.room_name();
-            let interro = room_preference.iter().find(|p| {
-                matches!(
-                    p,
-                    InterrogationRoomPreference::Suggestion { .. }
-                        | InterrogationRoomPreference::Demand { .. }
-                ) && p.room_name() == prep_name
-            });
-            if let Some(interro) = interro {
-                if !interro.can_share_with_prep() {
-                    all_warnings.push(RoomPreferenceWarning::InterrogationAndPrepWithoutSharing {
-                        row,
-                        room: (prep_name.as_ref() as &str).to_string(),
-                    });
+        for (prep_name, prep_status) in &prep_statuses {
+            if matches!(
+                prep_status,
+                PrepRoomStatus::Accepted | PrepRoomStatus::Demanded
+            ) {
+                if let Some(interro_status) = room_statuses.get(prep_name) {
+                    if !interro_status.can_share_with_prep() {
+                        all_warnings.push(
+                            RoomPreferenceWarning::InterrogationAndPrepWithoutSharing {
+                                row,
+                                room: (prep_name.as_ref() as &str).to_string(),
+                            },
+                        );
+                    }
                 }
             }
         }
@@ -431,13 +438,14 @@ pub fn parse_requests(
             classes,
             requester,
             teacher,
-            blackboards,
+            boards,
             window,
             students,
             prep_students,
-            room_preference,
-            floor_suggestions,
-            prep_preference,
+            room_statuses,
+            proximity,
+            prep_statuses,
+            prep_proximity,
             skip_room_continuity: isolated,
         });
     }
@@ -681,22 +689,42 @@ pub fn parse_incompats(path: &Path) -> Result<Vec<Incompat>, ScheduleError> {
     Ok(incompats)
 }
 
-fn parse_single_interrogation_room_preference(entry: &str) -> Option<InterrogationRoomPreference> {
+enum ParsedInterrogationEntry {
+    Status(NonEmptyString, InterrogationRoomStatus),
+    Proximity(ProximityType, ProximityDetails),
+}
+
+fn parse_single_interrogation_room_entry(entry: &str) -> Option<ParsedInterrogationEntry> {
     let value = entry.trim();
     if value.is_empty() {
         return None;
     }
     if let Some(rest) = value.strip_prefix('~') {
         let room = NonEmptyString::try_from(rest.trim()).ok()?;
-        return Some(InterrogationRoomPreference::Exclusion { room });
+        return Some(ParsedInterrogationEntry::Status(
+            room,
+            InterrogationRoomStatus::Excluded,
+        ));
     }
     if let Some(rest) = value.strip_prefix('-') {
         let room = NonEmptyString::try_from(rest.trim()).ok()?;
-        return Some(InterrogationRoomPreference::Avoidance { room });
+        return Some(ParsedInterrogationEntry::Proximity(
+            ProximityType::Room(room),
+            ProximityDetails {
+                fuzzy: false,
+                level: -1.0,
+            },
+        ));
     }
     if let Some(rest) = value.strip_prefix('@') {
         let room = NonEmptyString::try_from(rest.trim()).ok()?;
-        return Some(InterrogationRoomPreference::CloseTo { room });
+        return Some(ParsedInterrogationEntry::Proximity(
+            ProximityType::Room(room),
+            ProximityDetails {
+                fuzzy: true,
+                level: 1.0,
+            },
+        ));
     }
     let (is_demand, rest) = match value.strip_prefix('!') {
         Some(s) => (true, s.trim()),
@@ -707,64 +735,79 @@ fn parse_single_interrogation_room_preference(entry: &str) -> Option<Interrogati
         None => (false, rest),
     };
     let room = NonEmptyString::try_from(name).ok()?;
-    Some(if is_demand {
-        InterrogationRoomPreference::Demand {
-            room,
+    let status = if is_demand {
+        InterrogationRoomStatus::Demanded {
             can_share_with_prep,
         }
     } else {
-        InterrogationRoomPreference::Suggestion {
-            room,
+        InterrogationRoomStatus::Accepted {
             can_share_with_prep,
         }
-    })
+    };
+    Some(ParsedInterrogationEntry::Status(room, status))
 }
 
-fn parse_single_prep_room_preference(entry: &str) -> Option<PrepRoomPreference> {
+enum ParsedPrepEntry {
+    Status(NonEmptyString, PrepRoomStatus),
+    Proximity(ProximityType, ProximityDetails),
+}
+
+fn parse_single_prep_room_entry(entry: &str) -> Option<ParsedPrepEntry> {
     let value = entry.trim();
     if value.is_empty() {
         return None;
     }
     if let Some(name) = value.strip_prefix('@') {
-        NonEmptyString::try_from(name.trim())
-            .ok()
-            .map(PrepRoomPreference::CloseTo)
-    } else if let Some(name) = value.strip_prefix('!') {
-        let name = name.trim();
-        NonEmptyString::try_from(name)
-            .ok()
-            .map(PrepRoomPreference::Demand)
-    } else {
-        NonEmptyString::try_from(value)
-            .ok()
-            .map(PrepRoomPreference::Suggestion)
+        let room = NonEmptyString::try_from(name.trim()).ok()?;
+        return Some(ParsedPrepEntry::Proximity(
+            ProximityType::Room(room),
+            ProximityDetails {
+                fuzzy: true,
+                level: 1.0,
+            },
+        ));
+    }
+    if let Some(name) = value.strip_prefix('!') {
+        let room = NonEmptyString::try_from(name.trim()).ok()?;
+        return Some(ParsedPrepEntry::Status(room, PrepRoomStatus::Demanded));
+    }
+    let room = NonEmptyString::try_from(value).ok()?;
+    Some(ParsedPrepEntry::Status(room, PrepRoomStatus::Accepted))
+}
+
+fn format_interrogation_status(room: &str, status: &InterrogationRoomStatus) -> String {
+    match status {
+        InterrogationRoomStatus::Demanded {
+            can_share_with_prep: true,
+        } => format!("!{room}+"),
+        InterrogationRoomStatus::Demanded { .. } => format!("!{room}"),
+        InterrogationRoomStatus::Accepted {
+            can_share_with_prep: true,
+        } => format!("{room}+"),
+        InterrogationRoomStatus::Accepted { .. } => room.to_string(),
+        InterrogationRoomStatus::Excluded => format!("~{room}"),
     }
 }
 
-fn format_interrogation_pref(pref: &InterrogationRoomPreference) -> String {
-    let (prefix, suffix) = match pref {
-        InterrogationRoomPreference::Demand {
-            can_share_with_prep: true,
-            ..
-        } => ("!", "+"),
-        InterrogationRoomPreference::Demand { .. } => ("!", ""),
-        InterrogationRoomPreference::Suggestion {
-            can_share_with_prep: true,
-            ..
-        } => ("", "+"),
-        InterrogationRoomPreference::Suggestion { .. } => ("", ""),
-        InterrogationRoomPreference::Avoidance { .. } => ("-", ""),
-        InterrogationRoomPreference::Exclusion { .. } => ("~", ""),
-        InterrogationRoomPreference::CloseTo { .. } => ("@", ""),
-    };
-    format!("{prefix}{}{suffix}", pref.room_name().as_ref() as &str)
+fn format_proximity(key: &ProximityType, details: &ProximityDetails) -> String {
+    match key {
+        ProximityType::Floor(f) => format!("={f}"),
+        ProximityType::Room(name) => {
+            let name_str: &str = name.as_ref();
+            if details.level < 0.0 {
+                format!("-{name_str}")
+            } else {
+                format!("@{name_str}")
+            }
+        }
+    }
 }
 
-fn format_prep_pref(pref: &PrepRoomPreference) -> String {
-    match pref {
-        PrepRoomPreference::CloseTo(name) => format!("@{}", name.as_ref() as &str),
-        PrepRoomPreference::Demand(name) => format!("!{}", name.as_ref() as &str),
-        PrepRoomPreference::Suggestion(name) => (name.as_ref() as &str).to_string(),
+fn format_prep_status(room: &str, status: &PrepRoomStatus) -> String {
+    match status {
+        PrepRoomStatus::Demanded => format!("!{room}"),
+        PrepRoomStatus::Accepted => room.to_string(),
+        PrepRoomStatus::Excluded => format!("~{room}"),
     }
 }
 
@@ -795,19 +838,19 @@ fn parse_interrogation_room_preferences(
     row: usize,
 ) -> Result<
     (
-        Vec<InterrogationRoomPreference>,
-        Vec<u32>,
+        BTreeMap<NonEmptyString, InterrogationRoomStatus>,
+        BTreeMap<ProximityType, ProximityDetails>,
         Vec<RoomPreferenceWarning>,
     ),
     ScheduleError,
 > {
     let value = record.get(index).unwrap_or("").trim();
     if value.is_empty() {
-        return Ok((vec![], vec![], vec![]));
+        return Ok((BTreeMap::new(), BTreeMap::new(), vec![]));
     }
 
-    let mut parsed: Vec<InterrogationRoomPreference> = Vec::new();
-    let mut floor_suggestions: Vec<u32> = Vec::new();
+    let mut status_entries: Vec<(NonEmptyString, InterrogationRoomStatus, String)> = Vec::new();
+    let mut proximity_entries: Vec<(ProximityType, ProximityDetails, String)> = Vec::new();
 
     for entry in value.split(';') {
         let trimmed = entry.trim();
@@ -825,83 +868,78 @@ fn parse_interrogation_room_preferences(
                      expected a non-negative integer after '='"
                     ),
                 })?;
-            if !floor_suggestions.contains(&floor) {
-                floor_suggestions.push(floor);
+            proximity_entries.push((
+                ProximityType::Floor(floor),
+                ProximityDetails {
+                    fuzzy: true,
+                    level: 1.0,
+                },
+                format!("={floor}"),
+            ));
+        } else if let Some(parsed) = parse_single_interrogation_room_entry(trimmed) {
+            match parsed {
+                ParsedInterrogationEntry::Status(room, status) => {
+                    let formatted = format_interrogation_status(room.as_ref(), &status);
+                    status_entries.push((room, status, formatted));
+                }
+                ParsedInterrogationEntry::Proximity(key, details) => {
+                    let formatted = format_proximity(&key, &details);
+                    proximity_entries.push((key, details, formatted));
+                }
             }
-        } else if let Some(pref) = parse_single_interrogation_room_preference(trimmed) {
-            parsed.push(pref);
         }
     }
 
-    let mut by_room: BTreeMap<&str, Vec<&InterrogationRoomPreference>> = BTreeMap::new();
-    for pref in &parsed {
-        by_room
-            .entry(pref.room_name().as_ref())
-            .or_default()
-            .push(pref);
-    }
-
-    let mut result = Vec::new();
     let mut warnings = Vec::new();
 
-    for (room_name, entries) in &by_room {
+    // Merge status entries by room name
+    let mut by_room: BTreeMap<NonEmptyString, Vec<(InterrogationRoomStatus, String)>> =
+        BTreeMap::new();
+    for (room, status, formatted) in status_entries {
+        by_room.entry(room).or_default().push((status, formatted));
+    }
+
+    let mut result_statuses = BTreeMap::new();
+
+    for (room, entries) in &by_room {
+        let room_str: &str = room.as_ref();
         let positive: Vec<_> = entries
             .iter()
-            .filter(|p| {
+            .filter(|(s, _)| {
                 matches!(
-                    p,
-                    InterrogationRoomPreference::Suggestion { .. }
-                        | InterrogationRoomPreference::Demand { .. }
+                    s,
+                    InterrogationRoomStatus::Accepted { .. }
+                        | InterrogationRoomStatus::Demanded { .. }
                 )
             })
             .collect();
         let negative: Vec<_> = entries
             .iter()
-            .filter(|p| {
-                matches!(
-                    p,
-                    InterrogationRoomPreference::Avoidance { .. }
-                        | InterrogationRoomPreference::Exclusion { .. }
-                )
-            })
-            .collect();
-        let close_to: Vec<_> = entries
-            .iter()
-            .filter(|p| matches!(p, InterrogationRoomPreference::CloseTo { .. }))
+            .filter(|(s, _)| matches!(s, InterrogationRoomStatus::Excluded))
             .collect();
 
         if !positive.is_empty() && !negative.is_empty() {
             warnings.push(RoomPreferenceWarning::ConflictingPreferences {
                 row,
-                room: room_name.to_string(),
-                positive_entries: positive
-                    .iter()
-                    .map(|p| format_interrogation_pref(p))
-                    .collect(),
-                negative_entries: negative
-                    .iter()
-                    .map(|p| format_interrogation_pref(p))
-                    .collect(),
+                room: room_str.to_string(),
+                positive_entries: positive.iter().map(|(_, f)| f.clone()).collect(),
+                negative_entries: negative.iter().map(|(_, f)| f.clone()).collect(),
             });
             continue;
         }
 
-        let room = entries[0].room_name().clone();
-
         if !positive.is_empty() {
             let is_demand = positive
                 .iter()
-                .any(|p| matches!(p, InterrogationRoomPreference::Demand { .. }));
-            let can_share = positive.iter().any(|p| p.can_share_with_prep());
+                .any(|(s, _)| matches!(s, InterrogationRoomStatus::Demanded { .. }));
+            let can_share = positive.iter().any(|(s, _)| s.can_share_with_prep());
 
             let merged = if is_demand {
-                InterrogationRoomPreference::Demand {
-                    room,
+                InterrogationRoomStatus::Demanded {
                     can_share_with_prep: can_share,
                 }
             } else {
-                InterrogationRoomPreference::Suggestion {
-                    room,
+                InterrogationRoomStatus::Accepted {
                     can_share_with_prep: can_share,
                 }
             };
@@ -910,162 +948,114 @@ fn parse_interrogation_room_preferences(
                 warnings.push(RoomPreferenceWarning::Redundancy {
                     row,
                     column: "Salle",
-                    room: room_name.to_string(),
-                    original_entries: entries
-                        .iter()
-                        .map(|p| format_interrogation_pref(p))
-                        .collect(),
-                    merged_result: format_interrogation_pref(&merged),
+                    room: room_str.to_string(),
+                    original_entries: entries.iter().map(|(_, f)| f.clone()).collect(),
+                    merged_result: format_interrogation_status(room_str, &merged),
                 });
             }
 
-            result.push(merged);
-        } else if !negative.is_empty() {
-            let is_exclusion = negative
-                .iter()
-                .any(|p| matches!(p, InterrogationRoomPreference::Exclusion { .. }));
-
-            let merged_neg = if is_exclusion {
-                InterrogationRoomPreference::Exclusion { room: room.clone() }
-            } else {
-                InterrogationRoomPreference::Avoidance { room: room.clone() }
-            };
-
-            if negative.len() > 1 {
-                warnings.push(RoomPreferenceWarning::Redundancy {
-                    row,
-                    column: "Salle",
-                    room: room_name.to_string(),
-                    original_entries: negative
-                        .iter()
-                        .map(|p| format_interrogation_pref(p))
-                        .collect(),
-                    merged_result: format_interrogation_pref(&merged_neg),
-                });
-            }
-
-            result.push(merged_neg);
-
-            if !close_to.is_empty() {
-                let merged_ct = InterrogationRoomPreference::CloseTo { room };
-                if close_to.len() > 1 {
-                    warnings.push(RoomPreferenceWarning::Redundancy {
-                        row,
-                        column: "Salle",
-                        room: room_name.to_string(),
-                        original_entries: close_to
-                            .iter()
-                            .map(|p| format_interrogation_pref(p))
-                            .collect(),
-                        merged_result: format_interrogation_pref(&merged_ct),
-                    });
-                }
-                result.push(merged_ct);
-            }
+            result_statuses.insert(room.clone(), merged);
         } else {
-            let merged = InterrogationRoomPreference::CloseTo { room };
+            let merged = InterrogationRoomStatus::Excluded;
 
-            if close_to.len() > 1 {
+            if entries.len() > 1 {
                 warnings.push(RoomPreferenceWarning::Redundancy {
                     row,
                     column: "Salle",
-                    room: room_name.to_string(),
-                    original_entries: close_to
-                        .iter()
-                        .map(|p| format_interrogation_pref(p))
-                        .collect(),
-                    merged_result: format_interrogation_pref(&merged),
+                    room: room_str.to_string(),
+                    original_entries: entries.iter().map(|(_, f)| f.clone()).collect(),
+                    merged_result: format_interrogation_status(room_str, &merged),
                 });
             }
 
-            result.push(merged);
+            result_statuses.insert(room.clone(), merged);
         }
     }
 
-    Ok((result, floor_suggestions, warnings))
+    // Merge proximity entries by key (deduplicate)
+    let mut result_proximity = BTreeMap::new();
+    let mut prox_by_key: BTreeMap<&ProximityType, Vec<&str>> = BTreeMap::new();
+    for (key, _, formatted) in &proximity_entries {
+        prox_by_key.entry(key).or_default().push(formatted);
+    }
+    for (key, details, _) in proximity_entries {
+        result_proximity.entry(key).or_insert(details);
+    }
+
+    Ok((result_statuses, result_proximity, warnings))
 }
 
 fn parse_prep_room_preferences(
     record: &csv::StringRecord,
     index: usize,
     row: usize,
-) -> (Vec<PrepRoomPreference>, Vec<RoomPreferenceWarning>) {
+) -> (
+    BTreeMap<NonEmptyString, PrepRoomStatus>,
+    BTreeMap<ProximityType, ProximityDetails>,
+    Vec<RoomPreferenceWarning>,
+) {
     let value = record.get(index).unwrap_or("").trim();
     if value.is_empty() {
-        return (vec![], vec![]);
+        return (BTreeMap::new(), BTreeMap::new(), vec![]);
     }
 
-    let parsed: Vec<PrepRoomPreference> = value
-        .split(';')
-        .filter_map(parse_single_prep_room_preference)
-        .collect();
+    let mut status_entries: Vec<(NonEmptyString, PrepRoomStatus, String)> = Vec::new();
+    let mut proximity_entries: Vec<(ProximityType, ProximityDetails)> = Vec::new();
 
-    let mut by_room: BTreeMap<&str, Vec<&PrepRoomPreference>> = BTreeMap::new();
-    for pref in &parsed {
-        by_room
-            .entry(pref.room_name().as_ref())
-            .or_default()
-            .push(pref);
-    }
-
-    let mut result = Vec::new();
-    let mut warnings = Vec::new();
-
-    for (room_name, entries) in &by_room {
-        let positive: Vec<_> = entries
-            .iter()
-            .filter(|p| {
-                matches!(
-                    p,
-                    PrepRoomPreference::Suggestion(_) | PrepRoomPreference::Demand(_)
-                )
-            })
-            .collect();
-        let close_to: Vec<_> = entries
-            .iter()
-            .filter(|p| matches!(p, PrepRoomPreference::CloseTo(_)))
-            .collect();
-
-        let room = entries[0].room_name().clone();
-
-        if !positive.is_empty() {
-            let is_demand = positive
-                .iter()
-                .any(|p| matches!(p, PrepRoomPreference::Demand(_)));
-
-            let merged = if is_demand {
-                PrepRoomPreference::Demand(room)
-            } else {
-                PrepRoomPreference::Suggestion(room)
-            };
-
-            if entries.len() > 1 {
-                warnings.push(RoomPreferenceWarning::Redundancy {
-                    row,
-                    column: "Prep",
-                    room: room_name.to_string(),
-                    original_entries: entries.iter().map(|p| format_prep_pref(p)).collect(),
-                    merged_result: format_prep_pref(&merged),
-                });
+    for entry in value.split(';') {
+        if let Some(parsed) = parse_single_prep_room_entry(entry) {
+            match parsed {
+                ParsedPrepEntry::Status(room, status) => {
+                    let formatted = format_prep_status(room.as_ref(), &status);
+                    status_entries.push((room, status, formatted));
+                }
+                ParsedPrepEntry::Proximity(key, details) => {
+                    proximity_entries.push((key, details));
+                }
             }
-
-            result.push(merged);
-        } else {
-            let merged = PrepRoomPreference::CloseTo(room);
-
-            if close_to.len() > 1 {
-                warnings.push(RoomPreferenceWarning::Redundancy {
-                    row,
-                    column: "Prep",
-                    room: room_name.to_string(),
-                    original_entries: close_to.iter().map(|p| format_prep_pref(p)).collect(),
-                    merged_result: format_prep_pref(&merged),
-                });
-            }
-
-            result.push(merged);
         }
     }
 
-    (result, warnings)
+    let mut warnings = Vec::new();
+
+    // Merge status entries by room
+    let mut by_room: BTreeMap<NonEmptyString, Vec<(PrepRoomStatus, String)>> = BTreeMap::new();
+    for (room, status, formatted) in status_entries {
+        by_room.entry(room).or_default().push((status, formatted));
+    }
+
+    let mut result_statuses = BTreeMap::new();
+
+    for (room, entries) in &by_room {
+        let room_str: &str = room.as_ref();
+        let is_demand = entries
+            .iter()
+            .any(|(s, _)| matches!(s, PrepRoomStatus::Demanded));
+
+        let merged = if is_demand {
+            PrepRoomStatus::Demanded
+        } else {
+            PrepRoomStatus::Accepted
+        };
+
+        if entries.len() > 1 {
+            warnings.push(RoomPreferenceWarning::Redundancy {
+                row,
+                column: "Prep",
+                room: room_str.to_string(),
+                original_entries: entries.iter().map(|(_, f)| f.clone()).collect(),
+                merged_result: format_prep_status(room_str, &merged),
+            });
+        }
+
+        result_statuses.insert(room.clone(), merged);
+    }
+
+    // Merge proximity entries (deduplicate)
+    let mut result_proximity = BTreeMap::new();
+    for (key, details) in proximity_entries {
+        result_proximity.entry(key).or_insert(details);
+    }
+
+    (result_statuses, result_proximity, warnings)
 }

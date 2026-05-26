@@ -1,5 +1,5 @@
 use collomatique_ilp::int_linexpr::IntLinExpr;
-use collomatique_rooms_model::InterrogationRoomPreference;
+use collomatique_rooms_model::InterrogationRoomStatus;
 
 use super::{MyBundle, base_var};
 use crate::types::ConstraintDesc;
@@ -9,8 +9,8 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
     let mut bundle = MyBundle::new();
 
     for (req_idx, req) in env.data.requests.iter().enumerate() {
-        for pref in &req.room_preference {
-            if let InterrogationRoomPreference::Exclusion { room } = pref {
+        for (room, status) in &req.room_statuses {
+            if matches!(status, InterrogationRoomStatus::Excluded) {
                 if env.has_interrogation_var(req_idx, room) {
                     bundle = bundle.with_constraint(
                         IntLinExpr::var(base_var(Var::RoomForInterrogation {

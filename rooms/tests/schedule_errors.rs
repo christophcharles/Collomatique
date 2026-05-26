@@ -7,8 +7,9 @@ use collomatique_ilp::solvers::collo_cbc::ColloCbcSolver;
 use collomatique_rooms::ScheduleError;
 use collomatique_rooms::parsing;
 use collomatique_rooms::{
-    Config, DemandConflictKind, DemandKind, Hour, InterrogationRoomPreference, Periods,
-    PrepRoomPreference, Request, Room, RoomPreferenceWarning, RoomSol, ScheduleData, Window,
+    BoardRequirement, Config, DemandConflictKind, DemandKind, Hour, InterrogationRoomStatus,
+    Periods, PrepRoomStatus, ProximityDetails, ProximityType, Request, Room, RoomPreferenceWarning,
+    RoomSol, ScheduleData, Window,
 };
 use collomatique_time::Weekday;
 use non_empty_string::NonEmptyString;
@@ -222,8 +223,8 @@ fn parse_rooms_valid() {
     assert_eq!(room.floor, 1);
     assert_eq!(room.x, 2.5);
     assert_eq!(room.y, 3.0);
-    assert_eq!(room.blackboards, 2);
-    assert_eq!(room.whiteboards, 1);
+    assert_eq!(room.blackboards, 2.0);
+    assert_eq!(room.whiteboards, 1.0);
     assert_eq!(room.capacity.get(), 30);
     assert_eq!(room.window, Window::Exterior);
     assert_eq!(room.priority, Some(0));
@@ -252,18 +253,20 @@ fn parse_requests_valid() {
     assert_eq!(r.classes, vec![nes("MP"), nes("PC")]);
     assert_eq!(r.requester, nes("Dupont"));
     assert_eq!(r.teacher, nes("Martin"));
-    assert_eq!(r.blackboards, 1);
+    assert_eq!(r.boards, BoardRequirement::One);
     assert!(!r.window);
     assert_eq!(r.students.get(), 3);
     assert_eq!(r.prep_students, 2);
     assert_eq!(
-        r.room_preference,
-        vec![InterrogationRoomPreference::Suggestion {
-            room: nes("A101"),
-            can_share_with_prep: false,
-        }]
+        r.room_statuses,
+        BTreeMap::from([(
+            nes("A101"),
+            InterrogationRoomStatus::Accepted {
+                can_share_with_prep: false,
+            }
+        )])
     );
-    assert!(r.prep_preference.is_empty());
+    assert!(r.prep_statuses.is_empty());
 }
 
 #[test]
@@ -272,11 +275,13 @@ fn parse_requests_room_demand() {
         parsing::parse_requests(&fixture("requests_room_demand.csv")).unwrap();
     assert_eq!(requests.len(), 1);
     assert_eq!(
-        requests[0].room_preference,
-        vec![InterrogationRoomPreference::Demand {
-            room: nes("A101"),
-            can_share_with_prep: false,
-        }]
+        requests[0].room_statuses,
+        BTreeMap::from([(
+            nes("A101"),
+            InterrogationRoomStatus::Demanded {
+                can_share_with_prep: false,
+            }
+        )])
     );
 }
 
@@ -451,8 +456,8 @@ fn make_room(capacity: u32) -> Room {
         floor: 0,
         x: 0.0,
         y: 0.0,
-        blackboards: 0,
-        whiteboards: 0,
+        blackboards: 0.0,
+        whiteboards: 0.0,
         capacity: NonZeroU32::new(capacity).unwrap(),
         window: Window::None,
         priority: Some(0),
@@ -464,8 +469,8 @@ fn make_request(
     day: chrono::Weekday,
     hour: u32,
     periods: (bool, bool, bool),
-    room_preference: Vec<InterrogationRoomPreference>,
-    prep_preference: Vec<PrepRoomPreference>,
+    room_statuses: BTreeMap<NonEmptyString, InterrogationRoomStatus>,
+    prep_statuses: BTreeMap<NonEmptyString, PrepRoomStatus>,
     prep_students: u32,
 ) -> Request {
     Request {
@@ -480,13 +485,14 @@ fn make_request(
         classes: vec![nes("MP")],
         requester: nes("Dupont"),
         teacher: nes("Martin"),
-        blackboards: 0,
+        boards: BoardRequirement::Zero,
         window: false,
         students: NonZeroU32::new(3).unwrap(),
         prep_students,
-        room_preference,
-        floor_suggestions: vec![],
-        prep_preference,
+        room_statuses,
+        proximity: BTreeMap::new(),
+        prep_statuses,
+        prep_proximity: BTreeMap::new(),
         skip_room_continuity: false,
     }
 }
@@ -495,6 +501,12 @@ fn make_request(
 fn demand_no_conflict_non_overlapping_periods() {
     let mut rooms = BTreeMap::new();
     rooms.insert(nes("A101"), make_room(30));
+    let demanded = BTreeMap::from([(
+        nes("A101"),
+        InterrogationRoomStatus::Demanded {
+            can_share_with_prep: false,
+        },
+    )]);
     let data = ScheduleData {
         rooms,
         requests: vec![
@@ -502,22 +514,16 @@ fn demand_no_conflict_non_overlapping_periods() {
                 chrono::Weekday::Mon,
                 8,
                 (true, false, false),
-                vec![InterrogationRoomPreference::Demand {
-                    room: nes("A101"),
-                    can_share_with_prep: false,
-                }],
-                vec![],
+                demanded.clone(),
+                BTreeMap::new(),
                 0,
             ),
             make_request(
                 chrono::Weekday::Mon,
                 8,
                 (false, true, false),
-                vec![InterrogationRoomPreference::Demand {
-                    room: nes("A101"),
-                    can_share_with_prep: false,
-                }],
-                vec![],
+                demanded,
+                BTreeMap::new(),
                 0,
             ),
         ],
@@ -531,6 +537,12 @@ fn demand_no_conflict_non_overlapping_periods() {
 fn demand_interro_interro_conflict() {
     let mut rooms = BTreeMap::new();
     rooms.insert(nes("A101"), make_room(30));
+    let demanded = BTreeMap::from([(
+        nes("A101"),
+        InterrogationRoomStatus::Demanded {
+            can_share_with_prep: false,
+        },
+    )]);
     let data = ScheduleData {
         rooms,
         requests: vec![
@@ -538,22 +550,16 @@ fn demand_interro_interro_conflict() {
                 chrono::Weekday::Mon,
                 8,
                 (true, false, false),
-                vec![InterrogationRoomPreference::Demand {
-                    room: nes("A101"),
-                    can_share_with_prep: false,
-                }],
-                vec![],
+                demanded.clone(),
+                BTreeMap::new(),
                 0,
             ),
             make_request(
                 chrono::Weekday::Mon,
                 8,
                 (true, true, false),
-                vec![InterrogationRoomPreference::Demand {
-                    room: nes("A101"),
-                    can_share_with_prep: false,
-                }],
-                vec![],
+                demanded,
+                BTreeMap::new(),
                 0,
             ),
         ],
@@ -582,19 +588,21 @@ fn demand_interro_prep_conflict() {
                 chrono::Weekday::Mon,
                 8,
                 (true, false, false),
-                vec![InterrogationRoomPreference::Demand {
-                    room: nes("A101"),
-                    can_share_with_prep: false,
-                }],
-                vec![],
+                BTreeMap::from([(
+                    nes("A101"),
+                    InterrogationRoomStatus::Demanded {
+                        can_share_with_prep: false,
+                    },
+                )]),
+                BTreeMap::new(),
                 0,
             ),
             make_request(
                 chrono::Weekday::Mon,
                 8,
                 (true, true, false),
-                vec![],
-                vec![PrepRoomPreference::Demand(nes("A101"))],
+                BTreeMap::new(),
+                BTreeMap::from([(nes("A101"), PrepRoomStatus::Demanded)]),
                 5,
             ),
         ],
@@ -617,6 +625,7 @@ fn demand_interro_prep_conflict() {
 fn demand_prep_prep_over_capacity() {
     let mut rooms = BTreeMap::new();
     rooms.insert(nes("A101"), make_room(10));
+    let prep_demanded = BTreeMap::from([(nes("A101"), PrepRoomStatus::Demanded)]);
     let data = ScheduleData {
         rooms,
         requests: vec![
@@ -624,16 +633,16 @@ fn demand_prep_prep_over_capacity() {
                 chrono::Weekday::Mon,
                 8,
                 (true, false, false),
-                vec![],
-                vec![PrepRoomPreference::Demand(nes("A101"))],
+                BTreeMap::new(),
+                prep_demanded.clone(),
                 6,
             ),
             make_request(
                 chrono::Weekday::Mon,
                 8,
                 (true, false, false),
-                vec![],
-                vec![PrepRoomPreference::Demand(nes("A101"))],
+                BTreeMap::new(),
+                prep_demanded,
                 7,
             ),
         ],
@@ -655,6 +664,7 @@ fn demand_prep_prep_over_capacity() {
 fn demand_prep_prep_fits() {
     let mut rooms = BTreeMap::new();
     rooms.insert(nes("A101"), make_room(20));
+    let prep_demanded = BTreeMap::from([(nes("A101"), PrepRoomStatus::Demanded)]);
     let data = ScheduleData {
         rooms,
         requests: vec![
@@ -662,16 +672,16 @@ fn demand_prep_prep_fits() {
                 chrono::Weekday::Mon,
                 8,
                 (true, false, false),
-                vec![],
-                vec![PrepRoomPreference::Demand(nes("A101"))],
+                BTreeMap::new(),
+                prep_demanded.clone(),
                 6,
             ),
             make_request(
                 chrono::Weekday::Mon,
                 8,
                 (true, false, false),
-                vec![],
-                vec![PrepRoomPreference::Demand(nes("A101"))],
+                BTreeMap::new(),
+                prep_demanded,
                 7,
             ),
         ],
@@ -683,6 +693,7 @@ fn demand_prep_prep_fits() {
 
 #[test]
 fn demand_prep_prep_unlisted_room() {
+    let prep_demanded = BTreeMap::from([(nes("Z999"), PrepRoomStatus::Demanded)]);
     let data = ScheduleData {
         rooms: BTreeMap::new(),
         requests: vec![
@@ -690,16 +701,16 @@ fn demand_prep_prep_unlisted_room() {
                 chrono::Weekday::Mon,
                 8,
                 (true, false, false),
-                vec![],
-                vec![PrepRoomPreference::Demand(nes("Z999"))],
+                BTreeMap::new(),
+                prep_demanded.clone(),
                 3,
             ),
             make_request(
                 chrono::Weekday::Mon,
                 8,
                 (true, false, false),
-                vec![],
-                vec![PrepRoomPreference::Demand(nes("Z999"))],
+                BTreeMap::new(),
+                prep_demanded,
                 4,
             ),
         ],
@@ -718,6 +729,12 @@ fn demand_prep_prep_unlisted_room() {
 fn demand_suggestions_ignored() {
     let mut rooms = BTreeMap::new();
     rooms.insert(nes("A101"), make_room(30));
+    let accepted = BTreeMap::from([(
+        nes("A101"),
+        InterrogationRoomStatus::Accepted {
+            can_share_with_prep: false,
+        },
+    )]);
     let data = ScheduleData {
         rooms,
         requests: vec![
@@ -725,22 +742,16 @@ fn demand_suggestions_ignored() {
                 chrono::Weekday::Mon,
                 8,
                 (true, false, false),
-                vec![InterrogationRoomPreference::Suggestion {
-                    room: nes("A101"),
-                    can_share_with_prep: false,
-                }],
-                vec![],
+                accepted.clone(),
+                BTreeMap::new(),
                 0,
             ),
             make_request(
                 chrono::Weekday::Mon,
                 8,
                 (true, false, false),
-                vec![InterrogationRoomPreference::Suggestion {
-                    room: nes("A101"),
-                    can_share_with_prep: false,
-                }],
-                vec![],
+                accepted,
+                BTreeMap::new(),
                 0,
             ),
         ],
@@ -820,11 +831,13 @@ fn parse_requests_suggestion_sharing() {
         parsing::parse_requests(&fixture("requests_room_suggestion_sharing.csv")).unwrap();
     assert_eq!(requests.len(), 1);
     assert_eq!(
-        requests[0].room_preference,
-        vec![InterrogationRoomPreference::Suggestion {
-            room: nes("A101"),
-            can_share_with_prep: true,
-        }]
+        requests[0].room_statuses,
+        BTreeMap::from([(
+            nes("A101"),
+            InterrogationRoomStatus::Accepted {
+                can_share_with_prep: true,
+            }
+        )])
     );
 }
 
@@ -834,11 +847,13 @@ fn parse_requests_demand_sharing() {
         parsing::parse_requests(&fixture("requests_room_demand_sharing.csv")).unwrap();
     assert_eq!(requests.len(), 1);
     assert_eq!(
-        requests[0].room_preference,
-        vec![InterrogationRoomPreference::Demand {
-            room: nes("A101"),
-            can_share_with_prep: true,
-        }]
+        requests[0].room_statuses,
+        BTreeMap::from([(
+            nes("A101"),
+            InterrogationRoomStatus::Demanded {
+                can_share_with_prep: true,
+            }
+        )])
     );
 }
 
@@ -858,19 +873,21 @@ fn demand_interro_prep_conflict_with_sharing() {
                 chrono::Weekday::Mon,
                 8,
                 (true, false, false),
-                vec![InterrogationRoomPreference::Demand {
-                    room: nes("A101"),
-                    can_share_with_prep: true,
-                }],
-                vec![],
+                BTreeMap::from([(
+                    nes("A101"),
+                    InterrogationRoomStatus::Demanded {
+                        can_share_with_prep: true,
+                    },
+                )]),
+                BTreeMap::new(),
                 0,
             ),
             make_request(
                 chrono::Weekday::Mon,
                 8,
                 (true, true, false),
-                vec![],
-                vec![PrepRoomPreference::Demand(nes("A101"))],
+                BTreeMap::new(),
+                BTreeMap::from([(nes("A101"), PrepRoomStatus::Demanded)]),
                 5,
             ),
         ],
@@ -897,24 +914,28 @@ fn parse_requests_multi_room() {
     assert!(warnings.is_empty());
     let r = &requests[0];
     assert_eq!(
-        r.room_preference,
-        vec![
-            InterrogationRoomPreference::Suggestion {
-                room: nes("A101"),
-                can_share_with_prep: true,
-            },
-            InterrogationRoomPreference::Demand {
-                room: nes("B302"),
-                can_share_with_prep: false,
-            },
-        ]
+        r.room_statuses,
+        BTreeMap::from([
+            (
+                nes("A101"),
+                InterrogationRoomStatus::Accepted {
+                    can_share_with_prep: true,
+                }
+            ),
+            (
+                nes("B302"),
+                InterrogationRoomStatus::Demanded {
+                    can_share_with_prep: false,
+                }
+            ),
+        ])
     );
     assert_eq!(
-        r.prep_preference,
-        vec![
-            PrepRoomPreference::Demand(nes("C205")),
-            PrepRoomPreference::Suggestion(nes("D410")),
-        ]
+        r.prep_statuses,
+        BTreeMap::from([
+            (nes("C205"), PrepRoomStatus::Demanded),
+            (nes("D410"), PrepRoomStatus::Accepted),
+        ])
     );
 }
 
@@ -925,15 +946,17 @@ fn parse_requests_redundant_merge() {
     assert_eq!(requests.len(), 1);
     let r = &requests[0];
     assert_eq!(
-        r.room_preference,
-        vec![InterrogationRoomPreference::Demand {
-            room: nes("A101"),
-            can_share_with_prep: true,
-        }]
+        r.room_statuses,
+        BTreeMap::from([(
+            nes("A101"),
+            InterrogationRoomStatus::Demanded {
+                can_share_with_prep: true,
+            }
+        )])
     );
     assert_eq!(
-        r.prep_preference,
-        vec![PrepRoomPreference::Demand(nes("B302"))]
+        r.prep_statuses,
+        BTreeMap::from([(nes("B302"), PrepRoomStatus::Demanded)])
     );
     assert_eq!(warnings.len(), 2);
     assert!(matches!(
@@ -985,9 +1008,13 @@ fn parse_requests_avoidance() {
         parsing::parse_requests(&fixture("requests_avoidance.csv")).unwrap();
     assert_eq!(requests.len(), 1);
     assert!(warnings.is_empty());
+    assert!(requests[0].room_statuses.is_empty());
     assert_eq!(
-        requests[0].room_preference,
-        vec![InterrogationRoomPreference::Avoidance { room: nes("A101") }]
+        requests[0].proximity.get(&ProximityType::Room(nes("A101"))),
+        Some(&ProximityDetails {
+            fuzzy: false,
+            level: -1.0,
+        })
     );
 }
 
@@ -998,8 +1025,8 @@ fn parse_requests_exclusion() {
     assert_eq!(requests.len(), 1);
     assert!(warnings.is_empty());
     assert_eq!(
-        requests[0].room_preference,
-        vec![InterrogationRoomPreference::Exclusion { room: nes("A101") }]
+        requests[0].room_statuses,
+        BTreeMap::from([(nes("A101"), InterrogationRoomStatus::Excluded)])
     );
 }
 
@@ -1008,7 +1035,7 @@ fn parse_requests_conflicting_prefs() {
     let (requests, _, _, warnings) =
         parsing::parse_requests(&fixture("requests_conflicting_prefs.csv")).unwrap();
     assert_eq!(requests.len(), 1);
-    assert!(requests[0].room_preference.is_empty());
+    assert!(requests[0].room_statuses.is_empty());
     assert_eq!(warnings.len(), 1);
     assert!(matches!(
         &warnings[0],
@@ -1025,20 +1052,20 @@ fn parse_requests_negative_merge() {
     let (requests, _, _, warnings) =
         parsing::parse_requests(&fixture("requests_negative_merge.csv")).unwrap();
     assert_eq!(requests.len(), 1);
+    // -A101 is now a proximity entry (avoidance), ~A101 is a status (exclusion)
+    // They go into different maps, so no merging warning
     assert_eq!(
-        requests[0].room_preference,
-        vec![InterrogationRoomPreference::Exclusion { room: nes("A101") }]
+        requests[0].room_statuses,
+        BTreeMap::from([(nes("A101"), InterrogationRoomStatus::Excluded)])
     );
-    assert_eq!(warnings.len(), 1);
-    assert!(matches!(
-        &warnings[0],
-        RoomPreferenceWarning::Redundancy {
-            column: "Salle",
-            room,
-            merged_result,
-            ..
-        } if room == "A101" && merged_result == "~A101"
-    ));
+    assert_eq!(
+        requests[0].proximity.get(&ProximityType::Room(nes("A101"))),
+        Some(&ProximityDetails {
+            fuzzy: false,
+            level: -1.0,
+        })
+    );
+    assert!(warnings.is_empty());
 }
 
 #[test]
@@ -1086,13 +1113,21 @@ fn parse_requests_floor_suggestion_with_room() {
     assert_eq!(requests.len(), 1);
     let r = &requests[0];
     assert_eq!(
-        r.room_preference,
-        vec![InterrogationRoomPreference::Suggestion {
-            room: nes("A101"),
-            can_share_with_prep: false,
-        }]
+        r.room_statuses,
+        BTreeMap::from([(
+            nes("A101"),
+            InterrogationRoomStatus::Accepted {
+                can_share_with_prep: false,
+            }
+        )])
     );
-    assert_eq!(r.floor_suggestions, vec![2]);
+    assert_eq!(
+        r.proximity.get(&ProximityType::Floor(2)),
+        Some(&ProximityDetails {
+            fuzzy: true,
+            level: 1.0,
+        })
+    );
 }
 
 #[test]
@@ -1100,8 +1135,14 @@ fn parse_requests_floor_only() {
     let (requests, _, _, _) = parsing::parse_requests(&fixture("requests_floor_only.csv")).unwrap();
     assert_eq!(requests.len(), 1);
     let r = &requests[0];
-    assert!(r.room_preference.is_empty());
-    assert_eq!(r.floor_suggestions, vec![2]);
+    assert!(r.room_statuses.is_empty());
+    assert_eq!(
+        r.proximity.get(&ProximityType::Floor(2)),
+        Some(&ProximityDetails {
+            fuzzy: true,
+            level: 1.0,
+        })
+    );
 }
 
 #[test]
@@ -1110,7 +1151,8 @@ fn parse_requests_floor_multiple() {
         parsing::parse_requests(&fixture("requests_floor_multiple.csv")).unwrap();
     assert_eq!(requests.len(), 1);
     let r = &requests[0];
-    assert_eq!(r.floor_suggestions, vec![2, 3]);
+    assert!(r.proximity.contains_key(&ProximityType::Floor(2)));
+    assert!(r.proximity.contains_key(&ProximityType::Floor(3)));
 }
 
 #[test]
@@ -1169,16 +1211,16 @@ fn teacher_conflict_detected() {
                 chrono::Weekday::Mon,
                 10,
                 (true, false, true),
-                vec![],
-                vec![],
+                BTreeMap::new(),
+                BTreeMap::new(),
                 0,
             ),
             make_request(
                 chrono::Weekday::Mon,
                 10,
                 (false, false, true),
-                vec![],
-                vec![],
+                BTreeMap::new(),
+                BTreeMap::new(),
                 0,
             ),
         ],
@@ -1203,16 +1245,16 @@ fn teacher_conflict_no_overlap() {
                 chrono::Weekday::Mon,
                 10,
                 (true, false, false),
-                vec![],
-                vec![],
+                BTreeMap::new(),
+                BTreeMap::new(),
                 0,
             ),
             make_request(
                 chrono::Weekday::Mon,
                 10,
                 (false, false, true),
-                vec![],
-                vec![],
+                BTreeMap::new(),
+                BTreeMap::new(),
                 0,
             ),
         ],
@@ -1231,16 +1273,16 @@ fn teacher_conflict_skipped_when_isolated() {
         chrono::Weekday::Mon,
         10,
         (true, false, true),
-        vec![],
-        vec![],
+        BTreeMap::new(),
+        BTreeMap::new(),
         0,
     );
     let req2 = make_request(
         chrono::Weekday::Mon,
         10,
         (false, false, true),
-        vec![],
-        vec![],
+        BTreeMap::new(),
+        BTreeMap::new(),
         0,
     );
     req1.skip_room_continuity = true;
