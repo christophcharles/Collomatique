@@ -1,2 +1,2 @@
-P1,P2,P3,Jour,Heure,Discipline,Classes,Responsable,Colleur,Tableaux,Fenêtre,Nb élèves,Nb prep,Salle,Prep,Isolé,Extra
-1,0,1,Lundi,8,Mathématiques,MP;PC,Dupont,Martin,1,0,3,2,A101,,0,foo
+P1,P2,P3,Jour,Heure,Discipline,Classes,Responsable,Colleur,Tableaux,Fenêtre,Nb élèves,Nb prep,Salle,Prep,Proximité,Proximité Prep,Isolé,Extra
+1,0,1,Lundi,8,Mathématiques,MP;PC,Dupont,Martin,1,0,3,2,A101,,,,0,foo

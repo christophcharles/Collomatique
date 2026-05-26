@@ -1052,8 +1052,7 @@ fn parse_requests_negative_merge() {
     let (requests, _, _, warnings) =
         parsing::parse_requests(&fixture("requests_negative_merge.csv")).unwrap();
     assert_eq!(requests.len(), 1);
-    // -A101 is now a proximity entry (avoidance), ~A101 is a status (exclusion)
-    // They go into different maps, so no merging warning
+    // ~A101 is in Salle (exclusion status), A101:-1 is in Proximité (avoidance)
     assert_eq!(
         requests[0].room_statuses,
         BTreeMap::from([(nes("A101"), InterrogationRoomStatus::Excluded)])
@@ -1161,7 +1160,7 @@ fn parse_requests_floor_bad() {
     assert!(matches!(
         err,
         ScheduleError::RequestsRowError { row: 1, ref message }
-        if message.contains("invalid floor suggestion")
+        if message.contains("invalid floor")
     ));
 }
 
@@ -1171,7 +1170,7 @@ fn parse_requests_floor_empty() {
     assert!(matches!(
         err,
         ScheduleError::RequestsRowError { row: 1, ref message }
-        if message.contains("invalid floor suggestion")
+        if message.contains("invalid floor")
     ));
 }
 
@@ -1304,7 +1303,7 @@ fn parse_requests_with_solsalle() {
         parsing::parse_requests(&fixture("valid_requests_with_solsalle.csv")).unwrap();
     assert_eq!(requests.len(), 1);
     assert_eq!(raw_rows.len(), 1);
-    assert_eq!(raw_rows[0].len(), 16);
+    assert_eq!(raw_rows[0].len(), 18);
     assert_eq!(requests[0].subjects, vec![nes("Mathématiques")]);
     assert_eq!(
         solutions[0].0,
@@ -1322,7 +1321,7 @@ fn parse_requests_with_both_sol() {
         parsing::parse_requests(&fixture("valid_requests_with_both_sol.csv")).unwrap();
     assert_eq!(requests.len(), 1);
     assert_eq!(raw_rows.len(), 1);
-    assert_eq!(raw_rows[0].len(), 16);
+    assert_eq!(raw_rows[0].len(), 18);
     assert_eq!(requests[0].subjects, vec![nes("Mathématiques")]);
     assert_eq!(
         solutions[0].0,
@@ -1346,7 +1345,7 @@ fn parse_requests_with_fixed_sol() {
         parsing::parse_requests(&fixture("valid_requests_with_fixed_sol.csv")).unwrap();
     assert_eq!(requests.len(), 1);
     assert_eq!(raw_rows.len(), 1);
-    assert_eq!(raw_rows[0].len(), 16);
+    assert_eq!(raw_rows[0].len(), 18);
     assert_eq!(
         solutions[0].0,
         Some(RoomSol {
@@ -1381,5 +1380,5 @@ fn parse_requests_raw_rows_match_input() {
     assert_eq!(raw_rows[0][3], "Lundi");
     assert_eq!(raw_rows[0][5], "Mathématiques");
     assert_eq!(raw_rows[0][13], "A101");
-    assert_eq!(raw_rows[0][15], "0");
+    assert_eq!(raw_rows[0][17], "0");
 }

@@ -31,8 +31,12 @@ struct Args {
     complete: bool,
 
     /// Use existing SolSalle/SolPrep as warm start hint for the solver
-    #[arg(long, conflicts_with_all = ["check", "fix", "complete"])]
+    #[arg(long, conflicts_with_all = ["check", "fix", "complete", "update_csv"])]
     warm: bool,
+
+    /// Convert an old-format requests CSV to the new format (no solving)
+    #[arg(long, conflicts_with_all = ["check", "fix", "complete", "warm", "no_objective"])]
+    update_csv: bool,
 
     /// Output CSV file for the solution (defaults to stdout)
     #[arg(long, short)]
@@ -46,7 +50,9 @@ struct Args {
 fn main() -> Result<(), anyhow::Error> {
     let args = Args::parse();
 
-    let mode = if args.check {
+    let mode = if args.update_csv {
+        collomatique_rooms::SolveMode::UpdateCsv
+    } else if args.check {
         collomatique_rooms::SolveMode::Check
     } else if args.fix {
         collomatique_rooms::SolveMode::Fix

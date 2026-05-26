@@ -16,6 +16,7 @@ pub enum SolveMode {
     Check,
     Fix,
     Complete { no_objective: bool },
+    UpdateCsv,
 }
 
 pub fn run(
@@ -27,6 +28,10 @@ pub fn run(
     config: Config,
     timeout_minutes: u32,
 ) -> Result<(), ScheduleError> {
+    if matches!(mode, SolveMode::UpdateCsv) {
+        return run_update_csv(requests, out);
+    }
+
     let (data, raw_request_rows, solution_columns, pref_warnings) =
         parsing::parse_schedule(rooms, requests, incompats, config)?;
     eprintln!(
@@ -298,7 +303,63 @@ pub fn run(
                 warm_hint.as_ref(),
             )
         }
+
+        SolveMode::UpdateCsv => unreachable!("handled above"),
     }
+}
+
+fn run_update_csv(requests: &Path, out: Option<&Path>) -> Result<(), ScheduleError> {
+    eprintln!("Reading old-format requests from {}...", requests.display());
+    let (parsed_requests, solution_columns, warnings) =
+        parsing::parse_requests_old_format(requests)?;
+    eprintln!("Parsed {} requests", parsed_requests.len());
+    for w in &warnings {
+        match w {
+            RoomPreferenceWarning::Redundancy {
+                row,
+                column,
+                room,
+                original_entries,
+                merged_result,
+                ..
+            } => {
+                eprintln!(
+                    "Warning: request row {row}, column \"{column}\": room \"{room}\" \
+                     specified multiple times ({entries}), merged to {merged_result}",
+                    entries = original_entries.join(", "),
+                );
+            }
+            RoomPreferenceWarning::InterrogationAndPrepWithoutSharing { row, room } => {
+                eprintln!(
+                    "Warning: request row {row}: room \"{room}\" appears in both Salle and Prep \
+                     but is not marked for sharing (+). Did you mean to add + to enable sharing?",
+                );
+            }
+            RoomPreferenceWarning::ConflictingPreferences {
+                row,
+                room,
+                positive_entries,
+                negative_entries,
+            } => {
+                eprintln!(
+                    "Warning: request row {row}, column \"Salle\": room \"{room}\" has both \
+                     positive ({pos}) and negative ({neg}) preferences",
+                    pos = positive_entries.join(", "),
+                    neg = negative_entries.join(", "),
+                );
+            }
+        }
+    }
+
+    if let Some(path) = out {
+        let file = std::fs::File::create(path).map_err(ScheduleError::Io)?;
+        parsing::write_updated_csv(file, &parsed_requests, &solution_columns);
+        eprintln!("Updated CSV saved to {}", path.display());
+    } else {
+        parsing::write_updated_csv(std::io::stdout(), &parsed_requests, &solution_columns);
+    }
+
+    Ok(())
 }
 
 type InternalVar = collomatique_ilp_modeler::InternalVar<

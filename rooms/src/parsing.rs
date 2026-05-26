@@ -41,6 +41,27 @@ pub(crate) const REQUESTS_COLUMNS: &[&str] = &[
     "Nb prep",
     "Salle",
     "Prep",
+    "Proximité",
+    "Proximité Prep",
+    "Isolé",
+];
+
+const OLD_REQUESTS_COLUMNS: &[&str] = &[
+    "P1",
+    "P2",
+    "P3",
+    "Jour",
+    "Heure",
+    "Discipline",
+    "Classes",
+    "Responsable",
+    "Colleur",
+    "Tableaux",
+    "Fenêtre",
+    "Nb élèves",
+    "Nb prep",
+    "Salle",
+    "Prep",
     "Isolé",
 ];
 
@@ -404,11 +425,11 @@ pub fn parse_requests(
         let students = parse_field::<NonZeroU32>(&record, 11, row, "requests", "Nb élèves")?;
         let prep_students = parse_field::<u32>(&record, 12, row, "requests", "Nb prep")?;
 
-        let (room_statuses, proximity, room_warnings) =
-            parse_interrogation_room_preferences(&record, 13, row)?;
-        let (prep_statuses, prep_proximity, prep_warnings) =
-            parse_prep_room_preferences(&record, 14, row);
-        let isolated = parse_bool_field(&record, 15, row, "requests", "Isolé")?;
+        let (room_statuses, room_warnings) = parse_interrogation_room_statuses(&record, 13, row)?;
+        let (prep_statuses, prep_warnings) = parse_prep_room_statuses(&record, 14, row)?;
+        let proximity = parse_proximity_column(&record, 15, row, "Proximité")?;
+        let prep_proximity = parse_proximity_column(&record, 16, row, "Proximité Prep")?;
+        let isolated = parse_bool_field(&record, 17, row, "requests", "Isolé")?;
         all_warnings.extend(room_warnings);
         all_warnings.extend(prep_warnings);
 
@@ -496,14 +517,18 @@ fn validate_requests_headers(headers: &csv::StringRecord) -> Result<usize, Sched
     match extra {
         0 => Ok(REQUESTS_COLUMNS.len()),
         1 | 2 => {
-            let col16 = headers.get(REQUESTS_COLUMNS.len()).unwrap_or("").trim();
-            if col16 != "SolSalle" {
-                return Err(ScheduleError::RequestsUnknownColumn(col16.to_string()));
+            let sol_salle_col = headers.get(REQUESTS_COLUMNS.len()).unwrap_or("").trim();
+            if sol_salle_col != "SolSalle" {
+                return Err(ScheduleError::RequestsUnknownColumn(
+                    sol_salle_col.to_string(),
+                ));
             }
             if extra == 2 {
-                let col17 = headers.get(REQUESTS_COLUMNS.len() + 1).unwrap_or("").trim();
-                if col17 != "SolPrep" {
-                    return Err(ScheduleError::RequestsUnknownColumn(col17.to_string()));
+                let sol_prep_col = headers.get(REQUESTS_COLUMNS.len() + 1).unwrap_or("").trim();
+                if sol_prep_col != "SolPrep" {
+                    return Err(ScheduleError::RequestsUnknownColumn(
+                        sol_prep_col.to_string(),
+                    ));
                 }
             }
             Ok(REQUESTS_COLUMNS.len() + extra)
@@ -689,6 +714,413 @@ pub fn parse_incompats(path: &Path) -> Result<Vec<Incompat>, ScheduleError> {
     Ok(incompats)
 }
 
+// --- New format parsing (status-only columns + separate proximity columns) ---
+
+fn parse_interrogation_room_statuses(
+    record: &csv::StringRecord,
+    index: usize,
+    row: usize,
+) -> Result<
+    (
+        BTreeMap<NonEmptyString, InterrogationRoomStatus>,
+        Vec<RoomPreferenceWarning>,
+    ),
+    ScheduleError,
+> {
+    let value = record.get(index).unwrap_or("").trim();
+    if value.is_empty() {
+        return Ok((BTreeMap::new(), vec![]));
+    }
+
+    let mut entries: Vec<(NonEmptyString, InterrogationRoomStatus, String)> = Vec::new();
+
+    for entry in value.split(';') {
+        let trimmed = entry.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if trimmed.starts_with('@') || trimmed.starts_with('-') || trimmed.starts_with('=') {
+            return Err(ScheduleError::RequestsRowError {
+                row,
+                message: format!(
+                    "column \"Salle\": entry \"{trimmed}\" looks like a proximity preference; \
+                     use the \"Proximité\" column instead"
+                ),
+            });
+        }
+        if let Some(rest) = trimmed.strip_prefix('~') {
+            let room = NonEmptyString::try_from(rest.trim()).map_err(|_| {
+                ScheduleError::RequestsRowError {
+                    row,
+                    message: format!("column \"Salle\": empty room name in \"{trimmed}\""),
+                }
+            })?;
+            let status = InterrogationRoomStatus::Excluded;
+            let formatted = format_interrogation_status(room.as_ref(), &status);
+            entries.push((room, status, formatted));
+        } else {
+            let (is_demand, rest) = match trimmed.strip_prefix('!') {
+                Some(s) => (true, s.trim()),
+                None => (false, trimmed),
+            };
+            let (can_share_with_prep, name) = match rest.strip_suffix('+') {
+                Some(s) => (true, s.trim()),
+                None => (false, rest),
+            };
+            let room =
+                NonEmptyString::try_from(name).map_err(|_| ScheduleError::RequestsRowError {
+                    row,
+                    message: format!("column \"Salle\": empty room name in \"{trimmed}\""),
+                })?;
+            let status = if is_demand {
+                InterrogationRoomStatus::Demanded {
+                    can_share_with_prep,
+                }
+            } else {
+                InterrogationRoomStatus::Accepted {
+                    can_share_with_prep,
+                }
+            };
+            let formatted = format_interrogation_status(room.as_ref(), &status);
+            entries.push((room, status, formatted));
+        }
+    }
+
+    Ok(merge_interrogation_status_entries(entries, row))
+}
+
+fn parse_prep_room_statuses(
+    record: &csv::StringRecord,
+    index: usize,
+    row: usize,
+) -> Result<
+    (
+        BTreeMap<NonEmptyString, PrepRoomStatus>,
+        Vec<RoomPreferenceWarning>,
+    ),
+    ScheduleError,
+> {
+    let value = record.get(index).unwrap_or("").trim();
+    if value.is_empty() {
+        return Ok((BTreeMap::new(), vec![]));
+    }
+
+    let mut entries: Vec<(NonEmptyString, PrepRoomStatus, String)> = Vec::new();
+
+    for entry in value.split(';') {
+        let trimmed = entry.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if trimmed.starts_with('@') || trimmed.starts_with('-') || trimmed.starts_with('=') {
+            return Err(ScheduleError::RequestsRowError {
+                row,
+                message: format!(
+                    "column \"Prep\": entry \"{trimmed}\" looks like a proximity preference; \
+                     use the \"Proximité Prep\" column instead"
+                ),
+            });
+        }
+        if let Some(rest) = trimmed.strip_prefix('~') {
+            let room = NonEmptyString::try_from(rest.trim()).map_err(|_| {
+                ScheduleError::RequestsRowError {
+                    row,
+                    message: format!("column \"Prep\": empty room name in \"{trimmed}\""),
+                }
+            })?;
+            let status = PrepRoomStatus::Excluded;
+            let formatted = format_prep_status(room.as_ref(), &status);
+            entries.push((room, status, formatted));
+        } else if let Some(rest) = trimmed.strip_prefix('!') {
+            let room = NonEmptyString::try_from(rest.trim()).map_err(|_| {
+                ScheduleError::RequestsRowError {
+                    row,
+                    message: format!("column \"Prep\": empty room name in \"{trimmed}\""),
+                }
+            })?;
+            let status = PrepRoomStatus::Demanded;
+            let formatted = format_prep_status(room.as_ref(), &status);
+            entries.push((room, status, formatted));
+        } else {
+            let room =
+                NonEmptyString::try_from(trimmed).map_err(|_| ScheduleError::RequestsRowError {
+                    row,
+                    message: format!("column \"Prep\": empty room name in \"{trimmed}\""),
+                })?;
+            let status = PrepRoomStatus::Accepted;
+            let formatted = format_prep_status(room.as_ref(), &status);
+            entries.push((room, status, formatted));
+        }
+    }
+
+    Ok(merge_prep_status_entries(entries, row))
+}
+
+fn parse_proximity_entry(
+    entry: &str,
+    row: usize,
+    column_name: &str,
+) -> Result<(ProximityType, ProximityDetails), ScheduleError> {
+    let colon_pos = entry
+        .rfind(':')
+        .ok_or_else(|| ScheduleError::RequestsRowError {
+            row,
+            message: format!(
+                "column \"{column_name}\": entry \"{entry}\" missing ':' separator \
+             (expected format key:[~]level)"
+            ),
+        })?;
+    let key_str = &entry[..colon_pos];
+    let params_str = &entry[colon_pos + 1..];
+
+    let key = if let Some(floor_str) = key_str.strip_prefix('=') {
+        let floor: u32 = floor_str
+            .parse()
+            .map_err(|_| ScheduleError::RequestsRowError {
+                row,
+                message: format!(
+                    "column \"{column_name}\": invalid floor \"{key_str}\" in entry \"{entry}\""
+                ),
+            })?;
+        ProximityType::Floor(floor)
+    } else {
+        let room =
+            NonEmptyString::try_from(key_str).map_err(|_| ScheduleError::RequestsRowError {
+                row,
+                message: format!("column \"{column_name}\": empty room name in entry \"{entry}\""),
+            })?;
+        ProximityType::Room(room)
+    };
+
+    let (fuzzy, level_str) = match params_str.strip_prefix('~') {
+        Some(rest) => (true, rest),
+        None => (false, params_str),
+    };
+
+    let level: f32 = level_str
+        .parse()
+        .map_err(|_| ScheduleError::RequestsRowError {
+            row,
+            message: format!(
+                "column \"{column_name}\": invalid level \"{level_str}\" in entry \"{entry}\""
+            ),
+        })?;
+
+    Ok((key, ProximityDetails { fuzzy, level }))
+}
+
+fn parse_proximity_column(
+    record: &csv::StringRecord,
+    index: usize,
+    row: usize,
+    column_name: &str,
+) -> Result<BTreeMap<ProximityType, ProximityDetails>, ScheduleError> {
+    let value = record.get(index).unwrap_or("").trim();
+    if value.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+
+    let mut result = BTreeMap::new();
+    for entry in value.split(';') {
+        let trimmed = entry.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let (key, details) = parse_proximity_entry(trimmed, row, column_name)?;
+        result.entry(key).or_insert(details);
+    }
+
+    Ok(result)
+}
+
+fn format_proximity_entry(key: &ProximityType, details: &ProximityDetails) -> String {
+    let key_str = match key {
+        ProximityType::Floor(f) => format!("={f}"),
+        ProximityType::Room(name) => (name.as_ref() as &str).to_string(),
+    };
+    let fuzzy_str = if details.fuzzy { "~" } else { "" };
+    format!("{key_str}:{fuzzy_str}{}", details.level)
+}
+
+fn format_proximity_column(map: &BTreeMap<ProximityType, ProximityDetails>) -> String {
+    map.iter()
+        .map(|(key, details)| format_proximity_entry(key, details))
+        .collect::<Vec<_>>()
+        .join(";")
+}
+
+// --- Merge helpers (shared between old and new format) ---
+
+fn merge_interrogation_status_entries(
+    entries: Vec<(NonEmptyString, InterrogationRoomStatus, String)>,
+    row: usize,
+) -> (
+    BTreeMap<NonEmptyString, InterrogationRoomStatus>,
+    Vec<RoomPreferenceWarning>,
+) {
+    let mut warnings = Vec::new();
+    let mut by_room: BTreeMap<NonEmptyString, Vec<(InterrogationRoomStatus, String)>> =
+        BTreeMap::new();
+    for (room, status, formatted) in entries {
+        by_room.entry(room).or_default().push((status, formatted));
+    }
+
+    let mut result = BTreeMap::new();
+
+    for (room, entries) in &by_room {
+        let room_str: &str = room.as_ref();
+        let positive: Vec<_> = entries
+            .iter()
+            .filter(|(s, _)| {
+                matches!(
+                    s,
+                    InterrogationRoomStatus::Accepted { .. }
+                        | InterrogationRoomStatus::Demanded { .. }
+                )
+            })
+            .collect();
+        let negative: Vec<_> = entries
+            .iter()
+            .filter(|(s, _)| matches!(s, InterrogationRoomStatus::Excluded))
+            .collect();
+
+        if !positive.is_empty() && !negative.is_empty() {
+            warnings.push(RoomPreferenceWarning::ConflictingPreferences {
+                row,
+                room: room_str.to_string(),
+                positive_entries: positive.iter().map(|(_, f)| f.clone()).collect(),
+                negative_entries: negative.iter().map(|(_, f)| f.clone()).collect(),
+            });
+            continue;
+        }
+
+        if !positive.is_empty() {
+            let is_demand = positive
+                .iter()
+                .any(|(s, _)| matches!(s, InterrogationRoomStatus::Demanded { .. }));
+            let can_share = positive.iter().any(|(s, _)| s.can_share_with_prep());
+
+            let merged = if is_demand {
+                InterrogationRoomStatus::Demanded {
+                    can_share_with_prep: can_share,
+                }
+            } else {
+                InterrogationRoomStatus::Accepted {
+                    can_share_with_prep: can_share,
+                }
+            };
+
+            if entries.len() > 1 {
+                warnings.push(RoomPreferenceWarning::Redundancy {
+                    row,
+                    column: "Salle",
+                    room: room_str.to_string(),
+                    original_entries: entries.iter().map(|(_, f)| f.clone()).collect(),
+                    merged_result: format_interrogation_status(room_str, &merged),
+                });
+            }
+
+            result.insert(room.clone(), merged);
+        } else {
+            let merged = InterrogationRoomStatus::Excluded;
+
+            if entries.len() > 1 {
+                warnings.push(RoomPreferenceWarning::Redundancy {
+                    row,
+                    column: "Salle",
+                    room: room_str.to_string(),
+                    original_entries: entries.iter().map(|(_, f)| f.clone()).collect(),
+                    merged_result: format_interrogation_status(room_str, &merged),
+                });
+            }
+
+            result.insert(room.clone(), merged);
+        }
+    }
+
+    (result, warnings)
+}
+
+fn merge_prep_status_entries(
+    entries: Vec<(NonEmptyString, PrepRoomStatus, String)>,
+    row: usize,
+) -> (
+    BTreeMap<NonEmptyString, PrepRoomStatus>,
+    Vec<RoomPreferenceWarning>,
+) {
+    let mut warnings = Vec::new();
+    let mut by_room: BTreeMap<NonEmptyString, Vec<(PrepRoomStatus, String)>> = BTreeMap::new();
+    for (room, status, formatted) in entries {
+        by_room.entry(room).or_default().push((status, formatted));
+    }
+
+    let mut result = BTreeMap::new();
+
+    for (room, entries) in &by_room {
+        let room_str: &str = room.as_ref();
+        let positive: Vec<_> = entries
+            .iter()
+            .filter(|(s, _)| matches!(s, PrepRoomStatus::Accepted | PrepRoomStatus::Demanded))
+            .collect();
+        let negative: Vec<_> = entries
+            .iter()
+            .filter(|(s, _)| matches!(s, PrepRoomStatus::Excluded))
+            .collect();
+
+        if !positive.is_empty() && !negative.is_empty() {
+            warnings.push(RoomPreferenceWarning::ConflictingPreferences {
+                row,
+                room: room_str.to_string(),
+                positive_entries: positive.iter().map(|(_, f)| f.clone()).collect(),
+                negative_entries: negative.iter().map(|(_, f)| f.clone()).collect(),
+            });
+            continue;
+        }
+
+        if !positive.is_empty() {
+            let is_demand = positive
+                .iter()
+                .any(|(s, _)| matches!(s, PrepRoomStatus::Demanded));
+
+            let merged = if is_demand {
+                PrepRoomStatus::Demanded
+            } else {
+                PrepRoomStatus::Accepted
+            };
+
+            if entries.len() > 1 {
+                warnings.push(RoomPreferenceWarning::Redundancy {
+                    row,
+                    column: "Prep",
+                    room: room_str.to_string(),
+                    original_entries: entries.iter().map(|(_, f)| f.clone()).collect(),
+                    merged_result: format_prep_status(room_str, &merged),
+                });
+            }
+
+            result.insert(room.clone(), merged);
+        } else {
+            let merged = PrepRoomStatus::Excluded;
+
+            if entries.len() > 1 {
+                warnings.push(RoomPreferenceWarning::Redundancy {
+                    row,
+                    column: "Prep",
+                    room: room_str.to_string(),
+                    original_entries: entries.iter().map(|(_, f)| f.clone()).collect(),
+                    merged_result: format_prep_status(room_str, &merged),
+                });
+            }
+
+            result.insert(room.clone(), merged);
+        }
+    }
+
+    (result, warnings)
+}
+
+// --- Old format parsing (used by --update-csv) ---
+
 enum ParsedInterrogationEntry {
     Status(NonEmptyString, InterrogationRoomStatus),
     Proximity(ProximityType, ProximityDetails),
@@ -789,20 +1221,6 @@ fn format_interrogation_status(room: &str, status: &InterrogationRoomStatus) -> 
     }
 }
 
-fn format_proximity(key: &ProximityType, details: &ProximityDetails) -> String {
-    match key {
-        ProximityType::Floor(f) => format!("={f}"),
-        ProximityType::Room(name) => {
-            let name_str: &str = name.as_ref();
-            if details.level < 0.0 {
-                format!("-{name_str}")
-            } else {
-                format!("@{name_str}")
-            }
-        }
-    }
-}
-
 fn format_prep_status(room: &str, status: &PrepRoomStatus) -> String {
     match status {
         PrepRoomStatus::Demanded => format!("!{room}"),
@@ -850,7 +1268,7 @@ fn parse_interrogation_room_preferences(
     }
 
     let mut status_entries: Vec<(NonEmptyString, InterrogationRoomStatus, String)> = Vec::new();
-    let mut proximity_entries: Vec<(ProximityType, ProximityDetails, String)> = Vec::new();
+    let mut proximity_entries: Vec<(ProximityType, ProximityDetails)> = Vec::new();
 
     for entry in value.split(';') {
         let trimmed = entry.trim();
@@ -874,7 +1292,6 @@ fn parse_interrogation_room_preferences(
                     fuzzy: true,
                     level: 1.0,
                 },
-                format!("={floor}"),
             ));
         } else if let Some(parsed) = parse_single_interrogation_room_entry(trimmed) {
             match parsed {
@@ -883,102 +1300,16 @@ fn parse_interrogation_room_preferences(
                     status_entries.push((room, status, formatted));
                 }
                 ParsedInterrogationEntry::Proximity(key, details) => {
-                    let formatted = format_proximity(&key, &details);
-                    proximity_entries.push((key, details, formatted));
+                    proximity_entries.push((key, details));
                 }
             }
         }
     }
 
-    let mut warnings = Vec::new();
+    let (result_statuses, warnings) = merge_interrogation_status_entries(status_entries, row);
 
-    // Merge status entries by room name
-    let mut by_room: BTreeMap<NonEmptyString, Vec<(InterrogationRoomStatus, String)>> =
-        BTreeMap::new();
-    for (room, status, formatted) in status_entries {
-        by_room.entry(room).or_default().push((status, formatted));
-    }
-
-    let mut result_statuses = BTreeMap::new();
-
-    for (room, entries) in &by_room {
-        let room_str: &str = room.as_ref();
-        let positive: Vec<_> = entries
-            .iter()
-            .filter(|(s, _)| {
-                matches!(
-                    s,
-                    InterrogationRoomStatus::Accepted { .. }
-                        | InterrogationRoomStatus::Demanded { .. }
-                )
-            })
-            .collect();
-        let negative: Vec<_> = entries
-            .iter()
-            .filter(|(s, _)| matches!(s, InterrogationRoomStatus::Excluded))
-            .collect();
-
-        if !positive.is_empty() && !negative.is_empty() {
-            warnings.push(RoomPreferenceWarning::ConflictingPreferences {
-                row,
-                room: room_str.to_string(),
-                positive_entries: positive.iter().map(|(_, f)| f.clone()).collect(),
-                negative_entries: negative.iter().map(|(_, f)| f.clone()).collect(),
-            });
-            continue;
-        }
-
-        if !positive.is_empty() {
-            let is_demand = positive
-                .iter()
-                .any(|(s, _)| matches!(s, InterrogationRoomStatus::Demanded { .. }));
-            let can_share = positive.iter().any(|(s, _)| s.can_share_with_prep());
-
-            let merged = if is_demand {
-                InterrogationRoomStatus::Demanded {
-                    can_share_with_prep: can_share,
-                }
-            } else {
-                InterrogationRoomStatus::Accepted {
-                    can_share_with_prep: can_share,
-                }
-            };
-
-            if entries.len() > 1 {
-                warnings.push(RoomPreferenceWarning::Redundancy {
-                    row,
-                    column: "Salle",
-                    room: room_str.to_string(),
-                    original_entries: entries.iter().map(|(_, f)| f.clone()).collect(),
-                    merged_result: format_interrogation_status(room_str, &merged),
-                });
-            }
-
-            result_statuses.insert(room.clone(), merged);
-        } else {
-            let merged = InterrogationRoomStatus::Excluded;
-
-            if entries.len() > 1 {
-                warnings.push(RoomPreferenceWarning::Redundancy {
-                    row,
-                    column: "Salle",
-                    room: room_str.to_string(),
-                    original_entries: entries.iter().map(|(_, f)| f.clone()).collect(),
-                    merged_result: format_interrogation_status(room_str, &merged),
-                });
-            }
-
-            result_statuses.insert(room.clone(), merged);
-        }
-    }
-
-    // Merge proximity entries by key (deduplicate)
     let mut result_proximity = BTreeMap::new();
-    let mut prox_by_key: BTreeMap<&ProximityType, Vec<&str>> = BTreeMap::new();
-    for (key, _, formatted) in &proximity_entries {
-        prox_by_key.entry(key).or_default().push(formatted);
-    }
-    for (key, details, _) in proximity_entries {
+    for (key, details) in proximity_entries {
         result_proximity.entry(key).or_insert(details);
     }
 
@@ -1016,46 +1347,308 @@ fn parse_prep_room_preferences(
         }
     }
 
-    let mut warnings = Vec::new();
+    let (result_statuses, warnings) = merge_prep_status_entries(status_entries, row);
 
-    // Merge status entries by room
-    let mut by_room: BTreeMap<NonEmptyString, Vec<(PrepRoomStatus, String)>> = BTreeMap::new();
-    for (room, status, formatted) in status_entries {
-        by_room.entry(room).or_default().push((status, formatted));
-    }
-
-    let mut result_statuses = BTreeMap::new();
-
-    for (room, entries) in &by_room {
-        let room_str: &str = room.as_ref();
-        let is_demand = entries
-            .iter()
-            .any(|(s, _)| matches!(s, PrepRoomStatus::Demanded));
-
-        let merged = if is_demand {
-            PrepRoomStatus::Demanded
-        } else {
-            PrepRoomStatus::Accepted
-        };
-
-        if entries.len() > 1 {
-            warnings.push(RoomPreferenceWarning::Redundancy {
-                row,
-                column: "Prep",
-                room: room_str.to_string(),
-                original_entries: entries.iter().map(|(_, f)| f.clone()).collect(),
-                merged_result: format_prep_status(room_str, &merged),
-            });
-        }
-
-        result_statuses.insert(room.clone(), merged);
-    }
-
-    // Merge proximity entries (deduplicate)
     let mut result_proximity = BTreeMap::new();
     for (key, details) in proximity_entries {
         result_proximity.entry(key).or_insert(details);
     }
 
     (result_statuses, result_proximity, warnings)
+}
+
+// --- Old format entry points (for --update-csv) ---
+
+fn validate_old_requests_headers(headers: &csv::StringRecord) -> Result<usize, ScheduleError> {
+    for (i, &col) in OLD_REQUESTS_COLUMNS.iter().enumerate() {
+        match headers.get(i) {
+            Some(h) if h.trim() == col => {}
+            _ => return Err(ScheduleError::RequestsMissingColumn(col.to_string())),
+        }
+    }
+    let extra = headers.len() - OLD_REQUESTS_COLUMNS.len();
+    match extra {
+        0 => Ok(OLD_REQUESTS_COLUMNS.len()),
+        1 | 2 => {
+            let sol_salle_col = headers.get(OLD_REQUESTS_COLUMNS.len()).unwrap_or("").trim();
+            if sol_salle_col != "SolSalle" {
+                return Err(ScheduleError::RequestsUnknownColumn(
+                    sol_salle_col.to_string(),
+                ));
+            }
+            if extra == 2 {
+                let sol_prep_col = headers
+                    .get(OLD_REQUESTS_COLUMNS.len() + 1)
+                    .unwrap_or("")
+                    .trim();
+                if sol_prep_col != "SolPrep" {
+                    return Err(ScheduleError::RequestsUnknownColumn(
+                        sol_prep_col.to_string(),
+                    ));
+                }
+            }
+            Ok(OLD_REQUESTS_COLUMNS.len() + extra)
+        }
+        _ => {
+            let first_bad = OLD_REQUESTS_COLUMNS.len() + 2;
+            let name = headers.get(first_bad).unwrap_or("").trim().to_string();
+            Err(ScheduleError::RequestsUnknownColumn(name))
+        }
+    }
+}
+
+pub fn parse_requests_old_format(
+    path: &Path,
+) -> Result<(Vec<Request>, SolutionColumns, Vec<RoomPreferenceWarning>), ScheduleError> {
+    let mut reader = csv::ReaderBuilder::new()
+        .has_headers(true)
+        .flexible(true)
+        .from_path(path)?;
+    let headers = reader.headers()?.clone();
+    let expected_columns = validate_old_requests_headers(&headers)?;
+
+    let mut requests = Vec::new();
+    let mut solutions = Vec::new();
+    let mut all_warnings = Vec::new();
+
+    for (idx, result) in reader.records().enumerate() {
+        let record = result?;
+        let row = idx + 1;
+
+        if record.len() != expected_columns {
+            return Err(ScheduleError::RequestsRowError {
+                row,
+                message: format!(
+                    "expected {} columns, got {}",
+                    expected_columns,
+                    record.len()
+                ),
+            });
+        }
+
+        let sol_salle = if expected_columns > OLD_REQUESTS_COLUMNS.len() {
+            parse_room_sol(record.get(OLD_REQUESTS_COLUMNS.len()).unwrap_or(""))
+        } else {
+            None
+        };
+        let sol_prep = if expected_columns > OLD_REQUESTS_COLUMNS.len() + 1 {
+            parse_room_sol(record.get(OLD_REQUESTS_COLUMNS.len() + 1).unwrap_or(""))
+        } else {
+            None
+        };
+        solutions.push((sol_salle, sol_prep));
+
+        let p1 = parse_bool_field(&record, 0, row, "requests", "P1")?;
+        let p2 = parse_bool_field(&record, 1, row, "requests", "P2")?;
+        let p3 = parse_bool_field(&record, 2, row, "requests", "P3")?;
+
+        let day_str = record.get(3).unwrap().trim();
+        let day = Weekday::from_french(day_str).ok_or_else(|| ScheduleError::InvalidDay {
+            row,
+            value: day_str.to_string(),
+        })?;
+
+        let hour_val = parse_field::<u32>(&record, 4, row, "requests", "Heure")?;
+        let hour = Hour::new(hour_val).ok_or(ScheduleError::InvalidHour {
+            row,
+            value: hour_val,
+        })?;
+
+        let subjects_raw = record.get(5).unwrap();
+        let subjects: Vec<NonEmptyString> = subjects_raw
+            .split(';')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(|s| {
+                let normalized: String = s.nfc().collect();
+                if !ALLOWED_SUBJECTS.contains(&normalized.as_str()) {
+                    Err(ScheduleError::RequestsRowError {
+                        row,
+                        message: format!("unknown subject \"{s}\" in column \"Discipline\""),
+                    })
+                } else {
+                    Ok(NonEmptyString::try_from(normalized.as_str()).unwrap())
+                }
+            })
+            .collect::<Result<_, _>>()?;
+        if subjects.is_empty() {
+            return Err(ScheduleError::RequestsRowError {
+                row,
+                message: "column \"Discipline\": must have at least one subject".to_string(),
+            });
+        }
+
+        let classes_raw = record.get(6).unwrap();
+        let classes: Vec<NonEmptyString> = classes_raw
+            .split(';')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(|s| {
+                if !ALLOWED_CLASSES.contains(&s) {
+                    Err(ScheduleError::RequestsRowError {
+                        row,
+                        message: format!("unknown class \"{s}\" in column \"Classes\""),
+                    })
+                } else {
+                    Ok(NonEmptyString::try_from(s).unwrap())
+                }
+            })
+            .collect::<Result<_, _>>()?;
+        if classes.is_empty() {
+            return Err(ScheduleError::RequestsRowError {
+                row,
+                message: "column \"Classes\": must have at least one class".to_string(),
+            });
+        }
+
+        let requester = parse_non_empty_field(&record, 7, row, "requests", "Responsable")?;
+        let teacher = parse_non_empty_field(&record, 8, row, "requests", "Colleur")?;
+        let boards_raw = parse_field::<u32>(&record, 9, row, "requests", "Tableaux")?;
+        let boards = BoardRequirement::from_u32(boards_raw).ok_or_else(|| {
+            ScheduleError::RequestsRowError {
+                row,
+                message: format!("column \"Tableaux\": expected 0, 1, 2 or 3, got {boards_raw}"),
+            }
+        })?;
+        let window = parse_bool_field(&record, 10, row, "requests", "Fenêtre")?;
+        let students = parse_field::<NonZeroU32>(&record, 11, row, "requests", "Nb élèves")?;
+        let prep_students = parse_field::<u32>(&record, 12, row, "requests", "Nb prep")?;
+
+        let (room_statuses, proximity, room_warnings) =
+            parse_interrogation_room_preferences(&record, 13, row)?;
+        let (prep_statuses, prep_proximity, prep_warnings) =
+            parse_prep_room_preferences(&record, 14, row);
+        let isolated = parse_bool_field(&record, 15, row, "requests", "Isolé")?;
+        all_warnings.extend(room_warnings);
+        all_warnings.extend(prep_warnings);
+
+        for (prep_name, prep_status) in &prep_statuses {
+            if matches!(
+                prep_status,
+                PrepRoomStatus::Accepted | PrepRoomStatus::Demanded
+            ) {
+                if let Some(interro_status) = room_statuses.get(prep_name) {
+                    if !interro_status.can_share_with_prep() {
+                        all_warnings.push(
+                            RoomPreferenceWarning::InterrogationAndPrepWithoutSharing {
+                                row,
+                                room: (prep_name.as_ref() as &str).to_string(),
+                            },
+                        );
+                    }
+                }
+            }
+        }
+
+        requests.push(Request {
+            periods: Periods { p1, p2, p3 },
+            day,
+            hour,
+            subjects,
+            classes,
+            requester,
+            teacher,
+            boards,
+            window,
+            students,
+            prep_students,
+            room_statuses,
+            proximity,
+            prep_statuses,
+            prep_proximity,
+            skip_room_continuity: isolated,
+        });
+    }
+
+    Ok((requests, solutions, all_warnings))
+}
+
+// --- Updated CSV output ---
+
+fn format_salle_column(statuses: &BTreeMap<NonEmptyString, InterrogationRoomStatus>) -> String {
+    statuses
+        .iter()
+        .map(|(room, status)| format_interrogation_status(room.as_ref(), status))
+        .collect::<Vec<_>>()
+        .join(";")
+}
+
+fn format_prep_column(statuses: &BTreeMap<NonEmptyString, PrepRoomStatus>) -> String {
+    statuses
+        .iter()
+        .map(|(room, status)| format_prep_status(room.as_ref(), status))
+        .collect::<Vec<_>>()
+        .join(";")
+}
+
+pub fn write_updated_csv(
+    writer: impl std::io::Write,
+    requests: &[Request],
+    solution_columns: &SolutionColumns,
+) {
+    let mut wtr = csv::Writer::from_writer(writer);
+
+    let mut header: Vec<&str> = REQUESTS_COLUMNS.to_vec();
+    let has_solutions = solution_columns
+        .iter()
+        .any(|(s, p)| s.is_some() || p.is_some());
+    if has_solutions {
+        header.push("SolSalle");
+        header.push("SolPrep");
+    }
+    wtr.write_record(&header).unwrap();
+
+    for (i, req) in requests.iter().enumerate() {
+        let mut fields: Vec<String> = Vec::new();
+
+        fields.push(if req.periods.p1 { "1" } else { "0" }.to_string());
+        fields.push(if req.periods.p2 { "1" } else { "0" }.to_string());
+        fields.push(if req.periods.p3 { "1" } else { "0" }.to_string());
+        fields.push(req.day.capitalize().to_string());
+        fields.push((*req.hour).to_string());
+        fields.push(
+            req.subjects
+                .iter()
+                .map(|s| s.as_ref() as &str)
+                .collect::<Vec<_>>()
+                .join(";"),
+        );
+        fields.push(
+            req.classes
+                .iter()
+                .map(|s| s.as_ref() as &str)
+                .collect::<Vec<_>>()
+                .join(";"),
+        );
+        fields.push((req.requester.as_ref() as &str).to_string());
+        fields.push((req.teacher.as_ref() as &str).to_string());
+        fields.push((req.boards as u8).to_string());
+        fields.push(if req.window { "1" } else { "0" }.to_string());
+        fields.push(req.students.to_string());
+        fields.push(req.prep_students.to_string());
+        fields.push(format_salle_column(&req.room_statuses));
+        fields.push(format_prep_column(&req.prep_statuses));
+        fields.push(format_proximity_column(&req.proximity));
+        fields.push(format_proximity_column(&req.prep_proximity));
+        fields.push(if req.skip_room_continuity { "1" } else { "0" }.to_string());
+
+        if has_solutions {
+            let (sol_salle, sol_prep) = &solution_columns[i];
+            fields.push(match sol_salle {
+                Some(s) if s.mark_fixed => format!("!{}", s.room.as_ref() as &str),
+                Some(s) => (s.room.as_ref() as &str).to_string(),
+                None => String::new(),
+            });
+            fields.push(match sol_prep {
+                Some(s) if s.mark_fixed => format!("!{}", s.room.as_ref() as &str),
+                Some(s) => (s.room.as_ref() as &str).to_string(),
+                None => String::new(),
+            });
+        }
+
+        let field_refs: Vec<&str> = fields.iter().map(|s| s.as_str()).collect();
+        wtr.write_record(&field_refs).unwrap();
+    }
+
+    wtr.flush().unwrap();
 }
