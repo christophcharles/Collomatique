@@ -20,7 +20,7 @@ pub enum SolveMode {
 }
 
 pub fn run(
-    rooms: &Path,
+    rooms: Option<&Path>,
     requests: &Path,
     incompats: Option<&Path>,
     mode: SolveMode,
@@ -32,6 +32,7 @@ pub fn run(
         return run_update_csv(requests, out);
     }
 
+    let rooms = rooms.expect("rooms path required for all modes except --update-csv");
     let (data, raw_request_rows, solution_columns, pref_warnings) =
         parsing::parse_schedule(rooms, requests, incompats, config)?;
     eprintln!(

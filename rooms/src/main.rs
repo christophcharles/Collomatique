@@ -5,10 +5,12 @@ use std::path::PathBuf;
 #[command(author, version, about = "Assign rooms to scheduling requests")]
 struct Args {
     /// CSV file describing available rooms and their characteristics
-    rooms: PathBuf,
+    #[arg(required_unless_present = "update_csv")]
+    rooms: Option<PathBuf>,
 
     /// CSV file describing scheduling requests and their constraints
-    requests: PathBuf,
+    #[arg(required_unless_present = "update_csv")]
+    requests: Option<PathBuf>,
 
     /// CSV file describing room incompatibilities (optional)
     #[arg(long)]
@@ -35,8 +37,8 @@ struct Args {
     warm: bool,
 
     /// Convert an old-format requests CSV to the new format (no solving)
-    #[arg(long, conflicts_with_all = ["check", "fix", "complete", "warm", "no_objective"])]
-    update_csv: bool,
+    #[arg(long, value_name = "REQUESTS_CSV", conflicts_with_all = ["check", "fix", "complete", "warm", "no_objective"])]
+    update_csv: Option<PathBuf>,
 
     /// Output CSV file for the solution (defaults to stdout)
     #[arg(long, short)]
@@ -50,7 +52,7 @@ struct Args {
 fn main() -> Result<(), anyhow::Error> {
     let args = Args::parse();
 
-    let mode = if args.update_csv {
+    let mode = if args.update_csv.is_some() {
         collomatique_rooms::SolveMode::UpdateCsv
     } else if args.check {
         collomatique_rooms::SolveMode::Check
@@ -67,9 +69,15 @@ fn main() -> Result<(), anyhow::Error> {
         }
     };
 
+    let requests_path = args
+        .update_csv
+        .as_deref()
+        .or(args.requests.as_deref())
+        .expect("requests path required");
+
     collomatique_rooms::run(
-        &args.rooms,
-        &args.requests,
+        args.rooms.as_deref(),
+        requests_path,
         args.incompats.as_deref(),
         mode,
         args.out.as_deref(),
