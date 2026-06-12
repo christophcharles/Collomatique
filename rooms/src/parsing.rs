@@ -414,11 +414,13 @@ pub fn parse_requests(
 
         let requester = parse_non_empty_field(&record, 7, row, "requests", "Responsable")?;
         let teacher = parse_non_empty_field(&record, 8, row, "requests", "Colleur")?;
-        let boards_raw = parse_field::<u32>(&record, 9, row, "requests", "Tableaux")?;
-        let boards = BoardRequirement::from_u32(boards_raw).ok_or_else(|| {
+        let boards_raw = record.get(9).unwrap().trim();
+        let boards = BoardRequirement::from_str_column(boards_raw).ok_or_else(|| {
             ScheduleError::RequestsRowError {
                 row,
-                message: format!("column \"Tableaux\": expected 0, 1, 2 or 3, got {boards_raw}"),
+                message: format!(
+                    "column \"Tableaux\": expected 0, 1, 2, 3 or !3, got \"{boards_raw}\""
+                ),
             }
         })?;
         let window = parse_bool_field(&record, 10, row, "requests", "Fenêtre")?;
@@ -1503,11 +1505,13 @@ pub fn parse_requests_old_format(
 
         let requester = parse_non_empty_field(&record, 7, row, "requests", "Responsable")?;
         let teacher = parse_non_empty_field(&record, 8, row, "requests", "Colleur")?;
-        let boards_raw = parse_field::<u32>(&record, 9, row, "requests", "Tableaux")?;
-        let boards = BoardRequirement::from_u32(boards_raw).ok_or_else(|| {
+        let boards_raw = record.get(9).unwrap().trim();
+        let boards = BoardRequirement::from_str_column(boards_raw).ok_or_else(|| {
             ScheduleError::RequestsRowError {
                 row,
-                message: format!("column \"Tableaux\": expected 0, 1, 2 or 3, got {boards_raw}"),
+                message: format!(
+                    "column \"Tableaux\": expected 0, 1, 2, 3 or !3, got \"{boards_raw}\""
+                ),
             }
         })?;
         let window = parse_bool_field(&record, 10, row, "requests", "Fenêtre")?;
@@ -1622,7 +1626,7 @@ pub fn write_updated_csv(
         );
         fields.push((req.requester.as_ref() as &str).to_string());
         fields.push((req.teacher.as_ref() as &str).to_string());
-        fields.push((req.boards as u8).to_string());
+        fields.push(req.boards.to_csv_string().to_string());
         fields.push(if req.window { "1" } else { "0" }.to_string());
         fields.push(req.students.to_string());
         fields.push(req.prep_students.to_string());

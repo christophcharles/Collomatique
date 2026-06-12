@@ -96,6 +96,14 @@ pub enum ConstraintDesc {
         request: usize,
         room: NonEmptyString,
     },
+    ExcludedPrep {
+        request: usize,
+        room: NonEmptyString,
+    },
+    BoardsInterrogation {
+        request: usize,
+        room: NonEmptyString,
+    },
     RoomContinuityEqual {
         request_a: usize,
         request_b: usize,
@@ -300,6 +308,25 @@ impl ConstraintDesc {
                     format_request(data, *request),
                     <NonEmptyString as AsRef<str>>::as_ref(&req.teacher),
                     <NonEmptyString as AsRef<str>>::as_ref(room),
+                )
+            }
+            ConstraintDesc::ExcludedPrep { request, room } => {
+                let req = &data.requests[*request];
+                format!(
+                    "{} : l'enseignant {} a demandé à ne pas avoir la salle de préparation \"{}\" \
+                     de manière catégorique",
+                    format_request(data, *request),
+                    <NonEmptyString as AsRef<str>>::as_ref(&req.teacher),
+                    <NonEmptyString as AsRef<str>>::as_ref(room),
+                )
+            }
+            ConstraintDesc::BoardsInterrogation { request, room } => {
+                let req = &data.requests[*request];
+                format!(
+                    "{} : la salle \"{}\" n'a pas assez de tableaux noirs ({} requis)",
+                    format_request(data, *request),
+                    <NonEmptyString as AsRef<str>>::as_ref(room),
+                    req.boards.hard_target(),
                 )
             }
             ConstraintDesc::RoomContinuityEqual {

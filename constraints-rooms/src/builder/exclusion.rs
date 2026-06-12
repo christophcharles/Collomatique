@@ -1,5 +1,5 @@
 use collomatique_ilp::int_linexpr::IntLinExpr;
-use collomatique_rooms_model::InterrogationRoomStatus;
+use collomatique_rooms_model::{InterrogationRoomStatus, PrepRoomStatus};
 
 use super::{MyBundle, base_var};
 use crate::types::ConstraintDesc;
@@ -19,6 +19,24 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
                         }))
                         .leq(&IntLinExpr::constant(0)),
                         ConstraintDesc::ExcludedInterrogation {
+                            request: req_idx,
+                            room: room.clone(),
+                        },
+                    );
+                }
+            }
+        }
+
+        for (room, status) in &req.prep_statuses {
+            if matches!(status, PrepRoomStatus::Excluded) {
+                if env.has_prep_var(req_idx, room) {
+                    bundle = bundle.with_constraint(
+                        IntLinExpr::var(base_var(Var::RoomForPrep {
+                            request: req_idx,
+                            room: room.clone(),
+                        }))
+                        .leq(&IntLinExpr::constant(0)),
+                        ConstraintDesc::ExcludedPrep {
                             request: req_idx,
                             room: room.clone(),
                         },

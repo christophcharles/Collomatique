@@ -5,12 +5,11 @@ use collomatique_time::Weekday;
 use non_empty_string::NonEmptyString;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
 pub enum BoardRequirement {
-    Zero = 0,
-    One = 1,
-    Two = 2,
-    Three = 3,
+    Zero,
+    One,
+    Two,
+    Three { hard: bool },
 }
 
 impl BoardRequirement {
@@ -19,8 +18,53 @@ impl BoardRequirement {
             0 => Some(BoardRequirement::Zero),
             1 => Some(BoardRequirement::One),
             2 => Some(BoardRequirement::Two),
-            3 => Some(BoardRequirement::Three),
+            3 => Some(BoardRequirement::Three { hard: false }),
             _ => None,
+        }
+    }
+
+    pub fn from_str_column(value: &str) -> Option<BoardRequirement> {
+        match value {
+            "0" => Some(BoardRequirement::Zero),
+            "1" => Some(BoardRequirement::One),
+            "2" => Some(BoardRequirement::Two),
+            "3" => Some(BoardRequirement::Three { hard: false }),
+            "!3" => Some(BoardRequirement::Three { hard: true }),
+            _ => None,
+        }
+    }
+
+    pub fn hard_target(&self) -> u32 {
+        match self {
+            BoardRequirement::Zero => 0,
+            BoardRequirement::One => 1,
+            BoardRequirement::Two => 2,
+            BoardRequirement::Three { hard } => {
+                if *hard {
+                    3
+                } else {
+                    2
+                }
+            }
+        }
+    }
+
+    pub fn target(&self) -> u32 {
+        match self {
+            BoardRequirement::Zero => 0,
+            BoardRequirement::One => 1,
+            BoardRequirement::Two => 2,
+            BoardRequirement::Three { .. } => 3,
+        }
+    }
+
+    pub fn to_csv_string(&self) -> &'static str {
+        match self {
+            BoardRequirement::Zero => "0",
+            BoardRequirement::One => "1",
+            BoardRequirement::Two => "2",
+            BoardRequirement::Three { hard: false } => "3",
+            BoardRequirement::Three { hard: true } => "!3",
         }
     }
 }

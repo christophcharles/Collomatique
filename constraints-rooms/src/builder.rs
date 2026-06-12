@@ -1,4 +1,5 @@
 mod assignment;
+mod boards;
 mod capacity;
 mod continuity;
 mod exclusion;
@@ -47,6 +48,9 @@ pub fn build_modeler(data: &ScheduleData) -> (MyModeler<'static>, VarEnv) {
         .expect("no duplicate extras");
     modeler
         .apply_bundle(capacity::build(&env).into_general())
+        .expect("no duplicate extras");
+    modeler
+        .apply_bundle(boards::build(&env).into_general())
         .expect("no duplicate extras");
     modeler
         .apply_bundle(exclusion::build(&env).into_general())
