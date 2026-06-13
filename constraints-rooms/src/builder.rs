@@ -7,6 +7,7 @@ mod exclusivity;
 mod heat;
 mod incompats;
 mod priority;
+mod proximity;
 mod reservation;
 mod windows;
 
@@ -86,6 +87,9 @@ pub fn build_modeler(data: &ScheduleData) -> (MyModeler<'static>, VarEnv) {
         .expect("no duplicate extras");
     modeler
         .apply_bundle(heat::build(&env).into_general())
+        .expect("no duplicate extras");
+    modeler
+        .apply_bundle(proximity::build(&env))
         .expect("no duplicate extras");
 
     (modeler, env)

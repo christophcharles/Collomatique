@@ -220,6 +220,8 @@ pub struct Config {
     pub soft_windows_weight: f64,
     pub heat_weight: f64,
     pub prep_heat_weight: f64,
+    pub proximity_weight: f64,
+    pub proximity_floor_weight: f64,
 }
 
 impl Default for Config {
@@ -241,6 +243,8 @@ impl Default for Config {
             soft_windows_weight: 1.0,
             heat_weight: 1.0,
             prep_heat_weight: 1.0,
+            proximity_weight: 1.0,
+            proximity_floor_weight: 5.0,
         }
     }
 }

@@ -17,6 +17,24 @@ pub enum ExtraVarName {
     },
     PriorityPenalty,
     FixPenalty,
+    ProximityDeltaXPos {
+        request: usize,
+    },
+    ProximityDeltaXNeg {
+        request: usize,
+    },
+    ProximityDeltaYPos {
+        request: usize,
+    },
+    ProximityDeltaYNeg {
+        request: usize,
+    },
+    ProximityDeltaFloorPos {
+        request: usize,
+    },
+    ProximityDeltaFloorNeg {
+        request: usize,
+    },
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -121,6 +139,9 @@ pub enum ConstraintDesc {
     PinnedPrep {
         request: usize,
         room: NonEmptyString,
+    },
+    ProximityDefinition {
+        request: usize,
     },
 }
 
@@ -367,6 +388,12 @@ impl ConstraintDesc {
                     "{} : salle de préparation \"{}\" fixée par l'utilisateur",
                     format_request(data, *request),
                     <NonEmptyString as AsRef<str>>::as_ref(room),
+                )
+            }
+            ConstraintDesc::ProximityDefinition { request } => {
+                format!(
+                    "{} : définition de la distance interrogation-préparation",
+                    format_request(data, *request),
                 )
             }
         }
