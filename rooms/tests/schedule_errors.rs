@@ -1540,3 +1540,22 @@ fn heat_map_prefers_proximity_room() {
     assert_eq!(assignments.len(), 1);
     assert_eq!(assignments[0].room, nes("PREFERRED"));
 }
+
+#[test]
+fn prep_heat_map_prefers_proximity_room() {
+    let (data, _, _, _) = parsing::parse_schedule(
+        &fixture("prep_heat_rooms.csv"),
+        &fixture("prep_heat_requests.csv"),
+        None,
+        Default::default(),
+    )
+    .unwrap();
+    let model = collomatique_constraints_rooms::build_model(&data);
+    let solver = ColloCbcSolver::with_disable_logging(true);
+    let solved = model.solve(&solver).unwrap();
+    let config = solved.get_data();
+    let assignments = collomatique_constraints_rooms::extract_assignments(&data, &config);
+    assert_eq!(assignments.len(), 1);
+    assert!(assignments[0].prep_room.is_some());
+    assert_eq!(assignments[0].prep_room.as_ref().unwrap(), &nes("ROOM_B"));
+}
