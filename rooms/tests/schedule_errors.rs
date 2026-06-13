@@ -1559,3 +1559,22 @@ fn prep_heat_map_prefers_proximity_room() {
     assert!(assignments[0].prep_room.is_some());
     assert_eq!(assignments[0].prep_room.as_ref().unwrap(), &nes("ROOM_B"));
 }
+
+// --- no-objective mode still finds a feasible solution ---
+
+#[test]
+fn no_objective_feasible_with_heat() {
+    let result = collomatique_rooms::run(
+        Some(fixture("heat_rooms.csv").as_path()),
+        &fixture("heat_requests.csv"),
+        None,
+        collomatique_rooms::SolveMode::Solve {
+            no_objective: true,
+            warm: false,
+        },
+        None,
+        Default::default(),
+        0,
+    );
+    assert!(result.is_ok());
+}
