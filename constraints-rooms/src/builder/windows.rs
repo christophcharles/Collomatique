@@ -1,7 +1,7 @@
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_rooms_model::Window;
 
-use super::{MyBundle, base_var};
+use super::{MyBundle, base_var, is_accepted_or_demanded};
 use crate::types::ConstraintDesc;
 use crate::vars::{Var, VarEnv};
 
@@ -15,6 +15,10 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
 
         for (req_idx, req) in env.data.requests.iter().enumerate() {
             if !req.window {
+                continue;
+            }
+
+            if is_accepted_or_demanded(req, room_name) {
                 continue;
             }
 

@@ -1382,3 +1382,103 @@ fn parse_requests_raw_rows_match_input() {
     assert_eq!(raw_rows[0][13], "A101");
     assert_eq!(raw_rows[0][17], "0");
 }
+
+// --- Accepted relaxes hard constraints ---
+
+#[test]
+fn accepted_boards_feasible() {
+    assert_checker_feasible("accepted_boards_rooms.csv", "accepted_boards_requests.csv");
+}
+
+#[test]
+fn accepted_boards_assigns_room() {
+    let (data, _, _, _) = parsing::parse_schedule(
+        &fixture("accepted_boards_rooms.csv"),
+        &fixture("accepted_boards_requests.csv"),
+        None,
+        Default::default(),
+    )
+    .unwrap();
+    let model = collomatique_constraints_rooms::build_model(&data);
+    let solver = ColloCbcSolver::with_disable_logging(true);
+    let solved = model.solve_checker(&solver).unwrap();
+    let config = solved.get_data();
+    let assignments = collomatique_constraints_rooms::extract_assignments(&data, &config);
+    assert_eq!(assignments.len(), 1);
+    assert_eq!(assignments[0].room, nes("ROOM_A"));
+}
+
+#[test]
+fn demanded_boards_feasible() {
+    assert_checker_feasible("demanded_boards_rooms.csv", "demanded_boards_requests.csv");
+}
+
+#[test]
+fn demanded_boards_assigns_room() {
+    let (data, _, _, _) = parsing::parse_schedule(
+        &fixture("demanded_boards_rooms.csv"),
+        &fixture("demanded_boards_requests.csv"),
+        None,
+        Default::default(),
+    )
+    .unwrap();
+    let model = collomatique_constraints_rooms::build_model(&data);
+    let solver = ColloCbcSolver::with_disable_logging(true);
+    let solved = model.solve_checker(&solver).unwrap();
+    let config = solved.get_data();
+    let assignments = collomatique_constraints_rooms::extract_assignments(&data, &config);
+    assert_eq!(assignments.len(), 1);
+    assert_eq!(assignments[0].room, nes("ROOM_A"));
+}
+
+#[test]
+fn accepted_windows_feasible() {
+    assert_checker_feasible(
+        "accepted_windows_rooms.csv",
+        "accepted_windows_requests.csv",
+    );
+}
+
+#[test]
+fn accepted_windows_assigns_room() {
+    let (data, _, _, _) = parsing::parse_schedule(
+        &fixture("accepted_windows_rooms.csv"),
+        &fixture("accepted_windows_requests.csv"),
+        None,
+        Default::default(),
+    )
+    .unwrap();
+    let model = collomatique_constraints_rooms::build_model(&data);
+    let solver = ColloCbcSolver::with_disable_logging(true);
+    let solved = model.solve_checker(&solver).unwrap();
+    let config = solved.get_data();
+    let assignments = collomatique_constraints_rooms::extract_assignments(&data, &config);
+    assert_eq!(assignments.len(), 1);
+    assert_eq!(assignments[0].room, nes("ROOM_A"));
+}
+
+#[test]
+fn demanded_windows_feasible() {
+    assert_checker_feasible(
+        "demanded_windows_rooms.csv",
+        "demanded_windows_requests.csv",
+    );
+}
+
+#[test]
+fn demanded_windows_assigns_room() {
+    let (data, _, _, _) = parsing::parse_schedule(
+        &fixture("demanded_windows_rooms.csv"),
+        &fixture("demanded_windows_requests.csv"),
+        None,
+        Default::default(),
+    )
+    .unwrap();
+    let model = collomatique_constraints_rooms::build_model(&data);
+    let solver = ColloCbcSolver::with_disable_logging(true);
+    let solved = model.solve_checker(&solver).unwrap();
+    let config = solved.get_data();
+    let assignments = collomatique_constraints_rooms::extract_assignments(&data, &config);
+    assert_eq!(assignments.len(), 1);
+    assert_eq!(assignments[0].room, nes("ROOM_A"));
+}

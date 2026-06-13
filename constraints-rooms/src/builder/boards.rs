@@ -1,6 +1,6 @@
 use collomatique_ilp::int_linexpr::IntLinExpr;
 
-use super::{MyBundle, base_var};
+use super::{MyBundle, base_var, is_accepted_or_demanded};
 use crate::types::ConstraintDesc;
 use crate::vars::{Var, VarEnv};
 
@@ -14,7 +14,7 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
                 continue;
             }
 
-            if room.blackboards < hard_target as f32 {
+            if room.blackboards < hard_target as f32 && !is_accepted_or_demanded(req, room_name) {
                 if env.has_interrogation_var(req_idx, room_name) {
                     bundle = bundle.with_constraint(
                         IntLinExpr::var(base_var(Var::RoomForInterrogation {

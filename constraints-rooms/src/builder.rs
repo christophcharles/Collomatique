@@ -11,7 +11,7 @@ mod windows;
 
 use collomatique_ilp_modeler::bundle::ReifyError;
 use collomatique_ilp_modeler::{IntConstraintBundle, Modeler, Var as ModelerVar};
-use collomatique_rooms_model::ScheduleData;
+use collomatique_rooms_model::{InterrogationRoomStatus, ScheduleData};
 
 use crate::RoomModel;
 use crate::types::{ConstraintDesc, ExtraVarName};
@@ -30,6 +30,16 @@ pub(crate) type MyBundle = IntConstraintBundle<
 
 type MyModeler<'m> =
     Modeler<'m, Var, ExtraVarName, ConstraintDesc, VarEnv, ReifyError<Var, ExtraVarName>>;
+
+pub(crate) fn is_accepted_or_demanded(
+    req: &collomatique_rooms_model::Request,
+    room: &non_empty_string::NonEmptyString,
+) -> bool {
+    matches!(
+        req.room_statuses.get(room),
+        Some(InterrogationRoomStatus::Accepted { .. } | InterrogationRoomStatus::Demanded { .. })
+    )
+}
 
 pub(crate) fn base_var(v: Var) -> V {
     ModelerVar::Base(v)
