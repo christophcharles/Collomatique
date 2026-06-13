@@ -1482,3 +1482,41 @@ fn demanded_windows_assigns_room() {
     assert_eq!(assignments.len(), 1);
     assert_eq!(assignments[0].room, nes("ROOM_A"));
 }
+
+// --- Soft penalties prefer rooms meeting requirements ---
+
+#[test]
+fn soft_boards_prefers_good_room() {
+    let (data, _, _, _) = parsing::parse_schedule(
+        &fixture("soft_boards_rooms.csv"),
+        &fixture("soft_boards_requests.csv"),
+        None,
+        Default::default(),
+    )
+    .unwrap();
+    let model = collomatique_constraints_rooms::build_model(&data);
+    let solver = ColloCbcSolver::with_disable_logging(true);
+    let solved = model.solve(&solver).unwrap();
+    let config = solved.get_data();
+    let assignments = collomatique_constraints_rooms::extract_assignments(&data, &config);
+    assert_eq!(assignments.len(), 1);
+    assert_eq!(assignments[0].room, nes("GOOD"));
+}
+
+#[test]
+fn soft_windows_prefers_good_room() {
+    let (data, _, _, _) = parsing::parse_schedule(
+        &fixture("soft_windows_rooms.csv"),
+        &fixture("soft_windows_requests.csv"),
+        None,
+        Default::default(),
+    )
+    .unwrap();
+    let model = collomatique_constraints_rooms::build_model(&data);
+    let solver = ColloCbcSolver::with_disable_logging(true);
+    let solved = model.solve(&solver).unwrap();
+    let config = solved.get_data();
+    let assignments = collomatique_constraints_rooms::extract_assignments(&data, &config);
+    assert_eq!(assignments.len(), 1);
+    assert_eq!(assignments[0].room, nes("GOOD"));
+}

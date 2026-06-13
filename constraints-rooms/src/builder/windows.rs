@@ -1,3 +1,4 @@
+use collomatique_ilp::LinExpr;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_rooms_model::Window;
 
@@ -7,6 +8,7 @@ use crate::vars::{Var, VarEnv};
 
 pub(crate) fn build(env: &VarEnv) -> MyBundle {
     let mut bundle = MyBundle::new();
+    let soft_weight = env.data.config.soft_windows_weight;
 
     for (room_name, room) in &env.data.rooms {
         if room.window != Window::None {
@@ -19,10 +21,16 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
             }
 
             if is_accepted_or_demanded(req, room_name) {
-                continue;
-            }
-
-            if env.has_interrogation_var(req_idx, room_name) {
+                if env.has_interrogation_var(req_idx, room_name) {
+                    bundle = bundle.with_minimize(
+                        soft_weight,
+                        LinExpr::var(base_var(Var::RoomForInterrogation {
+                            request: req_idx,
+                            room: room_name.clone(),
+                        })),
+                    );
+                }
+            } else if env.has_interrogation_var(req_idx, room_name) {
                 bundle = bundle.with_constraint(
                     IntLinExpr::var(base_var(Var::RoomForInterrogation {
                         request: req_idx,

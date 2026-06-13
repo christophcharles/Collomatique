@@ -216,6 +216,8 @@ pub struct Config {
     pub enforce_period_exhaustions: Periods,
     pub time_zones: TimeZones,
     pub max_priority: Option<u32>,
+    pub soft_boards_weight: f64,
+    pub soft_windows_weight: f64,
 }
 
 impl Default for Config {
@@ -233,6 +235,8 @@ impl Default for Config {
             },
             time_zones: TimeZones::default(),
             max_priority: None,
+            soft_boards_weight: 1.0,
+            soft_windows_weight: 1.0,
         }
     }
 }
