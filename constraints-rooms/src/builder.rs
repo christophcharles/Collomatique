@@ -4,6 +4,7 @@ mod capacity;
 mod continuity;
 mod exclusion;
 mod exclusivity;
+mod heat;
 mod incompats;
 mod priority;
 mod reservation;
@@ -82,6 +83,9 @@ pub fn build_modeler(data: &ScheduleData) -> (MyModeler<'static>, VarEnv) {
         .expect("no duplicate extras");
     modeler
         .apply_bundle(continuity::build(&env).into_general())
+        .expect("no duplicate extras");
+    modeler
+        .apply_bundle(heat::build(&env).into_general())
         .expect("no duplicate extras");
 
     (modeler, env)
