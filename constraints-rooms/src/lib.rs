@@ -1,4 +1,5 @@
 mod builder;
+mod heat_map;
 mod types;
 pub mod vars;
 
