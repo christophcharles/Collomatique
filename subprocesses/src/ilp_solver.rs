@@ -35,8 +35,8 @@ pub struct IlpIncumbentInfo {
 #[derive(Debug, Clone)]
 pub struct IlpResult {
     pub status: IlpStatus,
-    pub obj_value: f64,
-    pub best_bound: f64,
+    pub obj_value: Option<f64>,
+    pub best_bound: Option<f64>,
     pub node_count: u64,
     pub solution: Option<Vec<f64>>,
 }
@@ -82,6 +82,8 @@ pub fn spawn_ilp_solver(
     worker_manager: &mut WorkerManager,
     config: IlpSolverConfig,
     result_callback: impl Fn(IlpResult) + Send + 'static,
+    progress_callback: impl Fn(&IlpProgress) + Send + 'static,
+    log_callback: impl Fn(&str) + Send + 'static,
 ) -> Result<SolverSubprocess, String> {
     let request = IlpSolveRequest {
         problem_desc: config.problem_desc,
@@ -113,6 +115,7 @@ pub fn spawn_ilp_solver(
                         feasible: info.feasible,
                     }),
                 };
+                progress_callback(&progress);
                 *last_progress_cb.lock().unwrap() = Some(progress);
 
                 let stopped = stop_flag_cb.load(Ordering::Relaxed);
@@ -131,8 +134,8 @@ pub fn spawn_ilp_solver(
                         collomatique_rpc::SolverStatus::Stopped => IlpStatus::Stopped,
                         collomatique_rpc::SolverStatus::Error => IlpStatus::Error,
                     },
-                    obj_value: data.obj_value.into_inner(),
-                    best_bound: data.best_bound.into_inner(),
+                    obj_value: data.obj_value.map(|v| v.into_inner()),
+                    best_bound: data.best_bound.map(|v| v.into_inner()),
                     node_count: data.node_count,
                     solution: data
                         .solution
@@ -149,6 +152,9 @@ pub fn spawn_ilp_solver(
             }
             _ => {}
         },
+        WorkerEvent::LogLine(line) => {
+            log_callback(&line);
+        }
         _ => {}
     };
 

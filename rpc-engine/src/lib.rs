@@ -122,8 +122,14 @@ fn solve_ilp(serialized: SerializedIlpProblem) -> Result<(), anyhow::Error> {
         .time_limit_seconds
         .map(|s| std::time::Duration::from_secs(s as u64));
 
+    let mut last_best_bound = 0.0f64;
+    let mut last_node_count = 0u64;
+
     eprintln!("Solving...");
     let result = model.solve_with_callback(|progress| {
+        last_best_bound = progress.best_bound();
+        last_node_count = progress.nodes();
+
         let progress_data = SolverProgressData {
             best_obj: OrderedFloat(progress.best_objective()),
             best_bound: OrderedFloat(progress.best_bound()),
@@ -160,11 +166,13 @@ fn solve_ilp(serialized: SerializedIlpProblem) -> Result<(), anyhow::Error> {
         SolverStatus::Infeasible
     };
 
-    let obj_value = result
-        .config
-        .as_ref()
-        .map(|c| c.eval())
-        .unwrap_or(f64::INFINITY);
+    let obj_value = result.config.as_ref().map(|c| OrderedFloat(c.eval()));
+
+    let best_bound = if last_node_count > 0 || obj_value.is_some() {
+        Some(OrderedFloat(last_best_bound))
+    } else {
+        None
+    };
 
     let solution = result.config.map(|config| {
         var_indices
@@ -175,9 +183,9 @@ fn solve_ilp(serialized: SerializedIlpProblem) -> Result<(), anyhow::Error> {
 
     let result_data = SolverResultData {
         status,
-        obj_value: OrderedFloat(obj_value),
-        best_bound: OrderedFloat(f64::NEG_INFINITY),
-        node_count: 0,
+        obj_value,
+        best_bound,
+        node_count: last_node_count,
         solution,
     };
 

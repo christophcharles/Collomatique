@@ -13,6 +13,7 @@ pub enum DebugMode {
     FullBlameMax,
     FullSolve,
     Objective,
+    SubprocessSolve,
 }
 
 pub fn print_help() -> Result<(), anyhow::Error> {
@@ -42,6 +43,7 @@ pub fn print_help() -> Result<(), anyhow::Error> {
     eprintln!(
         "    objective          Compute the objective function value for the current colloscope"
     );
+    eprintln!("    subprocess-solve   Solve the full ILP via a subprocess (end-to-end test)");
     eprintln!();
     eprintln!("  All modes except 'help' require a file argument.");
     eprintln!("  Blame modes use 'minimal' filtering by default: redundant constraints implied");
@@ -92,6 +94,7 @@ pub fn run(mode: DebugMode, file: PathBuf) -> Result<(), anyhow::Error> {
             DebugMode::CheckerSolve => solve(&model, true),
             DebugMode::FullSolve => solve(&model, false),
             DebugMode::Objective => objective(&model, &inner_data),
+            DebugMode::SubprocessSolve => subprocess_solve(&model),
         }
 
         eprintln!("Total: {:.2?}", t_total.elapsed());
@@ -292,4 +295,122 @@ fn objective(
     let t = Instant::now();
     let value = solution.eval();
     eprintln!("  Objective value: {value} ({:.2?})", t.elapsed());
+}
+
+fn subprocess_solve(model: &collomatique_constraints_colloscopes::ColloscopeModel) {
+    use collomatique_subprocesses::{IlpSolverConfig, IlpStatus, WorkerManager, spawn_ilp_solver};
+    use std::sync::mpsc;
+
+    let t = Instant::now();
+    eprintln!("Extracting problem descriptor...");
+    let (desc, var_order) = model.problem().get_desc();
+    eprintln!(
+        "  Descriptor: {} variables, {} constraints ({:.2?})",
+        desc.variables.len(),
+        desc.constraints.len(),
+        t.elapsed()
+    );
+
+    let config = IlpSolverConfig {
+        problem_desc: desc,
+        warm_start: None,
+        time_limit_seconds: None,
+        disable_logging: false,
+    };
+
+    let (tx, rx) = mpsc::channel();
+    let mut worker_manager = WorkerManager::new();
+
+    eprintln!("Spawning solver subprocess...");
+    let t = Instant::now();
+    let handle = spawn_ilp_solver(
+        &mut worker_manager,
+        config,
+        move |result| {
+            let _ = tx.send(result);
+        },
+        |progress| {
+            eprintln!(
+                "  [progress] obj={:.4} bound={:.4} nodes={} solutions={}",
+                progress.best_obj,
+                progress.best_bound,
+                progress.node_count,
+                progress.solutions_found
+            );
+        },
+        |line| {
+            eprintln!("  [subprocess] {}", line.trim_end());
+        },
+    );
+
+    let handle = match handle {
+        Ok(h) => h,
+        Err(e) => {
+            eprintln!("  Failed to spawn subprocess: {}", e);
+            return;
+        }
+    };
+
+    eprintln!("  Subprocess spawned in {:.2?}", t.elapsed());
+    eprintln!("Waiting for result...");
+
+    let t = Instant::now();
+    let result = rx.recv();
+    match result {
+        Ok(result) => {
+            eprintln!("  Result received in {:.2?}", t.elapsed());
+            eprintln!("  Status: {:?}", result.status);
+            match result.obj_value {
+                Some(v) => eprintln!("  Objective: {}", v),
+                None => eprintln!("  Objective: N/A"),
+            }
+            match result.best_bound {
+                Some(v) => eprintln!("  Best bound: {}", v),
+                None => eprintln!("  Best bound: N/A"),
+            }
+            eprintln!("  Nodes: {}", result.node_count);
+
+            if let Some(ref solution) = result.solution {
+                eprintln!("  Solution has {} values", solution.len());
+                let config_data = collomatique_ilp::solution_to_config_data(solution, &var_order);
+                let problem = model.problem();
+                match problem.build_config(config_data) {
+                    Ok(config) => {
+                        if config.is_feasible() {
+                            eprintln!("  Solution is FEASIBLE");
+                        } else {
+                            let violated = config.blame().len();
+                            eprintln!("  Solution violates {} constraint(s)", violated);
+                        }
+                    }
+                    Err(check) => {
+                        eprintln!(
+                            "  Config build failed: missing={}, excess={}, non_conforming={}",
+                            check.missing_variables.len(),
+                            check.excess_variables.len(),
+                            check.non_conforming_variables.len(),
+                        );
+                    }
+                }
+            } else {
+                eprintln!("  No solution returned");
+            }
+
+            if result.status == IlpStatus::Error {
+                eprintln!("  Solver reported an error");
+            }
+        }
+        Err(_) => {
+            eprintln!("  Channel closed without receiving a result");
+            if let Some(progress) = handle.last_progress() {
+                eprintln!(
+                    "  Last progress: obj={}, bound={}, nodes={}, solutions={}",
+                    progress.best_obj,
+                    progress.best_bound,
+                    progress.node_count,
+                    progress.solutions_found
+                );
+            }
+        }
+    }
 }

@@ -60,8 +60,8 @@ pub struct SolverIncumbentInfo {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SolverResultData {
     pub status: SolverStatus,
-    pub obj_value: OrderedFloat<f64>,
-    pub best_bound: OrderedFloat<f64>,
+    pub obj_value: Option<OrderedFloat<f64>>,
+    pub best_bound: Option<OrderedFloat<f64>>,
     pub node_count: u64,
     pub solution: Option<Vec<OrderedFloat<f64>>>,
 }
