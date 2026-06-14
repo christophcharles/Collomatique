@@ -131,6 +131,9 @@ pub fn run_rpc_engine() -> Result<(), anyhow::Error> {
             let rt = tokio::runtime::Runtime::new().unwrap();
             rt.block_on(try_solve())?;
         }
+        InitMsg::SolveIlp(_) => {
+            todo!("SolveIlp handler — implemented in Phase 3")
+        }
     }
 
     eprintln!("Exiting...");

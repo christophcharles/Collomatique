@@ -409,6 +409,9 @@ impl Component for Dialog {
                                 }
                             }
                         }
+                        CmdMsg::Solver(_) => {
+                            // Not expected in this context — ignore
+                        }
                     }
                 }
                 Err(e) => {

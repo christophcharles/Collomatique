@@ -11,6 +11,7 @@ pub enum CmdMsg {
     GuiRequest(GuiMsg),
     GetData,
     SetData(super::InternalDataStream),
+    Solver(super::SolverMsg),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -523,7 +523,9 @@ name = "collomatique-rpc"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "collomatique-ilp",
  "collomatique-state-colloscopes",
+ "ordered-float",
  "serde",
  "serde_json",
 ]

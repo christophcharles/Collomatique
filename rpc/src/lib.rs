@@ -13,10 +13,17 @@ pub use cmd_msg::CmdMsg;
 pub mod gui_answer;
 pub use gui_answer::GuiAnswer;
 
+pub mod solver_msg;
+pub use solver_msg::{
+    IlpSolveRequest, SerializedIlpProblem, SolverIncumbentInfo, SolverMsg, SolverProgressData,
+    SolverResultData, SolverStatus,
+};
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum InitMsg {
     RunPythonScript(String),
     SolveColloscope,
+    SolveIlp(SerializedIlpProblem),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -47,6 +54,7 @@ pub enum ResultMsg {
     AckGui(GuiAnswer),
     Data(InternalDataStream),
     GlobalError(String),
+    SolverControl(bool),
 }
 
 impl ResultMsg {
