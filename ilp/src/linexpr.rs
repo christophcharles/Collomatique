@@ -100,6 +100,7 @@ impl<V: UsableData> Default for LinExpr<V> {
 ///
 /// Normally, you don't have to handle EqSymbol directly.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum EqSymbol {
     /// Represents an "equal" ("=") symbol
     Equals,
@@ -161,6 +162,16 @@ impl<V: UsableData> LinExpr<V> {
         LinExpr {
             coefs: HashMap::new(),
             constant: ordered_float::OrderedFloat(number),
+        }
+    }
+
+    pub fn from_coefficients(coeffs: impl IntoIterator<Item = (V, f64)>, constant: f64) -> Self {
+        LinExpr {
+            coefs: coeffs
+                .into_iter()
+                .map(|(v, c)| (v, ordered_float::OrderedFloat(c)))
+                .collect(),
+            constant: ordered_float::OrderedFloat(constant),
         }
     }
 }

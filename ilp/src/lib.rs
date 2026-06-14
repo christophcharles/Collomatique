@@ -159,6 +159,7 @@ pub mod int_linexpr;
 pub mod linexpr;
 pub mod mat_repr;
 pub mod objectives;
+pub mod problem_desc;
 pub mod solvers;
 
 #[cfg(test)]
@@ -170,6 +171,9 @@ use thiserror::Error;
 pub use int_linexpr::{IntConstraint, IntLinExpr, NonIntegerError};
 pub use linexpr::{Constraint, LinExpr};
 pub use objectives::{Objective, ObjectiveSense};
+pub use problem_desc::{
+    ConstraintDesc, ObjectiveDesc, ProblemDesc, config_data_to_hint, solution_to_config_data,
+};
 
 use mat_repr::{ConfigRepr, ProblemRepr};
 
@@ -254,6 +258,7 @@ impl<T: std::fmt::Debug + std::hash::Hash + PartialEq + Eq + Clone + Send + Sync
 ///
 /// Further constraints can be imposed with [Variable::min] and [Variable::max].
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Variable {
     integer_var: bool,
     min: Option<ordered_float::OrderedFloat<f64>>,

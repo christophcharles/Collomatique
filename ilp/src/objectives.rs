@@ -15,6 +15,7 @@ use super::{LinExpr, UsableData};
 /// This enum represents the sense in which
 /// we try to optimize the objective function
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ObjectiveSense {
     /// Minimize the objective function (default)
     #[default]
