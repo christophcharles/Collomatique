@@ -91,7 +91,7 @@ impl ChildHandle {
     }
 }
 
-type StdinWriter = Arc<Mutex<Option<Box<dyn Write + Send>>>>;
+pub type StdinWriter = Arc<Mutex<Option<Box<dyn Write + Send>>>>;
 
 pub struct Process {
     state: ProcessState,
@@ -286,6 +286,10 @@ impl Process {
                 }
             }
         })
+    }
+
+    pub fn get_stdin_writer(&self) -> StdinWriter {
+        self.stdin.clone()
     }
 
     pub fn send_stdin(&self, data: &[u8]) -> Result<(), String> {

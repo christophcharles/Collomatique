@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::process::{Process, ProcessEvent, ProcessId, ProcessState};
+use crate::process::{Process, ProcessEvent, ProcessId, ProcessState, StdinWriter};
 
 pub struct ProcessManager {
     processes: HashMap<ProcessId, Process>,
@@ -63,6 +63,10 @@ impl ProcessManager {
             .get(&id)
             .ok_or_else(|| "Processus introuvable".to_string())?;
         process.send_stdin(data)
+    }
+
+    pub fn get_stdin_writer(&self, id: ProcessId) -> Option<StdinWriter> {
+        self.processes.get(&id).map(|p| p.get_stdin_writer())
     }
 
     pub fn get_state(&self, id: ProcessId) -> Option<&ProcessState> {

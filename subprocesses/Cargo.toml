@@ -6,6 +6,8 @@ authors.workspace = true
 
 [dependencies]
 collomatique-rpc = { path = "../rpc" }
+collomatique-ilp = { path = "../ilp", features = ["serde"] }
+ordered-float.workspace = true
 portable-pty = "0.9"
 
 [target.'cfg(unix)'.dependencies]

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 use crate::ProcessManager;
-use crate::process::{OutputData, ProcessEvent, ProcessStatus};
+use crate::process::{OutputData, ProcessEvent, ProcessStatus, StdinWriter};
 use crate::worker::{Worker, WorkerEvent, WorkerId, WorkerState};
 
 pub struct WorkerManager {
@@ -138,6 +138,11 @@ impl WorkerManager {
         let encoded = EncodedMsg::from(msg);
         self.process_manager
             .send_stdin(worker.process_id, encoded.encode().as_bytes())
+    }
+
+    pub fn get_worker_stdin(&self, id: WorkerId) -> Option<StdinWriter> {
+        let worker = self.workers.get(&id)?;
+        self.process_manager.get_stdin_writer(worker.process_id)
     }
 
     pub fn get_worker_state(&self, id: WorkerId) -> Option<&WorkerState> {
