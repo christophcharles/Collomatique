@@ -11,8 +11,9 @@ collomatique-state = { path = "../state" }
 collomatique-state-colloscopes = { path = "../state-colloscopes" }
 collomatique-ops = { path = "../ops" }
 collomatique-constraints-colloscopes = { path = "../constraints-colloscopes" }
-collomatique-ilp = { path = "../ilp" }
+collomatique-ilp = { path = "../ilp", features = ["serde", "collo_cbc"] }
 collomatique-sqlite-state = { path = "../sqlite-state" }
+ordered-float.workspace = true
 anyhow.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["rt", "rt-multi-thread"] }
 sqlx = { workspace = true, features = ["runtime-tokio", "sqlite"] }

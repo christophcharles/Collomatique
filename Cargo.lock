@@ -543,6 +543,7 @@ dependencies = [
  "collomatique-sqlite-state",
  "collomatique-state",
  "collomatique-state-colloscopes",
+ "ordered-float",
  "sqlx",
  "tokio",
 ]

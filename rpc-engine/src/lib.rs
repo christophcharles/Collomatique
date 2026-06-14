@@ -1,6 +1,9 @@
 use anyhow::anyhow;
 use collomatique_rpc::InternalDataStream;
-use collomatique_rpc::{CmdMsg, CompleteCmdMsg, EncodedMsg, InitMsg, ResultMsg};
+use collomatique_rpc::{
+    CmdMsg, CompleteCmdMsg, EncodedMsg, InitMsg, ResultMsg, SerializedIlpProblem,
+    SolverIncumbentInfo, SolverMsg, SolverProgressData, SolverResultData, SolverStatus,
+};
 
 pub fn wait_for_init_msg() -> Result<InitMsg, String> {
     let encoded_msg = EncodedMsg::receive()?;
@@ -85,6 +88,106 @@ async fn try_solve() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
+fn solve_ilp(serialized: SerializedIlpProblem) -> Result<(), anyhow::Error> {
+    use collomatique_ilp::solvers::collo_cbc::ColloCbcSolver;
+    use collomatique_ilp::solvers::{
+        CallbackSolverModel, ProgressBounds, ProgressIncumbentInfo, ProgressStats, Solver,
+        WarmSolver,
+    };
+    use collomatique_ilp::{DefaultRepr, ProblemBuilder};
+    use ordered_float::OrderedFloat;
+    use std::time::Instant;
+
+    let request = collomatique_rpc::IlpSolveRequest::from(serialized);
+
+    eprintln!("Building problem from desc...");
+    let problem = ProblemBuilder::<usize, (), DefaultRepr<usize>>::from_desc(request.problem_desc)
+        .build()
+        .map_err(|e| anyhow!("Failed to build problem from desc: {:?}", e))?;
+
+    let solver = ColloCbcSolver::with_disable_logging(request.disable_logging);
+
+    let num_vars = problem.get_variables().len();
+    let var_indices: Vec<usize> = (0..num_vars).collect();
+
+    let model = if let Some(ref warm_start) = request.warm_start {
+        let hint = collomatique_ilp::solution_to_config_data(warm_start, &var_indices);
+        solver.build_warm_model(&problem, &hint)
+    } else {
+        solver.build_model(&problem)
+    };
+
+    let start = Instant::now();
+    let time_limit = request
+        .time_limit_seconds
+        .map(|s| std::time::Duration::from_secs(s as u64));
+
+    eprintln!("Solving...");
+    let result = model.solve_with_callback(|progress| {
+        let progress_data = SolverProgressData {
+            best_obj: OrderedFloat(progress.best_objective()),
+            best_bound: OrderedFloat(progress.best_bound()),
+            node_count: progress.nodes(),
+            solutions_found: progress.solutions(),
+            incumbent_info: progress.incumbent_info().map(|info| SolverIncumbentInfo {
+                objective: OrderedFloat(info.objective),
+                feasible: info.feasible,
+            }),
+        };
+
+        let response = EncodedMsg::send_rpc(CmdMsg::Solver(SolverMsg::Progress(progress_data)));
+        let should_continue = match response {
+            Ok(ResultMsg::SolverControl(cont)) => cont,
+            _ => false,
+        };
+
+        let time_ok = time_limit
+            .map(|limit| start.elapsed() < limit)
+            .unwrap_or(true);
+
+        should_continue && time_ok
+    });
+
+    let status = if result.config.is_some() {
+        if result.stopped_by_callback {
+            SolverStatus::Stopped
+        } else {
+            SolverStatus::Optimal
+        }
+    } else if result.stopped_by_callback {
+        SolverStatus::Stopped
+    } else {
+        SolverStatus::Infeasible
+    };
+
+    let obj_value = result
+        .config
+        .as_ref()
+        .map(|c| c.eval())
+        .unwrap_or(f64::INFINITY);
+
+    let solution = result.config.map(|config| {
+        var_indices
+            .iter()
+            .map(|&i| OrderedFloat(config.get(i).unwrap_or(0.0)))
+            .collect::<Vec<_>>()
+    });
+
+    let result_data = SolverResultData {
+        status,
+        obj_value: OrderedFloat(obj_value),
+        best_bound: OrderedFloat(f64::NEG_INFINITY),
+        node_count: 0,
+        solution,
+    };
+
+    eprintln!("Sending result...");
+    EncodedMsg::send_rpc(CmdMsg::Solver(SolverMsg::Result(result_data)))
+        .map_err(|e| anyhow!("Error sending SolverResult: {}", e))?;
+
+    Ok(())
+}
+
 /// Main RPC Engine function
 ///
 /// Runs the RPC engine through stdin/stdout
@@ -131,8 +234,8 @@ pub fn run_rpc_engine() -> Result<(), anyhow::Error> {
             let rt = tokio::runtime::Runtime::new().unwrap();
             rt.block_on(try_solve())?;
         }
-        InitMsg::SolveIlp(_) => {
-            todo!("SolveIlp handler — implemented in Phase 3")
+        InitMsg::SolveIlp(serialized) => {
+            solve_ilp(serialized)?;
         }
     }
 
