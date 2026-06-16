@@ -125,3 +125,143 @@ pub trait Strategy: Send + Sync {
         C: UsableData + Send,
         P: ProblemRepr<V> + Send + Sync;
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct DefaultStrategy {
+    pub time_limit_seconds: Option<u32>,
+    pub disable_logging: bool,
+}
+
+#[async_trait]
+impl Strategy for DefaultStrategy {
+    async fn run<V, C, P>(
+        &self,
+        ctx: &StrategyContext,
+        problem: &Problem<V, C, P>,
+    ) -> Result<StrategyOutcome<V>, StrategyError>
+    where
+        V: UsableData + Send,
+        C: UsableData + Send,
+        P: ProblemRepr<V> + Send + Sync,
+    {
+        ctx.solve_problem(
+            problem,
+            SolveProblemOpts {
+                warm_start: None,
+                time_limit_seconds: self.time_limit_seconds,
+                disable_logging: self.disable_logging,
+            },
+        )
+        .await
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum StrategyKind {
+    Default(DefaultStrategy),
+}
+
+impl StrategyKind {
+    pub async fn run<V, C, P>(
+        &self,
+        ctx: &StrategyContext,
+        problem: &Problem<V, C, P>,
+    ) -> Result<StrategyOutcome<V>, StrategyError>
+    where
+        V: UsableData + Send,
+        C: UsableData + Send,
+        P: ProblemRepr<V> + Send + Sync,
+    {
+        match self {
+            StrategyKind::Default(s) => s.run(ctx, problem).await,
+        }
+    }
+}
+
+impl StrategyContext {
+    pub async fn run_strategy<V, C, P>(
+        &self,
+        strategy: &StrategyKind,
+        problem: &Problem<V, C, P>,
+    ) -> Result<StrategyOutcome<V>, StrategyError>
+    where
+        V: UsableData + Send,
+        C: UsableData + Send,
+        P: ProblemRepr<V> + Send + Sync,
+    {
+        strategy.run(self, problem).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use collomatique_ilp::{DefaultRepr, ProblemBuilder, Variable};
+
+    struct MockBackend {
+        outcome: RawSolveOutcome,
+    }
+
+    #[async_trait]
+    impl SolveBackend for MockBackend {
+        async fn solve(
+            &self,
+            _desc: &ProblemDesc,
+            _opts: SolveConfig,
+        ) -> Result<RawSolveOutcome, StrategyError> {
+            Ok(self.outcome.clone())
+        }
+    }
+
+    #[tokio::test]
+    async fn default_strategy_returns_mock_result() {
+        let problem = ProblemBuilder::<usize, (), DefaultRepr<usize>>::new()
+            .set_variable(0usize, Variable::binary())
+            .set_variable(1usize, Variable::binary())
+            .build()
+            .unwrap();
+
+        let backend = Arc::new(MockBackend {
+            outcome: RawSolveOutcome {
+                status: SolveStatus::Optimal,
+                objective: Some(42.0),
+                best_bound: Some(42.0),
+                solution: Some(vec![1.0, 1.0]),
+            },
+        });
+
+        let ctx = StrategyContext::new(backend);
+        let strategy = DefaultStrategy::default();
+        let outcome = strategy.run(&ctx, &problem).await.unwrap();
+
+        assert_eq!(outcome.status, SolveStatus::Optimal);
+        assert_eq!(outcome.objective, Some(42.0));
+        let solution = outcome.solution.unwrap();
+        assert_eq!(solution.get(0usize), Some(1.0));
+        assert_eq!(solution.get(1usize), Some(1.0));
+    }
+
+    #[tokio::test]
+    async fn strategy_kind_dispatches_to_default() {
+        let problem = ProblemBuilder::<usize, (), DefaultRepr<usize>>::new()
+            .set_variable(0usize, Variable::binary())
+            .build()
+            .unwrap();
+
+        let backend = Arc::new(MockBackend {
+            outcome: RawSolveOutcome {
+                status: SolveStatus::Optimal,
+                objective: Some(1.0),
+                best_bound: Some(1.0),
+                solution: Some(vec![1.0]),
+            },
+        });
+
+        let ctx = StrategyContext::new(backend);
+        let kind = StrategyKind::Default(DefaultStrategy::default());
+        let outcome = ctx.run_strategy(&kind, &problem).await.unwrap();
+
+        assert_eq!(outcome.status, SolveStatus::Optimal);
+        assert_eq!(outcome.solution.unwrap().get(0usize), Some(1.0));
+    }
+}

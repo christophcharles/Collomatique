@@ -9,3 +9,6 @@ collomatique-ilp = { path = "../ilp", features = ["serde"] }
 async-trait.workspace = true
 thiserror.workspace = true
 serde = { workspace = true, features = ["derive"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros"] }
