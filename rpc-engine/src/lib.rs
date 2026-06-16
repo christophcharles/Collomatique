@@ -2,7 +2,8 @@ use anyhow::anyhow;
 use collomatique_rpc::InternalDataStream;
 use collomatique_rpc::{
     CmdMsg, CompleteCmdMsg, EncodedMsg, InitMsg, ResultMsg, SerializedIlpProblem,
-    SolverIncumbentInfo, SolverMsg, SolverProgressData, SolverResultData, SolverStatus,
+    SerializedStrategyRequest, SolverIncumbentInfo, SolverMsg, SolverProgressData,
+    SolverResultData, SolverStatus, StrategyMsg, StrategyResultData, StrategyStatus,
 };
 
 pub fn wait_for_init_msg() -> Result<InitMsg, String> {
@@ -196,6 +197,63 @@ fn solve_ilp(serialized: SerializedIlpProblem) -> Result<(), anyhow::Error> {
     Ok(())
 }
 
+fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Error> {
+    use collomatique_ilp::{DefaultRepr, ProblemBuilder};
+    use collomatique_strategies::{StrategyContext, StrategyRequest};
+    use collomatique_subprocesses::{SubprocessSolveBackend, WorkerManager};
+    use ordered_float::OrderedFloat;
+    use std::sync::{Arc, Mutex};
+
+    let request_str: String = serialized.into();
+    let request = StrategyRequest::deserialize(&request_str)
+        .map_err(|e| anyhow!("Failed to deserialize strategy request: {e}"))?;
+
+    eprintln!("Building problem from desc...");
+    let problem = ProblemBuilder::<usize, (), DefaultRepr<usize>>::from_desc(request.problem_desc)
+        .build()
+        .map_err(|e| anyhow!("Failed to build problem from desc: {:?}", e))?;
+
+    let worker_manager = Arc::new(Mutex::new(WorkerManager::new()));
+    let backend = Arc::new(SubprocessSolveBackend::new(worker_manager));
+    let ctx = StrategyContext::new(backend);
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    eprintln!("Running strategy...");
+    let outcome = rt
+        .block_on(request.strategy.run(&ctx, &problem))
+        .map_err(|e| anyhow!("Strategy failed: {e}"))?;
+
+    let status = match outcome.status {
+        collomatique_strategies::SolveStatus::Optimal => StrategyStatus::Optimal,
+        collomatique_strategies::SolveStatus::Infeasible => StrategyStatus::Infeasible,
+        collomatique_strategies::SolveStatus::Stopped => StrategyStatus::Stopped,
+        collomatique_strategies::SolveStatus::Error => StrategyStatus::Error,
+    };
+
+    let num_vars = problem.get_variables().len();
+    let var_indices: Vec<usize> = (0..num_vars).collect();
+
+    let solution = outcome.solution.map(|config| {
+        var_indices
+            .iter()
+            .map(|&i| OrderedFloat(config.get(i).unwrap_or(0.0)))
+            .collect::<Vec<_>>()
+    });
+
+    let result_data = StrategyResultData {
+        status,
+        objective: outcome.objective.map(OrderedFloat),
+        best_bound: None,
+        solution,
+    };
+
+    eprintln!("Sending strategy result...");
+    EncodedMsg::send_rpc(CmdMsg::Strategy(StrategyMsg::Result(result_data)))
+        .map_err(|e| anyhow!("Error sending StrategyResult: {e}"))?;
+
+    Ok(())
+}
+
 /// Main RPC Engine function
 ///
 /// Runs the RPC engine through stdin/stdout
@@ -244,6 +302,9 @@ pub fn run_rpc_engine() -> Result<(), anyhow::Error> {
         }
         InitMsg::SolveIlp(serialized) => {
             solve_ilp(serialized)?;
+        }
+        InitMsg::RunStrategy(serialized) => {
+            run_strategy(serialized)?;
         }
     }
 

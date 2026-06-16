@@ -193,6 +193,24 @@ impl StrategyContext {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StrategyRequest {
+    pub problem_desc: ProblemDesc,
+    pub strategy: StrategyKind,
+}
+
+impl StrategyRequest {
+    pub fn serialize(&self) -> String {
+        serde_json::to_string(self).expect("Serialization of StrategyRequest should never fail")
+    }
+
+    pub fn deserialize(s: &str) -> Result<Self, StrategyError> {
+        serde_json::from_str(s).map_err(|e| {
+            StrategyError::Other(format!("failed to deserialize StrategyRequest: {e}"))
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

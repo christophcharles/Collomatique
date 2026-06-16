@@ -19,11 +19,18 @@ pub use solver_msg::{
     SolverResultData, SolverStatus,
 };
 
+pub mod strategy_msg;
+pub use strategy_msg::{
+    SerializedStrategyRequest, StrategyMsg, StrategyProgressData, StrategyResultData,
+    StrategyStatus,
+};
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum InitMsg {
     RunPythonScript(String),
     SolveColloscope,
     SolveIlp(SerializedIlpProblem),
+    RunStrategy(SerializedStrategyRequest),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -55,6 +62,7 @@ pub enum ResultMsg {
     Data(InternalDataStream),
     GlobalError(String),
     SolverControl(bool),
+    StrategyControl(bool),
 }
 
 impl ResultMsg {

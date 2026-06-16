@@ -543,6 +543,8 @@ dependencies = [
  "collomatique-sqlite-state",
  "collomatique-state",
  "collomatique-state-colloscopes",
+ "collomatique-strategies",
+ "collomatique-subprocesses",
  "ordered-float",
  "sqlx",
  "tokio",
@@ -603,6 +605,7 @@ dependencies = [
  "async-trait",
  "collomatique-ilp",
  "serde",
+ "serde_json",
  "thiserror 1.0.69",
  "tokio",
 ]

@@ -409,7 +409,7 @@ impl Component for Dialog {
                                 }
                             }
                         }
-                        CmdMsg::Solver(_) => {
+                        CmdMsg::Solver(_) | CmdMsg::Strategy(_) => {
                             // Not expected in this context — ignore
                         }
                     }

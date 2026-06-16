@@ -12,6 +12,7 @@ pub enum CmdMsg {
     GetData,
     SetData(super::InternalDataStream),
     Solver(super::SolverMsg),
+    Strategy(super::StrategyMsg),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
