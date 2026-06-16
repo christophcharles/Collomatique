@@ -38,6 +38,7 @@ pub struct RawSolveOutcome {
 pub struct StrategyOutcome<V: UsableData> {
     pub status: SolveStatus,
     pub objective: Option<f64>,
+    pub best_bound: Option<f64>,
     pub solution: Option<ConfigData<V>>,
 }
 
@@ -108,6 +109,7 @@ impl StrategyContext {
         Ok(StrategyOutcome {
             status: raw.status,
             objective: raw.objective,
+            best_bound: raw.best_bound,
             solution,
         })
     }

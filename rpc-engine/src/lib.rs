@@ -243,7 +243,7 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
     let result_data = StrategyResultData {
         status,
         objective: outcome.objective.map(OrderedFloat),
-        best_bound: None,
+        best_bound: outcome.best_bound.map(OrderedFloat),
         solution,
     };
 
