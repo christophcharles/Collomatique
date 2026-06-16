@@ -611,8 +611,11 @@ dependencies = [
 name = "collomatique-subprocesses"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "collomatique-ilp",
  "collomatique-rpc",
+ "collomatique-strategies",
+ "futures",
  "libc",
  "ordered-float",
  "portable-pty",
