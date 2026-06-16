@@ -214,7 +214,11 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
         .map_err(|e| anyhow!("Failed to build problem from desc: {:?}", e))?;
 
     let worker_manager = Arc::new(Mutex::new(WorkerManager::new()));
-    let backend = Arc::new(SubprocessSolveBackend::new(worker_manager));
+    let backend = Arc::new(SubprocessSolveBackend::new(
+        worker_manager,
+        request.echo_solver_logs,
+        request.echo_solver_progress,
+    ));
     let ctx = StrategyContext::new(backend);
 
     let rt = tokio::runtime::Runtime::new().unwrap();

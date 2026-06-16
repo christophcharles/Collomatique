@@ -447,6 +447,8 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
         &mut worker_manager,
         desc,
         strategy,
+        true,
+        true,
         move |result| {
             let _ = tx.send(result);
         },

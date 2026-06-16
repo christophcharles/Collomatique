@@ -10,11 +10,21 @@ use crate::worker_manager::WorkerManager;
 
 pub struct SubprocessSolveBackend {
     worker_manager: Arc<Mutex<WorkerManager>>,
+    echo_solver_logs: bool,
+    echo_solver_progress: bool,
 }
 
 impl SubprocessSolveBackend {
-    pub fn new(worker_manager: Arc<Mutex<WorkerManager>>) -> Self {
-        Self { worker_manager }
+    pub fn new(
+        worker_manager: Arc<Mutex<WorkerManager>>,
+        echo_solver_logs: bool,
+        echo_solver_progress: bool,
+    ) -> Self {
+        Self {
+            worker_manager,
+            echo_solver_logs,
+            echo_solver_progress,
+        }
     }
 }
 
@@ -41,6 +51,9 @@ impl SolveBackend for SubprocessSolveBackend {
             }
         };
 
+        let echo_progress = self.echo_solver_progress;
+        let echo_logs = self.echo_solver_logs;
+
         {
             let mut wm = self
                 .worker_manager
@@ -50,17 +63,21 @@ impl SolveBackend for SubprocessSolveBackend {
                 &mut wm,
                 config,
                 result_callback,
-                |progress| {
-                    eprintln!(
-                        "[solver subprocess] obj={:.4} bound={:.4} nodes={} solutions={}",
-                        progress.best_obj,
-                        progress.best_bound,
-                        progress.node_count,
-                        progress.solutions_found
-                    );
+                move |progress| {
+                    if echo_progress {
+                        eprintln!(
+                            "[solver subprocess] obj={:.4} bound={:.4} nodes={} solutions={}",
+                            progress.best_obj,
+                            progress.best_bound,
+                            progress.node_count,
+                            progress.solutions_found
+                        );
+                    }
                 },
-                |line| {
-                    eprintln!("[solver subprocess] {}", line.trim_end());
+                move |line| {
+                    if echo_logs {
+                        eprintln!("[solver subprocess] {}", line.trim_end());
+                    }
                 },
             )
             .map_err(|e| StrategyError::SolveError(format!("failed to spawn solver: {e}")))?;

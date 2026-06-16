@@ -65,6 +65,8 @@ pub fn spawn_strategy(
     worker_manager: &mut WorkerManager,
     problem_desc: collomatique_ilp::ProblemDesc,
     strategy: StrategyKind,
+    echo_solver_logs: bool,
+    echo_solver_progress: bool,
     result_callback: impl Fn(StrategyResult) + Send + 'static,
     progress_callback: impl Fn(&StrategyProgress) + Send + 'static,
     log_callback: impl Fn(&str) + Send + 'static,
@@ -72,6 +74,8 @@ pub fn spawn_strategy(
     let request = StrategyRequest {
         problem_desc,
         strategy,
+        echo_solver_logs,
+        echo_solver_progress,
     };
     let serialized_str = request.serialize();
     let serialized = SerializedStrategyRequest::from(serialized_str);

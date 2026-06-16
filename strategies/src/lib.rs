@@ -195,10 +195,18 @@ impl StrategyContext {
     }
 }
 
+fn default_true() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StrategyRequest {
     pub problem_desc: ProblemDesc,
     pub strategy: StrategyKind,
+    #[serde(default = "default_true")]
+    pub echo_solver_logs: bool,
+    #[serde(default = "default_true")]
+    pub echo_solver_progress: bool,
 }
 
 impl StrategyRequest {
