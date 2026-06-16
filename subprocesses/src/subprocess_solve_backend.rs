@@ -46,8 +46,24 @@ impl SolveBackend for SubprocessSolveBackend {
                 .worker_manager
                 .lock()
                 .map_err(|e| StrategyError::SolveError(format!("lock poisoned: {e}")))?;
-            spawn_ilp_solver(&mut wm, config, result_callback, |_| {}, |_| {})
-                .map_err(|e| StrategyError::SolveError(format!("failed to spawn solver: {e}")))?;
+            spawn_ilp_solver(
+                &mut wm,
+                config,
+                result_callback,
+                |progress| {
+                    eprintln!(
+                        "[solver subprocess] obj={:.4} bound={:.4} nodes={} solutions={}",
+                        progress.best_obj,
+                        progress.best_bound,
+                        progress.node_count,
+                        progress.solutions_found
+                    );
+                },
+                |line| {
+                    eprintln!("[solver subprocess] {}", line.trim_end());
+                },
+            )
+            .map_err(|e| StrategyError::SolveError(format!("failed to spawn solver: {e}")))?;
         }
 
         let result = rx
