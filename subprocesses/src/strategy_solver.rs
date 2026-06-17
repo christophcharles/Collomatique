@@ -3,18 +3,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use collomatique_rpc::{EncodedMsg, InitMsg, ResultMsg, SerializedStrategyRequest, StrategyMsg};
-use collomatique_strategies::{StrategyKind, StrategyRequest};
+use collomatique_strategies::{StrategyKind, StrategyProgress, StrategyRequest};
 
 use crate::process::StdinWriter;
 use crate::worker::{WorkerEvent, WorkerId};
 use crate::worker_manager::WorkerManager;
-
-#[derive(Debug, Clone)]
-pub struct StrategyProgress {
-    pub message: String,
-    pub best_objective: Option<f64>,
-    pub feasible: Option<bool>,
-}
 
 #[derive(Debug, Clone)]
 pub struct StrategyResult {
@@ -82,10 +75,17 @@ impl StrategySubprocess {
         let callback = move |event: WorkerEvent| match event {
             WorkerEvent::RpcCommand(Ok(cmd)) => match cmd {
                 collomatique_rpc::CmdMsg::Strategy(StrategyMsg::Progress(data)) => {
-                    let progress = StrategyProgress {
-                        message: data.message,
-                        best_objective: data.best_objective.map(|v| v.into_inner()),
-                        feasible: data.feasible,
+                    let serialized_str: String = data.progress.into();
+                    let progress = match StrategyProgress::deserialize(&serialized_str) {
+                        Ok(p) => p,
+                        Err(e) => {
+                            eprintln!("Failed to deserialize strategy progress: {e}");
+                            let guard = stdin_slot_cb.lock().unwrap();
+                            if let Some(stdin) = guard.as_ref() {
+                                send_via_stdin(stdin, ResultMsg::StrategyControl(true));
+                            }
+                            return;
+                        }
                     };
                     progress_callback(&progress);
                     *last_progress_cb.lock().unwrap() = Some(progress);

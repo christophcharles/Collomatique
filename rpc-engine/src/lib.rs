@@ -199,7 +199,8 @@ fn solve_ilp(serialized: SerializedIlpProblem) -> Result<(), anyhow::Error> {
 
 fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Error> {
     use collomatique_ilp::{DefaultRepr, ProblemBuilder};
-    use collomatique_strategies::{StrategyContext, StrategyRequest};
+    use collomatique_rpc::{SerializedStrategyProgress, StrategyProgressData};
+    use collomatique_strategies::{StrategyContext, StrategyProgress, StrategyRequest};
     use collomatique_subprocesses::{SubprocessSolveBackend, WorkerManager};
     use ordered_float::OrderedFloat;
     use std::sync::{Arc, Mutex};
@@ -221,10 +222,26 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
     ));
     let ctx = StrategyContext::new(backend);
 
+    let progress_callback = |progress: StrategyProgress| -> bool {
+        let serialized_progress = progress.serialize();
+        let progress_data = StrategyProgressData {
+            progress: SerializedStrategyProgress::from(serialized_progress),
+        };
+        let response = EncodedMsg::send_rpc(CmdMsg::Strategy(StrategyMsg::Progress(progress_data)));
+        match response {
+            Ok(ResultMsg::StrategyControl(cont)) => cont,
+            _ => false,
+        }
+    };
+
     let rt = tokio::runtime::Runtime::new().unwrap();
     eprintln!("Running strategy...");
     let outcome = rt
-        .block_on(request.strategy.run(&ctx, &problem))
+        .block_on(
+            request
+                .strategy
+                .run_with_callback(&ctx, &problem, &progress_callback),
+        )
         .map_err(|e| anyhow!("Strategy failed: {e}"))?;
 
     let status = match outcome.status {

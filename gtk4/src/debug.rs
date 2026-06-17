@@ -419,7 +419,7 @@ fn subprocess_solve(model: &collomatique_constraints_colloscopes::ColloscopeMode
 }
 
 fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::ColloscopeModel) {
-    use collomatique_strategies::{DefaultStrategy, StrategyKind};
+    use collomatique_strategies::{DefaultStrategy, StrategyKind, StrategyProgress};
     use collomatique_subprocesses::{StrategyStatus, StrategySubprocess, WorkerManager};
     use std::sync::mpsc;
 
@@ -452,15 +452,10 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
         move |result| {
             let _ = tx.send(result);
         },
-        |progress| {
-            eprintln!(
-                "  [strategy progress] {}{}",
-                progress.message,
-                progress
-                    .best_objective
-                    .map(|v| format!(" obj={v:.4}"))
-                    .unwrap_or_default(),
-            );
+        |progress: &StrategyProgress| match progress {
+            StrategyProgress::Default(p) => {
+                eprintln!("  [strategy progress] {}", p.message);
+            }
         },
         |line| {
             eprintln!("  [strategy subprocess] {}", line.trim_end());
@@ -526,14 +521,11 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
         Err(_) => {
             eprintln!("  Channel closed without receiving a result");
             if let Some(progress) = handle.last_progress() {
-                eprintln!(
-                    "  Last progress: {}{}",
-                    progress.message,
-                    progress
-                        .best_objective
-                        .map(|v| format!(" obj={v}"))
-                        .unwrap_or_default(),
-                );
+                match &progress {
+                    StrategyProgress::Default(p) => {
+                        eprintln!("  Last progress: {}", p.message);
+                    }
+                }
             }
         }
     }

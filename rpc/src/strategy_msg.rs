@@ -25,10 +25,25 @@ impl From<SerializedStrategyRequest> for String {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SerializedStrategyProgress {
+    serialized: String,
+}
+
+impl From<String> for SerializedStrategyProgress {
+    fn from(serialized: String) -> Self {
+        Self { serialized }
+    }
+}
+
+impl From<SerializedStrategyProgress> for String {
+    fn from(value: SerializedStrategyProgress) -> Self {
+        value.serialized
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StrategyProgressData {
-    pub message: String,
-    pub best_objective: Option<OrderedFloat<f64>>,
-    pub feasible: Option<bool>,
+    pub progress: SerializedStrategyProgress,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

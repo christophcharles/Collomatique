@@ -12,7 +12,7 @@ pub use ilp_solver::{
 pub use process::ProcessStatus;
 pub use process::{OutputData, OutputEntry, ProcessEvent, ProcessId, ProcessState, StdinWriter};
 pub use process_manager::ProcessManager;
-pub use strategy_solver::{StrategyProgress, StrategyResult, StrategyStatus, StrategySubprocess};
+pub use strategy_solver::{StrategyResult, StrategyStatus, StrategySubprocess};
 pub use subprocess_solve_backend::SubprocessSolveBackend;
 pub use worker::{WorkerEvent, WorkerId, WorkerState};
 pub use worker_manager::WorkerManager;

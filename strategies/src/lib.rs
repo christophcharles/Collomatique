@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 use collomatique_ilp::mat_repr::ProblemRepr;
 use collomatique_ilp::{ConfigData, Problem, ProblemDesc, UsableData};
@@ -117,25 +117,19 @@ impl StrategyContext {
 
 #[async_trait]
 pub trait Strategy: Send + Sync {
-    async fn run<V, C, P>(
+    type Progress: Serialize + DeserializeOwned + Send + Sync + Clone;
+
+    async fn run_with_callback<V, C, P>(
         &self,
         ctx: &StrategyContext,
         problem: &Problem<V, C, P>,
+        on_progress: &(dyn Fn(Self::Progress) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<V>, StrategyError>
     where
         V: UsableData + Send,
         C: UsableData + Send,
         P: ProblemRepr<V> + Send + Sync;
-}
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct DefaultStrategy {
-    pub time_limit_seconds: Option<u32>,
-    pub disable_logging: bool,
-}
-
-#[async_trait]
-impl Strategy for DefaultStrategy {
     async fn run<V, C, P>(
         &self,
         ctx: &StrategyContext,
@@ -146,6 +140,48 @@ impl Strategy for DefaultStrategy {
         C: UsableData + Send,
         P: ProblemRepr<V> + Send + Sync,
     {
+        self.run_with_callback(ctx, problem, &|_| true).await
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct DefaultStrategy {
+    pub time_limit_seconds: Option<u32>,
+    pub disable_logging: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DefaultStrategyProgress {
+    pub message: String,
+}
+
+#[async_trait]
+impl Strategy for DefaultStrategy {
+    type Progress = DefaultStrategyProgress;
+
+    async fn run_with_callback<V, C, P>(
+        &self,
+        ctx: &StrategyContext,
+        problem: &Problem<V, C, P>,
+        on_progress: &(dyn Fn(Self::Progress) -> bool + Send + Sync),
+    ) -> Result<StrategyOutcome<V>, StrategyError>
+    where
+        V: UsableData + Send,
+        C: UsableData + Send,
+        P: ProblemRepr<V> + Send + Sync,
+    {
+        let should_continue = on_progress(DefaultStrategyProgress {
+            message: "Solving...".into(),
+        });
+        if !should_continue {
+            return Ok(StrategyOutcome {
+                status: SolveStatus::Stopped,
+                objective: None,
+                best_bound: None,
+                solution: None,
+            });
+        }
+
         ctx.solve_problem(
             problem,
             SolveProblemOpts {
@@ -163,6 +199,23 @@ pub enum StrategyKind {
     Default(DefaultStrategy),
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum StrategyProgress {
+    Default(DefaultStrategyProgress),
+}
+
+impl StrategyProgress {
+    pub fn serialize(&self) -> String {
+        serde_json::to_string(self).expect("Serialization of StrategyProgress should never fail")
+    }
+
+    pub fn deserialize(s: &str) -> Result<Self, StrategyError> {
+        serde_json::from_str(s).map_err(|e| {
+            StrategyError::Other(format!("failed to deserialize StrategyProgress: {e}"))
+        })
+    }
+}
+
 impl StrategyKind {
     pub async fn run<V, C, P>(
         &self,
@@ -174,8 +227,25 @@ impl StrategyKind {
         C: UsableData + Send,
         P: ProblemRepr<V> + Send + Sync,
     {
+        self.run_with_callback(ctx, problem, &|_| true).await
+    }
+
+    pub async fn run_with_callback<V, C, P>(
+        &self,
+        ctx: &StrategyContext,
+        problem: &Problem<V, C, P>,
+        on_progress: &(dyn Fn(StrategyProgress) -> bool + Send + Sync),
+    ) -> Result<StrategyOutcome<V>, StrategyError>
+    where
+        V: UsableData + Send,
+        C: UsableData + Send,
+        P: ProblemRepr<V> + Send + Sync,
+    {
         match self {
-            StrategyKind::Default(s) => s.run(ctx, problem).await,
+            StrategyKind::Default(s) => {
+                s.run_with_callback(ctx, problem, &|p| on_progress(StrategyProgress::Default(p)))
+                    .await
+            }
         }
     }
 }
@@ -192,6 +262,20 @@ impl StrategyContext {
         P: ProblemRepr<V> + Send + Sync,
     {
         strategy.run(self, problem).await
+    }
+
+    pub async fn run_strategy_with_callback<V, C, P>(
+        &self,
+        strategy: &StrategyKind,
+        problem: &Problem<V, C, P>,
+        on_progress: &(dyn Fn(StrategyProgress) -> bool + Send + Sync),
+    ) -> Result<StrategyOutcome<V>, StrategyError>
+    where
+        V: UsableData + Send,
+        C: UsableData + Send,
+        P: ProblemRepr<V> + Send + Sync,
+    {
+        strategy.run_with_callback(self, problem, on_progress).await
     }
 }
 
