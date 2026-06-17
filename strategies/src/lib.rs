@@ -42,6 +42,14 @@ pub struct StrategyOutcome<V: UsableData> {
     pub solution: Option<ConfigData<V>>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SolveProgress {
+    pub best_obj: f64,
+    pub best_bound: f64,
+    pub node_count: u64,
+    pub solutions_found: u64,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum StrategyError {
     #[error("solve error: {0}")]
@@ -52,11 +60,20 @@ pub enum StrategyError {
 
 #[async_trait]
 pub trait SolveBackend: Send + Sync {
+    async fn solve_with_progress(
+        &self,
+        desc: &ProblemDesc,
+        opts: SolveConfig,
+        on_progress: &(dyn Fn(SolveProgress) -> bool + Send + Sync),
+    ) -> Result<RawSolveOutcome, StrategyError>;
+
     async fn solve(
         &self,
         desc: &ProblemDesc,
         opts: SolveConfig,
-    ) -> Result<RawSolveOutcome, StrategyError>;
+    ) -> Result<RawSolveOutcome, StrategyError> {
+        self.solve_with_progress(desc, opts, &|_| true).await
+    }
 }
 
 pub struct StrategyContext {
@@ -76,10 +93,36 @@ impl StrategyContext {
         self.backend.solve(desc, opts).await
     }
 
+    pub async fn solve_with_progress(
+        &self,
+        desc: &ProblemDesc,
+        opts: SolveConfig,
+        on_progress: &(dyn Fn(SolveProgress) -> bool + Send + Sync),
+    ) -> Result<RawSolveOutcome, StrategyError> {
+        self.backend
+            .solve_with_progress(desc, opts, on_progress)
+            .await
+    }
+
     pub async fn solve_problem<V, C, P>(
         &self,
         problem: &Problem<V, C, P>,
         opts: SolveProblemOpts<V>,
+    ) -> Result<StrategyOutcome<V>, StrategyError>
+    where
+        V: UsableData,
+        C: UsableData,
+        P: ProblemRepr<V>,
+    {
+        self.solve_problem_with_progress(problem, opts, &|_| true)
+            .await
+    }
+
+    pub async fn solve_problem_with_progress<V, C, P>(
+        &self,
+        problem: &Problem<V, C, P>,
+        opts: SolveProblemOpts<V>,
+        on_progress: &(dyn Fn(SolveProgress) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<V>, StrategyError>
     where
         V: UsableData,
@@ -99,7 +142,9 @@ impl StrategyContext {
             disable_logging: opts.disable_logging,
         };
 
-        let raw = self.solve(&desc, solve_config).await?;
+        let raw = self
+            .solve_with_progress(&desc, solve_config, on_progress)
+            .await?;
 
         let solution = raw
             .solution
@@ -150,14 +195,9 @@ pub struct DefaultStrategy {
     pub disable_logging: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct DefaultStrategyProgress {
-    pub message: String,
-}
-
 #[async_trait]
 impl Strategy for DefaultStrategy {
-    type Progress = DefaultStrategyProgress;
+    type Progress = SolveProgress;
 
     async fn run_with_callback<V, C, P>(
         &self,
@@ -170,25 +210,14 @@ impl Strategy for DefaultStrategy {
         C: UsableData + Send,
         P: ProblemRepr<V> + Send + Sync,
     {
-        let should_continue = on_progress(DefaultStrategyProgress {
-            message: "Solving...".into(),
-        });
-        if !should_continue {
-            return Ok(StrategyOutcome {
-                status: SolveStatus::Stopped,
-                objective: None,
-                best_bound: None,
-                solution: None,
-            });
-        }
-
-        ctx.solve_problem(
+        ctx.solve_problem_with_progress(
             problem,
             SolveProblemOpts {
                 warm_start: None,
                 time_limit_seconds: self.time_limit_seconds,
                 disable_logging: self.disable_logging,
             },
+            on_progress,
         )
         .await
     }
@@ -201,7 +230,7 @@ pub enum StrategyKind {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum StrategyProgress {
-    Default(DefaultStrategyProgress),
+    Default(SolveProgress),
 }
 
 impl StrategyProgress {
@@ -316,10 +345,11 @@ mod tests {
 
     #[async_trait]
     impl SolveBackend for MockBackend {
-        async fn solve(
+        async fn solve_with_progress(
             &self,
             _desc: &ProblemDesc,
             _opts: SolveConfig,
+            _on_progress: &(dyn Fn(SolveProgress) -> bool + Send + Sync),
         ) -> Result<RawSolveOutcome, StrategyError> {
             Ok(self.outcome.clone())
         }

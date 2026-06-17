@@ -454,7 +454,10 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
         },
         |progress: &StrategyProgress| match progress {
             StrategyProgress::Default(p) => {
-                eprintln!("  [strategy progress] {}", p.message);
+                eprintln!(
+                    "  [strategy progress] obj={:.4} bound={:.4} nodes={} solutions={}",
+                    p.best_obj, p.best_bound, p.node_count, p.solutions_found
+                );
             }
         },
         |line| {
@@ -523,7 +526,10 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
             if let Some(progress) = handle.last_progress() {
                 match &progress {
                     StrategyProgress::Default(p) => {
-                        eprintln!("  Last progress: {}", p.message);
+                        eprintln!(
+                            "  Last progress: obj={:.4} bound={:.4} nodes={} solutions={}",
+                            p.best_obj, p.best_bound, p.node_count, p.solutions_found
+                        );
                     }
                 }
             }
