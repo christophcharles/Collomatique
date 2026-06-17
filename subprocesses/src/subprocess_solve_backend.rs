@@ -5,7 +5,7 @@ use collomatique_strategies::{
     RawSolveOutcome, SolveBackend, SolveConfig, SolveStatus, StrategyError,
 };
 
-use crate::ilp_solver::{IlpSolverConfig, IlpStatus, spawn_ilp_solver};
+use crate::ilp_solver::{IlpSolverConfig, IlpStatus, SolverSubprocess};
 use crate::worker_manager::WorkerManager;
 
 pub struct SubprocessSolveBackend {
@@ -59,7 +59,7 @@ impl SolveBackend for SubprocessSolveBackend {
                 .worker_manager
                 .lock()
                 .map_err(|e| StrategyError::SolveError(format!("lock poisoned: {e}")))?;
-            spawn_ilp_solver(
+            SolverSubprocess::spawn(
                 &mut wm,
                 config,
                 result_callback,

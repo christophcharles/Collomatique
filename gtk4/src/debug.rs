@@ -301,7 +301,7 @@ fn objective(
 }
 
 fn subprocess_solve(model: &collomatique_constraints_colloscopes::ColloscopeModel) {
-    use collomatique_subprocesses::{IlpSolverConfig, IlpStatus, WorkerManager, spawn_ilp_solver};
+    use collomatique_subprocesses::{IlpSolverConfig, IlpStatus, SolverSubprocess, WorkerManager};
     use std::sync::mpsc;
 
     let t = Instant::now();
@@ -326,7 +326,7 @@ fn subprocess_solve(model: &collomatique_constraints_colloscopes::ColloscopeMode
 
     eprintln!("Spawning solver subprocess...");
     let t = Instant::now();
-    let handle = spawn_ilp_solver(
+    let handle = SolverSubprocess::spawn(
         &mut worker_manager,
         config,
         move |result| {
@@ -420,7 +420,7 @@ fn subprocess_solve(model: &collomatique_constraints_colloscopes::ColloscopeMode
 
 fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::ColloscopeModel) {
     use collomatique_strategies::{DefaultStrategy, StrategyKind};
-    use collomatique_subprocesses::{StrategyStatus, WorkerManager, spawn_strategy};
+    use collomatique_subprocesses::{StrategyStatus, StrategySubprocess, WorkerManager};
     use std::sync::mpsc;
 
     let t = Instant::now();
@@ -443,7 +443,7 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
 
     eprintln!("Spawning strategy subprocess...");
     let t = Instant::now();
-    let handle = spawn_strategy(
+    let handle = StrategySubprocess::spawn(
         &mut worker_manager,
         desc,
         strategy,

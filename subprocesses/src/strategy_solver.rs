@@ -50,6 +50,98 @@ impl StrategySubprocess {
     pub fn last_progress(&self) -> Option<StrategyProgress> {
         self.last_progress.lock().unwrap().clone()
     }
+
+    pub fn spawn(
+        worker_manager: &mut WorkerManager,
+        problem_desc: collomatique_ilp::ProblemDesc,
+        strategy: StrategyKind,
+        echo_solver_logs: bool,
+        echo_solver_progress: bool,
+        result_callback: impl Fn(StrategyResult) + Send + 'static,
+        progress_callback: impl Fn(&StrategyProgress) + Send + 'static,
+        log_callback: impl Fn(&str) + Send + 'static,
+    ) -> Result<StrategySubprocess, String> {
+        let request = StrategyRequest {
+            problem_desc,
+            strategy,
+            echo_solver_logs,
+            echo_solver_progress,
+        };
+        let serialized_str = request.serialize();
+        let serialized = SerializedStrategyRequest::from(serialized_str);
+        let init_msg = InitMsg::RunStrategy(serialized);
+
+        let stop_flag = Arc::new(AtomicBool::new(false));
+        let last_progress: Arc<Mutex<Option<StrategyProgress>>> = Arc::new(Mutex::new(None));
+        let stdin_slot: Arc<Mutex<Option<StdinWriter>>> = Arc::new(Mutex::new(None));
+
+        let stop_flag_cb = stop_flag.clone();
+        let last_progress_cb = last_progress.clone();
+        let stdin_slot_cb = stdin_slot.clone();
+
+        let callback = move |event: WorkerEvent| match event {
+            WorkerEvent::RpcCommand(Ok(cmd)) => match cmd {
+                collomatique_rpc::CmdMsg::Strategy(StrategyMsg::Progress(data)) => {
+                    let progress = StrategyProgress {
+                        message: data.message,
+                        best_objective: data.best_objective.map(|v| v.into_inner()),
+                        feasible: data.feasible,
+                    };
+                    progress_callback(&progress);
+                    *last_progress_cb.lock().unwrap() = Some(progress);
+
+                    let stopped = stop_flag_cb.load(Ordering::Relaxed);
+                    let response = ResultMsg::StrategyControl(!stopped);
+
+                    let guard = stdin_slot_cb.lock().unwrap();
+                    if let Some(stdin) = guard.as_ref() {
+                        send_via_stdin(stdin, response);
+                    }
+                }
+                collomatique_rpc::CmdMsg::Strategy(StrategyMsg::Result(data)) => {
+                    let result = StrategyResult {
+                        status: match data.status {
+                            collomatique_rpc::StrategyStatus::Optimal => StrategyStatus::Optimal,
+                            collomatique_rpc::StrategyStatus::Infeasible => {
+                                StrategyStatus::Infeasible
+                            }
+                            collomatique_rpc::StrategyStatus::Stopped => StrategyStatus::Stopped,
+                            collomatique_rpc::StrategyStatus::Error => StrategyStatus::Error,
+                        },
+                        objective: data.objective.map(|v| v.into_inner()),
+                        best_bound: data.best_bound.map(|v| v.into_inner()),
+                        solution: data
+                            .solution
+                            .map(|s| s.into_iter().map(|v| v.into_inner()).collect()),
+                    };
+
+                    let guard = stdin_slot_cb.lock().unwrap();
+                    if let Some(stdin) = guard.as_ref() {
+                        send_via_stdin(stdin, ResultMsg::Ack(None));
+                    }
+                    drop(guard);
+
+                    result_callback(result);
+                }
+                _ => {}
+            },
+            WorkerEvent::LogLine(line) => {
+                log_callback(&line);
+            }
+            _ => {}
+        };
+
+        let worker_id = worker_manager.spawn_worker(init_msg, callback)?;
+
+        let stdin_writer = worker_manager.get_worker_stdin(worker_id);
+        *stdin_slot.lock().unwrap() = stdin_writer;
+
+        Ok(StrategySubprocess {
+            worker_id,
+            stop_flag,
+            last_progress,
+        })
+    }
 }
 
 fn send_via_stdin(stdin: &StdinWriter, msg: ResultMsg) {
@@ -59,94 +151,4 @@ fn send_via_stdin(stdin: &StdinWriter, msg: ResultMsg) {
         let _ = writer.write_all(encoded.as_bytes());
         let _ = writer.flush();
     }
-}
-
-pub fn spawn_strategy(
-    worker_manager: &mut WorkerManager,
-    problem_desc: collomatique_ilp::ProblemDesc,
-    strategy: StrategyKind,
-    echo_solver_logs: bool,
-    echo_solver_progress: bool,
-    result_callback: impl Fn(StrategyResult) + Send + 'static,
-    progress_callback: impl Fn(&StrategyProgress) + Send + 'static,
-    log_callback: impl Fn(&str) + Send + 'static,
-) -> Result<StrategySubprocess, String> {
-    let request = StrategyRequest {
-        problem_desc,
-        strategy,
-        echo_solver_logs,
-        echo_solver_progress,
-    };
-    let serialized_str = request.serialize();
-    let serialized = SerializedStrategyRequest::from(serialized_str);
-    let init_msg = InitMsg::RunStrategy(serialized);
-
-    let stop_flag = Arc::new(AtomicBool::new(false));
-    let last_progress: Arc<Mutex<Option<StrategyProgress>>> = Arc::new(Mutex::new(None));
-    let stdin_slot: Arc<Mutex<Option<StdinWriter>>> = Arc::new(Mutex::new(None));
-
-    let stop_flag_cb = stop_flag.clone();
-    let last_progress_cb = last_progress.clone();
-    let stdin_slot_cb = stdin_slot.clone();
-
-    let callback = move |event: WorkerEvent| match event {
-        WorkerEvent::RpcCommand(Ok(cmd)) => match cmd {
-            collomatique_rpc::CmdMsg::Strategy(StrategyMsg::Progress(data)) => {
-                let progress = StrategyProgress {
-                    message: data.message,
-                    best_objective: data.best_objective.map(|v| v.into_inner()),
-                    feasible: data.feasible,
-                };
-                progress_callback(&progress);
-                *last_progress_cb.lock().unwrap() = Some(progress);
-
-                let stopped = stop_flag_cb.load(Ordering::Relaxed);
-                let response = ResultMsg::StrategyControl(!stopped);
-
-                let guard = stdin_slot_cb.lock().unwrap();
-                if let Some(stdin) = guard.as_ref() {
-                    send_via_stdin(stdin, response);
-                }
-            }
-            collomatique_rpc::CmdMsg::Strategy(StrategyMsg::Result(data)) => {
-                let result = StrategyResult {
-                    status: match data.status {
-                        collomatique_rpc::StrategyStatus::Optimal => StrategyStatus::Optimal,
-                        collomatique_rpc::StrategyStatus::Infeasible => StrategyStatus::Infeasible,
-                        collomatique_rpc::StrategyStatus::Stopped => StrategyStatus::Stopped,
-                        collomatique_rpc::StrategyStatus::Error => StrategyStatus::Error,
-                    },
-                    objective: data.objective.map(|v| v.into_inner()),
-                    best_bound: data.best_bound.map(|v| v.into_inner()),
-                    solution: data
-                        .solution
-                        .map(|s| s.into_iter().map(|v| v.into_inner()).collect()),
-                };
-
-                let guard = stdin_slot_cb.lock().unwrap();
-                if let Some(stdin) = guard.as_ref() {
-                    send_via_stdin(stdin, ResultMsg::Ack(None));
-                }
-                drop(guard);
-
-                result_callback(result);
-            }
-            _ => {}
-        },
-        WorkerEvent::LogLine(line) => {
-            log_callback(&line);
-        }
-        _ => {}
-    };
-
-    let worker_id = worker_manager.spawn_worker(init_msg, callback)?;
-
-    let stdin_writer = worker_manager.get_worker_stdin(worker_id);
-    *stdin_slot.lock().unwrap() = stdin_writer;
-
-    Ok(StrategySubprocess {
-        worker_id,
-        stop_flag,
-        last_progress,
-    })
 }
