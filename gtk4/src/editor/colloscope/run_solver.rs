@@ -1,118 +1,67 @@
-use collomatique_rpc::gui_answer::{OpenFileDialogAnswer, SaveFileDialogAnswer};
-use collomatique_rpc::{CmdMsg, ResultMsg};
-use collomatique_state::traits::Manager;
-use gtk::prelude::{AdjustmentExt, BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
-use relm4::factory::FactoryVecDeque;
+use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
 use relm4::{Component, ComponentController, adw, gtk};
 use relm4::{ComponentParts, ComponentSender, Controller, RelmWidgetExt};
 
-use collomatique_ops::Desc;
-use collomatique_state::{AppSession, AppState};
-use collomatique_state_colloscopes::Data;
+use std::sync::{Arc, Mutex};
 
-use crate::widgets::rpc_server;
-use std::path::PathBuf;
+use collomatique_strategies::StrategyKind;
+use collomatique_subprocesses::{
+    StrategyResult, StrategyStatus, StrategySubprocess, WorkerManager,
+};
 
-mod confirm_dialog;
+use crate::widgets::debug_view::{DebugView, DebugViewInput};
+
 mod error_dialog;
-mod error_display;
-mod input_dialog;
-mod ok_dialog;
 mod warning_running;
+
+type Colloscope = collomatique_state_colloscopes::colloscopes::Colloscope;
+
+/// The ILP problem to solve, bundled with the parameters needed to rebuild a
+/// colloscope from the solver's solution. `colloscope.rs` builds this on a
+/// debounce and hands it to the solver dialog.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IlpProblem {
+    pub env: collomatique_state_colloscopes::colloscope_params::Parameters,
+    pub problem: collomatique_constraints_colloscopes::ColloscopeModel,
+}
 
 pub struct Dialog {
     hidden: bool,
-    run_type: RunType,
     is_running: bool,
     end_with_error: bool,
+    worker_manager: Arc<Mutex<WorkerManager>>,
+    debug_view: Controller<DebugView>,
     error_dialog: Controller<error_dialog::Dialog>,
     warning_running: Controller<warning_running::Dialog>,
-    ok_dialog: Controller<ok_dialog::Dialog>,
-    confirm_dialog: Controller<confirm_dialog::Dialog>,
-    input_dialog: Controller<input_dialog::Dialog>,
-    rpc_logger: Controller<rpc_server::RpcLogger>,
-    errors: FactoryVecDeque<error_display::Entry>,
-    adjust_scrolling: bool,
-    app_session: Option<AppSession<AppState<Data, Desc>, Desc>>,
-}
-
-#[derive(Debug)]
-pub enum RunType {
-    Script(PathBuf, String),
-    SolveColloscope,
-}
-
-impl RunType {
-    fn get_path(&self) -> Option<std::path::PathBuf> {
-        match self {
-            RunType::Script(path, _script) => Some(path.clone()),
-            RunType::SolveColloscope => None,
-        }
-    }
-
-    fn get_init_msg(&self) -> collomatique_rpc::InitMsg {
-        match self {
-            RunType::Script(_path, script) => {
-                collomatique_rpc::InitMsg::RunPythonScript(script.clone())
-            }
-            RunType::SolveColloscope => collomatique_rpc::InitMsg::SolveColloscope,
-        }
-    }
-
-    fn get_under_text(&self) -> String {
-        match self {
-            RunType::Script(path, _script) => path.to_string_lossy().to_string(),
-            RunType::SolveColloscope => "Résolution du colloscope".into(),
-        }
-    }
-
-    fn get_op_name(&self) -> String {
-        match self {
-            RunType::Script(path, _script) => {
-                format!("Exécution de {}", path.to_string_lossy())
-            }
-            RunType::SolveColloscope => "Résolution du colloscope".into(),
-        }
-    }
-
-    fn get_title(&self) -> String {
-        match self {
-            RunType::Script(_, _) => "Exécution du script Python".to_string(),
-            RunType::SolveColloscope => "Résolution du colloscope".into(),
-        }
-    }
+    subprocess: Option<StrategySubprocess>,
+    current_problem: Option<IlpProblem>,
+    result_colloscope: Option<Colloscope>,
 }
 
 #[derive(Debug)]
 pub enum DialogInput {
-    Run(RunType, AppState<Data, Desc>),
+    Run(StrategyKind, IlpProblem),
     CancelRequest,
     Accept,
 
     Cancel,
-    ProcessFinished,
-    Cmd(Result<collomatique_rpc::CmdMsg, String>),
-    Error(String),
-}
-
-#[derive(Debug)]
-pub enum DialogCmdOutput {
-    AdjustScrolling,
-    DelayedRpcAnswer(ResultMsg),
+    Echo(String),
+    Finished(StrategyResult),
+    SpawnError(String),
 }
 
 #[derive(Debug)]
 pub enum DialogOutput {
-    NewData(AppState<Data, Desc>),
+    NewColloscope(Colloscope),
 }
 
 #[relm4::component(pub)]
 impl Component for Dialog {
-    type Init = ();
+    type Init = Arc<Mutex<WorkerManager>>;
 
     type Input = DialogInput;
     type Output = DialogOutput;
-    type CommandOutput = DialogCmdOutput;
+    type CommandOutput = ();
 
     view! {
         #[root]
@@ -122,8 +71,7 @@ impl Component for Dialog {
             set_resizable: true,
             #[watch]
             set_visible: !model.hidden,
-            #[watch]
-            set_title: Some(&model.run_type.get_title()),
+            set_title: Some("Résolution du colloscope"),
             add_css_class: "devel",
 
             adw::ToolbarView {
@@ -138,7 +86,7 @@ impl Component for Dialog {
                     pack_end = &gtk::Button {
                         set_label: "Valider les modifications",
                         #[watch]
-                        set_sensitive: !model.is_running && model.has_modifications(),
+                        set_sensitive: !model.is_running,
                         add_css_class: "destructive-action",
                         connect_clicked => DialogInput::Accept,
                     },
@@ -160,27 +108,13 @@ impl Component for Dialog {
                         set_halign: gtk::Align::Center,
                         set_valign: gtk::Align::Center,
                         #[watch]
-                        set_visible: !model.is_running && !model.end_with_error && model.has_modifications(),
+                        set_visible: !model.is_running && !model.end_with_error,
                         gtk::Image::from_icon_name("emblem-ok-symbolic") {
                             set_size_request: (50, 50),
                             set_icon_size: gtk::IconSize::Large,
                         },
                         gtk::Label {
                             set_label: "Exécution terminée",
-                        },
-                    },
-                    gtk::Box {
-                        set_orientation: gtk::Orientation::Horizontal,
-                        set_halign: gtk::Align::Center,
-                        set_valign: gtk::Align::Center,
-                        #[watch]
-                        set_visible: !model.is_running && !model.end_with_error && !model.has_modifications(),
-                        gtk::Image::from_icon_name("dialog-warning-symbolic") {
-                            set_size_request: (50, 50),
-                            set_icon_size: gtk::IconSize::Large,
-                        },
-                        gtk::Label {
-                            set_label: "Aucune modification effectuée",
                         },
                     },
                     gtk::Box {
@@ -197,28 +131,6 @@ impl Component for Dialog {
                             set_label: "Erreur pendant l'exécution",
                         },
                     },
-                    gtk::Label {
-                        set_margin_all: 5,
-                        set_halign: gtk::Align::Start,
-                        set_label: "Erreurs de communications avec le sous-processus :",
-                        #[watch]
-                        set_visible: !model.errors.is_empty(),
-                    },
-                    #[name(scrolled_window)]
-                    gtk::ScrolledWindow {
-                        set_hexpand: true,
-                        set_vexpand: true,
-                        set_policy: (gtk::PolicyType::Never, gtk::PolicyType::Automatic),
-                        set_margin_all: 5,
-                        #[watch]
-                        set_visible: !model.errors.is_empty(),
-                        #[local_ref]
-                        errors_listbox -> gtk::ListBox {
-                            set_hexpand: true,
-                            add_css_class: "boxed-list",
-                            set_selection_mode: gtk::SelectionMode::None,
-                        }
-                    },
                     gtk::Box {
                         set_margin_all: 5,
                         set_hexpand: true,
@@ -228,13 +140,7 @@ impl Component for Dialog {
                             set_halign: gtk::Align::Start,
                             set_label: "Informations de débogage :",
                         },
-                        append = model.rpc_logger.widget(),
-                    },
-                    gtk::Label {
-                        set_margin_all: 5,
-                        add_css_class: "dimmed",
-                        #[watch]
-                        set_label: &model.run_type.get_under_text(),
+                        append = model.debug_view.widget(),
                     },
                 }
             }
@@ -242,7 +148,7 @@ impl Component for Dialog {
     }
 
     fn init(
-        _params: Self::Init,
+        worker_manager: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
@@ -258,69 +164,20 @@ impl Component for Dialog {
                 warning_running::DialogOutput::Accept => DialogInput::Cancel,
             });
 
-        let ok_dialog = ok_dialog::Dialog::builder()
-            .transient_for(&root)
-            .launch(())
-            .forward(sender.command_sender(), |msg| match msg {
-                ok_dialog::DialogOutput::Ok => DialogCmdOutput::DelayedRpcAnswer(
-                    ResultMsg::AckGui(collomatique_rpc::GuiAnswer::OkDialogClosed),
-                ),
-            });
-
-        let confirm_dialog = confirm_dialog::Dialog::builder()
-            .transient_for(&root)
-            .launch(())
-            .forward(sender.command_sender(), |msg| match msg {
-                confirm_dialog::DialogOutput::Confirmed => DialogCmdOutput::DelayedRpcAnswer(
-                    ResultMsg::AckGui(collomatique_rpc::GuiAnswer::ConfirmDialog(true)),
-                ),
-                confirm_dialog::DialogOutput::Cancelled => DialogCmdOutput::DelayedRpcAnswer(
-                    ResultMsg::AckGui(collomatique_rpc::GuiAnswer::ConfirmDialog(false)),
-                ),
-            });
-
-        let input_dialog = input_dialog::Dialog::builder()
-            .transient_for(&root)
-            .launch(())
-            .forward(sender.command_sender(), |msg| match msg {
-                input_dialog::DialogOutput::Accepted(text) => DialogCmdOutput::DelayedRpcAnswer(
-                    ResultMsg::AckGui(collomatique_rpc::GuiAnswer::InputDialog(Some(text))),
-                ),
-                input_dialog::DialogOutput::Cancelled => DialogCmdOutput::DelayedRpcAnswer(
-                    ResultMsg::AckGui(collomatique_rpc::GuiAnswer::InputDialog(None)),
-                ),
-            });
-
-        use rpc_server::{RpcLogger, RpcLoggerOutput};
-        let rpc_logger = RpcLogger::builder()
-            .launch(())
-            .forward(sender.input_sender(), |msg| match msg {
-                RpcLoggerOutput::ProcessFinished => DialogInput::ProcessFinished,
-                RpcLoggerOutput::Cmd(cmd) => DialogInput::Cmd(cmd),
-                RpcLoggerOutput::Error(e) => DialogInput::Error(e),
-            });
-
-        let errors = FactoryVecDeque::builder()
-            .launch(gtk::ListBox::default())
-            .detach();
+        let debug_view = DebugView::builder().launch(()).detach();
 
         let model = Dialog {
             hidden: true,
-            run_type: RunType::Script(PathBuf::new(), String::new()),
-            error_dialog,
-            warning_running,
-            ok_dialog,
-            confirm_dialog,
-            input_dialog,
-            rpc_logger,
             is_running: false,
             end_with_error: false,
-            errors,
-            adjust_scrolling: false,
-            app_session: None,
+            worker_manager,
+            debug_view,
+            error_dialog,
+            warning_running,
+            subprocess: None,
+            current_problem: None,
+            result_colloscope: None,
         };
-
-        let errors_listbox = model.errors.widget();
 
         let widgets = view_output!();
 
@@ -328,21 +185,56 @@ impl Component for Dialog {
     }
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
-        self.adjust_scrolling = false;
         match msg {
-            DialogInput::Run(run_type, app_state) => {
+            DialogInput::Run(strategy, ilp_problem) => {
                 self.hidden = false;
-                self.run_type = run_type;
-                self.app_session = Some(AppSession::new(app_state));
-                self.errors.guard().clear();
                 self.is_running = true;
                 self.end_with_error = false;
-                self.rpc_logger
-                    .sender()
-                    .send(rpc_server::RpcLoggerInput::RunRcpEngine(
-                        self.run_type.get_init_msg(),
-                    ))
-                    .unwrap();
+                self.result_colloscope = None;
+                self.debug_view.emit(DebugViewInput::Clear);
+
+                let (desc, _var_order) = ilp_problem.problem.problem().get_desc();
+                self.current_problem = Some(ilp_problem);
+
+                let input = sender.input_sender().clone();
+                let log_input = input.clone();
+                let result_input = input.clone();
+                let log_cb = move |line: &str| {
+                    log_input.emit(DialogInput::Echo(line.trim_end().to_owned()));
+                };
+                let progress_cb = move |progress| {
+                    // TEMPORARY: route strategy progress to stderr until structured
+                    // UI reporting lands.
+                    match progress {
+                        Ok(collomatique_strategies::StrategyProgress::Default(p)) => {
+                            eprintln!(
+                                "  [strategy] obj={:.4} bound={:.4} nodes={} solutions={}",
+                                p.best_obj, p.best_bound, p.node_count, p.solutions_found
+                            );
+                        }
+                        Err(e) => eprintln!("  [strategy] [progress error] {e}"),
+                    }
+                };
+                let result_cb = move |result: StrategyResult| {
+                    result_input.emit(DialogInput::Finished(result));
+                };
+
+                let spawn_result = {
+                    let mut wm = self.worker_manager.lock().unwrap();
+                    StrategySubprocess::spawn(
+                        &mut wm,
+                        desc,
+                        strategy,
+                        result_cb,
+                        progress_cb,
+                        log_cb,
+                    )
+                };
+
+                match spawn_result {
+                    Ok(handle) => self.subprocess = Some(handle),
+                    Err(e) => sender.input(DialogInput::SpawnError(e)),
+                }
             }
             DialogInput::CancelRequest => {
                 if self.is_running {
@@ -356,212 +248,62 @@ impl Component for Dialog {
             }
             DialogInput::Cancel => {
                 self.hidden = true;
-                self.rpc_logger
-                    .sender()
-                    .send(rpc_server::RpcLoggerInput::KillProcess)
-                    .unwrap();
-            }
-            DialogInput::Cmd(cmd) => match cmd {
-                Ok(cmd_msg) => {
-                    let app_session = self
-                        .app_session
-                        .as_mut()
-                        .expect("there should be some current state to accept");
-                    let data = app_session.get_data();
-
-                    match cmd_msg {
-                        CmdMsg::GetData => {
-                            self.rpc_logger
-                                .sender()
-                                .send(rpc_server::RpcLoggerInput::SendMsg(
-                                    ResultMsg::generate_data_msg(data),
-                                ))
-                                .unwrap();
-                        }
-                        CmdMsg::GuiRequest(gui_cmd) => {
-                            self.handle_gui_request(sender, gui_cmd);
-                        }
-                        CmdMsg::SetData(data_stream) => {
-                            let inner_data: collomatique_state_colloscopes::InnerData =
-                                data_stream.into();
-                            let op = collomatique_state_colloscopes::Op::GlobalUpdate(inner_data);
-                            let desc = (
-                                collomatique_ops::OpCategory::None,
-                                String::from("Mise à jour globale"),
-                            );
-                            match collomatique_state::traits::Manager::apply(app_session, op, desc)
-                            {
-                                Ok(_) => {
-                                    self.rpc_logger
-                                        .sender()
-                                        .send(rpc_server::RpcLoggerInput::SendMsg(ResultMsg::Ack(
-                                            None,
-                                        )))
-                                        .unwrap();
-                                }
-                                Err(e) => {
-                                    self.rpc_logger
-                                        .sender()
-                                        .send(rpc_server::RpcLoggerInput::SendMsg(
-                                            ResultMsg::GlobalError(e.to_string()),
-                                        ))
-                                        .unwrap();
-                                }
-                            }
-                        }
-                        CmdMsg::Solver(_) | CmdMsg::Strategy(_) => {
-                            // Not expected in this context — ignore
-                        }
-                    }
+                if let Some(subprocess) = self.subprocess.take() {
+                    let wm = self.worker_manager.lock().unwrap();
+                    let _ = subprocess.kill(&wm);
                 }
-                Err(e) => {
-                    if !e.is_empty() {
-                        self.add_error(sender, e);
-                    }
-                    self.rpc_logger
-                        .sender()
-                        .send(rpc_server::RpcLoggerInput::SendMsg(ResultMsg::InvalidMsg))
-                        .unwrap();
-                }
-            },
-            DialogInput::Accept => {
-                self.hidden = true;
-                let app_session = self
-                    .app_session
-                    .take()
-                    .expect("there should be some current state to accept");
-                let last_op_cat = match app_session.get_undo_name() {
-                    Some((cat, _desc)) => cat.clone(),
-                    None => collomatique_ops::OpCategory::None,
-                };
-                sender
-                    .output(DialogOutput::NewData(
-                        app_session.commit((last_op_cat, self.run_type.get_op_name())),
-                    ))
-                    .unwrap();
             }
-            DialogInput::ProcessFinished => {
+            DialogInput::Echo(line) => {
+                self.debug_view
+                    .emit(DebugViewInput::Append(format!("{line}\n")));
+            }
+            DialogInput::Finished(result) => {
                 self.is_running = false;
+                self.subprocess = None;
+                match self.rebuild_colloscope(&result) {
+                    Some(colloscope) => self.result_colloscope = Some(colloscope),
+                    None => self.end_with_error = true,
+                }
             }
-            DialogInput::Error(error) => {
+            DialogInput::SpawnError(error) => {
+                self.is_running = false;
+                self.subprocess = None;
                 self.end_with_error = true;
                 self.error_dialog
                     .sender()
                     .send(error_dialog::DialogInput::Show(error))
                     .unwrap();
             }
-        }
-    }
-
-    fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
-        if self.adjust_scrolling {
-            let adj = widgets.scrolled_window.vadjustment();
-            adj.set_value(adj.upper());
-        }
-    }
-
-    fn update_cmd(
-        &mut self,
-        message: Self::CommandOutput,
-        _sender: ComponentSender<Self>,
-        _root: &Self::Root,
-    ) {
-        match message {
-            DialogCmdOutput::AdjustScrolling => {
-                self.adjust_scrolling = true;
-            }
-            DialogCmdOutput::DelayedRpcAnswer(result_msg) => {
-                self.rpc_logger
-                    .sender()
-                    .send(rpc_server::RpcLoggerInput::SendMsg(result_msg))
-                    .unwrap();
+            DialogInput::Accept => {
+                self.hidden = true;
+                if let Some(colloscope) = self.result_colloscope.take() {
+                    sender
+                        .output(DialogOutput::NewColloscope(colloscope))
+                        .unwrap();
+                }
             }
         }
     }
 }
 
 impl Dialog {
-    fn has_modifications(&self) -> bool {
-        self.app_session.as_ref().map_or(false, |s| s.can_undo())
-    }
-
-    fn add_error(&mut self, sender: ComponentSender<Self>, data: String) {
-        self.errors.guard().push_back(data);
-        sender.oneshot_command(async move {
-            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-            DialogCmdOutput::AdjustScrolling
-        });
-    }
-
-    fn handle_gui_request(
-        &mut self,
-        sender: ComponentSender<Self>,
-        gui_cmd: collomatique_rpc::cmd_msg::GuiMsg,
-    ) {
-        match gui_cmd {
-            collomatique_rpc::cmd_msg::GuiMsg::OpenFileDialog(params) => {
-                let path = self.run_type.get_path();
-                sender.oneshot_command(async move {
-                    let ext_vec: Vec<_> = params
-                        .list
-                        .iter()
-                        .map(|ext| (ext.desc.as_str(), ext.extension.as_str()))
-                        .collect();
-
-                    let file_name = crate::tools::open_save::generic_open_dialog(
-                        &params.title,
-                        &ext_vec[..],
-                        path.as_deref(),
-                    )
-                    .await;
-
-                    DialogCmdOutput::DelayedRpcAnswer(ResultMsg::AckGui(
-                        collomatique_rpc::GuiAnswer::OpenFileDialog(OpenFileDialogAnswer {
-                            file_path: file_name,
-                        }),
-                    ))
-                });
-            }
-            collomatique_rpc::cmd_msg::GuiMsg::SaveFileDialog(params) => {
-                sender.oneshot_command(async move {
-                    let ext_vec: Vec<_> = params
-                        .list
-                        .iter()
-                        .map(|ext| (ext.desc.as_str(), ext.extension.as_str()))
-                        .collect();
-
-                    let file_name = crate::tools::open_save::generic_save_dialog(
-                        &params.title,
-                        &ext_vec[..],
-                        params.suggested_name.as_deref(),
-                    )
-                    .await;
-
-                    DialogCmdOutput::DelayedRpcAnswer(ResultMsg::AckGui(
-                        collomatique_rpc::GuiAnswer::SaveFileDialog(SaveFileDialogAnswer {
-                            file_path: file_name,
-                        }),
-                    ))
-                });
-            }
-            collomatique_rpc::cmd_msg::GuiMsg::OkDialog(text) => {
-                self.ok_dialog
-                    .sender()
-                    .send(ok_dialog::DialogInput::Show(text))
-                    .unwrap();
-            }
-            collomatique_rpc::cmd_msg::GuiMsg::ConfirmDialog(text) => {
-                self.confirm_dialog
-                    .sender()
-                    .send(confirm_dialog::DialogInput::Show(text))
-                    .unwrap();
-            }
-            collomatique_rpc::cmd_msg::GuiMsg::InputDialog(info_text, placeholder_text) => {
-                self.input_dialog
-                    .sender()
-                    .send(input_dialog::DialogInput::Show(info_text, placeholder_text))
-                    .unwrap();
-            }
+    /// Rebuild a colloscope from a strategy result, mapping the raw internal-variable
+    /// solution back to base variables. Returns `None` when the strategy produced no
+    /// usable solution or the reconstruction fails.
+    fn rebuild_colloscope(&self, result: &StrategyResult) -> Option<Colloscope> {
+        if matches!(
+            result.status,
+            StrategyStatus::Error | StrategyStatus::Infeasible
+        ) {
+            return None;
         }
+        let problem = self.current_problem.as_ref()?;
+        let solution = result.solution.as_ref()?;
+
+        let (_, var_order) = problem.problem.problem().get_desc();
+        let config_data = collomatique_ilp::solution_to_config_data(solution, &var_order);
+        let sol = problem.problem.solution_from_complete_data(config_data)?;
+        let base_config = sol.get_data();
+        collomatique_constraints_colloscopes::convert::build_colloscope(&problem.env, &base_config)
     }
 }

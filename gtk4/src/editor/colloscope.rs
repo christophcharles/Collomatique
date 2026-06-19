@@ -5,7 +5,11 @@ use relm4::{
 };
 use relm4::{adw, gtk};
 
+use std::sync::{Arc, Mutex};
+
 use collomatique_ops::ColloscopeUpdateOp;
+
+use run_solver::IlpProblem;
 
 const DEBOUNCE_DURATION: std::time::Duration = std::time::Duration::from_millis(500);
 
@@ -34,9 +38,7 @@ pub enum ColloscopeInput {
     InterrogationAccepted(collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation),
 
     SolveColloscopeClicked,
-    SolveResult(
-        collomatique_state::AppState<collomatique_state_colloscopes::Data, collomatique_ops::Desc>,
-    ),
+    SolveResult(collomatique_state_colloscopes::colloscopes::Colloscope),
     EraseColloscopeClicked,
     EraseGroupListsClicked,
 
@@ -53,16 +55,8 @@ pub enum ColloscopeCommandOutput {
 #[derive(Debug)]
 pub enum ColloscopeOutput {
     UpdateOp(ColloscopeUpdateOp),
-    NewStateFromSolver(
-        collomatique_state::AppState<collomatique_state_colloscopes::Data, collomatique_ops::Desc>,
-    ),
+    NewColloscope(collomatique_state_colloscopes::colloscopes::Colloscope),
     UpdateIlpProblem(Option<super::export_panel::IlpInnerProblem>),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct IlpProblem {
-    env: collomatique_state_colloscopes::colloscope_params::Parameters,
-    problem: collomatique_constraints_colloscopes::ColloscopeModel,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -197,7 +191,7 @@ impl Colloscope {
 impl Component for Colloscope {
     type Input = ColloscopeInput;
     type Output = ColloscopeOutput;
-    type Init = ();
+    type Init = Arc<Mutex<collomatique_subprocesses::WorkerManager>>;
     type CommandOutput = ColloscopeCommandOutput;
 
     view! {
@@ -398,7 +392,7 @@ impl Component for Colloscope {
     }
 
     fn init(
-        _params: Self::Init,
+        worker_manager: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
@@ -446,10 +440,10 @@ impl Component for Colloscope {
 
         let run_solver_dialog = run_solver::Dialog::builder()
             .transient_for(&root)
-            .launch(())
+            .launch(worker_manager)
             .forward(sender.input_sender(), |msg| match msg {
-                run_solver::DialogOutput::NewData(new_data) => {
-                    ColloscopeInput::SolveResult(new_data)
+                run_solver::DialogOutput::NewColloscope(colloscope) => {
+                    ColloscopeInput::SolveResult(colloscope)
                 }
             });
 
@@ -615,28 +609,23 @@ impl Component for Colloscope {
                     .unwrap();
             }
             ColloscopeInput::SolveColloscopeClicked => {
-                // Temporary glue: the Colloscope component only holds params + colloscope,
-                // not the full AppState the solver dialog needs, so we rebuild one here with
-                // a default export config. This disappears as the solver code is reworked.
-                let inner = collomatique_state_colloscopes::InnerData {
-                    params: self.params.clone(),
-                    colloscope: self.colloscope.clone(),
-                    export_config: Default::default(),
-                };
-                let data = collomatique_state_colloscopes::Data::from_inner_data(inner)
-                    .expect("colloscope state should be valid");
-                let app_state = collomatique_state::AppState::new(data);
-                self.run_solver_dialog
-                    .sender()
-                    .send(run_solver::DialogInput::Run(
-                        run_solver::RunType::SolveColloscope,
-                        app_state,
-                    ))
-                    .unwrap();
+                // Only solvable once the ILP model is built (debounce finished). If no
+                // problem is ready yet, ignore the click.
+                if let Some(Ok(ilp_repr)) = self.get_ilp_repr() {
+                    let strategy =
+                        collomatique_strategies::StrategyKind::Default(Default::default());
+                    self.run_solver_dialog
+                        .sender()
+                        .send(run_solver::DialogInput::Run(
+                            strategy,
+                            ilp_repr.ilp_problem.clone(),
+                        ))
+                        .unwrap();
+                }
             }
-            ColloscopeInput::SolveResult(new_data) => {
+            ColloscopeInput::SolveResult(colloscope) => {
                 sender
-                    .output(ColloscopeOutput::NewStateFromSolver(new_data))
+                    .output(ColloscopeOutput::NewColloscope(colloscope))
                     .unwrap();
             }
             ColloscopeInput::ShowBlamedConstraints => {
