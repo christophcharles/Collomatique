@@ -460,7 +460,7 @@ impl Component for Colloscope {
 
         let run_solver_dialog = SolverDialog::builder()
             .transient_for(&root)
-            .launch(worker_manager)
+            .launch((worker_manager, "Résolution du colloscope".to_string()))
             .forward(sender.input_sender(), |msg| match msg {
                 run_solver::DialogOutput::NewConfig(config) => ColloscopeInput::SolveResult(config),
             });
@@ -638,11 +638,7 @@ impl Component for Colloscope {
                         collomatique_strategies::StrategyKind::Default(Default::default());
                     self.run_solver_dialog
                         .sender()
-                        .send(run_solver::DialogInput::Run(
-                            strategy,
-                            inner,
-                            "Résolution du colloscope".to_string(),
-                        ))
+                        .send(run_solver::DialogInput::Run(strategy, inner))
                         .unwrap();
                 }
             }

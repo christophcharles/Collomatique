@@ -34,7 +34,7 @@ pub struct Dialog<V: UsableData, C, P> {
 
 #[derive(Debug)]
 pub enum DialogInput<V: UsableData, C: UsableData, P: ProblemRepr<V>> {
-    Run(StrategyKind, Problem<V, C, P>, String),
+    Run(StrategyKind, Problem<V, C, P>),
     CancelRequest,
     Accept,
 
@@ -56,7 +56,7 @@ where
     C: UsableData + 'static,
     P: ProblemRepr<V> + 'static,
 {
-    type Init = Arc<Mutex<WorkerManager>>;
+    type Init = (Arc<Mutex<WorkerManager>>, String);
 
     type Input = DialogInput<V, C, P>;
     type Output = DialogOutput<V>;
@@ -70,7 +70,6 @@ where
             set_resizable: true,
             #[watch]
             set_visible: !model.hidden,
-            #[watch]
             set_title: Some(model.title.as_str()),
             add_css_class: "devel",
 
@@ -148,7 +147,7 @@ where
     }
 
     fn init(
-        worker_manager: Self::Init,
+        (worker_manager, title): Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
@@ -170,7 +169,7 @@ where
             hidden: true,
             is_running: false,
             end_with_error: false,
-            title: String::new(),
+            title,
             worker_manager,
             debug_view,
             error_dialog,
@@ -188,12 +187,11 @@ where
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match msg {
-            DialogInput::Run(strategy, problem, title) => {
+            DialogInput::Run(strategy, problem) => {
                 self.hidden = false;
                 self.is_running = true;
                 self.end_with_error = false;
                 self.result_config = None;
-                self.title = title;
                 self.debug_view.emit(DebugViewInput::Clear);
 
                 let (desc, var_order) = problem.get_desc();
