@@ -101,7 +101,7 @@ impl WorkerManager {
             self.process_manager
                 .spawn_pty(exe_str, &["--rpc-engine"], rpc_callback)?;
 
-        let encoded = EncodedMsg::from(init_msg.clone());
+        let encoded = EncodedMsg::from(init_msg);
         self.process_manager
             .send_stdin(process_id, encoded.encode().as_bytes())
             .map_err(|e| format!("Erreur à l'envoi du message initial : {}", e))?;
@@ -115,7 +115,6 @@ impl WorkerManager {
                     log_lines: Vec::new(),
                     errors: Vec::new(),
                 },
-                init_msg,
             },
         );
 

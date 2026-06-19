@@ -34,6 +34,7 @@ mod group_lists;
 mod incompats;
 mod pairings;
 mod run_second_instance;
+mod run_solver;
 mod settings;
 mod slot_pairings;
 mod slots;
@@ -227,7 +228,6 @@ pub struct EditorPanel {
     check_script_dialog: Controller<check_script::Dialog>,
     run_second_instance_dialog: Controller<run_second_instance::Dialog>,
     warning_op_dialog: Controller<warning_op::Dialog>,
-    worker_manager: Arc<Mutex<collomatique_subprocesses::WorkerManager>>,
 }
 
 impl EditorPanel {
@@ -806,7 +806,7 @@ impl Component for EditorPanel {
         let worker_manager = Arc::new(Mutex::new(collomatique_subprocesses::WorkerManager::new()));
 
         let colloscope = colloscope::Colloscope::builder()
-            .launch(worker_manager.clone())
+            .launch(worker_manager)
             .forward(sender.input_sender(), |op| match op {
                 ColloscopeOutput::UpdateOp(op) => {
                     EditorInput::UpdateOp(collomatique_ops::UpdateOp::Colloscope(op))
@@ -900,7 +900,6 @@ impl Component for EditorPanel {
             check_script_dialog,
             run_second_instance_dialog,
             warning_op_dialog,
-            worker_manager,
         };
         let widgets = view_output!();
 

@@ -1,4 +1,4 @@
-use collomatique_rpc::{CmdMsg, InitMsg};
+use collomatique_rpc::CmdMsg;
 
 use crate::process::{ProcessId, ProcessStatus};
 
@@ -23,7 +23,6 @@ pub struct WorkerState {
 pub(crate) struct Worker {
     pub(crate) process_id: ProcessId,
     pub(crate) state: WorkerState,
-    pub(crate) init_msg: InitMsg,
 }
 
 impl Worker {

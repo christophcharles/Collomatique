@@ -4,6 +4,8 @@ use relm4::{ComponentParts, ComponentSender, Controller, RelmWidgetExt};
 
 use std::sync::{Arc, Mutex};
 
+use collomatique_constraints_colloscopes::{IlpInnerProblem, ProblemInternalVar};
+use collomatique_ilp::ConfigData;
 use collomatique_strategies::StrategyKind;
 use collomatique_subprocesses::{
     StrategyResult, StrategyStatus, StrategySubprocess, WorkerManager,
@@ -14,33 +16,23 @@ use crate::widgets::debug_view::{DebugView, DebugViewInput};
 mod error_dialog;
 mod warning_running;
 
-type Colloscope = collomatique_state_colloscopes::colloscopes::Colloscope;
-
-/// The ILP problem to solve, bundled with the parameters needed to rebuild a
-/// colloscope from the solver's solution. `colloscope.rs` builds this on a
-/// debounce and hands it to the solver dialog.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct IlpProblem {
-    pub env: collomatique_state_colloscopes::colloscope_params::Parameters,
-    pub problem: collomatique_constraints_colloscopes::ColloscopeModel,
-}
-
 pub struct Dialog {
     hidden: bool,
     is_running: bool,
     end_with_error: bool,
+    title: String,
     worker_manager: Arc<Mutex<WorkerManager>>,
     debug_view: Controller<DebugView>,
     error_dialog: Controller<error_dialog::Dialog>,
     warning_running: Controller<warning_running::Dialog>,
     subprocess: Option<StrategySubprocess>,
-    current_problem: Option<IlpProblem>,
-    result_colloscope: Option<Colloscope>,
+    var_order: Option<Vec<ProblemInternalVar>>,
+    result_config: Option<ConfigData<ProblemInternalVar>>,
 }
 
 #[derive(Debug)]
 pub enum DialogInput {
-    Run(StrategyKind, IlpProblem),
+    Run(StrategyKind, IlpInnerProblem, String),
     CancelRequest,
     Accept,
 
@@ -52,7 +44,7 @@ pub enum DialogInput {
 
 #[derive(Debug)]
 pub enum DialogOutput {
-    NewColloscope(Colloscope),
+    NewConfig(ConfigData<ProblemInternalVar>),
 }
 
 #[relm4::component(pub)]
@@ -71,7 +63,8 @@ impl Component for Dialog {
             set_resizable: true,
             #[watch]
             set_visible: !model.hidden,
-            set_title: Some("Résolution du colloscope"),
+            #[watch]
+            set_title: Some(model.title.as_str()),
             add_css_class: "devel",
 
             adw::ToolbarView {
@@ -170,13 +163,14 @@ impl Component for Dialog {
             hidden: true,
             is_running: false,
             end_with_error: false,
+            title: String::new(),
             worker_manager,
             debug_view,
             error_dialog,
             warning_running,
             subprocess: None,
-            current_problem: None,
-            result_colloscope: None,
+            var_order: None,
+            result_config: None,
         };
 
         let widgets = view_output!();
@@ -186,15 +180,16 @@ impl Component for Dialog {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match msg {
-            DialogInput::Run(strategy, ilp_problem) => {
+            DialogInput::Run(strategy, problem, title) => {
                 self.hidden = false;
                 self.is_running = true;
                 self.end_with_error = false;
-                self.result_colloscope = None;
+                self.result_config = None;
+                self.title = title;
                 self.debug_view.emit(DebugViewInput::Clear);
 
-                let (desc, _var_order) = ilp_problem.problem.problem().get_desc();
-                self.current_problem = Some(ilp_problem);
+                let (desc, var_order) = problem.get_desc();
+                self.var_order = Some(var_order);
 
                 let input = sender.input_sender().clone();
                 let log_input = input.clone();
@@ -260,9 +255,18 @@ impl Component for Dialog {
             DialogInput::Finished(result) => {
                 self.is_running = false;
                 self.subprocess = None;
-                match self.rebuild_colloscope(&result) {
-                    Some(colloscope) => self.result_colloscope = Some(colloscope),
-                    None => self.end_with_error = true,
+
+                let usable = !matches!(
+                    result.status,
+                    StrategyStatus::Error | StrategyStatus::Infeasible
+                );
+                match (usable, result.solution, self.var_order.as_ref()) {
+                    (true, Some(solution), Some(var_order)) => {
+                        self.result_config = Some(collomatique_ilp::solution_to_config_data(
+                            &solution, var_order,
+                        ));
+                    }
+                    _ => self.end_with_error = true,
                 }
             }
             DialogInput::SpawnError(error) => {
@@ -276,34 +280,10 @@ impl Component for Dialog {
             }
             DialogInput::Accept => {
                 self.hidden = true;
-                if let Some(colloscope) = self.result_colloscope.take() {
-                    sender
-                        .output(DialogOutput::NewColloscope(colloscope))
-                        .unwrap();
+                if let Some(config) = self.result_config.take() {
+                    sender.output(DialogOutput::NewConfig(config)).unwrap();
                 }
             }
         }
-    }
-}
-
-impl Dialog {
-    /// Rebuild a colloscope from a strategy result, mapping the raw internal-variable
-    /// solution back to base variables. Returns `None` when the strategy produced no
-    /// usable solution or the reconstruction fails.
-    fn rebuild_colloscope(&self, result: &StrategyResult) -> Option<Colloscope> {
-        if matches!(
-            result.status,
-            StrategyStatus::Error | StrategyStatus::Infeasible
-        ) {
-            return None;
-        }
-        let problem = self.current_problem.as_ref()?;
-        let solution = result.solution.as_ref()?;
-
-        let (_, var_order) = problem.problem.problem().get_desc();
-        let config_data = collomatique_ilp::solution_to_config_data(solution, &var_order);
-        let sol = problem.problem.solution_from_complete_data(config_data)?;
-        let base_config = sol.get_data();
-        collomatique_constraints_colloscopes::convert::build_colloscope(&problem.env, &base_config)
     }
 }

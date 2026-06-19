@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 
 use collomatique_ops::ColloscopeUpdateOp;
 
-use run_solver::IlpProblem;
+use crate::editor::run_solver;
 
 const DEBOUNCE_DURATION: std::time::Duration = std::time::Duration::from_millis(500);
 
@@ -18,7 +18,6 @@ mod colloscope_display;
 mod group_list_dialog;
 mod group_lists_display;
 mod interrogation_dialog;
-mod run_solver;
 
 #[derive(Debug)]
 pub enum ColloscopeInput {
@@ -38,7 +37,9 @@ pub enum ColloscopeInput {
     InterrogationAccepted(collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation),
 
     SolveColloscopeClicked,
-    SolveResult(collomatique_state_colloscopes::colloscopes::Colloscope),
+    SolveResult(
+        collomatique_ilp::ConfigData<collomatique_constraints_colloscopes::ProblemInternalVar>,
+    ),
     EraseColloscopeClicked,
     EraseGroupListsClicked,
 
@@ -57,6 +58,14 @@ pub enum ColloscopeOutput {
     UpdateOp(ColloscopeUpdateOp),
     NewColloscope(collomatique_state_colloscopes::colloscopes::Colloscope),
     UpdateIlpProblem(Option<super::export_panel::IlpInnerProblem>),
+}
+
+/// The ILP problem together with the parameters needed to rebuild a colloscope
+/// from a solver solution. Built on a debounce and handed to the solver dialog.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IlpProblem {
+    env: collomatique_state_colloscopes::colloscope_params::Parameters,
+    problem: collomatique_constraints_colloscopes::ColloscopeModel,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -93,6 +102,10 @@ pub struct Colloscope {
     interrogation_dialog: Controller<interrogation_dialog::Dialog>,
     blame_dialog: Controller<blame_dialog::Dialog>,
     run_solver_dialog: Controller<run_solver::Dialog>,
+
+    // The problem currently being solved, kept so its solution config can be
+    // turned back into a colloscope when the solver dialog returns.
+    solving_problem: Option<IlpProblem>,
 
     edited_group_list: Option<collomatique_state_colloscopes::GroupListId>,
     edited_interrogation: Option<(
@@ -442,9 +455,7 @@ impl Component for Colloscope {
             .transient_for(&root)
             .launch(worker_manager)
             .forward(sender.input_sender(), |msg| match msg {
-                run_solver::DialogOutput::NewColloscope(colloscope) => {
-                    ColloscopeInput::SolveResult(colloscope)
-                }
+                run_solver::DialogOutput::NewConfig(config) => ColloscopeInput::SolveResult(config),
             });
 
         let model = Colloscope {
@@ -459,6 +470,7 @@ impl Component for Colloscope {
             computation_state: None,
             blame_dialog,
             run_solver_dialog,
+            solving_problem: None,
         };
 
         let list_box = model.group_list_entries.widget();
@@ -612,21 +624,41 @@ impl Component for Colloscope {
                 // Only solvable once the ILP model is built (debounce finished). If no
                 // problem is ready yet, ignore the click.
                 if let Some(Ok(ilp_repr)) = self.get_ilp_repr() {
+                    let ilp_problem = ilp_repr.ilp_problem.clone();
+                    let inner = ilp_problem.problem.problem().clone();
+                    self.solving_problem = Some(ilp_problem);
                     let strategy =
                         collomatique_strategies::StrategyKind::Default(Default::default());
                     self.run_solver_dialog
                         .sender()
                         .send(run_solver::DialogInput::Run(
                             strategy,
-                            ilp_repr.ilp_problem.clone(),
+                            inner,
+                            "Résolution du colloscope".to_string(),
                         ))
                         .unwrap();
                 }
             }
-            ColloscopeInput::SolveResult(colloscope) => {
-                sender
-                    .output(ColloscopeOutput::NewColloscope(colloscope))
-                    .unwrap();
+            ColloscopeInput::SolveResult(config_data) => {
+                // Translate the raw ILP config back into a colloscope, using the
+                // problem we dispatched. A real solution should always rebuild; a
+                // failure here is dropped rather than surfaced.
+                if let Some(ilp_problem) = self.solving_problem.take() {
+                    if let Some(sol) = ilp_problem.problem.solution_from_complete_data(config_data)
+                    {
+                        let base_config = sol.get_data();
+                        if let Some(colloscope) =
+                            collomatique_constraints_colloscopes::convert::build_colloscope(
+                                &ilp_problem.env,
+                                &base_config,
+                            )
+                        {
+                            sender
+                                .output(ColloscopeOutput::NewColloscope(colloscope))
+                                .unwrap();
+                        }
+                    }
+                }
             }
             ColloscopeInput::ShowBlamedConstraints => {
                 self.blame_dialog
