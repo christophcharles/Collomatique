@@ -22,7 +22,8 @@ mod warning_running;
 
 pub struct Dialog {
     hidden: bool,
-    run_type: RunType,
+    path: PathBuf,
+    script: String,
     is_running: bool,
     end_with_error: bool,
     error_dialog: Controller<error_dialog::Dialog>,
@@ -37,55 +38,8 @@ pub struct Dialog {
 }
 
 #[derive(Debug)]
-pub enum RunType {
-    Script(PathBuf, String),
-    SolveColloscope,
-}
-
-impl RunType {
-    fn get_path(&self) -> Option<std::path::PathBuf> {
-        match self {
-            RunType::Script(path, _script) => Some(path.clone()),
-            RunType::SolveColloscope => None,
-        }
-    }
-
-    fn get_init_msg(&self) -> collomatique_rpc::InitMsg {
-        match self {
-            RunType::Script(_path, script) => {
-                collomatique_rpc::InitMsg::RunPythonScript(script.clone())
-            }
-            RunType::SolveColloscope => collomatique_rpc::InitMsg::SolveColloscope,
-        }
-    }
-
-    fn get_under_text(&self) -> String {
-        match self {
-            RunType::Script(path, _script) => path.to_string_lossy().to_string(),
-            RunType::SolveColloscope => "Résolution du colloscope".into(),
-        }
-    }
-
-    fn get_op_name(&self) -> String {
-        match self {
-            RunType::Script(path, _script) => {
-                format!("Exécution de {}", path.to_string_lossy())
-            }
-            RunType::SolveColloscope => "Résolution du colloscope".into(),
-        }
-    }
-
-    fn get_title(&self) -> String {
-        match self {
-            RunType::Script(_, _) => "Exécution du script Python".to_string(),
-            RunType::SolveColloscope => "Résolution du colloscope".into(),
-        }
-    }
-}
-
-#[derive(Debug)]
 pub enum DialogInput {
-    Run(RunType, AppState<Data, Desc>),
+    Run(PathBuf, String, AppState<Data, Desc>),
     CancelRequest,
     Accept,
 
@@ -122,8 +76,7 @@ impl Component for Dialog {
             set_resizable: true,
             #[watch]
             set_visible: !model.hidden,
-            #[watch]
-            set_title: Some(&model.run_type.get_title()),
+            set_title: Some("Exécution du script Python"),
             add_css_class: "devel",
 
             adw::ToolbarView {
@@ -234,7 +187,7 @@ impl Component for Dialog {
                         set_margin_all: 5,
                         add_css_class: "dimmed",
                         #[watch]
-                        set_label: &model.run_type.get_under_text(),
+                        set_label: &model.path.to_string_lossy(),
                     },
                 }
             }
@@ -306,7 +259,8 @@ impl Component for Dialog {
 
         let model = Dialog {
             hidden: true,
-            run_type: RunType::Script(PathBuf::new(), String::new()),
+            path: PathBuf::new(),
+            script: String::new(),
             error_dialog,
             warning_running,
             ok_dialog,
@@ -330,9 +284,10 @@ impl Component for Dialog {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         self.adjust_scrolling = false;
         match msg {
-            DialogInput::Run(run_type, app_state) => {
+            DialogInput::Run(path, script, app_state) => {
                 self.hidden = false;
-                self.run_type = run_type;
+                self.path = path;
+                self.script = script;
                 self.app_session = Some(AppSession::new(app_state));
                 self.errors.guard().clear();
                 self.is_running = true;
@@ -340,7 +295,7 @@ impl Component for Dialog {
                 self.rpc_logger
                     .sender()
                     .send(rpc_server::RpcLoggerInput::RunRcpEngine(
-                        self.run_type.get_init_msg(),
+                        collomatique_rpc::InitMsg::RunPythonScript(self.script.clone()),
                     ))
                     .unwrap();
             }
@@ -435,9 +390,10 @@ impl Component for Dialog {
                     None => collomatique_ops::OpCategory::None,
                 };
                 sender
-                    .output(DialogOutput::NewData(
-                        app_session.commit((last_op_cat, self.run_type.get_op_name())),
-                    ))
+                    .output(DialogOutput::NewData(app_session.commit((
+                        last_op_cat,
+                        format!("Exécution de {}", self.path.to_string_lossy()),
+                    ))))
                     .unwrap();
             }
             DialogInput::ProcessFinished => {
@@ -500,7 +456,7 @@ impl Dialog {
     ) {
         match gui_cmd {
             collomatique_rpc::cmd_msg::GuiMsg::OpenFileDialog(params) => {
-                let path = self.run_type.get_path();
+                let path = self.path.clone();
                 sender.oneshot_command(async move {
                     let ext_vec: Vec<_> = params
                         .list
@@ -511,7 +467,7 @@ impl Dialog {
                     let file_name = crate::tools::open_save::generic_open_dialog(
                         &params.title,
                         &ext_vec[..],
-                        path.as_deref(),
+                        Some(path.as_path()),
                     )
                     .await;
 

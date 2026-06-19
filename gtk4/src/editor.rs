@@ -33,7 +33,7 @@ mod general_planning;
 mod group_lists;
 mod incompats;
 mod pairings;
-mod run_second_instance;
+mod run_python_script;
 mod run_solver;
 mod settings;
 mod slot_pairings;
@@ -226,7 +226,7 @@ pub struct EditorPanel {
     colloscope: Controller<colloscope::Colloscope>,
     export_panel: Controller<export_panel::ExportPanel>,
     check_script_dialog: Controller<check_script::Dialog>,
-    run_second_instance_dialog: Controller<run_second_instance::Dialog>,
+    run_python_script_dialog: Controller<run_python_script::Dialog>,
     warning_op_dialog: Controller<warning_op::Dialog>,
 }
 
@@ -846,11 +846,11 @@ impl Component for EditorPanel {
                 }
             });
 
-        let run_second_instance_dialog = run_second_instance::Dialog::builder()
+        let run_python_script_dialog = run_python_script::Dialog::builder()
             .transient_for(&root)
             .launch(())
             .forward(sender.input_sender(), |msg| match msg {
-                run_second_instance::DialogOutput::NewData(new_data) => {
+                run_python_script::DialogOutput::NewData(new_data) => {
                     EditorInput::NewStateFromSecondInstance(new_data)
                 }
             });
@@ -898,7 +898,7 @@ impl Component for EditorPanel {
             colloscope,
             export_panel,
             check_script_dialog,
-            run_second_instance_dialog,
+            run_python_script_dialog,
             warning_op_dialog,
         };
         let widgets = view_output!();
@@ -1063,10 +1063,11 @@ impl Component for EditorPanel {
                 });
             }
             EditorInput::RunScript(path, script) => {
-                self.run_second_instance_dialog
+                self.run_python_script_dialog
                     .sender()
-                    .send(run_second_instance::DialogInput::Run(
-                        run_second_instance::RunType::Script(path, script),
+                    .send(run_python_script::DialogInput::Run(
+                        path,
+                        script,
                         self.data.clone(),
                     ))
                     .unwrap();
