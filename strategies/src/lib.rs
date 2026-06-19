@@ -65,6 +65,7 @@ pub trait SolveBackend: Send + Sync {
         desc: &ProblemDesc,
         opts: SolveConfig,
         on_progress: &(dyn Fn(SolveProgress) -> bool + Send + Sync),
+        on_echo: &(dyn Fn(String) + Send + Sync),
     ) -> Result<RawSolveOutcome, StrategyError>;
 
     async fn solve(
@@ -72,17 +73,32 @@ pub trait SolveBackend: Send + Sync {
         desc: &ProblemDesc,
         opts: SolveConfig,
     ) -> Result<RawSolveOutcome, StrategyError> {
-        self.solve_with_progress(desc, opts, &|_| true).await
+        self.solve_with_progress(desc, opts, &|_| true, &|_| {})
+            .await
     }
 }
 
 pub struct StrategyContext {
     backend: Arc<dyn SolveBackend>,
+    on_echo: Option<Arc<dyn Fn(String) + Send + Sync>>,
 }
 
 impl StrategyContext {
     pub fn new(backend: Arc<dyn SolveBackend>) -> Self {
-        Self { backend }
+        Self {
+            backend,
+            on_echo: None,
+        }
+    }
+
+    pub fn with_echo(
+        backend: Arc<dyn SolveBackend>,
+        on_echo: Arc<dyn Fn(String) + Send + Sync>,
+    ) -> Self {
+        Self {
+            backend,
+            on_echo: Some(on_echo),
+        }
     }
 
     pub async fn solve(
@@ -99,8 +115,13 @@ impl StrategyContext {
         opts: SolveConfig,
         on_progress: &(dyn Fn(SolveProgress) -> bool + Send + Sync),
     ) -> Result<RawSolveOutcome, StrategyError> {
+        let noop_echo = |_: String| {};
+        let echo_fn: &(dyn Fn(String) + Send + Sync) = match &self.on_echo {
+            Some(f) => f.as_ref(),
+            None => &noop_echo,
+        };
         self.backend
-            .solve_with_progress(desc, opts, on_progress)
+            .solve_with_progress(desc, opts, on_progress, echo_fn)
             .await
     }
 
@@ -308,18 +329,10 @@ impl StrategyContext {
     }
 }
 
-fn default_true() -> bool {
-    true
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StrategyRequest {
     pub problem_desc: ProblemDesc,
     pub strategy: StrategyKind,
-    #[serde(default = "default_true")]
-    pub echo_solver_logs: bool,
-    #[serde(default = "default_true")]
-    pub echo_solver_progress: bool,
 }
 
 impl StrategyRequest {
@@ -350,6 +363,7 @@ mod tests {
             _desc: &ProblemDesc,
             _opts: SolveConfig,
             _on_progress: &(dyn Fn(SolveProgress) -> bool + Send + Sync),
+            _on_echo: &(dyn Fn(String) + Send + Sync),
         ) -> Result<RawSolveOutcome, StrategyError> {
             Ok(self.outcome.clone())
         }

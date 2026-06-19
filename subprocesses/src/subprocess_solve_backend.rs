@@ -11,21 +11,11 @@ use crate::worker_manager::WorkerManager;
 
 pub struct SubprocessSolveBackend {
     worker_manager: Arc<Mutex<WorkerManager>>,
-    echo_solver_logs: bool,
-    echo_solver_progress: bool,
 }
 
 impl SubprocessSolveBackend {
-    pub fn new(
-        worker_manager: Arc<Mutex<WorkerManager>>,
-        echo_solver_logs: bool,
-        echo_solver_progress: bool,
-    ) -> Self {
-        Self {
-            worker_manager,
-            echo_solver_logs,
-            echo_solver_progress,
-        }
+    pub fn new(worker_manager: Arc<Mutex<WorkerManager>>) -> Self {
+        Self { worker_manager }
     }
 }
 
@@ -52,6 +42,7 @@ impl SolveBackend for SubprocessSolveBackend {
         desc: &collomatique_ilp::ProblemDesc,
         opts: SolveConfig,
         on_progress: &(dyn Fn(SolveProgress) -> bool + Send + Sync),
+        on_echo: &(dyn Fn(String) + Send + Sync),
     ) -> Result<RawSolveOutcome, StrategyError> {
         let config = IlpSolverConfig {
             problem_desc: desc.clone(),
@@ -69,17 +60,7 @@ impl SolveBackend for SubprocessSolveBackend {
         };
 
         let (progress_tx, progress_rx) = futures::channel::mpsc::unbounded();
-        let echo_progress = self.echo_solver_progress;
         let progress_callback = move |progress: &crate::ilp_solver::IlpProgress| {
-            if echo_progress {
-                eprintln!(
-                    "[solver subprocess] obj={:.4} bound={:.4} nodes={} solutions={}",
-                    progress.best_obj,
-                    progress.best_bound,
-                    progress.node_count,
-                    progress.solutions_found
-                );
-            }
             let _ = progress_tx.unbounded_send(SolveProgress {
                 best_obj: progress.best_obj,
                 best_bound: progress.best_bound,
@@ -88,11 +69,9 @@ impl SolveBackend for SubprocessSolveBackend {
             });
         };
 
-        let echo_logs = self.echo_solver_logs;
+        let (echo_tx, echo_rx) = futures::channel::mpsc::unbounded();
         let log_callback = move |line: &str| {
-            if echo_logs {
-                eprintln!("[solver subprocess] {}", line.trim_end());
-            }
+            let _ = echo_tx.unbounded_send(line.to_owned());
         };
 
         let handle = {
@@ -112,12 +91,16 @@ impl SolveBackend for SubprocessSolveBackend {
 
         let mut result_rx = result_rx.fuse();
         let mut progress_rx = progress_rx.fuse();
+        let mut echo_rx = echo_rx.fuse();
 
         loop {
             futures::select! {
                 result = result_rx => {
                     while let Some(Some(p)) = progress_rx.next().now_or_never() {
                         on_progress(p);
+                    }
+                    while let Some(Some(line)) = echo_rx.next().now_or_never() {
+                        on_echo(line);
                     }
                     let result = result.map_err(|_| {
                         StrategyError::SolveError("solver channel closed".into())
@@ -129,6 +112,11 @@ impl SolveBackend for SubprocessSolveBackend {
                         if !on_progress(p) {
                             handle.stop();
                         }
+                    }
+                }
+                echo = echo_rx.next() => {
+                    if let Some(line) = echo {
+                        on_echo(line);
                     }
                 }
             }

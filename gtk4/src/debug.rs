@@ -447,17 +447,18 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
         &mut worker_manager,
         desc,
         strategy,
-        true,
-        true,
         move |result| {
             let _ = tx.send(result);
         },
-        |progress: &StrategyProgress| match progress {
-            StrategyProgress::Default(p) => {
+        |progress: Result<StrategyProgress, String>| match progress {
+            Ok(StrategyProgress::Default(p)) => {
                 eprintln!(
-                    "  [strategy progress] obj={:.4} bound={:.4} nodes={} solutions={}",
+                    "  [strategy subprocess] [progress] obj={:.4} bound={:.4} nodes={} solutions={}",
                     p.best_obj, p.best_bound, p.node_count, p.solutions_found
                 );
+            }
+            Err(e) => {
+                eprintln!("  [strategy subprocess] [progress error] {e}");
             }
         },
         |line| {

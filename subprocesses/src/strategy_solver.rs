@@ -48,17 +48,13 @@ impl StrategySubprocess {
         worker_manager: &mut WorkerManager,
         problem_desc: collomatique_ilp::ProblemDesc,
         strategy: StrategyKind,
-        echo_solver_logs: bool,
-        echo_solver_progress: bool,
         result_callback: impl Fn(StrategyResult) + Send + 'static,
-        progress_callback: impl Fn(&StrategyProgress) + Send + 'static,
+        progress_callback: impl Fn(Result<StrategyProgress, String>) + Send + 'static,
         log_callback: impl Fn(&str) + Send + 'static,
     ) -> Result<StrategySubprocess, String> {
         let request = StrategyRequest {
             problem_desc,
             strategy,
-            echo_solver_logs,
-            echo_solver_progress,
         };
         let serialized_str = request.serialize();
         let serialized = SerializedStrategyRequest::from(serialized_str);
@@ -76,19 +72,14 @@ impl StrategySubprocess {
             WorkerEvent::RpcCommand(Ok(cmd)) => match cmd {
                 collomatique_rpc::CmdMsg::Strategy(StrategyMsg::Progress(data)) => {
                     let serialized_str: String = data.progress.into();
-                    let progress = match StrategyProgress::deserialize(&serialized_str) {
-                        Ok(p) => p,
-                        Err(e) => {
-                            eprintln!("Failed to deserialize strategy progress: {e}");
-                            let guard = stdin_slot_cb.lock().unwrap();
-                            if let Some(stdin) = guard.as_ref() {
-                                send_via_stdin(stdin, ResultMsg::StrategyControl(true));
-                            }
-                            return;
-                        }
-                    };
-                    progress_callback(&progress);
-                    *last_progress_cb.lock().unwrap() = Some(progress);
+                    let progress_result =
+                        StrategyProgress::deserialize(&serialized_str).map_err(|e| e.to_string());
+
+                    if let Ok(ref progress) = progress_result {
+                        *last_progress_cb.lock().unwrap() = Some(progress.clone());
+                    }
+
+                    progress_callback(progress_result);
 
                     let stopped = stop_flag_cb.load(Ordering::Relaxed);
                     let response = ResultMsg::StrategyControl(!stopped);

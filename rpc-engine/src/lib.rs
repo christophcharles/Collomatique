@@ -61,20 +61,20 @@ async fn try_solve() -> Result<(), anyhow::Error> {
         stats.objective_extra_count, stats.objective_defining_constraint_count,
     );
 
-    println!("Solving ILP problem...");
+    eprintln!("Solving ILP problem...");
     let solver = collomatique_ilp::solvers::collo_cbc::ColloCbcSolver::with_disable_logging(false);
     let sol_opt = problem.solve(&solver);
     let Some(sol) = sol_opt else {
-        println!("No solution found");
+        eprintln!("No solution found");
         return Ok(());
     };
-    println!("Solution found!");
+    eprintln!("Solution found!");
     let config_data = sol.get_data();
     let new_colloscope =
         collomatique_constraints_colloscopes::convert::build_colloscope(&env, &config_data)
             .expect("Config data should be compatible with colloscope parameters");
 
-    println!("Sending updated data...");
+    eprintln!("Sending updated data...");
     let new_inner_data = collomatique_state_colloscopes::InnerData {
         params: env,
         colloscope: new_colloscope,
@@ -84,7 +84,7 @@ async fn try_solve() -> Result<(), anyhow::Error> {
     EncodedMsg::send_rpc(CmdMsg::SetData(data_stream))
         .map_err(|e| anyhow!("Error on SetData: {}", e))?;
 
-    println!("Done.");
+    eprintln!("Done.");
 
     Ok(())
 }
@@ -215,14 +215,21 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
         .map_err(|e| anyhow!("Failed to build problem from desc: {:?}", e))?;
 
     let worker_manager = Arc::new(Mutex::new(WorkerManager::new()));
-    let backend = Arc::new(SubprocessSolveBackend::new(
-        worker_manager,
-        request.echo_solver_logs,
-        request.echo_solver_progress,
-    ));
-    let ctx = StrategyContext::new(backend);
+    let backend = Arc::new(SubprocessSolveBackend::new(worker_manager));
+    let on_echo: Arc<dyn Fn(String) + Send + Sync> = Arc::new(|line: String| {
+        eprintln!("[solver] {}", line.trim_end());
+    });
+    let ctx = StrategyContext::with_echo(backend, on_echo);
 
     let progress_callback = |progress: StrategyProgress| -> bool {
+        match &progress {
+            StrategyProgress::Default(p) => {
+                eprintln!(
+                    "[solver] [progress] obj={:.4} bound={:.4} nodes={} solutions={}",
+                    p.best_obj, p.best_bound, p.node_count, p.solutions_found
+                );
+            }
+        }
         let serialized_progress = progress.serialize();
         let progress_data = StrategyProgressData {
             progress: SerializedStrategyProgress::from(serialized_progress),
