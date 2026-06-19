@@ -14,6 +14,7 @@ mod colloscope_display;
 mod group_list_dialog;
 mod group_lists_display;
 mod interrogation_dialog;
+mod run_solver;
 
 #[derive(Debug)]
 pub enum ColloscopeInput {
@@ -33,6 +34,9 @@ pub enum ColloscopeInput {
     InterrogationAccepted(collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation),
 
     SolveColloscopeClicked,
+    SolveResult(
+        collomatique_state::AppState<collomatique_state_colloscopes::Data, collomatique_ops::Desc>,
+    ),
     EraseColloscopeClicked,
     EraseGroupListsClicked,
 
@@ -49,7 +53,9 @@ pub enum ColloscopeCommandOutput {
 #[derive(Debug)]
 pub enum ColloscopeOutput {
     UpdateOp(ColloscopeUpdateOp),
-    SolveColloscopeClicked,
+    NewStateFromSolver(
+        collomatique_state::AppState<collomatique_state_colloscopes::Data, collomatique_ops::Desc>,
+    ),
     UpdateIlpProblem(Option<super::export_panel::IlpInnerProblem>),
 }
 
@@ -92,6 +98,7 @@ pub struct Colloscope {
     colloscope_display: Controller<colloscope_display::Display>,
     interrogation_dialog: Controller<interrogation_dialog::Dialog>,
     blame_dialog: Controller<blame_dialog::Dialog>,
+    run_solver_dialog: Controller<run_solver::Dialog>,
 
     edited_group_list: Option<collomatique_state_colloscopes::GroupListId>,
     edited_interrogation: Option<(
@@ -437,6 +444,15 @@ impl Component for Colloscope {
             .launch(())
             .detach();
 
+        let run_solver_dialog = run_solver::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                run_solver::DialogOutput::NewData(new_data) => {
+                    ColloscopeInput::SolveResult(new_data)
+                }
+            });
+
         let model = Colloscope {
             params: collomatique_state_colloscopes::colloscope_params::Parameters::default(),
             colloscope: collomatique_state_colloscopes::colloscopes::Colloscope::default(),
@@ -448,6 +464,7 @@ impl Component for Colloscope {
             edited_interrogation: None,
             computation_state: None,
             blame_dialog,
+            run_solver_dialog,
         };
 
         let list_box = model.group_list_entries.widget();
@@ -598,8 +615,28 @@ impl Component for Colloscope {
                     .unwrap();
             }
             ColloscopeInput::SolveColloscopeClicked => {
+                // Temporary glue: the Colloscope component only holds params + colloscope,
+                // not the full AppState the solver dialog needs, so we rebuild one here with
+                // a default export config. This disappears as the solver code is reworked.
+                let inner = collomatique_state_colloscopes::InnerData {
+                    params: self.params.clone(),
+                    colloscope: self.colloscope.clone(),
+                    export_config: Default::default(),
+                };
+                let data = collomatique_state_colloscopes::Data::from_inner_data(inner)
+                    .expect("colloscope state should be valid");
+                let app_state = collomatique_state::AppState::new(data);
+                self.run_solver_dialog
+                    .sender()
+                    .send(run_solver::DialogInput::Run(
+                        run_solver::RunType::SolveColloscope,
+                        app_state,
+                    ))
+                    .unwrap();
+            }
+            ColloscopeInput::SolveResult(new_data) => {
                 sender
-                    .output(ColloscopeOutput::SolveColloscopeClicked)
+                    .output(ColloscopeOutput::NewStateFromSolver(new_data))
                     .unwrap();
             }
             ColloscopeInput::ShowBlamedConstraints => {

@@ -65,7 +65,7 @@ pub enum EditorInput {
     RunScriptClicked,
     RunScript(PathBuf, String),
     NewStateFromSecondInstance(AppState<Data, Desc>),
-    SolveColloscopeClicked,
+    NewStateFromSolver(AppState<Data, Desc>),
     ExportColloscopeAs(PathBuf, collomatique_xlsx::Config),
     ExportSqliteAs(PathBuf),
     ExportMpsAs(PathBuf, export_panel::IlpInnerProblem),
@@ -809,7 +809,9 @@ impl Component for EditorPanel {
                     ColloscopeOutput::UpdateOp(op) => {
                         EditorInput::UpdateOp(collomatique_ops::UpdateOp::Colloscope(op))
                     }
-                    ColloscopeOutput::SolveColloscopeClicked => EditorInput::SolveColloscopeClicked,
+                    ColloscopeOutput::NewStateFromSolver(new_data) => {
+                        EditorInput::NewStateFromSolver(new_data)
+                    }
                     ColloscopeOutput::UpdateIlpProblem(problem) => {
                         EditorInput::UpdateIlpProblem(problem)
                     }
@@ -1068,22 +1070,14 @@ impl Component for EditorPanel {
                     ))
                     .unwrap();
             }
-            EditorInput::NewStateFromSecondInstance(new_data) => {
+            EditorInput::NewStateFromSecondInstance(new_data)
+            | EditorInput::NewStateFromSolver(new_data) => {
                 self.update_data(DataUpdate::Replace(new_data));
                 if let Some((cat, _desc)) = self.data.get_undo_name() {
                     self.show_particular_panel = Self::op_cat_to_panel_number(cat);
                 }
                 self.dirty = true;
                 self.send_msg_for_interface_update(sender);
-            }
-            EditorInput::SolveColloscopeClicked => {
-                self.run_second_instance_dialog
-                    .sender()
-                    .send(run_second_instance::DialogInput::Run(
-                        run_second_instance::RunType::SolveColloscope,
-                        self.data.clone(),
-                    ))
-                    .unwrap();
             }
             EditorInput::ExportColloscopeAs(path, xlsx_config) => {
                 self.toast_info = Some(ToastInfo::Toast {
