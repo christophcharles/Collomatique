@@ -806,7 +806,7 @@ impl Component for EditorPanel {
         let worker_manager = Arc::new(Mutex::new(collomatique_subprocesses::WorkerManager::new()));
 
         let colloscope = colloscope::Colloscope::builder()
-            .launch(worker_manager)
+            .launch(worker_manager.clone())
             .forward(sender.input_sender(), |op| match op {
                 ColloscopeOutput::UpdateOp(op) => {
                     EditorInput::UpdateOp(collomatique_ops::UpdateOp::Colloscope(op))
@@ -848,7 +848,7 @@ impl Component for EditorPanel {
 
         let run_python_script_dialog = run_python_script::Dialog::builder()
             .transient_for(&root)
-            .launch(())
+            .launch(worker_manager)
             .forward(sender.input_sender(), |msg| match msg {
                 run_python_script::DialogOutput::NewData(new_data) => {
                     EditorInput::NewStateFromSecondInstance(new_data)
