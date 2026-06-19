@@ -2,10 +2,11 @@ use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
 use relm4::{Component, ComponentController, adw, gtk};
 use relm4::{ComponentParts, ComponentSender, Controller, RelmWidgetExt};
 
+use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
 
-use collomatique_constraints_colloscopes::{IlpInnerProblem, ProblemInternalVar};
-use collomatique_ilp::ConfigData;
+use collomatique_ilp::mat_repr::ProblemRepr;
+use collomatique_ilp::{ConfigData, Problem, UsableData};
 use collomatique_strategies::StrategyKind;
 use collomatique_subprocesses::{
     StrategyResult, StrategyStatus, StrategySubprocess, WorkerManager,
@@ -16,7 +17,7 @@ use crate::widgets::debug_view::{DebugView, DebugViewInput};
 mod error_dialog;
 mod warning_running;
 
-pub struct Dialog {
+pub struct Dialog<V: UsableData, C, P> {
     hidden: bool,
     is_running: bool,
     end_with_error: bool,
@@ -26,13 +27,14 @@ pub struct Dialog {
     error_dialog: Controller<error_dialog::Dialog>,
     warning_running: Controller<warning_running::Dialog>,
     subprocess: Option<StrategySubprocess>,
-    var_order: Option<Vec<ProblemInternalVar>>,
-    result_config: Option<ConfigData<ProblemInternalVar>>,
+    var_order: Option<Vec<V>>,
+    result_config: Option<ConfigData<V>>,
+    _phantom: PhantomData<fn() -> (C, P)>,
 }
 
 #[derive(Debug)]
-pub enum DialogInput {
-    Run(StrategyKind, IlpInnerProblem, String),
+pub enum DialogInput<V: UsableData, C: UsableData, P: ProblemRepr<V>> {
+    Run(StrategyKind, Problem<V, C, P>, String),
     CancelRequest,
     Accept,
 
@@ -43,16 +45,21 @@ pub enum DialogInput {
 }
 
 #[derive(Debug)]
-pub enum DialogOutput {
-    NewConfig(ConfigData<ProblemInternalVar>),
+pub enum DialogOutput<V: UsableData> {
+    NewConfig(ConfigData<V>),
 }
 
 #[relm4::component(pub)]
-impl Component for Dialog {
+impl<V, C, P> Component for Dialog<V, C, P>
+where
+    V: UsableData + 'static,
+    C: UsableData + 'static,
+    P: ProblemRepr<V> + 'static,
+{
     type Init = Arc<Mutex<WorkerManager>>;
 
-    type Input = DialogInput;
-    type Output = DialogOutput;
+    type Input = DialogInput<V, C, P>;
+    type Output = DialogOutput<V>;
     type CommandOutput = ();
 
     view! {
@@ -171,6 +178,7 @@ impl Component for Dialog {
             subprocess: None,
             var_order: None,
             result_config: None,
+            _phantom: PhantomData,
         };
 
         let widgets = view_output!();

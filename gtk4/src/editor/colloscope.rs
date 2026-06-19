@@ -11,6 +11,13 @@ use collomatique_ops::ColloscopeUpdateOp;
 
 use crate::editor::run_solver;
 
+/// The solver dialog instantiated for the colloscope ILP problem.
+type SolverDialog = run_solver::Dialog<
+    collomatique_constraints_colloscopes::ProblemInternalVar,
+    collomatique_constraints_colloscopes::ProblemConstraintSource,
+    collomatique_ilp::DefaultRepr<collomatique_constraints_colloscopes::ProblemInternalVar>,
+>;
+
 const DEBOUNCE_DURATION: std::time::Duration = std::time::Duration::from_millis(500);
 
 mod blame_dialog;
@@ -101,7 +108,7 @@ pub struct Colloscope {
     colloscope_display: Controller<colloscope_display::Display>,
     interrogation_dialog: Controller<interrogation_dialog::Dialog>,
     blame_dialog: Controller<blame_dialog::Dialog>,
-    run_solver_dialog: Controller<run_solver::Dialog>,
+    run_solver_dialog: Controller<SolverDialog>,
 
     // The problem currently being solved, kept so its solution config can be
     // turned back into a colloscope when the solver dialog returns.
@@ -451,7 +458,7 @@ impl Component for Colloscope {
             .launch(())
             .detach();
 
-        let run_solver_dialog = run_solver::Dialog::builder()
+        let run_solver_dialog = SolverDialog::builder()
             .transient_for(&root)
             .launch(worker_manager)
             .forward(sender.input_sender(), |msg| match msg {
