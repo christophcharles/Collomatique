@@ -16,13 +16,13 @@ pub struct DefaultStrategy {
 
 #[async_trait]
 impl Strategy for DefaultStrategy {
-    type Progress = SolveProgress;
+    type Progress<V: UsableData + Send> = SolveProgress;
 
     async fn run_with_callback<V, C, P>(
         &self,
         ctx: &StrategyContext,
         problem: &Problem<V, C, P>,
-        on_progress: &(dyn Fn(Self::Progress) -> bool + Send + Sync),
+        on_progress: &(dyn Fn(Self::Progress<V>) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<V>, StrategyError>
     where
         V: UsableData + Send,

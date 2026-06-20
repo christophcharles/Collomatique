@@ -1,43 +1,201 @@
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
+use futures::stream::{FuturesUnordered, StreamExt};
 
 use collomatique_ilp::mat_repr::ProblemRepr;
-use collomatique_ilp::{Problem, UsableData};
+use collomatique_ilp::{ConfigData, ObjectiveSense, Problem, UsableData};
 
 use crate::{
-    SolveProblemOpts, SolveProgress, Strategy, StrategyContext, StrategyError, StrategyOutcome,
+    DefaultStrategy, SolveProgress, SolveStatus, Strategy, StrategyContext, StrategyError,
+    StrategyKind, StrategyOutcome, StrategyProgress,
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone)]
+pub struct Solution<V: UsableData + Send> {
+    pub config: ConfigData<V>,
+    pub objective: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct ConductorStatus<V: UsableData + Send> {
+    pub best_solution: Option<Solution<V>>,
+    pub best_bound: Option<f64>,
+    pub solution_found_count: u64,
+    pub finished_workers: u64,
+    pub total_workers: u64,
+}
+
+#[derive(Debug, Clone)]
+pub enum ConductorProgress<V: UsableData + Send> {
+    Conductor(ConductorStatus<V>),
+    DefaultWorker(SolveProgress),
+}
+
+enum WorkerTag {
+    Default,
+}
+
 pub struct ConductorStrategy {
-    pub time_limit_seconds: Option<u32>,
-    pub disable_logging: bool,
+    pub default_worker: bool,
+}
+
+impl Default for ConductorStrategy {
+    fn default() -> Self {
+        Self {
+            default_worker: true,
+        }
+    }
+}
+
+impl ConductorStrategy {
+    pub fn has_workers(&self) -> bool {
+        self.default_worker
+    }
+
+    fn default_status<V: UsableData + Send>(&self) -> ConductorStatus<V> {
+        let total_workers = u64::from(self.default_worker);
+        ConductorStatus {
+            best_solution: None,
+            best_bound: None,
+            solution_found_count: 0,
+            finished_workers: 0,
+            total_workers,
+        }
+    }
+}
+
+pub fn update_best_solution<V: UsableData + Send>(
+    status: &mut ConductorStatus<V>,
+    new_solution: ConfigData<V>,
+    new_objective: f64,
+    sense: ObjectiveSense,
+) {
+    let dominated = status
+        .best_solution
+        .as_ref()
+        .is_some_and(|current| match sense {
+            ObjectiveSense::Minimize => new_objective >= current.objective,
+            ObjectiveSense::Maximize => new_objective <= current.objective,
+        });
+    if !dominated {
+        status.best_solution = Some(Solution {
+            config: new_solution,
+            objective: new_objective,
+        });
+    }
+}
+
+pub fn update_best_bound<V: UsableData + Send>(
+    status: &mut ConductorStatus<V>,
+    new_bound: f64,
+    sense: ObjectiveSense,
+) {
+    let dominated = status.best_bound.is_some_and(|current| match sense {
+        ObjectiveSense::Minimize => new_bound <= current,
+        ObjectiveSense::Maximize => new_bound >= current,
+    });
+    if !dominated {
+        status.best_bound = Some(new_bound);
+    }
+}
+
+struct WorkerResult<V: UsableData + Send> {
+    tag: WorkerTag,
+    outcome: Result<StrategyOutcome<V>, StrategyError>,
+    solutions_found: u64,
 }
 
 #[async_trait]
 impl Strategy for ConductorStrategy {
-    type Progress = SolveProgress;
+    type Progress<V: UsableData + Send> = ConductorProgress<V>;
 
     async fn run_with_callback<V, C, P>(
         &self,
         ctx: &StrategyContext,
         problem: &Problem<V, C, P>,
-        on_progress: &(dyn Fn(Self::Progress) -> bool + Send + Sync),
+        on_progress: &(dyn Fn(Self::Progress<V>) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<V>, StrategyError>
     where
         V: UsableData + Send,
         C: UsableData + Send,
         P: ProblemRepr<V> + Send + Sync,
     {
-        ctx.solve_problem_with_progress(
-            problem,
-            SolveProblemOpts {
-                warm_start: None,
-                time_limit_seconds: self.time_limit_seconds,
-                disable_logging: self.disable_logging,
+        if !self.has_workers() {
+            return Err(StrategyError::Other("No workers selected".to_string()));
+        }
+
+        let mut status = self.default_status::<V>();
+        let sense = problem.get_objective().get_sense();
+
+        // Per-worker state (defined before FuturesUnordered so borrows outlive the futures)
+        let default_strategy = StrategyKind::Default(DefaultStrategy::default());
+        let default_solutions_found = AtomicU64::new(0);
+
+        // Launch all workers
+        let mut workers: FuturesUnordered<
+            Pin<Box<dyn Future<Output = WorkerResult<V>> + Send + '_>>,
+        > = FuturesUnordered::new();
+
+        if self.default_worker {
+            workers.push(Box::pin(async {
+                let outcome = ctx
+                    .run_strategy_with_callback(&default_strategy, problem, &|sp| match sp {
+                        StrategyProgress::Default(p) => {
+                            default_solutions_found.store(p.solutions_found, Ordering::Relaxed);
+                            on_progress(ConductorProgress::DefaultWorker(p))
+                        }
+                    })
+                    .await;
+                WorkerResult {
+                    tag: WorkerTag::Default,
+                    outcome,
+                    solutions_found: default_solutions_found.load(Ordering::Relaxed),
+                }
+            }));
+        }
+
+        // React to workers as they finish
+        while let Some(worker_result) = workers.next().await {
+            let outcome = match worker_result.outcome {
+                Err(e) => return Err(e),
+                Ok(outcome) => outcome,
+            };
+
+            match worker_result.tag {
+                WorkerTag::Default => {
+                    if outcome.status == SolveStatus::Infeasible {
+                        return Ok(StrategyOutcome {
+                            status: SolveStatus::Infeasible,
+                            objective: None,
+                            best_bound: None,
+                            solution: None,
+                        });
+                    }
+                    if let (Some(sol), Some(obj)) = (outcome.solution, outcome.objective) {
+                        update_best_solution(&mut status, sol, obj, sense);
+                    }
+                    if let Some(bound) = outcome.best_bound {
+                        update_best_bound(&mut status, bound, sense);
+                    }
+                    status.solution_found_count += worker_result.solutions_found;
+                }
+            }
+
+            status.finished_workers += 1;
+        }
+
+        Ok(StrategyOutcome {
+            status: if status.best_solution.is_some() {
+                SolveStatus::Optimal
+            } else {
+                SolveStatus::Stopped
             },
-            on_progress,
-        )
-        .await
+            objective: status.best_solution.as_ref().map(|s| s.objective),
+            best_bound: status.best_bound,
+            solution: status.best_solution.map(|s| s.config),
+        })
     }
 }

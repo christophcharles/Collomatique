@@ -1,12 +1,15 @@
 mod strategies;
 
-pub use strategies::conductor::ConductorStrategy;
+pub use strategies::conductor::{
+    ConductorProgress, ConductorStatus, ConductorStrategy, Solution, update_best_bound,
+    update_best_solution,
+};
 pub use strategies::default::DefaultStrategy;
 
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde::{Deserialize, Serialize};
 
 use collomatique_ilp::mat_repr::ProblemRepr;
 use collomatique_ilp::{ConfigData, Problem, ProblemDesc, UsableData};
@@ -188,13 +191,13 @@ impl StrategyContext {
 
 #[async_trait]
 pub trait Strategy: Send + Sync {
-    type Progress: Serialize + DeserializeOwned + Send + Sync + Clone;
+    type Progress<V: UsableData + Send>: Send + Sync + Clone;
 
     async fn run_with_callback<V, C, P>(
         &self,
         ctx: &StrategyContext,
         problem: &Problem<V, C, P>,
-        on_progress: &(dyn Fn(Self::Progress) -> bool + Send + Sync),
+        on_progress: &(dyn Fn(Self::Progress<V>) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<V>, StrategyError>
     where
         V: UsableData + Send,
