@@ -1,21 +1,22 @@
 use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
 use relm4::{Component, ComponentController, adw, gtk};
-use relm4::{ComponentParts, ComponentSender, Controller, RelmWidgetExt};
+use relm4::{ComponentParts, ComponentSender, Controller};
 
 use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
 
 use collomatique_ilp::mat_repr::ProblemRepr;
 use collomatique_ilp::{ConfigData, Problem, UsableData};
-use collomatique_strategies::StrategyKind;
+use collomatique_strategies::{StrategyKind, StrategyProgress};
 use collomatique_subprocesses::{
     StrategyResult, StrategyStatus, StrategySubprocess, WorkerManager,
 };
 
-use crate::widgets::debug_view::{DebugView, DebugViewInput};
-
 mod error_dialog;
+mod strategy_display;
 mod warning_running;
+
+use strategy_display::{StrategyDisplay, StrategyDisplayInput};
 
 pub struct Dialog<V: UsableData, C, P> {
     hidden: bool,
@@ -23,7 +24,7 @@ pub struct Dialog<V: UsableData, C, P> {
     end_with_error: bool,
     title: String,
     worker_manager: Arc<Mutex<WorkerManager>>,
-    debug_view: Controller<DebugView>,
+    strategy_display: Controller<StrategyDisplay>,
     error_dialog: Controller<error_dialog::Dialog>,
     warning_running: Controller<warning_running::Dialog>,
     subprocess: Option<StrategySubprocess>,
@@ -40,6 +41,7 @@ pub enum DialogInput<V: UsableData, C: UsableData, P: ProblemRepr<V>> {
 
     Cancel,
     Echo(String),
+    StrategyUpdate(Result<StrategyProgress, String>),
     Finished(StrategyResult),
     SpawnError(String),
 }
@@ -130,17 +132,7 @@ where
                             set_label: "Erreur pendant l'exécution",
                         },
                     },
-                    gtk::Box {
-                        set_margin_all: 5,
-                        set_hexpand: true,
-                        set_vexpand: true,
-                        set_orientation: gtk::Orientation::Vertical,
-                        gtk::Label {
-                            set_halign: gtk::Align::Start,
-                            set_label: "Informations de débogage :",
-                        },
-                        append = model.debug_view.widget(),
-                    },
+                    append = model.strategy_display.widget(),
                 }
             }
         }
@@ -163,7 +155,7 @@ where
                 warning_running::DialogOutput::Accept => DialogInput::Cancel,
             });
 
-        let debug_view = DebugView::builder().launch(()).detach();
+        let strategy_display = StrategyDisplay::builder().launch(()).detach();
 
         let model = Dialog {
             hidden: true,
@@ -171,7 +163,7 @@ where
             end_with_error: false,
             title,
             worker_manager,
-            debug_view,
+            strategy_display,
             error_dialog,
             warning_running,
             subprocess: None,
@@ -192,29 +184,20 @@ where
                 self.is_running = true;
                 self.end_with_error = false;
                 self.result_config = None;
-                self.debug_view.emit(DebugViewInput::Clear);
+                self.strategy_display.emit(StrategyDisplayInput::Clear);
 
                 let (desc, var_order) = problem.get_desc();
                 self.var_order = Some(var_order);
 
                 let input = sender.input_sender().clone();
                 let log_input = input.clone();
+                let progress_input = input.clone();
                 let result_input = input.clone();
                 let log_cb = move |line: &str| {
                     log_input.emit(DialogInput::Echo(line.trim_end().to_owned()));
                 };
                 let progress_cb = move |progress| {
-                    // TEMPORARY: route strategy progress to stderr until structured
-                    // UI reporting lands.
-                    match progress {
-                        Ok(collomatique_strategies::StrategyProgress::Default(p)) => {
-                            eprintln!(
-                                "  [strategy] obj={:.4} bound={:.4} nodes={} solutions={}",
-                                p.best_obj, p.best_bound, p.node_count, p.solutions_found
-                            );
-                        }
-                        Err(e) => eprintln!("  [strategy] [progress error] {e}"),
-                    }
+                    progress_input.emit(DialogInput::StrategyUpdate(progress));
                 };
                 let result_cb = move |result: StrategyResult| {
                     result_input.emit(DialogInput::Finished(result));
@@ -255,10 +238,14 @@ where
                 }
             }
             DialogInput::Echo(line) => {
-                self.debug_view
-                    .emit(DebugViewInput::Append(format!("{line}\n")));
+                self.strategy_display.emit(StrategyDisplayInput::Echo(line));
+            }
+            DialogInput::StrategyUpdate(progress) => {
+                self.strategy_display
+                    .emit(StrategyDisplayInput::StrategyUpdate(progress));
             }
             DialogInput::Finished(result) => {
+                self.strategy_display.emit(StrategyDisplayInput::Finished);
                 self.is_running = false;
                 self.subprocess = None;
 
