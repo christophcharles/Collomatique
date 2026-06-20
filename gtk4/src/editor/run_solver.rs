@@ -16,7 +16,7 @@ mod error_dialog;
 mod strategy_display;
 mod warning_running;
 
-use strategy_display::{StrategyDisplay, StrategyDisplayInput};
+use strategy_display::{StrategyDisplay, StrategyDisplayInput, strategy_name_from_kind};
 
 pub struct Dialog<V: UsableData, C, P> {
     hidden: bool,
@@ -184,7 +184,10 @@ where
                 self.is_running = true;
                 self.end_with_error = false;
                 self.result_config = None;
-                self.strategy_display.emit(StrategyDisplayInput::Clear);
+                self.strategy_display
+                    .emit(StrategyDisplayInput::Clear(strategy_name_from_kind(
+                        &strategy,
+                    )));
 
                 let (desc, var_order) = problem.get_desc();
                 self.var_order = Some(var_order);
@@ -245,7 +248,8 @@ where
                     .emit(StrategyDisplayInput::StrategyUpdate(progress));
             }
             DialogInput::Finished(result) => {
-                self.strategy_display.emit(StrategyDisplayInput::Finished);
+                self.strategy_display
+                    .emit(StrategyDisplayInput::Finished(result.clone()));
                 self.is_running = false;
                 self.subprocess = None;
 
