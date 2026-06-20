@@ -27,6 +27,7 @@ pub struct StrategyDisplay {
     is_running: bool,
     end_with_error: bool,
     last_progress: Option<SolveProgress>,
+    ipc_error: Option<String>,
 }
 
 #[derive(Debug)]
@@ -115,6 +116,13 @@ impl SimpleComponent for StrategyDisplay {
                     set_valign: gtk::Align::Center,
                     set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
                 },
+                gtk::Image::from_icon_name("dialog-warning-symbolic") {
+                    set_valign: gtk::Align::Center,
+                    #[watch]
+                    set_visible: model.ipc_error.is_some(),
+                    #[watch]
+                    set_tooltip_text: model.ipc_error.as_deref(),
+                },
                 gtk::Box {
                     set_hexpand: true,
                 },
@@ -181,6 +189,7 @@ impl SimpleComponent for StrategyDisplay {
             is_running: false,
             end_with_error: false,
             last_progress: None,
+            ipc_error: None,
         };
         let widgets = view_output!();
         ComponentParts { model, widgets }
@@ -198,17 +207,19 @@ impl SimpleComponent for StrategyDisplay {
                 self.is_running = true;
                 self.end_with_error = false;
                 self.last_progress = None;
+                self.ipc_error = None;
                 self.debug_view.emit(DebugViewInput::Clear);
             }
-            StrategyDisplayInput::StrategyUpdate(progress) => {
-                match progress {
-                    Ok(StrategyProgress::Default(p)) => {
-                        self.last_progress = Some(p);
-                    }
-                    // TEMPORARY: route progress errors to stderr
-                    Err(e) => eprintln!("  [strategy] [progress error] {e}"),
+            StrategyDisplayInput::StrategyUpdate(progress) => match progress {
+                Ok(StrategyProgress::Default(p)) => {
+                    self.last_progress = Some(p);
                 }
-            }
+                Err(e) => {
+                    self.ipc_error = Some(format!("Erreur IPC : {e}"));
+                    self.debug_view
+                        .emit(DebugViewInput::Append(format!("[ /!\\ IPC Error ] {e}\n")));
+                }
+            },
             StrategyDisplayInput::Finished(result) => {
                 self.is_running = false;
                 self.end_with_error = matches!(
