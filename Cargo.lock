@@ -446,6 +446,8 @@ version = "0.1.0"
 dependencies = [
  "collomatique-ilp",
  "collomatique-ilp-modeler-derive",
+ "serde",
+ "serde_json",
  "thiserror 1.0.69",
 ]
 

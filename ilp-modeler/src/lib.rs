@@ -22,6 +22,7 @@ use collomatique_ilp::{
 };
 
 pub mod bundle;
+pub mod model_desc;
 pub use bundle::{
     ConstraintBundle, EagerObjectifyError, EagerReifyError, ExtraEntry, IntConstraintBundle,
     ReifyError,
