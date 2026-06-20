@@ -1,6 +1,6 @@
 use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
 use relm4::{Component, ComponentController, adw, gtk};
-use relm4::{ComponentParts, ComponentSender, Controller};
+use relm4::{ComponentParts, ComponentSender, Controller, RelmWidgetExt};
 
 use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
@@ -16,7 +16,10 @@ mod error_dialog;
 mod strategy_display;
 mod warning_running;
 
-use strategy_display::{StrategyDisplay, StrategyDisplayInput, strategy_name_from_kind};
+use strategy_display::{
+    StrategyDisplayInput, StrategyFrame, StrategyName, StrategyStatusBar, StrategyStatusBarOutput,
+    strategy_name_from_kind,
+};
 
 pub struct Dialog<V: UsableData, C, P> {
     hidden: bool,
@@ -24,7 +27,9 @@ pub struct Dialog<V: UsableData, C, P> {
     end_with_error: bool,
     title: String,
     worker_manager: Arc<Mutex<WorkerManager>>,
-    strategy_display: Controller<StrategyDisplay>,
+    strategy_name: Option<StrategyName>,
+    strategy_frame: Controller<StrategyFrame>,
+    strategy_status_bar: Controller<StrategyStatusBar>,
     error_dialog: Controller<error_dialog::Dialog>,
     warning_running: Controller<warning_running::Dialog>,
     subprocess: Option<StrategySubprocess>,
@@ -43,6 +48,7 @@ pub enum DialogInput<V: UsableData, C: UsableData, P: ProblemRepr<V>> {
     Echo(String),
     StrategyUpdate(Result<StrategyProgress, String>),
     Finished(StrategyResult),
+    ToggleDebug(bool),
     SpawnError(String),
 }
 
@@ -132,7 +138,21 @@ where
                             set_label: "Erreur pendant l'exécution",
                         },
                     },
-                    append = model.strategy_display.widget(),
+                    append = model.strategy_frame.widget(),
+                    gtk::Box {
+                        set_orientation: gtk::Orientation::Horizontal,
+                        set_hexpand: true,
+                        set_margin_all: 10,
+                        set_margin_top: 0,
+                        set_spacing: 10,
+                        gtk::Label {
+                            #[watch]
+                            set_label: &model.strategy_name_label(),
+                            set_valign: gtk::Align::Center,
+                            set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                        },
+                        append = model.strategy_status_bar.widget(),
+                    },
                 }
             }
         }
@@ -155,7 +175,14 @@ where
                 warning_running::DialogOutput::Accept => DialogInput::Cancel,
             });
 
-        let strategy_display = StrategyDisplay::builder().launch(()).detach();
+        let strategy_frame = StrategyFrame::builder().launch(()).detach();
+
+        let strategy_status_bar = StrategyStatusBar::builder().launch(()).forward(
+            sender.input_sender(),
+            |msg| match msg {
+                StrategyStatusBarOutput::ToggleDebug(active) => DialogInput::ToggleDebug(active),
+            },
+        );
 
         let model = Dialog {
             hidden: true,
@@ -163,7 +190,9 @@ where
             end_with_error: false,
             title,
             worker_manager,
-            strategy_display,
+            strategy_name: None,
+            strategy_frame,
+            strategy_status_bar,
             error_dialog,
             warning_running,
             subprocess: None,
@@ -184,10 +213,9 @@ where
                 self.is_running = true;
                 self.end_with_error = false;
                 self.result_config = None;
-                self.strategy_display
-                    .emit(StrategyDisplayInput::Clear(strategy_name_from_kind(
-                        &strategy,
-                    )));
+                let name = strategy_name_from_kind(&strategy);
+                self.strategy_name = Some(name);
+                self.emit_strategy(StrategyDisplayInput::Clear(name));
 
                 let (desc, var_order) = problem.get_desc();
                 self.var_order = Some(var_order);
@@ -241,15 +269,13 @@ where
                 }
             }
             DialogInput::Echo(line) => {
-                self.strategy_display.emit(StrategyDisplayInput::Echo(line));
+                self.emit_strategy(StrategyDisplayInput::Echo(line));
             }
             DialogInput::StrategyUpdate(progress) => {
-                self.strategy_display
-                    .emit(StrategyDisplayInput::StrategyUpdate(progress));
+                self.emit_strategy(StrategyDisplayInput::StrategyUpdate(progress));
             }
             DialogInput::Finished(result) => {
-                self.strategy_display
-                    .emit(StrategyDisplayInput::Finished(result.clone()));
+                self.emit_strategy(StrategyDisplayInput::Finished(result.clone()));
                 self.is_running = false;
                 self.subprocess = None;
 
@@ -266,6 +292,10 @@ where
                     _ => self.end_with_error = true,
                 }
             }
+            DialogInput::ToggleDebug(active) => {
+                self.strategy_frame
+                    .emit(StrategyDisplayInput::ToggleDebug(active));
+            }
             DialogInput::SpawnError(error) => {
                 self.is_running = false;
                 self.subprocess = None;
@@ -281,6 +311,20 @@ where
                     sender.output(DialogOutput::NewConfig(config)).unwrap();
                 }
             }
+        }
+    }
+}
+
+impl<V: UsableData, C, P> Dialog<V, C, P> {
+    fn emit_strategy(&self, input: StrategyDisplayInput) {
+        self.strategy_frame.emit(input.clone());
+        self.strategy_status_bar.emit(input);
+    }
+
+    fn strategy_name_label(&self) -> String {
+        match self.strategy_name {
+            Some(StrategyName::Default) => "Stratégie par défaut".to_owned(),
+            None => String::new(),
         }
     }
 }
