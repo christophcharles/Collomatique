@@ -1129,3 +1129,71 @@ fn checker_no_extras() {
     assert_eq!(checker_recon.get_constraints().len(), 0);
     assert_eq!(checker_recon.get_variables().len(), 0);
 }
+
+// ----- ModelDesc round-trip test -------------------------------------------
+
+#[test]
+fn model_desc_round_trip_preserves_solution() {
+    let mut vars = HashMap::new();
+    vars.insert("a".to_string(), Variable::binary());
+    vars.insert("b".to_string(), Variable::binary());
+    vars.insert("c".to_string(), Variable::binary());
+    vars.insert("d".to_string(), Variable::binary());
+    let mut m: Modeler<'_, B, E, C, (), String> = Modeler::new(vars);
+
+    let a = LinExpr::var(base("a"));
+    let b = LinExpr::var(base("b"));
+    let c = LinExpr::var(base("c"));
+    let d = LinExpr::var(base("d"));
+
+    m.add_constraint((&a + &b).eq(&LinExpr::constant(1.0)), "a+b=1".into());
+    m.add_constraint((&c + &d).eq(&LinExpr::constant(1.0)), "c+d=1".into());
+    m.add_constraint((&a + &c).eq(&LinExpr::constant(1.0)), "a+c=1".into());
+    m.add_constraint((&b + &d).eq(&LinExpr::constant(1.0)), "b+d=1".into());
+    m.add_objective(1.0, Objective::new(a, ObjectiveSense::Maximize));
+
+    let model = m.build(&()).unwrap();
+
+    // Solve the original model.
+    let original_cfg = ColloCbcSolver::new()
+        .build_model(model.problem())
+        .solve()
+        .expect("solvable");
+
+    // Simulate the IPC round-trip:
+    // Parent side: extract var_order then build ModelDesc.
+    let (_, parent_var_order) = model.problem().get_desc();
+    let model_desc = model.to_desc();
+
+    // Subprocess side: extract canonical var_order from var_descs, then rebuild.
+    let subprocess_var_order: Vec<InternalVar<usize, usize>> = model_desc
+        .main
+        .var_descs
+        .iter()
+        .map(|d| d.to_internal_var())
+        .collect();
+    let rebuilt_model = model_desc.to_model();
+
+    // Subprocess solves and encodes solution as Vec<f64> using var_descs order.
+    let rebuilt_cfg = ColloCbcSolver::new()
+        .build_model(rebuilt_model.problem())
+        .solve()
+        .expect("solvable");
+    let solution_vec: Vec<f64> = subprocess_var_order
+        .iter()
+        .map(|iv| rebuilt_cfg.get(iv.clone()).unwrap_or(0.0))
+        .collect();
+
+    // Parent side: decode Vec<f64> back to ConfigData using its var_order.
+    let round_tripped = collomatique_ilp::solution_to_config_data(&solution_vec, &parent_var_order);
+
+    // Compare: both should give (a=1, b=0, c=0, d=1).
+    for name in ["a", "b", "c", "d"] {
+        let iv = InternalVar::<B, E>::Base(name.to_string());
+        assert_eq!(
+            original_cfg.get(iv.clone()).unwrap_or(0.0),
+            round_tripped.get(iv).unwrap_or(0.0),
+            "mismatch for variable {name}"
+        );
+    }
+}
