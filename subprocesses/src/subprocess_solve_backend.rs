@@ -1,12 +1,15 @@
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
+use collomatique_ilp_modeler::model_desc::ModelDesc;
 use collomatique_strategies::{
     RawSolveOutcome, SolveBackend, SolveConfig, SolveProgress, SolveStatus, StrategyError,
+    StrategyKind, StrategyProgress,
 };
 use futures::{FutureExt, StreamExt};
 
 use crate::ilp_solver::{IlpSolverConfig, IlpStatus, SolverSubprocess};
+use crate::strategy_solver::{StrategyResult, StrategyStatus, StrategySubprocess};
 use crate::worker_manager::WorkerManager;
 
 pub struct SubprocessSolveBackend {
@@ -30,6 +33,22 @@ fn convert_result(result: crate::ilp_solver::IlpResult) -> RawSolveOutcome {
     RawSolveOutcome {
         status,
         objective: result.obj_value,
+        best_bound: result.best_bound,
+        solution: result.solution,
+    }
+}
+
+fn convert_strategy_result(result: StrategyResult) -> RawSolveOutcome {
+    let status = match result.status {
+        StrategyStatus::Optimal => SolveStatus::Optimal,
+        StrategyStatus::Infeasible => SolveStatus::Infeasible,
+        StrategyStatus::Stopped => SolveStatus::Stopped,
+        StrategyStatus::Error => SolveStatus::Error,
+    };
+
+    RawSolveOutcome {
+        status,
+        objective: result.objective,
         best_bound: result.best_bound,
         solution: result.solution,
     }
@@ -111,6 +130,92 @@ impl SolveBackend for SubprocessSolveBackend {
                     if let Some(p) = progress {
                         if !on_progress(p) {
                             handle.stop();
+                        }
+                    }
+                }
+                echo = echo_rx.next() => {
+                    if let Some(line) = echo {
+                        on_echo(line);
+                    }
+                }
+            }
+        }
+    }
+
+    async fn run_strategy_subprocess(
+        &self,
+        model_desc: &ModelDesc,
+        strategy: &StrategyKind,
+        on_progress: &(dyn Fn(StrategyProgress) -> bool + Send + Sync),
+        on_echo: &(dyn Fn(String) + Send + Sync),
+    ) -> Result<RawSolveOutcome, StrategyError> {
+        let (result_tx, result_rx) = futures::channel::oneshot::channel();
+        let result_tx = Mutex::new(Some(result_tx));
+        let result_callback = move |result: StrategyResult| {
+            if let Some(sender) = result_tx.lock().unwrap().take() {
+                let _ = sender.send(result);
+            }
+        };
+
+        let (progress_tx, progress_rx) = futures::channel::mpsc::unbounded();
+        let progress_callback = move |progress: Result<StrategyProgress, String>| {
+            let _ = progress_tx.unbounded_send(progress);
+        };
+
+        let (echo_tx, echo_rx) = futures::channel::mpsc::unbounded();
+        let log_callback = move |line: &str| {
+            let _ = echo_tx.unbounded_send(line.to_owned());
+        };
+
+        let handle = {
+            let mut wm = self
+                .worker_manager
+                .lock()
+                .map_err(|e| StrategyError::Other(format!("lock poisoned: {e}")))?;
+            StrategySubprocess::spawn(
+                &mut wm,
+                model_desc.clone(),
+                strategy.clone(),
+                result_callback,
+                progress_callback,
+                log_callback,
+            )
+            .map_err(|e| {
+                StrategyError::Other(format!("failed to spawn strategy subprocess: {e}"))
+            })?
+        };
+
+        let mut result_rx = result_rx.fuse();
+        let mut progress_rx = progress_rx.fuse();
+        let mut echo_rx = echo_rx.fuse();
+
+        loop {
+            futures::select! {
+                result = result_rx => {
+                    while let Some(Some(p)) = progress_rx.next().now_or_never() {
+                        if let Ok(progress) = p {
+                            on_progress(progress);
+                        }
+                    }
+                    while let Some(Some(line)) = echo_rx.next().now_or_never() {
+                        on_echo(line);
+                    }
+                    let result = result.map_err(|_| {
+                        StrategyError::Other("strategy subprocess channel closed".into())
+                    })?;
+                    return Ok(convert_strategy_result(result));
+                }
+                progress = progress_rx.next() => {
+                    if let Some(progress_result) = progress {
+                        match progress_result {
+                            Ok(p) => {
+                                if !on_progress(p) {
+                                    handle.stop();
+                                }
+                            }
+                            Err(e) => {
+                                on_echo(format!("progress deserialization error: {e}"));
+                            }
                         }
                     }
                 }

@@ -86,6 +86,14 @@ pub trait SolveBackend: Send + Sync {
         self.solve_with_progress(desc, opts, &|_| true, &|_| {})
             .await
     }
+
+    async fn run_strategy_subprocess(
+        &self,
+        model_desc: &ModelDesc,
+        strategy: &StrategyKind,
+        on_progress: &(dyn Fn(StrategyProgress) -> bool + Send + Sync),
+        on_echo: &(dyn Fn(String) + Send + Sync),
+    ) -> Result<RawSolveOutcome, StrategyError>;
 }
 
 pub struct StrategyContext {
@@ -331,6 +339,58 @@ impl StrategyContext {
     {
         strategy.run_with_callback(self, model, on_progress).await
     }
+
+    pub async fn spawn_strategy<B, E, C>(
+        &self,
+        strategy: &StrategyKind,
+        model: &Model<B, E, C>,
+    ) -> Result<StrategyOutcome<InternalVar<usize, usize>>, StrategyError>
+    where
+        B: UsableData,
+        E: UsableData,
+        C: UsableData,
+    {
+        self.spawn_strategy_with_callback(strategy, model, &|_| true)
+            .await
+    }
+
+    pub async fn spawn_strategy_with_callback<B, E, C>(
+        &self,
+        strategy: &StrategyKind,
+        model: &Model<B, E, C>,
+        on_progress: &(dyn Fn(StrategyProgress) -> bool + Send + Sync),
+    ) -> Result<StrategyOutcome<InternalVar<usize, usize>>, StrategyError>
+    where
+        B: UsableData,
+        E: UsableData,
+        C: UsableData,
+    {
+        let model_desc = model.to_desc();
+        let var_order = model_desc.var_order();
+
+        let noop_echo = |_: String| {};
+        let echo_fn: &(dyn Fn(String) + Send + Sync) = match &self.on_echo {
+            Some(f) => f.as_ref(),
+            None => &noop_echo,
+        };
+
+        let raw = self
+            .backend
+            .run_strategy_subprocess(&model_desc, strategy, on_progress, echo_fn)
+            .await?;
+
+        let solution = raw
+            .solution
+            .as_ref()
+            .map(|sol| collomatique_ilp::solution_to_config_data(sol, &var_order));
+
+        Ok(StrategyOutcome {
+            status: raw.status,
+            objective: raw.objective,
+            best_bound: raw.best_bound,
+            solution,
+        })
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -369,6 +429,16 @@ mod tests {
             _desc: &ProblemDesc,
             _opts: SolveConfig,
             _on_progress: &(dyn Fn(SolveProgress) -> bool + Send + Sync),
+            _on_echo: &(dyn Fn(String) + Send + Sync),
+        ) -> Result<RawSolveOutcome, StrategyError> {
+            Ok(self.outcome.clone())
+        }
+
+        async fn run_strategy_subprocess(
+            &self,
+            _model_desc: &ModelDesc,
+            _strategy: &StrategyKind,
+            _on_progress: &(dyn Fn(StrategyProgress) -> bool + Send + Sync),
             _on_echo: &(dyn Fn(String) + Send + Sync),
         ) -> Result<RawSolveOutcome, StrategyError> {
             Ok(self.outcome.clone())
@@ -429,5 +499,45 @@ mod tests {
             outcome.solution.unwrap().get(InternalVar::Base(0usize)),
             Some(1.0)
         );
+    }
+
+    #[tokio::test]
+    async fn spawn_strategy_returns_mock_result() {
+        // Failure if it happens is non-deterministic (because of the HashMap seed)
+        // In case of bad code, odds of failures are about 50-50, so we repeat
+        // a couple of hundreds time. It should be enough to catch it.
+        for _ in 0..200 {
+            let model = make_model(vec![(0, Variable::binary()), (1, Variable::binary())]);
+            let model_desc = model.to_desc();
+            let var_order = model_desc.var_order();
+
+            let mut solution_vec = vec![0.0; var_order.len()];
+            for (i, iv) in var_order.iter().enumerate() {
+                solution_vec[i] = match iv {
+                    InternalVar::Base(0) => 1.0,
+                    InternalVar::Base(1) => 0.0,
+                    _ => panic!("unexpected var"),
+                };
+            }
+
+            let backend = Arc::new(MockBackend {
+                outcome: RawSolveOutcome {
+                    status: SolveStatus::Optimal,
+                    objective: Some(7.0),
+                    best_bound: Some(7.0),
+                    solution: Some(solution_vec),
+                },
+            });
+
+            let ctx = StrategyContext::new(backend);
+            let kind = StrategyKind::Default(DefaultStrategy::default());
+            let outcome = ctx.spawn_strategy(&kind, &model).await.unwrap();
+
+            assert_eq!(outcome.status, SolveStatus::Optimal);
+            assert_eq!(outcome.objective, Some(7.0));
+            let solution = outcome.solution.unwrap();
+            assert_eq!(solution.get(InternalVar::Base(0)), Some(1.0));
+            assert_eq!(solution.get(InternalVar::Base(1)), Some(0.0));
+        }
     }
 }

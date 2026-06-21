@@ -396,6 +396,14 @@ fn rebuild_sub_model(
 }
 
 impl ModelDesc {
+    pub fn var_order(&self) -> Vec<InternalVar<usize, usize>> {
+        self.main
+            .var_descs
+            .iter()
+            .map(|d| d.to_internal_var())
+            .collect()
+    }
+
     pub fn to_model(self) -> Model<usize, usize, usize> {
         let (
             problem,
