@@ -142,12 +142,17 @@ impl Strategy for ConductorStrategy {
         if self.default_worker {
             workers.push(Box::pin(async {
                 let outcome = ctx
-                    .spawn_strategy_with_callback(&default_strategy, model, &|sp| match sp {
-                        StrategyProgress::Default(p) => {
-                            default_solutions_found.store(p.solutions_found, Ordering::Relaxed);
-                            on_progress(ConductorProgress::DefaultWorker(p))
-                        }
-                    })
+                    .spawn_strategy_with_echo(
+                        &default_strategy,
+                        model,
+                        &|sp| match sp {
+                            StrategyProgress::Default(p) => {
+                                default_solutions_found.store(p.solutions_found, Ordering::Relaxed);
+                                on_progress(ConductorProgress::DefaultWorker(p))
+                            }
+                        },
+                        &|line| format!("[default worker] {}", line),
+                    )
                     .await;
                 WorkerResult {
                     tag: WorkerTag::Default,

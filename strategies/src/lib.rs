@@ -385,6 +385,35 @@ impl StrategyContext {
 
         Ok(raw.into_typed(&var_order))
     }
+
+    pub async fn spawn_strategy_with_echo<B, E, C>(
+        &self,
+        strategy: &StrategyKind,
+        model: &Model<B, E, C>,
+        on_progress: &(dyn Fn(StrategyProgress) -> bool + Send + Sync),
+        tag_echo: &(dyn Fn(String) -> String + Send + Sync),
+    ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
+    where
+        B: UsableData,
+        E: UsableData,
+        C: UsableData,
+    {
+        let (model_desc, var_order) = model.to_desc();
+
+        let echo_impl: Box<dyn Fn(String) + Send + Sync + '_> = match &self.on_echo {
+            Some(ctx_echo) => Box::new(move |line| ctx_echo(tag_echo(line))),
+            None => Box::new(move |line| {
+                let _ = tag_echo(line);
+            }),
+        };
+
+        let raw = self
+            .backend
+            .run_strategy_subprocess(&model_desc, strategy, on_progress, &*echo_impl)
+            .await?;
+
+        Ok(raw.into_typed(&var_order))
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
