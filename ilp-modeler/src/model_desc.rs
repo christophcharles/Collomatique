@@ -21,7 +21,7 @@ pub enum InternalVarDesc {
 }
 
 impl InternalVarDesc {
-    fn to_internal_var(&self) -> InternalVar<usize, usize> {
+    pub fn to_internal_var(&self) -> InternalVar<usize, usize> {
         match self {
             InternalVarDesc::Base(b) => InternalVar::Base(*b),
             InternalVarDesc::Extra(e) => InternalVar::Extra(*e),

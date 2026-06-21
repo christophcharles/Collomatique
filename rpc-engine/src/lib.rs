@@ -210,6 +210,13 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
         .map_err(|e| anyhow!("Failed to deserialize strategy request: {e}"))?;
 
     eprintln!("Building model from desc...");
+    let var_order: Vec<InternalVar<usize, usize>> = request
+        .model_desc
+        .main
+        .var_descs
+        .iter()
+        .map(|d| d.to_internal_var())
+        .collect();
     let model = request.model_desc.to_model();
 
     let worker_manager = Arc::new(Mutex::new(WorkerManager::new()));
@@ -256,7 +263,6 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
         collomatique_strategies::SolveStatus::Error => StrategyStatus::Error,
     };
 
-    let (_, var_order) = model.problem().get_desc();
     let solution = outcome.solution.map(|config| {
         var_order
             .iter()
