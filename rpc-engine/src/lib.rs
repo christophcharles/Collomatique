@@ -210,8 +210,7 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
         .map_err(|e| anyhow!("Failed to deserialize strategy request: {e}"))?;
 
     eprintln!("Building model from desc...");
-    let var_order = request.model_desc.var_order();
-    let model = request.model_desc.to_model();
+    let (model, var_order) = request.model_desc.to_model();
 
     let worker_manager = Arc::new(Mutex::new(WorkerManager::new()));
     let backend = Arc::new(SubprocessSolveBackend::new(worker_manager));

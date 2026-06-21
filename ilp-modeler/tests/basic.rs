@@ -1161,20 +1161,13 @@ fn model_desc_round_trip_preserves_solution() {
         .expect("solvable");
 
     // Simulate the IPC round-trip:
-    // Parent side: extract var_order then build ModelDesc.
-    let (_, parent_var_order) = model.problem().get_desc();
-    let model_desc = model.to_desc();
+    // Parent side: extract typed var_order alongside ModelDesc.
+    let (model_desc, parent_var_order) = model.to_desc();
 
-    // Subprocess side: extract canonical var_order from var_descs, then rebuild.
-    let subprocess_var_order: Vec<InternalVar<usize, usize>> = model_desc
-        .main
-        .var_descs
-        .iter()
-        .map(|d| d.to_internal_var())
-        .collect();
-    let rebuilt_model = model_desc.to_model();
+    // Subprocess side: rebuild model and extract var_order.
+    let (rebuilt_model, subprocess_var_order) = model_desc.to_model();
 
-    // Subprocess solves and encodes solution as Vec<f64> using var_descs order.
+    // Subprocess solves and encodes solution as Vec<f64> using var_order.
     let rebuilt_cfg = ColloCbcSolver::new()
         .build_model(rebuilt_model.problem())
         .solve()
@@ -1184,7 +1177,7 @@ fn model_desc_round_trip_preserves_solution() {
         .map(|iv| rebuilt_cfg.get(iv.clone()).unwrap_or(0.0))
         .collect();
 
-    // Parent side: decode Vec<f64> back to ConfigData using its var_order.
+    // Parent side: decode Vec<f64> back to ConfigData using its typed var_order.
     let round_tripped = collomatique_ilp::solution_to_config_data(&solution_vec, &parent_var_order);
 
     // Compare: both should give (a=1, b=0, c=0, d=1).

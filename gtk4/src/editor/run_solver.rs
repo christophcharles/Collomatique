@@ -7,10 +7,8 @@ use std::sync::{Arc, Mutex};
 
 use collomatique_ilp::{ConfigData, UsableData};
 use collomatique_ilp_modeler::{InternalVar, Model};
-use collomatique_strategies::{StrategyKind, StrategyProgress};
-use collomatique_subprocesses::{
-    StrategyResult, StrategyStatus, StrategySubprocess, WorkerManager,
-};
+use collomatique_strategies::{SolveStatus, StrategyKind, StrategyOutcome, StrategyProgress};
+use collomatique_subprocesses::{StrategySubprocess, WorkerManager};
 
 mod error_dialog;
 mod strategy_display;
@@ -33,7 +31,6 @@ pub struct Dialog<B: UsableData, E: UsableData, C: UsableData> {
     error_dialog: Controller<error_dialog::Dialog>,
     warning_running: Controller<warning_running::Dialog>,
     subprocess: Option<StrategySubprocess>,
-    var_order: Option<Vec<InternalVar<B, E>>>,
     result_config: Option<ConfigData<InternalVar<B, E>>>,
     _phantom: PhantomData<fn() -> C>,
 }
@@ -47,7 +44,7 @@ pub enum DialogInput<B: UsableData, E: UsableData, C: UsableData> {
     Cancel,
     Echo(String),
     StrategyUpdate(Result<StrategyProgress, String>),
-    Finished(StrategyResult),
+    Finished(StrategyOutcome<InternalVar<B, E>>),
     ToggleDebug(bool),
     SpawnError(String),
 }
@@ -196,7 +193,6 @@ where
             error_dialog,
             warning_running,
             subprocess: None,
-            var_order: None,
             result_config: None,
             _phantom: PhantomData,
         };
@@ -217,10 +213,6 @@ where
                 self.strategy_name = Some(name);
                 self.emit_strategy(StrategyDisplayInput::Clear(name));
 
-                let (_, var_order) = model.problem().get_desc();
-                self.var_order = Some(var_order);
-                let model_desc = model.to_desc();
-
                 let input = sender.input_sender().clone();
                 let log_input = input.clone();
                 let progress_input = input.clone();
@@ -231,15 +223,15 @@ where
                 let progress_cb = move |progress| {
                     progress_input.emit(DialogInput::StrategyUpdate(progress));
                 };
-                let result_cb = move |result: StrategyResult| {
-                    result_input.emit(DialogInput::Finished(result));
+                let result_cb = move |outcome: StrategyOutcome<InternalVar<B, E>>| {
+                    result_input.emit(DialogInput::Finished(outcome));
                 };
 
                 let spawn_result = {
                     let mut wm = self.worker_manager.lock().unwrap();
                     StrategySubprocess::spawn(
                         &mut wm,
-                        model_desc,
+                        &model,
                         strategy,
                         result_cb,
                         progress_cb,
@@ -275,20 +267,16 @@ where
             DialogInput::StrategyUpdate(progress) => {
                 self.emit_strategy(StrategyDisplayInput::StrategyUpdate(progress));
             }
-            DialogInput::Finished(result) => {
-                self.emit_strategy(StrategyDisplayInput::Finished(result.clone()));
+            DialogInput::Finished(outcome) => {
+                self.emit_strategy(StrategyDisplayInput::Finished(outcome.status.clone()));
                 self.is_running = false;
                 self.subprocess = None;
 
-                let usable = !matches!(
-                    result.status,
-                    StrategyStatus::Error | StrategyStatus::Infeasible
-                );
-                match (usable, result.solution, self.var_order.as_ref()) {
-                    (true, Some(solution), Some(var_order)) => {
-                        self.result_config = Some(collomatique_ilp::solution_to_config_data(
-                            &solution, var_order,
-                        ));
+                let usable =
+                    !matches!(outcome.status, SolveStatus::Error | SolveStatus::Infeasible);
+                match (usable, outcome.solution) {
+                    (true, Some(config)) => {
+                        self.result_config = Some(config);
                     }
                     _ => self.end_with_error = true,
                 }

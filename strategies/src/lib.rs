@@ -44,6 +44,21 @@ pub struct RawSolveOutcome {
     pub solution: Option<Vec<f64>>,
 }
 
+impl RawSolveOutcome {
+    pub fn into_typed<V: UsableData>(self, var_order: &[V]) -> StrategyOutcome<V> {
+        let solution = self
+            .solution
+            .as_ref()
+            .map(|sol| collomatique_ilp::solution_to_config_data(sol, var_order));
+        StrategyOutcome {
+            status: self.status,
+            objective: self.objective,
+            best_bound: self.best_bound,
+            solution,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct StrategyOutcome<V: UsableData> {
     pub status: SolveStatus,
@@ -185,17 +200,7 @@ impl StrategyContext {
             .solve_with_progress(&desc, solve_config, on_progress)
             .await?;
 
-        let solution = raw
-            .solution
-            .as_ref()
-            .map(|sol| collomatique_ilp::solution_to_config_data(sol, &var_order));
-
-        Ok(StrategyOutcome {
-            status: raw.status,
-            objective: raw.objective,
-            best_bound: raw.best_bound,
-            solution,
-        })
+        Ok(raw.into_typed(&var_order))
     }
 }
 
@@ -344,7 +349,7 @@ impl StrategyContext {
         &self,
         strategy: &StrategyKind,
         model: &Model<B, E, C>,
-    ) -> Result<StrategyOutcome<InternalVar<usize, usize>>, StrategyError>
+    ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
         B: UsableData,
         E: UsableData,
@@ -359,14 +364,13 @@ impl StrategyContext {
         strategy: &StrategyKind,
         model: &Model<B, E, C>,
         on_progress: &(dyn Fn(StrategyProgress) -> bool + Send + Sync),
-    ) -> Result<StrategyOutcome<InternalVar<usize, usize>>, StrategyError>
+    ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
         B: UsableData,
         E: UsableData,
         C: UsableData,
     {
-        let model_desc = model.to_desc();
-        let var_order = model_desc.var_order();
+        let (model_desc, var_order) = model.to_desc();
 
         let noop_echo = |_: String| {};
         let echo_fn: &(dyn Fn(String) + Send + Sync) = match &self.on_echo {
@@ -379,17 +383,7 @@ impl StrategyContext {
             .run_strategy_subprocess(&model_desc, strategy, on_progress, echo_fn)
             .await?;
 
-        let solution = raw
-            .solution
-            .as_ref()
-            .map(|sol| collomatique_ilp::solution_to_config_data(sol, &var_order));
-
-        Ok(StrategyOutcome {
-            status: raw.status,
-            objective: raw.objective,
-            best_bound: raw.best_bound,
-            solution,
-        })
+        Ok(raw.into_typed(&var_order))
     }
 }
 
@@ -508,8 +502,7 @@ mod tests {
         // a couple of hundreds time. It should be enough to catch it.
         for _ in 0..200 {
             let model = make_model(vec![(0, Variable::binary()), (1, Variable::binary())]);
-            let model_desc = model.to_desc();
-            let var_order = model_desc.var_order();
+            let (_, var_order) = model.to_desc();
 
             let mut solution_vec = vec![0.0; var_order.len()];
             for (i, iv) in var_order.iter().enumerate() {

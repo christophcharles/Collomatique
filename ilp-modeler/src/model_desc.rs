@@ -196,7 +196,7 @@ fn build_sub_model_desc<B: UsableData, E: UsableData, C: UsableData>(
     base_to_idx: &HashMap<&B, usize>,
     extra_to_idx: &HashMap<&E, usize>,
     user_constraint_to_idx: &HashMap<&C, usize>,
-) -> SubModelDesc {
+) -> (SubModelDesc, Vec<InternalVar<B, E>>) {
     let (problem_desc, var_order) = problem.get_desc();
 
     let var_to_index: HashMap<&InternalVar<B, E>, usize> =
@@ -235,7 +235,7 @@ fn build_sub_model_desc<B: UsableData, E: UsableData, C: UsableData>(
 
     let recon_objective = objective_to_desc(reconstruction_objective, &var_to_index);
 
-    SubModelDesc {
+    let sub_model_desc = SubModelDesc {
         problem_desc,
         problem_constraint_sources,
         var_descs,
@@ -243,7 +243,8 @@ fn build_sub_model_desc<B: UsableData, E: UsableData, C: UsableData>(
         reconstruction_variables: recon_variables,
         base_variable_set: base_set,
         reconstruction_objective: recon_objective,
-    }
+    };
+    (sub_model_desc, var_order)
 }
 
 impl<B, E, C> Model<B, E, C>
@@ -252,7 +253,7 @@ where
     E: UsableData,
     C: UsableData,
 {
-    pub fn to_desc(&self) -> ModelDesc {
+    pub fn to_desc(&self) -> (ModelDesc, Vec<InternalVar<B, E>>) {
         let base_to_idx: HashMap<&B, usize> = self
             .base_var_list
             .keys()
@@ -287,7 +288,7 @@ where
             .map(|(i, c)| (c, i))
             .collect();
 
-        let main = build_sub_model_desc(
+        let (main, var_order) = build_sub_model_desc(
             &self.problem,
             &self.reconstruction_constraints,
             &self.reconstruction_variables,
@@ -298,7 +299,7 @@ where
             &user_constraint_to_idx,
         );
 
-        let checker = build_sub_model_desc(
+        let (checker, _) = build_sub_model_desc(
             &self.checker_problem,
             &self.checker_reconstruction_constraints,
             &self.checker_reconstruction_variables,
@@ -314,11 +315,12 @@ where
             base_var_list[base_to_idx[b]] = var.clone();
         }
 
-        ModelDesc {
+        let model_desc = ModelDesc {
             main,
             checker,
             base_var_list,
-        }
+        };
+        (model_desc, var_order)
     }
 }
 
@@ -337,6 +339,7 @@ fn rebuild_sub_model(
     HashMap<IV, Variable>,
     HashSet<usize>,
     Objective<IV>,
+    Vec<IV>,
 ) {
     let index_to_var: Vec<IV> = sub.var_descs.iter().map(|d| d.to_internal_var()).collect();
 
@@ -392,25 +395,19 @@ fn rebuild_sub_model(
         recon_variables,
         base_set,
         recon_objective,
+        index_to_var,
     )
 }
 
 impl ModelDesc {
-    pub fn var_order(&self) -> Vec<InternalVar<usize, usize>> {
-        self.main
-            .var_descs
-            .iter()
-            .map(|d| d.to_internal_var())
-            .collect()
-    }
-
-    pub fn to_model(self) -> Model<usize, usize, usize> {
+    pub fn to_model(self) -> (Model<usize, usize, usize>, Vec<InternalVar<usize, usize>>) {
         let (
             problem,
             reconstruction_constraints,
             reconstruction_variables,
             base_variable_set,
             reconstruction_objective,
+            var_order,
         ) = rebuild_sub_model(&self.main);
 
         let (
@@ -419,12 +416,13 @@ impl ModelDesc {
             checker_reconstruction_variables,
             checker_base_variable_set,
             checker_reconstruction_objective,
+            _,
         ) = rebuild_sub_model(&self.checker);
 
         let base_var_list: HashMap<usize, Variable> =
             self.base_var_list.into_iter().enumerate().collect();
 
-        Model {
+        let model = Model {
             problem,
             reconstruction_constraints,
             reconstruction_variables,
@@ -436,6 +434,7 @@ impl ModelDesc {
             reconstruction_objective,
             checker_reconstruction_objective,
             base_var_list,
-        }
+        };
+        (model, var_order)
     }
 }

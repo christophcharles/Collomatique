@@ -1,7 +1,7 @@
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, ToggleButtonExt, WidgetExt};
 use relm4::{ComponentParts, ComponentSender, SimpleComponent, adw, gtk};
 
-use collomatique_subprocesses::StrategyStatus;
+use collomatique_strategies::SolveStatus;
 
 use super::StrategyDisplayInput;
 
@@ -115,12 +115,10 @@ impl SimpleComponent for StrategyStatusBar {
                     self.ipc_error = Some(format!("Erreur IPC : {e}"));
                 }
             }
-            StrategyDisplayInput::Finished(result) => {
+            StrategyDisplayInput::Finished(status) => {
                 self.is_running = false;
-                self.end_with_error = matches!(
-                    result.status,
-                    StrategyStatus::Error | StrategyStatus::Infeasible
-                );
+                self.end_with_error =
+                    matches!(status, SolveStatus::Error | SolveStatus::Infeasible);
             }
             StrategyDisplayInput::ToggleDebug(toggle) => {
                 if self.show_debug == toggle {

@@ -9,7 +9,7 @@ use collomatique_strategies::{
 use futures::{FutureExt, StreamExt};
 
 use crate::ilp_solver::{IlpSolverConfig, IlpStatus, SolverSubprocess};
-use crate::strategy_solver::{StrategyResult, StrategyStatus, StrategySubprocess};
+use crate::strategy_solver::{StrategyResult, StrategySubprocess};
 use crate::worker_manager::WorkerManager;
 
 pub struct SubprocessSolveBackend {
@@ -33,22 +33,6 @@ fn convert_result(result: crate::ilp_solver::IlpResult) -> RawSolveOutcome {
     RawSolveOutcome {
         status,
         objective: result.obj_value,
-        best_bound: result.best_bound,
-        solution: result.solution,
-    }
-}
-
-fn convert_strategy_result(result: StrategyResult) -> RawSolveOutcome {
-    let status = match result.status {
-        StrategyStatus::Optimal => SolveStatus::Optimal,
-        StrategyStatus::Infeasible => SolveStatus::Infeasible,
-        StrategyStatus::Stopped => SolveStatus::Stopped,
-        StrategyStatus::Error => SolveStatus::Error,
-    };
-
-    RawSolveOutcome {
-        status,
-        objective: result.objective,
         best_bound: result.best_bound,
         solution: result.solution,
     }
@@ -172,7 +156,7 @@ impl SolveBackend for SubprocessSolveBackend {
                 .worker_manager
                 .lock()
                 .map_err(|e| StrategyError::Other(format!("lock poisoned: {e}")))?;
-            StrategySubprocess::spawn(
+            StrategySubprocess::spawn_raw(
                 &mut wm,
                 model_desc.clone(),
                 strategy.clone(),
@@ -203,7 +187,7 @@ impl SolveBackend for SubprocessSolveBackend {
                     let result = result.map_err(|_| {
                         StrategyError::Other("strategy subprocess channel closed".into())
                     })?;
-                    return Ok(convert_strategy_result(result));
+                    return Ok(result.into_raw_outcome());
                 }
                 progress = progress_rx.next() => {
                     if let Some(progress_result) = progress {

@@ -419,14 +419,22 @@ fn subprocess_solve(model: &collomatique_constraints_colloscopes::ColloscopeMode
 }
 
 fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::ColloscopeModel) {
-    use collomatique_strategies::{DefaultStrategy, StrategyKind, StrategyProgress};
-    use collomatique_subprocesses::{StrategyStatus, StrategySubprocess, WorkerManager};
+    use collomatique_strategies::{
+        DefaultStrategy, SolveStatus, StrategyKind, StrategyOutcome, StrategyProgress,
+    };
+    use collomatique_subprocesses::{StrategySubprocess, WorkerManager};
     use std::sync::mpsc;
+
+    type Outcome = StrategyOutcome<
+        collomatique_ilp_modeler::InternalVar<
+            collomatique_constraints_colloscopes::Var,
+            collomatique_constraints_colloscopes::ExtraVarName,
+        >,
+    >;
 
     let t = Instant::now();
     eprintln!("Extracting problem descriptor...");
-    let (_, var_order) = model.problem().get_desc();
-    let model_desc = model.to_desc();
+    let (model_desc, _) = model.to_desc();
     eprintln!(
         "  Descriptor: {} variables, {} constraints ({:.2?})",
         model_desc.main.problem_desc.variables.len(),
@@ -446,10 +454,10 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
     let t = Instant::now();
     let handle = StrategySubprocess::spawn(
         &mut worker_manager,
-        model_desc,
+        model,
         strategy,
-        move |result| {
-            let _ = tx.send(result);
+        move |outcome: Outcome| {
+            let _ = tx.send(outcome);
         },
         |progress: Result<StrategyProgress, String>| match progress {
             Ok(StrategyProgress::Default(p)) => {
@@ -481,23 +489,21 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
     let t = Instant::now();
     let result = rx.recv();
     match result {
-        Ok(result) => {
+        Ok(outcome) => {
             eprintln!("  Result received in {:.2?}", t.elapsed());
-            eprintln!("  Status: {:?}", result.status);
-            match result.objective {
+            eprintln!("  Status: {:?}", outcome.status);
+            match outcome.objective {
                 Some(v) => eprintln!("  Objective: {}", v),
                 None => eprintln!("  Objective: N/A"),
             }
-            match result.best_bound {
+            match outcome.best_bound {
                 Some(v) => eprintln!("  Best bound: {}", v),
                 None => eprintln!("  Best bound: N/A"),
             }
 
-            if let Some(ref solution) = result.solution {
-                eprintln!("  Solution has {} values", solution.len());
-                let config_data = collomatique_ilp::solution_to_config_data(solution, &var_order);
+            if let Some(ref config_data) = outcome.solution {
                 let problem = model.problem();
-                match problem.build_config(config_data) {
+                match problem.build_config(config_data.clone()) {
                     Ok(config) => {
                         if config.is_feasible() {
                             eprintln!("  Solution is FEASIBLE");
@@ -519,7 +525,7 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
                 eprintln!("  No solution returned");
             }
 
-            if result.status == StrategyStatus::Error {
+            if outcome.status == SolveStatus::Error {
                 eprintln!("  Strategy reported an error");
             }
         }
