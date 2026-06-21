@@ -424,9 +424,7 @@ fn subprocess_solve(model: &collomatique_constraints_colloscopes::ColloscopeMode
 }
 
 fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::ColloscopeModel) {
-    use collomatique_strategies::{
-        DefaultStrategy, SolveStatus, StrategyKind, StrategyOutcome, StrategyProgress,
-    };
+    use collomatique_strategies::{DefaultStrategy, SolveProgress, SolveStatus, StrategyOutcome};
     use collomatique_subprocesses::{StrategySubprocess, WorkerManager};
     use std::sync::mpsc;
 
@@ -447,10 +445,10 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
         t.elapsed()
     );
 
-    let strategy = StrategyKind::Default(DefaultStrategy {
+    let strategy = DefaultStrategy {
         time_limit_seconds: None,
         disable_logging: false,
-    });
+    };
 
     let (tx, rx) = mpsc::channel();
     let mut worker_manager = WorkerManager::new();
@@ -460,18 +458,14 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
     let handle = StrategySubprocess::spawn(
         &mut worker_manager,
         model,
-        strategy,
+        &strategy,
         move |outcome: Outcome| {
             let _ = tx.send(outcome);
         },
-        |progress: Result<StrategyProgress, String>| match progress {
-            Ok(StrategyProgress::Default(p)) => {
-                eprintln!(
-                    "  [strategy subprocess progress] obj={:.4} bound={:.4} nodes={} solutions={}",
-                    p.best_obj, p.best_bound, p.node_count, p.solutions_found
-                );
+        |progress: Result<SolveProgress, String>| match progress {
+            Ok(p) => {
+                eprintln!("  [strategy subprocess progress] {p}");
             }
-            Ok(StrategyProgress::NoObjective(_)) => unreachable!(),
             Err(e) => {
                 eprintln!("  [strategy subprocess progress error] {e}");
             }
@@ -538,14 +532,8 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
         Err(_) => {
             eprintln!("  Channel closed without receiving a result");
             if let Some(progress) = handle.last_progress() {
-                match &progress {
-                    StrategyProgress::Default(p) => {
-                        eprintln!(
-                            "  Last progress: obj={:.4} bound={:.4} nodes={} solutions={}",
-                            p.best_obj, p.best_bound, p.node_count, p.solutions_found
-                        );
-                    }
-                    StrategyProgress::NoObjective(_) => unreachable!(),
+                if let Ok(p) = SolveProgress::try_from(progress) {
+                    eprintln!("  Last progress: {p}");
                 }
             }
         }

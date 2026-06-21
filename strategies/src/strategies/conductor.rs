@@ -10,7 +10,7 @@ use collomatique_ilp_modeler::{InternalVar, Model};
 
 use crate::{
     DefaultStrategy, SolveProgress, SolveStatus, Strategy, StrategyContext, StrategyError,
-    StrategyKind, StrategyOutcome, StrategyProgress,
+    StrategyOutcome,
 };
 
 #[derive(Debug, Clone)]
@@ -135,7 +135,7 @@ impl Strategy for ConductorStrategy {
         let sense = model.problem().get_objective().get_sense();
 
         // Per-worker state (defined before FuturesUnordered so borrows outlive the futures)
-        let default_strategy = StrategyKind::Default(DefaultStrategy::default());
+        let default_strategy = DefaultStrategy::default();
         let default_solutions_found = AtomicU64::new(0);
 
         // Launch all workers
@@ -149,12 +149,12 @@ impl Strategy for ConductorStrategy {
                     .spawn_strategy_with_echo(
                         &default_strategy,
                         model,
-                        &|sp| match sp {
-                            StrategyProgress::Default(p) => {
+                        &|result| match result {
+                            Ok(p) => {
                                 default_solutions_found.store(p.solutions_found, Ordering::Relaxed);
                                 on_progress(ConductorProgress::DefaultWorker(p))
                             }
-                            _ => unreachable!(),
+                            Err(_) => false,
                         },
                         &|line| format!("[default worker] {}", line),
                     )

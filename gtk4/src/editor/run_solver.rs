@@ -232,7 +232,7 @@ where
                     StrategySubprocess::spawn(
                         &mut wm,
                         &model,
-                        strategy,
+                        &strategy,
                         result_cb,
                         progress_cb,
                         log_cb,

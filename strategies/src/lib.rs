@@ -330,6 +330,74 @@ impl StrategyProgress {
     }
 }
 
+impl From<DefaultStrategy> for StrategyKind {
+    fn from(s: DefaultStrategy) -> Self {
+        StrategyKind::Default(s)
+    }
+}
+
+impl From<NoObjectiveStrategy> for StrategyKind {
+    fn from(s: NoObjectiveStrategy) -> Self {
+        StrategyKind::NoObjective(s)
+    }
+}
+
+impl TryFrom<StrategyProgress> for SolveProgress {
+    type Error = StrategyProgress;
+    fn try_from(sp: StrategyProgress) -> Result<Self, StrategyProgress> {
+        match sp {
+            StrategyProgress::Default(p) => Ok(p),
+            other => Err(other),
+        }
+    }
+}
+
+impl TryFrom<StrategyProgress> for NoObjectiveProgressData {
+    type Error = StrategyProgress;
+    fn try_from(sp: StrategyProgress) -> Result<Self, StrategyProgress> {
+        match sp {
+            StrategyProgress::NoObjective(p) => Ok(p),
+            other => Err(other),
+        }
+    }
+}
+
+pub trait SpawnableStrategy {
+    type Progress;
+    fn to_strategy_kind(&self) -> StrategyKind;
+    fn convert_progress(sp: StrategyProgress) -> Result<Self::Progress, StrategyProgress>;
+}
+
+impl SpawnableStrategy for DefaultStrategy {
+    type Progress = SolveProgress;
+    fn to_strategy_kind(&self) -> StrategyKind {
+        self.clone().into()
+    }
+    fn convert_progress(sp: StrategyProgress) -> Result<SolveProgress, StrategyProgress> {
+        sp.try_into()
+    }
+}
+
+impl SpawnableStrategy for NoObjectiveStrategy {
+    type Progress = NoObjectiveProgressData;
+    fn to_strategy_kind(&self) -> StrategyKind {
+        self.clone().into()
+    }
+    fn convert_progress(sp: StrategyProgress) -> Result<NoObjectiveProgressData, StrategyProgress> {
+        sp.try_into()
+    }
+}
+
+impl SpawnableStrategy for StrategyKind {
+    type Progress = StrategyProgress;
+    fn to_strategy_kind(&self) -> StrategyKind {
+        self.clone()
+    }
+    fn convert_progress(sp: StrategyProgress) -> Result<StrategyProgress, StrategyProgress> {
+        Ok(sp)
+    }
+}
+
 impl StrategyKind {
     pub fn name(&self) -> &'static str {
         match self {
@@ -449,9 +517,9 @@ impl StrategyContext {
         strategy.run_with_callback(self, model, on_progress).await
     }
 
-    pub async fn spawn_strategy<B, E, C>(
+    pub async fn spawn_strategy<B, E, C, S: SpawnableStrategy>(
         &self,
-        strategy: &StrategyKind,
+        strategy: &S,
         model: &Model<B, E, C>,
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
@@ -463,11 +531,11 @@ impl StrategyContext {
             .await
     }
 
-    pub async fn spawn_strategy_with_callback<B, E, C>(
+    pub async fn spawn_strategy_with_callback<B, E, C, S: SpawnableStrategy>(
         &self,
-        strategy: &StrategyKind,
+        strategy: &S,
         model: &Model<B, E, C>,
-        on_progress: &(dyn Fn(StrategyProgress) -> bool + Send + Sync),
+        on_progress: &(dyn Fn(Result<S::Progress, StrategyProgress>) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
         B: UsableData,
@@ -475,6 +543,7 @@ impl StrategyContext {
         C: UsableData,
     {
         let (model_desc, var_order) = model.to_desc();
+        let strategy_kind = strategy.to_strategy_kind();
 
         let noop_echo = |_: String| {};
         let echo_fn: &(dyn Fn(String) + Send + Sync) = match &self.on_echo {
@@ -482,19 +551,22 @@ impl StrategyContext {
             None => &noop_echo,
         };
 
+        let raw_on_progress =
+            |sp: StrategyProgress| -> bool { on_progress(S::convert_progress(sp)) };
+
         let raw = self
             .backend
-            .run_strategy_subprocess(&model_desc, strategy, on_progress, echo_fn)
+            .run_strategy_subprocess(&model_desc, &strategy_kind, &raw_on_progress, echo_fn)
             .await?;
 
         Ok(raw.into_typed(&var_order))
     }
 
-    pub async fn spawn_strategy_with_echo<B, E, C>(
+    pub async fn spawn_strategy_with_echo<B, E, C, S: SpawnableStrategy>(
         &self,
-        strategy: &StrategyKind,
+        strategy: &S,
         model: &Model<B, E, C>,
-        on_progress: &(dyn Fn(StrategyProgress) -> bool + Send + Sync),
+        on_progress: &(dyn Fn(Result<S::Progress, StrategyProgress>) -> bool + Send + Sync),
         tag_echo: &(dyn Fn(String) -> String + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
@@ -503,6 +575,7 @@ impl StrategyContext {
         C: UsableData,
     {
         let (model_desc, var_order) = model.to_desc();
+        let strategy_kind = strategy.to_strategy_kind();
 
         let echo_impl: Box<dyn Fn(String) + Send + Sync + '_> = match &self.on_echo {
             Some(ctx_echo) => Box::new(move |line| ctx_echo(tag_echo(line))),
@@ -511,9 +584,12 @@ impl StrategyContext {
             }),
         };
 
+        let raw_on_progress =
+            |sp: StrategyProgress| -> bool { on_progress(S::convert_progress(sp)) };
+
         let raw = self
             .backend
-            .run_strategy_subprocess(&model_desc, strategy, on_progress, &*echo_impl)
+            .run_strategy_subprocess(&model_desc, &strategy_kind, &raw_on_progress, &*echo_impl)
             .await?;
 
         Ok(raw.into_typed(&var_order))

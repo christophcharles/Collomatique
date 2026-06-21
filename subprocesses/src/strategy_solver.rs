@@ -7,7 +7,8 @@ use collomatique_ilp_modeler::model_desc::ModelDesc;
 use collomatique_ilp_modeler::{InternalVar, Model};
 use collomatique_rpc::{EncodedMsg, InitMsg, ResultMsg, SerializedStrategyRequest, StrategyMsg};
 use collomatique_strategies::{
-    RawSolveOutcome, SolveStatus, StrategyKind, StrategyOutcome, StrategyProgress, StrategyRequest,
+    RawSolveOutcome, SolveStatus, SpawnableStrategy, StrategyKind, StrategyOutcome,
+    StrategyProgress, StrategyRequest,
 };
 
 use crate::process::StdinWriter;
@@ -66,15 +67,16 @@ impl StrategySubprocess {
         self.last_progress.lock().unwrap().clone()
     }
 
-    pub fn spawn<B, E, C>(
+    pub fn spawn<B, E, C, S: SpawnableStrategy>(
         worker_manager: &mut WorkerManager,
         model: &Model<B, E, C>,
-        strategy: StrategyKind,
+        strategy: &S,
         result_callback: impl Fn(StrategyOutcome<InternalVar<B, E>>) + Send + 'static,
-        progress_callback: impl Fn(Result<StrategyProgress, String>) + Send + 'static,
+        progress_callback: impl Fn(Result<S::Progress, String>) + Send + 'static,
         log_callback: impl Fn(&str) + Send + 'static,
     ) -> Result<StrategySubprocess, String>
     where
+        S::Progress: Send + 'static,
         B: UsableData + Send + 'static,
         E: UsableData + Send + 'static,
         C: UsableData + Send + 'static,
@@ -84,12 +86,22 @@ impl StrategySubprocess {
             let outcome = result.into_raw_outcome().into_typed(&var_order);
             result_callback(outcome);
         };
+        let strategy_kind = strategy.to_strategy_kind();
+        let wrapped_progress = move |result: Result<StrategyProgress, String>| match result {
+            Ok(sp) => match S::convert_progress(sp) {
+                Ok(typed) => progress_callback(Ok(typed)),
+                Err(unexpected) => {
+                    progress_callback(Err(format!("unexpected progress variant: {unexpected}")))
+                }
+            },
+            Err(e) => progress_callback(Err(e)),
+        };
         Self::spawn_raw(
             worker_manager,
             model_desc,
-            strategy,
+            strategy_kind,
             raw_result_callback,
-            progress_callback,
+            wrapped_progress,
             log_callback,
         )
     }
