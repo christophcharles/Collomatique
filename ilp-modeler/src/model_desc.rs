@@ -228,10 +228,7 @@ fn build_sub_model_desc<B: UsableData, E: UsableData, C: UsableData>(
         .map(|(iv, var)| (var_to_index[iv], var.clone()))
         .collect();
 
-    let base_set: Vec<usize> = base_variable_set
-        .iter()
-        .map(|b| var_to_index[&InternalVar::Base(b.clone())])
-        .collect();
+    let base_set: Vec<usize> = base_variable_set.iter().map(|b| base_to_idx[b]).collect();
 
     let recon_objective = objective_to_desc(reconstruction_objective, &var_to_index);
 
