@@ -73,16 +73,17 @@ impl StrategySubprocess {
         strategy: &S,
         warm_start: Option<ConfigData<InternalVar<B, E>>>,
         result_callback: impl Fn(StrategyOutcome<InternalVar<B, E>>) + Send + 'static,
-        progress_callback: impl Fn(Result<S::Progress, String>) + Send + 'static,
+        progress_callback: impl Fn(Result<S::Progress<InternalVar<B, E>>, String>) + Send + 'static,
         log_callback: impl Fn(&str) + Send + 'static,
     ) -> Result<StrategySubprocess, String>
     where
-        S::Progress: Send + 'static,
+        S::Progress<InternalVar<B, E>>: Send + 'static,
         B: UsableData + Send + 'static,
         E: UsableData + Send + 'static,
         C: UsableData + Send + 'static,
     {
         let (model_desc, var_order) = model.to_desc();
+        let progress_var_order = var_order.clone();
         let raw_warm_start = warm_start
             .as_ref()
             .map(|hint| collomatique_ilp::config_data_to_hint(hint, &var_order));
@@ -92,7 +93,7 @@ impl StrategySubprocess {
         };
         let strategy_kind = strategy.to_strategy_kind();
         let wrapped_progress = move |result: Result<StrategyProgress, String>| match result {
-            Ok(sp) => match S::convert_progress(sp) {
+            Ok(sp) => match S::convert_progress(sp, &progress_var_order) {
                 Ok(typed) => progress_callback(Ok(typed)),
                 Err(unexpected) => {
                     progress_callback(Err(format!("unexpected progress variant: {unexpected}")))

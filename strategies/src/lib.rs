@@ -365,37 +365,49 @@ impl TryFrom<StrategyProgress> for NoObjectiveProgressData {
 }
 
 pub trait SpawnableStrategy {
-    type Progress;
+    type Progress<V: UsableData + Send>: Send;
     fn to_strategy_kind(&self) -> StrategyKind;
-    fn convert_progress(sp: StrategyProgress) -> Result<Self::Progress, StrategyProgress>;
+    fn convert_progress<V: UsableData + Send>(
+        sp: StrategyProgress,
+        var_order: &[V],
+    ) -> Result<Self::Progress<V>, StrategyProgress>;
 }
 
 impl SpawnableStrategy for DefaultStrategy {
-    type Progress = SolveProgress;
+    type Progress<V: UsableData + Send> = SolveProgress;
     fn to_strategy_kind(&self) -> StrategyKind {
         self.clone().into()
     }
-    fn convert_progress(sp: StrategyProgress) -> Result<SolveProgress, StrategyProgress> {
+    fn convert_progress<V: UsableData + Send>(
+        sp: StrategyProgress,
+        _var_order: &[V],
+    ) -> Result<SolveProgress, StrategyProgress> {
         sp.try_into()
     }
 }
 
 impl SpawnableStrategy for NoObjectiveStrategy {
-    type Progress = NoObjectiveProgressData;
+    type Progress<V: UsableData + Send> = NoObjectiveProgressData;
     fn to_strategy_kind(&self) -> StrategyKind {
         self.clone().into()
     }
-    fn convert_progress(sp: StrategyProgress) -> Result<NoObjectiveProgressData, StrategyProgress> {
+    fn convert_progress<V: UsableData + Send>(
+        sp: StrategyProgress,
+        _var_order: &[V],
+    ) -> Result<NoObjectiveProgressData, StrategyProgress> {
         sp.try_into()
     }
 }
 
 impl SpawnableStrategy for StrategyKind {
-    type Progress = StrategyProgress;
+    type Progress<V: UsableData + Send> = StrategyProgress;
     fn to_strategy_kind(&self) -> StrategyKind {
         self.clone()
     }
-    fn convert_progress(sp: StrategyProgress) -> Result<StrategyProgress, StrategyProgress> {
+    fn convert_progress<V: UsableData + Send>(
+        sp: StrategyProgress,
+        _var_order: &[V],
+    ) -> Result<StrategyProgress, StrategyProgress> {
         Ok(sp)
     }
 }
@@ -548,7 +560,9 @@ impl StrategyContext {
         strategy: &S,
         model: &Model<B, E, C>,
         warm_start: Option<ConfigData<InternalVar<B, E>>>,
-        on_progress: &(dyn Fn(Result<S::Progress, StrategyProgress>) -> bool + Send + Sync),
+        on_progress: &(
+             dyn Fn(Result<S::Progress<InternalVar<B, E>>, StrategyProgress>) -> bool + Send + Sync
+         ),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
         B: UsableData,
@@ -569,7 +583,7 @@ impl StrategyContext {
         };
 
         let raw_on_progress =
-            |sp: StrategyProgress| -> bool { on_progress(S::convert_progress(sp)) };
+            |sp: StrategyProgress| -> bool { on_progress(S::convert_progress(sp, &var_order)) };
 
         let raw = self
             .backend
@@ -590,7 +604,9 @@ impl StrategyContext {
         strategy: &S,
         model: &Model<B, E, C>,
         warm_start: Option<ConfigData<InternalVar<B, E>>>,
-        on_progress: &(dyn Fn(Result<S::Progress, StrategyProgress>) -> bool + Send + Sync),
+        on_progress: &(
+             dyn Fn(Result<S::Progress<InternalVar<B, E>>, StrategyProgress>) -> bool + Send + Sync
+         ),
         tag_echo: &(dyn Fn(String) -> String + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
@@ -613,7 +629,7 @@ impl StrategyContext {
         };
 
         let raw_on_progress =
-            |sp: StrategyProgress| -> bool { on_progress(S::convert_progress(sp)) };
+            |sp: StrategyProgress| -> bool { on_progress(S::convert_progress(sp, &var_order)) };
 
         let raw = self
             .backend
