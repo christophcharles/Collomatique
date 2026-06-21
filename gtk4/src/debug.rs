@@ -15,6 +15,7 @@ pub enum DebugMode {
     Objective,
     SubprocessSolve,
     SubprocessSolveStrategy,
+    Conductor,
 }
 
 pub fn print_help() -> Result<(), anyhow::Error> {
@@ -46,6 +47,9 @@ pub fn print_help() -> Result<(), anyhow::Error> {
     );
     eprintln!("    subprocess-solve   Solve the full ILP via a subprocess (end-to-end test)");
     eprintln!("    subprocess-solve-strategy  Solve via a strategy subprocess (end-to-end test)");
+    eprintln!(
+        "    conductor              Solve via the conductor strategy (spawns subprocess workers)"
+    );
     eprintln!();
     eprintln!("  All modes except 'help' require a file argument.");
     eprintln!("  Blame modes use 'minimal' filtering by default: redundant constraints implied");
@@ -98,6 +102,7 @@ pub fn run(mode: DebugMode, file: PathBuf) -> Result<(), anyhow::Error> {
             DebugMode::Objective => objective(&model, &inner_data),
             DebugMode::SubprocessSolve => subprocess_solve(&model),
             DebugMode::SubprocessSolveStrategy => subprocess_solve_strategy(&model),
+            DebugMode::Conductor => conductor_solve(&model).await,
         }
 
         eprintln!("Total: {:.2?}", t_total.elapsed());
@@ -541,6 +546,119 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
                     }
                 }
             }
+        }
+    }
+}
+
+async fn conductor_solve(model: &collomatique_constraints_colloscopes::ColloscopeModel) {
+    use collomatique_strategies::{
+        ConductorProgress, ConductorStrategy, SolveStatus, Strategy, StrategyContext,
+    };
+    use collomatique_subprocesses::{SubprocessSolveBackend, WorkerManager};
+    use std::sync::{Arc, Mutex};
+
+    type V = collomatique_ilp_modeler::InternalVar<
+        collomatique_constraints_colloscopes::Var,
+        collomatique_constraints_colloscopes::ExtraVarName,
+    >;
+
+    let t = Instant::now();
+    eprintln!("Extracting problem descriptor...");
+    let (model_desc, _) = model.to_desc();
+    eprintln!(
+        "  Descriptor: {} variables, {} constraints ({:.2?})",
+        model_desc.main.problem_desc.variables.len(),
+        model_desc.main.problem_desc.constraints.len(),
+        t.elapsed()
+    );
+
+    let worker_manager = Arc::new(Mutex::new(WorkerManager::new()));
+    let backend = Arc::new(SubprocessSolveBackend::new(worker_manager));
+    let on_echo: Arc<dyn Fn(String) + Send + Sync> = Arc::new(|line: String| {
+        eprintln!("  [conductor] {}", line.trim_end());
+    });
+    let ctx = StrategyContext::with_echo(backend, on_echo);
+
+    let conductor = ConductorStrategy::default();
+
+    eprintln!("Running conductor strategy...");
+    let t = Instant::now();
+    let result = conductor
+        .run_with_callback(&ctx, model, &|progress: ConductorProgress<V>| {
+            match &progress {
+                ConductorProgress::Conductor(status) => {
+                    let obj_str = status
+                        .best_solution
+                        .as_ref()
+                        .map(|s| format!("{:.4}", s.objective))
+                        .unwrap_or_else(|| "N/A".to_string());
+                    let bound_str = status
+                        .best_bound
+                        .map(|b| format!("{:.4}", b))
+                        .unwrap_or_else(|| "N/A".to_string());
+                    eprintln!(
+                        "  [conductor] obj={} bound={} solutions={} workers={}/{}",
+                        obj_str,
+                        bound_str,
+                        status.solution_found_count,
+                        status.finished_workers,
+                        status.total_workers,
+                    );
+                }
+                ConductorProgress::DefaultWorker(p) => {
+                    eprintln!(
+                        "  [conductor] [default worker] obj={:.4} bound={:.4} nodes={} solutions={}",
+                        p.best_obj, p.best_bound, p.node_count, p.solutions_found
+                    );
+                }
+            }
+            true
+        })
+        .await;
+
+    match result {
+        Ok(outcome) => {
+            eprintln!("  Result received in {:.2?}", t.elapsed());
+            eprintln!("  Status: {:?}", outcome.status);
+            match outcome.objective {
+                Some(v) => eprintln!("  Objective: {}", v),
+                None => eprintln!("  Objective: N/A"),
+            }
+            match outcome.best_bound {
+                Some(v) => eprintln!("  Best bound: {}", v),
+                None => eprintln!("  Best bound: N/A"),
+            }
+
+            if let Some(ref config_data) = outcome.solution {
+                let problem = model.problem();
+                match problem.build_config(config_data.clone()) {
+                    Ok(config) => {
+                        if config.is_feasible() {
+                            eprintln!("  Solution is FEASIBLE");
+                        } else {
+                            let violated = config.blame().len();
+                            eprintln!("  Solution violates {} constraint(s)", violated);
+                        }
+                    }
+                    Err(check) => {
+                        eprintln!(
+                            "  Config build failed: missing={}, excess={}, non_conforming={}",
+                            check.missing_variables.len(),
+                            check.excess_variables.len(),
+                            check.non_conforming_variables.len(),
+                        );
+                    }
+                }
+            } else {
+                eprintln!("  No solution returned");
+            }
+
+            if outcome.status == SolveStatus::Error {
+                eprintln!("  Conductor reported an error");
+            }
+        }
+        Err(e) => {
+            eprintln!("  Conductor strategy failed in {:.2?}: {}", t.elapsed(), e);
         }
     }
 }
