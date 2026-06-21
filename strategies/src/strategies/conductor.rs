@@ -142,7 +142,7 @@ impl Strategy for ConductorStrategy {
         if self.default_worker {
             workers.push(Box::pin(async {
                 let outcome = ctx
-                    .run_strategy_with_callback(&default_strategy, model, &|sp| match sp {
+                    .spawn_strategy_with_callback(&default_strategy, model, &|sp| match sp {
                         StrategyProgress::Default(p) => {
                             default_solutions_found.store(p.solutions_found, Ordering::Relaxed);
                             on_progress(ConductorProgress::DefaultWorker(p))
