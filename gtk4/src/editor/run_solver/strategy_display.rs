@@ -14,6 +14,7 @@ pub enum StrategyName {
 pub fn strategy_name_from_kind(kind: &StrategyKind) -> StrategyName {
     match kind {
         StrategyKind::Default(_) => StrategyName::Default,
+        StrategyKind::NoObjective(_) => todo!(),
     }
 }
 

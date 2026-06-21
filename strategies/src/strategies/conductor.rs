@@ -150,6 +150,7 @@ impl Strategy for ConductorStrategy {
                                 default_solutions_found.store(p.solutions_found, Ordering::Relaxed);
                                 on_progress(ConductorProgress::DefaultWorker(p))
                             }
+                            _ => unreachable!(),
                         },
                         &|line| format!("[default worker] {}", line),
                     )

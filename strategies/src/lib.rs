@@ -5,6 +5,7 @@ pub use strategies::conductor::{
     update_best_solution,
 };
 pub use strategies::default::DefaultStrategy;
+pub use strategies::no_objective::{NoObjectiveProgressData, NoObjectiveStrategy};
 
 use std::sync::Arc;
 
@@ -236,11 +237,13 @@ pub trait Strategy: Send + Sync {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum StrategyKind {
     Default(DefaultStrategy),
+    NoObjective(NoObjectiveStrategy),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum StrategyProgress {
     Default(SolveProgress),
+    NoObjective(NoObjectiveProgressData),
 }
 
 impl StrategyProgress {
@@ -284,6 +287,12 @@ impl StrategyKind {
             StrategyKind::Default(s) => {
                 s.run_with_callback(ctx, model, &|p| on_progress(StrategyProgress::Default(p)))
                     .await
+            }
+            StrategyKind::NoObjective(s) => {
+                s.run_with_callback(ctx, model, &|p| {
+                    on_progress(StrategyProgress::NoObjective(p))
+                })
+                .await
             }
         }
     }
@@ -439,7 +448,8 @@ mod tests {
     use super::*;
     use collomatique_ilp::Variable;
     use collomatique_ilp_modeler::Modeler;
-    use std::collections::HashMap;
+    use std::collections::{HashMap, VecDeque};
+    use std::sync::Mutex;
 
     struct MockBackend {
         outcome: RawSolveOutcome,
@@ -465,6 +475,47 @@ mod tests {
             _on_echo: &(dyn Fn(String) + Send + Sync),
         ) -> Result<RawSolveOutcome, StrategyError> {
             Ok(self.outcome.clone())
+        }
+    }
+
+    struct SequentialMockBackend {
+        outcomes: Mutex<VecDeque<RawSolveOutcome>>,
+    }
+
+    impl SequentialMockBackend {
+        fn new(outcomes: Vec<RawSolveOutcome>) -> Self {
+            Self {
+                outcomes: Mutex::new(outcomes.into()),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl SolveBackend for SequentialMockBackend {
+        async fn solve_with_progress(
+            &self,
+            _desc: &ProblemDesc,
+            _opts: SolveConfig,
+            _on_progress: &(dyn Fn(SolveProgress) -> bool + Send + Sync),
+            _on_echo: &(dyn Fn(String) + Send + Sync),
+        ) -> Result<RawSolveOutcome, StrategyError> {
+            let outcome = self
+                .outcomes
+                .lock()
+                .unwrap()
+                .pop_front()
+                .expect("SequentialMockBackend: no more outcomes");
+            Ok(outcome)
+        }
+
+        async fn run_strategy_subprocess(
+            &self,
+            _model_desc: &ModelDesc,
+            _strategy: &StrategyKind,
+            _on_progress: &(dyn Fn(StrategyProgress) -> bool + Send + Sync),
+            _on_echo: &(dyn Fn(String) + Send + Sync),
+        ) -> Result<RawSolveOutcome, StrategyError> {
+            unreachable!()
         }
     }
 
@@ -561,5 +612,109 @@ mod tests {
             assert_eq!(solution.get(InternalVar::Base(0)), Some(1.0));
             assert_eq!(solution.get(InternalVar::Base(1)), Some(0.0));
         }
+    }
+
+    #[tokio::test]
+    async fn no_objective_strategy_happy_path() {
+        let model = make_model(vec![(0, Variable::binary()), (1, Variable::binary())]);
+
+        let backend = Arc::new(SequentialMockBackend::new(vec![
+            // Checker solve (both vars = 1.0 to avoid var_order sensitivity)
+            RawSolveOutcome {
+                status: SolveStatus::Optimal,
+                objective: Some(0.0),
+                best_bound: Some(0.0),
+                solution: Some(vec![1.0, 1.0]),
+            },
+            // Reconstruction solve (no extras in trivial model)
+            RawSolveOutcome {
+                status: SolveStatus::Optimal,
+                objective: Some(5.0),
+                best_bound: Some(5.0),
+                solution: Some(vec![]),
+            },
+        ]));
+
+        let ctx = StrategyContext::new(backend);
+        let strategy = NoObjectiveStrategy {
+            checker_time_limit_seconds: None,
+            reconstruction_time_limit_seconds: None,
+            disable_logging: false,
+        };
+
+        let progress_log: Mutex<Vec<NoObjectiveProgressData>> = Mutex::new(Vec::new());
+        let outcome = strategy
+            .run_with_callback(&ctx, &model, &|p| {
+                progress_log.lock().unwrap().push(p);
+                true
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(outcome.status, SolveStatus::Optimal);
+        assert_eq!(outcome.objective, Some(5.0));
+        let solution = outcome.solution.unwrap();
+        assert_eq!(solution.get(InternalVar::Base(0usize)), Some(1.0));
+        assert_eq!(solution.get(InternalVar::Base(1usize)), Some(1.0));
+
+        let log = progress_log.into_inner().unwrap();
+        assert!(
+            log.iter()
+                .any(|p| matches!(p, NoObjectiveProgressData::ObjectiveReconstruction { .. }))
+        );
+    }
+
+    #[tokio::test]
+    async fn no_objective_strategy_infeasible() {
+        let model = make_model(vec![(0, Variable::binary())]);
+
+        let backend = Arc::new(SequentialMockBackend::new(vec![RawSolveOutcome {
+            status: SolveStatus::Infeasible,
+            objective: None,
+            best_bound: None,
+            solution: None,
+        }]));
+
+        let ctx = StrategyContext::new(backend);
+        let strategy = NoObjectiveStrategy {
+            checker_time_limit_seconds: None,
+            reconstruction_time_limit_seconds: None,
+            disable_logging: false,
+        };
+
+        let outcome = strategy.run(&ctx, &model).await.unwrap();
+        assert_eq!(outcome.status, SolveStatus::Infeasible);
+        assert!(outcome.solution.is_none());
+    }
+
+    #[tokio::test]
+    async fn no_objective_strategy_kind_dispatch() {
+        let model = make_model(vec![(0, Variable::binary())]);
+
+        let backend = Arc::new(SequentialMockBackend::new(vec![
+            RawSolveOutcome {
+                status: SolveStatus::Optimal,
+                objective: Some(0.0),
+                best_bound: Some(0.0),
+                solution: Some(vec![1.0]),
+            },
+            RawSolveOutcome {
+                status: SolveStatus::Optimal,
+                objective: Some(3.0),
+                best_bound: Some(3.0),
+                solution: Some(vec![]),
+            },
+        ]));
+
+        let ctx = StrategyContext::new(backend);
+        let kind = StrategyKind::NoObjective(NoObjectiveStrategy {
+            checker_time_limit_seconds: None,
+            reconstruction_time_limit_seconds: None,
+            disable_logging: false,
+        });
+        let outcome = ctx.run_strategy(&kind, &model).await.unwrap();
+
+        assert_eq!(outcome.status, SolveStatus::Optimal);
+        assert_eq!(outcome.objective, Some(3.0));
     }
 }

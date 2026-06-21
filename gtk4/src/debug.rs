@@ -471,6 +471,7 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
                     p.best_obj, p.best_bound, p.node_count, p.solutions_found
                 );
             }
+            Ok(StrategyProgress::NoObjective(_)) => unreachable!(),
             Err(e) => {
                 eprintln!("  [strategy subprocess] [progress error] {e}");
             }
@@ -544,6 +545,7 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
                             p.best_obj, p.best_bound, p.node_count, p.solutions_found
                         );
                     }
+                    StrategyProgress::NoObjective(_) => unreachable!(),
                 }
             }
         }

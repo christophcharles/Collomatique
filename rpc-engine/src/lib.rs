@@ -227,6 +227,19 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
                     p.best_obj, p.best_bound, p.node_count, p.solutions_found
                 );
             }
+            StrategyProgress::NoObjective(p) => match p {
+                collomatique_strategies::NoObjectiveProgressData::CheckerSolve(p) => {
+                    eprintln!(
+                        "[solver] [no-obj checker] nodes={} solutions={}",
+                        p.node_count, p.solutions_found
+                    );
+                }
+                collomatique_strategies::NoObjectiveProgressData::ObjectiveReconstruction {
+                    ..
+                } => {
+                    eprintln!("[solver] [no-obj] reconstructing objective...");
+                }
+            },
         }
         let serialized_progress = progress.serialize();
         let progress_data = StrategyProgressData {

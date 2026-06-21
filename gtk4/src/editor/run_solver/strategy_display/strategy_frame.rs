@@ -119,6 +119,7 @@ impl SimpleComponent for StrategyFrame {
                 Ok(StrategyProgress::Default(p)) => {
                     self.last_progress = Some(p);
                 }
+                Ok(StrategyProgress::NoObjective(_)) => todo!(),
                 Err(e) => {
                     self.debug_view
                         .emit(DebugViewInput::Append(format!("[ /!\\ IPC Error ] {e}\n")));
