@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-use collomatique_ilp::UsableData;
+use collomatique_ilp::{ConfigData, UsableData};
 use collomatique_ilp_modeler::{InternalVar, Model};
 
 use crate::{
@@ -26,6 +26,7 @@ impl Strategy for DefaultStrategy {
         &self,
         ctx: &StrategyContext,
         model: &Model<B, E, C>,
+        warm_start: Option<ConfigData<InternalVar<B, E>>>,
         on_progress: &(dyn Fn(Self::Progress<InternalVar<B, E>>) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
@@ -36,7 +37,7 @@ impl Strategy for DefaultStrategy {
         ctx.solve_model_with_echo(
             model,
             SolveProblemOpts {
-                warm_start: None,
+                warm_start,
                 time_limit_seconds: self.time_limit_seconds,
                 disable_logging: self.disable_logging,
             },

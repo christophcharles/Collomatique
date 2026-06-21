@@ -2,7 +2,7 @@ use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use collomatique_ilp::UsableData;
+use collomatique_ilp::{ConfigData, UsableData};
 use collomatique_ilp_modeler::model_desc::ModelDesc;
 use collomatique_ilp_modeler::{InternalVar, Model};
 use collomatique_rpc::{EncodedMsg, InitMsg, ResultMsg, SerializedStrategyRequest, StrategyMsg};
@@ -71,6 +71,7 @@ impl StrategySubprocess {
         worker_manager: &mut WorkerManager,
         model: &Model<B, E, C>,
         strategy: &S,
+        warm_start: Option<ConfigData<InternalVar<B, E>>>,
         result_callback: impl Fn(StrategyOutcome<InternalVar<B, E>>) + Send + 'static,
         progress_callback: impl Fn(Result<S::Progress, String>) + Send + 'static,
         log_callback: impl Fn(&str) + Send + 'static,
@@ -82,6 +83,9 @@ impl StrategySubprocess {
         C: UsableData + Send + 'static,
     {
         let (model_desc, var_order) = model.to_desc();
+        let raw_warm_start = warm_start
+            .as_ref()
+            .map(|hint| collomatique_ilp::config_data_to_hint(hint, &var_order));
         let raw_result_callback = move |result: StrategyResult| {
             let outcome = result.into_raw_outcome().into_typed(&var_order);
             result_callback(outcome);
@@ -100,6 +104,7 @@ impl StrategySubprocess {
             worker_manager,
             model_desc,
             strategy_kind,
+            raw_warm_start,
             raw_result_callback,
             wrapped_progress,
             log_callback,
@@ -110,6 +115,7 @@ impl StrategySubprocess {
         worker_manager: &mut WorkerManager,
         model_desc: ModelDesc,
         strategy: StrategyKind,
+        warm_start: Option<Vec<f64>>,
         result_callback: impl Fn(StrategyResult) + Send + 'static,
         progress_callback: impl Fn(Result<StrategyProgress, String>) + Send + 'static,
         log_callback: impl Fn(&str) + Send + 'static,
@@ -117,6 +123,7 @@ impl StrategySubprocess {
         let request = StrategyRequest {
             model_desc,
             strategy,
+            warm_start,
         };
         let serialized_str = request.serialize();
         let serialized = SerializedStrategyRequest::from(serialized_str);

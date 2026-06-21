@@ -10,7 +10,7 @@ use collomatique_ilp_modeler::{InternalVar, Model};
 
 use crate::{
     DefaultStrategy, SolveProgress, SolveStatus, Strategy, StrategyContext, StrategyError,
-    StrategyOutcome,
+    StrategyOutcome, StrategyProgress,
 };
 
 #[derive(Debug, Clone)]
@@ -120,6 +120,7 @@ impl Strategy for ConductorStrategy {
         &self,
         ctx: &StrategyContext,
         model: &Model<B, E, C>,
+        warm_start: Option<ConfigData<InternalVar<B, E>>>,
         on_progress: &(dyn Fn(Self::Progress<InternalVar<B, E>>) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
@@ -149,7 +150,8 @@ impl Strategy for ConductorStrategy {
                     .spawn_strategy_with_echo(
                         &default_strategy,
                         model,
-                        &|result| match result {
+                        warm_start,
+                        &|result: Result<SolveProgress, StrategyProgress>| match result {
                             Ok(p) => {
                                 default_solutions_found.store(p.solutions_found, Ordering::Relaxed);
                                 on_progress(ConductorProgress::DefaultWorker(p))

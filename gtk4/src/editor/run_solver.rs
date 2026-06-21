@@ -233,6 +233,7 @@ where
                         &mut wm,
                         &model,
                         &strategy,
+                        None,
                         result_cb,
                         progress_cb,
                         log_cb,

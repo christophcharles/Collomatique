@@ -212,6 +212,11 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
     eprintln!("Building model from desc...");
     let (model, var_order) = request.model_desc.to_model();
 
+    let warm_start = request
+        .warm_start
+        .as_ref()
+        .map(|raw| collomatique_ilp::solution_to_config_data(raw, &var_order));
+
     let worker_manager = Arc::new(Mutex::new(WorkerManager::new()));
     let backend = Arc::new(SubprocessSolveBackend::new(worker_manager));
     let strategy_name = request.strategy.name();
@@ -239,7 +244,7 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
         .block_on(
             request
                 .strategy
-                .run_with_callback(&ctx, &model, &progress_callback),
+                .run_with_callback(&ctx, &model, warm_start, &progress_callback),
         )
         .map_err(|e| anyhow!("Strategy failed: {e}"))?;
 

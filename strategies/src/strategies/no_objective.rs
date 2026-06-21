@@ -31,6 +31,7 @@ impl Strategy for NoObjectiveStrategy {
         &self,
         ctx: &StrategyContext,
         model: &Model<B, E, C>,
+        warm_start: Option<ConfigData<InternalVar<B, E>>>,
         on_progress: &(dyn Fn(Self::Progress<InternalVar<B, E>>) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
@@ -43,7 +44,7 @@ impl Strategy for NoObjectiveStrategy {
             .solve_problem_with_echo(
                 model.checker_problem(),
                 SolveProblemOpts {
-                    warm_start: None,
+                    warm_start,
                     time_limit_seconds: self.checker_time_limit_seconds,
                     disable_logging: self.disable_logging,
                 },

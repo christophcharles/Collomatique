@@ -118,6 +118,7 @@ pub trait SolveBackend: Send + Sync {
         &self,
         model_desc: &ModelDesc,
         strategy: &StrategyKind,
+        warm_start: Option<Vec<f64>>,
         on_progress: &(dyn Fn(StrategyProgress) -> bool + Send + Sync),
         on_echo: &(dyn Fn(String) + Send + Sync),
     ) -> Result<RawSolveOutcome, StrategyError>;
@@ -276,6 +277,7 @@ pub trait Strategy: Send + Sync {
         &self,
         ctx: &StrategyContext,
         model: &Model<B, E, C>,
+        warm_start: Option<ConfigData<InternalVar<B, E>>>,
         on_progress: &(dyn Fn(Self::Progress<InternalVar<B, E>>) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
@@ -293,7 +295,7 @@ pub trait Strategy: Send + Sync {
         E: UsableData + Send,
         C: UsableData + Send,
     {
-        self.run_with_callback(ctx, model, &|_| true).await
+        self.run_with_callback(ctx, model, None, &|_| true).await
     }
 }
 
@@ -410,19 +412,22 @@ impl StrategyKind {
         &self,
         ctx: &StrategyContext,
         model: &Model<B, E, C>,
+        warm_start: Option<ConfigData<InternalVar<B, E>>>,
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
         B: UsableData + Send,
         E: UsableData + Send,
         C: UsableData + Send,
     {
-        self.run_with_callback(ctx, model, &|_| true).await
+        self.run_with_callback(ctx, model, warm_start, &|_| true)
+            .await
     }
 
     pub async fn run_with_callback<B, E, C>(
         &self,
         ctx: &StrategyContext,
         model: &Model<B, E, C>,
+        warm_start: Option<ConfigData<InternalVar<B, E>>>,
         on_progress: &(dyn Fn(StrategyProgress) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
@@ -432,11 +437,13 @@ impl StrategyKind {
     {
         match self {
             StrategyKind::Default(s) => {
-                s.run_with_callback(ctx, model, &|p| on_progress(StrategyProgress::Default(p)))
-                    .await
+                s.run_with_callback(ctx, model, warm_start, &|p| {
+                    on_progress(StrategyProgress::Default(p))
+                })
+                .await
             }
             StrategyKind::NoObjective(s) => {
-                s.run_with_callback(ctx, model, &|p| {
+                s.run_with_callback(ctx, model, warm_start, &|p| {
                     on_progress(StrategyProgress::NoObjective(p))
                 })
                 .await
@@ -494,19 +501,21 @@ impl StrategyContext {
         &self,
         strategy: &StrategyKind,
         model: &Model<B, E, C>,
+        warm_start: Option<ConfigData<InternalVar<B, E>>>,
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
         B: UsableData + Send,
         E: UsableData + Send,
         C: UsableData + Send,
     {
-        strategy.run(self, model).await
+        strategy.run(self, model, warm_start).await
     }
 
     pub async fn run_strategy_with_callback<B, E, C>(
         &self,
         strategy: &StrategyKind,
         model: &Model<B, E, C>,
+        warm_start: Option<ConfigData<InternalVar<B, E>>>,
         on_progress: &(dyn Fn(StrategyProgress) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
@@ -514,20 +523,23 @@ impl StrategyContext {
         E: UsableData + Send,
         C: UsableData + Send,
     {
-        strategy.run_with_callback(self, model, on_progress).await
+        strategy
+            .run_with_callback(self, model, warm_start, on_progress)
+            .await
     }
 
     pub async fn spawn_strategy<B, E, C, S: SpawnableStrategy>(
         &self,
         strategy: &S,
         model: &Model<B, E, C>,
+        warm_start: Option<ConfigData<InternalVar<B, E>>>,
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
         B: UsableData,
         E: UsableData,
         C: UsableData,
     {
-        self.spawn_strategy_with_callback(strategy, model, &|_| true)
+        self.spawn_strategy_with_callback(strategy, model, warm_start, &|_| true)
             .await
     }
 
@@ -535,6 +547,7 @@ impl StrategyContext {
         &self,
         strategy: &S,
         model: &Model<B, E, C>,
+        warm_start: Option<ConfigData<InternalVar<B, E>>>,
         on_progress: &(dyn Fn(Result<S::Progress, StrategyProgress>) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
@@ -544,6 +557,10 @@ impl StrategyContext {
     {
         let (model_desc, var_order) = model.to_desc();
         let strategy_kind = strategy.to_strategy_kind();
+
+        let raw_warm_start = warm_start
+            .as_ref()
+            .map(|hint| collomatique_ilp::config_data_to_hint(hint, &var_order));
 
         let noop_echo = |_: String| {};
         let echo_fn: &(dyn Fn(String) + Send + Sync) = match &self.on_echo {
@@ -556,7 +573,13 @@ impl StrategyContext {
 
         let raw = self
             .backend
-            .run_strategy_subprocess(&model_desc, &strategy_kind, &raw_on_progress, echo_fn)
+            .run_strategy_subprocess(
+                &model_desc,
+                &strategy_kind,
+                raw_warm_start,
+                &raw_on_progress,
+                echo_fn,
+            )
             .await?;
 
         Ok(raw.into_typed(&var_order))
@@ -566,6 +589,7 @@ impl StrategyContext {
         &self,
         strategy: &S,
         model: &Model<B, E, C>,
+        warm_start: Option<ConfigData<InternalVar<B, E>>>,
         on_progress: &(dyn Fn(Result<S::Progress, StrategyProgress>) -> bool + Send + Sync),
         tag_echo: &(dyn Fn(String) -> String + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
@@ -576,6 +600,10 @@ impl StrategyContext {
     {
         let (model_desc, var_order) = model.to_desc();
         let strategy_kind = strategy.to_strategy_kind();
+
+        let raw_warm_start = warm_start
+            .as_ref()
+            .map(|hint| collomatique_ilp::config_data_to_hint(hint, &var_order));
 
         let echo_impl: Box<dyn Fn(String) + Send + Sync + '_> = match &self.on_echo {
             Some(ctx_echo) => Box::new(move |line| ctx_echo(tag_echo(line))),
@@ -589,7 +617,13 @@ impl StrategyContext {
 
         let raw = self
             .backend
-            .run_strategy_subprocess(&model_desc, &strategy_kind, &raw_on_progress, &*echo_impl)
+            .run_strategy_subprocess(
+                &model_desc,
+                &strategy_kind,
+                raw_warm_start,
+                &raw_on_progress,
+                &*echo_impl,
+            )
             .await?;
 
         Ok(raw.into_typed(&var_order))
@@ -600,6 +634,8 @@ impl StrategyContext {
 pub struct StrategyRequest {
     pub model_desc: ModelDesc,
     pub strategy: StrategyKind,
+    #[serde(default)]
+    pub warm_start: Option<Vec<f64>>,
 }
 
 impl StrategyRequest {
@@ -642,6 +678,7 @@ mod tests {
             &self,
             _model_desc: &ModelDesc,
             _strategy: &StrategyKind,
+            _warm_start: Option<Vec<f64>>,
             _on_progress: &(dyn Fn(StrategyProgress) -> bool + Send + Sync),
             _on_echo: &(dyn Fn(String) + Send + Sync),
         ) -> Result<RawSolveOutcome, StrategyError> {
@@ -683,6 +720,7 @@ mod tests {
             &self,
             _model_desc: &ModelDesc,
             _strategy: &StrategyKind,
+            _warm_start: Option<Vec<f64>>,
             _on_progress: &(dyn Fn(StrategyProgress) -> bool + Send + Sync),
             _on_echo: &(dyn Fn(String) + Send + Sync),
         ) -> Result<RawSolveOutcome, StrategyError> {
@@ -737,7 +775,7 @@ mod tests {
 
         let ctx = StrategyContext::new(backend);
         let kind = StrategyKind::Default(DefaultStrategy::default());
-        let outcome = ctx.run_strategy(&kind, &model).await.unwrap();
+        let outcome = ctx.run_strategy(&kind, &model, None).await.unwrap();
 
         assert_eq!(outcome.status, SolveStatus::Optimal);
         assert_eq!(
@@ -775,7 +813,7 @@ mod tests {
 
             let ctx = StrategyContext::new(backend);
             let kind = StrategyKind::Default(DefaultStrategy::default());
-            let outcome = ctx.spawn_strategy(&kind, &model).await.unwrap();
+            let outcome = ctx.spawn_strategy(&kind, &model, None).await.unwrap();
 
             assert_eq!(outcome.status, SolveStatus::Optimal);
             assert_eq!(outcome.objective, Some(7.0));
@@ -815,7 +853,7 @@ mod tests {
 
         let progress_log: Mutex<Vec<NoObjectiveProgressData>> = Mutex::new(Vec::new());
         let outcome = strategy
-            .run_with_callback(&ctx, &model, &|p| {
+            .run_with_callback(&ctx, &model, None, &|p| {
                 progress_log.lock().unwrap().push(p);
                 true
             })
@@ -883,7 +921,7 @@ mod tests {
             reconstruction_time_limit_seconds: None,
             disable_logging: false,
         });
-        let outcome = ctx.run_strategy(&kind, &model).await.unwrap();
+        let outcome = ctx.run_strategy(&kind, &model, None).await.unwrap();
 
         assert_eq!(outcome.status, SolveStatus::Optimal);
         assert_eq!(outcome.objective, Some(3.0));

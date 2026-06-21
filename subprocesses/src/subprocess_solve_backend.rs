@@ -130,6 +130,7 @@ impl SolveBackend for SubprocessSolveBackend {
         &self,
         model_desc: &ModelDesc,
         strategy: &StrategyKind,
+        warm_start: Option<Vec<f64>>,
         on_progress: &(dyn Fn(StrategyProgress) -> bool + Send + Sync),
         on_echo: &(dyn Fn(String) + Send + Sync),
     ) -> Result<RawSolveOutcome, StrategyError> {
@@ -160,6 +161,7 @@ impl SolveBackend for SubprocessSolveBackend {
                 &mut wm,
                 model_desc.clone(),
                 strategy.clone(),
+                warm_start,
                 result_callback,
                 progress_callback,
                 log_callback,

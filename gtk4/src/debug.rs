@@ -464,6 +464,7 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
         &mut worker_manager,
         model,
         &strategy,
+        None,
         move |outcome: Outcome| {
             let _ = tx.send(outcome);
         },
@@ -584,6 +585,7 @@ fn no_objective_solve(model: &collomatique_constraints_colloscopes::ColloscopeMo
         &mut worker_manager,
         model,
         &strategy,
+        None,
         move |outcome: Outcome| {
             let _ = tx.send(outcome);
         },
@@ -699,7 +701,7 @@ async fn conductor_solve(model: &collomatique_constraints_colloscopes::Colloscop
     eprintln!("Running conductor strategy...");
     let t = Instant::now();
     let result = conductor
-        .run_with_callback(&ctx, model, &|progress: ConductorProgress<V>| {
+        .run_with_callback(&ctx, model, None, &|progress: ConductorProgress<V>| {
             match &progress {
                 ConductorProgress::Conductor(status) => {
                     let obj_str = status
