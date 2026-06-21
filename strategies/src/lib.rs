@@ -6,6 +6,9 @@ pub use strategies::conductor::{
 };
 pub use strategies::default::DefaultStrategy;
 pub use strategies::no_objective::{NoObjectiveProgressData, NoObjectiveStrategy};
+pub use strategies::no_objective_starter::{
+    NoObjectiveStarterProgress, NoObjectiveStarterProgressData, NoObjectiveStarterStrategy,
+};
 
 use std::fmt;
 use std::sync::Arc;
@@ -303,12 +306,14 @@ pub trait Strategy: Send + Sync {
 pub enum StrategyKind {
     Default(DefaultStrategy),
     NoObjective(NoObjectiveStrategy),
+    NoObjectiveStarter(NoObjectiveStarterStrategy),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum StrategyProgress {
     Default(SolveProgress),
     NoObjective(NoObjectiveProgressData),
+    NoObjectiveStarter(NoObjectiveStarterProgressData),
 }
 
 impl fmt::Display for StrategyProgress {
@@ -316,6 +321,7 @@ impl fmt::Display for StrategyProgress {
         match self {
             StrategyProgress::Default(p) => write!(f, "{p}"),
             StrategyProgress::NoObjective(p) => write!(f, "{p}"),
+            StrategyProgress::NoObjectiveStarter(p) => write!(f, "{p}"),
         }
     }
 }
@@ -344,6 +350,12 @@ impl From<NoObjectiveStrategy> for StrategyKind {
     }
 }
 
+impl From<NoObjectiveStarterStrategy> for StrategyKind {
+    fn from(s: NoObjectiveStarterStrategy) -> Self {
+        StrategyKind::NoObjectiveStarter(s)
+    }
+}
+
 impl TryFrom<StrategyProgress> for SolveProgress {
     type Error = StrategyProgress;
     fn try_from(sp: StrategyProgress) -> Result<Self, StrategyProgress> {
@@ -359,6 +371,16 @@ impl TryFrom<StrategyProgress> for NoObjectiveProgressData {
     fn try_from(sp: StrategyProgress) -> Result<Self, StrategyProgress> {
         match sp {
             StrategyProgress::NoObjective(p) => Ok(p),
+            other => Err(other),
+        }
+    }
+}
+
+impl TryFrom<StrategyProgress> for NoObjectiveStarterProgressData {
+    type Error = StrategyProgress;
+    fn try_from(sp: StrategyProgress) -> Result<Self, StrategyProgress> {
+        match sp {
+            StrategyProgress::NoObjectiveStarter(p) => Ok(p),
             other => Err(other),
         }
     }
@@ -399,6 +421,33 @@ impl SpawnableStrategy for NoObjectiveStrategy {
     }
 }
 
+impl SpawnableStrategy for NoObjectiveStarterStrategy {
+    type Progress<V: UsableData + Send> = NoObjectiveStarterProgress<V>;
+    fn to_strategy_kind(&self) -> StrategyKind {
+        self.clone().into()
+    }
+    fn convert_progress<V: UsableData + Send>(
+        sp: StrategyProgress,
+        var_order: &[V],
+    ) -> Result<NoObjectiveStarterProgress<V>, StrategyProgress> {
+        match sp {
+            StrategyProgress::NoObjectiveStarter(data) => Ok(match data {
+                NoObjectiveStarterProgressData::Starter(p) => {
+                    NoObjectiveStarterProgress::Starter(p)
+                }
+                NoObjectiveStarterProgressData::HintFound(raw) => {
+                    let config = collomatique_ilp::solution_to_config_data(&raw, var_order);
+                    NoObjectiveStarterProgress::HintFound(config)
+                }
+                NoObjectiveStarterProgressData::Default(p) => {
+                    NoObjectiveStarterProgress::Default(p)
+                }
+            }),
+            other => Err(other),
+        }
+    }
+}
+
 impl SpawnableStrategy for StrategyKind {
     type Progress<V: UsableData + Send> = StrategyProgress;
     fn to_strategy_kind(&self) -> StrategyKind {
@@ -417,6 +466,7 @@ impl StrategyKind {
         match self {
             StrategyKind::Default(s) => s.name(),
             StrategyKind::NoObjective(s) => s.name(),
+            StrategyKind::NoObjectiveStarter(s) => s.name(),
         }
     }
 
@@ -457,6 +507,31 @@ impl StrategyKind {
             StrategyKind::NoObjective(s) => {
                 s.run_with_callback(ctx, model, warm_start, &|p| {
                     on_progress(StrategyProgress::NoObjective(p))
+                })
+                .await
+            }
+            StrategyKind::NoObjectiveStarter(s) => {
+                let (_, var_order) = model.to_desc();
+                s.run_with_callback(ctx, model, warm_start, &|p| {
+                    let sp = match p {
+                        NoObjectiveStarterProgress::Starter(d) => {
+                            StrategyProgress::NoObjectiveStarter(
+                                NoObjectiveStarterProgressData::Starter(d),
+                            )
+                        }
+                        NoObjectiveStarterProgress::HintFound(ref config) => {
+                            let raw = collomatique_ilp::config_data_to_hint(config, &var_order);
+                            StrategyProgress::NoObjectiveStarter(
+                                NoObjectiveStarterProgressData::HintFound(raw),
+                            )
+                        }
+                        NoObjectiveStarterProgress::Default(d) => {
+                            StrategyProgress::NoObjectiveStarter(
+                                NoObjectiveStarterProgressData::Default(d),
+                            )
+                        }
+                    };
+                    on_progress(sp)
                 })
                 .await
             }
@@ -941,5 +1016,141 @@ mod tests {
 
         assert_eq!(outcome.status, SolveStatus::Optimal);
         assert_eq!(outcome.objective, Some(3.0));
+    }
+
+    #[tokio::test]
+    async fn no_objective_starter_happy_path() {
+        let model = make_model(vec![(0, Variable::binary()), (1, Variable::binary())]);
+
+        let backend = Arc::new(SequentialMockBackend::new(vec![
+            // Checker solve (both vars = 1.0 to avoid var_order sensitivity)
+            RawSolveOutcome {
+                status: SolveStatus::Optimal,
+                objective: Some(0.0),
+                best_bound: Some(0.0),
+                solution: Some(vec![1.0, 1.0]),
+            },
+            // Reconstruction solve
+            RawSolveOutcome {
+                status: SolveStatus::Optimal,
+                objective: Some(5.0),
+                best_bound: Some(5.0),
+                solution: Some(vec![]),
+            },
+            // Default solve (with warm start from no-objective)
+            RawSolveOutcome {
+                status: SolveStatus::Optimal,
+                objective: Some(3.0),
+                best_bound: Some(3.0),
+                solution: Some(vec![1.0, 1.0]),
+            },
+        ]));
+
+        let ctx = StrategyContext::new(backend);
+        let strategy = NoObjectiveStarterStrategy {
+            no_objective: NoObjectiveStrategy {
+                checker_time_limit_seconds: None,
+                reconstruction_time_limit_seconds: None,
+                disable_logging: false,
+            },
+            default: DefaultStrategy {
+                time_limit_seconds: None,
+                disable_logging: false,
+            },
+        };
+
+        let progress_log: Mutex<Vec<String>> = Mutex::new(Vec::new());
+        let outcome = strategy
+            .run_with_callback(&ctx, &model, None, &|p: NoObjectiveStarterProgress<
+                InternalVar<usize, ()>,
+            >| {
+                let tag = match &p {
+                    NoObjectiveStarterProgress::Starter(_) => "starter",
+                    NoObjectiveStarterProgress::HintFound(_) => "hint",
+                    NoObjectiveStarterProgress::Default(_) => "default",
+                };
+                progress_log.lock().unwrap().push(tag.to_owned());
+                true
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(outcome.status, SolveStatus::Optimal);
+        assert_eq!(outcome.objective, Some(3.0));
+        let solution = outcome.solution.unwrap();
+        assert_eq!(solution.get(InternalVar::Base(0usize)), Some(1.0));
+        assert_eq!(solution.get(InternalVar::Base(1usize)), Some(1.0));
+
+        let log = progress_log.into_inner().unwrap();
+        assert!(log.contains(&"hint".to_owned()));
+    }
+
+    #[tokio::test]
+    async fn no_objective_starter_infeasible() {
+        let model = make_model(vec![(0, Variable::binary())]);
+
+        let backend = Arc::new(SequentialMockBackend::new(vec![RawSolveOutcome {
+            status: SolveStatus::Infeasible,
+            objective: None,
+            best_bound: None,
+            solution: None,
+        }]));
+
+        let ctx = StrategyContext::new(backend);
+        let strategy = NoObjectiveStarterStrategy {
+            no_objective: NoObjectiveStrategy {
+                checker_time_limit_seconds: None,
+                reconstruction_time_limit_seconds: None,
+                disable_logging: false,
+            },
+            default: DefaultStrategy::default(),
+        };
+
+        let outcome = strategy.run(&ctx, &model).await.unwrap();
+        assert_eq!(outcome.status, SolveStatus::Infeasible);
+        assert!(outcome.solution.is_none());
+    }
+
+    #[tokio::test]
+    async fn no_objective_starter_kind_dispatch() {
+        let model = make_model(vec![(0, Variable::binary())]);
+
+        let backend = Arc::new(SequentialMockBackend::new(vec![
+            // Checker
+            RawSolveOutcome {
+                status: SolveStatus::Optimal,
+                objective: Some(0.0),
+                best_bound: Some(0.0),
+                solution: Some(vec![1.0]),
+            },
+            // Reconstruction
+            RawSolveOutcome {
+                status: SolveStatus::Optimal,
+                objective: Some(5.0),
+                best_bound: Some(5.0),
+                solution: Some(vec![]),
+            },
+            // Default
+            RawSolveOutcome {
+                status: SolveStatus::Optimal,
+                objective: Some(2.0),
+                best_bound: Some(2.0),
+                solution: Some(vec![1.0]),
+            },
+        ]));
+
+        let ctx = StrategyContext::new(backend);
+        let kind = StrategyKind::NoObjectiveStarter(NoObjectiveStarterStrategy {
+            no_objective: NoObjectiveStrategy {
+                checker_time_limit_seconds: None,
+                reconstruction_time_limit_seconds: None,
+                disable_logging: false,
+            },
+            default: DefaultStrategy::default(),
+        });
+        let outcome = ctx.run_strategy(&kind, &model, None).await.unwrap();
+
+        assert_eq!(outcome.status, SolveStatus::Optimal);
+        assert_eq!(outcome.objective, Some(2.0));
     }
 }
