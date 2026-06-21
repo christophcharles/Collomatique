@@ -13,6 +13,8 @@ use serde::{Deserialize, Serialize};
 
 use collomatique_ilp::mat_repr::ProblemRepr;
 use collomatique_ilp::{ConfigData, Problem, ProblemDesc, UsableData};
+use collomatique_ilp_modeler::model_desc::ModelDesc;
+use collomatique_ilp_modeler::{InternalVar, Model};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SolveStatus {
@@ -193,28 +195,28 @@ impl StrategyContext {
 pub trait Strategy: Send + Sync {
     type Progress<V: UsableData + Send>: Send + Sync + Clone;
 
-    async fn run_with_callback<V, C, P>(
+    async fn run_with_callback<B, E, C>(
         &self,
         ctx: &StrategyContext,
-        problem: &Problem<V, C, P>,
-        on_progress: &(dyn Fn(Self::Progress<V>) -> bool + Send + Sync),
-    ) -> Result<StrategyOutcome<V>, StrategyError>
+        model: &Model<B, E, C>,
+        on_progress: &(dyn Fn(Self::Progress<InternalVar<B, E>>) -> bool + Send + Sync),
+    ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
-        V: UsableData + Send,
-        C: UsableData + Send,
-        P: ProblemRepr<V> + Send + Sync;
+        B: UsableData + Send,
+        E: UsableData + Send,
+        C: UsableData + Send;
 
-    async fn run<V, C, P>(
+    async fn run<B, E, C>(
         &self,
         ctx: &StrategyContext,
-        problem: &Problem<V, C, P>,
-    ) -> Result<StrategyOutcome<V>, StrategyError>
+        model: &Model<B, E, C>,
+    ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
-        V: UsableData + Send,
+        B: UsableData + Send,
+        E: UsableData + Send,
         C: UsableData + Send,
-        P: ProblemRepr<V> + Send + Sync,
     {
-        self.run_with_callback(ctx, problem, &|_| true).await
+        self.run_with_callback(ctx, model, &|_| true).await
     }
 }
 
@@ -241,33 +243,33 @@ impl StrategyProgress {
 }
 
 impl StrategyKind {
-    pub async fn run<V, C, P>(
+    pub async fn run<B, E, C>(
         &self,
         ctx: &StrategyContext,
-        problem: &Problem<V, C, P>,
-    ) -> Result<StrategyOutcome<V>, StrategyError>
+        model: &Model<B, E, C>,
+    ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
-        V: UsableData + Send,
+        B: UsableData + Send,
+        E: UsableData + Send,
         C: UsableData + Send,
-        P: ProblemRepr<V> + Send + Sync,
     {
-        self.run_with_callback(ctx, problem, &|_| true).await
+        self.run_with_callback(ctx, model, &|_| true).await
     }
 
-    pub async fn run_with_callback<V, C, P>(
+    pub async fn run_with_callback<B, E, C>(
         &self,
         ctx: &StrategyContext,
-        problem: &Problem<V, C, P>,
+        model: &Model<B, E, C>,
         on_progress: &(dyn Fn(StrategyProgress) -> bool + Send + Sync),
-    ) -> Result<StrategyOutcome<V>, StrategyError>
+    ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
-        V: UsableData + Send,
+        B: UsableData + Send,
+        E: UsableData + Send,
         C: UsableData + Send,
-        P: ProblemRepr<V> + Send + Sync,
     {
         match self {
             StrategyKind::Default(s) => {
-                s.run_with_callback(ctx, problem, &|p| on_progress(StrategyProgress::Default(p)))
+                s.run_with_callback(ctx, model, &|p| on_progress(StrategyProgress::Default(p)))
                     .await
             }
         }
@@ -275,37 +277,65 @@ impl StrategyKind {
 }
 
 impl StrategyContext {
-    pub async fn run_strategy<V, C, P>(
+    pub async fn solve_model<B, E, C>(
         &self,
-        strategy: &StrategyKind,
-        problem: &Problem<V, C, P>,
-    ) -> Result<StrategyOutcome<V>, StrategyError>
+        model: &Model<B, E, C>,
+        opts: SolveProblemOpts<InternalVar<B, E>>,
+    ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
-        V: UsableData + Send,
-        C: UsableData + Send,
-        P: ProblemRepr<V> + Send + Sync,
+        B: UsableData,
+        E: UsableData,
+        C: UsableData,
     {
-        strategy.run(self, problem).await
+        self.solve_model_with_progress(model, opts, &|_| true).await
     }
 
-    pub async fn run_strategy_with_callback<V, C, P>(
+    pub async fn solve_model_with_progress<B, E, C>(
+        &self,
+        model: &Model<B, E, C>,
+        opts: SolveProblemOpts<InternalVar<B, E>>,
+        on_progress: &(dyn Fn(SolveProgress) -> bool + Send + Sync),
+    ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
+    where
+        B: UsableData,
+        E: UsableData,
+        C: UsableData,
+    {
+        self.solve_problem_with_progress(model.problem(), opts, on_progress)
+            .await
+    }
+
+    pub async fn run_strategy<B, E, C>(
         &self,
         strategy: &StrategyKind,
-        problem: &Problem<V, C, P>,
-        on_progress: &(dyn Fn(StrategyProgress) -> bool + Send + Sync),
-    ) -> Result<StrategyOutcome<V>, StrategyError>
+        model: &Model<B, E, C>,
+    ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
-        V: UsableData + Send,
+        B: UsableData + Send,
+        E: UsableData + Send,
         C: UsableData + Send,
-        P: ProblemRepr<V> + Send + Sync,
     {
-        strategy.run_with_callback(self, problem, on_progress).await
+        strategy.run(self, model).await
+    }
+
+    pub async fn run_strategy_with_callback<B, E, C>(
+        &self,
+        strategy: &StrategyKind,
+        model: &Model<B, E, C>,
+        on_progress: &(dyn Fn(StrategyProgress) -> bool + Send + Sync),
+    ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
+    where
+        B: UsableData + Send,
+        E: UsableData + Send,
+        C: UsableData + Send,
+    {
+        strategy.run_with_callback(self, model, on_progress).await
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StrategyRequest {
-    pub problem_desc: ProblemDesc,
+    pub model_desc: ModelDesc,
     pub strategy: StrategyKind,
 }
 
@@ -324,7 +354,9 @@ impl StrategyRequest {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use collomatique_ilp::{DefaultRepr, ProblemBuilder, Variable};
+    use collomatique_ilp::Variable;
+    use collomatique_ilp_modeler::Modeler;
+    use std::collections::HashMap;
 
     struct MockBackend {
         outcome: RawSolveOutcome,
@@ -343,13 +375,17 @@ mod tests {
         }
     }
 
+    fn make_model(
+        base_vars: Vec<(usize, Variable)>,
+    ) -> collomatique_ilp_modeler::Model<usize, (), ()> {
+        let vars: HashMap<usize, Variable> = base_vars.into_iter().collect();
+        let modeler: Modeler<'_, usize, (), (), (), ()> = Modeler::new(vars);
+        modeler.build(&()).unwrap()
+    }
+
     #[tokio::test]
     async fn default_strategy_returns_mock_result() {
-        let problem = ProblemBuilder::<usize, (), DefaultRepr<usize>>::new()
-            .set_variable(0usize, Variable::binary())
-            .set_variable(1usize, Variable::binary())
-            .build()
-            .unwrap();
+        let model = make_model(vec![(0, Variable::binary()), (1, Variable::binary())]);
 
         let backend = Arc::new(MockBackend {
             outcome: RawSolveOutcome {
@@ -362,21 +398,18 @@ mod tests {
 
         let ctx = StrategyContext::new(backend);
         let strategy = DefaultStrategy::default();
-        let outcome = strategy.run(&ctx, &problem).await.unwrap();
+        let outcome = strategy.run(&ctx, &model).await.unwrap();
 
         assert_eq!(outcome.status, SolveStatus::Optimal);
         assert_eq!(outcome.objective, Some(42.0));
         let solution = outcome.solution.unwrap();
-        assert_eq!(solution.get(0usize), Some(1.0));
-        assert_eq!(solution.get(1usize), Some(1.0));
+        assert_eq!(solution.get(InternalVar::Base(0usize)), Some(1.0));
+        assert_eq!(solution.get(InternalVar::Base(1usize)), Some(1.0));
     }
 
     #[tokio::test]
     async fn strategy_kind_dispatches_to_default() {
-        let problem = ProblemBuilder::<usize, (), DefaultRepr<usize>>::new()
-            .set_variable(0usize, Variable::binary())
-            .build()
-            .unwrap();
+        let model = make_model(vec![(0, Variable::binary())]);
 
         let backend = Arc::new(MockBackend {
             outcome: RawSolveOutcome {
@@ -389,9 +422,12 @@ mod tests {
 
         let ctx = StrategyContext::new(backend);
         let kind = StrategyKind::Default(DefaultStrategy::default());
-        let outcome = ctx.run_strategy(&kind, &problem).await.unwrap();
+        let outcome = ctx.run_strategy(&kind, &model).await.unwrap();
 
         assert_eq!(outcome.status, SolveStatus::Optimal);
-        assert_eq!(outcome.solution.unwrap().get(0usize), Some(1.0));
+        assert_eq!(
+            outcome.solution.unwrap().get(InternalVar::Base(0usize)),
+            Some(1.0)
+        );
     }
 }

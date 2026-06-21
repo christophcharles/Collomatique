@@ -2,6 +2,7 @@ use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
+use collomatique_ilp_modeler::model_desc::ModelDesc;
 use collomatique_rpc::{EncodedMsg, InitMsg, ResultMsg, SerializedStrategyRequest, StrategyMsg};
 use collomatique_strategies::{StrategyKind, StrategyProgress, StrategyRequest};
 
@@ -46,14 +47,14 @@ impl StrategySubprocess {
 
     pub fn spawn(
         worker_manager: &mut WorkerManager,
-        problem_desc: collomatique_ilp::ProblemDesc,
+        model_desc: ModelDesc,
         strategy: StrategyKind,
         result_callback: impl Fn(StrategyResult) + Send + 'static,
         progress_callback: impl Fn(Result<StrategyProgress, String>) + Send + 'static,
         log_callback: impl Fn(&str) + Send + 'static,
     ) -> Result<StrategySubprocess, String> {
         let request = StrategyRequest {
-            problem_desc,
+            model_desc,
             strategy,
         };
         let serialized_str = request.serialize();

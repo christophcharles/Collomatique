@@ -5,8 +5,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use async_trait::async_trait;
 use futures::stream::{FuturesUnordered, StreamExt};
 
-use collomatique_ilp::mat_repr::ProblemRepr;
-use collomatique_ilp::{ConfigData, ObjectiveSense, Problem, UsableData};
+use collomatique_ilp::{ConfigData, ObjectiveSense, UsableData};
+use collomatique_ilp_modeler::{InternalVar, Model};
 
 use crate::{
     DefaultStrategy, SolveProgress, SolveStatus, Strategy, StrategyContext, StrategyError,
@@ -112,23 +112,23 @@ struct WorkerResult<V: UsableData + Send> {
 impl Strategy for ConductorStrategy {
     type Progress<V: UsableData + Send> = ConductorProgress<V>;
 
-    async fn run_with_callback<V, C, P>(
+    async fn run_with_callback<B, E, C>(
         &self,
         ctx: &StrategyContext,
-        problem: &Problem<V, C, P>,
-        on_progress: &(dyn Fn(Self::Progress<V>) -> bool + Send + Sync),
-    ) -> Result<StrategyOutcome<V>, StrategyError>
+        model: &Model<B, E, C>,
+        on_progress: &(dyn Fn(Self::Progress<InternalVar<B, E>>) -> bool + Send + Sync),
+    ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
-        V: UsableData + Send,
+        B: UsableData + Send,
+        E: UsableData + Send,
         C: UsableData + Send,
-        P: ProblemRepr<V> + Send + Sync,
     {
         if !self.has_workers() {
             return Err(StrategyError::Other("No workers selected".to_string()));
         }
 
-        let mut status = self.default_status::<V>();
-        let sense = problem.get_objective().get_sense();
+        let mut status = self.default_status::<InternalVar<B, E>>();
+        let sense = model.problem().get_objective().get_sense();
 
         // Per-worker state (defined before FuturesUnordered so borrows outlive the futures)
         let default_strategy = StrategyKind::Default(DefaultStrategy::default());
@@ -136,13 +136,13 @@ impl Strategy for ConductorStrategy {
 
         // Launch all workers
         let mut workers: FuturesUnordered<
-            Pin<Box<dyn Future<Output = WorkerResult<V>> + Send + '_>>,
+            Pin<Box<dyn Future<Output = WorkerResult<InternalVar<B, E>>> + Send + '_>>,
         > = FuturesUnordered::new();
 
         if self.default_worker {
             workers.push(Box::pin(async {
                 let outcome = ctx
-                    .run_strategy_with_callback(&default_strategy, problem, &|sp| match sp {
+                    .run_strategy_with_callback(&default_strategy, model, &|sp| match sp {
                         StrategyProgress::Default(p) => {
                             default_solutions_found.store(p.solutions_found, Ordering::Relaxed);
                             on_progress(ConductorProgress::DefaultWorker(p))

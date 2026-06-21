@@ -11,11 +11,11 @@ use collomatique_ops::ColloscopeUpdateOp;
 
 use crate::editor::run_solver;
 
-/// The solver dialog instantiated for the colloscope ILP problem.
+/// The solver dialog instantiated for the colloscope ILP model.
 type SolverDialog = run_solver::Dialog<
-    collomatique_constraints_colloscopes::ProblemInternalVar,
-    collomatique_constraints_colloscopes::ProblemConstraintSource,
-    collomatique_ilp::DefaultRepr<collomatique_constraints_colloscopes::ProblemInternalVar>,
+    collomatique_constraints_colloscopes::Var,
+    collomatique_constraints_colloscopes::ExtraVarName,
+    collomatique_constraints_colloscopes::ConstraintDesc,
 >;
 
 const DEBOUNCE_DURATION: std::time::Duration = std::time::Duration::from_millis(500);
@@ -632,13 +632,13 @@ impl Component for Colloscope {
                 // problem is ready yet, ignore the click.
                 if let Some(Ok(ilp_repr)) = self.get_ilp_repr() {
                     let ilp_problem = ilp_repr.ilp_problem.clone();
-                    let inner = ilp_problem.problem.problem().clone();
+                    let model = ilp_problem.problem.clone();
                     self.solving_problem = Some(ilp_problem);
                     let strategy =
                         collomatique_strategies::StrategyKind::Default(Default::default());
                     self.run_solver_dialog
                         .sender()
-                        .send(run_solver::DialogInput::Run(strategy, inner))
+                        .send(run_solver::DialogInput::Run(strategy, model))
                         .unwrap();
                 }
             }

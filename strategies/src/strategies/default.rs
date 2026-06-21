@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-use collomatique_ilp::mat_repr::ProblemRepr;
-use collomatique_ilp::{Problem, UsableData};
+use collomatique_ilp::UsableData;
+use collomatique_ilp_modeler::{InternalVar, Model};
 
 use crate::{
     SolveProblemOpts, SolveProgress, Strategy, StrategyContext, StrategyError, StrategyOutcome,
@@ -18,19 +18,19 @@ pub struct DefaultStrategy {
 impl Strategy for DefaultStrategy {
     type Progress<V: UsableData + Send> = SolveProgress;
 
-    async fn run_with_callback<V, C, P>(
+    async fn run_with_callback<B, E, C>(
         &self,
         ctx: &StrategyContext,
-        problem: &Problem<V, C, P>,
-        on_progress: &(dyn Fn(Self::Progress<V>) -> bool + Send + Sync),
-    ) -> Result<StrategyOutcome<V>, StrategyError>
+        model: &Model<B, E, C>,
+        on_progress: &(dyn Fn(Self::Progress<InternalVar<B, E>>) -> bool + Send + Sync),
+    ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
-        V: UsableData + Send,
+        B: UsableData + Send,
+        E: UsableData + Send,
         C: UsableData + Send,
-        P: ProblemRepr<V> + Send + Sync,
     {
-        ctx.solve_problem_with_progress(
-            problem,
+        ctx.solve_model_with_progress(
+            model,
             SolveProblemOpts {
                 warm_start: None,
                 time_limit_seconds: self.time_limit_seconds,

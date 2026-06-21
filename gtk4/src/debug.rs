@@ -425,11 +425,12 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
 
     let t = Instant::now();
     eprintln!("Extracting problem descriptor...");
-    let (desc, var_order) = model.problem().get_desc();
+    let (_, var_order) = model.problem().get_desc();
+    let model_desc = model.to_desc();
     eprintln!(
         "  Descriptor: {} variables, {} constraints ({:.2?})",
-        desc.variables.len(),
-        desc.constraints.len(),
+        model_desc.main.problem_desc.variables.len(),
+        model_desc.main.problem_desc.constraints.len(),
         t.elapsed()
     );
 
@@ -445,7 +446,7 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
     let t = Instant::now();
     let handle = StrategySubprocess::spawn(
         &mut worker_manager,
-        desc,
+        model_desc,
         strategy,
         move |result| {
             let _ = tx.send(result);

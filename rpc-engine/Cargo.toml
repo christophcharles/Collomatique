@@ -12,6 +12,7 @@ collomatique-state-colloscopes = { path = "../state-colloscopes" }
 collomatique-ops = { path = "../ops" }
 collomatique-constraints-colloscopes = { path = "../constraints-colloscopes" }
 collomatique-ilp = { path = "../ilp", features = ["serde", "collo_cbc"] }
+collomatique-ilp-modeler = { path = "../ilp-modeler", features = ["serde"] }
 collomatique-sqlite-state = { path = "../sqlite-state" }
 collomatique-strategies = { path = "../strategies" }
 collomatique-subprocesses = { path = "../subprocesses" }

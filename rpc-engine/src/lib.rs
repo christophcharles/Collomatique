@@ -198,7 +198,7 @@ fn solve_ilp(serialized: SerializedIlpProblem) -> Result<(), anyhow::Error> {
 }
 
 fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Error> {
-    use collomatique_ilp::{DefaultRepr, ProblemBuilder};
+    use collomatique_ilp_modeler::InternalVar;
     use collomatique_rpc::{SerializedStrategyProgress, StrategyProgressData};
     use collomatique_strategies::{StrategyContext, StrategyProgress, StrategyRequest};
     use collomatique_subprocesses::{SubprocessSolveBackend, WorkerManager};
@@ -209,10 +209,8 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
     let request = StrategyRequest::deserialize(&request_str)
         .map_err(|e| anyhow!("Failed to deserialize strategy request: {e}"))?;
 
-    eprintln!("Building problem from desc...");
-    let problem = ProblemBuilder::<usize, (), DefaultRepr<usize>>::from_desc(request.problem_desc)
-        .build()
-        .map_err(|e| anyhow!("Failed to build problem from desc: {:?}", e))?;
+    eprintln!("Building model from desc...");
+    let model = request.model_desc.to_model();
 
     let worker_manager = Arc::new(Mutex::new(WorkerManager::new()));
     let backend = Arc::new(SubprocessSolveBackend::new(worker_manager));
@@ -247,7 +245,7 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
         .block_on(
             request
                 .strategy
-                .run_with_callback(&ctx, &problem, &progress_callback),
+                .run_with_callback(&ctx, &model, &progress_callback),
         )
         .map_err(|e| anyhow!("Strategy failed: {e}"))?;
 
@@ -258,13 +256,13 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
         collomatique_strategies::SolveStatus::Error => StrategyStatus::Error,
     };
 
-    let num_vars = problem.get_variables().len();
-    let var_indices: Vec<usize> = (0..num_vars).collect();
-
+    let (_, var_order) = model.problem().get_desc();
     let solution = outcome.solution.map(|config| {
-        var_indices
+        var_order
             .iter()
-            .map(|&i| OrderedFloat(config.get(i).unwrap_or(0.0)))
+            .map(|iv: &InternalVar<usize, usize>| {
+                OrderedFloat(config.get(iv.clone()).unwrap_or(0.0))
+            })
             .collect::<Vec<_>>()
     });
 

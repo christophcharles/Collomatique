@@ -5,8 +5,8 @@ use relm4::{ComponentParts, ComponentSender, Controller, RelmWidgetExt};
 use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
 
-use collomatique_ilp::mat_repr::ProblemRepr;
-use collomatique_ilp::{ConfigData, Problem, UsableData};
+use collomatique_ilp::{ConfigData, UsableData};
+use collomatique_ilp_modeler::{InternalVar, Model};
 use collomatique_strategies::{StrategyKind, StrategyProgress};
 use collomatique_subprocesses::{
     StrategyResult, StrategyStatus, StrategySubprocess, WorkerManager,
@@ -21,7 +21,7 @@ use strategy_display::{
     strategy_name_from_kind,
 };
 
-pub struct Dialog<V: UsableData, C, P> {
+pub struct Dialog<B: UsableData, E: UsableData, C: UsableData> {
     hidden: bool,
     is_running: bool,
     end_with_error: bool,
@@ -33,14 +33,14 @@ pub struct Dialog<V: UsableData, C, P> {
     error_dialog: Controller<error_dialog::Dialog>,
     warning_running: Controller<warning_running::Dialog>,
     subprocess: Option<StrategySubprocess>,
-    var_order: Option<Vec<V>>,
-    result_config: Option<ConfigData<V>>,
-    _phantom: PhantomData<fn() -> (C, P)>,
+    var_order: Option<Vec<InternalVar<B, E>>>,
+    result_config: Option<ConfigData<InternalVar<B, E>>>,
+    _phantom: PhantomData<fn() -> C>,
 }
 
 #[derive(Debug)]
-pub enum DialogInput<V: UsableData, C: UsableData, P: ProblemRepr<V>> {
-    Run(StrategyKind, Problem<V, C, P>),
+pub enum DialogInput<B: UsableData, E: UsableData, C: UsableData> {
+    Run(StrategyKind, Model<B, E, C>),
     CancelRequest,
     Accept,
 
@@ -53,21 +53,21 @@ pub enum DialogInput<V: UsableData, C: UsableData, P: ProblemRepr<V>> {
 }
 
 #[derive(Debug)]
-pub enum DialogOutput<V: UsableData> {
-    NewConfig(ConfigData<V>),
+pub enum DialogOutput<B: UsableData, E: UsableData> {
+    NewConfig(ConfigData<InternalVar<B, E>>),
 }
 
 #[relm4::component(pub)]
-impl<V, C, P> Component for Dialog<V, C, P>
+impl<B, E, C> Component for Dialog<B, E, C>
 where
-    V: UsableData + 'static,
+    B: UsableData + 'static,
+    E: UsableData + 'static,
     C: UsableData + 'static,
-    P: ProblemRepr<V> + 'static,
 {
     type Init = (Arc<Mutex<WorkerManager>>, String);
 
-    type Input = DialogInput<V, C, P>;
-    type Output = DialogOutput<V>;
+    type Input = DialogInput<B, E, C>;
+    type Output = DialogOutput<B, E>;
     type CommandOutput = ();
 
     view! {
@@ -208,7 +208,7 @@ where
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match msg {
-            DialogInput::Run(strategy, problem) => {
+            DialogInput::Run(strategy, model) => {
                 self.hidden = false;
                 self.is_running = true;
                 self.end_with_error = false;
@@ -217,8 +217,9 @@ where
                 self.strategy_name = Some(name);
                 self.emit_strategy(StrategyDisplayInput::Clear(name));
 
-                let (desc, var_order) = problem.get_desc();
+                let (_, var_order) = model.problem().get_desc();
                 self.var_order = Some(var_order);
+                let model_desc = model.to_desc();
 
                 let input = sender.input_sender().clone();
                 let log_input = input.clone();
@@ -238,7 +239,7 @@ where
                     let mut wm = self.worker_manager.lock().unwrap();
                     StrategySubprocess::spawn(
                         &mut wm,
-                        desc,
+                        model_desc,
                         strategy,
                         result_cb,
                         progress_cb,
@@ -315,7 +316,7 @@ where
     }
 }
 
-impl<V: UsableData, C, P> Dialog<V, C, P> {
+impl<B: UsableData, E: UsableData, C: UsableData> Dialog<B, E, C> {
     fn emit_strategy(&self, input: StrategyDisplayInput) {
         self.strategy_frame.emit(input.clone());
         self.strategy_status_bar.emit(input);
