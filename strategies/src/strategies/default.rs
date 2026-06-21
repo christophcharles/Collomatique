@@ -18,6 +18,10 @@ pub struct DefaultStrategy {
 impl Strategy for DefaultStrategy {
     type Progress<V: UsableData + Send> = SolveProgress;
 
+    fn name(&self) -> &'static str {
+        "default"
+    }
+
     async fn run_with_callback<B, E, C>(
         &self,
         ctx: &StrategyContext,
@@ -29,7 +33,7 @@ impl Strategy for DefaultStrategy {
         E: UsableData + Send,
         C: UsableData + Send,
     {
-        ctx.solve_model_with_progress(
+        ctx.solve_model_with_echo(
             model,
             SolveProblemOpts {
                 warm_start: None,
@@ -37,6 +41,7 @@ impl Strategy for DefaultStrategy {
                 disable_logging: self.disable_logging,
             },
             on_progress,
+            &|line| format!("[solver] {line}"),
         )
         .await
     }

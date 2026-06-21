@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::fmt;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -23,6 +23,10 @@ pub struct NoObjectiveStrategy {
 impl Strategy for NoObjectiveStrategy {
     type Progress<V: UsableData + Send> = NoObjectiveProgressData;
 
+    fn name(&self) -> &'static str {
+        "no-obj"
+    }
+
     async fn run_with_callback<B, E, C>(
         &self,
         ctx: &StrategyContext,
@@ -35,20 +39,16 @@ impl Strategy for NoObjectiveStrategy {
         C: UsableData + Send,
     {
         // Phase 1: Solve checker problem (no objective, fast)
-        let last_progress: Mutex<Option<SolveProgress>> = Mutex::new(None);
-
         let checker_outcome = ctx
-            .solve_problem_with_progress(
+            .solve_problem_with_echo(
                 model.checker_problem(),
                 SolveProblemOpts {
                     warm_start: None,
                     time_limit_seconds: self.checker_time_limit_seconds,
                     disable_logging: self.disable_logging,
                 },
-                &|p: SolveProgress| {
-                    *last_progress.lock().unwrap() = Some(p.clone());
-                    on_progress(NoObjectiveProgressData::CheckerSolve(p))
-                },
+                &|p: SolveProgress| on_progress(NoObjectiveProgressData::CheckerSolve(p)),
+                &|line| format!("[checker solver] {line}"),
             )
             .await?;
 
@@ -81,6 +81,16 @@ impl Strategy for NoObjectiveStrategy {
             StrategyError::SolveError("checker optimal but no solution returned".into())
         })?;
 
+        let should_continue = on_progress(NoObjectiveProgressData::SolutionFound);
+        if !should_continue {
+            return Ok(StrategyOutcome {
+                status: SolveStatus::Stopped,
+                objective: checker_outcome.objective,
+                best_bound: checker_outcome.best_bound,
+                solution: None,
+            });
+        }
+
         // Phase 2: Reconstruct all variables + objective
         let base_values: HashMap<B, f64> = checker_solution
             .get_values()
@@ -95,26 +105,18 @@ impl Strategy for NoObjectiveStrategy {
             StrategyError::SolveError(format!("failed to build reconstruction problem: {e}"))
         })?;
 
-        let should_continue = on_progress(NoObjectiveProgressData::ObjectiveReconstruction {
-            last_solve_progress: last_progress.into_inner().unwrap(),
-        });
-        if !should_continue {
-            return Ok(StrategyOutcome {
-                status: SolveStatus::Stopped,
-                objective: None,
-                best_bound: None,
-                solution: None,
-            });
-        }
-
         let recon_outcome = ctx
-            .solve_problem(
+            .solve_problem_with_echo(
                 &recon_problem,
                 SolveProblemOpts {
                     warm_start: None,
                     time_limit_seconds: self.reconstruction_time_limit_seconds,
                     disable_logging: self.disable_logging,
                 },
+                &move |p: SolveProgress| {
+                    on_progress(NoObjectiveProgressData::ObjectiveReconstruction(p))
+                },
+                &|line| format!("[reconstruction solver] {line}"),
             )
             .await?;
 
@@ -156,7 +158,20 @@ impl Strategy for NoObjectiveStrategy {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum NoObjectiveProgressData {
     CheckerSolve(SolveProgress),
-    ObjectiveReconstruction {
-        last_solve_progress: Option<SolveProgress>,
-    },
+    SolutionFound,
+    ObjectiveReconstruction(SolveProgress),
+}
+
+impl fmt::Display for NoObjectiveProgressData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            NoObjectiveProgressData::CheckerSolve(p) => write!(f, "[checker solver progress] {p}"),
+            NoObjectiveProgressData::SolutionFound => {
+                write!(f, "Solution found! Reconstructing full variable set...")
+            }
+            NoObjectiveProgressData::ObjectiveReconstruction(p) => {
+                write!(f, "[reconstruction solver progress] {p}")
+            }
+        }
+    }
 }

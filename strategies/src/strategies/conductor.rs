@@ -112,6 +112,10 @@ struct WorkerResult<V: UsableData + Send> {
 impl Strategy for ConductorStrategy {
     type Progress<V: UsableData + Send> = ConductorProgress<V>;
 
+    fn name(&self) -> &'static str {
+        "conductor"
+    }
+
     async fn run_with_callback<B, E, C>(
         &self,
         ctx: &StrategyContext,

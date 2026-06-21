@@ -7,6 +7,7 @@ pub use strategies::conductor::{
 pub use strategies::default::DefaultStrategy;
 pub use strategies::no_objective::{NoObjectiveProgressData, NoObjectiveStrategy};
 
+use std::fmt;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -74,6 +75,16 @@ pub struct SolveProgress {
     pub best_bound: f64,
     pub node_count: u64,
     pub solutions_found: u64,
+}
+
+impl fmt::Display for SolveProgress {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "obj={:.4} bound={:.4} nodes={} solutions={}",
+            self.best_obj, self.best_bound, self.node_count, self.solutions_found
+        )
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -159,6 +170,24 @@ impl StrategyContext {
             .await
     }
 
+    pub async fn solve_with_progress_and_echo(
+        &self,
+        desc: &ProblemDesc,
+        opts: SolveConfig,
+        on_progress: &(dyn Fn(SolveProgress) -> bool + Send + Sync),
+        tag_echo: &(dyn Fn(String) -> String + Send + Sync),
+    ) -> Result<RawSolveOutcome, StrategyError> {
+        let echo_impl: Box<dyn Fn(String) + Send + Sync + '_> = match &self.on_echo {
+            Some(ctx_echo) => Box::new(move |line| ctx_echo(tag_echo(line))),
+            None => Box::new(move |line| {
+                let _ = tag_echo(line);
+            }),
+        };
+        self.backend
+            .solve_with_progress(desc, opts, on_progress, &*echo_impl)
+            .await
+    }
+
     pub async fn solve_problem<V, C, P>(
         &self,
         problem: &Problem<V, C, P>,
@@ -203,11 +232,45 @@ impl StrategyContext {
 
         Ok(raw.into_typed(&var_order))
     }
+
+    pub async fn solve_problem_with_echo<V, C, P>(
+        &self,
+        problem: &Problem<V, C, P>,
+        opts: SolveProblemOpts<V>,
+        on_progress: &(dyn Fn(SolveProgress) -> bool + Send + Sync),
+        tag_echo: &(dyn Fn(String) -> String + Send + Sync),
+    ) -> Result<StrategyOutcome<V>, StrategyError>
+    where
+        V: UsableData,
+        C: UsableData,
+        P: ProblemRepr<V>,
+    {
+        let (desc, var_order) = problem.get_desc();
+
+        let warm_start = opts
+            .warm_start
+            .as_ref()
+            .map(|hint| collomatique_ilp::config_data_to_hint(hint, &var_order));
+
+        let solve_config = SolveConfig {
+            warm_start,
+            time_limit_seconds: opts.time_limit_seconds,
+            disable_logging: opts.disable_logging,
+        };
+
+        let raw = self
+            .solve_with_progress_and_echo(&desc, solve_config, on_progress, tag_echo)
+            .await?;
+
+        Ok(raw.into_typed(&var_order))
+    }
 }
 
 #[async_trait]
 pub trait Strategy: Send + Sync {
     type Progress<V: UsableData + Send>: Send + Sync + Clone;
+
+    fn name(&self) -> &'static str;
 
     async fn run_with_callback<B, E, C>(
         &self,
@@ -246,6 +309,15 @@ pub enum StrategyProgress {
     NoObjective(NoObjectiveProgressData),
 }
 
+impl fmt::Display for StrategyProgress {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            StrategyProgress::Default(p) => write!(f, "{p}"),
+            StrategyProgress::NoObjective(p) => write!(f, "{p}"),
+        }
+    }
+}
+
 impl StrategyProgress {
     pub fn serialize(&self) -> String {
         serde_json::to_string(self).expect("Serialization of StrategyProgress should never fail")
@@ -259,6 +331,13 @@ impl StrategyProgress {
 }
 
 impl StrategyKind {
+    pub fn name(&self) -> &'static str {
+        match self {
+            StrategyKind::Default(s) => s.name(),
+            StrategyKind::NoObjective(s) => s.name(),
+        }
+    }
+
     pub async fn run<B, E, C>(
         &self,
         ctx: &StrategyContext,
@@ -324,6 +403,22 @@ impl StrategyContext {
         C: UsableData,
     {
         self.solve_problem_with_progress(model.problem(), opts, on_progress)
+            .await
+    }
+
+    pub async fn solve_model_with_echo<B, E, C>(
+        &self,
+        model: &Model<B, E, C>,
+        opts: SolveProblemOpts<InternalVar<B, E>>,
+        on_progress: &(dyn Fn(SolveProgress) -> bool + Send + Sync),
+        tag_echo: &(dyn Fn(String) -> String + Send + Sync),
+    ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
+    where
+        B: UsableData,
+        E: UsableData,
+        C: UsableData,
+    {
+        self.solve_problem_with_echo(model.problem(), opts, on_progress, tag_echo)
             .await
     }
 
@@ -660,7 +755,7 @@ mod tests {
         let log = progress_log.into_inner().unwrap();
         assert!(
             log.iter()
-                .any(|p| matches!(p, NoObjectiveProgressData::ObjectiveReconstruction { .. }))
+                .any(|p| matches!(p, NoObjectiveProgressData::SolutionFound { .. }))
         );
     }
 

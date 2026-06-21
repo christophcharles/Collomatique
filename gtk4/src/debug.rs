@@ -339,7 +339,7 @@ fn subprocess_solve(model: &collomatique_constraints_colloscopes::ColloscopeMode
         },
         |progress| {
             eprintln!(
-                "  [progress] obj={:.4} bound={:.4} nodes={} solutions={}",
+                "  [subprocess progress] obj={:.4} bound={:.4} nodes={} solutions={}",
                 progress.best_obj,
                 progress.best_bound,
                 progress.node_count,
@@ -467,13 +467,13 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
         |progress: Result<StrategyProgress, String>| match progress {
             Ok(StrategyProgress::Default(p)) => {
                 eprintln!(
-                    "  [strategy subprocess] [progress] obj={:.4} bound={:.4} nodes={} solutions={}",
+                    "  [strategy subprocess progress] obj={:.4} bound={:.4} nodes={} solutions={}",
                     p.best_obj, p.best_bound, p.node_count, p.solutions_found
                 );
             }
             Ok(StrategyProgress::NoObjective(_)) => unreachable!(),
             Err(e) => {
-                eprintln!("  [strategy subprocess] [progress error] {e}");
+                eprintln!("  [strategy subprocess progress error] {e}");
             }
         },
         |line| {

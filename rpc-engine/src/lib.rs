@@ -214,33 +214,14 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
 
     let worker_manager = Arc::new(Mutex::new(WorkerManager::new()));
     let backend = Arc::new(SubprocessSolveBackend::new(worker_manager));
-    let on_echo: Arc<dyn Fn(String) + Send + Sync> = Arc::new(|line: String| {
-        eprintln!("[solver] {}", line.trim_end());
+    let strategy_name = request.strategy.name();
+    let on_echo: Arc<dyn Fn(String) + Send + Sync> = Arc::new(move |line: String| {
+        eprintln!("[{strategy_name} strategy] {}", line.trim_end());
     });
     let ctx = StrategyContext::with_echo(backend, on_echo);
 
     let progress_callback = |progress: StrategyProgress| -> bool {
-        match &progress {
-            StrategyProgress::Default(p) => {
-                eprintln!(
-                    "[solver] [progress] obj={:.4} bound={:.4} nodes={} solutions={}",
-                    p.best_obj, p.best_bound, p.node_count, p.solutions_found
-                );
-            }
-            StrategyProgress::NoObjective(p) => match p {
-                collomatique_strategies::NoObjectiveProgressData::CheckerSolve(p) => {
-                    eprintln!(
-                        "[solver] [no-obj checker] nodes={} solutions={}",
-                        p.node_count, p.solutions_found
-                    );
-                }
-                collomatique_strategies::NoObjectiveProgressData::ObjectiveReconstruction {
-                    ..
-                } => {
-                    eprintln!("[solver] [no-obj] reconstructing objective...");
-                }
-            },
-        }
+        eprintln!("[{strategy_name} strategy progress] {progress}");
         let serialized_progress = progress.serialize();
         let progress_data = StrategyProgressData {
             progress: SerializedStrategyProgress::from(serialized_progress),
