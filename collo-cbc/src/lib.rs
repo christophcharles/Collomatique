@@ -150,6 +150,19 @@ impl Model {
         });
     }
 
+    /// Disable (or re-enable) CBC's heuristics. Useful for testing, so that
+    /// incumbents come from branch-and-bound rather than a heuristic solving
+    /// the whole problem up front.
+    pub fn set_disable_heuristics(&mut self, disable: bool) {
+        self.set_parameter("heuristicsOnOff", if disable { "off" } else { "on" });
+    }
+
+    /// Disable (or re-enable) CBC's cut generators. Useful for testing, to
+    /// force more branching.
+    pub fn set_disable_cuts(&mut self, disable: bool) {
+        self.set_parameter("cuts", if disable { "off" } else { "on" });
+    }
+
     pub fn set_log_level(&mut self, level: i32) {
         lock(|| unsafe {
             sys::collo_cbc_set_log_level(self.ptr, level);
