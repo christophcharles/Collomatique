@@ -246,3 +246,58 @@ fn collo_cbc_callback_not_stopped() {
     assert!(result.config.is_some());
     assert_eq!(result.config.unwrap().eval(), 1.0);
 }
+
+#[test]
+fn collo_cbc_callback_incumbent_data_is_feasible() {
+    use crate::solvers::{CallbackSolverModel, ProgressIncumbentData, Solver};
+    use crate::{ConfigData, LinExpr, Objective, ObjectiveSense, ProblemBuilder, Variable};
+
+    // Small knapsack: maximize value subject to a weight cap, so CBC has to
+    // report at least one integer incumbent during the solve.
+    let a = LinExpr::<String>::var("a");
+    let b = LinExpr::<String>::var("b");
+    let c = LinExpr::<String>::var("c");
+    let d = LinExpr::<String>::var("d");
+    let e = LinExpr::<String>::var("e");
+
+    let weight = 2.0 * &a + 3.0 * &b + 4.0 * &c + 5.0 * &d + 6.0 * &e;
+    let value = 3.0 * &a + 4.0 * &b + 5.0 * &c + 6.0 * &d + 7.0 * &e;
+    let cap = LinExpr::<String>::constant(10.0);
+
+    let problem = ProblemBuilder::<String, String>::new()
+        .set_variables([
+            ("a", Variable::binary()),
+            ("b", Variable::binary()),
+            ("c", Variable::binary()),
+            ("d", Variable::binary()),
+            ("e", Variable::binary()),
+        ])
+        .add_constraint(weight.leq(&cap), "capacity")
+        .set_objective(Objective::new(value, ObjectiveSense::Maximize))
+        .build()
+        .unwrap();
+
+    let solver = super::ColloCbcSolver::new();
+
+    let mut last_incumbent: Option<ConfigData<String>> = None;
+    let result = solver
+        .build_model(&problem)
+        .solve_with_callback(|progress| {
+            if let Some(config) = progress.incumbent_data() {
+                last_incumbent = Some(config.clone());
+            }
+            true
+        });
+
+    assert!(!result.stopped_by_callback);
+    assert!(result.config.is_some());
+
+    let incumbent = last_incumbent.expect("an incumbent ConfigData should be reported");
+
+    // The reported incumbent must build into the problem (i.e. cover exactly the
+    // problem's variables) and satisfy every hard constraint.
+    let config = problem
+        .build_config(incumbent)
+        .expect("incumbent should build into the problem");
+    assert!(config.is_feasible(), "reported incumbent must be feasible");
+}
