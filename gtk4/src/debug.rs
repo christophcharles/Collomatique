@@ -434,7 +434,9 @@ fn subprocess_solve(model: &collomatique_constraints_colloscopes::ColloscopeMode
 }
 
 fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::ColloscopeModel) {
-    use collomatique_strategies::{DefaultStrategy, SolveProgress, SolveStatus, StrategyOutcome};
+    use collomatique_strategies::{
+        DefaultStrategy, SolveProgress, SolveProgressData, SolveStatus, StrategyOutcome,
+    };
     use collomatique_subprocesses::{StrategySubprocess, WorkerManager};
     use std::sync::mpsc;
 
@@ -473,7 +475,7 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
         move |outcome: Outcome| {
             let _ = tx.send(outcome);
         },
-        |progress: Result<SolveProgress, String>| match progress {
+        |progress: Result<SolveProgress<_>, String>| match progress {
             Ok(p) => {
                 eprintln!("  [strategy subprocess progress] {p}");
             }
@@ -543,7 +545,7 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
         Err(_) => {
             eprintln!("  Channel closed without receiving a result");
             if let Some(progress) = handle.last_progress() {
-                if let Ok(p) = SolveProgress::try_from(progress) {
+                if let Ok(p) = SolveProgressData::try_from(progress) {
                     eprintln!("  Last progress: {p}");
                 }
             }

@@ -31,7 +31,7 @@ pub struct ConductorStatus<V: UsableData + Send> {
 #[derive(Debug, Clone)]
 pub enum ConductorProgress<V: UsableData + Send> {
     Conductor(ConductorStatus<V>),
-    DefaultWorker(SolveProgress),
+    DefaultWorker(SolveProgress<V>),
 }
 
 enum WorkerTag {
@@ -151,12 +151,15 @@ impl Strategy for ConductorStrategy {
                         &default_strategy,
                         model,
                         warm_start,
-                        &|result: Result<SolveProgress, StrategyProgress>| match result {
-                            Ok(p) => {
-                                default_solutions_found.store(p.solutions_found, Ordering::Relaxed);
-                                on_progress(ConductorProgress::DefaultWorker(p))
+                        &|result: Result<SolveProgress<InternalVar<B, E>>, StrategyProgress>| {
+                            match result {
+                                Ok(p) => {
+                                    default_solutions_found
+                                        .store(p.solutions_found, Ordering::Relaxed);
+                                    on_progress(ConductorProgress::DefaultWorker(p))
+                                }
+                                Err(_) => false,
                             }
-                            Err(_) => false,
                         },
                         &|line| format!("[default worker] {}", line),
                     )

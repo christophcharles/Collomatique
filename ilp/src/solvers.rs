@@ -169,3 +169,9 @@ pub struct IncumbentInfo {
 pub trait ProgressIncumbentInfo {
     fn incumbent_info(&self) -> Option<&IncumbentInfo>;
 }
+
+/// Progress data that can expose the current incumbent's variable assignment.
+pub trait ProgressIncumbentData<V: UsableData> {
+    /// The variable assignment of the most recent incumbent, if any.
+    fn incumbent_data(&self) -> Option<&ConfigData<V>>;
+}

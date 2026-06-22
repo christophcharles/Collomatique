@@ -4,7 +4,7 @@ use relm4::{
     SimpleComponent, gtk,
 };
 
-use collomatique_strategies::{SolveProgress, StrategyProgress};
+use collomatique_strategies::{SolveProgressData, StrategyProgress};
 
 use crate::widgets::debug_view::{DebugView, DebugViewInput};
 
@@ -14,7 +14,7 @@ pub struct StrategyFrame {
     debug_view: Controller<DebugView>,
     strategy_name: Option<StrategyName>,
     show_debug: bool,
-    last_progress: Option<SolveProgress>,
+    last_progress: Option<SolveProgressData>,
 }
 
 #[relm4::component(pub)]

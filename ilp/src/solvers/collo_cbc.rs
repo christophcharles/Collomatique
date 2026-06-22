@@ -5,8 +5,8 @@ use std::collections::HashMap;
 
 use super::{
     CallbackSolution, CallbackSolverModel, IncumbentInfo, ProblemRepr, ProgressBounds,
-    ProgressIncumbentInfo, ProgressStats, Solver, SolverModel, TimeLimitSolution,
-    TimeLimitSolverModel, WarmSolver,
+    ProgressIncumbentData, ProgressIncumbentInfo, ProgressStats, Solver, SolverModel,
+    TimeLimitSolution, TimeLimitSolverModel, WarmSolver,
 };
 use crate::{ConfigData, FeasibleConfig, ObjectiveSense, Problem, UsableData, linexpr::EqSymbol};
 
@@ -20,15 +20,16 @@ pub struct ColloCbcBuiltModel<'a, V: UsableData, C: UsableData, P: ProblemRepr<V
     problem: &'a Problem<V, C, P>,
 }
 
-pub struct Progress {
+pub struct Progress<V: UsableData> {
     best_objective: f64,
     best_bound: f64,
     nodes: u64,
     solutions: u64,
     incumbent: Option<IncumbentInfo>,
+    incumbent_config: Option<ConfigData<V>>,
 }
 
-impl ProgressBounds for Progress {
+impl<V: UsableData> ProgressBounds for Progress<V> {
     fn best_bound(&self) -> f64 {
         self.best_bound
     }
@@ -37,7 +38,7 @@ impl ProgressBounds for Progress {
     }
 }
 
-impl ProgressStats for Progress {
+impl<V: UsableData> ProgressStats for Progress<V> {
     fn nodes(&self) -> u64 {
         self.nodes
     }
@@ -46,9 +47,15 @@ impl ProgressStats for Progress {
     }
 }
 
-impl ProgressIncumbentInfo for Progress {
+impl<V: UsableData> ProgressIncumbentInfo for Progress<V> {
     fn incumbent_info(&self) -> Option<&IncumbentInfo> {
         self.incumbent.as_ref()
+    }
+}
+
+impl<V: UsableData> ProgressIncumbentData<V> for Progress<V> {
+    fn incumbent_data(&self) -> Option<&ConfigData<V>> {
+        self.incumbent_config.as_ref()
     }
 }
 
@@ -281,7 +288,7 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> TimeLimitSolverModel<'
 impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> CallbackSolverModel<'a, V, C, P>
     for ColloCbcBuiltModel<'a, V, C, P>
 {
-    type Progress = Progress;
+    type Progress = Progress<V>;
 
     fn solve_with_callback<F>(mut self, mut callback: F) -> CallbackSolution<'a, V, C, P>
     where
@@ -293,18 +300,27 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> CallbackSolverModel<'a
             nodes: 0,
             solutions: 0,
             incumbent: None,
+            incumbent_config: None,
         };
 
+        let col_indices = &self.col_indices;
         let result = self.model.solve_with_callback(|raw_progress| {
             progress.best_objective = raw_progress.best_obj;
             progress.best_bound = raw_progress.best_bound;
             progress.nodes = raw_progress.node_count as u64;
             progress.solutions = raw_progress.solutions_found as u64;
-            if raw_progress.solution.is_some() {
+            if let Some(sol) = raw_progress.solution.as_ref() {
                 progress.incumbent = Some(IncumbentInfo {
                     objective: raw_progress.best_obj,
                     feasible: true,
                 });
+                progress.incumbent_config = Some(
+                    ConfigData::new().set_iter(
+                        col_indices
+                            .iter()
+                            .map(|(var, &col)| (var.clone(), sol[col])),
+                    ),
+                );
             }
             callback(&progress)
         });

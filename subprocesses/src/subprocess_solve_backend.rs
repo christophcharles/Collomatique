@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use collomatique_ilp_modeler::model_desc::ModelDesc;
 use collomatique_strategies::{
-    RawSolveOutcome, SolveBackend, SolveConfig, SolveProgress, SolveStatus, StrategyError,
+    RawSolveOutcome, SolveBackend, SolveConfig, SolveProgressData, SolveStatus, StrategyError,
     StrategyKind, StrategyProgress,
 };
 use futures::{FutureExt, StreamExt};
@@ -44,7 +44,7 @@ impl SolveBackend for SubprocessSolveBackend {
         &self,
         desc: &collomatique_ilp::ProblemDesc,
         opts: SolveConfig,
-        on_progress: &(dyn Fn(SolveProgress) -> bool + Send + Sync),
+        on_progress: &(dyn Fn(SolveProgressData) -> bool + Send + Sync),
         on_echo: &(dyn Fn(String) + Send + Sync),
     ) -> Result<RawSolveOutcome, StrategyError> {
         let config = IlpSolverConfig {
@@ -64,11 +64,12 @@ impl SolveBackend for SubprocessSolveBackend {
 
         let (progress_tx, progress_rx) = futures::channel::mpsc::unbounded();
         let progress_callback = move |progress: &crate::ilp_solver::IlpProgress| {
-            let _ = progress_tx.unbounded_send(SolveProgress {
+            let _ = progress_tx.unbounded_send(SolveProgressData {
                 best_obj: progress.best_obj,
                 best_bound: progress.best_bound,
                 node_count: progress.node_count,
                 solutions_found: progress.solutions_found,
+                incumbent: progress.incumbent_solution.clone(),
             });
         };
 

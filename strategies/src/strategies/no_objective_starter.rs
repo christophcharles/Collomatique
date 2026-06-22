@@ -9,8 +9,8 @@ use collomatique_ilp_modeler::{InternalVar, Model};
 use crate::strategies::default::DefaultStrategy;
 use crate::strategies::no_objective::NoObjectiveStrategy;
 use crate::{
-    NoObjectiveProgressData, SolveProgress, SolveStatus, Strategy, StrategyContext, StrategyError,
-    StrategyOutcome,
+    NoObjectiveProgressData, SolveProgress, SolveProgressData, SolveStatus, Strategy,
+    StrategyContext, StrategyError, StrategyOutcome,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -97,14 +97,14 @@ impl Strategy for NoObjectiveStarterStrategy {
 pub enum NoObjectiveStarterProgress<V: UsableData + Send> {
     Starter(NoObjectiveProgressData),
     HintFound(ConfigData<V>),
-    Default(SolveProgress),
+    Default(SolveProgress<V>),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum NoObjectiveStarterProgressData {
     Starter(NoObjectiveProgressData),
     HintFound(Vec<f64>),
-    Default(SolveProgress),
+    Default(SolveProgressData),
 }
 
 impl fmt::Display for NoObjectiveStarterProgressData {

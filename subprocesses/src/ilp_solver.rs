@@ -24,6 +24,7 @@ pub struct IlpProgress {
     pub node_count: u64,
     pub solutions_found: u64,
     pub incumbent_info: Option<IlpIncumbentInfo>,
+    pub incumbent_solution: Option<Vec<f64>>,
 }
 
 #[derive(Debug, Clone)]
@@ -104,6 +105,9 @@ impl SolverSubprocess {
                             objective: info.objective.into_inner(),
                             feasible: info.feasible,
                         }),
+                        incumbent_solution: data
+                            .incumbent_solution
+                            .map(|s| s.into_iter().map(|v| v.into_inner()).collect()),
                     };
                     progress_callback(&progress);
                     *last_progress_cb.lock().unwrap() = Some(progress);

@@ -8,7 +8,7 @@ use collomatique_ilp::{ConfigData, UsableData};
 use collomatique_ilp_modeler::{InternalVar, Model};
 
 use crate::{
-    SolveProblemOpts, SolveProgress, SolveStatus, Strategy, StrategyContext, StrategyError,
+    SolveProblemOpts, SolveProgressData, SolveStatus, Strategy, StrategyContext, StrategyError,
     StrategyOutcome,
 };
 
@@ -48,7 +48,11 @@ impl Strategy for NoObjectiveStrategy {
                     time_limit_seconds: self.checker_time_limit_seconds,
                     disable_logging: self.disable_logging,
                 },
-                &|p: SolveProgress| on_progress(NoObjectiveProgressData::CheckerSolve(p)),
+                &|p| {
+                    on_progress(NoObjectiveProgressData::CheckerSolve(
+                        p.to_data_without_incumbent(),
+                    ))
+                },
                 &|line| format!("[checker solver] {line}"),
             )
             .await?;
@@ -114,8 +118,10 @@ impl Strategy for NoObjectiveStrategy {
                     time_limit_seconds: self.reconstruction_time_limit_seconds,
                     disable_logging: self.disable_logging,
                 },
-                &move |p: SolveProgress| {
-                    on_progress(NoObjectiveProgressData::ObjectiveReconstruction(p))
+                &move |p| {
+                    on_progress(NoObjectiveProgressData::ObjectiveReconstruction(
+                        p.to_data_without_incumbent(),
+                    ))
                 },
                 &|line| format!("[reconstruction solver] {line}"),
             )
@@ -158,9 +164,9 @@ impl Strategy for NoObjectiveStrategy {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum NoObjectiveProgressData {
-    CheckerSolve(SolveProgress),
+    CheckerSolve(SolveProgressData),
     SolutionFound,
-    ObjectiveReconstruction(SolveProgress),
+    ObjectiveReconstruction(SolveProgressData),
 }
 
 impl fmt::Display for NoObjectiveProgressData {

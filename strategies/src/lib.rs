@@ -72,15 +72,90 @@ pub struct StrategyOutcome<V: UsableData> {
     pub solution: Option<ConfigData<V>>,
 }
 
+/// Raw, serializable progress emitted by the solve backend.
+///
+/// The incumbent's variable assignment is carried as a column-indexed `Vec<f64>`
+/// (the implicit `ProblemDesc`/`ModelDesc` ordering), so the type stays serializable
+/// across the IPC barrier. Use [`SolveProgressData::into_typed`] to reconstruct the
+/// typed [`SolveProgress`] once a `var_order` is available.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SolveProgress {
+pub struct SolveProgressData {
     pub best_obj: f64,
     pub best_bound: f64,
     pub node_count: u64,
     pub solutions_found: u64,
+    pub incumbent: Option<Vec<f64>>,
 }
 
-impl fmt::Display for SolveProgress {
+impl fmt::Display for SolveProgressData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "obj={:.4} bound={:.4} nodes={} solutions={}",
+            self.best_obj, self.best_bound, self.node_count, self.solutions_found
+        )
+    }
+}
+
+impl SolveProgressData {
+    /// Reconstruct the typed progress, turning the raw incumbent vector into a
+    /// [`ConfigData`] keyed by the supplied `var_order`.
+    pub fn into_typed<V: UsableData>(self, var_order: &[V]) -> SolveProgress<V> {
+        SolveProgress {
+            best_obj: self.best_obj,
+            best_bound: self.best_bound,
+            node_count: self.node_count,
+            solutions_found: self.solutions_found,
+            incumbent: self
+                .incumbent
+                .as_ref()
+                .map(|sol| collomatique_ilp::solution_to_config_data(sol, var_order)),
+        }
+    }
+}
+
+/// Typed progress with the incumbent exposed as a [`ConfigData<V>`].
+///
+/// Not serializable by design: `ConfigData<V>` is only serializable when `V` is, which
+/// is not guaranteed. The serializable counterpart is [`SolveProgressData`].
+#[derive(Debug, Clone)]
+pub struct SolveProgress<V: UsableData> {
+    pub best_obj: f64,
+    pub best_bound: f64,
+    pub node_count: u64,
+    pub solutions_found: u64,
+    pub incumbent: Option<ConfigData<V>>,
+}
+
+impl<V: UsableData> SolveProgress<V> {
+    /// Serialize back to the raw form, encoding the incumbent against `var_order`.
+    pub fn into_data(self, var_order: &[V]) -> SolveProgressData {
+        SolveProgressData {
+            best_obj: self.best_obj,
+            best_bound: self.best_bound,
+            node_count: self.node_count,
+            solutions_found: self.solutions_found,
+            incumbent: self
+                .incumbent
+                .as_ref()
+                .map(|cfg| collomatique_ilp::config_data_to_hint(cfg, var_order)),
+        }
+    }
+
+    /// Cheap raw view that drops the incumbent (no `var_order` needed). Used where the
+    /// incumbent is not a meaningful final solution and is intentionally discarded.
+    pub fn to_data_without_incumbent(&self) -> SolveProgressData {
+        SolveProgressData {
+            best_obj: self.best_obj,
+            best_bound: self.best_bound,
+            node_count: self.node_count,
+            solutions_found: self.solutions_found,
+            incumbent: None,
+        }
+    }
+}
+
+impl<V: UsableData> fmt::Display for SolveProgress<V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -104,7 +179,7 @@ pub trait SolveBackend: Send + Sync {
         &self,
         desc: &ProblemDesc,
         opts: SolveConfig,
-        on_progress: &(dyn Fn(SolveProgress) -> bool + Send + Sync),
+        on_progress: &(dyn Fn(SolveProgressData) -> bool + Send + Sync),
         on_echo: &(dyn Fn(String) + Send + Sync),
     ) -> Result<RawSolveOutcome, StrategyError>;
 
@@ -162,7 +237,7 @@ impl StrategyContext {
         &self,
         desc: &ProblemDesc,
         opts: SolveConfig,
-        on_progress: &(dyn Fn(SolveProgress) -> bool + Send + Sync),
+        on_progress: &(dyn Fn(SolveProgressData) -> bool + Send + Sync),
     ) -> Result<RawSolveOutcome, StrategyError> {
         let noop_echo = |_: String| {};
         let echo_fn: &(dyn Fn(String) + Send + Sync) = match &self.on_echo {
@@ -178,7 +253,7 @@ impl StrategyContext {
         &self,
         desc: &ProblemDesc,
         opts: SolveConfig,
-        on_progress: &(dyn Fn(SolveProgress) -> bool + Send + Sync),
+        on_progress: &(dyn Fn(SolveProgressData) -> bool + Send + Sync),
         tag_echo: &(dyn Fn(String) -> String + Send + Sync),
     ) -> Result<RawSolveOutcome, StrategyError> {
         let echo_impl: Box<dyn Fn(String) + Send + Sync + '_> = match &self.on_echo {
@@ -210,7 +285,7 @@ impl StrategyContext {
         &self,
         problem: &Problem<V, C, P>,
         opts: SolveProblemOpts<V>,
-        on_progress: &(dyn Fn(SolveProgress) -> bool + Send + Sync),
+        on_progress: &(dyn Fn(SolveProgress<V>) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<V>, StrategyError>
     where
         V: UsableData,
@@ -230,8 +305,11 @@ impl StrategyContext {
             disable_logging: opts.disable_logging,
         };
 
+        let typed_on_progress =
+            |data: SolveProgressData| -> bool { on_progress(data.into_typed(&var_order)) };
+
         let raw = self
-            .solve_with_progress(&desc, solve_config, on_progress)
+            .solve_with_progress(&desc, solve_config, &typed_on_progress)
             .await?;
 
         Ok(raw.into_typed(&var_order))
@@ -241,7 +319,7 @@ impl StrategyContext {
         &self,
         problem: &Problem<V, C, P>,
         opts: SolveProblemOpts<V>,
-        on_progress: &(dyn Fn(SolveProgress) -> bool + Send + Sync),
+        on_progress: &(dyn Fn(SolveProgress<V>) -> bool + Send + Sync),
         tag_echo: &(dyn Fn(String) -> String + Send + Sync),
     ) -> Result<StrategyOutcome<V>, StrategyError>
     where
@@ -262,8 +340,11 @@ impl StrategyContext {
             disable_logging: opts.disable_logging,
         };
 
+        let typed_on_progress =
+            |data: SolveProgressData| -> bool { on_progress(data.into_typed(&var_order)) };
+
         let raw = self
-            .solve_with_progress_and_echo(&desc, solve_config, on_progress, tag_echo)
+            .solve_with_progress_and_echo(&desc, solve_config, &typed_on_progress, tag_echo)
             .await?;
 
         Ok(raw.into_typed(&var_order))
@@ -311,7 +392,7 @@ pub enum StrategyKind {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum StrategyProgress {
-    Default(SolveProgress),
+    Default(SolveProgressData),
     NoObjective(NoObjectiveProgressData),
     NoObjectiveStarter(NoObjectiveStarterProgressData),
 }
@@ -356,7 +437,7 @@ impl From<NoObjectiveStarterStrategy> for StrategyKind {
     }
 }
 
-impl TryFrom<StrategyProgress> for SolveProgress {
+impl TryFrom<StrategyProgress> for SolveProgressData {
     type Error = StrategyProgress;
     fn try_from(sp: StrategyProgress) -> Result<Self, StrategyProgress> {
         match sp {
@@ -396,15 +477,18 @@ pub trait SpawnableStrategy {
 }
 
 impl SpawnableStrategy for DefaultStrategy {
-    type Progress<V: UsableData + Send> = SolveProgress;
+    type Progress<V: UsableData + Send> = SolveProgress<V>;
     fn to_strategy_kind(&self) -> StrategyKind {
         self.clone().into()
     }
     fn convert_progress<V: UsableData + Send>(
         sp: StrategyProgress,
-        _var_order: &[V],
-    ) -> Result<SolveProgress, StrategyProgress> {
-        sp.try_into()
+        var_order: &[V],
+    ) -> Result<SolveProgress<V>, StrategyProgress> {
+        match sp {
+            StrategyProgress::Default(data) => Ok(data.into_typed(var_order)),
+            other => Err(other),
+        }
     }
 }
 
@@ -440,7 +524,7 @@ impl SpawnableStrategy for NoObjectiveStarterStrategy {
                     NoObjectiveStarterProgress::HintFound(config)
                 }
                 NoObjectiveStarterProgressData::Default(p) => {
-                    NoObjectiveStarterProgress::Default(p)
+                    NoObjectiveStarterProgress::Default(p.into_typed(var_order))
                 }
             }),
             other => Err(other),
@@ -499,8 +583,9 @@ impl StrategyKind {
     {
         match self {
             StrategyKind::Default(s) => {
+                let (_, var_order) = model.to_desc();
                 s.run_with_callback(ctx, model, warm_start, &|p| {
-                    on_progress(StrategyProgress::Default(p))
+                    on_progress(StrategyProgress::Default(p.into_data(&var_order)))
                 })
                 .await
             }
@@ -527,7 +612,7 @@ impl StrategyKind {
                         }
                         NoObjectiveStarterProgress::Default(d) => {
                             StrategyProgress::NoObjectiveStarter(
-                                NoObjectiveStarterProgressData::Default(d),
+                                NoObjectiveStarterProgressData::Default(d.into_data(&var_order)),
                             )
                         }
                     };
@@ -557,7 +642,7 @@ impl StrategyContext {
         &self,
         model: &Model<B, E, C>,
         opts: SolveProblemOpts<InternalVar<B, E>>,
-        on_progress: &(dyn Fn(SolveProgress) -> bool + Send + Sync),
+        on_progress: &(dyn Fn(SolveProgress<InternalVar<B, E>>) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
         B: UsableData,
@@ -572,7 +657,7 @@ impl StrategyContext {
         &self,
         model: &Model<B, E, C>,
         opts: SolveProblemOpts<InternalVar<B, E>>,
-        on_progress: &(dyn Fn(SolveProgress) -> bool + Send + Sync),
+        on_progress: &(dyn Fn(SolveProgress<InternalVar<B, E>>) -> bool + Send + Sync),
         tag_echo: &(dyn Fn(String) -> String + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
@@ -759,7 +844,7 @@ mod tests {
             &self,
             _desc: &ProblemDesc,
             _opts: SolveConfig,
-            _on_progress: &(dyn Fn(SolveProgress) -> bool + Send + Sync),
+            _on_progress: &(dyn Fn(SolveProgressData) -> bool + Send + Sync),
             _on_echo: &(dyn Fn(String) + Send + Sync),
         ) -> Result<RawSolveOutcome, StrategyError> {
             Ok(self.outcome.clone())
@@ -795,7 +880,7 @@ mod tests {
             &self,
             _desc: &ProblemDesc,
             _opts: SolveConfig,
-            _on_progress: &(dyn Fn(SolveProgress) -> bool + Send + Sync),
+            _on_progress: &(dyn Fn(SolveProgressData) -> bool + Send + Sync),
             _on_echo: &(dyn Fn(String) + Send + Sync),
         ) -> Result<RawSolveOutcome, StrategyError> {
             let outcome = self
@@ -819,12 +904,107 @@ mod tests {
         }
     }
 
+    /// Backend that emits a single progress update (carrying an incumbent) before
+    /// returning its canned outcome.
+    struct ProgressMockBackend {
+        progress: SolveProgressData,
+        outcome: RawSolveOutcome,
+    }
+
+    #[async_trait]
+    impl SolveBackend for ProgressMockBackend {
+        async fn solve_with_progress(
+            &self,
+            _desc: &ProblemDesc,
+            _opts: SolveConfig,
+            on_progress: &(dyn Fn(SolveProgressData) -> bool + Send + Sync),
+            _on_echo: &(dyn Fn(String) + Send + Sync),
+        ) -> Result<RawSolveOutcome, StrategyError> {
+            on_progress(self.progress.clone());
+            Ok(self.outcome.clone())
+        }
+
+        async fn run_strategy_subprocess(
+            &self,
+            _model_desc: &ModelDesc,
+            _strategy: &StrategyKind,
+            _warm_start: Option<Vec<f64>>,
+            _on_progress: &(dyn Fn(StrategyProgress) -> bool + Send + Sync),
+            _on_echo: &(dyn Fn(String) + Send + Sync),
+        ) -> Result<RawSolveOutcome, StrategyError> {
+            unreachable!()
+        }
+    }
+
     fn make_model(
         base_vars: Vec<(usize, Variable)>,
     ) -> collomatique_ilp_modeler::Model<usize, (), ()> {
         let vars: HashMap<usize, Variable> = base_vars.into_iter().collect();
         let modeler: Modeler<'_, usize, (), (), (), ()> = Modeler::new(vars);
         modeler.build(&()).unwrap()
+    }
+
+    #[tokio::test]
+    async fn solve_model_with_progress_reports_typed_incumbent() {
+        // The raw incumbent crosses the backend boundary as a column-indexed Vec<f64>;
+        // solve_model_with_progress must reconstruct it into a typed ConfigData<V> keyed
+        // by the exact var_order it uses internally. Build the raw vector against that same
+        // ordering so the test is insensitive to HashMap iteration order.
+        let model = make_model(vec![(0, Variable::binary()), (1, Variable::binary())]);
+        let (_, var_order) = model.problem().get_desc();
+
+        let incumbent: Vec<f64> = var_order
+            .iter()
+            .map(|iv| match iv {
+                InternalVar::Base(0) => 1.0,
+                InternalVar::Base(1) => 0.0,
+                _ => 0.0,
+            })
+            .collect();
+
+        let backend = Arc::new(ProgressMockBackend {
+            progress: SolveProgressData {
+                best_obj: 1.0,
+                best_bound: 2.0,
+                node_count: 3,
+                solutions_found: 1,
+                incumbent: Some(incumbent),
+            },
+            outcome: RawSolveOutcome {
+                status: SolveStatus::Optimal,
+                objective: Some(1.0),
+                best_bound: Some(1.0),
+                solution: Some(vec![1.0, 0.0]),
+            },
+        });
+
+        let ctx = StrategyContext::new(backend);
+        let captured: Mutex<Option<ConfigData<InternalVar<usize, ()>>>> = Mutex::new(None);
+
+        let outcome = ctx
+            .solve_model_with_progress(
+                &model,
+                SolveProblemOpts {
+                    warm_start: None,
+                    time_limit_seconds: None,
+                    disable_logging: false,
+                },
+                &|p: SolveProgress<InternalVar<usize, ()>>| {
+                    *captured.lock().unwrap() = p.incumbent;
+                    true
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(outcome.status, SolveStatus::Optimal);
+
+        let incumbent = captured
+            .into_inner()
+            .unwrap()
+            .expect("a typed incumbent should be reported");
+        assert_eq!(incumbent.get(InternalVar::Base(0)), Some(1.0));
+        assert_eq!(incumbent.get(InternalVar::Base(1)), Some(0.0));
     }
 
     #[tokio::test]
