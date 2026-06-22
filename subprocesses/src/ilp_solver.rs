@@ -1,3 +1,4 @@
+use std::fmt;
 use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -24,6 +25,25 @@ pub struct IlpProgress {
     pub node_count: u64,
     pub solutions_found: u64,
     pub incumbent_info: Option<IlpIncumbentInfo>,
+    pub incumbent_solution: Option<Vec<f64>>,
+}
+
+impl fmt::Display for IlpProgress {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "obj={:.4} bound={:.4} nodes={} solutions={} incumbent={}",
+            self.best_obj,
+            self.best_bound,
+            self.node_count,
+            self.solutions_found,
+            if self.incumbent_solution.is_some() {
+                "yes"
+            } else {
+                "no"
+            },
+        )
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -104,6 +124,9 @@ impl SolverSubprocess {
                             objective: info.objective.into_inner(),
                             feasible: info.feasible,
                         }),
+                        incumbent_solution: data
+                            .incumbent_solution
+                            .map(|s| s.into_iter().map(|v| v.into_inner()).collect()),
                     };
                     progress_callback(&progress);
                     *last_progress_cb.lock().unwrap() = Some(progress);

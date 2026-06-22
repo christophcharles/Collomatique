@@ -4,8 +4,7 @@ mod strategy_status_bar;
 pub use strategy_frame::StrategyFrame;
 pub use strategy_status_bar::{StrategyStatusBar, StrategyStatusBarOutput};
 
-use collomatique_strategies::{StrategyKind, StrategyProgress};
-use collomatique_subprocesses::StrategyResult;
+use collomatique_strategies::{SolveStatus, StrategyKind, StrategyProgress};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StrategyName {
@@ -15,6 +14,8 @@ pub enum StrategyName {
 pub fn strategy_name_from_kind(kind: &StrategyKind) -> StrategyName {
     match kind {
         StrategyKind::Default(_) => StrategyName::Default,
+        StrategyKind::NoObjective(_) => todo!(),
+        StrategyKind::NoObjectiveStarter(_) => todo!(),
     }
 }
 
@@ -23,6 +24,6 @@ pub enum StrategyDisplayInput {
     Echo(String),
     Clear(StrategyName),
     StrategyUpdate(Result<StrategyProgress, String>),
-    Finished(StrategyResult),
+    Finished(SolveStatus),
     ToggleDebug(bool),
 }

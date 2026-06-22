@@ -7,6 +7,7 @@ authors.workspace = true
 [dependencies]
 collomatique-rpc = { path = "../rpc" }
 collomatique-ilp = { path = "../ilp", features = ["serde"] }
+collomatique-ilp-modeler = { path = "../ilp-modeler", features = ["serde"] }
 collomatique-strategies = { path = "../strategies" }
 ordered-float.workspace = true
 async-trait.workspace = true

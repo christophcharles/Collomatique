@@ -15,6 +15,9 @@ pub enum DebugMode {
     Objective,
     SubprocessSolve,
     SubprocessSolveStrategy,
+    NoObjective,
+    NoObjectiveStarter,
+    Conductor,
 }
 
 pub fn print_help() -> Result<(), anyhow::Error> {
@@ -46,6 +49,15 @@ pub fn print_help() -> Result<(), anyhow::Error> {
     );
     eprintln!("    subprocess-solve   Solve the full ILP via a subprocess (end-to-end test)");
     eprintln!("    subprocess-solve-strategy  Solve via a strategy subprocess (end-to-end test)");
+    eprintln!(
+        "    no-objective           Solve via no-objective strategy subprocess (end-to-end test)"
+    );
+    eprintln!(
+        "    no-objective-starter   Solve via no-objective starter strategy subprocess (end-to-end test)"
+    );
+    eprintln!(
+        "    conductor              Solve via the conductor strategy (spawns subprocess workers)"
+    );
     eprintln!();
     eprintln!("  All modes except 'help' require a file argument.");
     eprintln!("  Blame modes use 'minimal' filtering by default: redundant constraints implied");
@@ -98,6 +110,9 @@ pub fn run(mode: DebugMode, file: PathBuf) -> Result<(), anyhow::Error> {
             DebugMode::Objective => objective(&model, &inner_data),
             DebugMode::SubprocessSolve => subprocess_solve(&model),
             DebugMode::SubprocessSolveStrategy => subprocess_solve_strategy(&model),
+            DebugMode::NoObjective => no_objective_solve(&model),
+            DebugMode::NoObjectiveStarter => no_objective_starter_solve(&model),
+            DebugMode::Conductor => conductor_solve(&model).await,
         }
 
         eprintln!("Total: {:.2?}", t_total.elapsed());
@@ -334,7 +349,7 @@ fn subprocess_solve(model: &collomatique_constraints_colloscopes::ColloscopeMode
         },
         |progress| {
             eprintln!(
-                "  [progress] obj={:.4} bound={:.4} nodes={} solutions={}",
+                "  [subprocess progress] obj={:.4} bound={:.4} nodes={} solutions={}",
                 progress.best_obj,
                 progress.best_bound,
                 progress.node_count,
@@ -419,24 +434,33 @@ fn subprocess_solve(model: &collomatique_constraints_colloscopes::ColloscopeMode
 }
 
 fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::ColloscopeModel) {
-    use collomatique_strategies::{DefaultStrategy, StrategyKind, StrategyProgress};
-    use collomatique_subprocesses::{StrategyStatus, StrategySubprocess, WorkerManager};
+    use collomatique_strategies::{
+        DefaultStrategy, SolveProgress, SolveProgressData, SolveStatus, StrategyOutcome,
+    };
+    use collomatique_subprocesses::{StrategySubprocess, WorkerManager};
     use std::sync::mpsc;
+
+    type Outcome = StrategyOutcome<
+        collomatique_ilp_modeler::InternalVar<
+            collomatique_constraints_colloscopes::Var,
+            collomatique_constraints_colloscopes::ExtraVarName,
+        >,
+    >;
 
     let t = Instant::now();
     eprintln!("Extracting problem descriptor...");
-    let (desc, var_order) = model.problem().get_desc();
+    let (model_desc, _) = model.to_desc();
     eprintln!(
         "  Descriptor: {} variables, {} constraints ({:.2?})",
-        desc.variables.len(),
-        desc.constraints.len(),
+        model_desc.main.problem_desc.variables.len(),
+        model_desc.main.problem_desc.constraints.len(),
         t.elapsed()
     );
 
-    let strategy = StrategyKind::Default(DefaultStrategy {
+    let strategy = DefaultStrategy {
         time_limit_seconds: None,
         disable_logging: false,
-    });
+    };
 
     let (tx, rx) = mpsc::channel();
     let mut worker_manager = WorkerManager::new();
@@ -445,20 +469,18 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
     let t = Instant::now();
     let handle = StrategySubprocess::spawn(
         &mut worker_manager,
-        desc,
-        strategy,
-        move |result| {
-            let _ = tx.send(result);
+        model,
+        &strategy,
+        None,
+        move |outcome: Outcome| {
+            let _ = tx.send(outcome);
         },
-        |progress: Result<StrategyProgress, String>| match progress {
-            Ok(StrategyProgress::Default(p)) => {
-                eprintln!(
-                    "  [strategy subprocess] [progress] obj={:.4} bound={:.4} nodes={} solutions={}",
-                    p.best_obj, p.best_bound, p.node_count, p.solutions_found
-                );
+        |progress: Result<SolveProgress<_>, String>| match progress {
+            Ok(p) => {
+                eprintln!("  [strategy subprocess progress] {p}");
             }
             Err(e) => {
-                eprintln!("  [strategy subprocess] [progress error] {e}");
+                eprintln!("  [strategy subprocess progress error] {e}");
             }
         },
         |line| {
@@ -480,23 +502,21 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
     let t = Instant::now();
     let result = rx.recv();
     match result {
-        Ok(result) => {
+        Ok(outcome) => {
             eprintln!("  Result received in {:.2?}", t.elapsed());
-            eprintln!("  Status: {:?}", result.status);
-            match result.objective {
+            eprintln!("  Status: {:?}", outcome.status);
+            match outcome.objective {
                 Some(v) => eprintln!("  Objective: {}", v),
                 None => eprintln!("  Objective: N/A"),
             }
-            match result.best_bound {
+            match outcome.best_bound {
                 Some(v) => eprintln!("  Best bound: {}", v),
                 None => eprintln!("  Best bound: N/A"),
             }
 
-            if let Some(ref solution) = result.solution {
-                eprintln!("  Solution has {} values", solution.len());
-                let config_data = collomatique_ilp::solution_to_config_data(solution, &var_order);
+            if let Some(ref config_data) = outcome.solution {
                 let problem = model.problem();
-                match problem.build_config(config_data) {
+                match problem.build_config(config_data.clone()) {
                     Ok(config) => {
                         if config.is_feasible() {
                             eprintln!("  Solution is FEASIBLE");
@@ -518,22 +538,385 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
                 eprintln!("  No solution returned");
             }
 
-            if result.status == StrategyStatus::Error {
+            if outcome.status == SolveStatus::Error {
                 eprintln!("  Strategy reported an error");
             }
         }
         Err(_) => {
             eprintln!("  Channel closed without receiving a result");
             if let Some(progress) = handle.last_progress() {
-                match &progress {
-                    StrategyProgress::Default(p) => {
+                if let Ok(p) = SolveProgressData::try_from(progress) {
+                    eprintln!("  Last progress: {p}");
+                }
+            }
+        }
+    }
+}
+
+fn no_objective_solve(model: &collomatique_constraints_colloscopes::ColloscopeModel) {
+    use collomatique_strategies::{
+        NoObjectiveProgressData, NoObjectiveStrategy, SolveStatus, StrategyOutcome,
+    };
+    use collomatique_subprocesses::{StrategySubprocess, WorkerManager};
+    use std::sync::mpsc;
+
+    type Outcome = StrategyOutcome<
+        collomatique_ilp_modeler::InternalVar<
+            collomatique_constraints_colloscopes::Var,
+            collomatique_constraints_colloscopes::ExtraVarName,
+        >,
+    >;
+
+    let t = Instant::now();
+    eprintln!("Extracting problem descriptor...");
+    let (model_desc, _) = model.to_desc();
+    eprintln!(
+        "  Descriptor: {} variables, {} constraints ({:.2?})",
+        model_desc.main.problem_desc.variables.len(),
+        model_desc.main.problem_desc.constraints.len(),
+        t.elapsed()
+    );
+
+    let strategy = NoObjectiveStrategy {
+        checker_time_limit_seconds: None,
+        reconstruction_time_limit_seconds: None,
+        disable_logging: false,
+    };
+
+    let (tx, rx) = mpsc::channel();
+    let mut worker_manager = WorkerManager::new();
+
+    eprintln!("Spawning no-objective strategy subprocess...");
+    let t = Instant::now();
+    let handle = StrategySubprocess::spawn(
+        &mut worker_manager,
+        model,
+        &strategy,
+        None,
+        move |outcome: Outcome| {
+            let _ = tx.send(outcome);
+        },
+        |progress: Result<NoObjectiveProgressData, String>| match progress {
+            Ok(p) => {
+                eprintln!("  [strategy subprocess progress] {p}");
+            }
+            Err(e) => {
+                eprintln!("  [strategy subprocess progress error] {e}");
+            }
+        },
+        |line| {
+            eprintln!("  [strategy subprocess] {}", line.trim_end());
+        },
+    );
+
+    let handle = match handle {
+        Ok(h) => h,
+        Err(e) => {
+            eprintln!("  Failed to spawn strategy subprocess: {}", e);
+            return;
+        }
+    };
+
+    eprintln!("  Strategy subprocess spawned in {:.2?}", t.elapsed());
+    eprintln!("Waiting for strategy result...");
+
+    let t = Instant::now();
+    let result = rx.recv();
+    match result {
+        Ok(outcome) => {
+            eprintln!("  Result received in {:.2?}", t.elapsed());
+            eprintln!("  Status: {:?}", outcome.status);
+            match outcome.objective {
+                Some(v) => eprintln!("  Objective: {}", v),
+                None => eprintln!("  Objective: N/A"),
+            }
+            match outcome.best_bound {
+                Some(v) => eprintln!("  Best bound: {}", v),
+                None => eprintln!("  Best bound: N/A"),
+            }
+
+            if let Some(ref config_data) = outcome.solution {
+                let problem = model.problem();
+                match problem.build_config(config_data.clone()) {
+                    Ok(config) => {
+                        if config.is_feasible() {
+                            eprintln!("  Solution is FEASIBLE");
+                        } else {
+                            let violated = config.blame().len();
+                            eprintln!("  Solution violates {} constraint(s)", violated);
+                        }
+                    }
+                    Err(check) => {
                         eprintln!(
-                            "  Last progress: obj={:.4} bound={:.4} nodes={} solutions={}",
-                            p.best_obj, p.best_bound, p.node_count, p.solutions_found
+                            "  Config build failed: missing={}, excess={}, non_conforming={}",
+                            check.missing_variables.len(),
+                            check.excess_variables.len(),
+                            check.non_conforming_variables.len(),
                         );
                     }
                 }
+            } else {
+                eprintln!("  No solution returned");
             }
+
+            if outcome.status == SolveStatus::Error {
+                eprintln!("  Strategy reported an error");
+            }
+        }
+        Err(_) => {
+            eprintln!("  Channel closed without receiving a result");
+            if let Some(progress) = handle.last_progress() {
+                if let Ok(p) = NoObjectiveProgressData::try_from(progress) {
+                    eprintln!("  Last progress: {p}");
+                }
+            }
+        }
+    }
+}
+
+fn no_objective_starter_solve(model: &collomatique_constraints_colloscopes::ColloscopeModel) {
+    use collomatique_strategies::{
+        DefaultStrategy, NoObjectiveStarterProgress, NoObjectiveStarterStrategy,
+        NoObjectiveStrategy, SolveStatus, StrategyOutcome,
+    };
+    use collomatique_subprocesses::{StrategySubprocess, WorkerManager};
+    use std::sync::mpsc;
+
+    type Outcome = StrategyOutcome<
+        collomatique_ilp_modeler::InternalVar<
+            collomatique_constraints_colloscopes::Var,
+            collomatique_constraints_colloscopes::ExtraVarName,
+        >,
+    >;
+
+    type V = collomatique_ilp_modeler::InternalVar<
+        collomatique_constraints_colloscopes::Var,
+        collomatique_constraints_colloscopes::ExtraVarName,
+    >;
+
+    let t = Instant::now();
+    eprintln!("Extracting problem descriptor...");
+    let (model_desc, _) = model.to_desc();
+    eprintln!(
+        "  Descriptor: {} variables, {} constraints ({:.2?})",
+        model_desc.main.problem_desc.variables.len(),
+        model_desc.main.problem_desc.constraints.len(),
+        t.elapsed()
+    );
+
+    let strategy = NoObjectiveStarterStrategy {
+        no_objective: NoObjectiveStrategy {
+            checker_time_limit_seconds: None,
+            reconstruction_time_limit_seconds: None,
+            disable_logging: false,
+        },
+        default: DefaultStrategy {
+            time_limit_seconds: None,
+            disable_logging: false,
+        },
+    };
+
+    let (tx, rx) = mpsc::channel();
+    let mut worker_manager = WorkerManager::new();
+
+    eprintln!("Spawning no-objective-starter strategy subprocess...");
+    let t = Instant::now();
+    let handle = StrategySubprocess::spawn(
+        &mut worker_manager,
+        model,
+        &strategy,
+        None,
+        move |outcome: Outcome| {
+            let _ = tx.send(outcome);
+        },
+        |progress: Result<NoObjectiveStarterProgress<V>, String>| match progress {
+            Ok(NoObjectiveStarterProgress::HintFound(_)) => {
+                eprintln!("  [strategy subprocess progress] Hint found!");
+            }
+            Ok(p) => {
+                eprintln!("  [strategy subprocess progress] {p}");
+            }
+            Err(e) => {
+                eprintln!("  [strategy subprocess progress error] {e}");
+            }
+        },
+        |line| {
+            eprintln!("  [strategy subprocess] {}", line.trim_end());
+        },
+    );
+
+    let handle = match handle {
+        Ok(h) => h,
+        Err(e) => {
+            eprintln!("  Failed to spawn strategy subprocess: {}", e);
+            return;
+        }
+    };
+
+    eprintln!("  Strategy subprocess spawned in {:.2?}", t.elapsed());
+    eprintln!("Waiting for strategy result...");
+
+    let t = Instant::now();
+    let result = rx.recv();
+    match result {
+        Ok(outcome) => {
+            eprintln!("  Result received in {:.2?}", t.elapsed());
+            eprintln!("  Status: {:?}", outcome.status);
+            match outcome.objective {
+                Some(v) => eprintln!("  Objective: {}", v),
+                None => eprintln!("  Objective: N/A"),
+            }
+            match outcome.best_bound {
+                Some(v) => eprintln!("  Best bound: {}", v),
+                None => eprintln!("  Best bound: N/A"),
+            }
+
+            if let Some(ref config_data) = outcome.solution {
+                let problem = model.problem();
+                match problem.build_config(config_data.clone()) {
+                    Ok(config) => {
+                        if config.is_feasible() {
+                            eprintln!("  Solution is FEASIBLE");
+                        } else {
+                            let violated = config.blame().len();
+                            eprintln!("  Solution violates {} constraint(s)", violated);
+                        }
+                    }
+                    Err(check) => {
+                        eprintln!(
+                            "  Config build failed: missing={}, excess={}, non_conforming={}",
+                            check.missing_variables.len(),
+                            check.excess_variables.len(),
+                            check.non_conforming_variables.len(),
+                        );
+                    }
+                }
+            } else {
+                eprintln!("  No solution returned");
+            }
+
+            if outcome.status == SolveStatus::Error {
+                eprintln!("  Strategy reported an error");
+            }
+        }
+        Err(_) => {
+            eprintln!("  Channel closed without receiving a result");
+            if let Some(progress) = handle.last_progress() {
+                eprintln!("  Last progress: {progress}");
+            }
+        }
+    }
+}
+
+async fn conductor_solve(model: &collomatique_constraints_colloscopes::ColloscopeModel) {
+    use collomatique_strategies::{
+        ConductorProgress, ConductorStrategy, SolveStatus, Strategy, StrategyContext,
+    };
+    use collomatique_subprocesses::{SubprocessSolveBackend, WorkerManager};
+    use std::sync::{Arc, Mutex};
+
+    type V = collomatique_ilp_modeler::InternalVar<
+        collomatique_constraints_colloscopes::Var,
+        collomatique_constraints_colloscopes::ExtraVarName,
+    >;
+
+    let t = Instant::now();
+    eprintln!("Extracting problem descriptor...");
+    let (model_desc, _) = model.to_desc();
+    eprintln!(
+        "  Descriptor: {} variables, {} constraints ({:.2?})",
+        model_desc.main.problem_desc.variables.len(),
+        model_desc.main.problem_desc.constraints.len(),
+        t.elapsed()
+    );
+
+    let worker_manager = Arc::new(Mutex::new(WorkerManager::new()));
+    let backend = Arc::new(SubprocessSolveBackend::new(worker_manager));
+    let on_echo: Arc<dyn Fn(String) + Send + Sync> = Arc::new(|line: String| {
+        eprintln!("  [conductor] {}", line.trim_end());
+    });
+    let ctx = StrategyContext::with_echo(backend, on_echo);
+
+    let conductor = ConductorStrategy::default();
+
+    eprintln!("Running conductor strategy...");
+    let t = Instant::now();
+    let result = conductor
+        .run_with_callback(&ctx, model, None, &|progress: ConductorProgress<V>| {
+            match &progress {
+                ConductorProgress::Conductor(status) => {
+                    let obj_str = status
+                        .best_solution
+                        .as_ref()
+                        .map(|s| format!("{:.4}", s.objective))
+                        .unwrap_or_else(|| "N/A".to_string());
+                    let bound_str = status
+                        .best_bound
+                        .map(|b| format!("{:.4}", b))
+                        .unwrap_or_else(|| "N/A".to_string());
+                    eprintln!(
+                        "  [conductor] obj={} bound={} solutions={} workers={}/{}",
+                        obj_str,
+                        bound_str,
+                        status.solution_found_count,
+                        status.finished_workers,
+                        status.total_workers,
+                    );
+                }
+                ConductorProgress::DefaultWorker(p) => {
+                    eprintln!(
+                        "  [conductor] [default worker] obj={:.4} bound={:.4} nodes={} solutions={}",
+                        p.best_obj, p.best_bound, p.node_count, p.solutions_found
+                    );
+                }
+            }
+            true
+        })
+        .await;
+
+    match result {
+        Ok(outcome) => {
+            eprintln!("  Result received in {:.2?}", t.elapsed());
+            eprintln!("  Status: {:?}", outcome.status);
+            match outcome.objective {
+                Some(v) => eprintln!("  Objective: {}", v),
+                None => eprintln!("  Objective: N/A"),
+            }
+            match outcome.best_bound {
+                Some(v) => eprintln!("  Best bound: {}", v),
+                None => eprintln!("  Best bound: N/A"),
+            }
+
+            if let Some(ref config_data) = outcome.solution {
+                let problem = model.problem();
+                match problem.build_config(config_data.clone()) {
+                    Ok(config) => {
+                        if config.is_feasible() {
+                            eprintln!("  Solution is FEASIBLE");
+                        } else {
+                            let violated = config.blame().len();
+                            eprintln!("  Solution violates {} constraint(s)", violated);
+                        }
+                    }
+                    Err(check) => {
+                        eprintln!(
+                            "  Config build failed: missing={}, excess={}, non_conforming={}",
+                            check.missing_variables.len(),
+                            check.excess_variables.len(),
+                            check.non_conforming_variables.len(),
+                        );
+                    }
+                }
+            } else {
+                eprintln!("  No solution returned");
+            }
+
+            if outcome.status == SolveStatus::Error {
+                eprintln!("  Conductor reported an error");
+            }
+        }
+        Err(e) => {
+            eprintln!("  Conductor strategy failed in {:.2?}: {}", t.elapsed(), e);
         }
     }
 }

@@ -92,8 +92,8 @@ async fn try_solve() -> Result<(), anyhow::Error> {
 fn solve_ilp(serialized: SerializedIlpProblem) -> Result<(), anyhow::Error> {
     use collomatique_ilp::solvers::collo_cbc::ColloCbcSolver;
     use collomatique_ilp::solvers::{
-        CallbackSolverModel, ProgressBounds, ProgressIncumbentInfo, ProgressStats, Solver,
-        WarmSolver,
+        CallbackSolverModel, ProgressBounds, ProgressIncumbentData, ProgressIncumbentInfo,
+        ProgressStats, Solver, WarmSolver,
     };
     use collomatique_ilp::{DefaultRepr, ProblemBuilder};
     use ordered_float::OrderedFloat;
@@ -139,6 +139,12 @@ fn solve_ilp(serialized: SerializedIlpProblem) -> Result<(), anyhow::Error> {
             incumbent_info: progress.incumbent_info().map(|info| SolverIncumbentInfo {
                 objective: OrderedFloat(info.objective),
                 feasible: info.feasible,
+            }),
+            incumbent_solution: progress.incumbent_data().map(|cfg| {
+                var_indices
+                    .iter()
+                    .map(|&i| OrderedFloat(cfg.get(i).unwrap_or(0.0)))
+                    .collect()
             }),
         };
 
@@ -198,7 +204,7 @@ fn solve_ilp(serialized: SerializedIlpProblem) -> Result<(), anyhow::Error> {
 }
 
 fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Error> {
-    use collomatique_ilp::{DefaultRepr, ProblemBuilder};
+    use collomatique_ilp_modeler::InternalVar;
     use collomatique_rpc::{SerializedStrategyProgress, StrategyProgressData};
     use collomatique_strategies::{StrategyContext, StrategyProgress, StrategyRequest};
     use collomatique_subprocesses::{SubprocessSolveBackend, WorkerManager};
@@ -209,27 +215,24 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
     let request = StrategyRequest::deserialize(&request_str)
         .map_err(|e| anyhow!("Failed to deserialize strategy request: {e}"))?;
 
-    eprintln!("Building problem from desc...");
-    let problem = ProblemBuilder::<usize, (), DefaultRepr<usize>>::from_desc(request.problem_desc)
-        .build()
-        .map_err(|e| anyhow!("Failed to build problem from desc: {:?}", e))?;
+    eprintln!("Building model from desc...");
+    let (model, var_order) = request.model_desc.to_model();
+
+    let warm_start = request
+        .warm_start
+        .as_ref()
+        .map(|raw| collomatique_ilp::solution_to_config_data(raw, &var_order));
 
     let worker_manager = Arc::new(Mutex::new(WorkerManager::new()));
     let backend = Arc::new(SubprocessSolveBackend::new(worker_manager));
-    let on_echo: Arc<dyn Fn(String) + Send + Sync> = Arc::new(|line: String| {
-        eprintln!("[solver] {}", line.trim_end());
+    let strategy_name = request.strategy.name();
+    let on_echo: Arc<dyn Fn(String) + Send + Sync> = Arc::new(move |line: String| {
+        eprintln!("[{strategy_name} strategy] {}", line.trim_end());
     });
     let ctx = StrategyContext::with_echo(backend, on_echo);
 
     let progress_callback = |progress: StrategyProgress| -> bool {
-        match &progress {
-            StrategyProgress::Default(p) => {
-                eprintln!(
-                    "[solver] [progress] obj={:.4} bound={:.4} nodes={} solutions={}",
-                    p.best_obj, p.best_bound, p.node_count, p.solutions_found
-                );
-            }
-        }
+        eprintln!("[{strategy_name} strategy progress] {progress}");
         let serialized_progress = progress.serialize();
         let progress_data = StrategyProgressData {
             progress: SerializedStrategyProgress::from(serialized_progress),
@@ -247,7 +250,7 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
         .block_on(
             request
                 .strategy
-                .run_with_callback(&ctx, &problem, &progress_callback),
+                .run_with_callback(&ctx, &model, warm_start, &progress_callback),
         )
         .map_err(|e| anyhow!("Strategy failed: {e}"))?;
 
@@ -258,13 +261,12 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
         collomatique_strategies::SolveStatus::Error => StrategyStatus::Error,
     };
 
-    let num_vars = problem.get_variables().len();
-    let var_indices: Vec<usize> = (0..num_vars).collect();
-
     let solution = outcome.solution.map(|config| {
-        var_indices
+        var_order
             .iter()
-            .map(|&i| OrderedFloat(config.get(i).unwrap_or(0.0)))
+            .map(|iv: &InternalVar<usize, usize>| {
+                OrderedFloat(config.get(iv.clone()).unwrap_or(0.0))
+            })
             .collect::<Vec<_>>()
     });
 

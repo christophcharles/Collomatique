@@ -22,6 +22,7 @@ use collomatique_ilp::{
 };
 
 pub mod bundle;
+pub mod model_desc;
 pub use bundle::{
     ConstraintBundle, EagerObjectifyError, EagerReifyError, ExtraEntry, IntConstraintBundle,
     ReifyError,
@@ -317,9 +318,9 @@ where
     /// constraints must be present in `base_values`. Returns
     /// [`ReconstructionError`] if any is missing.
     ///
-    /// The returned problem has a trivial objective (minimize 0)
-    /// and only contains the defining constraints of extras, with
-    /// base variables substituted out.
+    /// The returned problem contains the defining constraints of
+    /// extras (with base variables substituted out) and the full
+    /// objective reduced by the given base variable values.
     pub fn reconstruction_problem(
         &self,
         base_values: &HashMap<B, f64>,

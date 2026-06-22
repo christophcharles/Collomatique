@@ -2,8 +2,14 @@ use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
+use collomatique_ilp::{ConfigData, UsableData};
+use collomatique_ilp_modeler::model_desc::ModelDesc;
+use collomatique_ilp_modeler::{InternalVar, Model};
 use collomatique_rpc::{EncodedMsg, InitMsg, ResultMsg, SerializedStrategyRequest, StrategyMsg};
-use collomatique_strategies::{StrategyKind, StrategyProgress, StrategyRequest};
+use collomatique_strategies::{
+    RawSolveOutcome, SolveStatus, SpawnableStrategy, StrategyKind, StrategyOutcome,
+    StrategyProgress, StrategyRequest,
+};
 
 use crate::process::StdinWriter;
 use crate::worker::{WorkerEvent, WorkerId};
@@ -15,6 +21,23 @@ pub struct StrategyResult {
     pub objective: Option<f64>,
     pub best_bound: Option<f64>,
     pub solution: Option<Vec<f64>>,
+}
+
+impl StrategyResult {
+    pub fn into_raw_outcome(self) -> RawSolveOutcome {
+        let status = match self.status {
+            StrategyStatus::Optimal => SolveStatus::Optimal,
+            StrategyStatus::Infeasible => SolveStatus::Infeasible,
+            StrategyStatus::Stopped => SolveStatus::Stopped,
+            StrategyStatus::Error => SolveStatus::Error,
+        };
+        RawSolveOutcome {
+            status,
+            objective: self.objective,
+            best_bound: self.best_bound,
+            solution: self.solution,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,17 +67,64 @@ impl StrategySubprocess {
         self.last_progress.lock().unwrap().clone()
     }
 
-    pub fn spawn(
+    pub fn spawn<B, E, C, S: SpawnableStrategy>(
         worker_manager: &mut WorkerManager,
-        problem_desc: collomatique_ilp::ProblemDesc,
+        model: &Model<B, E, C>,
+        strategy: &S,
+        warm_start: Option<ConfigData<InternalVar<B, E>>>,
+        result_callback: impl Fn(StrategyOutcome<InternalVar<B, E>>) + Send + 'static,
+        progress_callback: impl Fn(Result<S::Progress<InternalVar<B, E>>, String>) + Send + 'static,
+        log_callback: impl Fn(&str) + Send + 'static,
+    ) -> Result<StrategySubprocess, String>
+    where
+        S::Progress<InternalVar<B, E>>: Send + 'static,
+        B: UsableData + Send + 'static,
+        E: UsableData + Send + 'static,
+        C: UsableData + Send + 'static,
+    {
+        let (model_desc, var_order) = model.to_desc();
+        let progress_var_order = var_order.clone();
+        let raw_warm_start = warm_start
+            .as_ref()
+            .map(|hint| collomatique_ilp::config_data_to_hint(hint, &var_order));
+        let raw_result_callback = move |result: StrategyResult| {
+            let outcome = result.into_raw_outcome().into_typed(&var_order);
+            result_callback(outcome);
+        };
+        let strategy_kind = strategy.to_strategy_kind();
+        let wrapped_progress = move |result: Result<StrategyProgress, String>| match result {
+            Ok(sp) => match S::convert_progress(sp, &progress_var_order) {
+                Ok(typed) => progress_callback(Ok(typed)),
+                Err(unexpected) => {
+                    progress_callback(Err(format!("unexpected progress variant: {unexpected}")))
+                }
+            },
+            Err(e) => progress_callback(Err(e)),
+        };
+        Self::spawn_raw(
+            worker_manager,
+            model_desc,
+            strategy_kind,
+            raw_warm_start,
+            raw_result_callback,
+            wrapped_progress,
+            log_callback,
+        )
+    }
+
+    pub fn spawn_raw(
+        worker_manager: &mut WorkerManager,
+        model_desc: ModelDesc,
         strategy: StrategyKind,
+        warm_start: Option<Vec<f64>>,
         result_callback: impl Fn(StrategyResult) + Send + 'static,
         progress_callback: impl Fn(Result<StrategyProgress, String>) + Send + 'static,
         log_callback: impl Fn(&str) + Send + 'static,
     ) -> Result<StrategySubprocess, String> {
         let request = StrategyRequest {
-            problem_desc,
+            model_desc,
             strategy,
+            warm_start,
         };
         let serialized_str = request.serialize();
         let serialized = SerializedStrategyRequest::from(serialized_str);

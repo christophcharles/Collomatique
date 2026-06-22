@@ -8,36 +8,141 @@
 #include "collo_cbc.h"
 
 #include <OsiClpSolverInterface.hpp>
+#include <ClpSimplex.hpp>
 #include <CbcModel.hpp>
 #include <CbcEventHandler.hpp>
 #include <CbcSolver.hpp>
 #include <CoinPackedMatrix.hpp>
+#include <CglPreProcess.hpp>
 
 #include <cmath>
+#include <cstring>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
 #include <iostream>
 
+// CBC publishes the CglPreProcess object that CbcMain1 builds internally through
+// this global (defined in libCbcSolver). It is non-null during the solve while
+// preprocessing has reduced the model, and lets the event handler postsolve an
+// incumbent back to original column space. The symbol is an unmangled global, so
+// this plain extern declaration resolves to it at link time.
+extern CglPreProcess* cbcPreProcessPointer;
+
+// Reconstruct the original-space solution for an incumbent that CBC reports in
+// its *preprocessed* column space, using CBC's own preprocessing object. This
+// follows the recipe from John Forrest's `postprocess.cpp` example (coin-or/Cbc
+// mailing list, 2016): clone the preprocessed continuous solver, install the
+// incumbent, fix the integer columns, re-solve so continuous columns are
+// consistent, then postProcess a *throwaway* clone — postsolve is destructive,
+// so a fresh copy is mandatory and is why distinct incumbents don't corrupt each
+// other. The postsolved solution lands in cbcPreProcessPointer->originalModel().
+//
+// `model` must be the top-level model (caller guards on !parentModel()).
+// Returns false (and leaves `out` untouched) if reconstruction can't be done
+// safely — the caller then withholds the vector rather than hand back garbage.
+static bool reconstruct_incumbent(
+    const CbcModel* model,
+    int32_t orig_num_cols,
+    std::vector<double>& out
+) {
+    const double* incumbent = model->bestSolution();
+    if (!incumbent)
+        return false;
+
+    if (!cbcPreProcessPointer) {
+        // No preprocessing reduction: the incumbent is already in original space.
+        if (model->getNumCols() != orig_num_cols)
+            return false;  // unexpected shape — don't hand back a wrong-length vector
+        out.assign(incumbent, incumbent + orig_num_cols);
+        return true;
+    }
+
+    const OsiSolverInterface* cont = model->continuousSolver();
+    auto* clone = dynamic_cast<OsiClpSolverInterface*>(cont ? cont->clone() : nullptr);
+    if (!clone)
+        return false;
+
+    ClpSimplex* lp = clone->getModelPtr();
+    int n = lp->numberColumns();
+    double* sol = lp->primalColumnSolution();
+    double* lower = lp->columnLower();
+    double* upper = lp->columnUpper();
+    std::memcpy(sol, incumbent, n * sizeof(double));
+    for (int i = 0; i < n; i++) {
+        if (clone->isInteger(i)) {
+            double x = std::floor(sol[i] + 0.5);
+            lower[i] = upper[i] = x;
+        }
+    }
+    lp->allSlackBasis();
+    lp->initialSolve();
+    lp->computeObjectiveValue(false);
+
+    cbcPreProcessPointer->postProcess(*clone, /*deleteStuff=*/false);
+    delete clone;
+
+    const OsiSolverInterface* original = cbcPreProcessPointer->originalModel();
+    if (!original || original->getNumCols() != orig_num_cols)
+        return false;
+
+    const double* orig_solution = original->getColSolution();
+    out.assign(orig_solution, orig_solution + orig_num_cols);
+    return true;
+}
+
+// Objective value of an original-space solution, computed directly from the
+// original problem so it is unaffected by any objective offset introduced by
+// preprocessing. obj_sense does not change the coefficients, so this matches
+// CBC's getObjValue() (which reports the value in the user's sense).
+static double original_objective(
+    const OsiSolverInterface* solver,
+    const std::vector<double>& solution
+) {
+    const double* obj = solver->getObjCoefficients();
+    double value = 0.0;
+    for (size_t i = 0; i < solution.size(); i++)
+        value += obj[i] * solution[i];
+    return value;
+}
+
 class ColloEventHandler : public CbcEventHandler {
 public:
     ColloCbcCallback callback_;
     void* user_data_;
+    // The originally-loaded solver (original column space) — used to compute the
+    // objective of a reconstructed incumbent in an offset-safe way.
+    const OsiSolverInterface* orig_solver_;
+    int32_t orig_num_cols_;
+    // Solution ids already reported, so each incumbent is reconstructed once.
+    std::set<int> seen_solutions_;
+    // Holds the original-space incumbent so the pointer handed to Rust stays
+    // valid for the duration of the callback (Rust copies it immediately).
+    std::vector<double> original_solution_;
 
     ColloEventHandler()
-        : CbcEventHandler(), callback_(nullptr), user_data_(nullptr) {}
+        : CbcEventHandler(), callback_(nullptr), user_data_(nullptr),
+          orig_solver_(nullptr), orig_num_cols_(0) {}
 
-    ColloEventHandler(CbcModel* model, ColloCbcCallback cb, void* ud)
-        : CbcEventHandler(model), callback_(cb), user_data_(ud) {}
+    ColloEventHandler(CbcModel* model, ColloCbcCallback cb, void* ud,
+                      const OsiSolverInterface* orig_solver, int32_t orig_num_cols)
+        : CbcEventHandler(model), callback_(cb), user_data_(ud),
+          orig_solver_(orig_solver), orig_num_cols_(orig_num_cols) {}
 
     ColloEventHandler(const ColloEventHandler& rhs)
-        : CbcEventHandler(rhs), callback_(rhs.callback_), user_data_(rhs.user_data_) {}
+        : CbcEventHandler(rhs), callback_(rhs.callback_), user_data_(rhs.user_data_),
+          orig_solver_(rhs.orig_solver_), orig_num_cols_(rhs.orig_num_cols_),
+          seen_solutions_(rhs.seen_solutions_) {}
 
     ColloEventHandler& operator=(const ColloEventHandler& rhs) {
         if (this != &rhs) {
             CbcEventHandler::operator=(rhs);
             callback_ = rhs.callback_;
             user_data_ = rhs.user_data_;
+            orig_solver_ = rhs.orig_solver_;
+            orig_num_cols_ = rhs.orig_num_cols_;
+            seen_solutions_ = rhs.seen_solutions_;
         }
         return *this;
     }
@@ -51,28 +156,48 @@ public:
     CbcAction event(CbcEvent whichEvent) override {
         if (!callback_)
             return noAction;
-        if (whichEvent != solution && whichEvent != treeStatus)
+
+        bool is_solution = (whichEvent == solution || whichEvent == heuristicSolution);
+        if (!is_solution && whichEvent != treeStatus)
             return noAction;
 
         const CbcModel* m = getModel();
         if (!m)
             return noAction;
+        // Only report for the top-level model. Heuristics (e.g. the feasibility
+        // pump) run sub-models with their own column space; their incumbents are
+        // promoted to the main model, which fires its own `solution` event.
+        if (m->parentModel())
+            return noAction;
 
         ColloCbcProgress progress;
-        progress.event_type = (whichEvent == solution)
+        progress.event_type = is_solution
             ? COLLO_CBC_EVENT_SOLUTION
             : COLLO_CBC_EVENT_TREE_STATUS;
         progress.best_obj = m->getObjValue();
         progress.best_bound = m->getBestPossibleObjValue();
         progress.node_count = m->getNodeCount();
         progress.solutions_found = m->getSolutionCount();
+        progress.solution = nullptr;
+        progress.num_cols = 0;
 
-        if (m->bestSolution()) {
-            progress.solution = m->bestSolution();
-            progress.num_cols = m->getNumCols();
-        } else {
-            progress.solution = nullptr;
-            progress.num_cols = 0;
+        // Reconstruct the incumbent (preprocessed -> original column space) once
+        // per distinct solution. m->bestSolution() is in CBC's preprocessed space.
+        if (is_solution) {
+            int solution_id = m->getSolutionCount();
+            if (seen_solutions_.find(solution_id) == seen_solutions_.end()) {
+                seen_solutions_.insert(solution_id);
+                if (reconstruct_incumbent(m, orig_num_cols_, original_solution_)) {
+                    progress.solution = original_solution_.data();
+                    progress.num_cols = orig_num_cols_;
+                    // Objective from the original problem, offset-safe and
+                    // consistent with the final solution's objective.
+                    if (orig_solver_) {
+                        progress.best_obj =
+                            original_objective(orig_solver_, original_solution_);
+                    }
+                }
+            }
         }
 
         int result = callback_(&progress, user_data_);
@@ -212,7 +337,11 @@ ColloCbcStatus collo_cbc_solve(ColloCbcModel* m, ColloCbcCallback cb, void* user
     }
 
     // MIP path: use CbcMain0/CbcMain1 for full solver setup
-    // (cut generators, heuristics, preprocessing, etc.)
+    // (cut generators, heuristics, preprocessing, etc.). We let CBC do its own
+    // default preprocessing; the event handler reconstructs original-space
+    // incumbents via CBC's published CglPreProcess (cbcPreProcessPointer). The
+    // final solution returned by CbcMain1 is already in original space (CbcMain1
+    // postprocesses before returning).
     CbcModel cbcModel(*m->solver);
 
     CbcSolverUsefulData cbcData;
@@ -223,13 +352,13 @@ ColloCbcStatus collo_cbc_solve(ColloCbcModel* m, ColloCbcCallback cb, void* user
     }
 
     // Install event handler (after CbcMain0, before CbcMain1)
-    ColloEventHandler handler(&cbcModel, cb, user_data);
+    ColloEventHandler handler(&cbcModel, cb, user_data, m->solver, m->num_cols);
     cbcModel.passInEventHandler(&handler);
 
-    // Set MIPStart (before CbcMain1 so it's available during solve)
+    // Set MIPStart (before CbcMain1 so it's available during solve), in original
+    // column space — CBC preprocesses it internally.
     if (m->has_mip_start && (int32_t)m->mip_start.size() == m->num_cols) {
-        // We need to manually compute the objective here for some reason
-        const double *objvec = m->solver->getObjCoefficients();
+        const double* objvec = m->solver->getObjCoefficients();
         double objval = 0;
         for (int i = 0; i < m->num_cols; i++) {
             objval += objvec[i] * m->mip_start[i];
@@ -249,7 +378,8 @@ ColloCbcStatus collo_cbc_solve(ColloCbcModel* m, ColloCbcCallback cb, void* user
 
     CbcMain1((int)argv.size(), argv.data(), cbcModel, NULL, cbcData);
 
-    // Extract results
+    // Extract results. CbcMain1 postprocesses, so bestSolution() is already in
+    // original column space.
     m->node_count = cbcModel.getNodeCount();
     m->best_bound = cbcModel.getBestPossibleObjValue();
 

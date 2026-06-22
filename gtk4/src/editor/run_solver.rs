@@ -5,12 +5,10 @@ use relm4::{ComponentParts, ComponentSender, Controller, RelmWidgetExt};
 use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
 
-use collomatique_ilp::mat_repr::ProblemRepr;
-use collomatique_ilp::{ConfigData, Problem, UsableData};
-use collomatique_strategies::{StrategyKind, StrategyProgress};
-use collomatique_subprocesses::{
-    StrategyResult, StrategyStatus, StrategySubprocess, WorkerManager,
-};
+use collomatique_ilp::{ConfigData, UsableData};
+use collomatique_ilp_modeler::{InternalVar, Model};
+use collomatique_strategies::{SolveStatus, StrategyKind, StrategyOutcome, StrategyProgress};
+use collomatique_subprocesses::{StrategySubprocess, WorkerManager};
 
 mod error_dialog;
 mod strategy_display;
@@ -21,7 +19,7 @@ use strategy_display::{
     strategy_name_from_kind,
 };
 
-pub struct Dialog<V: UsableData, C, P> {
+pub struct Dialog<B: UsableData, E: UsableData, C: UsableData> {
     hidden: bool,
     is_running: bool,
     end_with_error: bool,
@@ -33,41 +31,40 @@ pub struct Dialog<V: UsableData, C, P> {
     error_dialog: Controller<error_dialog::Dialog>,
     warning_running: Controller<warning_running::Dialog>,
     subprocess: Option<StrategySubprocess>,
-    var_order: Option<Vec<V>>,
-    result_config: Option<ConfigData<V>>,
-    _phantom: PhantomData<fn() -> (C, P)>,
+    result_config: Option<ConfigData<InternalVar<B, E>>>,
+    _phantom: PhantomData<fn() -> C>,
 }
 
 #[derive(Debug)]
-pub enum DialogInput<V: UsableData, C: UsableData, P: ProblemRepr<V>> {
-    Run(StrategyKind, Problem<V, C, P>),
+pub enum DialogInput<B: UsableData, E: UsableData, C: UsableData> {
+    Run(StrategyKind, Model<B, E, C>),
     CancelRequest,
     Accept,
 
     Cancel,
     Echo(String),
     StrategyUpdate(Result<StrategyProgress, String>),
-    Finished(StrategyResult),
+    Finished(StrategyOutcome<InternalVar<B, E>>),
     ToggleDebug(bool),
     SpawnError(String),
 }
 
 #[derive(Debug)]
-pub enum DialogOutput<V: UsableData> {
-    NewConfig(ConfigData<V>),
+pub enum DialogOutput<B: UsableData, E: UsableData> {
+    NewConfig(ConfigData<InternalVar<B, E>>),
 }
 
 #[relm4::component(pub)]
-impl<V, C, P> Component for Dialog<V, C, P>
+impl<B, E, C> Component for Dialog<B, E, C>
 where
-    V: UsableData + 'static,
+    B: UsableData + 'static,
+    E: UsableData + 'static,
     C: UsableData + 'static,
-    P: ProblemRepr<V> + 'static,
 {
     type Init = (Arc<Mutex<WorkerManager>>, String);
 
-    type Input = DialogInput<V, C, P>;
-    type Output = DialogOutput<V>;
+    type Input = DialogInput<B, E, C>;
+    type Output = DialogOutput<B, E>;
     type CommandOutput = ();
 
     view! {
@@ -196,7 +193,6 @@ where
             error_dialog,
             warning_running,
             subprocess: None,
-            var_order: None,
             result_config: None,
             _phantom: PhantomData,
         };
@@ -208,7 +204,7 @@ where
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match msg {
-            DialogInput::Run(strategy, problem) => {
+            DialogInput::Run(strategy, model) => {
                 self.hidden = false;
                 self.is_running = true;
                 self.end_with_error = false;
@@ -216,9 +212,6 @@ where
                 let name = strategy_name_from_kind(&strategy);
                 self.strategy_name = Some(name);
                 self.emit_strategy(StrategyDisplayInput::Clear(name));
-
-                let (desc, var_order) = problem.get_desc();
-                self.var_order = Some(var_order);
 
                 let input = sender.input_sender().clone();
                 let log_input = input.clone();
@@ -230,16 +223,17 @@ where
                 let progress_cb = move |progress| {
                     progress_input.emit(DialogInput::StrategyUpdate(progress));
                 };
-                let result_cb = move |result: StrategyResult| {
-                    result_input.emit(DialogInput::Finished(result));
+                let result_cb = move |outcome: StrategyOutcome<InternalVar<B, E>>| {
+                    result_input.emit(DialogInput::Finished(outcome));
                 };
 
                 let spawn_result = {
                     let mut wm = self.worker_manager.lock().unwrap();
                     StrategySubprocess::spawn(
                         &mut wm,
-                        desc,
-                        strategy,
+                        &model,
+                        &strategy,
+                        None,
                         result_cb,
                         progress_cb,
                         log_cb,
@@ -274,20 +268,16 @@ where
             DialogInput::StrategyUpdate(progress) => {
                 self.emit_strategy(StrategyDisplayInput::StrategyUpdate(progress));
             }
-            DialogInput::Finished(result) => {
-                self.emit_strategy(StrategyDisplayInput::Finished(result.clone()));
+            DialogInput::Finished(outcome) => {
+                self.emit_strategy(StrategyDisplayInput::Finished(outcome.status.clone()));
                 self.is_running = false;
                 self.subprocess = None;
 
-                let usable = !matches!(
-                    result.status,
-                    StrategyStatus::Error | StrategyStatus::Infeasible
-                );
-                match (usable, result.solution, self.var_order.as_ref()) {
-                    (true, Some(solution), Some(var_order)) => {
-                        self.result_config = Some(collomatique_ilp::solution_to_config_data(
-                            &solution, var_order,
-                        ));
+                let usable =
+                    !matches!(outcome.status, SolveStatus::Error | SolveStatus::Infeasible);
+                match (usable, outcome.solution) {
+                    (true, Some(config)) => {
+                        self.result_config = Some(config);
                     }
                     _ => self.end_with_error = true,
                 }
@@ -315,7 +305,7 @@ where
     }
 }
 
-impl<V: UsableData, C, P> Dialog<V, C, P> {
+impl<B: UsableData, E: UsableData, C: UsableData> Dialog<B, E, C> {
     fn emit_strategy(&self, input: StrategyDisplayInput) {
         self.strategy_frame.emit(input.clone());
         self.strategy_status_bar.emit(input);
