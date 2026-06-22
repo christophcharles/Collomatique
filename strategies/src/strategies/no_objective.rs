@@ -8,7 +8,7 @@ use collomatique_ilp::{ConfigData, UsableData};
 use collomatique_ilp_modeler::{InternalVar, Model};
 
 use crate::{
-    SolveProblemOpts, SolveProgressData, SolveStatus, Strategy, StrategyContext, StrategyError,
+    SolveProblemOpts, SolveProgress, SolveStatus, Strategy, StrategyContext, StrategyError,
     StrategyOutcome,
 };
 
@@ -48,11 +48,7 @@ impl Strategy for NoObjectiveStrategy {
                     time_limit_seconds: self.checker_time_limit_seconds,
                     disable_logging: self.disable_logging,
                 },
-                &|p| {
-                    on_progress(NoObjectiveProgressData::CheckerSolve(
-                        p.to_data_without_incumbent(),
-                    ))
-                },
+                &|p| on_progress(NoObjectiveProgressData::CheckerSolve((&p).into())),
                 &|line| format!("[checker solver] {line}"),
             )
             .await?;
@@ -120,7 +116,7 @@ impl Strategy for NoObjectiveStrategy {
                 },
                 &move |p| {
                     on_progress(NoObjectiveProgressData::ObjectiveReconstruction(
-                        p.to_data_without_incumbent(),
+                        (&p).into(),
                     ))
                 },
                 &|line| format!("[reconstruction solver] {line}"),
@@ -162,11 +158,46 @@ impl Strategy for NoObjectiveStrategy {
     }
 }
 
+/// Scalar solve statistics for a NoObjective sub-solve.
+///
+/// Unlike [`SolveProgressData`](crate::SolveProgressData), this carries no incumbent: the
+/// incumbents produced by the checker and reconstruction sub-solves are not meaningful to the
+/// caller (a checker incumbent covers only base+checker variables; a reconstruction incumbent is
+/// expressed in the sub-problem's coordinate system), so they are pruned here by construction.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct NoObjectiveSolveProgress {
+    pub best_obj: f64,
+    pub best_bound: f64,
+    pub node_count: u64,
+    pub solutions_found: u64,
+}
+
+impl<V: UsableData> From<&SolveProgress<V>> for NoObjectiveSolveProgress {
+    fn from(p: &SolveProgress<V>) -> Self {
+        Self {
+            best_obj: p.best_obj,
+            best_bound: p.best_bound,
+            node_count: p.node_count,
+            solutions_found: p.solutions_found,
+        }
+    }
+}
+
+impl fmt::Display for NoObjectiveSolveProgress {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "obj={:.4} bound={:.4} nodes={} solutions={}",
+            self.best_obj, self.best_bound, self.node_count, self.solutions_found
+        )
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum NoObjectiveProgressData {
-    CheckerSolve(SolveProgressData),
+    CheckerSolve(NoObjectiveSolveProgress),
     SolutionFound,
-    ObjectiveReconstruction(SolveProgressData),
+    ObjectiveReconstruction(NoObjectiveSolveProgress),
 }
 
 impl fmt::Display for NoObjectiveProgressData {
@@ -180,5 +211,27 @@ impl fmt::Display for NoObjectiveProgressData {
                 write!(f, "[reconstruction solver progress] {p}")
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn checker_progress_round_trips_without_incumbent() {
+        let progress = NoObjectiveProgressData::CheckerSolve(NoObjectiveSolveProgress {
+            best_obj: 1.5,
+            best_bound: 0.5,
+            node_count: 7,
+            solutions_found: 2,
+        });
+
+        let json = serde_json::to_string(&progress).unwrap();
+        // The dedicated type has no incumbent concept at all.
+        assert!(!json.contains("incumbent"));
+
+        let restored: NoObjectiveProgressData = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored, progress);
     }
 }

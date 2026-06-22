@@ -5,7 +5,9 @@ pub use strategies::conductor::{
     update_best_solution,
 };
 pub use strategies::default::DefaultStrategy;
-pub use strategies::no_objective::{NoObjectiveProgressData, NoObjectiveStrategy};
+pub use strategies::no_objective::{
+    NoObjectiveProgressData, NoObjectiveSolveProgress, NoObjectiveStrategy,
+};
 pub use strategies::no_objective_starter::{
     NoObjectiveStarterProgress, NoObjectiveStarterProgressData, NoObjectiveStarterStrategy,
 };
@@ -139,18 +141,6 @@ impl<V: UsableData> SolveProgress<V> {
                 .incumbent
                 .as_ref()
                 .map(|cfg| collomatique_ilp::config_data_to_hint(cfg, var_order)),
-        }
-    }
-
-    /// Cheap raw view that drops the incumbent (no `var_order` needed). Used where the
-    /// incumbent is not a meaningful final solution and is intentionally discarded.
-    pub fn to_data_without_incumbent(&self) -> SolveProgressData {
-        SolveProgressData {
-            best_obj: self.best_obj,
-            best_bound: self.best_bound,
-            node_count: self.node_count,
-            solutions_found: self.solutions_found,
-            incumbent: None,
         }
     }
 }
