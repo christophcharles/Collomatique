@@ -260,12 +260,17 @@ impl StrategyContext {
         desc: &ProblemDesc,
         opts: SolveConfig,
         on_progress: &(dyn Fn(SolveProgressData) -> bool + Send + Sync),
-        tag_echo: &(dyn Fn(String) -> String + Send + Sync),
+        handle_echo: &(dyn Fn(String) -> Option<String> + Send + Sync),
     ) -> Result<RawSolveOutcome, StrategyError> {
         let echo_impl: Box<dyn Fn(String) + Send + Sync + '_> = match &self.on_echo {
-            Some(ctx_echo) => Box::new(move |line| ctx_echo(tag_echo(line))),
+            Some(ctx_echo) => Box::new(move |line| {
+                if let Some(out) = handle_echo(line) {
+                    ctx_echo(out);
+                }
+            }),
+            // No parent sink: still call handle_echo so its side effects/routing run.
             None => Box::new(move |line| {
-                let _ = tag_echo(line);
+                let _ = handle_echo(line);
             }),
         };
         self.backend
@@ -326,7 +331,7 @@ impl StrategyContext {
         problem: &Problem<V, C, P>,
         opts: SolveProblemOpts<V>,
         on_progress: &(dyn Fn(SolveProgress<V>) -> bool + Send + Sync),
-        tag_echo: &(dyn Fn(String) -> String + Send + Sync),
+        handle_echo: &(dyn Fn(String) -> Option<String> + Send + Sync),
     ) -> Result<StrategyOutcome<V>, StrategyError>
     where
         V: UsableData,
@@ -350,7 +355,7 @@ impl StrategyContext {
             |data: SolveProgressData| -> bool { on_progress(data.into_typed(&var_order)) };
 
         let raw = self
-            .solve_with_progress_and_echo(&desc, solve_config, &typed_on_progress, tag_echo)
+            .solve_with_progress_and_echo(&desc, solve_config, &typed_on_progress, handle_echo)
             .await?;
 
         Ok(raw.into_typed(&var_order))
@@ -664,14 +669,14 @@ impl StrategyContext {
         model: &Model<B, E, C>,
         opts: SolveProblemOpts<InternalVar<B, E>>,
         on_progress: &(dyn Fn(SolveProgress<InternalVar<B, E>>) -> bool + Send + Sync),
-        tag_echo: &(dyn Fn(String) -> String + Send + Sync),
+        handle_echo: &(dyn Fn(String) -> Option<String> + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
         B: UsableData,
         E: UsableData,
         C: UsableData,
     {
-        self.solve_problem_with_echo(model.problem(), opts, on_progress, tag_echo)
+        self.solve_problem_with_echo(model.problem(), opts, on_progress, handle_echo)
             .await
     }
 
@@ -773,7 +778,7 @@ impl StrategyContext {
         on_progress: &(
              dyn Fn(Result<S::Progress<InternalVar<B, E>>, StrategyProgress>) -> bool + Send + Sync
          ),
-        tag_echo: &(dyn Fn(String) -> String + Send + Sync),
+        handle_echo: &(dyn Fn(String) -> Option<String> + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
         B: UsableData,
@@ -788,9 +793,14 @@ impl StrategyContext {
             .map(|hint| collomatique_ilp::config_data_to_hint(hint, &var_order));
 
         let echo_impl: Box<dyn Fn(String) + Send + Sync + '_> = match &self.on_echo {
-            Some(ctx_echo) => Box::new(move |line| ctx_echo(tag_echo(line))),
+            Some(ctx_echo) => Box::new(move |line| {
+                if let Some(out) = handle_echo(line) {
+                    ctx_echo(out);
+                }
+            }),
+            // No parent sink: still call handle_echo so its side effects/routing run.
             None => Box::new(move |line| {
-                let _ = tag_echo(line);
+                let _ = handle_echo(line);
             }),
         };
 

@@ -42,7 +42,7 @@ impl Strategy for DefaultStrategy {
                 disable_logging: self.disable_logging,
             },
             on_progress,
-            &|line| format!("[solver] {line}"),
+            &|line| Some(format!("[solver] {line}")),
         )
         .await
     }

@@ -49,7 +49,7 @@ impl Strategy for NoObjectiveStrategy {
                     disable_logging: self.disable_logging,
                 },
                 &|p| on_progress(NoObjectiveProgressData::CheckerSolve((&p).into())),
-                &|line| format!("[checker solver] {line}"),
+                &|line| Some(format!("[checker solver] {line}")),
             )
             .await?;
 
@@ -119,7 +119,7 @@ impl Strategy for NoObjectiveStrategy {
                         (&p).into(),
                     ))
                 },
-                &|line| format!("[reconstruction solver] {line}"),
+                &|line| Some(format!("[reconstruction solver] {line}")),
             )
             .await?;
 

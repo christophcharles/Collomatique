@@ -200,7 +200,7 @@ impl Strategy for ConductorStrategy {
                                 Err(_) => false,
                             }
                         },
-                        &|line| format!("[default worker] {}", line),
+                        &|line| Some(format!("[default worker] {}", line)),
                     )
                     .await;
                 WorkerResult {
