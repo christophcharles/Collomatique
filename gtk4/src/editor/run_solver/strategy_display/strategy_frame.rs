@@ -121,6 +121,7 @@ impl SimpleComponent for StrategyFrame {
                 }
                 Ok(StrategyProgress::NoObjective(_)) => todo!(),
                 Ok(StrategyProgress::NoObjectiveStarter(_)) => todo!(),
+                Ok(StrategyProgress::Conductor(_)) => todo!(),
                 Err(e) => {
                     self.debug_view
                         .emit(DebugViewInput::Append(format!("[ /!\\ IPC Error ] {e}\n")));

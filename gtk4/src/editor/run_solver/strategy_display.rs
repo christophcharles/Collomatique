@@ -16,6 +16,7 @@ pub fn strategy_name_from_kind(kind: &StrategyKind) -> StrategyName {
         StrategyKind::Default(_) => StrategyName::Default,
         StrategyKind::NoObjective(_) => todo!(),
         StrategyKind::NoObjectiveStarter(_) => todo!(),
+        StrategyKind::Conductor(_) => todo!(),
     }
 }
 

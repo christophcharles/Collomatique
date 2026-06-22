@@ -1,8 +1,8 @@
 mod strategies;
 
 pub use strategies::conductor::{
-    ConductorProgress, ConductorStatus, ConductorStrategy, Solution, update_best_bound,
-    update_best_solution,
+    ConductorProgress, ConductorProgressData, ConductorStatus, ConductorStatusData,
+    ConductorStrategy, Solution, SolutionData, update_best_bound, update_best_solution,
 };
 pub use strategies::default::DefaultStrategy;
 pub use strategies::no_objective::{
@@ -399,6 +399,7 @@ pub enum StrategyKind {
     Default(DefaultStrategy),
     NoObjective(NoObjectiveStrategy),
     NoObjectiveStarter(NoObjectiveStarterStrategy),
+    Conductor(ConductorStrategy),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -406,6 +407,7 @@ pub enum StrategyProgress {
     Default(SolveProgressData),
     NoObjective(NoObjectiveProgressData),
     NoObjectiveStarter(NoObjectiveStarterProgressData),
+    Conductor(ConductorProgressData),
 }
 
 impl fmt::Display for StrategyProgress {
@@ -414,6 +416,7 @@ impl fmt::Display for StrategyProgress {
             StrategyProgress::Default(p) => write!(f, "{p}"),
             StrategyProgress::NoObjective(p) => write!(f, "{p}"),
             StrategyProgress::NoObjectiveStarter(p) => write!(f, "{p}"),
+            StrategyProgress::Conductor(p) => write!(f, "{p}"),
         }
     }
 }
@@ -448,6 +451,12 @@ impl From<NoObjectiveStarterStrategy> for StrategyKind {
     }
 }
 
+impl From<ConductorStrategy> for StrategyKind {
+    fn from(s: ConductorStrategy) -> Self {
+        StrategyKind::Conductor(s)
+    }
+}
+
 impl TryFrom<StrategyProgress> for SolveProgressData {
     type Error = StrategyProgress;
     fn try_from(sp: StrategyProgress) -> Result<Self, StrategyProgress> {
@@ -473,6 +482,16 @@ impl TryFrom<StrategyProgress> for NoObjectiveStarterProgressData {
     fn try_from(sp: StrategyProgress) -> Result<Self, StrategyProgress> {
         match sp {
             StrategyProgress::NoObjectiveStarter(p) => Ok(p),
+            other => Err(other),
+        }
+    }
+}
+
+impl TryFrom<StrategyProgress> for ConductorProgressData {
+    type Error = StrategyProgress;
+    fn try_from(sp: StrategyProgress) -> Result<Self, StrategyProgress> {
+        match sp {
+            StrategyProgress::Conductor(p) => Ok(p),
             other => Err(other),
         }
     }
@@ -543,6 +562,22 @@ impl SpawnableStrategy for NoObjectiveStarterStrategy {
     }
 }
 
+impl SpawnableStrategy for ConductorStrategy {
+    type Progress<V: UsableData + Send> = ConductorProgress<V>;
+    fn to_strategy_kind(&self) -> StrategyKind {
+        self.clone().into()
+    }
+    fn convert_progress<V: UsableData + Send>(
+        sp: StrategyProgress,
+        var_order: &[V],
+    ) -> Result<ConductorProgress<V>, StrategyProgress> {
+        match sp {
+            StrategyProgress::Conductor(data) => Ok(data.into_typed(var_order)),
+            other => Err(other),
+        }
+    }
+}
+
 impl SpawnableStrategy for StrategyKind {
     type Progress<V: UsableData + Send> = StrategyProgress;
     fn to_strategy_kind(&self) -> StrategyKind {
@@ -562,6 +597,7 @@ impl StrategyKind {
             StrategyKind::Default(s) => s.name(),
             StrategyKind::NoObjective(s) => s.name(),
             StrategyKind::NoObjectiveStarter(s) => s.name(),
+            StrategyKind::Conductor(s) => s.name(),
         }
     }
 
@@ -628,6 +664,13 @@ impl StrategyKind {
                         }
                     };
                     on_progress(sp)
+                })
+                .await
+            }
+            StrategyKind::Conductor(s) => {
+                let (_, var_order) = model.to_desc();
+                s.run_with_callback(ctx, model, warm_start, &|p| {
+                    on_progress(StrategyProgress::Conductor(p.into_data(&var_order)))
                 })
                 .await
             }
