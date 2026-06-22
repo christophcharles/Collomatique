@@ -1,3 +1,5 @@
+use std::fmt;
+
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 
@@ -50,6 +52,24 @@ pub struct SolverProgressData {
     pub solutions_found: u64,
     pub incumbent_info: Option<SolverIncumbentInfo>,
     pub incumbent_solution: Option<Vec<OrderedFloat<f64>>>,
+}
+
+impl fmt::Display for SolverProgressData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "obj={:.4} bound={:.4} nodes={} solutions={} incumbent={}",
+            self.best_obj.into_inner(),
+            self.best_bound.into_inner(),
+            self.node_count,
+            self.solutions_found,
+            if self.incumbent_solution.is_some() {
+                "yes"
+            } else {
+                "no"
+            },
+        )
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

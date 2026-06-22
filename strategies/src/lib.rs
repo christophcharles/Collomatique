@@ -93,8 +93,16 @@ impl fmt::Display for SolveProgressData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "obj={:.4} bound={:.4} nodes={} solutions={}",
-            self.best_obj, self.best_bound, self.node_count, self.solutions_found
+            "obj={:.4} bound={:.4} nodes={} solutions={} incumbent={}",
+            self.best_obj,
+            self.best_bound,
+            self.node_count,
+            self.solutions_found,
+            if self.incumbent.is_some() {
+                "yes"
+            } else {
+                "no"
+            },
         )
     }
 }
@@ -149,8 +157,16 @@ impl<V: UsableData> fmt::Display for SolveProgress<V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "obj={:.4} bound={:.4} nodes={} solutions={}",
-            self.best_obj, self.best_bound, self.node_count, self.solutions_found
+            "obj={:.4} bound={:.4} nodes={} solutions={} incumbent={}",
+            self.best_obj,
+            self.best_bound,
+            self.node_count,
+            self.solutions_found,
+            if self.incumbent.is_some() {
+                "yes"
+            } else {
+                "no"
+            },
         )
     }
 }
@@ -823,6 +839,24 @@ mod tests {
     use collomatique_ilp_modeler::Modeler;
     use std::collections::{HashMap, VecDeque};
     use std::sync::Mutex;
+
+    #[test]
+    fn solve_progress_data_display_signals_incumbent_presence() {
+        let base = SolveProgressData {
+            best_obj: 1.5,
+            best_bound: 0.5,
+            node_count: 7,
+            solutions_found: 2,
+            incumbent: None,
+        };
+        assert!(format!("{base}").ends_with("incumbent=no"));
+
+        let with_incumbent = SolveProgressData {
+            incumbent: Some(vec![0.0, 1.0]),
+            ..base
+        };
+        assert!(format!("{with_incumbent}").ends_with("incumbent=yes"));
+    }
 
     struct MockBackend {
         outcome: RawSolveOutcome,

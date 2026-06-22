@@ -734,7 +734,7 @@ fn no_objective_starter_solve(model: &collomatique_constraints_colloscopes::Coll
                 eprintln!("  [strategy subprocess progress] Hint found!");
             }
             Ok(p) => {
-                eprintln!("  [strategy subprocess progress] {p:?}");
+                eprintln!("  [strategy subprocess progress] {p}");
             }
             Err(e) => {
                 eprintln!("  [strategy subprocess progress error] {e}");

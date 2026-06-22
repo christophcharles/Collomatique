@@ -1,3 +1,4 @@
+use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -32,6 +33,44 @@ pub struct ConductorStatus<V: UsableData + Send> {
 pub enum ConductorProgress<V: UsableData + Send> {
     Conductor(ConductorStatus<V>),
     DefaultWorker(SolveProgress<V>),
+}
+
+impl<V: UsableData + Send> fmt::Display for Solution<V> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // A `Solution` always carries a config, so incumbent presence is implicit.
+        write!(f, "objective={:.4}", self.objective)
+    }
+}
+
+impl<V: UsableData + Send> fmt::Display for ConductorStatus<V> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "workers={}/{} solutions={}",
+            self.finished_workers, self.total_workers, self.solution_found_count
+        )?;
+        if let Some(bound) = self.best_bound {
+            write!(f, " bound={bound:.4}")?;
+        }
+        write!(
+            f,
+            " incumbent={}",
+            if self.best_solution.is_some() {
+                "yes"
+            } else {
+                "no"
+            }
+        )
+    }
+}
+
+impl<V: UsableData + Send> fmt::Display for ConductorProgress<V> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ConductorProgress::Conductor(s) => write!(f, "[conductor] {s}"),
+            ConductorProgress::DefaultWorker(p) => write!(f, "[default worker] {p}"),
+        }
+    }
 }
 
 enum WorkerTag {

@@ -100,6 +100,23 @@ pub enum NoObjectiveStarterProgress<V: UsableData + Send> {
     Default(SolveProgress<V>),
 }
 
+impl<V: UsableData + Send> fmt::Display for NoObjectiveStarterProgress<V> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            NoObjectiveStarterProgress::Starter(p) => write!(f, "[starter] {p}"),
+            NoObjectiveStarterProgress::HintFound(_) => {
+                write!(
+                    f,
+                    "Hint found! Starting default strategy with warm start..."
+                )
+            }
+            NoObjectiveStarterProgress::Default(p) => {
+                write!(f, "[default solver progress] {p}")
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum NoObjectiveStarterProgressData {
     Starter(NoObjectiveProgressData),
