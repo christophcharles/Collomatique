@@ -49,6 +49,7 @@ pub struct SolverProgressData {
     pub node_count: u64,
     pub solutions_found: u64,
     pub incumbent_info: Option<SolverIncumbentInfo>,
+    pub incumbent_solution: Option<Vec<OrderedFloat<f64>>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

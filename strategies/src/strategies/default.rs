@@ -16,7 +16,7 @@ pub struct DefaultStrategy {
 
 #[async_trait]
 impl Strategy for DefaultStrategy {
-    type Progress<V: UsableData + Send> = SolveProgress;
+    type Progress<V: UsableData + Send> = SolveProgress<V>;
 
     fn name(&self) -> &'static str {
         "default"

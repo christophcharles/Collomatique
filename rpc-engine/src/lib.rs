@@ -92,8 +92,8 @@ async fn try_solve() -> Result<(), anyhow::Error> {
 fn solve_ilp(serialized: SerializedIlpProblem) -> Result<(), anyhow::Error> {
     use collomatique_ilp::solvers::collo_cbc::ColloCbcSolver;
     use collomatique_ilp::solvers::{
-        CallbackSolverModel, ProgressBounds, ProgressIncumbentInfo, ProgressStats, Solver,
-        WarmSolver,
+        CallbackSolverModel, ProgressBounds, ProgressIncumbentData, ProgressIncumbentInfo,
+        ProgressStats, Solver, WarmSolver,
     };
     use collomatique_ilp::{DefaultRepr, ProblemBuilder};
     use ordered_float::OrderedFloat;
@@ -139,6 +139,12 @@ fn solve_ilp(serialized: SerializedIlpProblem) -> Result<(), anyhow::Error> {
             incumbent_info: progress.incumbent_info().map(|info| SolverIncumbentInfo {
                 objective: OrderedFloat(info.objective),
                 feasible: info.feasible,
+            }),
+            incumbent_solution: progress.incumbent_data().map(|cfg| {
+                var_indices
+                    .iter()
+                    .map(|&i| OrderedFloat(cfg.get(i).unwrap_or(0.0)))
+                    .collect()
             }),
         };
 
