@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use collomatique_ilp_modeler::model_desc::ModelDesc;
 use collomatique_strategies::{
     RawSolveOutcome, SolveBackend, SolveConfig, SolveProgressData, SolveStatus, StrategyError,
-    StrategyKind, StrategyProgress,
+    StrategyKind, StrategyProgressData,
 };
 use futures::{FutureExt, StreamExt};
 
@@ -132,7 +132,7 @@ impl SolveBackend for SubprocessSolveBackend {
         model_desc: &ModelDesc,
         strategy: &StrategyKind,
         warm_start: Option<Vec<f64>>,
-        on_progress: &(dyn Fn(StrategyProgress) -> bool + Send + Sync),
+        on_progress: &(dyn Fn(StrategyProgressData) -> bool + Send + Sync),
         on_echo: &(dyn Fn(String) + Send + Sync),
     ) -> Result<RawSolveOutcome, StrategyError> {
         let (result_tx, result_rx) = futures::channel::oneshot::channel();
@@ -144,7 +144,7 @@ impl SolveBackend for SubprocessSolveBackend {
         };
 
         let (progress_tx, progress_rx) = futures::channel::mpsc::unbounded();
-        let progress_callback = move |progress: Result<StrategyProgress, String>| {
+        let progress_callback = move |progress: Result<StrategyProgressData, String>| {
             let _ = progress_tx.unbounded_send(progress);
         };
 

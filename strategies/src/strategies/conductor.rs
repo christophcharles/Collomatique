@@ -1,3 +1,4 @@
+use std::convert::Infallible;
 use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
@@ -11,8 +12,8 @@ use collomatique_ilp::{ConfigData, ObjectiveSense, UsableData};
 use collomatique_ilp_modeler::{InternalVar, Model};
 
 use crate::{
-    DefaultStrategy, SolveProgress, SolveProgressData, SolveStatus, Strategy, StrategyContext,
-    StrategyError, StrategyOutcome, StrategyProgress,
+    DefaultStrategy, SerializableProgress, SolveProgress, SolveProgressData, SolveStatus, Strategy,
+    StrategyContext, StrategyError, StrategyOutcome,
 };
 
 #[derive(Debug, Clone)]
@@ -195,6 +196,17 @@ impl ConductorProgressData {
     }
 }
 
+impl<V: UsableData + Send> SerializableProgress<V> for ConductorProgress<V> {
+    type Data = ConductorProgressData;
+    type Error = Infallible;
+    fn into_data(&self, var_order: &[V]) -> Result<ConductorProgressData, Infallible> {
+        Ok(ConductorProgress::into_data(self.clone(), var_order))
+    }
+    fn from_data(data: &ConductorProgressData, var_order: &[V]) -> Result<Self, Infallible> {
+        Ok(ConductorProgressData::into_typed(data.clone(), var_order))
+    }
+}
+
 enum WorkerTag {
     Default,
 }
@@ -313,15 +325,9 @@ impl Strategy for ConductorStrategy {
                         &default_strategy,
                         model,
                         warm_start,
-                        &|result: Result<SolveProgress<InternalVar<B, E>>, StrategyProgress>| {
-                            match result {
-                                Ok(p) => {
-                                    default_solutions_found
-                                        .store(p.solutions_found, Ordering::Relaxed);
-                                    on_progress(ConductorProgress::DefaultWorker(p))
-                                }
-                                Err(_) => false,
-                            }
+                        &|p: SolveProgress<InternalVar<B, E>>| {
+                            default_solutions_found.store(p.solutions_found, Ordering::Relaxed);
+                            on_progress(ConductorProgress::DefaultWorker(p))
                         },
                         &|line| Some(format!("[default worker] {}", line)),
                     )

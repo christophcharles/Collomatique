@@ -1,3 +1,4 @@
+use std::convert::Infallible;
 use std::fmt;
 
 use async_trait::async_trait;
@@ -9,8 +10,8 @@ use collomatique_ilp_modeler::{InternalVar, Model};
 use crate::strategies::default::DefaultStrategy;
 use crate::strategies::no_objective::NoObjectiveStrategy;
 use crate::{
-    NoObjectiveProgressData, SolveProgress, SolveProgressData, SolveStatus, Strategy,
-    StrategyContext, StrategyError, StrategyOutcome,
+    NoObjectiveProgressData, SerializableProgress, SolveProgress, SolveProgressData, SolveStatus,
+    Strategy, StrategyContext, StrategyError, StrategyOutcome,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -138,5 +139,62 @@ impl fmt::Display for NoObjectiveStarterProgressData {
                 write!(f, "[default solver progress] {p}")
             }
         }
+    }
+}
+
+impl<V: UsableData + Send> NoObjectiveStarterProgress<V> {
+    /// Erase the typed progress into its serializable form, encoding the hint config
+    /// against `var_order`.
+    pub fn into_data(self, var_order: &[V]) -> NoObjectiveStarterProgressData {
+        match self {
+            NoObjectiveStarterProgress::Starter(d) => NoObjectiveStarterProgressData::Starter(d),
+            NoObjectiveStarterProgress::HintFound(config) => {
+                let raw = collomatique_ilp::config_data_to_hint(&config, var_order);
+                NoObjectiveStarterProgressData::HintFound(raw)
+            }
+            NoObjectiveStarterProgress::Default(p) => {
+                NoObjectiveStarterProgressData::Default(p.into_data(var_order))
+            }
+        }
+    }
+}
+
+impl NoObjectiveStarterProgressData {
+    /// Reconstruct the typed progress, turning the raw hint vector back into a
+    /// [`ConfigData<V>`] keyed by `var_order`.
+    pub fn into_typed<V: UsableData + Send>(
+        self,
+        var_order: &[V],
+    ) -> NoObjectiveStarterProgress<V> {
+        match self {
+            NoObjectiveStarterProgressData::Starter(d) => NoObjectiveStarterProgress::Starter(d),
+            NoObjectiveStarterProgressData::HintFound(raw) => {
+                let config = collomatique_ilp::solution_to_config_data(&raw, var_order);
+                NoObjectiveStarterProgress::HintFound(config)
+            }
+            NoObjectiveStarterProgressData::Default(p) => {
+                NoObjectiveStarterProgress::Default(p.into_typed(var_order))
+            }
+        }
+    }
+}
+
+impl<V: UsableData + Send> SerializableProgress<V> for NoObjectiveStarterProgress<V> {
+    type Data = NoObjectiveStarterProgressData;
+    type Error = Infallible;
+    fn into_data(&self, var_order: &[V]) -> Result<NoObjectiveStarterProgressData, Infallible> {
+        Ok(NoObjectiveStarterProgress::into_data(
+            self.clone(),
+            var_order,
+        ))
+    }
+    fn from_data(
+        data: &NoObjectiveStarterProgressData,
+        var_order: &[V],
+    ) -> Result<Self, Infallible> {
+        Ok(NoObjectiveStarterProgressData::into_typed(
+            data.clone(),
+            var_order,
+        ))
     }
 }

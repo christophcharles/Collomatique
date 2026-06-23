@@ -7,7 +7,10 @@ use std::sync::{Arc, Mutex};
 
 use collomatique_ilp::{ConfigData, UsableData};
 use collomatique_ilp_modeler::{InternalVar, Model};
-use collomatique_strategies::{SolveStatus, StrategyKind, StrategyOutcome, StrategyProgress};
+use collomatique_strategies::{
+    SerializableProgress, SolveStatus, StrategyKind, StrategyOutcome, StrategyProgress,
+    StrategyProgressData,
+};
 use collomatique_subprocesses::{StrategySubprocess, WorkerManager};
 
 mod error_dialog;
@@ -43,7 +46,7 @@ pub enum DialogInput<B: UsableData, E: UsableData, C: UsableData> {
 
     Cancel,
     Echo(String),
-    StrategyUpdate(Result<StrategyProgress, String>),
+    StrategyUpdate(Result<StrategyProgressData, String>),
     Finished(StrategyOutcome<InternalVar<B, E>>),
     ToggleDebug(bool),
     SpawnError(String),
@@ -220,9 +223,17 @@ where
                 let log_cb = move |line: &str| {
                     log_input.emit(DialogInput::Echo(line.trim_end().to_owned()));
                 };
-                let progress_cb = move |progress| {
-                    progress_input.emit(DialogInput::StrategyUpdate(progress));
-                };
+                // The subprocess hands us typed progress; the scalar display only needs the
+                // erased form, so erase it here at the (type-aware) Dialog boundary.
+                let (_, progress_var_order) = model.to_desc();
+                let progress_cb =
+                    move |progress: Result<StrategyProgress<InternalVar<B, E>>, String>| {
+                        let erased = progress.map(|p| {
+                            SerializableProgress::into_data(&p, &progress_var_order)
+                                .unwrap_or_else(|e| match e {})
+                        });
+                        progress_input.emit(DialogInput::StrategyUpdate(erased));
+                    };
                 let result_cb = move |outcome: StrategyOutcome<InternalVar<B, E>>| {
                     result_input.emit(DialogInput::Finished(outcome));
                 };

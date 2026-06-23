@@ -8,7 +8,7 @@ use collomatique_ilp_modeler::{InternalVar, Model};
 use collomatique_rpc::{EncodedMsg, InitMsg, ResultMsg, SerializedStrategyRequest, StrategyMsg};
 use collomatique_strategies::{
     RawSolveOutcome, SolveStatus, SpawnableStrategy, StrategyKind, StrategyOutcome,
-    StrategyProgress, StrategyRequest,
+    StrategyProgressData, StrategyRequest,
 };
 
 use crate::process::StdinWriter;
@@ -51,7 +51,7 @@ pub enum StrategyStatus {
 pub struct StrategySubprocess {
     worker_id: WorkerId,
     stop_flag: Arc<AtomicBool>,
-    last_progress: Arc<Mutex<Option<StrategyProgress>>>,
+    last_progress: Arc<Mutex<Option<StrategyProgressData>>>,
 }
 
 impl StrategySubprocess {
@@ -63,21 +63,22 @@ impl StrategySubprocess {
         worker_manager.kill_worker(self.worker_id)
     }
 
-    pub fn last_progress(&self) -> Option<StrategyProgress> {
+    pub fn last_progress(&self) -> Option<StrategyProgressData> {
         self.last_progress.lock().unwrap().clone()
     }
 
-    pub fn spawn<B, E, C, S: SpawnableStrategy>(
+    pub fn spawn<B, E, C, S>(
         worker_manager: &mut WorkerManager,
         model: &Model<B, E, C>,
         strategy: &S,
         warm_start: Option<ConfigData<InternalVar<B, E>>>,
         result_callback: impl Fn(StrategyOutcome<InternalVar<B, E>>) + Send + 'static,
-        progress_callback: impl Fn(Result<S::Progress<InternalVar<B, E>>, String>) + Send + 'static,
+        progress_callback: impl Fn(Result<S::Progress, String>) + Send + 'static,
         log_callback: impl Fn(&str) + Send + 'static,
     ) -> Result<StrategySubprocess, String>
     where
-        S::Progress<InternalVar<B, E>>: Send + 'static,
+        S: SpawnableStrategy<InternalVar<B, E>>,
+        S::Progress: Send + 'static,
         B: UsableData + Send + 'static,
         E: UsableData + Send + 'static,
         C: UsableData + Send + 'static,
@@ -92,7 +93,7 @@ impl StrategySubprocess {
             result_callback(outcome);
         };
         let strategy_kind = strategy.to_strategy_kind();
-        let wrapped_progress = move |result: Result<StrategyProgress, String>| match result {
+        let wrapped_progress = move |result: Result<StrategyProgressData, String>| match result {
             Ok(sp) => match S::convert_progress(sp, &progress_var_order) {
                 Ok(typed) => progress_callback(Ok(typed)),
                 Err(unexpected) => {
@@ -118,7 +119,7 @@ impl StrategySubprocess {
         strategy: StrategyKind,
         warm_start: Option<Vec<f64>>,
         result_callback: impl Fn(StrategyResult) + Send + 'static,
-        progress_callback: impl Fn(Result<StrategyProgress, String>) + Send + 'static,
+        progress_callback: impl Fn(Result<StrategyProgressData, String>) + Send + 'static,
         log_callback: impl Fn(&str) + Send + 'static,
     ) -> Result<StrategySubprocess, String> {
         let request = StrategyRequest {
@@ -131,7 +132,7 @@ impl StrategySubprocess {
         let init_msg = InitMsg::RunStrategy(serialized);
 
         let stop_flag = Arc::new(AtomicBool::new(false));
-        let last_progress: Arc<Mutex<Option<StrategyProgress>>> = Arc::new(Mutex::new(None));
+        let last_progress: Arc<Mutex<Option<StrategyProgressData>>> = Arc::new(Mutex::new(None));
         let stdin_slot: Arc<Mutex<Option<StdinWriter>>> = Arc::new(Mutex::new(None));
 
         let stop_flag_cb = stop_flag.clone();
@@ -142,8 +143,8 @@ impl StrategySubprocess {
             WorkerEvent::RpcCommand(Ok(cmd)) => match cmd {
                 collomatique_rpc::CmdMsg::Strategy(StrategyMsg::Progress(data)) => {
                     let serialized_str: String = data.progress.into();
-                    let progress_result =
-                        StrategyProgress::deserialize(&serialized_str).map_err(|e| e.to_string());
+                    let progress_result = StrategyProgressData::deserialize(&serialized_str)
+                        .map_err(|e| e.to_string());
 
                     if let Ok(ref progress) = progress_result {
                         *last_progress_cb.lock().unwrap() = Some(progress.clone());

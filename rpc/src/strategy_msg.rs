@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StrategyMsg {
-    Progress(StrategyProgressData),
+    Progress(StrategyProgressRaw),
     Result(StrategyResultData),
 }
 
@@ -41,8 +41,10 @@ impl From<SerializedStrategyProgress> for String {
     }
 }
 
+/// RPC envelope carrying a serialized `collomatique_strategies::StrategyProgressData`
+/// across the IPC barrier.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct StrategyProgressData {
+pub struct StrategyProgressRaw {
     pub progress: SerializedStrategyProgress,
 }
 

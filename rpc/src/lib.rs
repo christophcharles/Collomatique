@@ -21,7 +21,7 @@ pub use solver_msg::{
 
 pub mod strategy_msg;
 pub use strategy_msg::{
-    SerializedStrategyProgress, SerializedStrategyRequest, StrategyMsg, StrategyProgressData,
+    SerializedStrategyProgress, SerializedStrategyRequest, StrategyMsg, StrategyProgressRaw,
     StrategyResultData, StrategyStatus,
 };
 

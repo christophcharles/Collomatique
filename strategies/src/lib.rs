@@ -12,6 +12,7 @@ pub use strategies::no_objective_starter::{
     NoObjectiveStarterProgress, NoObjectiveStarterProgressData, NoObjectiveStarterStrategy,
 };
 
+use std::convert::Infallible;
 use std::fmt;
 use std::sync::Arc;
 
@@ -203,7 +204,7 @@ pub trait SolveBackend: Send + Sync {
         model_desc: &ModelDesc,
         strategy: &StrategyKind,
         warm_start: Option<Vec<f64>>,
-        on_progress: &(dyn Fn(StrategyProgress) -> bool + Send + Sync),
+        on_progress: &(dyn Fn(StrategyProgressData) -> bool + Send + Sync),
         on_echo: &(dyn Fn(String) + Send + Sync),
     ) -> Result<RawSolveOutcome, StrategyError>;
 }
@@ -402,15 +403,42 @@ pub enum StrategyKind {
     Conductor(ConductorStrategy),
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum StrategyProgress {
-    Default(SolveProgressData),
-    NoObjective(NoObjectiveProgressData),
-    NoObjectiveStarter(NoObjectiveStarterProgressData),
-    Conductor(ConductorProgressData),
+/// Conversion between a typed progress and its serializable (`Data`) counterpart,
+/// parameterized by the model's `var_order` (used to encode/decode incumbents as
+/// column-indexed `Vec<f64>`). Implemented by every progress type; [`StrategyProgress<V>`]
+/// implements it by delegating to its sub-progress types.
+pub trait SerializableProgress<V: UsableData + Send>: Sized {
+    type Data: serde::Serialize + serde::de::DeserializeOwned;
+    type Error;
+
+    /// Erase the typed progress into its serializable form.
+    fn into_data(&self, var_order: &[V]) -> Result<Self::Data, Self::Error>;
+
+    /// Reconstruct the typed progress from its serializable form.
+    fn from_data(data: &Self::Data, var_order: &[V]) -> Result<Self, Self::Error>;
 }
 
-impl fmt::Display for StrategyProgress {
+/// A typed progress that is one variant of [`StrategyProgress<V>`]. Used to project the
+/// typed union down to the specific progress a [`SpawnableStrategy`] expects.
+pub trait StrategyProgressVariant<V: UsableData + Send>: Sized {
+    /// Extract this variant from the union, handing the union back unchanged on mismatch.
+    fn from_strategy_progress(progress: StrategyProgress<V>) -> Result<Self, StrategyProgress<V>>;
+}
+
+/// Typed union of every strategy's progress, carrying real incumbents as `ConfigData<V>`.
+///
+/// Not serializable by design (mirrors the per-strategy typed/erased split). The
+/// serializable counterpart is [`StrategyProgressData`]; convert via the
+/// [`SerializableProgress`] impl.
+#[derive(Debug, Clone)]
+pub enum StrategyProgress<V: UsableData + Send> {
+    Default(SolveProgress<V>),
+    NoObjective(NoObjectiveProgressData),
+    NoObjectiveStarter(NoObjectiveStarterProgress<V>),
+    Conductor(ConductorProgress<V>),
+}
+
+impl<V: UsableData + Send> fmt::Display for StrategyProgress<V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             StrategyProgress::Default(p) => write!(f, "{p}"),
@@ -421,15 +449,143 @@ impl fmt::Display for StrategyProgress {
     }
 }
 
-impl StrategyProgress {
+/// Serializable, type-erased union of every strategy's progress. This is the only progress
+/// form that crosses the IPC barrier; reconstruct the typed [`StrategyProgress<V>`] with
+/// [`SerializableProgress::from_data`] once a `var_order` is available.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum StrategyProgressData {
+    Default(SolveProgressData),
+    NoObjective(NoObjectiveProgressData),
+    NoObjectiveStarter(NoObjectiveStarterProgressData),
+    Conductor(ConductorProgressData),
+}
+
+impl fmt::Display for StrategyProgressData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            StrategyProgressData::Default(p) => write!(f, "{p}"),
+            StrategyProgressData::NoObjective(p) => write!(f, "{p}"),
+            StrategyProgressData::NoObjectiveStarter(p) => write!(f, "{p}"),
+            StrategyProgressData::Conductor(p) => write!(f, "{p}"),
+        }
+    }
+}
+
+impl StrategyProgressData {
     pub fn serialize(&self) -> String {
-        serde_json::to_string(self).expect("Serialization of StrategyProgress should never fail")
+        serde_json::to_string(self)
+            .expect("Serialization of StrategyProgressData should never fail")
     }
 
     pub fn deserialize(s: &str) -> Result<Self, StrategyError> {
         serde_json::from_str(s).map_err(|e| {
-            StrategyError::Other(format!("failed to deserialize StrategyProgress: {e}"))
+            StrategyError::Other(format!("failed to deserialize StrategyProgressData: {e}"))
         })
+    }
+}
+
+impl<V: UsableData + Send> SerializableProgress<V> for SolveProgress<V> {
+    type Data = SolveProgressData;
+    type Error = Infallible;
+    fn into_data(&self, var_order: &[V]) -> Result<SolveProgressData, Infallible> {
+        Ok(SolveProgress::into_data(self.clone(), var_order))
+    }
+    fn from_data(data: &SolveProgressData, var_order: &[V]) -> Result<Self, Infallible> {
+        Ok(SolveProgressData::into_typed(data.clone(), var_order))
+    }
+}
+
+impl<V: UsableData + Send> SerializableProgress<V> for NoObjectiveProgressData {
+    type Data = NoObjectiveProgressData;
+    type Error = Infallible;
+    fn into_data(&self, _var_order: &[V]) -> Result<NoObjectiveProgressData, Infallible> {
+        Ok(self.clone())
+    }
+    fn from_data(data: &NoObjectiveProgressData, _var_order: &[V]) -> Result<Self, Infallible> {
+        Ok(data.clone())
+    }
+}
+
+impl<V: UsableData + Send> SerializableProgress<V> for StrategyProgress<V> {
+    type Data = StrategyProgressData;
+    type Error = Infallible;
+    fn into_data(&self, var_order: &[V]) -> Result<StrategyProgressData, Infallible> {
+        Ok(match self {
+            StrategyProgress::Default(p) => {
+                StrategyProgressData::Default(SerializableProgress::into_data(p, var_order)?)
+            }
+            StrategyProgress::NoObjective(p) => {
+                StrategyProgressData::NoObjective(SerializableProgress::into_data(p, var_order)?)
+            }
+            StrategyProgress::NoObjectiveStarter(p) => StrategyProgressData::NoObjectiveStarter(
+                SerializableProgress::into_data(p, var_order)?,
+            ),
+            StrategyProgress::Conductor(p) => {
+                StrategyProgressData::Conductor(SerializableProgress::into_data(p, var_order)?)
+            }
+        })
+    }
+    fn from_data(data: &StrategyProgressData, var_order: &[V]) -> Result<Self, Infallible> {
+        Ok(match data {
+            StrategyProgressData::Default(d) => StrategyProgress::Default(
+                <SolveProgress<V> as SerializableProgress<V>>::from_data(d, var_order)?,
+            ),
+            StrategyProgressData::NoObjective(d) => {
+                StrategyProgress::NoObjective(<NoObjectiveProgressData as SerializableProgress<
+                    V,
+                >>::from_data(d, var_order)?)
+            }
+            StrategyProgressData::NoObjectiveStarter(d) => StrategyProgress::NoObjectiveStarter(
+                <NoObjectiveStarterProgress<V> as SerializableProgress<V>>::from_data(
+                    d, var_order,
+                )?,
+            ),
+            StrategyProgressData::Conductor(d) => StrategyProgress::Conductor(
+                <ConductorProgress<V> as SerializableProgress<V>>::from_data(d, var_order)?,
+            ),
+        })
+    }
+}
+
+impl<V: UsableData + Send> StrategyProgressVariant<V> for StrategyProgress<V> {
+    fn from_strategy_progress(progress: StrategyProgress<V>) -> Result<Self, StrategyProgress<V>> {
+        Ok(progress)
+    }
+}
+
+impl<V: UsableData + Send> StrategyProgressVariant<V> for SolveProgress<V> {
+    fn from_strategy_progress(progress: StrategyProgress<V>) -> Result<Self, StrategyProgress<V>> {
+        match progress {
+            StrategyProgress::Default(p) => Ok(p),
+            other => Err(other),
+        }
+    }
+}
+
+impl<V: UsableData + Send> StrategyProgressVariant<V> for NoObjectiveProgressData {
+    fn from_strategy_progress(progress: StrategyProgress<V>) -> Result<Self, StrategyProgress<V>> {
+        match progress {
+            StrategyProgress::NoObjective(p) => Ok(p),
+            other => Err(other),
+        }
+    }
+}
+
+impl<V: UsableData + Send> StrategyProgressVariant<V> for NoObjectiveStarterProgress<V> {
+    fn from_strategy_progress(progress: StrategyProgress<V>) -> Result<Self, StrategyProgress<V>> {
+        match progress {
+            StrategyProgress::NoObjectiveStarter(p) => Ok(p),
+            other => Err(other),
+        }
+    }
+}
+
+impl<V: UsableData + Send> StrategyProgressVariant<V> for ConductorProgress<V> {
+    fn from_strategy_progress(progress: StrategyProgress<V>) -> Result<Self, StrategyProgress<V>> {
+        match progress {
+            StrategyProgress::Conductor(p) => Ok(p),
+            other => Err(other),
+        }
     }
 }
 
@@ -457,142 +613,50 @@ impl From<ConductorStrategy> for StrategyKind {
     }
 }
 
-impl TryFrom<StrategyProgress> for SolveProgressData {
-    type Error = StrategyProgress;
-    fn try_from(sp: StrategyProgress) -> Result<Self, StrategyProgress> {
-        match sp {
-            StrategyProgress::Default(p) => Ok(p),
-            other => Err(other),
-        }
-    }
-}
-
-impl TryFrom<StrategyProgress> for NoObjectiveProgressData {
-    type Error = StrategyProgress;
-    fn try_from(sp: StrategyProgress) -> Result<Self, StrategyProgress> {
-        match sp {
-            StrategyProgress::NoObjective(p) => Ok(p),
-            other => Err(other),
-        }
-    }
-}
-
-impl TryFrom<StrategyProgress> for NoObjectiveStarterProgressData {
-    type Error = StrategyProgress;
-    fn try_from(sp: StrategyProgress) -> Result<Self, StrategyProgress> {
-        match sp {
-            StrategyProgress::NoObjectiveStarter(p) => Ok(p),
-            other => Err(other),
-        }
-    }
-}
-
-impl TryFrom<StrategyProgress> for ConductorProgressData {
-    type Error = StrategyProgress;
-    fn try_from(sp: StrategyProgress) -> Result<Self, StrategyProgress> {
-        match sp {
-            StrategyProgress::Conductor(p) => Ok(p),
-            other => Err(other),
-        }
-    }
-}
-
-pub trait SpawnableStrategy {
-    type Progress<V: UsableData + Send>: Send;
+/// A strategy that can be spawned as a subprocess for a given variable type `V`.
+///
+/// `V` is a trait parameter (not a GAT) so the blanket impl below can bound
+/// `Self::Progress: StrategyProgressVariant<V>` as an ordinary per-instantiation
+/// `where` clause — a GAT would require an (inexpressible) `for<V>` bound.
+pub trait SpawnableStrategy<V: UsableData + Send> {
+    type Progress: Send;
     fn to_strategy_kind(&self) -> StrategyKind;
-    fn convert_progress<V: UsableData + Send>(
-        sp: StrategyProgress,
+    /// Reconstruct the typed progress from the erased form received over IPC, returning
+    /// the typed union unchanged if it carries a variant this strategy never emits.
+    fn convert_progress(
+        data: StrategyProgressData,
         var_order: &[V],
-    ) -> Result<Self::Progress<V>, StrategyProgress>;
+    ) -> Result<Self::Progress, StrategyProgress<V>>;
 }
 
-impl SpawnableStrategy for DefaultStrategy {
-    type Progress<V: UsableData + Send> = SolveProgress<V>;
+/// Every `Strategy` that can be turned into a `StrategyKind` and whose progress is a
+/// variant of the typed union is spawnable: deserialize-then-project.
+impl<V, S> SpawnableStrategy<V> for S
+where
+    V: UsableData + Send,
+    S: Strategy + Clone,
+    StrategyKind: From<S>,
+    <S as Strategy>::Progress<V>: StrategyProgressVariant<V>,
+{
+    type Progress = <S as Strategy>::Progress<V>;
     fn to_strategy_kind(&self) -> StrategyKind {
-        self.clone().into()
+        StrategyKind::from(self.clone())
     }
-    fn convert_progress<V: UsableData + Send>(
-        sp: StrategyProgress,
+    fn convert_progress(
+        data: StrategyProgressData,
         var_order: &[V],
-    ) -> Result<SolveProgress<V>, StrategyProgress> {
-        match sp {
-            StrategyProgress::Default(data) => Ok(data.into_typed(var_order)),
-            other => Err(other),
-        }
+    ) -> Result<Self::Progress, StrategyProgress<V>> {
+        let typed = <StrategyProgress<V> as SerializableProgress<V>>::from_data(&data, var_order)
+            .unwrap_or_else(|e| match e {});
+        <Self::Progress as StrategyProgressVariant<V>>::from_strategy_progress(typed)
     }
 }
 
-impl SpawnableStrategy for NoObjectiveStrategy {
-    type Progress<V: UsableData + Send> = NoObjectiveProgressData;
-    fn to_strategy_kind(&self) -> StrategyKind {
-        self.clone().into()
-    }
-    fn convert_progress<V: UsableData + Send>(
-        sp: StrategyProgress,
-        _var_order: &[V],
-    ) -> Result<NoObjectiveProgressData, StrategyProgress> {
-        sp.try_into()
-    }
-}
+#[async_trait]
+impl Strategy for StrategyKind {
+    type Progress<V: UsableData + Send> = StrategyProgress<V>;
 
-impl SpawnableStrategy for NoObjectiveStarterStrategy {
-    type Progress<V: UsableData + Send> = NoObjectiveStarterProgress<V>;
-    fn to_strategy_kind(&self) -> StrategyKind {
-        self.clone().into()
-    }
-    fn convert_progress<V: UsableData + Send>(
-        sp: StrategyProgress,
-        var_order: &[V],
-    ) -> Result<NoObjectiveStarterProgress<V>, StrategyProgress> {
-        match sp {
-            StrategyProgress::NoObjectiveStarter(data) => Ok(match data {
-                NoObjectiveStarterProgressData::Starter(p) => {
-                    NoObjectiveStarterProgress::Starter(p)
-                }
-                NoObjectiveStarterProgressData::HintFound(raw) => {
-                    let config = collomatique_ilp::solution_to_config_data(&raw, var_order);
-                    NoObjectiveStarterProgress::HintFound(config)
-                }
-                NoObjectiveStarterProgressData::Default(p) => {
-                    NoObjectiveStarterProgress::Default(p.into_typed(var_order))
-                }
-            }),
-            other => Err(other),
-        }
-    }
-}
-
-impl SpawnableStrategy for ConductorStrategy {
-    type Progress<V: UsableData + Send> = ConductorProgress<V>;
-    fn to_strategy_kind(&self) -> StrategyKind {
-        self.clone().into()
-    }
-    fn convert_progress<V: UsableData + Send>(
-        sp: StrategyProgress,
-        var_order: &[V],
-    ) -> Result<ConductorProgress<V>, StrategyProgress> {
-        match sp {
-            StrategyProgress::Conductor(data) => Ok(data.into_typed(var_order)),
-            other => Err(other),
-        }
-    }
-}
-
-impl SpawnableStrategy for StrategyKind {
-    type Progress<V: UsableData + Send> = StrategyProgress;
-    fn to_strategy_kind(&self) -> StrategyKind {
-        self.clone()
-    }
-    fn convert_progress<V: UsableData + Send>(
-        sp: StrategyProgress,
-        _var_order: &[V],
-    ) -> Result<StrategyProgress, StrategyProgress> {
-        Ok(sp)
-    }
-}
-
-impl StrategyKind {
-    pub fn name(&self) -> &'static str {
+    fn name(&self) -> &'static str {
         match self {
             StrategyKind::Default(s) => s.name(),
             StrategyKind::NoObjective(s) => s.name(),
@@ -601,27 +665,12 @@ impl StrategyKind {
         }
     }
 
-    pub async fn run<B, E, C>(
+    async fn run_with_callback<B, E, C>(
         &self,
         ctx: &StrategyContext,
         model: &Model<B, E, C>,
         warm_start: Option<ConfigData<InternalVar<B, E>>>,
-    ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
-    where
-        B: UsableData + Send,
-        E: UsableData + Send,
-        C: UsableData + Send,
-    {
-        self.run_with_callback(ctx, model, warm_start, &|_| true)
-            .await
-    }
-
-    pub async fn run_with_callback<B, E, C>(
-        &self,
-        ctx: &StrategyContext,
-        model: &Model<B, E, C>,
-        warm_start: Option<ConfigData<InternalVar<B, E>>>,
-        on_progress: &(dyn Fn(StrategyProgress) -> bool + Send + Sync),
+        on_progress: &(dyn Fn(StrategyProgress<InternalVar<B, E>>) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
         B: UsableData + Send,
@@ -630,9 +679,8 @@ impl StrategyKind {
     {
         match self {
             StrategyKind::Default(s) => {
-                let (_, var_order) = model.to_desc();
                 s.run_with_callback(ctx, model, warm_start, &|p| {
-                    on_progress(StrategyProgress::Default(p.into_data(&var_order)))
+                    on_progress(StrategyProgress::Default(p))
                 })
                 .await
             }
@@ -643,34 +691,14 @@ impl StrategyKind {
                 .await
             }
             StrategyKind::NoObjectiveStarter(s) => {
-                let (_, var_order) = model.to_desc();
                 s.run_with_callback(ctx, model, warm_start, &|p| {
-                    let sp = match p {
-                        NoObjectiveStarterProgress::Starter(d) => {
-                            StrategyProgress::NoObjectiveStarter(
-                                NoObjectiveStarterProgressData::Starter(d),
-                            )
-                        }
-                        NoObjectiveStarterProgress::HintFound(ref config) => {
-                            let raw = collomatique_ilp::config_data_to_hint(config, &var_order);
-                            StrategyProgress::NoObjectiveStarter(
-                                NoObjectiveStarterProgressData::HintFound(raw),
-                            )
-                        }
-                        NoObjectiveStarterProgress::Default(d) => {
-                            StrategyProgress::NoObjectiveStarter(
-                                NoObjectiveStarterProgressData::Default(d.into_data(&var_order)),
-                            )
-                        }
-                    };
-                    on_progress(sp)
+                    on_progress(StrategyProgress::NoObjectiveStarter(p))
                 })
                 .await
             }
             StrategyKind::Conductor(s) => {
-                let (_, var_order) = model.to_desc();
                 s.run_with_callback(ctx, model, warm_start, &|p| {
-                    on_progress(StrategyProgress::Conductor(p.into_data(&var_order)))
+                    on_progress(StrategyProgress::Conductor(p))
                 })
                 .await
             }
@@ -734,7 +762,9 @@ impl StrategyContext {
         E: UsableData + Send,
         C: UsableData + Send,
     {
-        strategy.run(self, model, warm_start).await
+        strategy
+            .run_with_callback(self, model, warm_start, &|_| true)
+            .await
     }
 
     pub async fn run_strategy_with_callback<B, E, C>(
@@ -742,7 +772,7 @@ impl StrategyContext {
         strategy: &StrategyKind,
         model: &Model<B, E, C>,
         warm_start: Option<ConfigData<InternalVar<B, E>>>,
-        on_progress: &(dyn Fn(StrategyProgress) -> bool + Send + Sync),
+        on_progress: &(dyn Fn(StrategyProgress<InternalVar<B, E>>) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
         B: UsableData + Send,
@@ -754,7 +784,7 @@ impl StrategyContext {
             .await
     }
 
-    pub async fn spawn_strategy<B, E, C, S: SpawnableStrategy>(
+    pub async fn spawn_strategy<B, E, C, S>(
         &self,
         strategy: &S,
         model: &Model<B, E, C>,
@@ -764,24 +794,24 @@ impl StrategyContext {
         B: UsableData,
         E: UsableData,
         C: UsableData,
+        S: SpawnableStrategy<InternalVar<B, E>>,
     {
         self.spawn_strategy_with_callback(strategy, model, warm_start, &|_| true)
             .await
     }
 
-    pub async fn spawn_strategy_with_callback<B, E, C, S: SpawnableStrategy>(
+    pub async fn spawn_strategy_with_callback<B, E, C, S>(
         &self,
         strategy: &S,
         model: &Model<B, E, C>,
         warm_start: Option<ConfigData<InternalVar<B, E>>>,
-        on_progress: &(
-             dyn Fn(Result<S::Progress<InternalVar<B, E>>, StrategyProgress>) -> bool + Send + Sync
-         ),
+        on_progress: &(dyn Fn(S::Progress) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
         B: UsableData,
         E: UsableData,
         C: UsableData,
+        S: SpawnableStrategy<InternalVar<B, E>>,
     {
         let (model_desc, var_order) = model.to_desc();
         let strategy_kind = strategy.to_strategy_kind();
@@ -796,8 +826,15 @@ impl StrategyContext {
             None => &noop_echo,
         };
 
-        let raw_on_progress =
-            |sp: StrategyProgress| -> bool { on_progress(S::convert_progress(sp, &var_order)) };
+        let raw_on_progress = |data: StrategyProgressData| -> bool {
+            match S::convert_progress(data, &var_order) {
+                Ok(typed) => on_progress(typed),
+                Err(leftover) => {
+                    echo_fn(format!("unexpected progress variant: {leftover}"));
+                    true
+                }
+            }
+        };
 
         let raw = self
             .backend
@@ -813,20 +850,19 @@ impl StrategyContext {
         Ok(raw.into_typed(&var_order))
     }
 
-    pub async fn spawn_strategy_with_echo<B, E, C, S: SpawnableStrategy>(
+    pub async fn spawn_strategy_with_echo<B, E, C, S>(
         &self,
         strategy: &S,
         model: &Model<B, E, C>,
         warm_start: Option<ConfigData<InternalVar<B, E>>>,
-        on_progress: &(
-             dyn Fn(Result<S::Progress<InternalVar<B, E>>, StrategyProgress>) -> bool + Send + Sync
-         ),
+        on_progress: &(dyn Fn(S::Progress) -> bool + Send + Sync),
         handle_echo: &(dyn Fn(String) -> Option<String> + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
         B: UsableData,
         E: UsableData,
         C: UsableData,
+        S: SpawnableStrategy<InternalVar<B, E>>,
     {
         let (model_desc, var_order) = model.to_desc();
         let strategy_kind = strategy.to_strategy_kind();
@@ -847,8 +883,15 @@ impl StrategyContext {
             }),
         };
 
-        let raw_on_progress =
-            |sp: StrategyProgress| -> bool { on_progress(S::convert_progress(sp, &var_order)) };
+        let raw_on_progress = |data: StrategyProgressData| -> bool {
+            match S::convert_progress(data, &var_order) {
+                Ok(typed) => on_progress(typed),
+                Err(leftover) => {
+                    echo_impl(format!("unexpected progress variant: {leftover}"));
+                    true
+                }
+            }
+        };
 
         let raw = self
             .backend
@@ -932,7 +975,7 @@ mod tests {
             _model_desc: &ModelDesc,
             _strategy: &StrategyKind,
             _warm_start: Option<Vec<f64>>,
-            _on_progress: &(dyn Fn(StrategyProgress) -> bool + Send + Sync),
+            _on_progress: &(dyn Fn(StrategyProgressData) -> bool + Send + Sync),
             _on_echo: &(dyn Fn(String) + Send + Sync),
         ) -> Result<RawSolveOutcome, StrategyError> {
             Ok(self.outcome.clone())
@@ -974,7 +1017,7 @@ mod tests {
             _model_desc: &ModelDesc,
             _strategy: &StrategyKind,
             _warm_start: Option<Vec<f64>>,
-            _on_progress: &(dyn Fn(StrategyProgress) -> bool + Send + Sync),
+            _on_progress: &(dyn Fn(StrategyProgressData) -> bool + Send + Sync),
             _on_echo: &(dyn Fn(String) + Send + Sync),
         ) -> Result<RawSolveOutcome, StrategyError> {
             unreachable!()
@@ -1006,7 +1049,7 @@ mod tests {
             _model_desc: &ModelDesc,
             _strategy: &StrategyKind,
             _warm_start: Option<Vec<f64>>,
-            _on_progress: &(dyn Fn(StrategyProgress) -> bool + Send + Sync),
+            _on_progress: &(dyn Fn(StrategyProgressData) -> bool + Send + Sync),
             _on_echo: &(dyn Fn(String) + Send + Sync),
         ) -> Result<RawSolveOutcome, StrategyError> {
             unreachable!()

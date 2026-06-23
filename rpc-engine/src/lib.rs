@@ -205,8 +205,10 @@ fn solve_ilp(serialized: SerializedIlpProblem) -> Result<(), anyhow::Error> {
 
 fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Error> {
     use collomatique_ilp_modeler::InternalVar;
-    use collomatique_rpc::{SerializedStrategyProgress, StrategyProgressData};
-    use collomatique_strategies::{StrategyContext, StrategyProgress, StrategyRequest};
+    use collomatique_rpc::{SerializedStrategyProgress, StrategyProgressRaw};
+    use collomatique_strategies::{
+        SerializableProgress, Strategy, StrategyContext, StrategyProgress, StrategyRequest,
+    };
     use collomatique_subprocesses::{SubprocessSolveBackend, WorkerManager};
     use ordered_float::OrderedFloat;
     use std::sync::{Arc, Mutex};
@@ -231,13 +233,16 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
     });
     let ctx = StrategyContext::with_echo(backend, on_echo);
 
-    let progress_callback = |progress: StrategyProgress| -> bool {
-        eprintln!("[{strategy_name} strategy progress] {progress}");
-        let serialized_progress = progress.serialize();
-        let progress_data = StrategyProgressData {
+    let progress_callback = |progress: StrategyProgress<InternalVar<usize, usize>>| -> bool {
+        // Erase the typed progress to its serializable form for the IPC barrier.
+        let data =
+            SerializableProgress::into_data(&progress, &var_order).unwrap_or_else(|e| match e {});
+        eprintln!("[{strategy_name} strategy progress] {data}");
+        let serialized_progress = data.serialize();
+        let progress_raw = StrategyProgressRaw {
             progress: SerializedStrategyProgress::from(serialized_progress),
         };
-        let response = EncodedMsg::send_rpc(CmdMsg::Strategy(StrategyMsg::Progress(progress_data)));
+        let response = EncodedMsg::send_rpc(CmdMsg::Strategy(StrategyMsg::Progress(progress_raw)));
         match response {
             Ok(ResultMsg::StrategyControl(cont)) => cont,
             _ => false,

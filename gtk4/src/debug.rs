@@ -435,7 +435,7 @@ fn subprocess_solve(model: &collomatique_constraints_colloscopes::ColloscopeMode
 
 fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::ColloscopeModel) {
     use collomatique_strategies::{
-        DefaultStrategy, SolveProgress, SolveProgressData, SolveStatus, StrategyOutcome,
+        DefaultStrategy, SolveProgress, SolveStatus, StrategyOutcome, StrategyProgressData,
     };
     use collomatique_subprocesses::{StrategySubprocess, WorkerManager};
     use std::sync::mpsc;
@@ -544,10 +544,8 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
         }
         Err(_) => {
             eprintln!("  Channel closed without receiving a result");
-            if let Some(progress) = handle.last_progress() {
-                if let Ok(p) = SolveProgressData::try_from(progress) {
-                    eprintln!("  Last progress: {p}");
-                }
+            if let Some(StrategyProgressData::Default(p)) = handle.last_progress() {
+                eprintln!("  Last progress: {p}");
             }
         }
     }
@@ -556,6 +554,7 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
 fn no_objective_solve(model: &collomatique_constraints_colloscopes::ColloscopeModel) {
     use collomatique_strategies::{
         NoObjectiveProgressData, NoObjectiveStrategy, SolveStatus, StrategyOutcome,
+        StrategyProgressData,
     };
     use collomatique_subprocesses::{StrategySubprocess, WorkerManager};
     use std::sync::mpsc;
@@ -665,10 +664,8 @@ fn no_objective_solve(model: &collomatique_constraints_colloscopes::ColloscopeMo
         }
         Err(_) => {
             eprintln!("  Channel closed without receiving a result");
-            if let Some(progress) = handle.last_progress() {
-                if let Ok(p) = NoObjectiveProgressData::try_from(progress) {
-                    eprintln!("  Last progress: {p}");
-                }
+            if let Some(StrategyProgressData::NoObjective(p)) = handle.last_progress() {
+                eprintln!("  Last progress: {p}");
             }
         }
     }

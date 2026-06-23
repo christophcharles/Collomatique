@@ -4,7 +4,7 @@ use relm4::{
     SimpleComponent, gtk,
 };
 
-use collomatique_strategies::{SolveProgressData, StrategyProgress};
+use collomatique_strategies::{SolveProgressData, StrategyProgressData};
 
 use crate::widgets::debug_view::{DebugView, DebugViewInput};
 
@@ -116,12 +116,12 @@ impl SimpleComponent for StrategyFrame {
                 self.debug_view.emit(DebugViewInput::Clear);
             }
             StrategyDisplayInput::StrategyUpdate(progress) => match progress {
-                Ok(StrategyProgress::Default(p)) => {
+                Ok(StrategyProgressData::Default(p)) => {
                     self.last_progress = Some(p);
                 }
-                Ok(StrategyProgress::NoObjective(_)) => todo!(),
-                Ok(StrategyProgress::NoObjectiveStarter(_)) => todo!(),
-                Ok(StrategyProgress::Conductor(_)) => todo!(),
+                Ok(StrategyProgressData::NoObjective(_)) => todo!(),
+                Ok(StrategyProgressData::NoObjectiveStarter(_)) => todo!(),
+                Ok(StrategyProgressData::Conductor(_)) => todo!(),
                 Err(e) => {
                     self.debug_view
                         .emit(DebugViewInput::Append(format!("[ /!\\ IPC Error ] {e}\n")));
