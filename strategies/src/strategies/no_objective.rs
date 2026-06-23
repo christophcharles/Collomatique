@@ -12,7 +12,7 @@ use crate::{
     StrategyOutcome,
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NoObjectiveStrategy {
     pub checker_time_limit_seconds: Option<u32>,
     pub reconstruction_time_limit_seconds: Option<u32>,

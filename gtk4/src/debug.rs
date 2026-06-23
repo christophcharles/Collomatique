@@ -852,19 +852,24 @@ async fn conductor_solve(model: &collomatique_constraints_colloscopes::Colloscop
                         .map(|b| format!("{:.4}", b))
                         .unwrap_or_else(|| "N/A".to_string());
                     eprintln!(
-                        "  [conductor] obj={} bound={} solutions={} workers={}/{}",
-                        obj_str,
-                        bound_str,
-                        status.solution_found_count,
-                        status.finished_workers,
-                        status.total_workers,
+                        "  [conductor] obj={} bound={} solutions={}",
+                        obj_str, bound_str, status.solution_found_count,
                     );
                 }
-                ConductorProgress::DefaultWorker(p) => {
-                    eprintln!(
-                        "  [conductor] [default worker] obj={:.4} bound={:.4} nodes={} solutions={}",
-                        p.best_obj, p.best_bound, p.node_count, p.solutions_found
-                    );
+                ConductorProgress::WorkerAssigned {
+                    worker_num,
+                    strategy,
+                } => match strategy {
+                    Some(s) => {
+                        eprintln!("  [conductor] worker {worker_num} assigned: {}", s.name())
+                    }
+                    None => eprintln!("  [conductor] worker {worker_num} idle"),
+                },
+                ConductorProgress::Worker {
+                    worker_num,
+                    progress,
+                } => {
+                    eprintln!("  [conductor] worker {worker_num}: {progress}");
                 }
             }
             true

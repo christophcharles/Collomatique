@@ -8,7 +8,7 @@ use crate::{
     SolveProblemOpts, SolveProgress, Strategy, StrategyContext, StrategyError, StrategyOutcome,
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct DefaultStrategy {
     pub time_limit_seconds: Option<u32>,
     pub disable_logging: bool,

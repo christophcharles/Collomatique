@@ -395,7 +395,7 @@ pub trait Strategy: Send + Sync {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum StrategyKind {
     Default(DefaultStrategy),
     NoObjective(NoObjectiveStrategy),

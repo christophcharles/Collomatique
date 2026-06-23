@@ -14,7 +14,7 @@ use crate::{
     Strategy, StrategyContext, StrategyError, StrategyOutcome,
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NoObjectiveStarterStrategy {
     pub no_objective: NoObjectiveStrategy,
     pub default: DefaultStrategy,

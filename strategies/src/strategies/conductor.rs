@@ -1,8 +1,9 @@
 use std::convert::Infallible;
 use std::fmt;
 use std::future::Future;
+use std::num::NonZeroU32;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Mutex;
 
 use async_trait::async_trait;
 use futures::stream::{FuturesUnordered, StreamExt};
@@ -12,8 +13,8 @@ use collomatique_ilp::{ConfigData, ObjectiveSense, UsableData};
 use collomatique_ilp_modeler::{InternalVar, Model};
 
 use crate::{
-    DefaultStrategy, SerializableProgress, SolveProgress, SolveProgressData, SolveStatus, Strategy,
-    StrategyContext, StrategyError, StrategyOutcome,
+    DefaultStrategy, SerializableProgress, SolveProgress, SolveStatus, Strategy, StrategyContext,
+    StrategyError, StrategyKind, StrategyOutcome, StrategyProgress, StrategyProgressData,
 };
 
 #[derive(Debug, Clone)]
@@ -27,14 +28,24 @@ pub struct ConductorStatus<V: UsableData + Send> {
     pub best_solution: Option<Solution<V>>,
     pub best_bound: Option<f64>,
     pub solution_found_count: u64,
-    pub finished_workers: u64,
-    pub total_workers: u64,
 }
 
 #[derive(Debug, Clone)]
 pub enum ConductorProgress<V: UsableData + Send> {
+    /// Aggregated conductor-level status, emitted whenever the best bound or best
+    /// solution improves.
     Conductor(ConductorStatus<V>),
-    DefaultWorker(SolveProgress<V>),
+    /// A worker was (re)assigned: `Some(strategy)` when a substrategy is launched on it,
+    /// `None` when the worker goes idle.
+    WorkerAssigned {
+        worker_num: u32,
+        strategy: Option<Box<StrategyKind>>,
+    },
+    /// An inner progress update forwarded from a worker's substrategy.
+    Worker {
+        worker_num: u32,
+        progress: Box<StrategyProgress<V>>,
+    },
 }
 
 impl<V: UsableData + Send> fmt::Display for Solution<V> {
@@ -46,11 +57,7 @@ impl<V: UsableData + Send> fmt::Display for Solution<V> {
 
 impl<V: UsableData + Send> fmt::Display for ConductorStatus<V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "workers={}/{} solutions={}",
-            self.finished_workers, self.total_workers, self.solution_found_count
-        )?;
+        write!(f, "solutions={}", self.solution_found_count)?;
         if let Some(bound) = self.best_bound {
             write!(f, " bound={bound:.4}")?;
         }
@@ -70,7 +77,17 @@ impl<V: UsableData + Send> fmt::Display for ConductorProgress<V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ConductorProgress::Conductor(s) => write!(f, "[conductor] {s}"),
-            ConductorProgress::DefaultWorker(p) => write!(f, "[default worker] {p}"),
+            ConductorProgress::WorkerAssigned {
+                worker_num,
+                strategy,
+            } => match strategy {
+                Some(s) => write!(f, "[worker {worker_num}] assigned: {} strategy", s.name()),
+                None => write!(f, "[worker {worker_num}] idle"),
+            },
+            ConductorProgress::Worker {
+                worker_num,
+                progress,
+            } => write!(f, "[worker {worker_num}] {progress}"),
         }
     }
 }
@@ -89,8 +106,6 @@ pub struct ConductorStatusData {
     pub best_solution: Option<SolutionData>,
     pub best_bound: Option<f64>,
     pub solution_found_count: u64,
-    pub finished_workers: u64,
-    pub total_workers: u64,
 }
 
 /// Serializable counterpart of [`ConductorProgress<V>`], used to carry conductor
@@ -100,16 +115,19 @@ pub struct ConductorStatusData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ConductorProgressData {
     Conductor(ConductorStatusData),
-    DefaultWorker(SolveProgressData),
+    WorkerAssigned {
+        worker_num: u32,
+        strategy: Option<Box<StrategyKind>>,
+    },
+    Worker {
+        worker_num: u32,
+        progress: Box<StrategyProgressData>,
+    },
 }
 
 impl fmt::Display for ConductorStatusData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "workers={}/{} solutions={}",
-            self.finished_workers, self.total_workers, self.solution_found_count
-        )?;
+        write!(f, "solutions={}", self.solution_found_count)?;
         if let Some(bound) = self.best_bound {
             write!(f, " bound={bound:.4}")?;
         }
@@ -129,7 +147,17 @@ impl fmt::Display for ConductorProgressData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ConductorProgressData::Conductor(s) => write!(f, "[conductor] {s}"),
-            ConductorProgressData::DefaultWorker(p) => write!(f, "[default worker] {p}"),
+            ConductorProgressData::WorkerAssigned {
+                worker_num,
+                strategy,
+            } => match strategy {
+                Some(s) => write!(f, "[worker {worker_num}] assigned: {} strategy", s.name()),
+                None => write!(f, "[worker {worker_num}] idle"),
+            },
+            ConductorProgressData::Worker {
+                worker_num,
+                progress,
+            } => write!(f, "[worker {worker_num}] {progress}"),
         }
     }
 }
@@ -145,8 +173,6 @@ impl<V: UsableData + Send> ConductorStatus<V> {
             }),
             best_bound: self.best_bound,
             solution_found_count: self.solution_found_count,
-            finished_workers: self.finished_workers,
-            total_workers: self.total_workers,
         }
     }
 }
@@ -162,8 +188,6 @@ impl ConductorStatusData {
             }),
             best_bound: self.best_bound,
             solution_found_count: self.solution_found_count,
-            finished_workers: self.finished_workers,
-            total_workers: self.total_workers,
         }
     }
 }
@@ -175,8 +199,23 @@ impl<V: UsableData + Send> ConductorProgress<V> {
             ConductorProgress::Conductor(s) => {
                 ConductorProgressData::Conductor(s.into_data(var_order))
             }
-            ConductorProgress::DefaultWorker(p) => {
-                ConductorProgressData::DefaultWorker(p.into_data(var_order))
+            ConductorProgress::WorkerAssigned {
+                worker_num,
+                strategy,
+            } => ConductorProgressData::WorkerAssigned {
+                worker_num,
+                strategy,
+            },
+            ConductorProgress::Worker {
+                worker_num,
+                progress,
+            } => {
+                let data = SerializableProgress::into_data(progress.as_ref(), var_order)
+                    .unwrap_or_else(|e: Infallible| match e {});
+                ConductorProgressData::Worker {
+                    worker_num,
+                    progress: Box::new(data),
+                }
             }
         }
     }
@@ -189,8 +228,26 @@ impl ConductorProgressData {
             ConductorProgressData::Conductor(s) => {
                 ConductorProgress::Conductor(s.into_typed(var_order))
             }
-            ConductorProgressData::DefaultWorker(p) => {
-                ConductorProgress::DefaultWorker(p.into_typed(var_order))
+            ConductorProgressData::WorkerAssigned {
+                worker_num,
+                strategy,
+            } => ConductorProgress::WorkerAssigned {
+                worker_num,
+                strategy,
+            },
+            ConductorProgressData::Worker {
+                worker_num,
+                progress,
+            } => {
+                let typed = <StrategyProgress<V> as SerializableProgress<V>>::from_data(
+                    progress.as_ref(),
+                    var_order,
+                )
+                .unwrap_or_else(|e: Infallible| match e {});
+                ConductorProgress::Worker {
+                    worker_num,
+                    progress: Box::new(typed),
+                }
             }
         }
     }
@@ -207,36 +264,25 @@ impl<V: UsableData + Send> SerializableProgress<V> for ConductorProgress<V> {
     }
 }
 
-enum WorkerTag {
-    Default,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ConductorStrategy {
-    pub default_worker: bool,
+    pub worker_count: NonZeroU32,
 }
 
 impl Default for ConductorStrategy {
     fn default() -> Self {
         Self {
-            default_worker: true,
+            worker_count: NonZeroU32::new(1).expect("1 is non-zero"),
         }
     }
 }
 
 impl ConductorStrategy {
-    pub fn has_workers(&self) -> bool {
-        self.default_worker
-    }
-
-    fn default_status<V: UsableData + Send>(&self) -> ConductorStatus<V> {
-        let total_workers = u64::from(self.default_worker);
+    fn default_status<V: UsableData + Send>() -> ConductorStatus<V> {
         ConductorStatus {
             best_solution: None,
             best_bound: None,
             solution_found_count: 0,
-            finished_workers: 0,
-            total_workers,
         }
     }
 }
@@ -277,9 +323,8 @@ pub fn update_best_bound<V: UsableData + Send>(
 }
 
 struct WorkerResult<V: UsableData + Send> {
-    tag: WorkerTag,
+    worker_num: u32,
     outcome: Result<StrategyOutcome<V>, StrategyError>,
-    solutions_found: u64,
 }
 
 #[async_trait]
@@ -302,43 +347,71 @@ impl Strategy for ConductorStrategy {
         E: UsableData + Send,
         C: UsableData + Send,
     {
-        if !self.has_workers() {
-            return Err(StrategyError::Other("No workers selected".to_string()));
-        }
-
-        let mut status = self.default_status::<InternalVar<B, E>>();
+        // Shared conductor status: both the streaming worker callback and the
+        // completion handler fold improvements into it. A `Mutex` makes this safe to
+        // share by reference across concurrent worker futures (generalizes to N workers).
+        let status: Mutex<ConductorStatus<InternalVar<B, E>>> =
+            Mutex::new(Self::default_status::<InternalVar<B, E>>());
         let sense = model.problem().get_objective().get_sense();
 
         // Per-worker state (defined before FuturesUnordered so borrows outlive the futures)
         let default_strategy = DefaultStrategy::default();
-        let default_solutions_found = AtomicU64::new(0);
 
-        // Launch all workers
+        // For now we run a single substrategy: the default strategy on worker 0. The
+        // logic that decides how many workers to spawn (and which substrategies) lives
+        // elsewhere and is not yet implemented.
+        const DEFAULT_WORKER_NUM: u32 = 0;
+
         let mut workers: FuturesUnordered<
             Pin<Box<dyn Future<Output = WorkerResult<InternalVar<B, E>>> + Send + '_>>,
         > = FuturesUnordered::new();
 
-        if self.default_worker {
-            workers.push(Box::pin(async {
-                let outcome = ctx
-                    .spawn_strategy_with_echo(
-                        &default_strategy,
-                        model,
-                        warm_start,
-                        &|p: SolveProgress<InternalVar<B, E>>| {
-                            default_solutions_found.store(p.solutions_found, Ordering::Relaxed);
-                            on_progress(ConductorProgress::DefaultWorker(p))
-                        },
-                        &|line| Some(format!("[default worker] {}", line)),
-                    )
-                    .await;
-                WorkerResult {
-                    tag: WorkerTag::Default,
-                    outcome,
-                    solutions_found: default_solutions_found.load(Ordering::Relaxed),
-                }
-            }));
-        }
+        on_progress(ConductorProgress::WorkerAssigned {
+            worker_num: DEFAULT_WORKER_NUM,
+            strategy: Some(Box::new(StrategyKind::Default(default_strategy.clone()))),
+        });
+
+        workers.push(Box::pin(async {
+            let outcome = ctx
+                .spawn_strategy_with_echo(
+                    &default_strategy,
+                    model,
+                    warm_start,
+                    &|p: SolveProgress<InternalVar<B, E>>| {
+                        // Forward the worker's inner update upstairs.
+                        let cont = on_progress(ConductorProgress::Worker {
+                            worker_num: DEFAULT_WORKER_NUM,
+                            progress: Box::new(StrategyProgress::Default(p.clone())),
+                        });
+
+                        // Fold the worker's bound/incumbent into the conductor's global
+                        // status, emitting a Conductor update only when something improves.
+                        let improved = {
+                            let mut status = status.lock().expect("conductor status mutex");
+                            status.solution_found_count = p.solutions_found;
+                            let before_bound = status.best_bound;
+                            let before_obj = status.best_solution.as_ref().map(|s| s.objective);
+                            update_best_bound(&mut status, p.best_bound, sense);
+                            if let Some(incumbent) = p.incumbent.clone() {
+                                update_best_solution(&mut status, incumbent, p.best_obj, sense);
+                            }
+                            let changed = status.best_bound != before_bound
+                                || status.best_solution.as_ref().map(|s| s.objective) != before_obj;
+                            changed.then(|| status.clone())
+                        };
+                        if let Some(snapshot) = improved {
+                            on_progress(ConductorProgress::Conductor(snapshot));
+                        }
+                        cont
+                    },
+                    &|line| Some(format!("[worker {DEFAULT_WORKER_NUM}] {}", line)),
+                )
+                .await;
+            WorkerResult {
+                worker_num: DEFAULT_WORKER_NUM,
+                outcome,
+            }
+        }));
 
         // React to workers as they finish
         while let Some(worker_result) = workers.next().await {
@@ -347,29 +420,33 @@ impl Strategy for ConductorStrategy {
                 Ok(outcome) => outcome,
             };
 
-            match worker_result.tag {
-                WorkerTag::Default => {
-                    if outcome.status == SolveStatus::Infeasible {
-                        return Ok(StrategyOutcome {
-                            status: SolveStatus::Infeasible,
-                            objective: None,
-                            best_bound: None,
-                            solution: None,
-                        });
-                    }
-                    if let (Some(sol), Some(obj)) = (outcome.solution, outcome.objective) {
-                        update_best_solution(&mut status, sol, obj, sense);
-                    }
-                    if let Some(bound) = outcome.best_bound {
-                        update_best_bound(&mut status, bound, sense);
-                    }
-                    status.solution_found_count += worker_result.solutions_found;
+            if outcome.status == SolveStatus::Infeasible {
+                return Ok(StrategyOutcome {
+                    status: SolveStatus::Infeasible,
+                    objective: None,
+                    best_bound: None,
+                    solution: None,
+                });
+            }
+
+            {
+                let mut status = status.lock().expect("conductor status mutex");
+                if let (Some(sol), Some(obj)) = (outcome.solution, outcome.objective) {
+                    update_best_solution(&mut status, sol, obj, sense);
+                }
+                if let Some(bound) = outcome.best_bound {
+                    update_best_bound(&mut status, bound, sense);
                 }
             }
 
-            status.finished_workers += 1;
+            // The worker is done; report it as idle.
+            on_progress(ConductorProgress::WorkerAssigned {
+                worker_num: worker_result.worker_num,
+                strategy: None,
+            });
         }
 
+        let status = status.lock().expect("conductor status mutex").clone();
         Ok(StrategyOutcome {
             status: if status.best_solution.is_some() {
                 SolveStatus::Optimal
@@ -396,13 +473,46 @@ mod tests {
             }),
             best_bound: Some(2.0),
             solution_found_count: 4,
-            finished_workers: 1,
-            total_workers: 1,
         });
 
         let json = serde_json::to_string(&progress).unwrap();
         let restored: ConductorProgressData = serde_json::from_str(&json).unwrap();
         assert_eq!(restored, progress);
+    }
+
+    #[test]
+    fn conductor_worker_progress_data_round_trips_via_json() {
+        use crate::{SolveProgressData, StrategyKind};
+
+        let assigned = ConductorProgressData::WorkerAssigned {
+            worker_num: 0,
+            strategy: Some(Box::new(StrategyKind::Default(DefaultStrategy::default()))),
+        };
+        let json = serde_json::to_string(&assigned).unwrap();
+        let restored: ConductorProgressData = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored, assigned);
+
+        let idle = ConductorProgressData::WorkerAssigned {
+            worker_num: 0,
+            strategy: None,
+        };
+        let json = serde_json::to_string(&idle).unwrap();
+        let restored: ConductorProgressData = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored, idle);
+
+        let inner = ConductorProgressData::Worker {
+            worker_num: 0,
+            progress: Box::new(StrategyProgressData::Default(SolveProgressData {
+                best_obj: 1.5,
+                best_bound: 0.5,
+                node_count: 7,
+                solutions_found: 2,
+                incumbent: None,
+            })),
+        };
+        let json = serde_json::to_string(&inner).unwrap();
+        let restored: ConductorProgressData = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored, inner);
     }
 
     #[test]
@@ -422,8 +532,6 @@ mod tests {
             }),
             best_bound: Some(2.0),
             solution_found_count: 4,
-            finished_workers: 1,
-            total_workers: 1,
         };
 
         let data = status.into_data(&var_order);
