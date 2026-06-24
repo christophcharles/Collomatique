@@ -75,8 +75,14 @@ impl Strategy for NoObjectiveStarterStrategy {
         let hint = no_obj_outcome.solution.ok_or_else(|| {
             StrategyError::SolveError("no-objective optimal but no solution returned".into())
         })?;
+        let hint_objective = no_obj_outcome.objective.ok_or_else(|| {
+            StrategyError::SolveError("no-objective optimal but no objective returned".into())
+        })?;
 
-        let should_continue = on_progress(NoObjectiveStarterProgress::HintFound(hint.clone()));
+        let should_continue = on_progress(NoObjectiveStarterProgress::HintFound {
+            config: hint.clone(),
+            objective: hint_objective,
+        });
         if !should_continue {
             return Ok(StrategyOutcome {
                 status: SolveStatus::Stopped,
@@ -97,7 +103,10 @@ impl Strategy for NoObjectiveStarterStrategy {
 #[derive(Debug, Clone)]
 pub enum NoObjectiveStarterProgress<V: UsableData + Send> {
     Starter(NoObjectiveProgressData),
-    HintFound(ConfigData<V>),
+    HintFound {
+        config: ConfigData<V>,
+        objective: f64,
+    },
     Default(SolveProgress<V>),
 }
 
@@ -105,10 +114,10 @@ impl<V: UsableData + Send> fmt::Display for NoObjectiveStarterProgress<V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             NoObjectiveStarterProgress::Starter(p) => write!(f, "[starter] {p}"),
-            NoObjectiveStarterProgress::HintFound(_) => {
+            NoObjectiveStarterProgress::HintFound { objective, .. } => {
                 write!(
                     f,
-                    "Hint found! Starting default strategy with warm start..."
+                    "Hint found (objective={objective:.4})! Starting default strategy with warm start..."
                 )
             }
             NoObjectiveStarterProgress::Default(p) => {
@@ -121,7 +130,7 @@ impl<V: UsableData + Send> fmt::Display for NoObjectiveStarterProgress<V> {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum NoObjectiveStarterProgressData {
     Starter(NoObjectiveProgressData),
-    HintFound(Vec<f64>),
+    HintFound { config: Vec<f64>, objective: f64 },
     Default(SolveProgressData),
 }
 
@@ -129,10 +138,10 @@ impl fmt::Display for NoObjectiveStarterProgressData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             NoObjectiveStarterProgressData::Starter(p) => write!(f, "[starter] {p}"),
-            NoObjectiveStarterProgressData::HintFound(_) => {
+            NoObjectiveStarterProgressData::HintFound { objective, .. } => {
                 write!(
                     f,
-                    "Hint found! Starting default strategy with warm start..."
+                    "Hint found (objective={objective:.4})! Starting default strategy with warm start..."
                 )
             }
             NoObjectiveStarterProgressData::Default(p) => {
@@ -148,9 +157,12 @@ impl<V: UsableData + Send> NoObjectiveStarterProgress<V> {
     pub fn into_data(self, var_order: &[V]) -> NoObjectiveStarterProgressData {
         match self {
             NoObjectiveStarterProgress::Starter(d) => NoObjectiveStarterProgressData::Starter(d),
-            NoObjectiveStarterProgress::HintFound(config) => {
+            NoObjectiveStarterProgress::HintFound { config, objective } => {
                 let raw = collomatique_ilp::config_data_to_hint(&config, var_order);
-                NoObjectiveStarterProgressData::HintFound(raw)
+                NoObjectiveStarterProgressData::HintFound {
+                    config: raw,
+                    objective,
+                }
             }
             NoObjectiveStarterProgress::Default(p) => {
                 NoObjectiveStarterProgressData::Default(p.into_data(var_order))
@@ -168,9 +180,9 @@ impl NoObjectiveStarterProgressData {
     ) -> NoObjectiveStarterProgress<V> {
         match self {
             NoObjectiveStarterProgressData::Starter(d) => NoObjectiveStarterProgress::Starter(d),
-            NoObjectiveStarterProgressData::HintFound(raw) => {
-                let config = collomatique_ilp::solution_to_config_data(&raw, var_order);
-                NoObjectiveStarterProgress::HintFound(config)
+            NoObjectiveStarterProgressData::HintFound { config, objective } => {
+                let config = collomatique_ilp::solution_to_config_data(&config, var_order);
+                NoObjectiveStarterProgress::HintFound { config, objective }
             }
             NoObjectiveStarterProgressData::Default(p) => {
                 NoObjectiveStarterProgress::Default(p.into_typed(var_order))

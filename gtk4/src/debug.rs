@@ -727,7 +727,7 @@ fn no_objective_starter_solve(model: &collomatique_constraints_colloscopes::Coll
             let _ = tx.send(outcome);
         },
         |progress: Result<NoObjectiveStarterProgress<V>, String>| match progress {
-            Ok(NoObjectiveStarterProgress::HintFound(_)) => {
+            Ok(NoObjectiveStarterProgress::HintFound { .. }) => {
                 eprintln!("  [strategy subprocess progress] Hint found!");
             }
             Ok(p) => {
@@ -851,10 +851,7 @@ async fn conductor_solve(model: &collomatique_constraints_colloscopes::Colloscop
                         .best_bound
                         .map(|b| format!("{:.4}", b))
                         .unwrap_or_else(|| "N/A".to_string());
-                    eprintln!(
-                        "  [conductor] obj={} bound={} solutions={}",
-                        obj_str, bound_str, status.solution_found_count,
-                    );
+                    eprintln!("  [conductor] obj={} bound={}", obj_str, bound_str,);
                 }
                 ConductorProgress::WorkerAssigned {
                     worker_num,

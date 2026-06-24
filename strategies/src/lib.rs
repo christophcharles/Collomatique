@@ -449,6 +449,32 @@ impl<V: UsableData + Send> fmt::Display for StrategyProgress<V> {
     }
 }
 
+// Lift each strategy's own progress into the typed union, so helpers can accept any
+// worker's progress via `Into<StrategyProgress<V>>`.
+impl<V: UsableData + Send> From<SolveProgress<V>> for StrategyProgress<V> {
+    fn from(p: SolveProgress<V>) -> Self {
+        StrategyProgress::Default(p)
+    }
+}
+
+impl<V: UsableData + Send> From<NoObjectiveProgressData> for StrategyProgress<V> {
+    fn from(p: NoObjectiveProgressData) -> Self {
+        StrategyProgress::NoObjective(p)
+    }
+}
+
+impl<V: UsableData + Send> From<NoObjectiveStarterProgress<V>> for StrategyProgress<V> {
+    fn from(p: NoObjectiveStarterProgress<V>) -> Self {
+        StrategyProgress::NoObjectiveStarter(p)
+    }
+}
+
+impl<V: UsableData + Send> From<ConductorProgress<V>> for StrategyProgress<V> {
+    fn from(p: ConductorProgress<V>) -> Self {
+        StrategyProgress::Conductor(p)
+    }
+}
+
 /// Serializable, type-erased union of every strategy's progress. This is the only progress
 /// form that crosses the IPC barrier; reconstruct the typed [`StrategyProgress<V>`] with
 /// [`SerializableProgress::from_data`] once a `var_order` is available.
@@ -1366,7 +1392,7 @@ mod tests {
             >| {
                 let tag = match &p {
                     NoObjectiveStarterProgress::Starter(_) => "starter",
-                    NoObjectiveStarterProgress::HintFound(_) => "hint",
+                    NoObjectiveStarterProgress::HintFound { .. } => "hint",
                     NoObjectiveStarterProgress::Default(_) => "default",
                 };
                 progress_log.lock().unwrap().push(tag.to_owned());
