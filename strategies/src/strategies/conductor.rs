@@ -319,6 +319,25 @@ pub fn update_best_bound<V: UsableData + Send>(
     }
 }
 
+/// Pick the warm start for a newly launched worker.
+///
+/// Prefer the conductor's current best solution once one has been found; until then fall
+/// back to the original `warm_start` hint passed into the conductor. The incoming hint is
+/// *only* a hint (possibly not a feasible solution), so it is never folded into
+/// `ConductorStatus` — it serves purely as this fallback.
+fn warm_start_for<V: UsableData + Send>(
+    status: &Mutex<ConductorStatus<V>>,
+    fallback: &Option<ConfigData<V>>,
+) -> Option<ConfigData<V>> {
+    status
+        .lock()
+        .expect("conductor status mutex")
+        .best_solution
+        .as_ref()
+        .map(|s| s.config.clone())
+        .or_else(|| fallback.clone())
+}
+
 /// Lock the shared status, apply `mutate`, and return a snapshot only if the best bound
 /// or the best objective actually improved. Centralizes the "emit a Conductor update only
 /// when something changed" rule shared by progress folding and result folding.
@@ -549,6 +568,7 @@ impl Strategy for ConductorStrategy {
                     worker_num: slot as u32,
                     strategy: Some(Box::new(kind.clone())),
                 });
+                let worker_warm_start = warm_start_for(&status, &warm_start);
                 workers.push(Box::pin(run_one_worker(
                     ctx,
                     model,
@@ -557,7 +577,7 @@ impl Strategy for ConductorStrategy {
                     on_progress,
                     slot as u32,
                     kind,
-                    warm_start.clone(),
+                    worker_warm_start,
                 )));
             }
 
@@ -810,6 +830,27 @@ mod tests {
         let st = status.lock().unwrap();
         assert_eq!(st.best_solution.as_ref().unwrap().objective, 2.5);
         assert!(st.best_bound.is_none());
+    }
+
+    #[test]
+    fn warm_start_prefers_best_solution_then_falls_back() {
+        // No solution yet: fall back to the original hint (or to None when there is none).
+        let status = empty_status();
+        let fallback = Some(config(&[(0, 1.0)]));
+        assert_eq!(warm_start_for(&status, &fallback), fallback);
+        assert_eq!(warm_start_for(&status, &None), None);
+
+        // Once a solution exists, prefer it over the fallback hint.
+        let best = config(&[(0, 0.0), (1, 1.0)]);
+        let status = Mutex::new(ConductorStatus {
+            best_solution: Some(Solution {
+                config: best.clone(),
+                objective: 2.0,
+            }),
+            best_bound: None,
+        });
+        assert_eq!(warm_start_for(&status, &fallback), Some(best.clone()));
+        assert_eq!(warm_start_for(&status, &None), Some(best));
     }
 
     fn no_objective_strategy() -> NoObjectiveStrategy {
