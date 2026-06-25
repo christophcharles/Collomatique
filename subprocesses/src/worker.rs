@@ -1,16 +1,40 @@
 use std::sync::Mutex;
 
-use collomatique_rpc::{CmdMsg, CompleteCmdMsg, EncodedMsg, InitMsg, ResultMsg};
+use collomatique_rpc::{CmdMsg, CompleteCmdMsg, EncodedMsg, InitMsg, ResultMsg, RpcDecodeError};
 
-use crate::process::{OutputData, Process, ProcessEvent, SendError, StdinWriter};
+use crate::process::{
+    KillError, OutputData, Process, ProcessEvent, SendError, SpawnError, StdinWriter,
+};
+
+/// A runtime error surfaced by a [`Worker`]'s reader thread (as opposed to a spawn-time failure).
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum WorkerError {
+    #[error("Données non-UTF-8 reçues ({0} octets)")]
+    NonUtf8Output(usize),
+}
+
+/// Failure to spawn a [`Worker`] subprocess.
+#[derive(Debug, thiserror::Error)]
+pub enum WorkerSpawnError {
+    #[error("Impossible de déterminer l'exécutable courant : {0}")]
+    CurrentExe(#[source] std::io::Error),
+    #[error("Le chemin de l'exécutable contient des caractères non-UTF-8")]
+    NonUtf8ExePath,
+    #[error(transparent)]
+    Spawn(#[from] SpawnError),
+    #[error("Le sous-processus s'est terminé avant l'envoi du message initial")]
+    InitFinished,
+    #[error("Erreur à l'envoi du message initial : {0}")]
+    InitSend(#[source] std::io::Error),
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WorkerEvent {
     LogLine(String),
-    RpcCommand(Result<CmdMsg, String>),
+    RpcCommand(Result<CmdMsg, RpcDecodeError>),
     GracefulExit,
     ProcessExited(Option<u32>),
-    Error(String),
+    Error(WorkerError),
 }
 
 /// Owned RAII handle to an RPC worker subprocess (`<self> --rpc-engine`).
@@ -24,15 +48,12 @@ pub struct Worker {
 }
 
 impl Worker {
-    pub fn spawn<F>(init_msg: InitMsg, callback: F) -> Result<Worker, String>
+    pub fn spawn<F>(init_msg: InitMsg, callback: F) -> Result<Worker, WorkerSpawnError>
     where
         F: Fn(WorkerEvent) + Send + 'static,
     {
-        let exe = std::env::current_exe()
-            .map_err(|e| format!("Impossible de déterminer l'exécutable courant : {}", e))?;
-        let exe_str = exe.to_str().ok_or_else(|| {
-            "Le chemin de l'exécutable contient des caractères non-UTF-8".to_string()
-        })?;
+        let exe = std::env::current_exe().map_err(WorkerSpawnError::CurrentExe)?;
+        let exe_str = exe.to_str().ok_or(WorkerSpawnError::NonUtf8ExePath)?;
 
         let current_cmd: Mutex<String> = Mutex::new(String::new());
 
@@ -41,10 +62,7 @@ impl Worker {
                 let line = match data {
                     OutputData::Utf8(s) => s,
                     OutputData::Raw(bytes) => {
-                        callback(WorkerEvent::Error(format!(
-                            "Données non-UTF-8 reçues ({} octets)",
-                            bytes.len()
-                        )));
+                        callback(WorkerEvent::Error(WorkerError::NonUtf8Output(bytes.len())));
                         return;
                     }
                 };
@@ -84,9 +102,6 @@ impl Worker {
             ProcessEvent::ProcessExited(code) => {
                 callback(WorkerEvent::ProcessExited(code));
             }
-            ProcessEvent::Error(e) => {
-                callback(WorkerEvent::Error(e));
-            }
         };
 
         let process = Process::spawn_pty(exe_str, &["--rpc-engine"], rpc_callback)?;
@@ -95,10 +110,8 @@ impl Worker {
         process
             .send_stdin(encoded.encode().as_bytes())
             .map_err(|e| match e {
-                SendError::Finished => {
-                    "Le sous-processus s'est terminé avant l'envoi du message initial".to_string()
-                }
-                SendError::Io(msg) => format!("Erreur à l'envoi du message initial : {}", msg),
+                SendError::Finished => WorkerSpawnError::InitFinished,
+                SendError::Io(io) => WorkerSpawnError::InitSend(io),
             })?;
 
         Ok(Worker { process })
@@ -120,7 +133,7 @@ impl Worker {
     }
 
     /// Kill the worker if it is still running. Idempotent (see [`Process::kill`]).
-    pub fn kill(&self) -> Result<(), String> {
+    pub fn kill(&self) -> Result<(), KillError> {
         self.process.kill()
     }
 }

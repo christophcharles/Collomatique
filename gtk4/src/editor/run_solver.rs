@@ -246,7 +246,7 @@ where
 
                 match spawn_result {
                     Ok(handle) => self.subprocess = Some(handle),
-                    Err(e) => sender.input(DialogInput::SpawnError(e)),
+                    Err(e) => sender.input(DialogInput::SpawnError(e.to_string())),
                 }
             }
             DialogInput::CancelRequest => {

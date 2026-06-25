@@ -47,7 +47,7 @@ pub enum DialogInput {
     Cancel,
     Echo(String),
     ProcessFinished,
-    Cmd(Result<collomatique_rpc::CmdMsg, String>),
+    Cmd(Result<collomatique_rpc::CmdMsg, collomatique_rpc::RpcDecodeError>),
     Error(String),
 }
 
@@ -300,7 +300,7 @@ impl Component for Dialog {
                         input.emit(DialogInput::ProcessFinished);
                     }
                     WorkerEvent::Error(e) => {
-                        input.emit(DialogInput::Error(e));
+                        input.emit(DialogInput::Error(e.to_string()));
                     }
                 };
 
@@ -315,7 +315,7 @@ impl Component for Dialog {
                         self.end_with_error = true;
                         self.error_dialog
                             .sender()
-                            .send(error_dialog::DialogInput::Show(e))
+                            .send(error_dialog::DialogInput::Show(e.to_string()))
                             .unwrap();
                     }
                 }
@@ -375,8 +375,8 @@ impl Component for Dialog {
                     CmdMsg::Solver(_) | CmdMsg::Strategy(_) => {}
                 },
                 Err(e) => {
-                    if !e.is_empty() {
-                        self.add_error(sender, e);
+                    if !e.payload().is_empty() {
+                        self.add_error(sender, e.to_string());
                     }
                     self.send_response(ResultMsg::InvalidMsg);
                 }

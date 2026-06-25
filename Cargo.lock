@@ -532,6 +532,7 @@ dependencies = [
  "ordered-float",
  "serde",
  "serde_json",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -630,6 +631,7 @@ dependencies = [
  "libc",
  "ordered-float",
  "portable-pty",
+ "thiserror 1.0.69",
 ]
 
 [[package]]

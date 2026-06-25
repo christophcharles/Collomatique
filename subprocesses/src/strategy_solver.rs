@@ -12,7 +12,7 @@ use collomatique_strategies::{
 };
 
 use crate::process::StdinWriter;
-use crate::worker::{Worker, WorkerEvent};
+use crate::worker::{Worker, WorkerEvent, WorkerSpawnError};
 
 #[derive(Debug, Clone)]
 pub struct StrategyResult {
@@ -76,7 +76,7 @@ impl StrategySubprocess {
         result_callback: impl Fn(StrategyOutcome<InternalVar<B, E>>) + Send + 'static,
         progress_callback: impl Fn(Result<S::Progress, String>) + Send + 'static,
         log_callback: impl Fn(&str) + Send + 'static,
-    ) -> Result<StrategySubprocess, String>
+    ) -> Result<StrategySubprocess, WorkerSpawnError>
     where
         S: SpawnableStrategy<InternalVar<B, E>>,
         S::Progress: Send + 'static,
@@ -120,7 +120,7 @@ impl StrategySubprocess {
         result_callback: impl Fn(StrategyResult) + Send + 'static,
         progress_callback: impl Fn(Result<StrategyProgressData, String>) + Send + 'static,
         log_callback: impl Fn(&str) + Send + 'static,
-    ) -> Result<StrategySubprocess, String> {
+    ) -> Result<StrategySubprocess, WorkerSpawnError> {
         let request = StrategyRequest {
             model_desc,
             strategy,

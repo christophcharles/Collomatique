@@ -8,7 +8,7 @@ use collomatique_rpc::{
 };
 
 use crate::process::StdinWriter;
-use crate::worker::{Worker, WorkerEvent};
+use crate::worker::{Worker, WorkerEvent, WorkerSpawnError};
 
 pub struct IlpSolverConfig {
     pub problem_desc: collomatique_ilp::ProblemDesc,
@@ -95,7 +95,7 @@ impl SolverSubprocess {
         result_callback: impl Fn(IlpResult) + Send + 'static,
         progress_callback: impl Fn(&IlpProgress) + Send + 'static,
         log_callback: impl Fn(&str) + Send + 'static,
-    ) -> Result<SolverSubprocess, String> {
+    ) -> Result<SolverSubprocess, WorkerSpawnError> {
         let request = IlpSolveRequest {
             problem_desc: config.problem_desc,
             warm_start: config.warm_start,

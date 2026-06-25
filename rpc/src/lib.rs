@@ -25,6 +25,29 @@ pub use strategy_msg::{
     StrategyResultData, StrategyStatus,
 };
 
+/// Failure to decode an RPC message from its wire form.
+///
+/// Both variants carry the raw payload that could not be decoded (the framing markers stripped),
+/// matching the historical behaviour where the undecodable data was itself surfaced as the error.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum RpcDecodeError {
+    /// The RPC frame markers were malformed; carries the data with markers stripped.
+    #[error("Trame RPC mal formée : {0}")]
+    MalformedFrame(String),
+    /// The message body was not valid JSON for the target type; carries the raw body.
+    #[error("Message RPC indécodable : {0}")]
+    InvalidJson(String),
+}
+
+impl RpcDecodeError {
+    /// The raw payload, for callers that need to suppress empty/no-detail errors.
+    pub fn payload(&self) -> &str {
+        match self {
+            Self::MalformedFrame(s) | Self::InvalidJson(s) => s,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum InitMsg {
     RunPythonScript(String),
@@ -78,10 +101,10 @@ pub enum CompleteCmdMsg {
 }
 
 impl InitMsg {
-    fn from_text_msg(data: &str) -> Result<Self, String> {
+    fn from_text_msg(data: &str) -> Result<Self, RpcDecodeError> {
         match serde_json::from_str::<Self>(data) {
             Ok(cmd) => Ok(cmd),
-            Err(_) => Err(data.to_string()),
+            Err(_) => Err(RpcDecodeError::InvalidJson(data.to_string())),
         }
     }
 
@@ -91,10 +114,10 @@ impl InitMsg {
 }
 
 impl ResultMsg {
-    fn from_text_msg(data: &str) -> Result<Self, String> {
+    fn from_text_msg(data: &str) -> Result<Self, RpcDecodeError> {
         match serde_json::from_str::<Self>(data) {
             Ok(cmd) => Ok(cmd),
-            Err(_) => Err(data.to_string()),
+            Err(_) => Err(RpcDecodeError::InvalidJson(data.to_string())),
         }
     }
 
@@ -104,10 +127,10 @@ impl ResultMsg {
 }
 
 impl CompleteCmdMsg {
-    fn from_text_msg(data: &str) -> Result<Self, String> {
+    fn from_text_msg(data: &str) -> Result<Self, RpcDecodeError> {
         match serde_json::from_str::<Self>(data) {
             Ok(cmd) => Ok(cmd),
-            Err(_) => Err(data.to_string()),
+            Err(_) => Err(RpcDecodeError::InvalidJson(data.to_string())),
         }
     }
 
@@ -138,7 +161,7 @@ impl EncodedMsg {
         data.starts_with(RPC_END_MARKER)
     }
 
-    pub fn receive() -> Result<Self, String> {
+    pub fn receive() -> Result<Self, RpcDecodeError> {
         Self::from_raw_string(Self::wait_for_raw_msg())
     }
 
@@ -146,12 +169,12 @@ impl EncodedMsg {
         Self::bundle_msg(self.msg)
     }
 
-    pub fn from_raw_string(raw: String) -> Result<Self, String> {
+    pub fn from_raw_string(raw: String) -> Result<Self, RpcDecodeError> {
         let msg = Self::strip_msg(raw)?;
         Ok(Self { msg })
     }
 
-    pub fn send_and_get_response(self) -> Result<Self, String> {
+    pub fn send_and_get_response(self) -> Result<Self, RpcDecodeError> {
         self.send();
         Self::receive()
     }
@@ -161,7 +184,7 @@ impl EncodedMsg {
         Self::send_raw_msg(&bundled);
     }
 
-    pub fn send_rpc(cmd: CmdMsg) -> Result<ResultMsg, String> {
+    pub fn send_rpc(cmd: CmdMsg) -> Result<ResultMsg, RpcDecodeError> {
         let msg: Self = CompleteCmdMsg::CmdMsg(cmd).into();
         let answer = msg.send_and_get_response()?;
         answer.try_into()
@@ -177,7 +200,7 @@ impl From<InitMsg> for EncodedMsg {
 }
 
 impl TryFrom<EncodedMsg> for InitMsg {
-    type Error = String;
+    type Error = RpcDecodeError;
     fn try_from(value: EncodedMsg) -> Result<Self, Self::Error> {
         InitMsg::from_text_msg(&value.msg)
     }
@@ -198,7 +221,7 @@ impl From<CompleteCmdMsg> for EncodedMsg {
 }
 
 impl TryFrom<EncodedMsg> for CompleteCmdMsg {
-    type Error = String;
+    type Error = RpcDecodeError;
     fn try_from(value: EncodedMsg) -> Result<Self, Self::Error> {
         CompleteCmdMsg::from_text_msg(&value.msg)
     }
@@ -213,8 +236,8 @@ impl From<ResultMsg> for EncodedMsg {
 }
 
 impl TryFrom<EncodedMsg> for ResultMsg {
-    type Error = String;
-    fn try_from(value: EncodedMsg) -> Result<Self, String> {
+    type Error = RpcDecodeError;
+    fn try_from(value: EncodedMsg) -> Result<Self, RpcDecodeError> {
         ResultMsg::from_text_msg(&value.msg)
     }
 }
@@ -247,21 +270,22 @@ impl EncodedMsg {
         output
     }
 
-    fn strip_msg(data: String) -> Result<String, String> {
+    fn strip_msg(data: String) -> Result<String, RpcDecodeError> {
         let naked_data = data
             .replace(RPC_MSG_MARKER, "")
             .replace(RPC_CONTINUE_MARKER, "")
             .replace(RPC_END_MARKER, "");
+        let malformed = || RpcDecodeError::MalformedFrame(naked_data.clone());
         let mut stripped = String::new();
         let mut reached_last = false;
         let mut first_run = true;
         for line in data.lines() {
             if reached_last {
-                return Err(naked_data);
+                return Err(malformed());
             }
             if line.starts_with(RPC_END_MARKER) {
                 if line != RPC_END_MARKER {
-                    return Err(naked_data);
+                    return Err(malformed());
                 }
                 reached_last = true;
                 continue;
@@ -272,18 +296,18 @@ impl EncodedMsg {
                 }
                 stripped += match line.strip_prefix(RPC_MSG_MARKER) {
                     Some(d) => d,
-                    None => return Err(naked_data),
+                    None => return Err(malformed()),
                 };
             } else if line.starts_with(RPC_CONTINUE_MARKER) {
                 if first_run {
-                    return Err(naked_data);
+                    return Err(malformed());
                 }
                 stripped += match line.strip_prefix(RPC_CONTINUE_MARKER) {
                     Some(d) => d,
-                    None => return Err(naked_data),
+                    None => return Err(malformed()),
                 };
             } else {
-                return Err(naked_data);
+                return Err(malformed());
             }
             first_run = false;
         }

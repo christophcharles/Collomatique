@@ -16,17 +16,69 @@ pub enum ProcessEvent {
     Stdout(OutputData),
     Stderr(OutputData),
     ProcessExited(Option<u32>),
-    Error(String),
+}
+
+/// One of a process's standard streams, used to report which one could not be acquired.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StdStream {
+    Stdin,
+    Stdout,
+    Stderr,
+}
+
+impl std::fmt::Display for StdStream {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            StdStream::Stdin => "stdin",
+            StdStream::Stdout => "stdout",
+            StdStream::Stderr => "stderr",
+        };
+        f.write_str(s)
+    }
+}
+
+/// Failure to spawn a child process.
+///
+/// The PTY-backed variants carry a formatted message because `portable_pty` reports failures as
+/// `anyhow::Error` (not a concrete `std::error::Error`); the pipe-backed variant keeps the real
+/// `std::io::Error` source.
+#[derive(Debug, thiserror::Error)]
+pub enum SpawnError {
+    #[error("Erreur à la création du PTY : {0}")]
+    PtyCreation(String),
+    #[error("Erreur à l'exécution du sous-processus : {0}")]
+    PtySpawn(String),
+    #[error("Erreur à l'acquisition du reader PTY : {0}")]
+    PtyReader(String),
+    #[error("Erreur à l'acquisition de l'entrée standard : {0}")]
+    PtyWriter(String),
+    #[error("Erreur à l'exécution du sous-processus : {0}")]
+    PipeSpawn(#[source] std::io::Error),
+    #[error("Impossible d'acquérir {0}")]
+    StreamUnavailable(StdStream),
 }
 
 /// Outcome of sending data to a process's stdin.
-#[derive(Debug, Clone)]
+#[derive(Debug, thiserror::Error)]
 pub enum SendError {
     /// The process no longer accepts input: it has exited or been killed (its stdin slot
     /// is closed, or the write hit a broken pipe).
+    #[error("Le sous-processus est terminé")]
     Finished,
     /// A genuine I/O error occurred while writing.
-    Io(String),
+    #[error("Erreur d'écriture stdin : {0}")]
+    Io(#[from] std::io::Error),
+}
+
+/// Failure to terminate a child process.
+#[derive(Debug, thiserror::Error)]
+pub enum KillError {
+    #[error("Erreur lors du test d'état du processus : {0}")]
+    Status(#[source] std::io::Error),
+    #[error("Erreur à l'arrêt du processus : {0}")]
+    Kill(#[source] std::io::Error),
+    #[error("Erreur à l'attente du processus : {0}")]
+    Wait(#[source] std::io::Error),
 }
 
 enum ChildHandle {
@@ -99,7 +151,7 @@ pub struct Process {
 }
 
 impl Process {
-    pub fn spawn_pty<F>(command: &str, args: &[&str], callback: F) -> Result<Self, String>
+    pub fn spawn_pty<F>(command: &str, args: &[&str], callback: F) -> Result<Self, SpawnError>
     where
         F: Fn(ProcessEvent) + Send + 'static,
     {
@@ -112,7 +164,7 @@ impl Process {
                 pixel_width: 0,
                 pixel_height: 0,
             })
-            .map_err(|e| format!("Erreur à la création du PTY : {}", e))?;
+            .map_err(|e| SpawnError::PtyCreation(e.to_string()))?;
 
         #[cfg(unix)]
         {
@@ -137,17 +189,17 @@ impl Process {
         let child = pair
             .slave
             .spawn_command(cmd)
-            .map_err(|e| format!("Erreur à l'exécution du sous-processus : {}", e))?;
+            .map_err(|e| SpawnError::PtySpawn(e.to_string()))?;
 
         let reader = pair
             .master
             .try_clone_reader()
-            .map_err(|e| format!("Erreur à l'acquisition du reader PTY : {}", e))?;
+            .map_err(|e| SpawnError::PtyReader(e.to_string()))?;
 
         let writer = pair
             .master
             .take_writer()
-            .map_err(|e| format!("Erreur à l'acquisition de l'entrée standard : {}", e))?;
+            .map_err(|e| SpawnError::PtyWriter(e.to_string()))?;
 
         drop(pair.slave);
 
@@ -178,7 +230,7 @@ impl Process {
         })
     }
 
-    pub fn spawn_pipes<F>(command: &str, args: &[&str], callback: F) -> Result<Self, String>
+    pub fn spawn_pipes<F>(command: &str, args: &[&str], callback: F) -> Result<Self, SpawnError>
     where
         F: Fn(ProcessEvent) + Send + Clone + 'static,
     {
@@ -188,20 +240,20 @@ impl Process {
             .stderr(Stdio::piped())
             .stdin(Stdio::piped())
             .spawn()
-            .map_err(|e| format!("Erreur à l'exécution du sous-processus : {}", e))?;
+            .map_err(SpawnError::PipeSpawn)?;
 
         let stdout = child
             .stdout
             .take()
-            .ok_or_else(|| "Impossible d'acquérir stdout".to_string())?;
+            .ok_or(SpawnError::StreamUnavailable(StdStream::Stdout))?;
         let stderr = child
             .stderr
             .take()
-            .ok_or_else(|| "Impossible d'acquérir stderr".to_string())?;
+            .ok_or(SpawnError::StreamUnavailable(StdStream::Stderr))?;
         let stdin_pipe = child
             .stdin
             .take()
-            .ok_or_else(|| "Impossible d'acquérir stdin".to_string())?;
+            .ok_or(SpawnError::StreamUnavailable(StdStream::Stdin))?;
 
         let child_handle = ChildHandle::Pipe { child };
         let child_arc = Arc::new(Mutex::new(child_handle));
@@ -313,14 +365,14 @@ impl Process {
         match writer.write_all(data).and_then(|()| writer.flush()) {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == ErrorKind::BrokenPipe => Err(SendError::Finished),
-            Err(e) => Err(SendError::Io(format!("Erreur d'écriture stdin : {}", e))),
+            Err(e) => Err(SendError::Io(e)),
         }
     }
 
     /// Terminate the child if it is still running. Idempotent and safe to call on an
     /// already-killed or already-exited process: the first caller (explicit `kill`, `Drop`,
     /// or the reader thread observing exit) wins, the rest are no-ops.
-    pub fn kill(&self) -> Result<(), String> {
+    pub fn kill(&self) -> Result<(), KillError> {
         if self.terminated.swap(true, Ordering::AcqRel) {
             return Ok(());
         }
@@ -333,15 +385,11 @@ impl Process {
         match child.try_wait() {
             Ok(Some(_)) => Ok(()),
             Ok(None) => {
-                child
-                    .kill()
-                    .map_err(|e| format!("Erreur à l'arrêt du processus : {}", e))?;
-                child
-                    .wait()
-                    .map_err(|e| format!("Erreur à l'attente du processus : {}", e))?;
+                child.kill().map_err(KillError::Kill)?;
+                child.wait().map_err(KillError::Wait)?;
                 Ok(())
             }
-            Err(e) => Err(format!("Erreur lors du test d'état du processus : {}", e)),
+            Err(e) => Err(KillError::Status(e)),
         }
     }
 }

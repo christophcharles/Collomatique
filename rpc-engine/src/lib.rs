@@ -1,14 +1,16 @@
 use anyhow::anyhow;
 use collomatique_rpc::InternalDataStream;
 use collomatique_rpc::{
-    CmdMsg, CompleteCmdMsg, EncodedMsg, InitMsg, ResultMsg, SerializedIlpProblem,
+    CmdMsg, CompleteCmdMsg, EncodedMsg, InitMsg, ResultMsg, RpcDecodeError, SerializedIlpProblem,
     SerializedStrategyRequest, SolverIncumbentInfo, SolverMsg, SolverProgressData,
     SolverResultData, SolverStatus, StrategyMsg, StrategyResultData, StrategyStatus,
 };
 
 pub fn wait_for_init_msg() -> Result<InitMsg, String> {
-    let encoded_msg = EncodedMsg::receive()?;
-    encoded_msg.try_into()
+    let encoded_msg = EncodedMsg::receive().map_err(|e| e.to_string())?;
+    encoded_msg
+        .try_into()
+        .map_err(|e: RpcDecodeError| e.to_string())
 }
 
 pub fn send_exit() {

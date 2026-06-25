@@ -12,6 +12,7 @@ collomatique-strategies = { path = "../strategies" }
 ordered-float.workspace = true
 async-trait.workspace = true
 futures.workspace = true
+thiserror.workspace = true
 portable-pty = "0.9"
 
 [target.'cfg(unix)'.dependencies]

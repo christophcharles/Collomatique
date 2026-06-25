@@ -9,5 +9,6 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 ordered-float = { workspace = true, features = ["serde"] }
 anyhow.workspace = true
+thiserror.workspace = true
 collomatique-state-colloscopes = { path = "../state-colloscopes" }
 collomatique-ilp = { path = "../ilp", features = ["serde"] }
