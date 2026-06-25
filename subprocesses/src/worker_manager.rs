@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 use crate::ProcessManager;
-use crate::process::{OutputData, ProcessEvent, ProcessStatus, StdinWriter};
+use crate::process::{OutputData, Process, ProcessEvent, ProcessStatus, StdinWriter};
 use crate::worker::{Worker, WorkerEvent, WorkerId, WorkerState};
 
 pub struct WorkerManager {
@@ -127,6 +127,17 @@ impl WorkerManager {
             .get(&id)
             .ok_or_else(|| "Worker introuvable".to_string())?;
         self.process_manager.kill(worker.process_id)
+    }
+
+    /// Remove a worker and its backing process from the manager, returning the owned
+    /// [`Process`] if present.
+    ///
+    /// This cascades into [`ProcessManager::remove`] so neither the `workers` map nor the
+    /// `processes` map leaks the entry. Returning the owned `Process` lets the caller decide
+    /// whether to kill it (mid-flight) or just drop it (already finished).
+    pub(crate) fn remove_worker(&mut self, id: WorkerId) -> Option<Process> {
+        let worker = self.workers.remove(&id)?;
+        self.process_manager.remove(worker.process_id)
     }
 
     pub fn send_rpc_message(&self, id: WorkerId, msg: ResultMsg) -> Result<(), String> {

@@ -238,18 +238,15 @@ where
                     result_input.emit(DialogInput::Finished(outcome));
                 };
 
-                let spawn_result = {
-                    let mut wm = self.worker_manager.lock().unwrap();
-                    StrategySubprocess::spawn(
-                        &mut wm,
-                        &model,
-                        &strategy,
-                        None,
-                        result_cb,
-                        progress_cb,
-                        log_cb,
-                    )
-                };
+                let spawn_result = StrategySubprocess::spawn(
+                    self.worker_manager.clone(),
+                    &model,
+                    &strategy,
+                    None,
+                    result_cb,
+                    progress_cb,
+                    log_cb,
+                );
 
                 match spawn_result {
                     Ok(handle) => self.subprocess = Some(handle),
@@ -269,8 +266,7 @@ where
             DialogInput::Cancel => {
                 self.hidden = true;
                 if let Some(subprocess) = self.subprocess.take() {
-                    let wm = self.worker_manager.lock().unwrap();
-                    let _ = subprocess.kill(&wm);
+                    subprocess.kill();
                 }
             }
             DialogInput::Echo(line) => {

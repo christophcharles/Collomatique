@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::convert::Infallible;
 use std::fmt;
 use std::future::Future;
@@ -12,9 +13,11 @@ use serde::{Deserialize, Serialize};
 use collomatique_ilp::{ConfigData, ObjectiveSense, UsableData};
 use collomatique_ilp_modeler::{InternalVar, Model};
 
+#[cfg(test)]
+use crate::SolveProgress;
 use crate::{
-    DefaultStrategy, NoObjectiveStarterProgress, SerializableProgress, SolveProgress, SolveStatus,
-    Strategy, StrategyContext, StrategyError, StrategyKind, StrategyOutcome, StrategyProgress,
+    DefaultStrategy, NoObjectiveStarterProgress, SerializableProgress, SolveStatus, Strategy,
+    StrategyContext, StrategyError, StrategyKind, StrategyOutcome, StrategyProgress,
     StrategyProgressData,
 };
 
@@ -451,17 +454,49 @@ fn resolve_worker_outcome<V: UsableData + Send>(
     }
 }
 
-/// Terminate any in-flight workers once a definitive result has been reached.
-///
-/// No-op for now: returning from `run_with_callback` drops the `FuturesUnordered`, which
-/// drops the worker futures. A later design will use this to actively kill worker
-/// subprocesses instead of waiting for drop.
-fn kill_workers() {}
-
 struct WorkerResult<V: UsableData + Send> {
     worker_num: u32,
     kind: StrategyKind,
     outcome: Result<StrategyOutcome<V>, StrategyError>,
+}
+
+/// Run a single substrategy on a worker slot and tag the outcome with its slot index.
+///
+/// The strategy is spawned uniformly as a [`StrategyKind`]: it is itself a `SpawnableStrategy`
+/// whose progress is `StrategyProgress<V>`, which `report_worker_progress` already folds for
+/// every variant — so adding new strategy kinds needs no change here.
+#[allow(clippy::too_many_arguments)]
+async fn run_one_worker<'a, B, E, C>(
+    ctx: &'a StrategyContext,
+    model: &'a Model<B, E, C>,
+    status: &'a Mutex<ConductorStatus<InternalVar<B, E>>>,
+    sense: ObjectiveSense,
+    on_progress: &'a (dyn Fn(ConductorProgress<InternalVar<B, E>>) -> bool + Send + Sync),
+    worker_num: u32,
+    kind: StrategyKind,
+    warm_start: Option<ConfigData<InternalVar<B, E>>>,
+) -> WorkerResult<InternalVar<B, E>>
+where
+    B: UsableData + Send,
+    E: UsableData + Send,
+    C: UsableData + Send,
+{
+    let outcome = ctx
+        .spawn_strategy_with_echo(
+            &kind,
+            model,
+            warm_start,
+            &|p: StrategyProgress<InternalVar<B, E>>| {
+                report_worker_progress(worker_num, p, status, sense, on_progress)
+            },
+            &|line| Some(format!("[worker {worker_num}] {line}")),
+        )
+        .await;
+    WorkerResult {
+        worker_num,
+        kind,
+        outcome,
+    }
 }
 
 #[async_trait]
@@ -491,59 +526,71 @@ impl Strategy for ConductorStrategy {
             Mutex::new(Self::default_status::<InternalVar<B, E>>());
         let sense = model.problem().get_objective().get_sense();
 
-        // Per-worker state (defined before FuturesUnordered so borrows outlive the futures)
-        let default_strategy = DefaultStrategy::default();
-
-        // For now we run a single substrategy: the default strategy on worker 0. The
-        // logic that decides how many workers to spawn (and which substrategies) lives
-        // elsewhere and is not yet implemented.
-        const DEFAULT_WORKER_NUM: u32 = 0;
+        // A fixed-size pool of worker slots (one busy flag per slot) and a queue of
+        // substrategies waiting for a free slot. The slot index *is* the `worker_num`.
+        // For now the queue holds a single entry — the default strategy — so behaviour is
+        // unchanged; this is the isolated extension point for future substrategies.
+        let worker_count = self.worker_count.get() as usize;
+        let mut slots: Vec<bool> = vec![false; worker_count];
+        let mut queue: VecDeque<StrategyKind> = VecDeque::new();
+        queue.push_back(StrategyKind::Default(DefaultStrategy::default()));
 
         let mut workers: FuturesUnordered<
             Pin<Box<dyn Future<Output = WorkerResult<InternalVar<B, E>>> + Send + '_>>,
         > = FuturesUnordered::new();
 
-        on_progress(ConductorProgress::WorkerAssigned {
-            worker_num: DEFAULT_WORKER_NUM,
-            strategy: Some(Box::new(StrategyKind::Default(default_strategy.clone()))),
-        });
-
-        workers.push(Box::pin(async {
-            let outcome = ctx
-                .spawn_strategy_with_echo(
-                    &default_strategy,
+        loop {
+            // Fill every free slot from the queue, spawning a worker for each. A worker is
+            // assigned -> emit `WorkerAssigned { Some }`.
+            while let Some(slot) = slots.iter().position(|busy| !*busy) {
+                let Some(kind) = queue.pop_front() else { break };
+                slots[slot] = true;
+                on_progress(ConductorProgress::WorkerAssigned {
+                    worker_num: slot as u32,
+                    strategy: Some(Box::new(kind.clone())),
+                });
+                workers.push(Box::pin(run_one_worker(
+                    ctx,
                     model,
-                    warm_start,
-                    &|p: SolveProgress<InternalVar<B, E>>| {
-                        report_worker_progress(DEFAULT_WORKER_NUM, p, &status, sense, on_progress)
-                    },
-                    &|line| Some(format!("[worker {DEFAULT_WORKER_NUM}] {}", line)),
-                )
-                .await;
-            WorkerResult {
-                worker_num: DEFAULT_WORKER_NUM,
-                kind: StrategyKind::Default(default_strategy.clone()),
-                outcome,
+                    &status,
+                    sense,
+                    on_progress,
+                    slot as u32,
+                    kind,
+                    warm_start.clone(),
+                )));
             }
-        }));
 
-        // React to workers as they finish.
-        while let Some(worker_result) = workers.next().await {
+            // Wait for the next worker to finish; if none are running we're done.
+            let Some(worker_result) = workers.next().await else {
+                break;
+            };
+            let slot = worker_result.worker_num as usize;
+            slots[slot] = false;
             let outcome = worker_result.outcome?;
-
-            // The worker is done; report it as idle.
-            on_progress(ConductorProgress::WorkerAssigned {
-                worker_num: worker_result.worker_num,
-                strategy: None,
-            });
 
             match resolve_worker_outcome(&worker_result.kind, outcome, &status, sense, on_progress)
             {
                 WorkerResolution::Definitive(outcome) => {
-                    kill_workers();
+                    // The freed slot goes idle and we return. Dropping `workers` here
+                    // forcefully kills every still-live worker subprocess via
+                    // `StrategySubprocess`'s `Drop`.
+                    on_progress(ConductorProgress::WorkerAssigned {
+                        worker_num: slot as u32,
+                        strategy: None,
+                    });
                     return Ok(outcome);
                 }
                 WorkerResolution::Update => {}
+            }
+
+            // The freed slot is refilled at the top of the next iteration; if the queue is
+            // empty it stays idle, which we report now.
+            if queue.is_empty() {
+                on_progress(ConductorProgress::WorkerAssigned {
+                    worker_num: slot as u32,
+                    strategy: None,
+                });
             }
         }
 

@@ -463,12 +463,12 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
     };
 
     let (tx, rx) = mpsc::channel();
-    let mut worker_manager = WorkerManager::new();
+    let worker_manager = std::sync::Arc::new(std::sync::Mutex::new(WorkerManager::new()));
 
     eprintln!("Spawning strategy subprocess...");
     let t = Instant::now();
     let handle = StrategySubprocess::spawn(
-        &mut worker_manager,
+        worker_manager.clone(),
         model,
         &strategy,
         None,
@@ -583,12 +583,12 @@ fn no_objective_solve(model: &collomatique_constraints_colloscopes::ColloscopeMo
     };
 
     let (tx, rx) = mpsc::channel();
-    let mut worker_manager = WorkerManager::new();
+    let worker_manager = std::sync::Arc::new(std::sync::Mutex::new(WorkerManager::new()));
 
     eprintln!("Spawning no-objective strategy subprocess...");
     let t = Instant::now();
     let handle = StrategySubprocess::spawn(
-        &mut worker_manager,
+        worker_manager.clone(),
         model,
         &strategy,
         None,
@@ -714,12 +714,12 @@ fn no_objective_starter_solve(model: &collomatique_constraints_colloscopes::Coll
     };
 
     let (tx, rx) = mpsc::channel();
-    let mut worker_manager = WorkerManager::new();
+    let worker_manager = std::sync::Arc::new(std::sync::Mutex::new(WorkerManager::new()));
 
     eprintln!("Spawning no-objective-starter strategy subprocess...");
     let t = Instant::now();
     let handle = StrategySubprocess::spawn(
-        &mut worker_manager,
+        worker_manager.clone(),
         model,
         &strategy,
         None,

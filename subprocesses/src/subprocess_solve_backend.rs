@@ -153,24 +153,16 @@ impl SolveBackend for SubprocessSolveBackend {
             let _ = echo_tx.unbounded_send(line.to_owned());
         };
 
-        let handle = {
-            let mut wm = self
-                .worker_manager
-                .lock()
-                .map_err(|e| StrategyError::Other(format!("lock poisoned: {e}")))?;
-            StrategySubprocess::spawn_raw(
-                &mut wm,
-                model_desc.clone(),
-                strategy.clone(),
-                warm_start,
-                result_callback,
-                progress_callback,
-                log_callback,
-            )
-            .map_err(|e| {
-                StrategyError::Other(format!("failed to spawn strategy subprocess: {e}"))
-            })?
-        };
+        let handle = StrategySubprocess::spawn_raw(
+            self.worker_manager.clone(),
+            model_desc.clone(),
+            strategy.clone(),
+            warm_start,
+            result_callback,
+            progress_callback,
+            log_callback,
+        )
+        .map_err(|e| StrategyError::Other(format!("failed to spawn strategy subprocess: {e}")))?;
 
         let mut result_rx = result_rx.fuse();
         let mut progress_rx = progress_rx.fuse();

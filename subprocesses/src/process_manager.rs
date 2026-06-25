@@ -57,6 +57,14 @@ impl ProcessManager {
         process.kill()
     }
 
+    /// Remove a process from the manager, returning the owned [`Process`] if present.
+    ///
+    /// Dropping the returned `Process` frees its PTY master, child handle, stdin writer
+    /// and reader-thread handles, so callers that drop it reclaim those resources.
+    pub fn remove(&mut self, id: ProcessId) -> Option<Process> {
+        self.processes.remove(&id)
+    }
+
     pub fn send_stdin(&self, id: ProcessId, data: &[u8]) -> Result<(), String> {
         let process = self
             .processes
