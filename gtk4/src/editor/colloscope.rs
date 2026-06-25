@@ -5,8 +5,6 @@ use relm4::{
 };
 use relm4::{adw, gtk};
 
-use std::sync::{Arc, Mutex};
-
 use collomatique_ops::ColloscopeUpdateOp;
 
 use crate::editor::run_solver;
@@ -211,7 +209,7 @@ impl Colloscope {
 impl Component for Colloscope {
     type Input = ColloscopeInput;
     type Output = ColloscopeOutput;
-    type Init = Arc<Mutex<collomatique_subprocesses::WorkerManager>>;
+    type Init = ();
     type CommandOutput = ColloscopeCommandOutput;
 
     view! {
@@ -412,7 +410,7 @@ impl Component for Colloscope {
     }
 
     fn init(
-        worker_manager: Self::Init,
+        _: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
@@ -460,7 +458,7 @@ impl Component for Colloscope {
 
         let run_solver_dialog = SolverDialog::builder()
             .transient_for(&root)
-            .launch((worker_manager, "Résolution du colloscope".to_string()))
+            .launch("Résolution du colloscope".to_string())
             .forward(sender.input_sender(), |msg| match msg {
                 run_solver::DialogOutput::NewConfig(config) => ColloscopeInput::SolveResult(config),
             });

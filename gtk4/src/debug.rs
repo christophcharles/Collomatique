@@ -316,7 +316,7 @@ fn objective(
 }
 
 fn subprocess_solve(model: &collomatique_constraints_colloscopes::ColloscopeModel) {
-    use collomatique_subprocesses::{IlpSolverConfig, IlpStatus, SolverSubprocess, WorkerManager};
+    use collomatique_subprocesses::{IlpSolverConfig, IlpStatus, SolverSubprocess};
     use std::sync::mpsc;
 
     let t = Instant::now();
@@ -337,12 +337,10 @@ fn subprocess_solve(model: &collomatique_constraints_colloscopes::ColloscopeMode
     };
 
     let (tx, rx) = mpsc::channel();
-    let mut worker_manager = WorkerManager::new();
 
     eprintln!("Spawning solver subprocess...");
     let t = Instant::now();
     let handle = SolverSubprocess::spawn(
-        &mut worker_manager,
         config,
         move |result| {
             let _ = tx.send(result);
@@ -437,7 +435,7 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
     use collomatique_strategies::{
         DefaultStrategy, SolveProgress, SolveStatus, StrategyOutcome, StrategyProgressData,
     };
-    use collomatique_subprocesses::{StrategySubprocess, WorkerManager};
+    use collomatique_subprocesses::StrategySubprocess;
     use std::sync::mpsc;
 
     type Outcome = StrategyOutcome<
@@ -463,12 +461,9 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
     };
 
     let (tx, rx) = mpsc::channel();
-    let worker_manager = std::sync::Arc::new(std::sync::Mutex::new(WorkerManager::new()));
-
     eprintln!("Spawning strategy subprocess...");
     let t = Instant::now();
     let handle = StrategySubprocess::spawn(
-        worker_manager.clone(),
         model,
         &strategy,
         None,
@@ -556,7 +551,7 @@ fn no_objective_solve(model: &collomatique_constraints_colloscopes::ColloscopeMo
         NoObjectiveProgressData, NoObjectiveStrategy, SolveStatus, StrategyOutcome,
         StrategyProgressData,
     };
-    use collomatique_subprocesses::{StrategySubprocess, WorkerManager};
+    use collomatique_subprocesses::StrategySubprocess;
     use std::sync::mpsc;
 
     type Outcome = StrategyOutcome<
@@ -583,12 +578,9 @@ fn no_objective_solve(model: &collomatique_constraints_colloscopes::ColloscopeMo
     };
 
     let (tx, rx) = mpsc::channel();
-    let worker_manager = std::sync::Arc::new(std::sync::Mutex::new(WorkerManager::new()));
-
     eprintln!("Spawning no-objective strategy subprocess...");
     let t = Instant::now();
     let handle = StrategySubprocess::spawn(
-        worker_manager.clone(),
         model,
         &strategy,
         None,
@@ -676,7 +668,7 @@ fn no_objective_starter_solve(model: &collomatique_constraints_colloscopes::Coll
         DefaultStrategy, NoObjectiveStarterProgress, NoObjectiveStarterStrategy,
         NoObjectiveStrategy, SolveStatus, StrategyOutcome,
     };
-    use collomatique_subprocesses::{StrategySubprocess, WorkerManager};
+    use collomatique_subprocesses::StrategySubprocess;
     use std::sync::mpsc;
 
     type Outcome = StrategyOutcome<
@@ -714,12 +706,9 @@ fn no_objective_starter_solve(model: &collomatique_constraints_colloscopes::Coll
     };
 
     let (tx, rx) = mpsc::channel();
-    let worker_manager = std::sync::Arc::new(std::sync::Mutex::new(WorkerManager::new()));
-
     eprintln!("Spawning no-objective-starter strategy subprocess...");
     let t = Instant::now();
     let handle = StrategySubprocess::spawn(
-        worker_manager.clone(),
         model,
         &strategy,
         None,
@@ -809,8 +798,8 @@ async fn conductor_solve(model: &collomatique_constraints_colloscopes::Colloscop
     use collomatique_strategies::{
         ConductorProgress, ConductorStrategy, SolveStatus, Strategy, StrategyContext,
     };
-    use collomatique_subprocesses::{SubprocessSolveBackend, WorkerManager};
-    use std::sync::{Arc, Mutex};
+    use collomatique_subprocesses::SubprocessSolveBackend;
+    use std::sync::Arc;
 
     type V = collomatique_ilp_modeler::InternalVar<
         collomatique_constraints_colloscopes::Var,
@@ -827,8 +816,7 @@ async fn conductor_solve(model: &collomatique_constraints_colloscopes::Colloscop
         t.elapsed()
     );
 
-    let worker_manager = Arc::new(Mutex::new(WorkerManager::new()));
-    let backend = Arc::new(SubprocessSolveBackend::new(worker_manager));
+    let backend = Arc::new(SubprocessSolveBackend::new());
     let on_echo: Arc<dyn Fn(String) + Send + Sync> = Arc::new(|line: String| {
         eprintln!("  [conductor] {}", line.trim_end());
     });

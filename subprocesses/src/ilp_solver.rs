@@ -8,8 +8,7 @@ use collomatique_rpc::{
 };
 
 use crate::process::StdinWriter;
-use crate::worker::{WorkerEvent, WorkerId};
-use crate::worker_manager::WorkerManager;
+use crate::worker::{Worker, WorkerEvent};
 
 pub struct IlpSolverConfig {
     pub problem_desc: collomatique_ilp::ProblemDesc,
@@ -70,7 +69,8 @@ pub enum IlpStatus {
 }
 
 pub struct SolverSubprocess {
-    worker_id: WorkerId,
+    /// Held only for its `Drop`: dropping the handle kills the worker if still running.
+    _worker: Worker,
     stop_flag: Arc<AtomicBool>,
     last_progress: Arc<Mutex<Option<IlpProgress>>>,
 }
@@ -80,8 +80,10 @@ impl SolverSubprocess {
         self.stop_flag.store(true, Ordering::Relaxed);
     }
 
-    pub fn kill(&self, worker_manager: &WorkerManager) -> Result<(), String> {
-        worker_manager.kill_worker(self.worker_id)
+    /// Forcefully terminate the worker. Equivalent to dropping the handle: the kill happens
+    /// in the owned [`Worker`]'s `Drop`.
+    pub fn kill(self) {
+        // `self` is dropped here, killing the worker.
     }
 
     pub fn last_progress(&self) -> Option<IlpProgress> {
@@ -89,7 +91,6 @@ impl SolverSubprocess {
     }
 
     pub fn spawn(
-        worker_manager: &mut WorkerManager,
         config: IlpSolverConfig,
         result_callback: impl Fn(IlpResult) + Send + 'static,
         progress_callback: impl Fn(&IlpProgress) + Send + 'static,
@@ -171,13 +172,12 @@ impl SolverSubprocess {
             _ => {}
         };
 
-        let worker_id = worker_manager.spawn_worker(init_msg, callback)?;
+        let worker = Worker::spawn(init_msg, callback)?;
 
-        let stdin_writer = worker_manager.get_worker_stdin(worker_id);
-        *stdin_slot.lock().unwrap() = stdin_writer;
+        *stdin_slot.lock().unwrap() = Some(worker.get_stdin_writer());
 
         Ok(SolverSubprocess {
-            worker_id,
+            _worker: worker,
             stop_flag,
             last_progress,
         })

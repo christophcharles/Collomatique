@@ -12,8 +12,7 @@ use collomatique_strategies::{
 };
 
 use crate::process::StdinWriter;
-use crate::worker::{WorkerEvent, WorkerId};
-use crate::worker_manager::WorkerManager;
+use crate::worker::{Worker, WorkerEvent};
 
 #[derive(Debug, Clone)]
 pub struct StrategyResult {
@@ -49,14 +48,10 @@ pub enum StrategyStatus {
 }
 
 pub struct StrategySubprocess {
-    worker_id: WorkerId,
+    /// Held only for its `Drop`: dropping the handle kills the worker if still running.
+    _worker: Worker,
     stop_flag: Arc<AtomicBool>,
-    /// Set to `true` once the worker has delivered its final result, so dropping the handle
-    /// after a normal completion does not try to kill an already-finished subprocess.
-    finished: Arc<AtomicBool>,
     last_progress: Arc<Mutex<Option<StrategyProgressData>>>,
-    /// Shared handle to the manager, so `Drop` can remove (and, if still live, kill) the worker.
-    worker_manager: Arc<Mutex<WorkerManager>>,
 }
 
 impl StrategySubprocess {
@@ -65,9 +60,9 @@ impl StrategySubprocess {
     }
 
     /// Forcefully terminate the worker. Equivalent to dropping the handle: the actual kill
-    /// and the manager cleanup happen in [`Drop`].
+    /// happens in the owned [`Worker`]'s `Drop`.
     pub fn kill(self) {
-        // `self` is dropped here, which runs `Drop::drop`.
+        // `self` is dropped here, killing the worker.
     }
 
     pub fn last_progress(&self) -> Option<StrategyProgressData> {
@@ -75,7 +70,6 @@ impl StrategySubprocess {
     }
 
     pub fn spawn<B, E, C, S>(
-        worker_manager: Arc<Mutex<WorkerManager>>,
         model: &Model<B, E, C>,
         strategy: &S,
         warm_start: Option<ConfigData<InternalVar<B, E>>>,
@@ -110,7 +104,6 @@ impl StrategySubprocess {
             Err(e) => progress_callback(Err(e)),
         };
         Self::spawn_raw(
-            worker_manager,
             model_desc,
             strategy_kind,
             raw_warm_start,
@@ -121,7 +114,6 @@ impl StrategySubprocess {
     }
 
     pub fn spawn_raw(
-        worker_manager: Arc<Mutex<WorkerManager>>,
         model_desc: ModelDesc,
         strategy: StrategyKind,
         warm_start: Option<Vec<f64>>,
@@ -139,12 +131,10 @@ impl StrategySubprocess {
         let init_msg = InitMsg::RunStrategy(serialized);
 
         let stop_flag = Arc::new(AtomicBool::new(false));
-        let finished = Arc::new(AtomicBool::new(false));
         let last_progress: Arc<Mutex<Option<StrategyProgressData>>> = Arc::new(Mutex::new(None));
         let stdin_slot: Arc<Mutex<Option<StdinWriter>>> = Arc::new(Mutex::new(None));
 
         let stop_flag_cb = stop_flag.clone();
-        let finished_cb = finished.clone();
         let last_progress_cb = last_progress.clone();
         let stdin_slot_cb = stdin_slot.clone();
 
@@ -170,10 +160,6 @@ impl StrategySubprocess {
                     }
                 }
                 collomatique_rpc::CmdMsg::Strategy(StrategyMsg::Result(data)) => {
-                    // The worker has produced its final result and will exit on its own;
-                    // mark it finished so dropping the handle does not try to kill it.
-                    finished_cb.store(true, Ordering::Relaxed);
-
                     let result = StrategyResult {
                         status: match data.status {
                             collomatique_rpc::StrategyStatus::Optimal => StrategyStatus::Optimal,
@@ -206,45 +192,14 @@ impl StrategySubprocess {
             _ => {}
         };
 
-        // Hold the manager lock only for the cheap spawn + stdin lookup, then release it.
-        let worker_id = {
-            let mut wm = worker_manager
-                .lock()
-                .map_err(|e| format!("WorkerManager empoisonné : {e}"))?;
-            let worker_id = wm.spawn_worker(init_msg, callback)?;
-            let stdin_writer = wm.get_worker_stdin(worker_id);
-            *stdin_slot.lock().unwrap() = stdin_writer;
-            worker_id
-        };
+        let worker = Worker::spawn(init_msg, callback)?;
+        *stdin_slot.lock().unwrap() = Some(worker.get_stdin_writer());
 
         Ok(StrategySubprocess {
-            worker_id,
+            _worker: worker,
             stop_flag,
-            finished,
             last_progress,
-            worker_manager,
         })
-    }
-}
-
-impl Drop for StrategySubprocess {
-    fn drop(&mut self) {
-        // Cheap HashMap removals under the lock; release it before the (blocking) kill.
-        let removed = match self.worker_manager.lock() {
-            Ok(mut wm) => wm.remove_worker(self.worker_id),
-            Err(_) => {
-                eprintln!("WorkerManager empoisonné lors de l'arrêt du worker");
-                return;
-            }
-        };
-        if let Some(process) = removed {
-            if !self.finished.load(Ordering::Relaxed) {
-                if let Err(e) = process.kill() {
-                    eprintln!("Échec de l'arrêt du worker {:?} : {e}", self.worker_id);
-                }
-            }
-            // `process` is dropped here, freeing the PTY fd, child handle and reader handles.
-        }
     }
 }
 

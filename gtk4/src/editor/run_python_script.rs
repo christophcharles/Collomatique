@@ -11,9 +11,8 @@ use collomatique_state::{AppSession, AppState};
 use collomatique_state_colloscopes::Data;
 
 use crate::widgets::debug_view::{DebugView, DebugViewInput};
-use collomatique_subprocesses::{WorkerEvent, WorkerId, WorkerManager};
+use collomatique_subprocesses::{SendError, Worker, WorkerEvent};
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
 
 mod confirm_dialog;
 mod error_dialog;
@@ -27,9 +26,8 @@ pub struct Dialog {
     path: PathBuf,
     script: String,
     end_with_error: bool,
-    worker_manager: Arc<Mutex<WorkerManager>>,
     debug_view: Controller<DebugView>,
-    worker_id: Option<WorkerId>,
+    worker: Option<Worker>,
     error_dialog: Controller<error_dialog::Dialog>,
     warning_running: Controller<warning_running::Dialog>,
     ok_dialog: Controller<ok_dialog::Dialog>,
@@ -66,7 +64,7 @@ pub enum DialogOutput {
 
 #[relm4::component(pub)]
 impl Component for Dialog {
-    type Init = Arc<Mutex<WorkerManager>>;
+    type Init = ();
 
     type Input = DialogInput;
     type Output = DialogOutput;
@@ -95,7 +93,7 @@ impl Component for Dialog {
                     pack_end = &gtk::Button {
                         set_label: "Valider les modifications",
                         #[watch]
-                        set_sensitive: model.worker_id.is_none() && model.has_modifications(),
+                        set_sensitive: model.worker.is_none() && model.has_modifications(),
                         add_css_class: "destructive-action",
                         connect_clicked => DialogInput::Accept,
                     },
@@ -110,14 +108,14 @@ impl Component for Dialog {
                         set_valign: gtk::Align::Center,
                         set_size_request: (50, 50),
                         #[watch]
-                        set_visible: model.worker_id.is_some(),
+                        set_visible: model.worker.is_some(),
                     },
                     gtk::Box {
                         set_orientation: gtk::Orientation::Horizontal,
                         set_halign: gtk::Align::Center,
                         set_valign: gtk::Align::Center,
                         #[watch]
-                        set_visible: model.worker_id.is_none() && !model.end_with_error && model.has_modifications(),
+                        set_visible: model.worker.is_none() && !model.end_with_error && model.has_modifications(),
                         gtk::Image::from_icon_name("emblem-ok-symbolic") {
                             set_size_request: (50, 50),
                             set_icon_size: gtk::IconSize::Large,
@@ -131,7 +129,7 @@ impl Component for Dialog {
                         set_halign: gtk::Align::Center,
                         set_valign: gtk::Align::Center,
                         #[watch]
-                        set_visible: model.worker_id.is_none() && !model.end_with_error && !model.has_modifications(),
+                        set_visible: model.worker.is_none() && !model.end_with_error && !model.has_modifications(),
                         gtk::Image::from_icon_name("dialog-warning-symbolic") {
                             set_size_request: (50, 50),
                             set_icon_size: gtk::IconSize::Large,
@@ -145,7 +143,7 @@ impl Component for Dialog {
                         set_halign: gtk::Align::Center,
                         set_valign: gtk::Align::Center,
                         #[watch]
-                        set_visible: model.worker_id.is_none() && model.end_with_error,
+                        set_visible: model.worker.is_none() && model.end_with_error,
                         gtk::Image::from_icon_name("dialog-error-symbolic") {
                             set_size_request: (50, 50),
                             set_icon_size: gtk::IconSize::Large,
@@ -199,7 +197,7 @@ impl Component for Dialog {
     }
 
     fn init(
-        worker_manager: Self::Init,
+        _: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
@@ -259,9 +257,8 @@ impl Component for Dialog {
             path: PathBuf::new(),
             script: String::new(),
             end_with_error: false,
-            worker_manager,
             debug_view,
-            worker_id: None,
+            worker: None,
             error_dialog,
             warning_running,
             ok_dialog,
@@ -307,16 +304,13 @@ impl Component for Dialog {
                     }
                 };
 
-                let spawn_result = {
-                    let mut wm = self.worker_manager.lock().unwrap();
-                    wm.spawn_worker(
-                        collomatique_rpc::InitMsg::RunPythonScript(self.script.clone()),
-                        callback,
-                    )
-                };
+                let spawn_result = Worker::spawn(
+                    collomatique_rpc::InitMsg::RunPythonScript(self.script.clone()),
+                    callback,
+                );
 
                 match spawn_result {
-                    Ok(id) => self.worker_id = Some(id),
+                    Ok(worker) => self.worker = Some(worker),
                     Err(e) => {
                         self.end_with_error = true;
                         self.error_dialog
@@ -327,7 +321,7 @@ impl Component for Dialog {
                 }
             }
             DialogInput::CancelRequest => {
-                if self.worker_id.is_some() {
+                if self.worker.is_some() {
                     self.warning_running
                         .sender()
                         .send(warning_running::DialogInput::Show)
@@ -338,10 +332,8 @@ impl Component for Dialog {
             }
             DialogInput::Cancel => {
                 self.hidden = true;
-                if let Some(worker_id) = self.worker_id.take() {
-                    let wm = self.worker_manager.lock().unwrap();
-                    let _ = wm.kill_worker(worker_id);
-                }
+                // Dropping the worker kills the subprocess if it is still running.
+                self.worker = None;
             }
             DialogInput::Echo(line) => {
                 self.debug_view.emit(DebugViewInput::Append(line));
@@ -407,7 +399,7 @@ impl Component for Dialog {
                     .unwrap();
             }
             DialogInput::ProcessFinished => {
-                self.worker_id = None;
+                self.worker = None;
             }
             DialogInput::Error(error) => {
                 self.end_with_error = true;
@@ -449,9 +441,15 @@ impl Dialog {
     }
 
     fn send_response(&self, msg: ResultMsg) {
-        if let Some(worker_id) = self.worker_id {
-            let wm = self.worker_manager.lock().unwrap();
-            let _ = wm.send_rpc_message(worker_id, msg);
+        if let Some(worker) = self.worker.as_ref() {
+            match worker.send_rpc_message(msg) {
+                // The worker already exited: nothing to respond to (also handled by the
+                // separate `ProcessFinished` event). Harmless, so ignore it.
+                Ok(()) | Err(SendError::Finished) => {}
+                Err(SendError::Io(e)) => {
+                    eprintln!("Erreur d'envoi de la réponse RPC au sous-processus : {e}");
+                }
+            }
         }
     }
 

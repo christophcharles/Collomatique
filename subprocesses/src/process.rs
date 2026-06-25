@@ -1,29 +1,14 @@
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, ErrorKind, Write};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ProcessId(pub(crate) u64);
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ProcessStatus {
-    Running,
-    Exited(Option<u32>),
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OutputData {
     Utf8(String),
     Raw(Vec<u8>),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum OutputEntry {
-    Stdout(OutputData),
-    Stderr(OutputData),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,9 +19,14 @@ pub enum ProcessEvent {
     Error(String),
 }
 
-pub struct ProcessState {
-    pub status: ProcessStatus,
-    pub output_log: Vec<OutputEntry>,
+/// Outcome of sending data to a process's stdin.
+#[derive(Debug, Clone)]
+pub enum SendError {
+    /// The process no longer accepts input: it has exited or been killed (its stdin slot
+    /// is closed, or the write hit a broken pipe).
+    Finished,
+    /// A genuine I/O error occurred while writing.
+    Io(String),
 }
 
 enum ChildHandle {
@@ -93,15 +83,23 @@ impl ChildHandle {
 
 pub type StdinWriter = Arc<Mutex<Option<Box<dyn Write + Send>>>>;
 
+/// Owned RAII handle to a child process.
+///
+/// Dropping a `Process` kills the child if it is still running (see [`Process::kill`]),
+/// frees its PTY master / child handle, and lets the detached reader thread(s) finish.
+/// All teardown is idempotent: explicit `kill`, `Drop`, and a natural exit observed by the
+/// reader thread all converge to the same terminal state without double-killing.
 pub struct Process {
-    state: ProcessState,
     child: Arc<Mutex<ChildHandle>>,
     stdin: StdinWriter,
+    /// Set once the child has been killed or observed to exit. Makes `kill`/`Drop`
+    /// idempotent and turns a post-exit `kill` into a no-op.
+    terminated: Arc<AtomicBool>,
     _reader_handles: Vec<JoinHandle<()>>,
 }
 
 impl Process {
-    pub(crate) fn spawn_pty<F>(command: &str, args: &[&str], callback: F) -> Result<Self, String>
+    pub fn spawn_pty<F>(command: &str, args: &[&str], callback: F) -> Result<Self, String>
     where
         F: Fn(ProcessEvent) + Send + 'static,
     {
@@ -159,28 +157,28 @@ impl Process {
         };
         let child_arc = Arc::new(Mutex::new(child_handle));
         let stdin: StdinWriter = Arc::new(Mutex::new(Some(writer)));
+        let terminated = Arc::new(AtomicBool::new(false));
 
         let exit_emitted = Arc::new(AtomicBool::new(false));
         let reader_handle = Self::spawn_reader_thread(
             reader,
             Arc::clone(&child_arc),
             exit_emitted,
+            Arc::clone(&terminated),
+            Arc::clone(&stdin),
             callback,
             false,
         );
 
         Ok(Process {
-            state: ProcessState {
-                status: ProcessStatus::Running,
-                output_log: Vec::new(),
-            },
             child: child_arc,
             stdin,
+            terminated,
             _reader_handles: vec![reader_handle],
         })
     }
 
-    pub(crate) fn spawn_pipes<F>(command: &str, args: &[&str], callback: F) -> Result<Self, String>
+    pub fn spawn_pipes<F>(command: &str, args: &[&str], callback: F) -> Result<Self, String>
     where
         F: Fn(ProcessEvent) + Send + Clone + 'static,
     {
@@ -208,6 +206,7 @@ impl Process {
         let child_handle = ChildHandle::Pipe { child };
         let child_arc = Arc::new(Mutex::new(child_handle));
         let stdin: StdinWriter = Arc::new(Mutex::new(Some(Box::new(stdin_pipe))));
+        let terminated = Arc::new(AtomicBool::new(false));
 
         let exit_emitted = Arc::new(AtomicBool::new(false));
         let stdout_callback = callback.clone();
@@ -215,28 +214,37 @@ impl Process {
             stdout,
             Arc::clone(&child_arc),
             Arc::clone(&exit_emitted),
+            Arc::clone(&terminated),
+            Arc::clone(&stdin),
             stdout_callback,
             false,
         );
 
-        let stderr_handle =
-            Self::spawn_reader_thread(stderr, Arc::clone(&child_arc), exit_emitted, callback, true);
+        let stderr_handle = Self::spawn_reader_thread(
+            stderr,
+            Arc::clone(&child_arc),
+            exit_emitted,
+            Arc::clone(&terminated),
+            Arc::clone(&stdin),
+            callback,
+            true,
+        );
 
         Ok(Process {
-            state: ProcessState {
-                status: ProcessStatus::Running,
-                output_log: Vec::new(),
-            },
             child: child_arc,
             stdin,
+            terminated,
             _reader_handles: vec![stdout_handle, stderr_handle],
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn spawn_reader_thread<R, F>(
         reader: R,
         child: Arc<Mutex<ChildHandle>>,
         exit_emitted: Arc<AtomicBool>,
+        terminated: Arc<AtomicBool>,
+        stdin: StdinWriter,
         callback: F,
         is_stderr: bool,
     ) -> JoinHandle<()>
@@ -246,8 +254,13 @@ impl Process {
     {
         std::thread::spawn(move || {
             let mut buf_reader = BufReader::new(reader);
-            let emit_exit = |code| {
+            // Run exactly once, when the child is first observed to have exited: mark the
+            // process terminated, close its stdin (so further sends report `Finished` and
+            // `kill`/`Drop` become a no-op), then emit the exit event.
+            let on_exit = |code| {
                 if !exit_emitted.swap(true, Ordering::AcqRel) {
+                    terminated.store(true, Ordering::Release);
+                    *stdin.lock().unwrap() = None;
                     callback(ProcessEvent::ProcessExited(code));
                 }
             };
@@ -259,7 +272,7 @@ impl Process {
                             Ok(code) => code,
                             Err(_) => None,
                         };
-                        emit_exit(exit_code);
+                        on_exit(exit_code);
                         break;
                     }
                     Ok(_) => {
@@ -276,7 +289,7 @@ impl Process {
                     }
                     Err(_) => match child.lock().unwrap().try_wait() {
                         Ok(Some(code)) => {
-                            emit_exit(code);
+                            on_exit(code);
                             break;
                         }
                         _ => {
@@ -292,59 +305,109 @@ impl Process {
         self.stdin.clone()
     }
 
-    pub fn send_stdin(&self, data: &[u8]) -> Result<(), String> {
+    pub fn send_stdin(&self, data: &[u8]) -> Result<(), SendError> {
         let mut guard = self.stdin.lock().unwrap();
         let Some(writer) = guard.as_mut() else {
-            return Err("Le processus n'accepte plus d'entrées".to_string());
+            return Err(SendError::Finished);
         };
-        match writer.write_all(data) {
-            Ok(()) => {}
-            Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => return Ok(()),
-            Err(e) => return Err(format!("Erreur d'écriture stdin : {}", e)),
-        }
-        match writer.flush() {
+        match writer.write_all(data).and_then(|()| writer.flush()) {
             Ok(()) => Ok(()),
-            Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => Ok(()),
-            Err(e) => Err(format!("Erreur de flush stdin : {}", e)),
+            Err(e) if e.kind() == ErrorKind::BrokenPipe => Err(SendError::Finished),
+            Err(e) => Err(SendError::Io(format!("Erreur d'écriture stdin : {}", e))),
         }
     }
 
+    /// Terminate the child if it is still running. Idempotent and safe to call on an
+    /// already-killed or already-exited process: the first caller (explicit `kill`, `Drop`,
+    /// or the reader thread observing exit) wins, the rest are no-ops.
     pub fn kill(&self) -> Result<(), String> {
-        // Close stdin first
+        if self.terminated.swap(true, Ordering::AcqRel) {
+            return Ok(());
+        }
+        // Close stdin first so the child sees EOF.
         {
             let mut guard = self.stdin.lock().unwrap();
             *guard = None;
         }
         let mut child = self.child.lock().unwrap();
-        child
-            .kill()
-            .map_err(|e| format!("Erreur à l'arrêt du processus : {}", e))?;
-        child
-            .wait()
-            .map_err(|e| format!("Erreur à l'attente du processus : {}", e))?;
-        Ok(())
+        match child.try_wait() {
+            Ok(Some(_)) => Ok(()),
+            Ok(None) => {
+                child
+                    .kill()
+                    .map_err(|e| format!("Erreur à l'arrêt du processus : {}", e))?;
+                child
+                    .wait()
+                    .map_err(|e| format!("Erreur à l'attente du processus : {}", e))?;
+                Ok(())
+            }
+            Err(e) => Err(format!("Erreur lors du test d'état du processus : {}", e)),
+        }
+    }
+}
+
+impl Drop for Process {
+    fn drop(&mut self) {
+        // Idempotent: a no-op if the child already exited or was killed.
+        let _ = self.kill();
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    /// Block until the spawned child is observed to have exited (the reader thread emits
+    /// `ProcessExited` only after it has nulled stdin and flipped `terminated`).
+    fn spawn_and_wait_for_exit(command: &str, args: &[&str]) -> Process {
+        let (tx, rx) = mpsc::channel();
+        let process = Process::spawn_pipes(command, args, move |event| {
+            if let ProcessEvent::ProcessExited(_) = event {
+                let _ = tx.send(());
+            }
+        })
+        .expect("spawn");
+        rx.recv_timeout(Duration::from_secs(5))
+            .expect("child should exit promptly");
+        process
     }
 
-    pub fn state(&self) -> &ProcessState {
-        &self.state
+    #[test]
+    fn kill_is_idempotent_on_a_running_child() {
+        let process = Process::spawn_pipes("sleep", &["10"], |_| {}).expect("spawn");
+        assert!(process.kill().is_ok());
+        // A second explicit kill on an already-killed process is a clean no-op.
+        assert!(process.kill().is_ok());
+        // Dropping afterwards must not double-kill / panic either.
     }
 
-    pub fn handle_event(&mut self, event: &ProcessEvent) {
-        match event {
-            ProcessEvent::Stdout(data) => {
-                self.state
-                    .output_log
-                    .push(OutputEntry::Stdout(data.clone()));
-            }
-            ProcessEvent::Stderr(data) => {
-                self.state
-                    .output_log
-                    .push(OutputEntry::Stderr(data.clone()));
-            }
-            ProcessEvent::ProcessExited(code) => {
-                self.state.status = ProcessStatus::Exited(*code);
-            }
-            ProcessEvent::Error(_) => {}
+    #[test]
+    fn kill_after_natural_exit_is_a_noop() {
+        let process = spawn_and_wait_for_exit("true", &[]);
+        // The child already exited; kill sees `terminated`/`try_wait` and does nothing.
+        assert!(process.kill().is_ok());
+    }
+
+    #[test]
+    fn send_after_exit_reports_finished() {
+        let process = spawn_and_wait_for_exit("true", &[]);
+        // The reader thread nulled stdin when the child exited, so the send is rejected
+        // deterministically rather than racing a broken pipe.
+        match process.send_stdin(b"hello\n") {
+            Err(SendError::Finished) => {}
+            other => panic!("expected SendError::Finished, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn send_after_kill_reports_finished() {
+        let process = Process::spawn_pipes("sleep", &["10"], |_| {}).expect("spawn");
+        assert!(process.kill().is_ok());
+        match process.send_stdin(b"hello\n") {
+            Err(SendError::Finished) => {}
+            other => panic!("expected SendError::Finished, got {:?}", other),
         }
     }
 }

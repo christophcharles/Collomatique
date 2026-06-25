@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 use async_trait::async_trait;
 use collomatique_ilp_modeler::model_desc::ModelDesc;
@@ -10,15 +10,13 @@ use futures::{FutureExt, StreamExt};
 
 use crate::ilp_solver::{IlpSolverConfig, IlpStatus, SolverSubprocess};
 use crate::strategy_solver::{StrategyResult, StrategySubprocess};
-use crate::worker_manager::WorkerManager;
 
-pub struct SubprocessSolveBackend {
-    worker_manager: Arc<Mutex<WorkerManager>>,
-}
+#[derive(Default)]
+pub struct SubprocessSolveBackend;
 
 impl SubprocessSolveBackend {
-    pub fn new(worker_manager: Arc<Mutex<WorkerManager>>) -> Self {
-        Self { worker_manager }
+    pub fn new() -> Self {
+        Self
     }
 }
 
@@ -78,20 +76,9 @@ impl SolveBackend for SubprocessSolveBackend {
             let _ = echo_tx.unbounded_send(line.to_owned());
         };
 
-        let handle = {
-            let mut wm = self
-                .worker_manager
-                .lock()
-                .map_err(|e| StrategyError::SolveError(format!("lock poisoned: {e}")))?;
-            SolverSubprocess::spawn(
-                &mut wm,
-                config,
-                result_callback,
-                progress_callback,
-                log_callback,
-            )
-            .map_err(|e| StrategyError::SolveError(format!("failed to spawn solver: {e}")))?
-        };
+        let handle =
+            SolverSubprocess::spawn(config, result_callback, progress_callback, log_callback)
+                .map_err(|e| StrategyError::SolveError(format!("failed to spawn solver: {e}")))?;
 
         let mut result_rx = result_rx.fuse();
         let mut progress_rx = progress_rx.fuse();
@@ -154,7 +141,6 @@ impl SolveBackend for SubprocessSolveBackend {
         };
 
         let handle = StrategySubprocess::spawn_raw(
-            self.worker_manager.clone(),
             model_desc.clone(),
             strategy.clone(),
             warm_start,

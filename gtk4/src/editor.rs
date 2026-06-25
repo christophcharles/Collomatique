@@ -8,7 +8,6 @@ use relm4::{adw, gtk};
 use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU32;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
 
 use collomatique_ops::Desc;
 use collomatique_state::AppState;
@@ -803,21 +802,20 @@ impl Component for EditorPanel {
                 EditorInput::UpdateOp(collomatique_ops::UpdateOp::Balancing(op))
             });
 
-        let worker_manager = Arc::new(Mutex::new(collomatique_subprocesses::WorkerManager::new()));
-
-        let colloscope = colloscope::Colloscope::builder()
-            .launch(worker_manager.clone())
-            .forward(sender.input_sender(), |op| match op {
-                ColloscopeOutput::UpdateOp(op) => {
-                    EditorInput::UpdateOp(collomatique_ops::UpdateOp::Colloscope(op))
-                }
-                ColloscopeOutput::NewColloscope(colloscope) => {
-                    EditorInput::UpdateFullColloscope(colloscope)
-                }
-                ColloscopeOutput::UpdateIlpProblem(problem) => {
-                    EditorInput::UpdateIlpProblem(problem)
-                }
-            });
+        let colloscope =
+            colloscope::Colloscope::builder()
+                .launch(())
+                .forward(sender.input_sender(), |op| match op {
+                    ColloscopeOutput::UpdateOp(op) => {
+                        EditorInput::UpdateOp(collomatique_ops::UpdateOp::Colloscope(op))
+                    }
+                    ColloscopeOutput::NewColloscope(colloscope) => {
+                        EditorInput::UpdateFullColloscope(colloscope)
+                    }
+                    ColloscopeOutput::UpdateIlpProblem(problem) => {
+                        EditorInput::UpdateIlpProblem(problem)
+                    }
+                });
 
         let export_panel =
             export_panel::ExportPanel::builder()
@@ -848,7 +846,7 @@ impl Component for EditorPanel {
 
         let run_python_script_dialog = run_python_script::Dialog::builder()
             .transient_for(&root)
-            .launch(worker_manager)
+            .launch(())
             .forward(sender.input_sender(), |msg| match msg {
                 run_python_script::DialogOutput::NewData(new_data) => {
                     EditorInput::NewStateFromSecondInstance(new_data)

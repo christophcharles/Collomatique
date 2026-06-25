@@ -3,7 +3,6 @@ use relm4::{Component, ComponentController, adw, gtk};
 use relm4::{ComponentParts, ComponentSender, Controller, RelmWidgetExt};
 
 use std::marker::PhantomData;
-use std::sync::{Arc, Mutex};
 
 use collomatique_ilp::{ConfigData, UsableData};
 use collomatique_ilp_modeler::{InternalVar, Model};
@@ -11,7 +10,7 @@ use collomatique_strategies::{
     SerializableProgress, SolveStatus, StrategyKind, StrategyOutcome, StrategyProgress,
     StrategyProgressData,
 };
-use collomatique_subprocesses::{StrategySubprocess, WorkerManager};
+use collomatique_subprocesses::StrategySubprocess;
 
 mod error_dialog;
 mod strategy_display;
@@ -27,7 +26,6 @@ pub struct Dialog<B: UsableData, E: UsableData, C: UsableData> {
     is_running: bool,
     end_with_error: bool,
     title: String,
-    worker_manager: Arc<Mutex<WorkerManager>>,
     strategy_name: Option<StrategyName>,
     strategy_frame: Controller<StrategyFrame>,
     strategy_status_bar: Controller<StrategyStatusBar>,
@@ -64,7 +62,7 @@ where
     E: UsableData + 'static,
     C: UsableData + 'static,
 {
-    type Init = (Arc<Mutex<WorkerManager>>, String);
+    type Init = String;
 
     type Input = DialogInput<B, E, C>;
     type Output = DialogOutput<B, E>;
@@ -159,7 +157,7 @@ where
     }
 
     fn init(
-        (worker_manager, title): Self::Init,
+        title: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
@@ -189,7 +187,6 @@ where
             is_running: false,
             end_with_error: false,
             title,
-            worker_manager,
             strategy_name: None,
             strategy_frame,
             strategy_status_bar,
@@ -239,7 +236,6 @@ where
                 };
 
                 let spawn_result = StrategySubprocess::spawn(
-                    self.worker_manager.clone(),
                     &model,
                     &strategy,
                     None,

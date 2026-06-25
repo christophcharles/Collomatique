@@ -209,9 +209,9 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
     use collomatique_strategies::{
         SerializableProgress, Strategy, StrategyContext, StrategyProgress, StrategyRequest,
     };
-    use collomatique_subprocesses::{SubprocessSolveBackend, WorkerManager};
+    use collomatique_subprocesses::SubprocessSolveBackend;
     use ordered_float::OrderedFloat;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
 
     let request_str: String = serialized.into();
     let request = StrategyRequest::deserialize(&request_str)
@@ -225,8 +225,7 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
         .as_ref()
         .map(|raw| collomatique_ilp::solution_to_config_data(raw, &var_order));
 
-    let worker_manager = Arc::new(Mutex::new(WorkerManager::new()));
-    let backend = Arc::new(SubprocessSolveBackend::new(worker_manager));
+    let backend = Arc::new(SubprocessSolveBackend::new());
     let strategy_name = request.strategy.name();
     let on_echo: Arc<dyn Fn(String) + Send + Sync> = Arc::new(move |line: String| {
         eprintln!("[{strategy_name} strategy] {}", line.trim_end());
