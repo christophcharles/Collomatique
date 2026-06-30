@@ -49,6 +49,8 @@ pub enum ConductorProgress<V: UsableData + Send> {
         worker_num: u32,
         progress: Box<StrategyProgress<V>>,
     },
+    /// A line of console output from a worker's substrategy subprocess.
+    WorkerEcho { worker_num: u32, echo: String },
 }
 
 impl<V: UsableData + Send> fmt::Display for Solution<V> {
@@ -90,6 +92,9 @@ impl<V: UsableData + Send> fmt::Display for ConductorProgress<V> {
                 worker_num,
                 progress,
             } => write!(f, "[worker {worker_num}] {progress}"),
+            ConductorProgress::WorkerEcho { worker_num, echo } => {
+                write!(f, "[worker {worker_num}] {echo}")
+            }
         }
     }
 }
@@ -123,6 +128,10 @@ pub enum ConductorProgressData {
     Worker {
         worker_num: u32,
         progress: Box<StrategyProgressData>,
+    },
+    WorkerEcho {
+        worker_num: u32,
+        echo: String,
     },
 }
 
@@ -158,6 +167,9 @@ impl fmt::Display for ConductorProgressData {
                 worker_num,
                 progress,
             } => write!(f, "[worker {worker_num}] {progress}"),
+            ConductorProgressData::WorkerEcho { worker_num, echo } => {
+                write!(f, "[worker {worker_num}] {echo}")
+            }
         }
     }
 }
@@ -215,6 +227,9 @@ impl<V: UsableData + Send> ConductorProgress<V> {
                     progress: Box::new(data),
                 }
             }
+            ConductorProgress::WorkerEcho { worker_num, echo } => {
+                ConductorProgressData::WorkerEcho { worker_num, echo }
+            }
         }
     }
 }
@@ -246,6 +261,9 @@ impl ConductorProgressData {
                     worker_num,
                     progress: Box::new(typed),
                 }
+            }
+            ConductorProgressData::WorkerEcho { worker_num, echo } => {
+                ConductorProgress::WorkerEcho { worker_num, echo }
             }
         }
     }
@@ -414,7 +432,9 @@ where
         StrategyProgress::NoObjective(_)
         | StrategyProgress::NoObjectiveStarter(NoObjectiveStarterProgress::Starter(_))
         | StrategyProgress::Conductor(
-            ConductorProgress::Worker { .. } | ConductorProgress::WorkerAssigned { .. },
+            ConductorProgress::Worker { .. }
+            | ConductorProgress::WorkerAssigned { .. }
+            | ConductorProgress::WorkerEcho { .. },
         ) => None,
     };
 
@@ -508,7 +528,16 @@ where
             &|p: StrategyProgress<InternalVar<B, E>>| {
                 report_worker_progress(worker_num, p, status, sense, on_progress)
             },
-            &|line| Some(format!("[worker {worker_num}] {line}")),
+            &|line| {
+                // Route the worker's console output as first-class progress so it can be
+                // attributed to this worker across the subprocess boundary, instead of
+                // folding it into the conductor's ambient echo sink.
+                on_progress(ConductorProgress::WorkerEcho {
+                    worker_num,
+                    echo: line,
+                });
+                None
+            },
         )
         .await;
     WorkerResult {
@@ -681,6 +710,14 @@ mod tests {
         let json = serde_json::to_string(&inner).unwrap();
         let restored: ConductorProgressData = serde_json::from_str(&json).unwrap();
         assert_eq!(restored, inner);
+
+        let echo = ConductorProgressData::WorkerEcho {
+            worker_num: 0,
+            echo: "solving...".to_owned(),
+        };
+        let json = serde_json::to_string(&echo).unwrap();
+        let restored: ConductorProgressData = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored, echo);
     }
 
     #[test]
@@ -722,6 +759,7 @@ mod tests {
             ConductorProgress::Conductor(_) => "conductor",
             ConductorProgress::Worker { .. } => "worker",
             ConductorProgress::WorkerAssigned { .. } => "assigned",
+            ConductorProgress::WorkerEcho { .. } => "echo",
         }
     }
 

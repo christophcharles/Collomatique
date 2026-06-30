@@ -856,6 +856,9 @@ async fn conductor_solve(model: &collomatique_constraints_colloscopes::Colloscop
                 } => {
                     eprintln!("  [conductor] worker {worker_num}: {progress}");
                 }
+                ConductorProgress::WorkerEcho { worker_num, echo } => {
+                    eprintln!("  [conductor] [worker {worker_num}] {}", echo.trim_end());
+                }
             }
             true
         })
