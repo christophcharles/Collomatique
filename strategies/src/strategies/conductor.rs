@@ -93,10 +93,15 @@ impl<V: UsableData + Send> fmt::Display for ConductorProgress<V> {
                 progress,
             } => write!(f, "[worker {worker_num}] {progress}"),
             ConductorProgress::WorkerEcho { worker_num, echo } => {
-                write!(f, "[worker {worker_num}] {echo}")
+                write!(f, "[worker {worker_num}] {}", trim_newline(echo))
             }
         }
     }
+}
+
+fn trim_newline(s: &str) -> &str {
+    s.strip_suffix('\n')
+        .map_or(s, |s| s.strip_suffix('\r').unwrap_or(s))
 }
 
 /// Serializable counterpart of [`Solution<V>`]: the config is erased to a
@@ -168,7 +173,7 @@ impl fmt::Display for ConductorProgressData {
                 progress,
             } => write!(f, "[worker {worker_num}] {progress}"),
             ConductorProgressData::WorkerEcho { worker_num, echo } => {
-                write!(f, "[worker {worker_num}] {echo}")
+                write!(f, "[worker {worker_num}] {}", trim_newline(echo))
             }
         }
     }

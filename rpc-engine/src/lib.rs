@@ -230,7 +230,7 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
     let backend = Arc::new(SubprocessSolveBackend::new());
     let strategy_name = request.strategy.name();
     let on_echo: Arc<dyn Fn(String) + Send + Sync> = Arc::new(move |line: String| {
-        eprintln!("[{strategy_name} strategy] {}", line.trim_end());
+        eprint!("[{strategy_name} strategy] {}", line);
     });
     let ctx = StrategyContext::with_echo(backend, on_echo);
 

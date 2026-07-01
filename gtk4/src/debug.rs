@@ -355,7 +355,7 @@ fn subprocess_solve(model: &collomatique_constraints_colloscopes::ColloscopeMode
             );
         },
         |line| {
-            eprintln!("  [subprocess] {}", line.trim_end());
+            eprint!("  [subprocess] {}", line);
         },
     );
 
@@ -479,7 +479,7 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
             }
         },
         |line| {
-            eprintln!("  [strategy subprocess] {}", line.trim_end());
+            eprint!("  [strategy subprocess] {}", line);
         },
     );
 
@@ -596,7 +596,7 @@ fn no_objective_solve(model: &collomatique_constraints_colloscopes::ColloscopeMo
             }
         },
         |line| {
-            eprintln!("  [strategy subprocess] {}", line.trim_end());
+            eprint!("  [strategy subprocess] {}", line);
         },
     );
 
@@ -727,7 +727,7 @@ fn no_objective_starter_solve(model: &collomatique_constraints_colloscopes::Coll
             }
         },
         |line| {
-            eprintln!("  [strategy subprocess] {}", line.trim_end());
+            eprint!("  [strategy subprocess] {}", line);
         },
     );
 
@@ -818,7 +818,7 @@ async fn conductor_solve(model: &collomatique_constraints_colloscopes::Colloscop
 
     let backend = Arc::new(SubprocessSolveBackend::new());
     let on_echo: Arc<dyn Fn(String) + Send + Sync> = Arc::new(|line: String| {
-        eprintln!("  [conductor] {}", line.trim_end());
+        eprint!("  [conductor] {}", line);
     });
     let ctx = StrategyContext::with_echo(backend, on_echo);
 
@@ -857,7 +857,7 @@ async fn conductor_solve(model: &collomatique_constraints_colloscopes::Colloscop
                     eprintln!("  [conductor] worker {worker_num}: {progress}");
                 }
                 ConductorProgress::WorkerEcho { worker_num, echo } => {
-                    eprintln!("  [conductor] [worker {worker_num}] {}", echo.trim_end());
+                    eprint!("  [conductor] [worker {worker_num}] {}", echo);
                 }
             }
             true

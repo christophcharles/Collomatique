@@ -174,10 +174,10 @@ impl Process {
                 .expect("Should have a raw fd on UNIX platform");
             unsafe {
                 let mut termios: libc::termios = std::mem::zeroed();
-                libc::tcgetattr(fd, &mut termios);
-                termios.c_lflag &= !libc::ECHO;
-                termios.c_lflag &= !libc::ECHONL;
-                libc::tcsetattr(fd, libc::TCSANOW, &termios);
+                if libc::tcgetattr(fd, &mut termios) == 0 {
+                    libc::cfmakeraw(&mut termios);
+                    libc::tcsetattr(fd, libc::TCSANOW, &termios);
+                }
             }
         }
 

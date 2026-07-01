@@ -148,8 +148,7 @@ impl FactoryComponent for StrategyFrame {
     fn update(&mut self, msg: Self::Input, _sender: FactorySender<Self>) {
         match msg {
             StrategyDisplayInput::Echo(line) => {
-                self.debug_view
-                    .emit(DebugViewInput::Append(format!("{line}\n")));
+                self.debug_view.emit(DebugViewInput::Append(line));
             }
             StrategyDisplayInput::Reset(worker_num) => {
                 self.worker_num = worker_num;
