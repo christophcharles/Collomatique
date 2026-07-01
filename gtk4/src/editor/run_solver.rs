@@ -17,22 +17,18 @@ mod error_dialog;
 mod strategy_display;
 mod warning_running;
 
+use crate::widgets::debug_view::{DebugView, DebugViewInput};
 use strategy_display::{StrategyDisplayInput, StrategyFrame, strategy_name_from_kind};
-
-/// The conductor worker whose activity is mirrored into the dialog's frame and
-/// status bar. Only this *number* is hardcoded; everything else (which strategy,
-/// its name, metrics, echo) is derived from the live `ConductorProgress` stream, so
-/// this generalizes to N workers later.
-const DISPLAY_WORKER_NUM: u32 = 0;
 
 pub struct Dialog<B: UsableData, E: UsableData, C: UsableData> {
     hidden: bool,
     is_running: bool,
     end_with_error: bool,
     show_debug: bool,
+    global_debug_view: Controller<DebugView>,
     title: String,
     worker_strategies: Vec<Option<StrategyKind>>,
-    displayed_worker: usize,
+    displayed_worker: Option<u32>,
     strategy_frames: FactoryVecDeque<StrategyFrame>,
     worker_dropdown: Controller<crate::widgets::droplist::Widget>,
     error_dialog: Controller<error_dialog::Dialog>,
@@ -110,45 +106,79 @@ where
                     set_orientation: gtk::Orientation::Vertical,
                     set_hexpand: true,
                     set_vexpand: true,
-                    adw::Spinner {
-                        set_halign: gtk::Align::Center,
-                        set_valign: gtk::Align::Center,
-                        set_size_request: (50, 50),
+                    gtk::Box {
+                        set_hexpand: true,
+                        set_vexpand: true,
+                        set_margin_all: 5,
                         #[watch]
-                        set_visible: model.is_running,
+                        set_visible: model.displayed_worker.is_none() && !model.show_debug,
+                        gtk::Frame {
+                            set_margin_all: 5,
+                            set_hexpand: true,
+                            set_vexpand: true,
+                            gtk::Box {
+                                set_margin_all: 0,
+                                set_hexpand: true,
+                                set_vexpand: true,
+                                set_orientation: gtk::Orientation::Horizontal,
+                                gtk::Box {
+                                    set_hexpand: true,
+                                },
+                                adw::Spinner {
+                                    set_halign: gtk::Align::Center,
+                                    set_valign: gtk::Align::Center,
+                                    set_size_request: (50, 50),
+                                    #[watch]
+                                    set_visible: model.is_running,
+                                },
+                                gtk::Box {
+                                    set_orientation: gtk::Orientation::Horizontal,
+                                    set_halign: gtk::Align::Center,
+                                    set_valign: gtk::Align::Center,
+                                    #[watch]
+                                    set_visible: !model.is_running && !model.end_with_error,
+                                    gtk::Image::from_icon_name("emblem-ok-symbolic") {
+                                        set_size_request: (50, 50),
+                                        set_icon_size: gtk::IconSize::Large,
+                                    },
+                                    gtk::Label {
+                                        set_label: "Exécution terminée",
+                                    },
+                                },
+                                gtk::Box {
+                                    set_orientation: gtk::Orientation::Horizontal,
+                                    set_halign: gtk::Align::Center,
+                                    set_valign: gtk::Align::Center,
+                                    #[watch]
+                                    set_visible: !model.is_running && model.end_with_error,
+                                    gtk::Image::from_icon_name("dialog-error-symbolic") {
+                                        set_size_request: (50, 50),
+                                        set_icon_size: gtk::IconSize::Large,
+                                    },
+                                    gtk::Label {
+                                        set_label: "Erreur pendant l'exécution",
+                                    },
+                                },
+                                gtk::Box {
+                                    set_hexpand: true,
+                                },
+                            },
+                        },
                     },
                     gtk::Box {
-                        set_orientation: gtk::Orientation::Horizontal,
-                        set_halign: gtk::Align::Center,
-                        set_valign: gtk::Align::Center,
+                        set_hexpand: true,
+                        set_vexpand: true,
+                        set_margin_all: 5,
                         #[watch]
-                        set_visible: !model.is_running && !model.end_with_error,
-                        gtk::Image::from_icon_name("emblem-ok-symbolic") {
-                            set_size_request: (50, 50),
-                            set_icon_size: gtk::IconSize::Large,
-                        },
-                        gtk::Label {
-                            set_label: "Exécution terminée",
-                        },
-                    },
-                    gtk::Box {
-                        set_orientation: gtk::Orientation::Horizontal,
-                        set_halign: gtk::Align::Center,
-                        set_valign: gtk::Align::Center,
-                        #[watch]
-                        set_visible: !model.is_running && model.end_with_error,
-                        gtk::Image::from_icon_name("dialog-error-symbolic") {
-                            set_size_request: (50, 50),
-                            set_icon_size: gtk::IconSize::Large,
-                        },
-                        gtk::Label {
-                            set_label: "Erreur pendant l'exécution",
-                        },
+                        set_visible: model.displayed_worker.is_none() && model.show_debug,
+                        append: model.global_debug_view.widget(),
                     },
                     #[local_ref]
                     strategy_frames_stack -> gtk::Stack {
                         set_hexpand: true,
                         set_vexpand: true,
+                        #[watch]
+                        set_visible: model.displayed_worker.is_some(),
                     },
                     gtk::Box {
                         set_orientation: gtk::Orientation::Horizontal,
@@ -245,14 +275,17 @@ where
                 }
             });
 
+        let global_debug_view = DebugView::builder().launch(()).detach();
+
         let model = Dialog {
             hidden: true,
             is_running: false,
             end_with_error: false,
             show_debug: false,
+            global_debug_view,
             title,
             worker_strategies: Vec::new(),
-            displayed_worker: DISPLAY_WORKER_NUM as usize,
+            displayed_worker: None,
             strategy_frames,
             worker_dropdown,
             error_dialog,
@@ -282,28 +315,24 @@ where
                     0..strategy.worker_count.get(),
                     StrategyDisplayInput::Reset,
                 );
-                self.strategy_frames
-                    .widget()
-                    .set_visible_child_name(&DISPLAY_WORKER_NUM.to_string());
-                self.displayed_worker = DISPLAY_WORKER_NUM as usize;
+                self.displayed_worker = None;
                 self.worker_dropdown
                     .sender()
                     .send(crate::widgets::droplist::WidgetInput::UpdateList(
-                        self.worker_labels(),
-                        Some(DISPLAY_WORKER_NUM as usize),
+                        self.dropdown_labels(),
+                        Some(Self::worker_num_to_selected(self.displayed_worker)),
                     ))
                     .unwrap();
+                self.global_debug_view.emit(DebugViewInput::Clear);
 
                 let input = sender.input_sender().clone();
                 let log_input = input.clone();
                 let progress_input = input.clone();
                 let result_input = input.clone();
                 let log_cb = move |line: &str| {
-                    log_input.emit(DialogInput::Echo(line.trim_end().to_owned()));
+                    log_input.emit(DialogInput::Echo(line.to_owned()));
                 };
-                // The conductor hands us typed per-worker progress; mirror only the
-                // displayed worker, erasing its inner progress to the form the scalar
-                // display needs here at the (type-aware) Dialog boundary.
+                // The conductor hands us typed per-worker progress
                 let (_, progress_var_order) = model.to_desc();
                 let progress_cb = move |progress: Result<
                     ConductorProgress<InternalVar<B, E>>,
@@ -320,10 +349,7 @@ where
                             progress_input.emit(DialogInput::StrategyUpdate(worker_num, data));
                         }
                         Ok(ConductorProgress::WorkerEcho { worker_num, echo }) => {
-                            progress_input.emit(DialogInput::WorkerEcho(
-                                worker_num,
-                                echo.trim_end().to_owned(),
-                            ));
+                            progress_input.emit(DialogInput::WorkerEcho(worker_num, echo));
                         }
                         Ok(ConductorProgress::WorkerAssigned {
                             worker_num,
@@ -376,8 +402,8 @@ where
                     subprocess.kill();
                 }
             }
-            DialogInput::Echo(_line) => {
-                // For now, sink the conductor echo
+            DialogInput::Echo(line) => {
+                self.global_debug_view.emit(DebugViewInput::Append(line));
             }
             DialogInput::WorkerEcho(worker_num, line) => {
                 self.strategy_frames
@@ -391,8 +417,8 @@ where
                 self.worker_dropdown
                     .sender()
                     .send(crate::widgets::droplist::WidgetInput::UpdateList(
-                        self.worker_labels(),
-                        Some(self.displayed_worker),
+                        self.dropdown_labels(),
+                        Some(Self::worker_num_to_selected(self.displayed_worker)),
                     ))
                     .unwrap();
             }
@@ -403,14 +429,17 @@ where
                 );
             }
             DialogInput::SelectWorker(selected) => {
-                if let Some(worker_num) = selected {
-                    if self.displayed_worker == worker_num {
+                if let Some(selected) = selected {
+                    let display_worker = Self::selected_to_worker_num(selected);
+                    if self.displayed_worker == display_worker {
                         return;
                     }
-                    self.displayed_worker = worker_num;
-                    self.strategy_frames
-                        .widget()
-                        .set_visible_child_name(&worker_num.to_string());
+                    self.displayed_worker = display_worker;
+                    if let Some(worker_num) = display_worker {
+                        self.strategy_frames
+                            .widget()
+                            .set_visible_child_name(&worker_num.to_string());
+                    }
                 }
             }
             DialogInput::Finished(outcome) => {
@@ -456,14 +485,32 @@ where
 }
 
 impl<B: UsableData, E: UsableData, C: UsableData> Dialog<B, E, C> {
-    fn worker_labels(&self) -> Vec<String> {
-        self.worker_strategies
-            .iter()
-            .enumerate()
-            .map(|(i, kind)| match kind {
-                Some(k) => format!("Tâche {} : {}", i + 1, k.ui_name()),
-                None => format!("Tâche {}", i + 1),
-            })
+    fn dropdown_labels(&self) -> Vec<String> {
+        std::iter::once("Vue générale".to_string())
+            .chain(
+                self.worker_strategies
+                    .iter()
+                    .enumerate()
+                    .map(|(i, kind)| match kind {
+                        Some(k) => format!("Tâche {} : {}", i + 1, k.ui_name()),
+                        None => format!("Tâche {}", i + 1),
+                    }),
+            )
             .collect()
+    }
+
+    fn selected_to_worker_num(selected: usize) -> Option<u32> {
+        if selected == 0 {
+            None
+        } else {
+            Some((selected - 1) as u32)
+        }
+    }
+
+    fn worker_num_to_selected(num: Option<u32>) -> usize {
+        match num {
+            None => 0,
+            Some(i) => (i + 1) as usize,
+        }
     }
 }
