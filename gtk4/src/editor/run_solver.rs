@@ -1,4 +1,4 @@
-use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
+use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, ToggleButtonExt, WidgetExt};
 use relm4::{Component, ComponentController, adw, gtk};
 use relm4::{ComponentParts, ComponentSender, Controller, RelmWidgetExt};
 
@@ -16,10 +16,7 @@ mod error_dialog;
 mod strategy_display;
 mod warning_running;
 
-use strategy_display::{
-    StrategyDisplayInput, StrategyFrame, StrategyStatusBar, StrategyStatusBarOutput,
-    strategy_name_from_kind,
-};
+use strategy_display::{StrategyDisplayInput, StrategyFrame, strategy_name_from_kind};
 
 /// The conductor worker whose activity is mirrored into the dialog's frame and
 /// status bar. Only this *number* is hardcoded; everything else (which strategy,
@@ -31,10 +28,10 @@ pub struct Dialog<B: UsableData, E: UsableData, C: UsableData> {
     hidden: bool,
     is_running: bool,
     end_with_error: bool,
+    show_debug: bool,
     title: String,
     worker_strategy: Option<StrategyKind>,
     strategy_frame: Controller<StrategyFrame>,
-    strategy_status_bar: Controller<StrategyStatusBar>,
     error_dialog: Controller<error_dialog::Dialog>,
     warning_running: Controller<warning_running::Dialog>,
     subprocess: Option<StrategySubprocess>,
@@ -157,7 +154,54 @@ where
                             set_valign: gtk::Align::Center,
                             set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
                         },
-                        append = model.strategy_status_bar.widget(),
+                        gtk::Box {
+                            set_hexpand: true,
+                        },
+                        gtk::Box {
+                            set_orientation: gtk::Orientation::Horizontal,
+                            set_valign: gtk::Align::Center,
+                            set_spacing: 5,
+                            #[watch]
+                            set_visible: model.is_running,
+                            adw::Spinner {},
+                            gtk::Label {
+                                set_label: "Exécution en cours",
+                            },
+                        },
+                        gtk::Box {
+                            set_orientation: gtk::Orientation::Horizontal,
+                            set_valign: gtk::Align::Center,
+                            #[watch]
+                            set_visible: !model.is_running && !model.end_with_error,
+                            gtk::Image::from_icon_name("emblem-ok-symbolic") {
+                                set_size_request: (30, 30),
+                                set_icon_size: gtk::IconSize::Normal,
+                            },
+                            gtk::Label {
+                                set_label: "Exécution terminée",
+                            },
+                        },
+                        gtk::Box {
+                            set_orientation: gtk::Orientation::Horizontal,
+                            set_valign: gtk::Align::Center,
+                            #[watch]
+                            set_visible: !model.is_running && model.end_with_error,
+                            gtk::Image::from_icon_name("dialog-error-symbolic") {
+                                set_size_request: (30, 30),
+                                set_icon_size: gtk::IconSize::Normal,
+                            },
+                            gtk::Label {
+                                set_label: "Erreur pendant l'exécution",
+                            },
+                        },
+                        gtk::ToggleButton {
+                            set_icon_name: "utilities-terminal-symbolic",
+                            #[watch]
+                            set_active: model.show_debug,
+                            connect_toggled[sender] => move |btn| {
+                                sender.input(DialogInput::ToggleDebug(btn.is_active()));
+                            },
+                        },
                     },
                 }
             }
@@ -183,21 +227,14 @@ where
 
         let strategy_frame = StrategyFrame::builder().launch(()).detach();
 
-        let strategy_status_bar = StrategyStatusBar::builder().launch(()).forward(
-            sender.input_sender(),
-            |msg| match msg {
-                StrategyStatusBarOutput::ToggleDebug(active) => DialogInput::ToggleDebug(active),
-            },
-        );
-
         let model = Dialog {
             hidden: true,
             is_running: false,
             end_with_error: false,
+            show_debug: false,
             title,
             worker_strategy: None,
             strategy_frame,
-            strategy_status_bar,
             error_dialog,
             warning_running,
             subprocess: None,
@@ -216,6 +253,7 @@ where
                 self.hidden = false;
                 self.is_running = true;
                 self.end_with_error = false;
+                self.show_debug = false;
                 self.result_config = None;
                 self.worker_strategy = None;
                 self.emit_strategy(StrategyDisplayInput::Clear);
@@ -336,6 +374,10 @@ where
                 }
             }
             DialogInput::ToggleDebug(active) => {
+                if self.show_debug == active {
+                    return;
+                }
+                self.show_debug = active;
                 self.strategy_frame
                     .emit(StrategyDisplayInput::ToggleDebug(active));
             }
@@ -360,8 +402,7 @@ where
 
 impl<B: UsableData, E: UsableData, C: UsableData> Dialog<B, E, C> {
     fn emit_strategy(&self, input: StrategyDisplayInput) {
-        self.strategy_frame.emit(input.clone());
-        self.strategy_status_bar.emit(input);
+        self.strategy_frame.emit(input);
     }
 
     fn strategy_name_label(&self) -> String {

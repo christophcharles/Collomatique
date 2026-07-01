@@ -1,8 +1,6 @@
 mod strategy_frame;
-mod strategy_status_bar;
 
 pub use strategy_frame::StrategyFrame;
-pub use strategy_status_bar::{StrategyStatusBar, StrategyStatusBarOutput};
 
 use collomatique_strategies::{StrategyKind, StrategyProgressData};
 
