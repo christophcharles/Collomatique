@@ -32,7 +32,9 @@ pub struct Dialog<B: UsableData, E: UsableData, C: UsableData> {
     show_debug: bool,
     title: String,
     worker_strategies: Vec<Option<StrategyKind>>,
+    displayed_worker: usize,
     strategy_frames: FactoryVecDeque<StrategyFrame>,
+    worker_dropdown: Controller<crate::widgets::droplist::Widget>,
     error_dialog: Controller<error_dialog::Dialog>,
     warning_running: Controller<warning_running::Dialog>,
     subprocess: Option<StrategySubprocess>,
@@ -51,6 +53,7 @@ pub enum DialogInput<B: UsableData, E: UsableData, C: UsableData> {
     WorkerEcho(u32, String),
     WorkerAssigned(u32, Option<StrategyKind>),
     StrategyUpdate(u32, StrategyProgressData),
+    SelectWorker(Option<usize>),
     Finished(StrategyOutcome<InternalVar<B, E>>),
     ToggleDebug(bool),
     SpawnError(String),
@@ -153,12 +156,7 @@ where
                         set_margin_all: 10,
                         set_margin_top: 0,
                         set_spacing: 10,
-                        gtk::Label {
-                            #[watch]
-                            set_label: &model.strategy_name_label(),
-                            set_valign: gtk::Align::Center,
-                            set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
-                        },
+                        append: model.worker_dropdown.widget(),
                         gtk::Box {
                             set_hexpand: true,
                         },
@@ -234,6 +232,19 @@ where
             .launch(gtk::Stack::default())
             .detach();
 
+        let worker_dropdown = crate::widgets::droplist::Widget::builder()
+            .launch(crate::widgets::droplist::WidgetParams {
+                initial_list: Vec::new(),
+                initial_selected: None,
+                enable_search: false,
+                width_request: 200,
+            })
+            .forward(sender.input_sender(), |msg| match msg {
+                crate::widgets::droplist::WidgetOutput::SelectionChanged(num) => {
+                    DialogInput::SelectWorker(num)
+                }
+            });
+
         let model = Dialog {
             hidden: true,
             is_running: false,
@@ -241,7 +252,9 @@ where
             show_debug: false,
             title,
             worker_strategies: Vec::new(),
+            displayed_worker: DISPLAY_WORKER_NUM as usize,
             strategy_frames,
+            worker_dropdown,
             error_dialog,
             warning_running,
             subprocess: None,
@@ -272,6 +285,14 @@ where
                 self.strategy_frames
                     .widget()
                     .set_visible_child_name(&DISPLAY_WORKER_NUM.to_string());
+                self.displayed_worker = DISPLAY_WORKER_NUM as usize;
+                self.worker_dropdown
+                    .sender()
+                    .send(crate::widgets::droplist::WidgetInput::UpdateList(
+                        self.worker_labels(),
+                        Some(DISPLAY_WORKER_NUM as usize),
+                    ))
+                    .unwrap();
 
                 let input = sender.input_sender().clone();
                 let log_input = input.clone();
@@ -367,12 +388,30 @@ where
                 let name = assignment.as_ref().map(strategy_name_from_kind);
                 self.strategy_frames
                     .send(worker_num as usize, StrategyDisplayInput::Assigned(name));
+                self.worker_dropdown
+                    .sender()
+                    .send(crate::widgets::droplist::WidgetInput::UpdateList(
+                        self.worker_labels(),
+                        Some(self.displayed_worker),
+                    ))
+                    .unwrap();
             }
             DialogInput::StrategyUpdate(worker_num, progress) => {
                 self.strategy_frames.send(
                     worker_num as usize,
                     StrategyDisplayInput::StrategyUpdate(progress),
                 );
+            }
+            DialogInput::SelectWorker(selected) => {
+                if let Some(worker_num) = selected {
+                    if self.displayed_worker == worker_num {
+                        return;
+                    }
+                    self.displayed_worker = worker_num;
+                    self.strategy_frames
+                        .widget()
+                        .set_visible_child_name(&worker_num.to_string());
+                }
             }
             DialogInput::Finished(outcome) => {
                 self.is_running = false;
@@ -417,15 +456,14 @@ where
 }
 
 impl<B: UsableData, E: UsableData, C: UsableData> Dialog<B, E, C> {
-    fn strategy_name_label(&self) -> String {
-        let n = DISPLAY_WORKER_NUM + 1;
-        match self
-            .worker_strategies
-            .get(DISPLAY_WORKER_NUM as usize)
-            .and_then(Option::as_ref)
-        {
-            Some(kind) => format!("Tâche {n} : {}", kind.ui_name()),
-            None => format!("Tâche {n}"),
-        }
+    fn worker_labels(&self) -> Vec<String> {
+        self.worker_strategies
+            .iter()
+            .enumerate()
+            .map(|(i, kind)| match kind {
+                Some(k) => format!("Tâche {} : {}", i + 1, k.ui_name()),
+                None => format!("Tâche {}", i + 1),
+            })
+            .collect()
     }
 }
