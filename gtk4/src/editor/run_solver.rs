@@ -30,7 +30,7 @@ pub struct Dialog<B: UsableData, E: UsableData, C: UsableData> {
     end_with_error: bool,
     show_debug: bool,
     title: String,
-    worker_strategy: Option<StrategyKind>,
+    worker_strategy: Vec<Option<StrategyKind>>,
     strategy_frame: Controller<StrategyFrame>,
     error_dialog: Controller<error_dialog::Dialog>,
     warning_running: Controller<warning_running::Dialog>,
@@ -233,7 +233,7 @@ where
             end_with_error: false,
             show_debug: false,
             title,
-            worker_strategy: None,
+            worker_strategy: Vec::new(),
             strategy_frame,
             error_dialog,
             warning_running,
@@ -255,7 +255,7 @@ where
                 self.end_with_error = false;
                 self.show_debug = false;
                 self.result_config = None;
-                self.worker_strategy = None;
+                self.worker_strategy = vec![None; strategy.worker_count.get() as usize];
                 self.emit_strategy(StrategyDisplayInput::Clear);
 
                 let input = sender.input_sender().clone();
@@ -349,8 +349,8 @@ where
                 }
             }
             DialogInput::WorkerAssigned(worker_num, assignment) => {
+                self.worker_strategy[worker_num as usize] = assignment.clone();
                 if worker_num == DISPLAY_WORKER_NUM {
-                    self.worker_strategy = assignment.clone();
                     let name = assignment.as_ref().map(strategy_name_from_kind);
                     self.emit_strategy(StrategyDisplayInput::Assigned(name));
                 }
@@ -407,7 +407,11 @@ impl<B: UsableData, E: UsableData, C: UsableData> Dialog<B, E, C> {
 
     fn strategy_name_label(&self) -> String {
         let n = DISPLAY_WORKER_NUM + 1;
-        match &self.worker_strategy {
+        match self
+            .worker_strategy
+            .get(DISPLAY_WORKER_NUM as usize)
+            .and_then(Option::as_ref)
+        {
             Some(kind) => format!("Tâche {n} : {}", kind.ui_name()),
             None => format!("Tâche {n}"),
         }
