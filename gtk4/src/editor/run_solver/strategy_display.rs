@@ -1,8 +1,7 @@
 use gtk::prelude::{BoxExt, OrientableExt, WidgetExt};
-use relm4::{
-    Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
-    SimpleComponent, gtk,
-};
+use relm4::factory::{FactoryComponent, FactorySender, FactoryView};
+use relm4::prelude::DynamicIndex;
+use relm4::{Component, ComponentController, Controller, RelmWidgetExt, gtk};
 
 use collomatique_strategies::{SolveProgressData, StrategyKind, StrategyProgressData};
 
@@ -25,8 +24,9 @@ pub fn strategy_name_from_kind(kind: &StrategyKind) -> StrategyName {
 #[derive(Debug, Clone)]
 pub enum StrategyDisplayInput {
     Echo(String),
-    /// The conductor was launched: full reset of the display (metrics and echo).
-    Clear,
+    /// The conductor was (re)launched: full reset of the display (metrics and echo)
+    /// and (re)binding of this frame to the given worker number.
+    Reset(u32),
     /// The displayed worker was (re)assigned: `Some` = a substrategy is running,
     /// `None` = the worker went idle. The echo is preserved; the display marks the
     /// boundary itself.
@@ -37,16 +37,19 @@ pub enum StrategyDisplayInput {
 
 pub struct StrategyFrame {
     debug_view: Controller<DebugView>,
+    worker_num: u32,
     strategy_name: Option<StrategyName>,
     show_debug: bool,
     last_progress: Option<SolveProgressData>,
 }
 
-#[relm4::component(pub)]
-impl SimpleComponent for StrategyFrame {
-    type Init = ();
+#[relm4::factory(pub)]
+impl FactoryComponent for StrategyFrame {
+    type Init = u32;
     type Input = StrategyDisplayInput;
     type Output = ();
+    type CommandOutput = ();
+    type ParentWidget = gtk::Stack;
 
     view! {
         #[root]
@@ -61,15 +64,15 @@ impl SimpleComponent for StrategyFrame {
                 set_hexpand: true,
                 set_vexpand: true,
                 #[watch]
-                set_visible: model.show_debug,
-                append = model.debug_view.widget(),
+                set_visible: self.show_debug,
+                append = self.debug_view.widget(),
             },
             gtk::Frame {
                 set_margin_all: 5,
                 set_hexpand: true,
                 set_vexpand: true,
                 #[watch]
-                set_visible: !model.show_debug,
+                set_visible: !self.show_debug,
 
                 gtk::Box {
                     set_orientation: gtk::Orientation::Vertical,
@@ -84,57 +87,72 @@ impl SimpleComponent for StrategyFrame {
                         set_halign: gtk::Align::Center,
                         set_valign: gtk::Align::Center,
                         #[watch]
-                        set_visible: model.strategy_name == Some(StrategyName::Default),
+                        set_visible: self.strategy_name == Some(StrategyName::Default),
                         gtk::Label {
                             set_halign: gtk::Align::Start,
                             #[watch]
-                            set_label: &model.format_best_obj(),
+                            set_label: &self.format_best_obj(),
                         },
                         gtk::Label {
                             set_halign: gtk::Align::Start,
                             #[watch]
-                            set_label: &model.format_best_bound(),
+                            set_label: &self.format_best_bound(),
                         },
                         gtk::Label {
                             set_halign: gtk::Align::Start,
                             #[watch]
-                            set_label: &model.format_node_count(),
+                            set_label: &self.format_node_count(),
                         },
                         gtk::Label {
                             set_halign: gtk::Align::Start,
                             #[watch]
-                            set_label: &model.format_solutions_found(),
+                            set_label: &self.format_solutions_found(),
                         },
                     },
                 },
             },
+        },
+        #[local_ref]
+        returned_widget -> gtk::StackPage {
+            set_name: &self.worker_num.to_string(),
         }
     }
 
-    fn init(
-        _params: Self::Init,
-        root: Self::Root,
-        _sender: ComponentSender<Self>,
-    ) -> ComponentParts<Self> {
+    fn init_model(
+        worker_num: Self::Init,
+        _index: &DynamicIndex,
+        _sender: FactorySender<Self>,
+    ) -> Self {
         let debug_view = DebugView::builder().launch(()).detach();
 
-        let model = StrategyFrame {
+        StrategyFrame {
             debug_view,
+            worker_num,
             strategy_name: None,
             show_debug: false,
             last_progress: None,
-        };
-        let widgets = view_output!();
-        ComponentParts { model, widgets }
+        }
     }
 
-    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
+    fn init_widgets(
+        &mut self,
+        _index: &DynamicIndex,
+        root: Self::Root,
+        returned_widget: &<Self::ParentWidget as FactoryView>::ReturnedWidget,
+        _sender: FactorySender<Self>,
+    ) -> Self::Widgets {
+        let widgets = view_output!();
+        widgets
+    }
+
+    fn update(&mut self, msg: Self::Input, _sender: FactorySender<Self>) {
         match msg {
             StrategyDisplayInput::Echo(line) => {
                 self.debug_view
                     .emit(DebugViewInput::Append(format!("{line}\n")));
             }
-            StrategyDisplayInput::Clear => {
+            StrategyDisplayInput::Reset(worker_num) => {
+                self.worker_num = worker_num;
                 self.strategy_name = None;
                 self.show_debug = false;
                 self.last_progress = None;

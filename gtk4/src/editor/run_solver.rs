@@ -1,4 +1,5 @@
 use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, ToggleButtonExt, WidgetExt};
+use relm4::factory::FactoryVecDeque;
 use relm4::{Component, ComponentController, adw, gtk};
 use relm4::{ComponentParts, ComponentSender, Controller, RelmWidgetExt};
 
@@ -30,8 +31,8 @@ pub struct Dialog<B: UsableData, E: UsableData, C: UsableData> {
     end_with_error: bool,
     show_debug: bool,
     title: String,
-    worker_strategy: Vec<Option<StrategyKind>>,
-    strategy_frame: Controller<StrategyFrame>,
+    worker_strategies: Vec<Option<StrategyKind>>,
+    strategy_frames: FactoryVecDeque<StrategyFrame>,
     error_dialog: Controller<error_dialog::Dialog>,
     warning_running: Controller<warning_running::Dialog>,
     subprocess: Option<StrategySubprocess>,
@@ -141,7 +142,11 @@ where
                             set_label: "Erreur pendant l'exécution",
                         },
                     },
-                    append = model.strategy_frame.widget(),
+                    #[local_ref]
+                    strategy_frames_stack -> gtk::Stack {
+                        set_hexpand: true,
+                        set_vexpand: true,
+                    },
                     gtk::Box {
                         set_orientation: gtk::Orientation::Horizontal,
                         set_hexpand: true,
@@ -225,7 +230,9 @@ where
                 warning_running::DialogOutput::Accept => DialogInput::Cancel,
             });
 
-        let strategy_frame = StrategyFrame::builder().launch(()).detach();
+        let strategy_frames = FactoryVecDeque::builder()
+            .launch(gtk::Stack::default())
+            .detach();
 
         let model = Dialog {
             hidden: true,
@@ -233,8 +240,8 @@ where
             end_with_error: false,
             show_debug: false,
             title,
-            worker_strategy: Vec::new(),
-            strategy_frame,
+            worker_strategies: Vec::new(),
+            strategy_frames,
             error_dialog,
             warning_running,
             subprocess: None,
@@ -242,6 +249,7 @@ where
             _phantom: PhantomData,
         };
 
+        let strategy_frames_stack = model.strategy_frames.widget();
         let widgets = view_output!();
 
         ComponentParts { model, widgets }
@@ -255,8 +263,15 @@ where
                 self.end_with_error = false;
                 self.show_debug = false;
                 self.result_config = None;
-                self.worker_strategy = vec![None; strategy.worker_count.get() as usize];
-                self.emit_strategy(StrategyDisplayInput::Clear);
+                self.worker_strategies = vec![None; strategy.worker_count.get() as usize];
+                crate::tools::factories::update_vec_deque(
+                    &mut self.strategy_frames,
+                    0..strategy.worker_count.get(),
+                    StrategyDisplayInput::Reset,
+                );
+                self.strategy_frames
+                    .widget()
+                    .set_visible_child_name(&DISPLAY_WORKER_NUM.to_string());
 
                 let input = sender.input_sender().clone();
                 let log_input = input.clone();
@@ -344,21 +359,20 @@ where
                 // For now, sink the conductor echo
             }
             DialogInput::WorkerEcho(worker_num, line) => {
-                if worker_num == DISPLAY_WORKER_NUM {
-                    self.emit_strategy(StrategyDisplayInput::Echo(line));
-                }
+                self.strategy_frames
+                    .send(worker_num as usize, StrategyDisplayInput::Echo(line));
             }
             DialogInput::WorkerAssigned(worker_num, assignment) => {
-                self.worker_strategy[worker_num as usize] = assignment.clone();
-                if worker_num == DISPLAY_WORKER_NUM {
-                    let name = assignment.as_ref().map(strategy_name_from_kind);
-                    self.emit_strategy(StrategyDisplayInput::Assigned(name));
-                }
+                self.worker_strategies[worker_num as usize] = assignment.clone();
+                let name = assignment.as_ref().map(strategy_name_from_kind);
+                self.strategy_frames
+                    .send(worker_num as usize, StrategyDisplayInput::Assigned(name));
             }
             DialogInput::StrategyUpdate(worker_num, progress) => {
-                if worker_num == DISPLAY_WORKER_NUM {
-                    self.emit_strategy(StrategyDisplayInput::StrategyUpdate(progress));
-                }
+                self.strategy_frames.send(
+                    worker_num as usize,
+                    StrategyDisplayInput::StrategyUpdate(progress),
+                );
             }
             DialogInput::Finished(outcome) => {
                 self.is_running = false;
@@ -378,8 +392,10 @@ where
                     return;
                 }
                 self.show_debug = active;
-                self.strategy_frame
-                    .emit(StrategyDisplayInput::ToggleDebug(active));
+                for i in 0..self.strategy_frames.len() {
+                    self.strategy_frames
+                        .send(i, StrategyDisplayInput::ToggleDebug(active));
+                }
             }
             DialogInput::SpawnError(error) => {
                 self.is_running = false;
@@ -401,14 +417,10 @@ where
 }
 
 impl<B: UsableData, E: UsableData, C: UsableData> Dialog<B, E, C> {
-    fn emit_strategy(&self, input: StrategyDisplayInput) {
-        self.strategy_frame.emit(input);
-    }
-
     fn strategy_name_label(&self) -> String {
         let n = DISPLAY_WORKER_NUM + 1;
         match self
-            .worker_strategy
+            .worker_strategies
             .get(DISPLAY_WORKER_NUM as usize)
             .and_then(Option::as_ref)
         {
