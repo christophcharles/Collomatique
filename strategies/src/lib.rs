@@ -369,6 +369,9 @@ pub trait Strategy: Send + Sync {
 
     fn name(&self) -> &'static str;
 
+    /// Human-facing French name, shown in the UI.
+    fn ui_name(&self) -> &'static str;
+
     async fn run_with_callback<B, E, C>(
         &self,
         ctx: &StrategyContext,
@@ -688,6 +691,15 @@ impl Strategy for StrategyKind {
             StrategyKind::NoObjective(s) => s.name(),
             StrategyKind::NoObjectiveStarter(s) => s.name(),
             StrategyKind::Conductor(s) => s.name(),
+        }
+    }
+
+    fn ui_name(&self) -> &'static str {
+        match self {
+            StrategyKind::Default(s) => s.ui_name(),
+            StrategyKind::NoObjective(s) => s.ui_name(),
+            StrategyKind::NoObjectiveStarter(s) => s.ui_name(),
+            StrategyKind::Conductor(s) => s.ui_name(),
         }
     }
 

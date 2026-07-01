@@ -1,15 +1,11 @@
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, ToggleButtonExt, WidgetExt};
 use relm4::{ComponentParts, ComponentSender, SimpleComponent, adw, gtk};
 
-use collomatique_strategies::SolveStatus;
-
 use super::StrategyDisplayInput;
 
 pub struct StrategyStatusBar {
     show_debug: bool,
     is_running: bool,
-    end_with_error: bool,
-    ipc_error: Option<String>,
 }
 
 #[derive(Debug)]
@@ -28,13 +24,6 @@ impl SimpleComponent for StrategyStatusBar {
         gtk::Box {
             set_orientation: gtk::Orientation::Horizontal,
             set_spacing: 10,
-            gtk::Image::from_icon_name("dialog-warning-symbolic") {
-                set_valign: gtk::Align::Center,
-                #[watch]
-                set_visible: model.ipc_error.is_some(),
-                #[watch]
-                set_tooltip_text: model.ipc_error.as_deref(),
-            },
             gtk::Box {
                 set_hexpand: true,
             },
@@ -53,26 +42,10 @@ impl SimpleComponent for StrategyStatusBar {
                 set_orientation: gtk::Orientation::Horizontal,
                 set_valign: gtk::Align::Center,
                 #[watch]
-                set_visible: !model.is_running && !model.end_with_error,
-                gtk::Image::from_icon_name("emblem-ok-symbolic") {
-                    set_size_request: (30, 30),
-                    set_icon_size: gtk::IconSize::Normal,
-                },
+                set_visible: !model.is_running,
                 gtk::Label {
-                    set_label: "Exécution terminée",
-                },
-            },
-            gtk::Box {
-                set_orientation: gtk::Orientation::Horizontal,
-                set_valign: gtk::Align::Center,
-                #[watch]
-                set_visible: !model.is_running && model.end_with_error,
-                gtk::Image::from_icon_name("dialog-error-symbolic") {
-                    set_size_request: (30, 30),
-                    set_icon_size: gtk::IconSize::Normal,
-                },
-                gtk::Label {
-                    set_label: "Erreur pendant l'exécution",
+                    set_label: "À l'arrêt",
+                    set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
                 },
             },
             gtk::ToggleButton {
@@ -95,8 +68,6 @@ impl SimpleComponent for StrategyStatusBar {
         let model = StrategyStatusBar {
             show_debug: false,
             is_running: false,
-            end_with_error: false,
-            ipc_error: None,
         };
         let widgets = view_output!();
         ComponentParts { model, widgets }
@@ -104,21 +75,12 @@ impl SimpleComponent for StrategyStatusBar {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         match msg {
-            StrategyDisplayInput::Clear(_) => {
+            StrategyDisplayInput::Clear => {
                 self.show_debug = false;
                 self.is_running = true;
-                self.end_with_error = false;
-                self.ipc_error = None;
             }
-            StrategyDisplayInput::StrategyUpdate(progress) => {
-                if let Err(e) = progress {
-                    self.ipc_error = Some(format!("Erreur IPC : {e}"));
-                }
-            }
-            StrategyDisplayInput::Finished(status) => {
-                self.is_running = false;
-                self.end_with_error =
-                    matches!(status, SolveStatus::Error | SolveStatus::Infeasible);
+            StrategyDisplayInput::Assigned(assignment) => {
+                self.is_running = assignment.is_some();
             }
             StrategyDisplayInput::ToggleDebug(toggle) => {
                 if self.show_debug == toggle {
@@ -129,7 +91,7 @@ impl SimpleComponent for StrategyStatusBar {
                     .output(StrategyStatusBarOutput::ToggleDebug(toggle))
                     .unwrap();
             }
-            StrategyDisplayInput::Echo(_) => {}
+            StrategyDisplayInput::Echo(_) | StrategyDisplayInput::StrategyUpdate(_) => {}
         }
     }
 }

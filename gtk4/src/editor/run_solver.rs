@@ -7,8 +7,8 @@ use std::marker::PhantomData;
 use collomatique_ilp::{ConfigData, UsableData};
 use collomatique_ilp_modeler::{InternalVar, Model};
 use collomatique_strategies::{
-    SerializableProgress, SolveStatus, StrategyKind, StrategyOutcome, StrategyProgress,
-    StrategyProgressData,
+    ConductorProgress, ConductorStrategy, SerializableProgress, SolveStatus, Strategy,
+    StrategyKind, StrategyOutcome, StrategyProgressData,
 };
 use collomatique_subprocesses::StrategySubprocess;
 
@@ -17,16 +17,22 @@ mod strategy_display;
 mod warning_running;
 
 use strategy_display::{
-    StrategyDisplayInput, StrategyFrame, StrategyName, StrategyStatusBar, StrategyStatusBarOutput,
+    StrategyDisplayInput, StrategyFrame, StrategyStatusBar, StrategyStatusBarOutput,
     strategy_name_from_kind,
 };
+
+/// The conductor worker whose activity is mirrored into the dialog's frame and
+/// status bar. Only this *number* is hardcoded; everything else (which strategy,
+/// its name, metrics, echo) is derived from the live `ConductorProgress` stream, so
+/// this generalizes to N workers later.
+const DISPLAY_WORKER_NUM: u32 = 0;
 
 pub struct Dialog<B: UsableData, E: UsableData, C: UsableData> {
     hidden: bool,
     is_running: bool,
     end_with_error: bool,
     title: String,
-    strategy_name: Option<StrategyName>,
+    worker_strategy: Option<StrategyKind>,
     strategy_frame: Controller<StrategyFrame>,
     strategy_status_bar: Controller<StrategyStatusBar>,
     error_dialog: Controller<error_dialog::Dialog>,
@@ -38,13 +44,15 @@ pub struct Dialog<B: UsableData, E: UsableData, C: UsableData> {
 
 #[derive(Debug)]
 pub enum DialogInput<B: UsableData, E: UsableData, C: UsableData> {
-    Run(StrategyKind, Model<B, E, C>),
+    Run(ConductorStrategy, Model<B, E, C>),
     CancelRequest,
     Accept,
 
     Cancel,
     Echo(String),
-    StrategyUpdate(Result<StrategyProgressData, String>),
+    WorkerEcho(u32, String),
+    WorkerAssigned(u32, Option<StrategyKind>),
+    StrategyUpdate(u32, StrategyProgressData),
     Finished(StrategyOutcome<InternalVar<B, E>>),
     ToggleDebug(bool),
     SpawnError(String),
@@ -187,7 +195,7 @@ where
             is_running: false,
             end_with_error: false,
             title,
-            strategy_name: None,
+            worker_strategy: None,
             strategy_frame,
             strategy_status_bar,
             error_dialog,
@@ -209,9 +217,8 @@ where
                 self.is_running = true;
                 self.end_with_error = false;
                 self.result_config = None;
-                let name = strategy_name_from_kind(&strategy);
-                self.strategy_name = Some(name);
-                self.emit_strategy(StrategyDisplayInput::Clear(name));
+                self.worker_strategy = None;
+                self.emit_strategy(StrategyDisplayInput::Clear);
 
                 let input = sender.input_sender().clone();
                 let log_input = input.clone();
@@ -220,17 +227,47 @@ where
                 let log_cb = move |line: &str| {
                     log_input.emit(DialogInput::Echo(line.trim_end().to_owned()));
                 };
-                // The subprocess hands us typed progress; the scalar display only needs the
-                // erased form, so erase it here at the (type-aware) Dialog boundary.
+                // The conductor hands us typed per-worker progress; mirror only the
+                // displayed worker, erasing its inner progress to the form the scalar
+                // display needs here at the (type-aware) Dialog boundary.
                 let (_, progress_var_order) = model.to_desc();
-                let progress_cb =
-                    move |progress: Result<StrategyProgress<InternalVar<B, E>>, String>| {
-                        let erased = progress.map(|p| {
-                            SerializableProgress::into_data(&p, &progress_var_order)
-                                .unwrap_or_else(|e| match e {})
-                        });
-                        progress_input.emit(DialogInput::StrategyUpdate(erased));
-                    };
+                let progress_cb = move |progress: Result<
+                    ConductorProgress<InternalVar<B, E>>,
+                    String,
+                >| {
+                    match progress {
+                        Ok(ConductorProgress::Worker {
+                            worker_num,
+                            progress,
+                        }) => {
+                            let data =
+                                SerializableProgress::into_data(&*progress, &progress_var_order)
+                                    .unwrap_or_else(|e| match e {});
+                            progress_input.emit(DialogInput::StrategyUpdate(worker_num, data));
+                        }
+                        Ok(ConductorProgress::WorkerEcho { worker_num, echo }) => {
+                            progress_input.emit(DialogInput::WorkerEcho(
+                                worker_num,
+                                echo.trim_end().to_owned(),
+                            ));
+                        }
+                        Ok(ConductorProgress::WorkerAssigned {
+                            worker_num,
+                            strategy,
+                        }) => {
+                            progress_input.emit(DialogInput::WorkerAssigned(
+                                worker_num,
+                                strategy.map(|b| *b),
+                            ));
+                        }
+                        // TODO: a top-level Err is not attributable to a specific worker
+                        // (we can't decode which one). `todo!()` so it fails loudly rather
+                        // than vanishing.
+                        Err(_e) => todo!("surface non-worker-attributable strategy IPC errors"),
+                        // Conductor aggregate + non-displayed workers: ignored for now.
+                        _ => {}
+                    }
+                };
                 let result_cb = move |outcome: StrategyOutcome<InternalVar<B, E>>| {
                     result_input.emit(DialogInput::Finished(outcome));
                 };
@@ -265,14 +302,27 @@ where
                     subprocess.kill();
                 }
             }
-            DialogInput::Echo(line) => {
-                self.emit_strategy(StrategyDisplayInput::Echo(line));
+            DialogInput::Echo(_line) => {
+                // For now, sink the conductor echo
             }
-            DialogInput::StrategyUpdate(progress) => {
-                self.emit_strategy(StrategyDisplayInput::StrategyUpdate(progress));
+            DialogInput::WorkerEcho(worker_num, line) => {
+                if worker_num == DISPLAY_WORKER_NUM {
+                    self.emit_strategy(StrategyDisplayInput::Echo(line));
+                }
+            }
+            DialogInput::WorkerAssigned(worker_num, assignment) => {
+                if worker_num == DISPLAY_WORKER_NUM {
+                    self.worker_strategy = assignment.clone();
+                    let name = assignment.as_ref().map(strategy_name_from_kind);
+                    self.emit_strategy(StrategyDisplayInput::Assigned(name));
+                }
+            }
+            DialogInput::StrategyUpdate(worker_num, progress) => {
+                if worker_num == DISPLAY_WORKER_NUM {
+                    self.emit_strategy(StrategyDisplayInput::StrategyUpdate(progress));
+                }
             }
             DialogInput::Finished(outcome) => {
-                self.emit_strategy(StrategyDisplayInput::Finished(outcome.status.clone()));
                 self.is_running = false;
                 self.subprocess = None;
 
@@ -315,9 +365,10 @@ impl<B: UsableData, E: UsableData, C: UsableData> Dialog<B, E, C> {
     }
 
     fn strategy_name_label(&self) -> String {
-        match self.strategy_name {
-            Some(StrategyName::Default) => "Stratégie par défaut".to_owned(),
-            None => String::new(),
+        let n = DISPLAY_WORKER_NUM + 1;
+        match &self.worker_strategy {
+            Some(kind) => format!("Tâche {n} : {}", kind.ui_name()),
+            None => format!("Tâche {n}"),
         }
     }
 }

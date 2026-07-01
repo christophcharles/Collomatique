@@ -109,25 +109,36 @@ impl SimpleComponent for StrategyFrame {
                 self.debug_view
                     .emit(DebugViewInput::Append(format!("{line}\n")));
             }
-            StrategyDisplayInput::Clear(name) => {
-                self.strategy_name = Some(name);
+            StrategyDisplayInput::Clear => {
+                self.strategy_name = None;
                 self.show_debug = false;
                 self.last_progress = None;
                 self.debug_view.emit(DebugViewInput::Clear);
             }
+            StrategyDisplayInput::Assigned(Some(name)) => {
+                // A new substrategy starts: reset the metrics but keep the echo, marking
+                // the boundary in the log so worker switches stay legible.
+                self.strategy_name = Some(name);
+                self.last_progress = None;
+                self.debug_view.emit(DebugViewInput::Append(format!(
+                    "\n=== Worker assigned: {name:?} ===\n\n"
+                )));
+            }
+            StrategyDisplayInput::Assigned(None) => {
+                // The worker went idle: metrics and strategy name persist (final figures
+                // stay on screen); just mark the boundary.
+                self.debug_view.emit(DebugViewInput::Append(
+                    "\n=== Worker is idle ===\n\n".to_owned(),
+                ));
+            }
             StrategyDisplayInput::StrategyUpdate(progress) => match progress {
-                Ok(StrategyProgressData::Default(p)) => {
+                StrategyProgressData::Default(p) => {
                     self.last_progress = Some(p);
                 }
-                Ok(StrategyProgressData::NoObjective(_)) => todo!(),
-                Ok(StrategyProgressData::NoObjectiveStarter(_)) => todo!(),
-                Ok(StrategyProgressData::Conductor(_)) => todo!(),
-                Err(e) => {
-                    self.debug_view
-                        .emit(DebugViewInput::Append(format!("[ /!\\ IPC Error ] {e}\n")));
-                }
+                StrategyProgressData::NoObjective(_) => todo!(),
+                StrategyProgressData::NoObjectiveStarter(_) => todo!(),
+                StrategyProgressData::Conductor(_) => todo!(),
             },
-            StrategyDisplayInput::Finished(_) => {}
             StrategyDisplayInput::ToggleDebug(active) => {
                 self.show_debug = active;
             }

@@ -22,6 +22,10 @@ impl Strategy for DefaultStrategy {
         "default"
     }
 
+    fn ui_name(&self) -> &'static str {
+        "Stratégie par défaut"
+    }
+
     async fn run_with_callback<B, E, C>(
         &self,
         ctx: &StrategyContext,

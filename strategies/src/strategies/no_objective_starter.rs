@@ -28,6 +28,10 @@ impl Strategy for NoObjectiveStarterStrategy {
         "no-obj-starter"
     }
 
+    fn ui_name(&self) -> &'static str {
+        "Résolution avec préamorçage"
+    }
+
     async fn run_with_callback<B, E, C>(
         &self,
         ctx: &StrategyContext,

@@ -4,7 +4,7 @@ mod strategy_status_bar;
 pub use strategy_frame::StrategyFrame;
 pub use strategy_status_bar::{StrategyStatusBar, StrategyStatusBarOutput};
 
-use collomatique_strategies::{SolveStatus, StrategyKind, StrategyProgressData};
+use collomatique_strategies::{StrategyKind, StrategyProgressData};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StrategyName {
@@ -23,8 +23,12 @@ pub fn strategy_name_from_kind(kind: &StrategyKind) -> StrategyName {
 #[derive(Debug, Clone)]
 pub enum StrategyDisplayInput {
     Echo(String),
-    Clear(StrategyName),
-    StrategyUpdate(Result<StrategyProgressData, String>),
-    Finished(SolveStatus),
+    /// The conductor was launched: full reset of the display (metrics and echo).
+    Clear,
+    /// The displayed worker was (re)assigned: `Some` = a substrategy is running,
+    /// `None` = the worker went idle. The echo is preserved; the display marks the
+    /// boundary itself.
+    Assigned(Option<StrategyName>),
+    StrategyUpdate(StrategyProgressData),
     ToggleDebug(bool),
 }

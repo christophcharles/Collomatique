@@ -27,6 +27,10 @@ impl Strategy for NoObjectiveStrategy {
         "no-obj"
     }
 
+    fn ui_name(&self) -> &'static str {
+        "Résolution avec objectif désactivé"
+    }
+
     async fn run_with_callback<B, E, C>(
         &self,
         ctx: &StrategyContext,

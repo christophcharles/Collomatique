@@ -555,6 +555,10 @@ impl Strategy for ConductorStrategy {
         "conductor"
     }
 
+    fn ui_name(&self) -> &'static str {
+        "Coordinateur"
+    }
+
     async fn run_with_callback<B, E, C>(
         &self,
         ctx: &StrategyContext,
