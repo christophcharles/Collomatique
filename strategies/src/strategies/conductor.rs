@@ -45,7 +45,7 @@ pub enum ConductorProgress<V: UsableData + Send> {
         strategy: Option<Box<StrategyKind>>,
     },
     /// An inner progress update forwarded from a worker's substrategy.
-    Worker {
+    WorkerProgress {
         worker_num: u32,
         progress: Box<StrategyProgress<V>>,
     },
@@ -88,7 +88,7 @@ impl<V: UsableData + Send> fmt::Display for ConductorProgress<V> {
                 Some(s) => write!(f, "[worker {worker_num}] assigned: {} strategy", s.name()),
                 None => write!(f, "[worker {worker_num}] idle"),
             },
-            ConductorProgress::Worker {
+            ConductorProgress::WorkerProgress {
                 worker_num,
                 progress,
             } => write!(f, "[worker {worker_num}] {progress}"),
@@ -125,7 +125,7 @@ pub enum ConductorProgressData {
         worker_num: u32,
         strategy: Option<Box<StrategyKind>>,
     },
-    Worker {
+    WorkerProgress {
         worker_num: u32,
         progress: Box<StrategyProgressData>,
     },
@@ -163,7 +163,7 @@ impl fmt::Display for ConductorProgressData {
                 Some(s) => write!(f, "[worker {worker_num}] assigned: {} strategy", s.name()),
                 None => write!(f, "[worker {worker_num}] idle"),
             },
-            ConductorProgressData::Worker {
+            ConductorProgressData::WorkerProgress {
                 worker_num,
                 progress,
             } => write!(f, "[worker {worker_num}] {progress}"),
@@ -216,13 +216,13 @@ impl<V: UsableData + Send> ConductorProgress<V> {
                 worker_num,
                 strategy,
             },
-            ConductorProgress::Worker {
+            ConductorProgress::WorkerProgress {
                 worker_num,
                 progress,
             } => {
                 let data = SerializableProgress::into_data(progress.as_ref(), var_order)
                     .unwrap_or_else(|e: Infallible| match e {});
-                ConductorProgressData::Worker {
+                ConductorProgressData::WorkerProgress {
                     worker_num,
                     progress: Box::new(data),
                 }
@@ -248,7 +248,7 @@ impl ConductorProgressData {
                 worker_num,
                 strategy,
             },
-            ConductorProgressData::Worker {
+            ConductorProgressData::WorkerProgress {
                 worker_num,
                 progress,
             } => {
@@ -257,7 +257,7 @@ impl ConductorProgressData {
                     var_order,
                 )
                 .unwrap_or_else(|e: Infallible| match e {});
-                ConductorProgress::Worker {
+                ConductorProgress::WorkerProgress {
                     worker_num,
                     progress: Box::new(typed),
                 }
@@ -392,7 +392,7 @@ where
     let sp: StrategyProgress<V> = progress.into();
 
     // Always route the raw worker update upstairs.
-    let cont = on_progress(ConductorProgress::Worker {
+    let cont = on_progress(ConductorProgress::WorkerProgress {
         worker_num,
         progress: Box::new(sp.clone()),
     });
@@ -432,7 +432,7 @@ where
         StrategyProgress::NoObjective(_)
         | StrategyProgress::NoObjectiveStarter(NoObjectiveStarterProgress::Starter(_))
         | StrategyProgress::Conductor(
-            ConductorProgress::Worker { .. }
+            ConductorProgress::WorkerProgress { .. }
             | ConductorProgress::WorkerAssigned { .. }
             | ConductorProgress::WorkerEcho { .. },
         ) => None,
@@ -701,7 +701,7 @@ mod tests {
         let restored: ConductorProgressData = serde_json::from_str(&json).unwrap();
         assert_eq!(restored, idle);
 
-        let inner = ConductorProgressData::Worker {
+        let inner = ConductorProgressData::WorkerProgress {
             worker_num: 0,
             progress: Box::new(StrategyProgressData::Default(SolveProgressData {
                 best_obj: 1.5,
@@ -761,7 +761,7 @@ mod tests {
     fn tag(p: &ConductorProgress<usize>) -> &'static str {
         match p {
             ConductorProgress::Conductor(_) => "conductor",
-            ConductorProgress::Worker { .. } => "worker",
+            ConductorProgress::WorkerProgress { .. } => "worker",
             ConductorProgress::WorkerAssigned { .. } => "assigned",
             ConductorProgress::WorkerEcho { .. } => "echo",
         }

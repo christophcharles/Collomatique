@@ -850,7 +850,7 @@ async fn conductor_solve(model: &collomatique_constraints_colloscopes::Colloscop
                     }
                     None => eprintln!("  [conductor] worker {worker_num} idle"),
                 },
-                ConductorProgress::Worker {
+                ConductorProgress::WorkerProgress {
                     worker_num,
                     progress,
                 } => {

@@ -274,7 +274,7 @@ where
                     String,
                 >| {
                     match progress {
-                        Ok(ConductorProgress::Worker {
+                        Ok(ConductorProgress::WorkerProgress {
                             worker_num,
                             progress,
                         }) => {
