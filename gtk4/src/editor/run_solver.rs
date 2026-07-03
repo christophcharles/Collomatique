@@ -8,8 +8,8 @@ use std::marker::PhantomData;
 use collomatique_ilp::{ConfigData, UsableData};
 use collomatique_ilp_modeler::{InternalVar, Model};
 use collomatique_strategies::{
-    ConductorProgress, ConductorStrategy, SerializableProgress, SolveStatus, Strategy,
-    StrategyKind, StrategyOutcome, StrategyProgressData,
+    ConductorProgress, ConductorStatus, ConductorStrategy, SerializableProgress, Solution,
+    SolveStatus, Strategy, StrategyKind, StrategyOutcome, StrategyProgressData,
 };
 use collomatique_subprocesses::StrategySubprocess;
 
@@ -35,6 +35,7 @@ pub struct Dialog<B: UsableData, E: UsableData, C: UsableData> {
     warning_running: Controller<warning_running::Dialog>,
     subprocess: Option<StrategySubprocess>,
     result_config: Option<ConfigData<InternalVar<B, E>>>,
+    conductor_status: ConductorStatus<InternalVar<B, E>>,
     _phantom: PhantomData<fn() -> C>,
 }
 
@@ -49,6 +50,7 @@ pub enum DialogInput<B: UsableData, E: UsableData, C: UsableData> {
     WorkerEcho(u32, String),
     WorkerAssigned(u32, Option<StrategyKind>),
     StrategyUpdate(u32, StrategyProgressData),
+    ConductorStatus(ConductorStatus<InternalVar<B, E>>),
     SelectWorker(Option<usize>),
     Finished(StrategyOutcome<InternalVar<B, E>>),
     ToggleDebug(bool),
@@ -292,6 +294,10 @@ where
             warning_running,
             subprocess: None,
             result_config: None,
+            conductor_status: ConductorStatus {
+                best_solution: None,
+                best_bound: None,
+            },
             _phantom: PhantomData,
         };
 
@@ -309,6 +315,10 @@ where
                 self.end_with_error = false;
                 self.show_debug = false;
                 self.result_config = None;
+                self.conductor_status = ConductorStatus {
+                    best_solution: None,
+                    best_bound: None,
+                };
                 self.worker_strategies = vec![None; strategy.worker_count.get() as usize];
                 crate::tools::factories::update_vec_deque(
                     &mut self.strategy_frames,
@@ -339,6 +349,9 @@ where
                     String,
                 >| {
                     match progress {
+                        Ok(ConductorProgress::Conductor(status)) => {
+                            progress_input.emit(DialogInput::ConductorStatus(status));
+                        }
                         Ok(ConductorProgress::WorkerProgress {
                             worker_num,
                             progress,
@@ -364,8 +377,6 @@ where
                         // (we can't decode which one). `todo!()` so it fails loudly rather
                         // than vanishing.
                         Err(_e) => todo!("surface non-worker-attributable strategy IPC errors"),
-                        // Conductor aggregate + non-displayed workers: ignored for now.
-                        _ => {}
                     }
                 };
                 let result_cb = move |outcome: StrategyOutcome<InternalVar<B, E>>| {
@@ -428,6 +439,9 @@ where
                     StrategyDisplayInput::StrategyUpdate(progress),
                 );
             }
+            DialogInput::ConductorStatus(status) => {
+                self.conductor_status = status;
+            }
             DialogInput::SelectWorker(selected) => {
                 if let Some(selected) = selected {
                     let display_worker = Self::selected_to_worker_num(selected);
@@ -448,6 +462,18 @@ where
 
                 let usable =
                     !matches!(outcome.status, SolveStatus::Error | SolveStatus::Infeasible);
+                self.conductor_status = ConductorStatus {
+                    best_solution: if usable {
+                        outcome
+                            .solution
+                            .clone()
+                            .zip(outcome.objective)
+                            .map(|(config, objective)| Solution { config, objective })
+                    } else {
+                        None
+                    },
+                    best_bound: outcome.best_bound,
+                };
                 match (usable, outcome.solution) {
                     (true, Some(config)) => {
                         self.result_config = Some(config);
