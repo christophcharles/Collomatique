@@ -3,7 +3,10 @@ use relm4::factory::{FactoryComponent, FactorySender, FactoryView};
 use relm4::prelude::DynamicIndex;
 use relm4::{Component, ComponentController, Controller, RelmWidgetExt, adw, gtk};
 
-use collomatique_strategies::{SolveProgressData, StrategyKind, StrategyProgressData};
+use collomatique_strategies::{
+    ConductorProgressData, NoObjectiveProgressData, NoObjectiveStarterProgressData, StrategyKind,
+    StrategyProgressData,
+};
 
 use crate::widgets::debug_view::{DebugView, DebugViewInput};
 
@@ -28,7 +31,7 @@ pub struct StrategyFrame {
     idle: bool,
     show_debug: bool,
     last_line: String,
-    last_progress: Option<SolveProgressData>,
+    last_progress: Option<StrategyProgressData>,
 }
 
 #[relm4::factory(pub)]
@@ -92,7 +95,7 @@ impl FactoryComponent for StrategyFrame {
                                         use collomatique_strategies::Strategy;
                                         strat.ui_name()
                                     }
-                                ).unwrap_or_default()),
+                                ).unwrap_or("non-attribuée")),
                                 set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
                             },
                             gtk::Label {
@@ -146,7 +149,7 @@ impl FactoryComponent for StrategyFrame {
                                 },
                                 gtk::Label {
                                     #[watch]
-                                    set_label: &self.format_best_obj(),
+                                    set_label: &self.default_best_obj(),
                                 },
                             },
                             gtk::Box {
@@ -157,7 +160,7 @@ impl FactoryComponent for StrategyFrame {
                                 },
                                 gtk::Label {
                                     #[watch]
-                                    set_label: &self.format_best_bound(),
+                                    set_label: &self.default_best_bound(),
                                 },
                             },
                             gtk::Box {
@@ -168,7 +171,7 @@ impl FactoryComponent for StrategyFrame {
                                 },
                                 gtk::Label {
                                     #[watch]
-                                    set_label: &self.format_node_count(),
+                                    set_label: &self.default_node_count(),
                                 },
                             },
                             gtk::Box {
@@ -179,7 +182,139 @@ impl FactoryComponent for StrategyFrame {
                                 },
                                 gtk::Label {
                                     #[watch]
-                                    set_label: &self.format_solutions_found(),
+                                    set_label: &self.default_solutions_found(),
+                                },
+                            },
+                        },
+                        gtk::Box {
+                            set_orientation: gtk::Orientation::Vertical,
+                            set_margin_all: 5,
+                            set_hexpand: true,
+                            set_vexpand: true,
+                            set_halign: gtk::Align::Center,
+                            set_valign: gtk::Align::Center,
+                            set_spacing: 5,
+                            #[watch]
+                            set_visible: matches!(self.strategy_kind, Some(StrategyKind::NoObjective { .. })),
+                            gtk::Box {
+                                set_orientation: gtk::Orientation::Horizontal,
+                                gtk::Label {
+                                    set_label: "Étape : ",
+                                    set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                                },
+                                gtk::Label {
+                                    #[watch]
+                                    set_label: &self.no_obj_step(),
+                                },
+                            },
+                            gtk::Box {
+                                set_orientation: gtk::Orientation::Horizontal,
+                                gtk::Label {
+                                    set_label: "Coût obtenu : ",
+                                    set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                                },
+                                gtk::Label {
+                                    #[watch]
+                                    set_label: &self.no_obj_cost(),
+                                },
+                            },
+                        },
+                        gtk::Box {
+                            set_orientation: gtk::Orientation::Vertical,
+                            set_margin_all: 5,
+                            set_hexpand: true,
+                            set_vexpand: true,
+                            set_halign: gtk::Align::Center,
+                            set_valign: gtk::Align::Center,
+                            set_spacing: 5,
+                            #[watch]
+                            set_visible: matches!(self.strategy_kind, Some(StrategyKind::NoObjectiveStarter { .. })),
+                            gtk::Box {
+                                set_orientation: gtk::Orientation::Horizontal,
+                                gtk::Label {
+                                    set_label: "Étape : ",
+                                    set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                                },
+                                gtk::Label {
+                                    #[watch]
+                                    set_label: &self.no_obj_starter_step(),
+                                },
+                            },
+                            gtk::Box {
+                                set_orientation: gtk::Orientation::Horizontal,
+                                gtk::Label {
+                                    set_label: "Meilleur coût trouvé : ",
+                                    set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                                },
+                                gtk::Label {
+                                    #[watch]
+                                    set_label: &self.no_obj_starter_best_obj(),
+                                },
+                            },
+                            gtk::Box {
+                                set_orientation: gtk::Orientation::Horizontal,
+                                gtk::Label {
+                                    set_label: "Meilleur coût possible : ",
+                                    set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                                },
+                                gtk::Label {
+                                    #[watch]
+                                    set_label: &self.no_obj_starter_best_bound(),
+                                },
+                            },
+                            gtk::Box {
+                                set_orientation: gtk::Orientation::Horizontal,
+                                gtk::Label {
+                                    set_label: "Nœuds explorés : ",
+                                    set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                                },
+                                gtk::Label {
+                                    #[watch]
+                                    set_label: &self.no_obj_starter_node_count(),
+                                },
+                            },
+                            gtk::Box {
+                                set_orientation: gtk::Orientation::Horizontal,
+                                gtk::Label {
+                                    set_label: "Solutions trouvées : ",
+                                    set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                                },
+                                gtk::Label {
+                                    #[watch]
+                                    set_label: &self.no_obj_starter_solutions_found(),
+                                },
+                            },
+                        },
+                        gtk::Box {
+                            set_orientation: gtk::Orientation::Vertical,
+                            set_margin_all: 5,
+                            set_hexpand: true,
+                            set_vexpand: true,
+                            set_halign: gtk::Align::Center,
+                            set_valign: gtk::Align::Center,
+                            set_spacing: 5,
+                            #[watch]
+                            set_visible: matches!(self.strategy_kind, Some(StrategyKind::Conductor { .. })),
+                            gtk::Box {
+                                set_orientation: gtk::Orientation::Horizontal,
+                                gtk::Label {
+                                    set_label: "Meilleur coût trouvé : ",
+                                    set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                                },
+                                gtk::Label {
+                                    #[watch]
+                                    set_label: &self.conductor_best_found_cost(),
+                                },
+                            },
+                            gtk::Box {
+                                set_orientation: gtk::Orientation::Horizontal,
+                                gtk::Label {
+                                    set_label: "Meilleur coût possible : ",
+                                    set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                                },
+                                gtk::Label {
+                                    #[watch]
+                                    set_label: &self.conductor_best_possible_cost(),
                                 },
                             },
                         },
@@ -271,14 +406,11 @@ impl FactoryComponent for StrategyFrame {
                 ));
                 self.idle = true;
             }
-            StrategyDisplayInput::StrategyUpdate(progress) => match progress {
-                StrategyProgressData::Default(p) => {
-                    self.last_progress = Some(p);
+            StrategyDisplayInput::StrategyUpdate(progress) => {
+                if Self::should_retain(&progress) {
+                    self.last_progress = Some(progress);
                 }
-                StrategyProgressData::NoObjective(_) => todo!(),
-                StrategyProgressData::NoObjectiveStarter(_) => todo!(),
-                StrategyProgressData::Conductor(_) => todo!(),
-            },
+            }
             StrategyDisplayInput::ToggleDebug(active) => {
                 self.show_debug = active;
             }
@@ -287,31 +419,133 @@ impl FactoryComponent for StrategyFrame {
 }
 
 impl StrategyFrame {
-    fn format_best_obj(&self) -> String {
-        match &self.last_progress {
-            Some(p) => format!("{:.1}", p.best_obj),
-            None => "-".to_owned(),
+    fn should_retain(progress: &StrategyProgressData) -> bool {
+        match progress {
+            StrategyProgressData::Default(_) => true,
+            StrategyProgressData::NoObjective(_) => true,
+            StrategyProgressData::NoObjectiveStarter(_) => true,
+            StrategyProgressData::Conductor(ConductorProgressData::Conductor(_)) => true,
+            StrategyProgressData::Conductor(_) => false,
         }
     }
 
-    fn format_best_bound(&self) -> String {
+    fn default_best_obj(&self) -> String {
         match &self.last_progress {
-            Some(p) => format!("{:.1}", p.best_bound),
-            None => "-".to_owned(),
+            Some(StrategyProgressData::Default(p)) => format!("{:.1}", p.best_obj),
+            _ => "-".to_owned(),
         }
     }
 
-    fn format_node_count(&self) -> String {
+    fn default_best_bound(&self) -> String {
         match &self.last_progress {
-            Some(p) => format!("{}", p.node_count),
-            None => "0".to_owned(),
+            Some(StrategyProgressData::Default(p)) => format!("{:.1}", p.best_bound),
+            _ => "-".to_owned(),
         }
     }
 
-    fn format_solutions_found(&self) -> String {
+    fn default_node_count(&self) -> String {
         match &self.last_progress {
-            Some(p) => format!("{}", p.solutions_found),
-            None => "0".to_owned(),
+            Some(StrategyProgressData::Default(p)) => format!("{}", p.node_count),
+            _ => "0".to_owned(),
+        }
+    }
+
+    fn default_solutions_found(&self) -> String {
+        match &self.last_progress {
+            Some(StrategyProgressData::Default(p)) => format!("{}", p.solutions_found),
+            _ => "0".to_owned(),
+        }
+    }
+
+    fn no_obj_step(&self) -> String {
+        match &self.last_progress {
+            Some(StrategyProgressData::NoObjective(NoObjectiveProgressData::CheckerSolve(_))) => {
+                "1/2 (démarrage)".to_string()
+            }
+            Some(StrategyProgressData::NoObjective(_)) => "2/2 (calcul du coût)".to_string(),
+            _ => "-".to_owned(),
+        }
+    }
+
+    fn no_obj_cost(&self) -> String {
+        match &self.last_progress {
+            Some(StrategyProgressData::NoObjective(
+                NoObjectiveProgressData::ObjectiveReconstruction(p),
+            )) => format!("{:.1}", p.best_obj),
+            _ => "-".to_owned(),
+        }
+    }
+
+    fn no_obj_starter_best_obj(&self) -> String {
+        match &self.last_progress {
+            Some(StrategyProgressData::NoObjectiveStarter(
+                NoObjectiveStarterProgressData::Default(p),
+            )) => format!("{:.1}", p.best_obj),
+            _ => "-".to_owned(),
+        }
+    }
+
+    fn no_obj_starter_best_bound(&self) -> String {
+        match &self.last_progress {
+            Some(StrategyProgressData::NoObjectiveStarter(
+                NoObjectiveStarterProgressData::Default(p),
+            )) => format!("{:.1}", p.best_bound),
+            _ => "-".to_owned(),
+        }
+    }
+
+    fn no_obj_starter_node_count(&self) -> String {
+        match &self.last_progress {
+            Some(StrategyProgressData::NoObjectiveStarter(
+                NoObjectiveStarterProgressData::Default(p),
+            )) => format!("{}", p.node_count),
+            _ => "0".to_owned(),
+        }
+    }
+
+    fn no_obj_starter_solutions_found(&self) -> String {
+        match &self.last_progress {
+            Some(StrategyProgressData::NoObjectiveStarter(
+                NoObjectiveStarterProgressData::Default(p),
+            )) => format!("{}", p.solutions_found),
+            _ => "0".to_owned(),
+        }
+    }
+
+    fn no_obj_starter_step(&self) -> String {
+        match &self.last_progress {
+            Some(StrategyProgressData::NoObjectiveStarter(
+                NoObjectiveStarterProgressData::Starter(NoObjectiveProgressData::CheckerSolve(_)),
+            )) => "1/3 (démarrage)".to_string(),
+            Some(StrategyProgressData::NoObjectiveStarter(
+                NoObjectiveStarterProgressData::Starter(_),
+            )) => "2/3 (calcul du coût)".to_string(),
+            Some(StrategyProgressData::NoObjectiveStarter(_)) => "3/3 (optimisation)".to_string(),
+            _ => "-".to_owned(),
+        }
+    }
+
+    fn conductor_best_found_cost(&self) -> String {
+        match &self.last_progress {
+            Some(StrategyProgressData::Conductor(ConductorProgressData::Conductor(p))) => {
+                match &p.best_solution {
+                    Some(sol) => format!("{:.1}", sol.objective),
+                    None => "-".to_owned(),
+                }
+            }
+            _ => "-".to_owned(),
+        }
+    }
+
+    fn conductor_best_possible_cost(&self) -> String {
+        match &self.last_progress {
+            Some(StrategyProgressData::Conductor(ConductorProgressData::Conductor(p))) => {
+                match p.best_bound {
+                    Some(val) => format!("{:.1}", val),
+                    None => "-".to_owned(),
+                }
+            }
+            _ => "-".to_owned(),
         }
     }
 }
