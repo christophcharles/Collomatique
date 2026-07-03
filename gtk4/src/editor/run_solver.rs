@@ -29,6 +29,7 @@ pub struct Dialog<B: UsableData, E: UsableData, C: UsableData> {
     show_debug: bool,
     global_debug_view: Controller<DebugView>,
     title: String,
+    last_line: String,
     worker_strategies: Vec<Option<StrategyKind>>,
     displayed_worker: Option<u32>,
     strategy_frames: FactoryVecDeque<StrategyFrame>,
@@ -129,107 +130,124 @@ where
                                 set_margin_all: 0,
                                 set_hexpand: true,
                                 set_vexpand: true,
-                                set_orientation: gtk::Orientation::Horizontal,
+                                set_orientation: gtk::Orientation::Vertical,
                                 gtk::Box {
+                                    set_margin_all: 0,
                                     set_hexpand: true,
-                                },
-                                gtk::Box {
-                                    set_orientation: gtk::Orientation::Vertical,
-                                    set_halign: gtk::Align::Center,
-                                    set_valign: gtk::Align::Center,
-                                    set_spacing: 5,
-                                    #[watch]
-                                    set_visible: model.is_running,
-                                    adw::Spinner {
-                                        set_size_request: (60, 60),
-                                    },
-                                    gtk::Label {
-                                        set_margin_top: 15,
-                                        set_label: "Exécution en cours",
-                                        set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
-                                    },
-                                },
-                                gtk::Box {
-                                    set_orientation: gtk::Orientation::Vertical,
-                                    set_halign: gtk::Align::Center,
-                                    set_valign: gtk::Align::Center,
-                                    set_spacing: 5,
-                                    #[watch]
-                                    set_visible: !model.is_running && !model.end_with_error,
-                                    gtk::Image::from_icon_name("emblem-ok-symbolic") {
-                                        set_size_request: (60, 60),
-                                        set_pixel_size: 60,
-                                    },
-                                    gtk::Label {
-                                        set_margin_top: 15,
-                                        set_label: "Exécution terminée",
-                                        set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
-                                    },
-                                },
-                                gtk::Box {
-                                    set_orientation: gtk::Orientation::Vertical,
-                                    set_halign: gtk::Align::Center,
-                                    set_valign: gtk::Align::Center,
-                                    set_spacing: 5,
-                                    #[watch]
-                                    set_visible: !model.is_running && model.end_with_error,
-                                    gtk::Image::from_icon_name("dialog-error-symbolic") {
-                                        set_size_request: (60, 60),
-                                        set_pixel_size: 60,
-                                    },
-                                    gtk::Label {
-                                        set_margin_top: 15,
-                                        set_label: "Erreur pendant l'exécution",
-                                        set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
-                                    },
-                                },
-                                gtk::Box {
-                                    set_hexpand: true,
-                                },
-                                gtk::Box {
-                                    set_orientation: gtk::Orientation::Vertical,
-                                    set_halign: gtk::Align::Center,
-                                    set_valign: gtk::Align::Center,
-                                    set_spacing: 5,
+                                    set_vexpand: true,
+                                    set_orientation: gtk::Orientation::Horizontal,
                                     gtk::Box {
-                                        set_orientation: gtk::Orientation::Horizontal,
-                                        gtk::Label {
-                                            set_label: "Meilleur coût trouvé : ",
-                                            set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                                        set_hexpand: true,
+                                    },
+                                    gtk::Box {
+                                        set_orientation: gtk::Orientation::Vertical,
+                                        set_halign: gtk::Align::Center,
+                                        set_valign: gtk::Align::Center,
+                                        set_spacing: 5,
+                                        #[watch]
+                                        set_visible: model.is_running,
+                                        adw::Spinner {
+                                            set_size_request: (60, 60),
                                         },
                                         gtk::Label {
-                                            #[watch]
-                                            set_label: &model.best_found_cost(),
+                                            set_margin_top: 15,
+                                            set_label: "Exécution en cours",
+                                            set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
                                         },
                                     },
                                     gtk::Box {
-                                        set_orientation: gtk::Orientation::Horizontal,
-                                        gtk::Label {
-                                            set_label: "Meilleur coût possible : ",
-                                            set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                                        set_orientation: gtk::Orientation::Vertical,
+                                        set_halign: gtk::Align::Center,
+                                        set_valign: gtk::Align::Center,
+                                        set_spacing: 5,
+                                        #[watch]
+                                        set_visible: !model.is_running && !model.end_with_error,
+                                        gtk::Image::from_icon_name("emblem-ok-symbolic") {
+                                            set_size_request: (60, 60),
+                                            set_pixel_size: 60,
                                         },
                                         gtk::Label {
+                                            set_margin_top: 15,
+                                            set_label: "Exécution terminée",
+                                            set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
+                                        },
+                                    },
+                                    gtk::Box {
+                                        set_orientation: gtk::Orientation::Vertical,
+                                        set_halign: gtk::Align::Center,
+                                        set_valign: gtk::Align::Center,
+                                        set_spacing: 5,
+                                        #[watch]
+                                        set_visible: !model.is_running && model.end_with_error,
+                                        gtk::Image::from_icon_name("dialog-error-symbolic") {
+                                            set_size_request: (60, 60),
+                                            set_pixel_size: 60,
+                                        },
+                                        gtk::Label {
+                                            set_margin_top: 15,
+                                            set_label: "Erreur pendant l'exécution",
+                                            set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
+                                        },
+                                    },
+                                    gtk::Box {
+                                        set_hexpand: true,
+                                    },
+                                    gtk::Box {
+                                        set_orientation: gtk::Orientation::Vertical,
+                                        set_halign: gtk::Align::Center,
+                                        set_valign: gtk::Align::Center,
+                                        set_spacing: 5,
+                                        gtk::Box {
+                                            set_orientation: gtk::Orientation::Horizontal,
+                                            gtk::Label {
+                                                set_label: "Meilleur coût trouvé : ",
+                                                set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                                            },
+                                            gtk::Label {
+                                                #[watch]
+                                                set_label: &model.best_found_cost(),
+                                            },
+                                        },
+                                        gtk::Box {
+                                            set_orientation: gtk::Orientation::Horizontal,
+                                            gtk::Label {
+                                                set_label: "Meilleur coût possible : ",
+                                                set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                                            },
+                                            gtk::Label {
+                                                #[watch]
+                                                set_label: &model.best_possible_cost(),
+                                            },
+                                        },
+                                        gtk::Label {
+                                            set_margin_top: 15,
+                                            set_label: "Solution optimale trouvée !",
+                                            set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
                                             #[watch]
-                                            set_label: &model.best_possible_cost(),
+                                            set_visible: !model.is_running && model.conductor_status.best_solution.is_some(),
+                                        },
+                                        gtk::Label {
+                                            set_margin_top: 15,
+                                            set_label: "Pas de solution !",
+                                            set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
+                                            #[watch]
+                                            set_visible: !model.is_running && model.conductor_status.best_solution.is_none(),
                                         },
                                     },
-                                    gtk::Label {
-                                        set_margin_top: 15,
-                                        set_label: "Solution optimale trouvée !",
-                                        set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
-                                        #[watch]
-                                        set_visible: !model.is_running && model.conductor_status.best_solution.is_some(),
-                                    },
-                                    gtk::Label {
-                                        set_margin_top: 15,
-                                        set_label: "Pas de solution !",
-                                        set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
-                                        #[watch]
-                                        set_visible: !model.is_running && model.conductor_status.best_solution.is_none(),
+                                    gtk::Box {
+                                        set_hexpand: true,
                                     },
                                 },
                                 gtk::Box {
                                     set_hexpand: true,
+                                    gtk::Label {
+                                        set_halign: gtk::Align::Start,
+                                        set_margin_all: 5,
+                                        add_css_class: "dimmed",
+                                        add_css_class: "monospace",
+                                        #[watch]
+                                        set_label: &model.last_line,
+                                    },
                                 },
                             },
                         },
@@ -373,6 +391,7 @@ where
             show_debug: false,
             global_debug_view,
             title,
+            last_line: String::new(),
             worker_strategies: Vec::new(),
             displayed_worker: None,
             strategy_frames,
@@ -403,6 +422,7 @@ where
                 self.is_running = true;
                 self.end_with_error = false;
                 self.show_debug = false;
+                self.last_line = String::new();
                 self.conductor_status = ConductorStatus {
                     best_solution: None,
                     best_bound: None,
@@ -515,6 +535,7 @@ where
                 }
             }
             DialogInput::Echo(line) => {
+                self.last_line = truncate_line(line.trim_end());
                 self.global_debug_view.emit(DebugViewInput::Append(line));
             }
             DialogInput::WorkerEcho(worker_num, line) => {
@@ -661,4 +682,31 @@ impl<B: UsableData, E: UsableData, C: UsableData> Dialog<B, E, C> {
             None => "-".to_string(),
         }
     }
+}
+
+fn truncate_line(line: &str) -> String {
+    const MAX_LEN: usize = 80;
+
+    let total = line.chars().count();
+    if total <= MAX_LEN {
+        return line.to_string();
+    }
+
+    // Reserve 3 chars for the dots, then split the rest.
+    let available = MAX_LEN.saturating_sub(3);
+    let head_len = available - available / 2; // ceil
+    let tail_len = available / 2; // floor
+
+    let head_end = line
+        .char_indices()
+        .nth(head_len)
+        .map(|(i, _)| i)
+        .unwrap_or(line.len());
+    let tail_start = line
+        .char_indices()
+        .nth(total - tail_len)
+        .map(|(i, _)| i)
+        .unwrap_or(line.len());
+
+    format!("{}...{}", &line[..head_end], &line[tail_start..])
 }

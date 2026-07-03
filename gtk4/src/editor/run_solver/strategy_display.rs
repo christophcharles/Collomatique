@@ -27,6 +27,7 @@ pub struct StrategyFrame {
     strategy_kind: Option<StrategyKind>,
     idle: bool,
     show_debug: bool,
+    last_line: String,
     last_progress: Option<SolveProgressData>,
 }
 
@@ -60,126 +61,142 @@ impl FactoryComponent for StrategyFrame {
                 set_vexpand: true,
                 #[watch]
                 set_visible: !self.show_debug,
-
                 gtk::Box {
-                    set_orientation: gtk::Orientation::Horizontal,
+                    set_margin_all: 0,
                     set_hexpand: true,
                     set_vexpand: true,
-
+                    set_orientation: gtk::Orientation::Vertical,
                     gtk::Box {
-                        set_hexpand: true,
-                    },
-                    gtk::Box {
-                        set_orientation: gtk::Orientation::Vertical,
-                        set_halign: gtk::Align::Center,
-                        set_valign: gtk::Align::Center,
-                        set_spacing: 5,
-                        #[watch]
-                        set_visible: !self.idle,
-                        adw::Spinner {
-                            set_size_request: (60, 60),
-                        },
-                        gtk::Label {
-                            set_margin_top: 15,
-                            #[watch]
-                            set_label: &format!("Tâche {} : {}", self.worker_num+1, self.strategy_kind.as_ref().map(
-                                |strat| {
-                                    use collomatique_strategies::Strategy;
-                                    strat.ui_name()
-                                }
-                            ).unwrap_or_default()),
-                            set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
-                        },
-                        gtk::Label {
-                            set_label: "En cours d'exécution",
-                        },
-                    },
-                    gtk::Box {
-                        set_orientation: gtk::Orientation::Vertical,
-                        set_halign: gtk::Align::Center,
-                        set_valign: gtk::Align::Center,
-                        set_spacing: 5,
-                        #[watch]
-                        set_visible: self.idle,
-                        gtk::Image::from_icon_name("media-playback-pause-symbolic") {
-                            set_size_request: (60, 60),
-                            set_pixel_size: 60,
-                        },
-                        gtk::Label {
-                            set_margin_top: 15,
-                            #[watch]
-                            set_label: &format!("Tâche {} : {}", self.worker_num+1, self.strategy_kind.as_ref().map(
-                                |strat| {
-                                    use collomatique_strategies::Strategy;
-                                    strat.ui_name()
-                                }
-                            ).unwrap_or_default()),
-                            set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
-                        },
-                        gtk::Label {
-                            set_label: "À l'arrêt",
-                        },
-                    },
-                    gtk::Box {
-                        set_hexpand: true,
-                    },
-                    gtk::Box {
-                        set_orientation: gtk::Orientation::Vertical,
-                        set_margin_all: 5,
+                        set_orientation: gtk::Orientation::Horizontal,
                         set_hexpand: true,
                         set_vexpand: true,
-                        set_halign: gtk::Align::Center,
-                        set_valign: gtk::Align::Center,
-                        set_spacing: 5,
-                        #[watch]
-                        set_visible: matches!(self.strategy_kind, Some(StrategyKind::Default { .. })),
+
                         gtk::Box {
-                            set_orientation: gtk::Orientation::Horizontal,
-                            gtk::Label {
-                                set_label: "Meilleur coût trouvé : ",
-                                set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                            set_hexpand: true,
+                        },
+                        gtk::Box {
+                            set_orientation: gtk::Orientation::Vertical,
+                            set_halign: gtk::Align::Center,
+                            set_valign: gtk::Align::Center,
+                            set_spacing: 5,
+                            #[watch]
+                            set_visible: !self.idle,
+                            adw::Spinner {
+                                set_size_request: (60, 60),
                             },
                             gtk::Label {
+                                set_margin_top: 15,
                                 #[watch]
-                                set_label: &self.format_best_obj(),
+                                set_label: &format!("Tâche {} : {}", self.worker_num+1, self.strategy_kind.as_ref().map(
+                                    |strat| {
+                                        use collomatique_strategies::Strategy;
+                                        strat.ui_name()
+                                    }
+                                ).unwrap_or_default()),
+                                set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
+                            },
+                            gtk::Label {
+                                set_label: "En cours d'exécution",
                             },
                         },
                         gtk::Box {
-                            set_orientation: gtk::Orientation::Horizontal,
-                            gtk::Label {
-                                set_label: "Meilleur coût possible : ",
-                                set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                            set_orientation: gtk::Orientation::Vertical,
+                            set_halign: gtk::Align::Center,
+                            set_valign: gtk::Align::Center,
+                            set_spacing: 5,
+                            #[watch]
+                            set_visible: self.idle,
+                            gtk::Image::from_icon_name("media-playback-pause-symbolic") {
+                                set_size_request: (60, 60),
+                                set_pixel_size: 60,
                             },
                             gtk::Label {
+                                set_margin_top: 15,
                                 #[watch]
-                                set_label: &self.format_best_bound(),
+                                set_label: &format!("Tâche {} : {}", self.worker_num+1, self.strategy_kind.as_ref().map(
+                                    |strat| {
+                                        use collomatique_strategies::Strategy;
+                                        strat.ui_name()
+                                    }
+                                ).unwrap_or_default()),
+                                set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
+                            },
+                            gtk::Label {
+                                set_label: "À l'arrêt",
                             },
                         },
                         gtk::Box {
-                            set_orientation: gtk::Orientation::Horizontal,
-                            gtk::Label {
-                                set_label: "Nœuds explorés : ",
-                                set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                            set_hexpand: true,
+                        },
+                        gtk::Box {
+                            set_orientation: gtk::Orientation::Vertical,
+                            set_margin_all: 5,
+                            set_hexpand: true,
+                            set_vexpand: true,
+                            set_halign: gtk::Align::Center,
+                            set_valign: gtk::Align::Center,
+                            set_spacing: 5,
+                            #[watch]
+                            set_visible: matches!(self.strategy_kind, Some(StrategyKind::Default { .. })),
+                            gtk::Box {
+                                set_orientation: gtk::Orientation::Horizontal,
+                                gtk::Label {
+                                    set_label: "Meilleur coût trouvé : ",
+                                    set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                                },
+                                gtk::Label {
+                                    #[watch]
+                                    set_label: &self.format_best_obj(),
+                                },
                             },
-                            gtk::Label {
-                                #[watch]
-                                set_label: &self.format_node_count(),
+                            gtk::Box {
+                                set_orientation: gtk::Orientation::Horizontal,
+                                gtk::Label {
+                                    set_label: "Meilleur coût possible : ",
+                                    set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                                },
+                                gtk::Label {
+                                    #[watch]
+                                    set_label: &self.format_best_bound(),
+                                },
+                            },
+                            gtk::Box {
+                                set_orientation: gtk::Orientation::Horizontal,
+                                gtk::Label {
+                                    set_label: "Nœuds explorés : ",
+                                    set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                                },
+                                gtk::Label {
+                                    #[watch]
+                                    set_label: &self.format_node_count(),
+                                },
+                            },
+                            gtk::Box {
+                                set_orientation: gtk::Orientation::Horizontal,
+                                gtk::Label {
+                                    set_label: "Solutions trouvées : ",
+                                    set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                                },
+                                gtk::Label {
+                                    #[watch]
+                                    set_label: &self.format_solutions_found(),
+                                },
                             },
                         },
                         gtk::Box {
-                            set_orientation: gtk::Orientation::Horizontal,
-                            gtk::Label {
-                                set_label: "Solutions trouvées : ",
-                                set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
-                            },
-                            gtk::Label {
-                                #[watch]
-                                set_label: &self.format_solutions_found(),
-                            },
+                            set_hexpand: true,
                         },
                     },
                     gtk::Box {
                         set_hexpand: true,
+                        gtk::Label {
+                            set_halign: gtk::Align::Start,
+                            set_margin_all: 5,
+                            add_css_class: "dimmed",
+                            add_css_class: "monospace",
+                            #[watch]
+                            set_label: &self.last_line,
+                        },
                     },
                 },
             },
@@ -203,6 +220,7 @@ impl FactoryComponent for StrategyFrame {
             strategy_kind: None,
             idle: true,
             show_debug: false,
+            last_line: String::new(),
             last_progress: None,
         }
     }
@@ -221,6 +239,7 @@ impl FactoryComponent for StrategyFrame {
     fn update(&mut self, msg: Self::Input, _sender: FactorySender<Self>) {
         match msg {
             StrategyDisplayInput::Echo(line) => {
+                self.last_line = super::truncate_line(line.trim_end());
                 self.debug_view.emit(DebugViewInput::Append(line));
             }
             StrategyDisplayInput::Reset(worker_num) => {
@@ -229,6 +248,7 @@ impl FactoryComponent for StrategyFrame {
                 self.show_debug = false;
                 self.idle = true;
                 self.last_progress = None;
+                self.last_line = String::new();
                 self.debug_view.emit(DebugViewInput::Clear);
             }
             StrategyDisplayInput::Assigned(Some(name)) => {
