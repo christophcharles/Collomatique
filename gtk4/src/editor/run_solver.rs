@@ -127,39 +127,96 @@ where
                                 gtk::Box {
                                     set_hexpand: true,
                                 },
-                                adw::Spinner {
+                                gtk::Box {
+                                    set_orientation: gtk::Orientation::Vertical,
                                     set_halign: gtk::Align::Center,
                                     set_valign: gtk::Align::Center,
-                                    set_size_request: (50, 50),
+                                    set_spacing: 5,
                                     #[watch]
                                     set_visible: model.is_running,
+                                    adw::Spinner {
+                                        set_size_request: (60, 60),
+                                    },
+                                    gtk::Label {
+                                        set_label: "Exécution en cours",
+                                        set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
+                                    },
                                 },
                                 gtk::Box {
-                                    set_orientation: gtk::Orientation::Horizontal,
+                                    set_orientation: gtk::Orientation::Vertical,
                                     set_halign: gtk::Align::Center,
                                     set_valign: gtk::Align::Center,
+                                    set_spacing: 5,
                                     #[watch]
                                     set_visible: !model.is_running && !model.end_with_error,
                                     gtk::Image::from_icon_name("emblem-ok-symbolic") {
-                                        set_size_request: (50, 50),
+                                        set_size_request: (60, 60),
                                         set_icon_size: gtk::IconSize::Large,
                                     },
                                     gtk::Label {
                                         set_label: "Exécution terminée",
+                                        set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
                                     },
                                 },
                                 gtk::Box {
-                                    set_orientation: gtk::Orientation::Horizontal,
+                                    set_orientation: gtk::Orientation::Vertical,
                                     set_halign: gtk::Align::Center,
                                     set_valign: gtk::Align::Center,
+                                    set_spacing: 5,
                                     #[watch]
                                     set_visible: !model.is_running && model.end_with_error,
                                     gtk::Image::from_icon_name("dialog-error-symbolic") {
-                                        set_size_request: (50, 50),
+                                        set_size_request: (60, 60),
                                         set_icon_size: gtk::IconSize::Large,
                                     },
                                     gtk::Label {
                                         set_label: "Erreur pendant l'exécution",
+                                        set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
+                                    },
+                                },
+                                gtk::Box {
+                                    set_hexpand: true,
+                                },
+                                gtk::Box {
+                                    set_orientation: gtk::Orientation::Vertical,
+                                    set_halign: gtk::Align::Center,
+                                    set_valign: gtk::Align::Center,
+                                    set_spacing: 5,
+                                    gtk::Box {
+                                        set_orientation: gtk::Orientation::Horizontal,
+                                        gtk::Label {
+                                            set_label: "Meilleur coût trouvé : ",
+                                            set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                                        },
+                                        gtk::Label {
+                                            #[watch]
+                                            set_label: &model.best_found_cost(),
+                                        },
+                                    },
+                                    gtk::Box {
+                                        set_orientation: gtk::Orientation::Horizontal,
+                                        gtk::Label {
+                                            set_label: "Meilleur coût possible : ",
+                                            set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                                        },
+                                        gtk::Label {
+                                            #[watch]
+                                            set_label: &model.best_possible_cost(),
+                                        },
+                                    },
+                                    gtk::Label {
+                                        set_margin_top: 15,
+                                        set_label: "Solution optimale trouvée !",
+                                        set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
+                                        #[watch]
+                                        set_visible: !model.is_running && model.conductor_status.best_solution.is_some(),
+                                    },
+                                    gtk::Label {
+                                        set_margin_top: 15,
+                                        set_label: "Pas de solution !",
+                                        set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
+                                        #[watch]
+                                        set_visible: !model.is_running && model.conductor_status.best_solution.is_none(),
                                     },
                                 },
                                 gtk::Box {
@@ -489,7 +546,7 @@ where
                 } else {
                     None
                 };
-                if best_solution.is_none() {
+                if outcome.status == SolveStatus::Error {
                     self.end_with_error = true;
                 }
                 self.conductor_status = ConductorStatus {
@@ -559,6 +616,20 @@ impl<B: UsableData, E: UsableData, C: UsableData> Dialog<B, E, C> {
         match num {
             None => 0,
             Some(i) => (i + 1) as usize,
+        }
+    }
+
+    fn best_found_cost(&self) -> String {
+        match &self.conductor_status.best_solution {
+            Some(sol) => format!("{:.1}", sol.objective),
+            None => "-".to_string(),
+        }
+    }
+
+    fn best_possible_cost(&self) -> String {
+        match self.conductor_status.best_bound {
+            Some(bound) => format!("{:.1}", bound),
+            None => "-".to_string(),
         }
     }
 }
