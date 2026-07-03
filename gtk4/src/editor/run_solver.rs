@@ -15,10 +15,12 @@ use collomatique_subprocesses::StrategySubprocess;
 
 mod error_dialog;
 mod strategy_display;
+mod warning_icon;
 mod warning_running;
 
 use crate::widgets::debug_view::{DebugView, DebugViewInput};
 use strategy_display::{StrategyDisplayInput, StrategyFrame};
+use warning_icon::WarningIcon;
 
 pub struct Dialog<B: UsableData, E: UsableData, C: UsableData> {
     hidden: bool,
@@ -30,6 +32,7 @@ pub struct Dialog<B: UsableData, E: UsableData, C: UsableData> {
     worker_strategies: Vec<Option<StrategyKind>>,
     displayed_worker: Option<u32>,
     strategy_frames: FactoryVecDeque<StrategyFrame>,
+    report_errors: FactoryVecDeque<WarningIcon>,
     worker_dropdown: Controller<crate::widgets::droplist::Widget>,
     error_dialog: Controller<error_dialog::Dialog>,
     warning_running: Controller<warning_running::Dialog>,
@@ -55,6 +58,7 @@ pub enum DialogInput<B: UsableData, E: UsableData, C: UsableData> {
     SelectWorker(Option<usize>),
     Finished(StrategyOutcome<InternalVar<B, E>>),
     ToggleDebug(bool),
+    ReportError(String),
     SpawnError(String),
 }
 
@@ -252,6 +256,12 @@ where
                         set_margin_top: 0,
                         set_spacing: 10,
                         append: model.worker_dropdown.widget(),
+                        #[local_ref]
+                        report_errors_box -> gtk::Box {
+                            set_orientation: gtk::Orientation::Horizontal,
+                            set_valign: gtk::Align::Center,
+                            set_spacing: 5,
+                        },
                         gtk::Box {
                             set_hexpand: true,
                         },
@@ -337,6 +347,10 @@ where
             .launch(gtk::Stack::default())
             .detach();
 
+        let report_errors = FactoryVecDeque::builder()
+            .launch(gtk::Box::default())
+            .detach();
+
         let worker_dropdown = crate::widgets::droplist::Widget::builder()
             .launch(crate::widgets::droplist::WidgetParams {
                 initial_list: Vec::new(),
@@ -362,6 +376,7 @@ where
             worker_strategies: Vec::new(),
             displayed_worker: None,
             strategy_frames,
+            report_errors,
             worker_dropdown,
             error_dialog,
             warning_running,
@@ -375,6 +390,7 @@ where
         };
 
         let strategy_frames_stack = model.strategy_frames.widget();
+        let report_errors_box = model.report_errors.widget();
         let widgets = view_output!();
 
         ComponentParts { model, widgets }
@@ -397,6 +413,7 @@ where
                     0..strategy.worker_count.get(),
                     StrategyDisplayInput::Reset,
                 );
+                self.report_errors.guard().clear();
                 self.displayed_worker = None;
                 self.worker_dropdown
                     .sender()
@@ -445,10 +462,12 @@ where
                                 strategy.map(|b| *b),
                             ));
                         }
-                        // TODO: a top-level Err is not attributable to a specific worker
-                        // (we can't decode which one). `todo!()` so it fails loudly rather
-                        // than vanishing.
-                        Err(_e) => todo!("surface non-worker-attributable strategy IPC errors"),
+                        // A top-level Err is not attributable to a specific worker
+                        // (we can't decode which one), so surface it as a warning icon
+                        // next to the dropdown rather than dropping it.
+                        Err(e) => {
+                            progress_input.emit(DialogInput::ReportError(e));
+                        }
                     }
                 };
                 let result_cb = move |outcome: StrategyOutcome<InternalVar<B, E>>| {
@@ -570,6 +589,9 @@ where
                     self.strategy_frames
                         .send(i, StrategyDisplayInput::ToggleDebug(active));
                 }
+            }
+            DialogInput::ReportError(message) => {
+                self.report_errors.guard().push_back(message);
             }
             DialogInput::SpawnError(error) => {
                 self.is_running = false;
