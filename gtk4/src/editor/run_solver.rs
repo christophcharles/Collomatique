@@ -94,6 +94,7 @@ where
                     pack_start = &gtk::Button {
                         set_label: "Annuler",
                         set_sensitive: true,
+                        set_tooltip: "Abandonner la résolution",
                         connect_clicked => DialogInput::CancelRequest,
                     },
                     pack_end = &gtk::Button {
@@ -101,6 +102,7 @@ where
                         #[watch]
                         set_sensitive: model.conductor_status.best_solution.is_some(),
                         add_css_class: "destructive-action",
+                        set_tooltip: "Utiliser la meilleure solution trouvée",
                         connect_clicked => DialogInput::AcceptRequest,
                     },
                 },
@@ -294,6 +296,7 @@ where
                             set_icon_name: "utilities-terminal-symbolic",
                             #[watch]
                             set_active: model.show_debug,
+                            set_tooltip: "Afficher/Cacher la sortie de débogage",
                             connect_toggled[sender] => move |btn| {
                                 sender.input(DialogInput::ToggleDebug(btn.is_active()));
                             },
