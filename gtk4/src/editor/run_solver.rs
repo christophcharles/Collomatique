@@ -34,7 +34,6 @@ pub struct Dialog<B: UsableData, E: UsableData, C: UsableData> {
     error_dialog: Controller<error_dialog::Dialog>,
     warning_running: Controller<warning_running::Dialog>,
     subprocess: Option<StrategySubprocess>,
-    result_config: Option<ConfigData<InternalVar<B, E>>>,
     conductor_status: ConductorStatus<InternalVar<B, E>>,
     _phantom: PhantomData<fn() -> C>,
 }
@@ -98,7 +97,7 @@ where
                     pack_end = &gtk::Button {
                         set_label: "Valider les modifications",
                         #[watch]
-                        set_sensitive: !model.is_running,
+                        set_sensitive: model.conductor_status.best_solution.is_some(),
                         add_css_class: "destructive-action",
                         connect_clicked => DialogInput::Accept,
                     },
@@ -293,7 +292,6 @@ where
             error_dialog,
             warning_running,
             subprocess: None,
-            result_config: None,
             conductor_status: ConductorStatus {
                 best_solution: None,
                 best_bound: None,
@@ -314,7 +312,6 @@ where
                 self.is_running = true;
                 self.end_with_error = false;
                 self.show_debug = false;
-                self.result_config = None;
                 self.conductor_status = ConductorStatus {
                     best_solution: None,
                     best_bound: None,
@@ -462,24 +459,21 @@ where
 
                 let usable =
                     !matches!(outcome.status, SolveStatus::Error | SolveStatus::Infeasible);
+                let best_solution = if usable {
+                    outcome
+                        .solution
+                        .zip(outcome.objective)
+                        .map(|(config, objective)| Solution { config, objective })
+                } else {
+                    None
+                };
+                if best_solution.is_none() {
+                    self.end_with_error = true;
+                }
                 self.conductor_status = ConductorStatus {
-                    best_solution: if usable {
-                        outcome
-                            .solution
-                            .clone()
-                            .zip(outcome.objective)
-                            .map(|(config, objective)| Solution { config, objective })
-                    } else {
-                        None
-                    },
+                    best_solution,
                     best_bound: outcome.best_bound,
                 };
-                match (usable, outcome.solution) {
-                    (true, Some(config)) => {
-                        self.result_config = Some(config);
-                    }
-                    _ => self.end_with_error = true,
-                }
             }
             DialogInput::ToggleDebug(active) => {
                 if self.show_debug == active {
@@ -502,8 +496,14 @@ where
             }
             DialogInput::Accept => {
                 self.hidden = true;
-                if let Some(config) = self.result_config.take() {
-                    sender.output(DialogOutput::NewConfig(config)).unwrap();
+                self.is_running = false;
+                if let Some(subprocess) = self.subprocess.take() {
+                    subprocess.kill();
+                }
+                if let Some(solution) = self.conductor_status.best_solution.take() {
+                    sender
+                        .output(DialogOutput::NewConfig(solution.config))
+                        .unwrap();
                 }
             }
         }
