@@ -219,6 +219,21 @@ where
                                                 set_label: &model.best_possible_cost(),
                                             },
                                         },
+                                        gtk::Box {
+                                            set_orientation: gtk::Orientation::Horizontal,
+                                            gtk::Label {
+                                                set_label: "Tâches actives : ",
+                                                set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                                            },
+                                            gtk::Label {
+                                                #[watch]
+                                                set_label: &format!(
+                                                    "{}/{}",
+                                                    model.worker_strategies.iter().filter(|x| x.is_some()).count(),
+                                                    model.worker_strategies.len(),
+                                                ),
+                                            },
+                                        },
                                         gtk::Label {
                                             set_margin_top: 15,
                                             set_label: "Solution optimale trouvée !",
