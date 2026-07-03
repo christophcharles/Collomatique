@@ -18,7 +18,7 @@ mod strategy_display;
 mod warning_running;
 
 use crate::widgets::debug_view::{DebugView, DebugViewInput};
-use strategy_display::{StrategyDisplayInput, StrategyFrame, strategy_name_from_kind};
+use strategy_display::{StrategyDisplayInput, StrategyFrame};
 
 pub struct Dialog<B: UsableData, E: UsableData, C: UsableData> {
     hidden: bool,
@@ -138,6 +138,7 @@ where
                                         set_size_request: (60, 60),
                                     },
                                     gtk::Label {
+                                        set_margin_top: 15,
                                         set_label: "Exécution en cours",
                                         set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
                                     },
@@ -151,9 +152,10 @@ where
                                     set_visible: !model.is_running && !model.end_with_error,
                                     gtk::Image::from_icon_name("emblem-ok-symbolic") {
                                         set_size_request: (60, 60),
-                                        set_icon_size: gtk::IconSize::Large,
+                                        set_pixel_size: 60,
                                     },
                                     gtk::Label {
+                                        set_margin_top: 15,
                                         set_label: "Exécution terminée",
                                         set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
                                     },
@@ -167,9 +169,10 @@ where
                                     set_visible: !model.is_running && model.end_with_error,
                                     gtk::Image::from_icon_name("dialog-error-symbolic") {
                                         set_size_request: (60, 60),
-                                        set_icon_size: gtk::IconSize::Large,
+                                        set_pixel_size: 60,
                                     },
                                     gtk::Label {
+                                        set_margin_top: 15,
                                         set_label: "Erreur pendant l'exécution",
                                         set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
                                     },
@@ -498,9 +501,10 @@ where
             }
             DialogInput::WorkerAssigned(worker_num, assignment) => {
                 self.worker_strategies[worker_num as usize] = assignment.clone();
-                let name = assignment.as_ref().map(strategy_name_from_kind);
-                self.strategy_frames
-                    .send(worker_num as usize, StrategyDisplayInput::Assigned(name));
+                self.strategy_frames.send(
+                    worker_num as usize,
+                    StrategyDisplayInput::Assigned(assignment),
+                );
                 self.worker_dropdown
                     .sender()
                     .send(crate::widgets::droplist::WidgetInput::UpdateList(

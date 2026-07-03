@@ -118,7 +118,7 @@ impl Component for Dialog {
                         set_visible: model.worker.is_none() && !model.end_with_error && model.has_modifications(),
                         gtk::Image::from_icon_name("emblem-ok-symbolic") {
                             set_size_request: (50, 50),
-                            set_icon_size: gtk::IconSize::Large,
+                            set_pixel_size: 50,
                         },
                         gtk::Label {
                             set_label: "Exécution terminée",
@@ -132,7 +132,7 @@ impl Component for Dialog {
                         set_visible: model.worker.is_none() && !model.end_with_error && !model.has_modifications(),
                         gtk::Image::from_icon_name("dialog-warning-symbolic") {
                             set_size_request: (50, 50),
-                            set_icon_size: gtk::IconSize::Large,
+                            set_pixel_size: 50,
                         },
                         gtk::Label {
                             set_label: "Aucune modification effectuée",
@@ -146,7 +146,7 @@ impl Component for Dialog {
                         set_visible: model.worker.is_none() && model.end_with_error,
                         gtk::Image::from_icon_name("dialog-error-symbolic") {
                             set_size_request: (50, 50),
-                            set_icon_size: gtk::IconSize::Large,
+                            set_pixel_size: 50,
                         },
                         gtk::Label {
                             set_label: "Erreur pendant l'exécution",
