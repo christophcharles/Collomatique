@@ -33,6 +33,7 @@ pub struct Dialog<B: UsableData, E: UsableData, C: UsableData> {
     worker_dropdown: Controller<crate::widgets::droplist::Widget>,
     error_dialog: Controller<error_dialog::Dialog>,
     warning_running: Controller<warning_running::Dialog>,
+    warning_validate: Controller<warning_running::Dialog>,
     subprocess: Option<StrategySubprocess>,
     conductor_status: ConductorStatus<InternalVar<B, E>>,
     _phantom: PhantomData<fn() -> C>,
@@ -42,6 +43,7 @@ pub struct Dialog<B: UsableData, E: UsableData, C: UsableData> {
 pub enum DialogInput<B: UsableData, E: UsableData, C: UsableData> {
     Run(ConductorStrategy, Model<B, E, C>),
     CancelRequest,
+    AcceptRequest,
     Accept,
 
     Cancel,
@@ -99,7 +101,7 @@ where
                         #[watch]
                         set_sensitive: model.conductor_status.best_solution.is_some(),
                         add_css_class: "destructive-action",
-                        connect_clicked => DialogInput::Accept,
+                        connect_clicked => DialogInput::AcceptRequest,
                     },
                 },
                 #[wrap(Some)]
@@ -254,9 +256,18 @@ where
 
         let warning_running = warning_running::Dialog::builder()
             .transient_for(&root)
-            .launch(())
+            .launch("Toutes les modifications sur le colloscope seront perdues.".to_string())
             .forward(sender.input_sender(), |msg| match msg {
                 warning_running::DialogOutput::Accept => DialogInput::Cancel,
+            });
+
+        let warning_validate = warning_running::Dialog::builder()
+            .transient_for(&root)
+            .launch(
+                "Le résolveur n'a pas encore pu prouver l'optimalité de la solution".to_string(),
+            )
+            .forward(sender.input_sender(), |msg| match msg {
+                warning_running::DialogOutput::Accept => DialogInput::Accept,
             });
 
         let strategy_frames = FactoryVecDeque::builder()
@@ -291,6 +302,7 @@ where
             worker_dropdown,
             error_dialog,
             warning_running,
+            warning_validate,
             subprocess: None,
             conductor_status: ConductorStatus {
                 best_solution: None,
@@ -402,6 +414,16 @@ where
                         .unwrap();
                 } else {
                     sender.input(DialogInput::Cancel);
+                }
+            }
+            DialogInput::AcceptRequest => {
+                if self.is_running {
+                    self.warning_validate
+                        .sender()
+                        .send(warning_running::DialogInput::Show)
+                        .unwrap();
+                } else {
+                    sender.input(DialogInput::Accept);
                 }
             }
             DialogInput::Cancel => {

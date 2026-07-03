@@ -4,6 +4,7 @@ use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
 
 pub struct Dialog {
     hidden: bool,
+    message: String,
 }
 
 #[derive(Debug)]
@@ -20,7 +21,7 @@ pub enum DialogOutput {
 
 #[relm4::component(pub)]
 impl SimpleComponent for Dialog {
-    type Init = ();
+    type Init = String;
 
     type Input = DialogInput;
     type Output = DialogOutput;
@@ -62,7 +63,7 @@ impl SimpleComponent for Dialog {
                 },
 
                 gtk::Label {
-                    set_label: "Toutes les modifications sur le colloscope seront perdues.",
+                    set_label: model.message.as_str(),
                     set_wrap: true,
                     set_halign: gtk::Align::Center,
                 },
@@ -94,11 +95,14 @@ impl SimpleComponent for Dialog {
     }
 
     fn init(
-        _params: Self::Init,
+        message: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let model = Dialog { hidden: true };
+        let model = Dialog {
+            hidden: true,
+            message,
+        };
         let widgets = view_output!();
 
         ComponentParts { model, widgets }
