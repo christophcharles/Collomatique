@@ -10,6 +10,8 @@ use relm4::factory::{FactoryComponent, FactorySender, FactoryView};
 use relm4::prelude::DynamicIndex;
 use relm4::{Component, ComponentController, Controller, RelmWidgetExt, adw, gtk};
 
+use std::time::Instant;
+
 use collomatique_strategies::{StrategyKind, StrategyProgressData};
 
 use crate::widgets::debug_view::{DebugView, DebugViewInput};
@@ -33,6 +35,8 @@ pub enum StrategyDisplayInput {
     Assigned(Option<StrategyKind>),
     StrategyUpdate(StrategyProgressData),
     ToggleDebug(bool),
+    /// Periodic no-op tick from the dialog: forces the elapsed-time label to recompute.
+    Refresh,
 }
 
 pub struct StrategyFrame {
@@ -42,6 +46,10 @@ pub struct StrategyFrame {
     idle: bool,
     show_debug: bool,
     last_line: String,
+    // Elapsed-time bookkeeping for this worker: `timer_start` set on assignment, `timer_end`
+    // frozen when the worker goes idle.
+    timer_start: Option<Instant>,
+    timer_end: Option<Instant>,
     // One display panel per strategy kind. Each owns its retained state and its own
     // visibility, driven by the `Reset`/`Update` signals routed from `update`.
     default_panel: Controller<DefaultPanel>,
@@ -119,6 +127,12 @@ impl FactoryComponent for StrategyFrame {
                             gtk::Label {
                                 set_label: "En cours d'exécution",
                             },
+                            gtk::Label {
+                                add_css_class: "monospace",
+                                set_margin_top: 10,
+                                #[watch]
+                                set_label: &self.elapsed(),
+                            },
                         },
                         gtk::Box {
                             set_orientation: gtk::Orientation::Vertical,
@@ -147,6 +161,12 @@ impl FactoryComponent for StrategyFrame {
                             },
                             gtk::Label {
                                 set_label: "À l'arrêt",
+                            },
+                            gtk::Label {
+                                add_css_class: "monospace",
+                                set_margin_top: 10,
+                                #[watch]
+                                set_label: &self.elapsed(),
                             },
                         },
                         gtk::Box {
@@ -196,6 +216,8 @@ impl FactoryComponent for StrategyFrame {
             idle: true,
             show_debug: false,
             last_line: String::new(),
+            timer_start: None,
+            timer_end: None,
             default_panel: DefaultPanel::builder().launch(()).detach(),
             no_objective_panel: NoObjectivePanel::builder().launch(()).detach(),
             find_closest_panel: FindClosestPanel::builder().launch(()).detach(),
@@ -228,6 +250,8 @@ impl FactoryComponent for StrategyFrame {
                 self.show_debug = false;
                 self.idle = true;
                 self.last_line = String::new();
+                self.timer_start = None;
+                self.timer_end = None;
                 self.debug_view.emit(DebugViewInput::Clear);
                 // Hide and clear every panel until a strategy is assigned.
                 self.reset_panels(None);
@@ -241,6 +265,8 @@ impl FactoryComponent for StrategyFrame {
                     name.name(),
                 )));
                 self.idle = false;
+                self.timer_start = Some(Instant::now());
+                self.timer_end = None;
                 // Make the matching panel visible with fresh state; clear and hide the rest.
                 self.reset_panels(Some(&name));
                 self.strategy_kind = Some(name);
@@ -252,16 +278,31 @@ impl FactoryComponent for StrategyFrame {
                     "\n=== Worker is idle ===\n\n".to_owned(),
                 ));
                 self.idle = true;
+                self.timer_end = Some(Instant::now());
             }
             StrategyDisplayInput::StrategyUpdate(progress) => self.route_update(progress),
             StrategyDisplayInput::ToggleDebug(active) => {
                 self.show_debug = active;
             }
+            // The refresh only needs to re-render the view (elapsed-time label); the model
+            // stays put.
+            StrategyDisplayInput::Refresh => {}
         }
     }
 }
 
 impl StrategyFrame {
+    /// Elapsed wall-clock time since this worker was assigned, `HH:MM:SS`: live while running,
+    /// frozen to the total once the worker goes idle, `00:00:00` before any assignment.
+    fn elapsed(&self) -> String {
+        let d = match (self.timer_start, self.timer_end) {
+            (Some(s), Some(e)) => e.saturating_duration_since(s),
+            (Some(s), None) => s.elapsed(),
+            _ => std::time::Duration::ZERO,
+        };
+        super::format_elapsed(d)
+    }
+
     /// (Re)set every panel's visibility and clear its retained state. Exactly the panel
     /// whose strategy matches `kind` becomes visible; `None` hides them all.
     fn reset_panels(&self, kind: Option<&StrategyKind>) {

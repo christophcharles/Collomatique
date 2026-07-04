@@ -4,6 +4,7 @@ use relm4::{Component, ComponentController, adw, gtk};
 use relm4::{ComponentParts, ComponentSender, Controller, RelmWidgetExt};
 
 use std::marker::PhantomData;
+use std::time::{Duration, Instant};
 
 use collomatique_ilp::{ConfigData, UsableData};
 use collomatique_ilp_modeler::{InternalVar, Model};
@@ -40,6 +41,10 @@ pub struct Dialog<B: UsableData, E: UsableData, C: UsableData> {
     warning_validate: Controller<warning_running::Dialog>,
     subprocess: Option<StrategySubprocess>,
     conductor_status: ConductorStatus<InternalVar<B, E>>,
+    // Elapsed-time bookkeeping for the whole solve. `run_start` doubles as the tick-generation
+    // epoch; `run_end` freezes the total once the solve stops.
+    run_start: Option<Instant>,
+    run_end: Option<Instant>,
     _phantom: PhantomData<fn() -> C>,
 }
 
@@ -68,6 +73,13 @@ pub enum DialogOutput<B: UsableData, E: UsableData> {
     NewConfig(ConfigData<InternalVar<B, E>>),
 }
 
+/// Periodic elapsed-time refresh. Carries the run's start instant as a generation epoch so a
+/// stale tick from a previous run is dropped rather than reviving the loop.
+#[derive(Debug)]
+pub enum DialogCommandOutput {
+    Tick(Instant),
+}
+
 #[relm4::component(pub)]
 impl<B, E, C> Component for Dialog<B, E, C>
 where
@@ -79,7 +91,7 @@ where
 
     type Input = DialogInput<B, E, C>;
     type Output = DialogOutput<B, E>;
-    type CommandOutput = ();
+    type CommandOutput = DialogCommandOutput;
 
     view! {
         #[root]
@@ -154,6 +166,12 @@ where
                                             set_label: "Exécution en cours",
                                             set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
                                         },
+                                        gtk::Label {
+                                            add_css_class: "monospace",
+                                            set_margin_top: 10,
+                                            #[watch]
+                                            set_label: &model.global_elapsed(),
+                                        },
                                     },
                                     gtk::Box {
                                         set_orientation: gtk::Orientation::Vertical,
@@ -174,6 +192,12 @@ where
                                             set_label: "Exécution terminée",
                                             set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
                                         },
+                                        gtk::Label {
+                                            add_css_class: "monospace",
+                                            set_margin_top: 10,
+                                            #[watch]
+                                            set_label: &model.global_elapsed(),
+                                        },
                                     },
                                     gtk::Box {
                                         set_orientation: gtk::Orientation::Vertical,
@@ -193,6 +217,12 @@ where
                                             set_margin_top: 15,
                                             set_label: "Erreur pendant l'exécution",
                                             set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
+                                        },
+                                        gtk::Label {
+                                            add_css_class: "monospace",
+                                            set_margin_top: 10,
+                                            #[watch]
+                                            set_label: &model.global_elapsed(),
                                         },
                                     },
                                     gtk::Box {
@@ -426,6 +456,8 @@ where
                 best_solution: None,
                 best_bound: None,
             },
+            run_start: None,
+            run_end: None,
             _phantom: PhantomData,
         };
 
@@ -444,6 +476,16 @@ where
                 self.end_with_error = false;
                 self.show_debug = false;
                 self.last_line = String::new();
+
+                // Start the elapsed-time clock and kick off the periodic refresh loop.
+                let epoch = Instant::now();
+                self.run_start = Some(epoch);
+                self.run_end = None;
+                sender.oneshot_command(async move {
+                    tokio::time::sleep(REFRESH_INTERVAL).await;
+                    DialogCommandOutput::Tick(epoch)
+                });
+
                 self.conductor_status = ConductorStatus {
                     best_solution: None,
                     best_bound: None,
@@ -551,6 +593,8 @@ where
             }
             DialogInput::Cancel => {
                 self.hidden = true;
+                self.is_running = false;
+                self.run_end = Some(Instant::now());
                 if let Some(subprocess) = self.subprocess.take() {
                     subprocess.kill();
                 }
@@ -602,6 +646,7 @@ where
             }
             DialogInput::Finished(outcome) => {
                 self.is_running = false;
+                self.run_end = Some(Instant::now());
                 self.subprocess = None;
 
                 let usable =
@@ -637,6 +682,7 @@ where
             }
             DialogInput::SpawnError(error) => {
                 self.is_running = false;
+                self.run_end = Some(Instant::now());
                 self.subprocess = None;
                 self.end_with_error = true;
                 self.error_dialog
@@ -657,6 +703,28 @@ where
                 }
             }
         }
+    }
+
+    fn update_cmd(
+        &mut self,
+        msg: Self::CommandOutput,
+        sender: ComponentSender<Self>,
+        _root: &Self::Root,
+    ) {
+        let DialogCommandOutput::Tick(epoch) = msg;
+        // Drop stale ticks from a previous run and let the loop die once the solve has stopped.
+        // Running this handler is itself enough to re-render the global `#[watch]` timer label.
+        if !self.is_running || self.run_start != Some(epoch) {
+            return;
+        }
+        // Fan the refresh out to every worker frame so their timer labels recompute too.
+        for i in 0..self.strategy_frames.len() {
+            self.strategy_frames.send(i, StrategyDisplayInput::Refresh);
+        }
+        sender.oneshot_command(async move {
+            tokio::time::sleep(REFRESH_INTERVAL).await;
+            DialogCommandOutput::Tick(epoch)
+        });
     }
 }
 
@@ -703,6 +771,33 @@ impl<B: UsableData, E: UsableData, C: UsableData> Dialog<B, E, C> {
             None => "-".to_string(),
         }
     }
+
+    /// Elapsed wall-clock time for the whole solve, `HH:MM:SS`: live while running, frozen to the
+    /// total once stopped, `00:00:00` before any run.
+    fn global_elapsed(&self) -> String {
+        let d = match (self.run_start, self.run_end) {
+            (Some(s), Some(e)) => e.saturating_duration_since(s),
+            (Some(s), None) => s.elapsed(),
+            _ => Duration::ZERO,
+        };
+        format_elapsed(d)
+    }
+}
+
+/// How often the elapsed-time timers refresh while a solve is running. Kept well under a second
+/// so no whole displayed second is ever skipped despite scheduling jitter; adjust freely.
+const REFRESH_INTERVAL: Duration = Duration::from_millis(250);
+
+/// Format a duration as `HH:MM:SS`. Shared by the global dialog timer and the per-worker frames
+/// (via `super::format_elapsed`).
+fn format_elapsed(duration: Duration) -> String {
+    let secs = duration.as_secs();
+    format!(
+        "{:02}:{:02}:{:02}",
+        secs / 3600,
+        (secs % 3600) / 60,
+        secs % 60
+    )
 }
 
 fn truncate_line(line: &str) -> String {
