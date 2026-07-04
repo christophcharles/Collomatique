@@ -28,7 +28,7 @@ impl Strategy for NoObjectiveStrategy {
     }
 
     fn ui_name(&self) -> &'static str {
-        "Résolution avec objectif désactivé"
+        "Préamorçage"
     }
 
     async fn run_with_callback<B, E, C>(
