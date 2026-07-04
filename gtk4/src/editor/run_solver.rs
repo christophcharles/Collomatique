@@ -45,6 +45,9 @@ pub struct Dialog<B: UsableData, E: UsableData, C: UsableData> {
     // epoch; `run_end` freezes the total once the solve stops.
     run_start: Option<Instant>,
     run_end: Option<Instant>,
+    // Instant the best solution was last improved; its end point is the shared `run_end`, so the
+    // "time since the best solution" clock freezes when the solve stops. `None` before any solution.
+    best_solution_at: Option<Instant>,
     _phantom: PhantomData<fn() -> C>,
 }
 
@@ -258,6 +261,18 @@ where
                                         gtk::Box {
                                             set_orientation: gtk::Orientation::Horizontal,
                                             gtk::Label {
+                                                set_label: "Meilleure solution il y a : ",
+                                                set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                                            },
+                                            gtk::Label {
+                                                add_css_class: "monospace",
+                                                #[watch]
+                                                set_label: &model.best_solution_elapsed(),
+                                            },
+                                        },
+                                        gtk::Box {
+                                            set_orientation: gtk::Orientation::Horizontal,
+                                            gtk::Label {
                                                 set_label: "Tâches actives : ",
                                                 set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
                                             },
@@ -459,6 +474,7 @@ where
             },
             run_start: None,
             run_end: None,
+            best_solution_at: None,
             _phantom: PhantomData,
         };
 
@@ -482,6 +498,7 @@ where
                 let epoch = Instant::now();
                 self.run_start = Some(epoch);
                 self.run_end = None;
+                self.best_solution_at = None;
                 sender.oneshot_command(async move {
                     tokio::time::sleep(REFRESH_INTERVAL).await;
                     DialogCommandOutput::Tick(epoch)
@@ -629,6 +646,7 @@ where
                 );
             }
             DialogInput::ConductorStatus(status) => {
+                self.note_best_solution(&status);
                 self.conductor_status = status;
             }
             DialogInput::SelectWorker(selected) => {
@@ -663,10 +681,12 @@ where
                 if outcome.status == SolveStatus::Error {
                     self.end_with_error = true;
                 }
-                self.conductor_status = ConductorStatus {
+                let status = ConductorStatus {
                     best_solution,
                     best_bound: outcome.best_bound,
                 };
+                self.note_best_solution(&status);
+                self.conductor_status = status;
             }
             DialogInput::ToggleDebug(active) => {
                 if self.show_debug == active {
@@ -782,6 +802,33 @@ impl<B: UsableData, E: UsableData, C: UsableData> Dialog<B, E, C> {
             _ => Duration::ZERO,
         };
         format_elapsed(d)
+    }
+
+    /// Stamp `best_solution_at` if the incoming status carries a newly-found or improved best
+    /// solution; clear it if there is no best solution; leave it running otherwise (e.g. when only
+    /// `best_bound` moved). Objectives are compared as copied `Option<f64>` to sidestep borrows.
+    fn note_best_solution(&mut self, status: &ConductorStatus<InternalVar<B, E>>) {
+        let old_obj = self
+            .conductor_status
+            .best_solution
+            .as_ref()
+            .map(|s| s.objective);
+        let new_obj = status.best_solution.as_ref().map(|s| s.objective);
+        if new_obj.is_none() {
+            self.best_solution_at = None;
+        } else if old_obj != new_obj {
+            self.best_solution_at = Some(Instant::now());
+        }
+    }
+
+    /// Elapsed time since the best solution was last improved, `HH:MM:SS`: live while running,
+    /// frozen once stopped, `-` (as for the cost fields) while no solution has been found.
+    fn best_solution_elapsed(&self) -> String {
+        match (self.best_solution_at, self.run_end) {
+            (Some(s), Some(e)) => format_elapsed(e.saturating_duration_since(s)),
+            (Some(s), None) => format_elapsed(s.elapsed()),
+            _ => "-".to_string(),
+        }
     }
 }
 
