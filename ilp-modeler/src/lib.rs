@@ -1080,6 +1080,150 @@ where
         }
         Ok(())
     }
+
+    /// Rebuild a [`Modeler`] from an already-assembled
+    /// [`Problem`], reversing [`Modeler::build`]'s flattening.
+    ///
+    /// The [`ConstraintSource`] tag on each constraint is what
+    /// makes this possible: [`ConstraintSource::User`] constraints
+    /// become user constraints again, while
+    /// [`ConstraintSource::DefiningExtra`] constraints are grouped
+    /// per extra and replayed by a synthesized definition closure.
+    /// Extra and helper variable kinds are recovered from the
+    /// problem's variable set.
+    ///
+    /// Passed the full [`Model::problem`], the reconstruction is
+    /// faithful: the user constraints and the objective reference
+    /// the same extras, so [`Modeler::build`] rediscovers the exact
+    /// same constraint/objective roots and recomputes each extra's
+    /// `for_constraints` flag identically — an objective-only extra
+    /// stays out of the checker problem, a constraint extra stays
+    /// in. The only differences are constraint ordering and helper
+    /// variable renumbering (helpers are re-minted with fresh ids),
+    /// neither of which changes the problem's meaning. The
+    /// synthesized closures ignore `Env` and never fail, so both
+    /// type parameters are free at the call site.
+    ///
+    /// The folded objective is re-added as a single weighted
+    /// objective; callers that want to optimize a different
+    /// surrogate can follow with [`Modeler::clear_objectives`].
+    pub fn from_model_problem(problem: &Problem<InternalVar<B, E>, ConstraintSource<E, C>>) -> Self
+    where
+        B: 'm,
+        E: 'm,
+    {
+        // Recover variable kinds, split by role.
+        let mut base_vars: HashMap<B, Variable> = HashMap::new();
+        let mut extra_kinds: HashMap<E, Variable> = HashMap::new();
+        let mut helper_kinds: HashMap<E, HashMap<HelperId, Variable>> = HashMap::new();
+        for (var, kind) in problem.get_variables() {
+            match var {
+                InternalVar::Base(b) => {
+                    base_vars.insert(b.clone(), kind.clone());
+                }
+                InternalVar::Extra(e) => {
+                    extra_kinds.insert(e.clone(), kind.clone());
+                }
+                InternalVar::Helper { owner, id } => {
+                    helper_kinds
+                        .entry(owner.clone())
+                        .or_default()
+                        .insert(id.clone(), kind.clone());
+                }
+            }
+        }
+
+        let mut modeler = Self::new(base_vars);
+
+        // Partition constraints: user constraints go back verbatim,
+        // defining-extra constraints are grouped per extra (later
+        // ordered by their original index).
+        let mut per_extra: HashMap<E, Vec<(usize, Constraint<InternalVar<B, E>>)>> = HashMap::new();
+        for (constraint, source) in problem.get_constraints() {
+            match source {
+                ConstraintSource::User(desc) => {
+                    modeler.add_constraint(constraint.transmute(internal_to_var), desc.clone());
+                }
+                ConstraintSource::DefiningExtra { extra, index, .. } => {
+                    per_extra
+                        .entry(extra.clone())
+                        .or_default()
+                        .push((*index, constraint.clone()));
+                }
+            }
+        }
+
+        // Synthesize a definition closure for every extra. We cover
+        // every extra name that has a kind, even one with no defining
+        // constraints (its closure simply returns nothing).
+        for (extra, kind) in extra_kinds {
+            let mut defs = per_extra.remove(&extra).unwrap_or_default();
+            defs.sort_by_key(|(index, _)| *index);
+            let constraints: Vec<Constraint<InternalVar<B, E>>> =
+                defs.into_iter().map(|(_, c)| c).collect();
+            let owned_helper_kinds = helper_kinds.remove(&extra).unwrap_or_default();
+
+            modeler
+                .declare_extra(extra, kind, move |factory, _ctx, _name| {
+                    // Re-mint this extra's helpers in first-seen
+                    // order, mapping each original id to a fresh one.
+                    let mut remap: HashMap<HelperId, ExtraVar<B, E>> = HashMap::new();
+                    for c in &constraints {
+                        for v in c.variable_refs() {
+                            if let InternalVar::Helper { id, .. } = v
+                                && !remap.contains_key(id)
+                            {
+                                let helper_kind = owned_helper_kinds
+                                    .get(id)
+                                    .cloned()
+                                    .expect("helper kind recorded for defining constraint");
+                                remap.insert(id.clone(), factory.new_helper(helper_kind));
+                            }
+                        }
+                    }
+                    let translated = constraints
+                        .iter()
+                        .map(|c| {
+                            c.transmute(|v| match v {
+                                InternalVar::Base(b) => ExtraVar::Base(b.clone()),
+                                InternalVar::Extra(e) => ExtraVar::Extra(e.clone()),
+                                InternalVar::Helper { id, .. } => remap
+                                    .get(id)
+                                    .cloned()
+                                    .expect("helper remapped before translation"),
+                            })
+                        })
+                        .collect();
+                    Ok(translated)
+                })
+                .expect("extra names are unique in a built problem");
+        }
+
+        // Re-add the folded objective (weight 1.0). No helpers here.
+        modeler.add_objective(1.0, problem.get_objective().transmute(internal_to_var));
+
+        modeler
+    }
+}
+
+/// Translate a flattened [`InternalVar`] back to the user-facing
+/// [`Var`] used in constraints and objectives. Helpers never appear
+/// in user constraints or the objective, so encountering one means
+/// the problem was not produced by [`Modeler::build`].
+fn internal_to_var<B, E>(var: &InternalVar<B, E>) -> Var<B, E>
+where
+    B: UsableData,
+    E: UsableData,
+{
+    match var {
+        InternalVar::Base(b) => Var::Base(b.clone()),
+        InternalVar::Extra(e) => Var::Extra(e.clone()),
+        InternalVar::Helper { .. } => {
+            panic!(
+                "expected a Modeler-built problem: helper variable found in a user constraint or the objective"
+            )
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
