@@ -7,6 +7,7 @@ use std::pin::Pin;
 use std::sync::Mutex;
 
 use async_trait::async_trait;
+use futures::channel::oneshot;
 use futures::stream::{FuturesUnordered, StreamExt};
 use serde::{Deserialize, Serialize};
 
@@ -385,6 +386,41 @@ fn optimum_reached<V: UsableData + Send>(
     }
 }
 
+/// Fold a freshly reported Default incumbent objective into the tracked best, per sense.
+fn merge_default_obj(current: Option<f64>, candidate: f64, sense: ObjectiveSense) -> f64 {
+    match current {
+        None => candidate,
+        Some(cur) => match sense {
+            ObjectiveSense::Minimize => cur.min(candidate),
+            ObjectiveSense::Maximize => cur.max(candidate),
+        },
+    }
+}
+
+/// Decide whether a fresh incumbent (`new_obj`) warrants killing and respawning the Default
+/// worker. With no tracked Default objective yet (cold boot), any incumbent triggers the
+/// one-time warm-start reboot. Otherwise it triggers only once `new_obj` has closed at least
+/// half the gap between Default's objective `D` and the best bound `B` (midpoint `(D+B)/2`).
+/// With no bound there is no midpoint, so we do not restart.
+fn should_restart_default(
+    new_obj: f64,
+    default_obj: Option<f64>,
+    best_bound: Option<f64>,
+    sense: ObjectiveSense,
+) -> bool {
+    let Some(d) = default_obj else {
+        return true;
+    };
+    let Some(b) = best_bound else {
+        return false;
+    };
+    let midpoint = (d + b) / 2.0;
+    match sense {
+        ObjectiveSense::Minimize => new_obj <= midpoint,
+        ObjectiveSense::Maximize => new_obj >= midpoint,
+    }
+}
+
 /// Assemble the conductor's final outcome from its accumulated status: `Optimal` when a
 /// feasible incumbent exists, `Stopped` otherwise. Carries the best bound and solution.
 fn conductor_outcome<V: UsableData + Send>(status: &ConductorStatus<V>) -> StrategyOutcome<V> {
@@ -609,6 +645,13 @@ struct WorkerResult<V: UsableData + Send> {
     outcome: Result<StrategyOutcome<V>, StrategyError>,
 }
 
+/// Outcome of awaiting a worker: it either finished on its own, or was cancelled (killed)
+/// by the conductor — currently only the Default worker, when it is superseded.
+enum WorkerEnd<V: UsableData + Send> {
+    Finished(WorkerResult<V>),
+    Cancelled { worker_num: u32 },
+}
+
 /// The conductor's worker-slot pool; the slot index *is* the `worker_num`. On drop — which
 /// happens on every exit from `run_with_callback`, including the early returns that force-kill
 /// live workers by dropping `workers` — it emits an idle `WorkerAssigned { None }` for each
@@ -671,46 +714,73 @@ impl<V: UsableData + Send> Drop for WorkerSlots<'_, V> {
 /// The strategy is spawned uniformly as a [`StrategyKind`]: it is itself a `SpawnableStrategy`
 /// whose progress is `StrategyProgress<V>`, which `report_worker_progress` already folds for
 /// every variant — so adding new strategy kinds needs no change here.
+///
+/// When `cancel` is provided (the Default worker), the solve is raced against it: firing the
+/// channel drops the strategy future, which RAII-kills its subprocess, and yields
+/// [`WorkerEnd::Cancelled`]. `default_obj` tracks the Default worker's own best incumbent
+/// objective so the conductor can decide when a far-better incumbent warrants a restart.
 #[allow(clippy::too_many_arguments)]
 async fn run_one_worker<'a, B, E, C>(
     ctx: &'a StrategyContext,
     model: &'a Model<B, E, C>,
     status: &'a Mutex<ConductorStatus<InternalVar<B, E>>>,
+    default_obj: &'a Mutex<Option<f64>>,
     sense: ObjectiveSense,
     on_progress: &'a (dyn Fn(ConductorProgress<InternalVar<B, E>>) -> bool + Send + Sync),
     worker_num: u32,
     kind: StrategyKind,
     warm_start: Option<ConfigData<InternalVar<B, E>>>,
-) -> WorkerResult<InternalVar<B, E>>
+    cancel: Option<oneshot::Receiver<()>>,
+) -> WorkerEnd<InternalVar<B, E>>
 where
     B: UsableData + Send,
     E: UsableData + Send,
     C: UsableData + Send,
 {
-    let outcome = ctx
-        .spawn_strategy_with_echo(
-            &kind,
-            model,
-            warm_start,
-            &|p: StrategyProgress<InternalVar<B, E>>| {
-                report_worker_progress(worker_num, p, status, sense, on_progress)
-            },
-            &|line| {
-                // Route the worker's console output as first-class progress so it can be
-                // attributed to this worker across the subprocess boundary, instead of
-                // folding it into the conductor's ambient echo sink.
-                on_progress(ConductorProgress::WorkerEcho {
+    let progress = |p: StrategyProgress<InternalVar<B, E>>| {
+        // Only the Default worker emits real-coordinate Default progress in the conductor's
+        // worker set, so this unambiguously tracks Default's own incumbent objective.
+        if let StrategyProgress::Default(sp) = &p {
+            if sp.incumbent.is_some() {
+                let mut d = default_obj.lock().expect("default obj mutex");
+                *d = Some(merge_default_obj(*d, sp.best_obj, sense));
+            }
+        }
+        report_worker_progress(worker_num, p, status, sense, on_progress)
+    };
+    let echo = |line| {
+        // Route the worker's console output as first-class progress so it can be attributed
+        // to this worker across the subprocess boundary, instead of folding it into the
+        // conductor's ambient echo sink.
+        on_progress(ConductorProgress::WorkerEcho {
+            worker_num,
+            echo: line,
+        });
+        None
+    };
+
+    let fut = ctx.spawn_strategy_with_echo(&kind, model, warm_start, &progress, &echo);
+    match cancel {
+        None => {
+            let outcome = fut.await;
+            WorkerEnd::Finished(WorkerResult {
+                worker_num,
+                kind: kind.clone(),
+                outcome,
+            })
+        }
+        Some(rx) => {
+            futures::pin_mut!(fut);
+            match futures::future::select(fut, rx).await {
+                futures::future::Either::Left((outcome, _)) => WorkerEnd::Finished(WorkerResult {
                     worker_num,
-                    echo: line,
-                });
-                None
-            },
-        )
-        .await;
-    WorkerResult {
-        worker_num,
-        kind,
-        outcome,
+                    kind: kind.clone(),
+                    outcome,
+                }),
+                // Cancelled: `fut` is dropped at scope end → RAII-kills the subprocess.
+                futures::future::Either::Right((_, _fut)) => WorkerEnd::Cancelled { worker_num },
+            }
+        }
     }
 }
 
@@ -753,8 +823,15 @@ impl Strategy for ConductorStrategy {
         let mut slots = WorkerSlots::new(worker_count, on_progress);
         let mut queue: VecDeque<StrategyKind> = self.seed_queue();
 
+        // Trace of the single Default worker so it can be superseded: its slot, a `oneshot`
+        // sender that cancels (kills) its future, and its own best incumbent objective — shared
+        // because the Default worker's streaming callback refines it while the main loop reads it.
+        let default_obj: Mutex<Option<f64>> = Mutex::new(None);
+        let mut default_slot: Option<usize> = None;
+        let mut default_cancel: Option<oneshot::Sender<()>> = None;
+
         let mut workers: FuturesUnordered<
-            Pin<Box<dyn Future<Output = WorkerResult<InternalVar<B, E>>> + Send + '_>>,
+            Pin<Box<dyn Future<Output = WorkerEnd<InternalVar<B, E>>> + Send + '_>>,
         > = FuturesUnordered::new();
 
         loop {
@@ -788,24 +865,54 @@ impl Strategy for ConductorStrategy {
                     strategy: Some(Box::new(kind.clone())),
                 });
                 let worker_warm_start = warm_start_for(&status, &warm_start);
+                // Only the Default worker is cancellable. Trace its slot + cancel handle and seed
+                // its tracked objective to the warm start's objective (the anti-thrash fuse).
+                let cancel = if matches!(kind, StrategyKind::Default(_)) {
+                    let (tx, rx) = oneshot::channel();
+                    default_slot = Some(slot);
+                    default_cancel = Some(tx);
+                    *default_obj.lock().expect("default obj mutex") = status
+                        .lock()
+                        .expect("conductor status mutex")
+                        .best_solution
+                        .as_ref()
+                        .map(|s| s.objective);
+                    Some(rx)
+                } else {
+                    None
+                };
                 workers.push(Box::pin(run_one_worker(
                     ctx,
                     model,
                     &status,
+                    &default_obj,
                     sense,
                     on_progress,
                     slot as u32,
                     kind,
                     worker_warm_start,
+                    cancel,
                 )));
             }
 
             // Wait for the next worker to finish; if none are running we're done.
-            let Some(worker_result) = workers.next().await else {
+            let Some(end) = workers.next().await else {
                 break;
+            };
+            let worker_result = match end {
+                // A superseded Default was killed; its replacement is already queued at the front,
+                // so just free the slot and let the loop head refill it (Default first).
+                WorkerEnd::Cancelled { worker_num } => {
+                    slots.free(worker_num as usize);
+                    continue;
+                }
+                WorkerEnd::Finished(wr) => wr,
             };
             let slot = worker_result.worker_num as usize;
             let outcome = worker_result.outcome?;
+            // Capture the incumbent this worker produced before `resolve_worker_outcome` consumes
+            // it; used below to decide whether to restart the Default worker.
+            let incumbent_obj = outcome.objective;
 
             let resolution =
                 resolve_worker_outcome(&worker_result.kind, outcome, &status, sense, on_progress);
@@ -828,10 +935,31 @@ impl Strategy for ConductorStrategy {
                 WorkerResolution::Update => {}
             }
 
-            // Not terminal: the worker's slot is free again. Report it idle now only if nothing is
-            // queued to refill it (a live "went idle while the conductor keeps working" signal,
-            // distinct from the terminal cleanup that `WorkerSlots::drop` handles on return).
+            // Not terminal: the worker's slot is free again.
             slots.free(slot);
+
+            // A far-better incumbent arrived while Default grinds on a stale one: restart Default
+            // from it. Queue the replacement first (so the freed slot is refilled with the new
+            // Default), then kill the old one. Default finishing on its own is always `Definitive`
+            // and returns above, so it never reaches here — only `NoObjective`/`Fuzzy` do.
+            if let (Some(new_obj), Some(_)) = (incumbent_obj, default_slot) {
+                let d = *default_obj.lock().expect("default obj mutex");
+                let b = status.lock().expect("conductor status mutex").best_bound;
+                if should_restart_default(new_obj, d, b, sense) {
+                    queue.push_front(StrategyKind::Default(DefaultStrategy::default()));
+                    default_slot = None;
+                    if let Some(tx) = default_cancel.take() {
+                        // Wake the old Default's cancel branch → drops its future → kills its
+                        // subprocess. Its slot frees when the `Cancelled` result surfaces; the new
+                        // Default re-establishes the trace and re-seeds `default_obj` when launched.
+                        let _ = tx.send(());
+                    }
+                }
+            }
+
+            // Report the freed slot idle now only if nothing is queued to refill it (a live "went
+            // idle while the conductor keeps working" signal, distinct from the terminal cleanup
+            // that `WorkerSlots::drop` handles on return). A queued Default restart skips this.
             if queue.is_empty() {
                 on_progress(ConductorProgress::WorkerAssigned {
                     worker_num: slot as u32,
@@ -1345,5 +1473,99 @@ mod tests {
         let mut got = events.lock().unwrap().clone();
         got.sort();
         assert_eq!(got, vec![(0, false), (2, false)]);
+    }
+
+    #[test]
+    fn merge_default_obj_takes_the_better_per_sense() {
+        // With nothing tracked yet, the candidate is adopted verbatim.
+        assert_eq!(merge_default_obj(None, 5.0, ObjectiveSense::Minimize), 5.0);
+        assert_eq!(merge_default_obj(None, 5.0, ObjectiveSense::Maximize), 5.0);
+        // Minimize keeps the smaller; Maximize keeps the larger.
+        assert_eq!(
+            merge_default_obj(Some(5.0), 3.0, ObjectiveSense::Minimize),
+            3.0
+        );
+        assert_eq!(
+            merge_default_obj(Some(5.0), 7.0, ObjectiveSense::Minimize),
+            5.0
+        );
+        assert_eq!(
+            merge_default_obj(Some(5.0), 7.0, ObjectiveSense::Maximize),
+            7.0
+        );
+        assert_eq!(
+            merge_default_obj(Some(5.0), 3.0, ObjectiveSense::Maximize),
+            5.0
+        );
+    }
+
+    #[test]
+    fn should_restart_default_reboots_once_when_untracked() {
+        // No tracked Default objective (cold boot): any incumbent triggers the one-time reboot,
+        // regardless of the bound.
+        assert!(should_restart_default(
+            1000.0,
+            None,
+            Some(1200.0),
+            ObjectiveSense::Minimize
+        ));
+        assert!(should_restart_default(
+            9999.0,
+            None,
+            None,
+            ObjectiveSense::Minimize
+        ));
+    }
+
+    #[test]
+    fn should_restart_default_needs_a_bound_to_gate() {
+        // Tracked objective but no bound: no midpoint, so never restart.
+        assert!(!should_restart_default(
+            0.0,
+            Some(2800.0),
+            None,
+            ObjectiveSense::Minimize
+        ));
+    }
+
+    #[test]
+    fn should_restart_default_crosses_midpoint_per_sense() {
+        // Minimize: D=2800, B=1200 -> midpoint 2000. At-or-below triggers; above does not.
+        let d = Some(2800.0);
+        let b = Some(1200.0);
+        assert!(should_restart_default(
+            2000.0,
+            d,
+            b,
+            ObjectiveSense::Minimize
+        ));
+        assert!(should_restart_default(
+            1000.0,
+            d,
+            b,
+            ObjectiveSense::Minimize
+        ));
+        assert!(!should_restart_default(
+            2001.0,
+            d,
+            b,
+            ObjectiveSense::Minimize
+        ));
+
+        // Maximize: D=1200, B=2800 -> midpoint 2000. At-or-above triggers; below does not.
+        let d = Some(1200.0);
+        let b = Some(2800.0);
+        assert!(should_restart_default(
+            2000.0,
+            d,
+            b,
+            ObjectiveSense::Maximize
+        ));
+        assert!(!should_restart_default(
+            1999.0,
+            d,
+            b,
+            ObjectiveSense::Maximize
+        ));
     }
 }
