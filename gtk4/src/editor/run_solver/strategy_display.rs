@@ -4,7 +4,7 @@ use relm4::prelude::DynamicIndex;
 use relm4::{Component, ComponentController, Controller, RelmWidgetExt, adw, gtk};
 
 use collomatique_strategies::{
-    ConductorProgressData, FindClosestProgressData, NoObjectiveProgressData,
+    ConductorProgressData, FindClosestProgressData, FuzzyProgressData, NoObjectiveProgressData,
     NoObjectiveStarterProgressData, StrategyKind, StrategyProgressData,
 };
 
@@ -32,6 +32,12 @@ pub struct StrategyFrame {
     show_debug: bool,
     last_line: String,
     last_progress: Option<StrategyProgressData>,
+    /// Quick-and-dirty retention of the fuzzy `Perturbed` payload
+    /// (perturbed count, total, L1 distance): it is lost from
+    /// `last_progress` once a later `FindClosest` message overwrites it, but
+    /// the panel keeps showing it. A cleaner per-strategy state model is left
+    /// for later.
+    last_fuzzy_perturbed: Option<(usize, usize, f64)>,
 }
 
 #[relm4::factory(pub)]
@@ -261,6 +267,61 @@ impl FactoryComponent for StrategyFrame {
                             set_valign: gtk::Align::Center,
                             set_spacing: 5,
                             #[watch]
+                            set_visible: matches!(self.strategy_kind, Some(StrategyKind::Fuzzy { .. })),
+                            gtk::Box {
+                                set_orientation: gtk::Orientation::Horizontal,
+                                gtk::Label {
+                                    set_label: "Étape : ",
+                                    set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                                },
+                                gtk::Label {
+                                    #[watch]
+                                    set_label: &self.fuzzy_step(),
+                                },
+                            },
+                            gtk::Box {
+                                set_orientation: gtk::Orientation::Horizontal,
+                                gtk::Label {
+                                    set_label: "Variables perturbées : ",
+                                    set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                                },
+                                gtk::Label {
+                                    #[watch]
+                                    set_label: &self.fuzzy_perturbed_count(),
+                                },
+                            },
+                            gtk::Box {
+                                set_orientation: gtk::Orientation::Horizontal,
+                                gtk::Label {
+                                    set_label: "Distance L1 : ",
+                                    set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                                },
+                                gtk::Label {
+                                    #[watch]
+                                    set_label: &self.fuzzy_l1_distance(),
+                                },
+                            },
+                            gtk::Box {
+                                set_orientation: gtk::Orientation::Horizontal,
+                                gtk::Label {
+                                    set_label: "Coût obtenu : ",
+                                    set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                                },
+                                gtk::Label {
+                                    #[watch]
+                                    set_label: &self.fuzzy_cost(),
+                                },
+                            },
+                        },
+                        gtk::Box {
+                            set_orientation: gtk::Orientation::Vertical,
+                            set_margin_all: 5,
+                            set_hexpand: true,
+                            set_vexpand: true,
+                            set_halign: gtk::Align::Center,
+                            set_valign: gtk::Align::Center,
+                            set_spacing: 5,
+                            #[watch]
                             set_visible: matches!(self.strategy_kind, Some(StrategyKind::NoObjectiveStarter { .. })),
                             gtk::Box {
                                 set_orientation: gtk::Orientation::Horizontal,
@@ -390,6 +451,7 @@ impl FactoryComponent for StrategyFrame {
             show_debug: false,
             last_line: String::new(),
             last_progress: None,
+            last_fuzzy_perturbed: None,
         }
     }
 
@@ -416,6 +478,7 @@ impl FactoryComponent for StrategyFrame {
                 self.show_debug = false;
                 self.idle = true;
                 self.last_progress = None;
+                self.last_fuzzy_perturbed = None;
                 self.last_line = String::new();
                 self.debug_view.emit(DebugViewInput::Clear);
             }
@@ -429,6 +492,7 @@ impl FactoryComponent for StrategyFrame {
                 )));
                 self.strategy_kind = Some(name);
                 self.last_progress = None;
+                self.last_fuzzy_perturbed = None;
                 self.idle = false;
             }
             StrategyDisplayInput::Assigned(None) => {
@@ -440,6 +504,17 @@ impl FactoryComponent for StrategyFrame {
                 self.idle = true;
             }
             StrategyDisplayInput::StrategyUpdate(progress) => {
+                // Capture the fuzzy perturbation payload separately: it is
+                // overwritten in `last_progress` by later repair messages, but
+                // the panel keeps displaying it.
+                if let StrategyProgressData::Fuzzy(FuzzyProgressData::Perturbed {
+                    perturbed,
+                    total,
+                    l1_distance,
+                }) = &progress
+                {
+                    self.last_fuzzy_perturbed = Some((*perturbed, *total, *l1_distance));
+                }
                 if Self::should_retain(&progress) {
                     self.last_progress = Some(progress);
                 }
@@ -532,6 +607,47 @@ impl StrategyFrame {
             Some(StrategyProgressData::FindClosest(
                 FindClosestProgressData::ObjectiveReconstruction(p),
             )) => format!("{:.1}", p.best_obj),
+            _ => "-".to_owned(),
+        }
+    }
+
+    fn fuzzy_step(&self) -> String {
+        match &self.last_progress {
+            // No progress message yet: the warm start is still being
+            // perturbed (a dedicated first step, one more than FindClosest).
+            None => "1/4 (perturbation de la solution)".to_string(),
+            Some(StrategyProgressData::Fuzzy(FuzzyProgressData::Perturbed { .. })) => {
+                "2/4 (construction du modèle)".to_string()
+            }
+            Some(StrategyProgressData::Fuzzy(FuzzyProgressData::FindClosest(
+                FindClosestProgressData::ModelReady | FindClosestProgressData::ClosenessSolve(_),
+            ))) => "3/4 (recherche du plus proche)".to_string(),
+            Some(StrategyProgressData::Fuzzy(FuzzyProgressData::FindClosest(
+                FindClosestProgressData::ObjectiveReconstruction(_),
+            ))) => "4/4 (calcul du coût)".to_string(),
+            _ => "-".to_owned(),
+        }
+    }
+
+    fn fuzzy_perturbed_count(&self) -> String {
+        match self.last_fuzzy_perturbed {
+            Some((perturbed, total, _)) => format!("{perturbed} / {total}"),
+            None => "-".to_owned(),
+        }
+    }
+
+    fn fuzzy_l1_distance(&self) -> String {
+        match self.last_fuzzy_perturbed {
+            Some((_, _, l1_distance)) => format!("{l1_distance:.1}"),
+            None => "-".to_owned(),
+        }
+    }
+
+    fn fuzzy_cost(&self) -> String {
+        match &self.last_progress {
+            Some(StrategyProgressData::Fuzzy(FuzzyProgressData::FindClosest(
+                FindClosestProgressData::ObjectiveReconstruction(p),
+            ))) => format!("{:.1}", p.best_obj),
             _ => "-".to_owned(),
         }
     }
