@@ -185,7 +185,8 @@ impl FactoryComponent for StrategyFrame {
                     gtk::Box {
                         set_hexpand: true,
                         gtk::Label {
-                            set_halign: gtk::Align::Start,
+                            set_hexpand: true,
+                            set_justify: gtk::Justification::Center,
                             set_margin_all: 5,
                             add_css_class: "dimmed",
                             add_css_class: "monospace",
