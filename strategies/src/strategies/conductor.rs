@@ -434,7 +434,10 @@ where
             })
         }
         // Non-contributing progress: still routed above, but nothing to fold.
+        // A FindClosest sub-solve's progress lives in the surrogate/sub-problem
+        // coordinate system, so like NoObjective it carries no foldable incumbent.
         StrategyProgress::NoObjective(_)
+        | StrategyProgress::FindClosest(_)
         | StrategyProgress::NoObjectiveStarter(NoObjectiveStarterProgress::Starter(_))
         | StrategyProgress::Conductor(
             ConductorProgress::WorkerProgress { .. }
@@ -479,9 +482,11 @@ fn resolve_worker_outcome<V: UsableData + Send>(
         StrategyKind::Default(_)
         | StrategyKind::NoObjectiveStarter(_)
         | StrategyKind::Conductor(_) => WorkerResolution::Definitive(outcome),
-        // NoObjective solves the complete problem, so infeasibility is globally definitive;
-        // but a feasible result is not objective-optimal, so it is only an update.
-        StrategyKind::NoObjective(_) => {
+        // NoObjective and FindClosest solve the complete feasibility problem, so
+        // infeasibility is globally definitive; but their feasible result optimizes a
+        // surrogate (nothing / closeness to a warm start), not the real objective, so it
+        // is only an update.
+        StrategyKind::NoObjective(_) | StrategyKind::FindClosest(_) => {
             if outcome.status == SolveStatus::Infeasible {
                 return WorkerResolution::Definitive(outcome);
             }

@@ -424,6 +424,9 @@ impl StrategyFrame {
             StrategyProgressData::Default(_) => true,
             StrategyProgressData::NoObjective(_) => true,
             StrategyProgressData::NoObjectiveStarter(_) => true,
+            // Minimal stub: retained so the latest line renders; no dedicated
+            // metric panel yet (see Commit 3).
+            StrategyProgressData::FindClosest(_) => true,
             StrategyProgressData::Conductor(ConductorProgressData::Conductor(_)) => true,
             StrategyProgressData::Conductor(_) => false,
         }

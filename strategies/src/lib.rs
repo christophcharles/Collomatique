@@ -5,6 +5,7 @@ pub use strategies::conductor::{
     ConductorStrategy, Solution, SolutionData, update_best_bound, update_best_solution,
 };
 pub use strategies::default::DefaultStrategy;
+pub use strategies::find_closest::{FindClosestProgressData, FindClosestStrategy};
 pub use strategies::no_objective::{
     NoObjectiveProgressData, NoObjectiveSolveProgress, NoObjectiveStrategy,
 };
@@ -403,6 +404,7 @@ pub enum StrategyKind {
     Default(DefaultStrategy),
     NoObjective(NoObjectiveStrategy),
     NoObjectiveStarter(NoObjectiveStarterStrategy),
+    FindClosest(FindClosestStrategy),
     Conductor(ConductorStrategy),
 }
 
@@ -438,6 +440,7 @@ pub enum StrategyProgress<V: UsableData + Send> {
     Default(SolveProgress<V>),
     NoObjective(NoObjectiveProgressData),
     NoObjectiveStarter(NoObjectiveStarterProgress<V>),
+    FindClosest(FindClosestProgressData),
     Conductor(ConductorProgress<V>),
 }
 
@@ -447,6 +450,7 @@ impl<V: UsableData + Send> fmt::Display for StrategyProgress<V> {
             StrategyProgress::Default(p) => write!(f, "{p}"),
             StrategyProgress::NoObjective(p) => write!(f, "{p}"),
             StrategyProgress::NoObjectiveStarter(p) => write!(f, "{p}"),
+            StrategyProgress::FindClosest(p) => write!(f, "{p}"),
             StrategyProgress::Conductor(p) => write!(f, "{p}"),
         }
     }
@@ -472,6 +476,12 @@ impl<V: UsableData + Send> From<NoObjectiveStarterProgress<V>> for StrategyProgr
     }
 }
 
+impl<V: UsableData + Send> From<FindClosestProgressData> for StrategyProgress<V> {
+    fn from(p: FindClosestProgressData) -> Self {
+        StrategyProgress::FindClosest(p)
+    }
+}
+
 impl<V: UsableData + Send> From<ConductorProgress<V>> for StrategyProgress<V> {
     fn from(p: ConductorProgress<V>) -> Self {
         StrategyProgress::Conductor(p)
@@ -486,6 +496,7 @@ pub enum StrategyProgressData {
     Default(SolveProgressData),
     NoObjective(NoObjectiveProgressData),
     NoObjectiveStarter(NoObjectiveStarterProgressData),
+    FindClosest(FindClosestProgressData),
     Conductor(ConductorProgressData),
 }
 
@@ -495,6 +506,7 @@ impl fmt::Display for StrategyProgressData {
             StrategyProgressData::Default(p) => write!(f, "{p}"),
             StrategyProgressData::NoObjective(p) => write!(f, "{p}"),
             StrategyProgressData::NoObjectiveStarter(p) => write!(f, "{p}"),
+            StrategyProgressData::FindClosest(p) => write!(f, "{p}"),
             StrategyProgressData::Conductor(p) => write!(f, "{p}"),
         }
     }
@@ -535,6 +547,17 @@ impl<V: UsableData + Send> SerializableProgress<V> for NoObjectiveProgressData {
     }
 }
 
+impl<V: UsableData + Send> SerializableProgress<V> for FindClosestProgressData {
+    type Data = FindClosestProgressData;
+    type Error = Infallible;
+    fn into_data(&self, _var_order: &[V]) -> Result<FindClosestProgressData, Infallible> {
+        Ok(self.clone())
+    }
+    fn from_data(data: &FindClosestProgressData, _var_order: &[V]) -> Result<Self, Infallible> {
+        Ok(data.clone())
+    }
+}
+
 impl<V: UsableData + Send> SerializableProgress<V> for StrategyProgress<V> {
     type Data = StrategyProgressData;
     type Error = Infallible;
@@ -549,6 +572,9 @@ impl<V: UsableData + Send> SerializableProgress<V> for StrategyProgress<V> {
             StrategyProgress::NoObjectiveStarter(p) => StrategyProgressData::NoObjectiveStarter(
                 SerializableProgress::into_data(p, var_order)?,
             ),
+            StrategyProgress::FindClosest(p) => {
+                StrategyProgressData::FindClosest(SerializableProgress::into_data(p, var_order)?)
+            }
             StrategyProgress::Conductor(p) => {
                 StrategyProgressData::Conductor(SerializableProgress::into_data(p, var_order)?)
             }
@@ -569,6 +595,11 @@ impl<V: UsableData + Send> SerializableProgress<V> for StrategyProgress<V> {
                     d, var_order,
                 )?,
             ),
+            StrategyProgressData::FindClosest(d) => {
+                StrategyProgress::FindClosest(<FindClosestProgressData as SerializableProgress<
+                    V,
+                >>::from_data(d, var_order)?)
+            }
             StrategyProgressData::Conductor(d) => StrategyProgress::Conductor(
                 <ConductorProgress<V> as SerializableProgress<V>>::from_data(d, var_order)?,
             ),
@@ -609,6 +640,15 @@ impl<V: UsableData + Send> StrategyProgressVariant<V> for NoObjectiveStarterProg
     }
 }
 
+impl<V: UsableData + Send> StrategyProgressVariant<V> for FindClosestProgressData {
+    fn from_strategy_progress(progress: StrategyProgress<V>) -> Result<Self, StrategyProgress<V>> {
+        match progress {
+            StrategyProgress::FindClosest(p) => Ok(p),
+            other => Err(other),
+        }
+    }
+}
+
 impl<V: UsableData + Send> StrategyProgressVariant<V> for ConductorProgress<V> {
     fn from_strategy_progress(progress: StrategyProgress<V>) -> Result<Self, StrategyProgress<V>> {
         match progress {
@@ -633,6 +673,12 @@ impl From<NoObjectiveStrategy> for StrategyKind {
 impl From<NoObjectiveStarterStrategy> for StrategyKind {
     fn from(s: NoObjectiveStarterStrategy) -> Self {
         StrategyKind::NoObjectiveStarter(s)
+    }
+}
+
+impl From<FindClosestStrategy> for StrategyKind {
+    fn from(s: FindClosestStrategy) -> Self {
+        StrategyKind::FindClosest(s)
     }
 }
 
@@ -690,6 +736,7 @@ impl Strategy for StrategyKind {
             StrategyKind::Default(s) => s.name(),
             StrategyKind::NoObjective(s) => s.name(),
             StrategyKind::NoObjectiveStarter(s) => s.name(),
+            StrategyKind::FindClosest(s) => s.name(),
             StrategyKind::Conductor(s) => s.name(),
         }
     }
@@ -699,6 +746,7 @@ impl Strategy for StrategyKind {
             StrategyKind::Default(s) => s.ui_name(),
             StrategyKind::NoObjective(s) => s.ui_name(),
             StrategyKind::NoObjectiveStarter(s) => s.ui_name(),
+            StrategyKind::FindClosest(s) => s.ui_name(),
             StrategyKind::Conductor(s) => s.ui_name(),
         }
     }
@@ -731,6 +779,12 @@ impl Strategy for StrategyKind {
             StrategyKind::NoObjectiveStarter(s) => {
                 s.run_with_callback(ctx, model, warm_start, &|p| {
                     on_progress(StrategyProgress::NoObjectiveStarter(p))
+                })
+                .await
+            }
+            StrategyKind::FindClosest(s) => {
+                s.run_with_callback(ctx, model, warm_start, &|p| {
+                    on_progress(StrategyProgress::FindClosest(p))
                 })
                 .await
             }

@@ -482,6 +482,22 @@ impl Variable {
         self.integer_var
     }
 
+    /// Returns whether the variable is binary, i.e. an integer variable bounded to `[0, 1]`.
+    ///
+    /// This is exactly the shape produced by [`Variable::binary`].
+    ///
+    /// ```
+    /// # use collomatique_ilp::Variable;
+    /// assert_eq!(Variable::binary().is_binary(), true);
+    /// assert_eq!(Variable::integer().min(0.0).max(1.0).is_binary(), true);
+    /// assert_eq!(Variable::integer().min(0.0).max(5.0).is_binary(), false);
+    /// assert_eq!(Variable::continuous().min(0.0).max(1.0).is_binary(), false);
+    /// assert_eq!(Variable::integer().is_binary(), false);
+    /// ```
+    pub fn is_binary(&self) -> bool {
+        self.integer_var && self.get_min() == Some(0.0) && self.get_max() == Some(1.0)
+    }
+
     /// Returns the minimum bound of the variable.
     ///
     /// ```
