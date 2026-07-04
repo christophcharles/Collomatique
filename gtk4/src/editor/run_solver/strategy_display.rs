@@ -281,8 +281,15 @@ impl StrategyFrame {
             .emit(NoObjectiveStarterPanelInput::Reset {
                 visible: matches!(kind, Some(StrategyKind::NoObjectiveStarter { .. })),
             });
+        // The conductor panel also needs the slot count to render "Tâches actives : X/Y",
+        // which is known from the assigned conductor strategy.
+        let (conductor_visible, conductor_total) = match kind {
+            Some(StrategyKind::Conductor(cs)) => (true, cs.worker_count.get()),
+            _ => (false, 0),
+        };
         self.conductor_panel.emit(ConductorPanelInput::Reset {
-            visible: matches!(kind, Some(StrategyKind::Conductor { .. })),
+            visible: conductor_visible,
+            total: conductor_total,
         });
     }
 

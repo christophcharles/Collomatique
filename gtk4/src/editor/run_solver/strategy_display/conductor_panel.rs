@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use gtk::prelude::{BoxExt, OrientableExt, WidgetExt};
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent, gtk};
 
@@ -6,9 +8,11 @@ use collomatique_strategies::{ConductorProgressData, ConductorStatusData};
 #[derive(Debug)]
 pub enum ConductorPanelInput {
     /// Sent on (re)assignment: `visible` is whether the conductor strategy is the one now
-    /// running on the worker. Also clears retained state to its fresh state.
+    /// running on the worker; `total` is the conductor's worker-slot count. Also clears
+    /// retained state to its fresh state.
     Reset {
         visible: bool,
+        total: u32,
     },
     Update(ConductorProgressData),
 }
@@ -18,6 +22,11 @@ pub struct ConductorPanel {
     /// Only the aggregated `Conductor` status is meaningful here; the per-worker
     /// sub-progress variants live in the surrogate coordinate system and are ignored.
     last: Option<ConductorStatusData>,
+    /// Number of worker slots of the (nested) conductor being displayed.
+    total: u32,
+    /// Sub-worker number → whether it currently has a strategy assigned. Learned from the
+    /// conductor's `WorkerAssigned` events; the active count is those mapped to `true`.
+    worker_active: HashMap<u32, bool>,
 }
 
 #[relm4::component(pub)]
@@ -60,6 +69,17 @@ impl SimpleComponent for ConductorPanel {
                     set_label: &model.best_possible_cost(),
                 },
             },
+            gtk::Box {
+                set_orientation: gtk::Orientation::Horizontal,
+                gtk::Label {
+                    set_label: "Tâches actives : ",
+                    set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                },
+                gtk::Label {
+                    #[watch]
+                    set_label: &model.active_tasks(),
+                },
+            },
         }
     }
 
@@ -71,6 +91,8 @@ impl SimpleComponent for ConductorPanel {
         let model = ConductorPanel {
             visible: false,
             last: None,
+            total: 0,
+            worker_active: HashMap::new(),
         };
         let widgets = view_output!();
         ComponentParts { model, widgets }
@@ -78,13 +100,22 @@ impl SimpleComponent for ConductorPanel {
 
     fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
         match msg {
-            ConductorPanelInput::Reset { visible } => {
+            ConductorPanelInput::Reset { visible, total } => {
                 self.visible = visible;
+                self.total = total;
                 self.last = None;
+                self.worker_active.clear();
             }
             // Retain only the aggregated status; other variants are non-contributing.
             ConductorPanelInput::Update(ConductorProgressData::Conductor(status)) => {
                 self.last = Some(status);
+            }
+            // Track each sub-worker's assignment so we can report the active-task count.
+            ConductorPanelInput::Update(ConductorProgressData::WorkerAssigned {
+                worker_num,
+                strategy,
+            }) => {
+                self.worker_active.insert(worker_num, strategy.is_some());
             }
             ConductorPanelInput::Update(_) => {}
         }
@@ -110,5 +141,10 @@ impl ConductorPanel {
             },
             None => "-".to_owned(),
         }
+    }
+
+    fn active_tasks(&self) -> String {
+        let active = self.worker_active.values().filter(|a| **a).count();
+        format!("{}/{}", active, self.total)
     }
 }
