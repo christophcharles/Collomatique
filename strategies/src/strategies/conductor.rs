@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::convert::Infallible;
 use std::fmt;
 use std::future::Future;
@@ -286,15 +286,10 @@ impl<V: UsableData + Send> SerializableProgress<V> for ConductorProgress<V> {
     }
 }
 
+/// Tuning knobs for the conductor's fuzzy exploration. Only meaningful when fuzzy is enabled,
+/// hence carried as `ConductorStrategy::fuzzy_config: Option<FuzzyConfig>`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ConductorStrategy {
-    pub worker_count: NonZeroU32,
-    /// Queue a `DefaultStrategy` (the full branch-and-bound solve). Queued last.
-    pub enable_default: bool,
-    /// Queue a `NoObjectiveStrategy` first, to produce a feasible warm-start incumbent.
-    pub enable_warm_start: bool,
-    /// Fill otherwise-idle workers with `FuzzyStrategy` exploration around the incumbent.
-    pub enable_fuzzy: bool,
+pub struct FuzzyConfig {
     /// Gaussian per-variable perturbation strength used by the fuzzy exploration workers.
     pub fuzzy_sigma: f64,
     /// Absolute L1-distance tolerance handed to every `FindClosestStrategy` the conductor
@@ -303,15 +298,56 @@ pub struct ConductorStrategy {
     pub find_closest_tolerance: f64,
 }
 
+impl Default for FuzzyConfig {
+    fn default() -> Self {
+        Self {
+            fuzzy_sigma: 0.2, // gives ~1.2% of variables flipped if they're all binary
+            find_closest_tolerance: 10.0,
+        }
+    }
+}
+
+/// A misconfiguration the conductor can detect before running. Surfaced via
+/// [`ConductorStrategy::warnings`] so a UI can flag setups that waste work or never finish.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ConductorWarning {
+    /// No substrategy is enabled at all: nothing would run.
+    NoStrategyEnabled,
+    /// Fuzzy is enabled but neither default nor warm-start is, so no incumbent is ever produced
+    /// to seed it: fuzzy never fires and the conductor exits immediately.
+    NoSeed,
+    /// Fuzzy is enabled alongside the default worker but there is only one slot, which the default
+    /// worker occupies: fuzzy never gets an idle slot to fill.
+    StarvedFuzzy,
+    /// Default is disabled while fuzzy runs off a warm-start incumbent: with no default there is
+    /// never a bound to prove optimality, so fuzzy refills the workers indefinitely.
+    WontFinish,
+    /// Fuzzy is enabled but warm-start is not: fuzzy can only fire once the default worker has
+    /// already gone far, so the fuzzers are usually wasted.
+    ColdFuzzy,
+    /// More worker slots than available CPU cores.
+    OverwhelmedCpu,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ConductorStrategy {
+    pub worker_count: NonZeroU32,
+    /// Queue a `DefaultStrategy` (the full branch-and-bound solve). Queued last.
+    pub enable_default: bool,
+    /// Queue a `NoObjectiveStrategy` first, to produce a feasible warm-start incumbent.
+    pub enable_warm_start: bool,
+    /// Fill otherwise-idle workers with `FuzzyStrategy` exploration around the incumbent, tuned by
+    /// the carried config. `None` disables fuzzy exploration entirely.
+    pub fuzzy_config: Option<FuzzyConfig>,
+}
+
 impl Default for ConductorStrategy {
     fn default() -> Self {
         Self {
             worker_count: NonZeroU32::new(1).expect("1 is non-zero"),
             enable_default: true,
             enable_warm_start: true,
-            enable_fuzzy: true,
-            fuzzy_sigma: 0.2, // gives ~1.2% of variables flipped if they're all binary
-            find_closest_tolerance: 10.0,
+            fuzzy_config: None,
         }
     }
 }
@@ -321,8 +357,9 @@ impl ConductorStrategy {
     /// cores (as reported by [`std::thread::available_parallelism`]), capped at 4. The
     /// conductor gains little from more than a Default worker plus a few fuzzers, and most
     /// users don't want a solve to bog down the whole machine. Falls back to a single worker
-    /// when the available parallelism cannot be determined. Every substrategy toggle is on.
-    pub fn with_sane_defaults() -> Self {
+    /// when the available parallelism cannot be determined. Fuzzy exploration is enabled so the
+    /// extra worker slots have something to run.
+    pub fn with_parallelism_defaults() -> Self {
         let cores = std::thread::available_parallelism()
             .map(|n| n.get())
             .unwrap_or(1);
@@ -333,8 +370,42 @@ impl ConductorStrategy {
             .unwrap_or(NonZeroU32::MIN);
         Self {
             worker_count,
+            fuzzy_config: Some(FuzzyConfig::default()),
             ..Self::default()
         }
+    }
+
+    /// Misconfigurations detectable before running (see [`ConductorWarning`]). Returned as a set
+    /// so a UI can flag any combination that would waste work or never terminate.
+    pub fn warnings(&self) -> HashSet<ConductorWarning> {
+        let d = self.enable_default;
+        let w = self.enable_warm_start;
+        let f = self.fuzzy_config.is_some();
+        let wc = self.worker_count.get();
+
+        let mut warnings = HashSet::new();
+        if !d && !w && !f {
+            warnings.insert(ConductorWarning::NoStrategyEnabled);
+        }
+        if f && !d && !w {
+            warnings.insert(ConductorWarning::NoSeed);
+        }
+        if f && d && wc == 1 {
+            warnings.insert(ConductorWarning::StarvedFuzzy);
+        }
+        if f && w && !d {
+            warnings.insert(ConductorWarning::WontFinish);
+        }
+        if f && d && !w {
+            warnings.insert(ConductorWarning::ColdFuzzy);
+        }
+        let oversubscribed = std::thread::available_parallelism()
+            .map(|n| wc as usize > n.get())
+            .unwrap_or(false);
+        if oversubscribed {
+            warnings.insert(ConductorWarning::OverwhelmedCpu);
+        }
+        warnings
     }
 
     fn default_status<V: UsableData + Send>() -> ConductorStatus<V> {
@@ -344,18 +415,17 @@ impl ConductorStrategy {
         }
     }
 
-    /// Build a fuzzy exploration substrategy tuned by this conductor's `fuzzy_sigma`
-    /// and `find_closest_tolerance`.
-    fn fuzzy_substrategy(&self) -> FuzzyStrategy {
+    /// Build a fuzzy exploration substrategy tuned by the given `FuzzyConfig`.
+    fn fuzzy_substrategy(&self, cfg: &FuzzyConfig) -> FuzzyStrategy {
         FuzzyStrategy {
-            sigma: self.fuzzy_sigma,
+            sigma: cfg.fuzzy_sigma,
             // Entropy-seeded: each spawned fuzzy worker perturbs the incumbent differently.
             seed: None,
             find_closest: FindClosestStrategy {
                 closeness_time_limit_seconds: None,
                 reconstruction_time_limit_seconds: None,
                 disable_logging: false,
-                distance_tolerance: self.find_closest_tolerance,
+                distance_tolerance: cfg.find_closest_tolerance,
             },
         }
     }
@@ -851,15 +921,17 @@ impl Strategy for ConductorStrategy {
             // drained, a warm start exists, and we are not yet at a proven optimum, fill every
             // idle slot with a fuzzy perturbation attempt. Fuzzy needs an incumbent, so this
             // can only start after warm_start/default has produced one.
-            if self.enable_fuzzy && queue.is_empty() {
-                let free = slots.free_count();
-                let (has_incumbent, solved) = {
-                    let st = status.lock().expect("conductor status mutex");
-                    (st.best_solution.is_some(), optimum_reached(&st, sense))
-                };
-                if free > 0 && has_incumbent && !solved {
-                    for _ in 0..free {
-                        queue.push_back(StrategyKind::Fuzzy(self.fuzzy_substrategy()));
+            if let Some(fuzzy_cfg) = &self.fuzzy_config {
+                if queue.is_empty() {
+                    let free = slots.free_count();
+                    let (has_incumbent, solved) = {
+                        let st = status.lock().expect("conductor status mutex");
+                        (st.best_solution.is_some(), optimum_reached(&st, sense))
+                    };
+                    if free > 0 && has_incumbent && !solved {
+                        for _ in 0..free {
+                            queue.push_back(StrategyKind::Fuzzy(self.fuzzy_substrategy(fuzzy_cfg)));
+                        }
                     }
                 }
             }
@@ -1366,6 +1438,94 @@ mod tests {
                 _ => "other",
             })
             .collect()
+    }
+
+    fn conductor(worker_count: u32, d: bool, w: bool, f: bool) -> ConductorStrategy {
+        ConductorStrategy {
+            worker_count: NonZeroU32::new(worker_count).expect("non-zero worker count"),
+            enable_default: d,
+            enable_warm_start: w,
+            fuzzy_config: f.then(FuzzyConfig::default),
+        }
+    }
+
+    #[test]
+    fn warnings_flag_no_strategy_and_no_seed() {
+        // Nothing enabled at all.
+        assert!(
+            conductor(1, false, false, false)
+                .warnings()
+                .contains(&ConductorWarning::NoStrategyEnabled)
+        );
+        // Fuzzy only: enabled but nothing produces an incumbent to seed it.
+        let w = conductor(4, false, false, true).warnings();
+        assert!(w.contains(&ConductorWarning::NoSeed));
+        assert!(!w.contains(&ConductorWarning::NoStrategyEnabled));
+        // NoSeed and ColdFuzzy are mutually exclusive (ColdFuzzy requires default).
+        assert!(!w.contains(&ConductorWarning::ColdFuzzy));
+    }
+
+    #[test]
+    fn warnings_flag_starved_fuzzy_on_single_worker() {
+        // One slot, default + fuzzy: default hogs it, fuzzy never gets an idle slot.
+        assert!(
+            conductor(1, true, true, true)
+                .warnings()
+                .contains(&ConductorWarning::StarvedFuzzy)
+        );
+        // Two slots leaves room for fuzzy: not starved.
+        assert!(
+            !conductor(2, true, true, true)
+                .warnings()
+                .contains(&ConductorWarning::StarvedFuzzy)
+        );
+    }
+
+    #[test]
+    fn warnings_flag_wont_finish_and_cold_fuzzy() {
+        // Warm-start seeds fuzzy but no default => no bound => never terminates.
+        assert!(
+            conductor(4, false, true, true)
+                .warnings()
+                .contains(&ConductorWarning::WontFinish)
+        );
+        // Fuzzy with default but no warm start => fuzzy only fires once default has gone far.
+        assert!(
+            conductor(4, true, false, true)
+                .warnings()
+                .contains(&ConductorWarning::ColdFuzzy)
+        );
+    }
+
+    #[test]
+    fn warnings_are_clean_for_healthy_configs() {
+        // Default only, or default + warm start, on a single worker: nothing to flag (barring an
+        // impossibly small reported core count, which `OverwhelmedCpu` guards against separately).
+        let plain = conductor(1, true, false, false).warnings();
+        assert!(!plain.contains(&ConductorWarning::NoStrategyEnabled));
+        assert!(!plain.contains(&ConductorWarning::StarvedFuzzy));
+        assert!(!plain.contains(&ConductorWarning::WontFinish));
+        assert!(!plain.contains(&ConductorWarning::ColdFuzzy));
+        assert!(!plain.contains(&ConductorWarning::NoSeed));
+    }
+
+    #[test]
+    fn warnings_flag_overwhelmed_cpu() {
+        // Only assert when the platform reports its parallelism; otherwise the check is skipped.
+        if let Ok(cores) = std::thread::available_parallelism() {
+            let over = u32::try_from(cores.get() + 1).expect("core count + 1 fits in u32");
+            assert!(
+                conductor(over, true, true, false)
+                    .warnings()
+                    .contains(&ConductorWarning::OverwhelmedCpu)
+            );
+            // One worker never oversubscribes a machine that reports at least one core.
+            assert!(
+                !conductor(1, true, false, false)
+                    .warnings()
+                    .contains(&ConductorWarning::OverwhelmedCpu)
+            );
+        }
     }
 
     #[test]

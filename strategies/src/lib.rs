@@ -2,7 +2,8 @@ mod strategies;
 
 pub use strategies::conductor::{
     ConductorProgress, ConductorProgressData, ConductorStatus, ConductorStatusData,
-    ConductorStrategy, Solution, SolutionData, update_best_bound, update_best_solution,
+    ConductorStrategy, ConductorWarning, FuzzyConfig, Solution, SolutionData, update_best_bound,
+    update_best_solution,
 };
 pub use strategies::default::DefaultStrategy;
 pub use strategies::find_closest::{FindClosestProgressData, FindClosestStrategy};
