@@ -6,6 +6,7 @@ pub use strategies::conductor::{
 };
 pub use strategies::default::DefaultStrategy;
 pub use strategies::find_closest::{FindClosestProgressData, FindClosestStrategy};
+pub use strategies::fuzzy::{FuzzyProgressData, FuzzyStrategy};
 pub use strategies::no_objective::{
     NoObjectiveProgressData, NoObjectiveSolveProgress, NoObjectiveStrategy,
 };
@@ -405,6 +406,7 @@ pub enum StrategyKind {
     NoObjective(NoObjectiveStrategy),
     NoObjectiveStarter(NoObjectiveStarterStrategy),
     FindClosest(FindClosestStrategy),
+    Fuzzy(FuzzyStrategy),
     Conductor(ConductorStrategy),
 }
 
@@ -441,6 +443,7 @@ pub enum StrategyProgress<V: UsableData + Send> {
     NoObjective(NoObjectiveProgressData),
     NoObjectiveStarter(NoObjectiveStarterProgress<V>),
     FindClosest(FindClosestProgressData),
+    Fuzzy(FuzzyProgressData),
     Conductor(ConductorProgress<V>),
 }
 
@@ -451,6 +454,7 @@ impl<V: UsableData + Send> fmt::Display for StrategyProgress<V> {
             StrategyProgress::NoObjective(p) => write!(f, "{p}"),
             StrategyProgress::NoObjectiveStarter(p) => write!(f, "{p}"),
             StrategyProgress::FindClosest(p) => write!(f, "{p}"),
+            StrategyProgress::Fuzzy(p) => write!(f, "{p}"),
             StrategyProgress::Conductor(p) => write!(f, "{p}"),
         }
     }
@@ -482,6 +486,12 @@ impl<V: UsableData + Send> From<FindClosestProgressData> for StrategyProgress<V>
     }
 }
 
+impl<V: UsableData + Send> From<FuzzyProgressData> for StrategyProgress<V> {
+    fn from(p: FuzzyProgressData) -> Self {
+        StrategyProgress::Fuzzy(p)
+    }
+}
+
 impl<V: UsableData + Send> From<ConductorProgress<V>> for StrategyProgress<V> {
     fn from(p: ConductorProgress<V>) -> Self {
         StrategyProgress::Conductor(p)
@@ -497,6 +507,7 @@ pub enum StrategyProgressData {
     NoObjective(NoObjectiveProgressData),
     NoObjectiveStarter(NoObjectiveStarterProgressData),
     FindClosest(FindClosestProgressData),
+    Fuzzy(FuzzyProgressData),
     Conductor(ConductorProgressData),
 }
 
@@ -507,6 +518,7 @@ impl fmt::Display for StrategyProgressData {
             StrategyProgressData::NoObjective(p) => write!(f, "{p}"),
             StrategyProgressData::NoObjectiveStarter(p) => write!(f, "{p}"),
             StrategyProgressData::FindClosest(p) => write!(f, "{p}"),
+            StrategyProgressData::Fuzzy(p) => write!(f, "{p}"),
             StrategyProgressData::Conductor(p) => write!(f, "{p}"),
         }
     }
@@ -558,6 +570,17 @@ impl<V: UsableData + Send> SerializableProgress<V> for FindClosestProgressData {
     }
 }
 
+impl<V: UsableData + Send> SerializableProgress<V> for FuzzyProgressData {
+    type Data = FuzzyProgressData;
+    type Error = Infallible;
+    fn into_data(&self, _var_order: &[V]) -> Result<FuzzyProgressData, Infallible> {
+        Ok(self.clone())
+    }
+    fn from_data(data: &FuzzyProgressData, _var_order: &[V]) -> Result<Self, Infallible> {
+        Ok(data.clone())
+    }
+}
+
 impl<V: UsableData + Send> SerializableProgress<V> for StrategyProgress<V> {
     type Data = StrategyProgressData;
     type Error = Infallible;
@@ -574,6 +597,9 @@ impl<V: UsableData + Send> SerializableProgress<V> for StrategyProgress<V> {
             ),
             StrategyProgress::FindClosest(p) => {
                 StrategyProgressData::FindClosest(SerializableProgress::into_data(p, var_order)?)
+            }
+            StrategyProgress::Fuzzy(p) => {
+                StrategyProgressData::Fuzzy(SerializableProgress::into_data(p, var_order)?)
             }
             StrategyProgress::Conductor(p) => {
                 StrategyProgressData::Conductor(SerializableProgress::into_data(p, var_order)?)
@@ -600,6 +626,9 @@ impl<V: UsableData + Send> SerializableProgress<V> for StrategyProgress<V> {
                     V,
                 >>::from_data(d, var_order)?)
             }
+            StrategyProgressData::Fuzzy(d) => StrategyProgress::Fuzzy(
+                <FuzzyProgressData as SerializableProgress<V>>::from_data(d, var_order)?,
+            ),
             StrategyProgressData::Conductor(d) => StrategyProgress::Conductor(
                 <ConductorProgress<V> as SerializableProgress<V>>::from_data(d, var_order)?,
             ),
@@ -649,6 +678,15 @@ impl<V: UsableData + Send> StrategyProgressVariant<V> for FindClosestProgressDat
     }
 }
 
+impl<V: UsableData + Send> StrategyProgressVariant<V> for FuzzyProgressData {
+    fn from_strategy_progress(progress: StrategyProgress<V>) -> Result<Self, StrategyProgress<V>> {
+        match progress {
+            StrategyProgress::Fuzzy(p) => Ok(p),
+            other => Err(other),
+        }
+    }
+}
+
 impl<V: UsableData + Send> StrategyProgressVariant<V> for ConductorProgress<V> {
     fn from_strategy_progress(progress: StrategyProgress<V>) -> Result<Self, StrategyProgress<V>> {
         match progress {
@@ -679,6 +717,12 @@ impl From<NoObjectiveStarterStrategy> for StrategyKind {
 impl From<FindClosestStrategy> for StrategyKind {
     fn from(s: FindClosestStrategy) -> Self {
         StrategyKind::FindClosest(s)
+    }
+}
+
+impl From<FuzzyStrategy> for StrategyKind {
+    fn from(s: FuzzyStrategy) -> Self {
+        StrategyKind::Fuzzy(s)
     }
 }
 
@@ -737,6 +781,7 @@ impl Strategy for StrategyKind {
             StrategyKind::NoObjective(s) => s.name(),
             StrategyKind::NoObjectiveStarter(s) => s.name(),
             StrategyKind::FindClosest(s) => s.name(),
+            StrategyKind::Fuzzy(s) => s.name(),
             StrategyKind::Conductor(s) => s.name(),
         }
     }
@@ -747,6 +792,7 @@ impl Strategy for StrategyKind {
             StrategyKind::NoObjective(s) => s.ui_name(),
             StrategyKind::NoObjectiveStarter(s) => s.ui_name(),
             StrategyKind::FindClosest(s) => s.ui_name(),
+            StrategyKind::Fuzzy(s) => s.ui_name(),
             StrategyKind::Conductor(s) => s.ui_name(),
         }
     }
@@ -785,6 +831,12 @@ impl Strategy for StrategyKind {
             StrategyKind::FindClosest(s) => {
                 s.run_with_callback(ctx, model, warm_start, &|p| {
                     on_progress(StrategyProgress::FindClosest(p))
+                })
+                .await
+            }
+            StrategyKind::Fuzzy(s) => {
+                s.run_with_callback(ctx, model, warm_start, &|p| {
+                    on_progress(StrategyProgress::Fuzzy(p))
                 })
                 .await
             }

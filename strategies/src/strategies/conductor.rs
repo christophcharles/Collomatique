@@ -438,6 +438,7 @@ where
         // coordinate system, so like NoObjective it carries no foldable incumbent.
         StrategyProgress::NoObjective(_)
         | StrategyProgress::FindClosest(_)
+        | StrategyProgress::Fuzzy(_)
         | StrategyProgress::NoObjectiveStarter(NoObjectiveStarterProgress::Starter(_))
         | StrategyProgress::Conductor(
             ConductorProgress::WorkerProgress { .. }
@@ -486,7 +487,7 @@ fn resolve_worker_outcome<V: UsableData + Send>(
         // infeasibility is globally definitive; but their feasible result optimizes a
         // surrogate (nothing / closeness to a warm start), not the real objective, so it
         // is only an update.
-        StrategyKind::NoObjective(_) | StrategyKind::FindClosest(_) => {
+        StrategyKind::NoObjective(_) | StrategyKind::FindClosest(_) | StrategyKind::Fuzzy(_) => {
             if outcome.status == SolveStatus::Infeasible {
                 return WorkerResolution::Definitive(outcome);
             }

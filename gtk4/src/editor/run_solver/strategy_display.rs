@@ -458,6 +458,7 @@ impl StrategyFrame {
             StrategyProgressData::NoObjective(_) => true,
             StrategyProgressData::NoObjectiveStarter(_) => true,
             StrategyProgressData::FindClosest(_) => true,
+            StrategyProgressData::Fuzzy(_) => true,
             StrategyProgressData::Conductor(ConductorProgressData::Conductor(_)) => true,
             StrategyProgressData::Conductor(_) => false,
         }
