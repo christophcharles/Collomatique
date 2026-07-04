@@ -299,6 +299,18 @@ impl Default for ConductorStrategy {
 }
 
 impl ConductorStrategy {
+    /// Build a conductor with one worker slot per available CPU core, as reported by
+    /// [`std::thread::available_parallelism`]. Falls back to a single worker when the
+    /// available parallelism cannot be determined.
+    pub fn with_available_parallelism() -> Self {
+        let worker_count = std::thread::available_parallelism()
+            .ok()
+            .and_then(|n| u32::try_from(n.get()).ok())
+            .and_then(NonZeroU32::new)
+            .unwrap_or(NonZeroU32::MIN);
+        Self { worker_count }
+    }
+
     fn default_status<V: UsableData + Send>() -> ConductorStatus<V> {
         ConductorStatus {
             best_solution: None,

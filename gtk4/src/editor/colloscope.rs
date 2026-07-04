@@ -632,7 +632,8 @@ impl Component for Colloscope {
                     let ilp_problem = ilp_repr.ilp_problem.clone();
                     let model = ilp_problem.problem.clone();
                     self.solving_problem = Some(ilp_problem);
-                    let strategy = collomatique_strategies::ConductorStrategy::default();
+                    let strategy =
+                        collomatique_strategies::ConductorStrategy::with_available_parallelism();
                     self.run_solver_dialog
                         .sender()
                         .send(run_solver::DialogInput::Run(strategy, model))
