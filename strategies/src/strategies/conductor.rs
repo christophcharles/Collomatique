@@ -312,13 +312,18 @@ impl Default for ConductorStrategy {
 }
 
 impl ConductorStrategy {
-    /// Build a conductor with one worker slot per available CPU core, as reported by
-    /// [`std::thread::available_parallelism`]. Falls back to a single worker when the
-    /// available parallelism cannot be determined. Every substrategy toggle is on.
-    pub fn with_available_parallelism() -> Self {
-        let worker_count = std::thread::available_parallelism()
+    /// Build a conductor with a sane number of worker slots: roughly half the available CPU
+    /// cores (as reported by [`std::thread::available_parallelism`]), capped at 4. The
+    /// conductor gains little from more than a Default worker plus a few fuzzers, and most
+    /// users don't want a solve to bog down the whole machine. Falls back to a single worker
+    /// when the available parallelism cannot be determined. Every substrategy toggle is on.
+    pub fn with_sane_defaults() -> Self {
+        let cores = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1);
+        let workers = cores.div_ceil(2).clamp(1, 4);
+        let worker_count = u32::try_from(workers)
             .ok()
-            .and_then(|n| u32::try_from(n.get()).ok())
             .and_then(NonZeroU32::new)
             .unwrap_or(NonZeroU32::MIN);
         Self {
