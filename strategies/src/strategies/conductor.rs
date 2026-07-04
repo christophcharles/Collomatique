@@ -609,6 +609,63 @@ struct WorkerResult<V: UsableData + Send> {
     outcome: Result<StrategyOutcome<V>, StrategyError>,
 }
 
+/// The conductor's worker-slot pool; the slot index *is* the `worker_num`. On drop — which
+/// happens on every exit from `run_with_callback`, including the early returns that force-kill
+/// live workers by dropping `workers` — it emits an idle `WorkerAssigned { None }` for each
+/// slot still marked busy, so the UI never shows a worker as running after it was killed.
+struct WorkerSlots<'a, V: UsableData + Send> {
+    busy: Vec<bool>,
+    on_progress: &'a (dyn Fn(ConductorProgress<V>) -> bool + Send + Sync),
+}
+
+impl<'a, V: UsableData + Send> WorkerSlots<'a, V> {
+    fn new(
+        count: usize,
+        on_progress: &'a (dyn Fn(ConductorProgress<V>) -> bool + Send + Sync),
+    ) -> Self {
+        Self {
+            busy: vec![false; count],
+            on_progress,
+        }
+    }
+
+    /// Index of the first idle slot, if any.
+    fn first_free(&self) -> Option<usize> {
+        self.busy.iter().position(|busy| !*busy)
+    }
+
+    /// How many slots are currently idle.
+    fn free_count(&self) -> usize {
+        self.busy.iter().filter(|busy| !**busy).count()
+    }
+
+    /// Grab the first idle slot, marking it busy, and return its index; `None` if all busy.
+    fn assign(&mut self) -> Option<usize> {
+        let slot = self.first_free()?;
+        self.busy[slot] = true;
+        Some(slot)
+    }
+
+    /// Mark a busy slot idle again. Panics if it was not busy — freeing an idle slot is a bug.
+    fn free(&mut self, slot: usize) {
+        assert!(self.busy[slot], "freeing an already-idle slot {slot}");
+        self.busy[slot] = false;
+    }
+}
+
+impl<V: UsableData + Send> Drop for WorkerSlots<'_, V> {
+    fn drop(&mut self) {
+        for (slot, busy) in self.busy.iter().enumerate() {
+            if *busy {
+                (self.on_progress)(ConductorProgress::WorkerAssigned {
+                    worker_num: slot as u32,
+                    strategy: None,
+                });
+            }
+        }
+    }
+}
+
 /// Run a single substrategy on a worker slot and tag the outcome with its slot index.
 ///
 /// The strategy is spawned uniformly as a [`StrategyKind`]: it is itself a `SpawnableStrategy`
@@ -693,7 +750,7 @@ impl Strategy for ConductorStrategy {
         // The queue is seeded from the toggles (warm-start first, default last); idle slots
         // are later topped up with fuzzy exploration once an incumbent exists.
         let worker_count = self.worker_count.get() as usize;
-        let mut slots: Vec<bool> = vec![false; worker_count];
+        let mut slots = WorkerSlots::new(worker_count, on_progress);
         let mut queue: VecDeque<StrategyKind> = self.seed_queue();
 
         let mut workers: FuturesUnordered<
@@ -706,7 +763,7 @@ impl Strategy for ConductorStrategy {
             // idle slot with a fuzzy perturbation attempt. Fuzzy needs an incumbent, so this
             // can only start after warm_start/default has produced one.
             if self.enable_fuzzy && queue.is_empty() {
-                let free = slots.iter().filter(|busy| !**busy).count();
+                let free = slots.free_count();
                 let (has_incumbent, solved) = {
                     let st = status.lock().expect("conductor status mutex");
                     (st.best_solution.is_some(), optimum_reached(&st, sense))
@@ -720,9 +777,12 @@ impl Strategy for ConductorStrategy {
 
             // Fill every free slot from the queue, spawning a worker for each. A worker is
             // assigned -> emit `WorkerAssigned { Some }`.
-            while let Some(slot) = slots.iter().position(|busy| !*busy) {
-                let Some(kind) = queue.pop_front() else { break };
-                slots[slot] = true;
+            while let Some(slot) = slots.assign() {
+                let Some(kind) = queue.pop_front() else {
+                    // Assigned a slot but the queue is empty — nothing to run on it; release it.
+                    slots.free(slot);
+                    break;
+                };
                 on_progress(ConductorProgress::WorkerAssigned {
                     worker_num: slot as u32,
                     strategy: Some(Box::new(kind.clone())),
@@ -745,7 +805,6 @@ impl Strategy for ConductorStrategy {
                 break;
             };
             let slot = worker_result.worker_num as usize;
-            slots[slot] = false;
             let outcome = worker_result.outcome?;
 
             let resolution =
@@ -754,34 +813,25 @@ impl Strategy for ConductorStrategy {
             // A feasible incumbent whose cost meets the best proven bound is optimal — whichever
             // workers produced the incumbent and the bound. If the gap is now closed, finish with
             // the conductor's best solution regardless of this worker's own (possibly `Stopped`)
-            // status. Dropping `workers` on return kills every still-live worker subprocess via
-            // `StrategySubprocess`'s `Drop`.
+            // status. On return, `workers`' drop kills every still-live worker subprocess and
+            // `slots`' drop reports every still-busy slot (this one included) idle.
             let proven = {
                 let st = status.lock().expect("conductor status mutex");
                 optimum_reached(&st, sense).then(|| conductor_outcome(&st))
             };
             if let Some(outcome) = proven {
-                on_progress(ConductorProgress::WorkerAssigned {
-                    worker_num: slot as u32,
-                    strategy: None,
-                });
                 return Ok(outcome);
             }
 
             match resolution {
-                WorkerResolution::Definitive(outcome) => {
-                    // The freed slot goes idle and we return.
-                    on_progress(ConductorProgress::WorkerAssigned {
-                        worker_num: slot as u32,
-                        strategy: None,
-                    });
-                    return Ok(outcome);
-                }
+                WorkerResolution::Definitive(outcome) => return Ok(outcome),
                 WorkerResolution::Update => {}
             }
 
-            // The freed slot is refilled at the top of the next iteration; if the queue is
-            // empty it stays idle, which we report now.
+            // Not terminal: the worker's slot is free again. Report it idle now only if nothing is
+            // queued to refill it (a live "went idle while the conductor keeps working" signal,
+            // distinct from the terminal cleanup that `WorkerSlots::drop` handles on return).
+            slots.free(slot);
             if queue.is_empty() {
                 on_progress(ConductorProgress::WorkerAssigned {
                     worker_num: slot as u32,
@@ -1261,5 +1311,39 @@ mod tests {
         assert_eq!(outcome.objective, None);
         assert_eq!(outcome.best_bound, Some(2.0));
         assert!(outcome.solution.is_none());
+    }
+
+    #[test]
+    fn worker_slots_drop_idles_still_busy_slots() {
+        let events: Mutex<Vec<(u32, bool)>> = Mutex::new(Vec::new());
+        let on_progress = |p: ConductorProgress<usize>| {
+            if let ConductorProgress::WorkerAssigned {
+                worker_num,
+                strategy,
+            } = p
+            {
+                events
+                    .lock()
+                    .unwrap()
+                    .push((worker_num, strategy.is_some()));
+            }
+            true
+        };
+
+        {
+            let mut slots = WorkerSlots::new(3, &on_progress);
+            // `assign` hands out ascending free slots and reports `None` once the pool is full.
+            assert_eq!(slots.assign(), Some(0));
+            assert_eq!(slots.assign(), Some(1));
+            assert_eq!(slots.assign(), Some(2));
+            assert_eq!(slots.assign(), None);
+            // Slot 1 is recycled; 0 and 2 are still busy when the pool is dropped below.
+            slots.free(1);
+        }
+
+        // Drop reports exactly the still-busy slots as idle (`strategy: None`).
+        let mut got = events.lock().unwrap().clone();
+        got.sort();
+        assert_eq!(got, vec![(0, false), (2, false)]);
     }
 }
