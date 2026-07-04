@@ -16,9 +16,9 @@ use collomatique_ilp_modeler::{InternalVar, Model};
 #[cfg(test)]
 use crate::SolveProgress;
 use crate::{
-    DefaultStrategy, NoObjectiveStarterProgress, SerializableProgress, SolveStatus, Strategy,
-    StrategyContext, StrategyError, StrategyKind, StrategyOutcome, StrategyProgress,
-    StrategyProgressData,
+    DefaultStrategy, FindClosestStrategy, FuzzyStrategy, NoObjectiveStarterProgress,
+    NoObjectiveStrategy, SerializableProgress, SolveStatus, Strategy, StrategyContext,
+    StrategyError, StrategyKind, StrategyOutcome, StrategyProgress, StrategyProgressData,
 };
 
 #[derive(Debug, Clone)]
@@ -288,12 +288,24 @@ impl<V: UsableData + Send> SerializableProgress<V> for ConductorProgress<V> {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ConductorStrategy {
     pub worker_count: NonZeroU32,
+    /// Queue a `DefaultStrategy` (the full branch-and-bound solve). Queued last.
+    pub enable_default: bool,
+    /// Queue a `NoObjectiveStrategy` first, to produce a feasible warm-start incumbent.
+    pub enable_warm_start: bool,
+    /// Fill otherwise-idle workers with `FuzzyStrategy` exploration around the incumbent.
+    pub enable_fuzzy: bool,
+    /// Gaussian per-variable perturbation strength used by the fuzzy exploration workers.
+    pub fuzzy_sigma: f64,
 }
 
 impl Default for ConductorStrategy {
     fn default() -> Self {
         Self {
             worker_count: NonZeroU32::new(1).expect("1 is non-zero"),
+            enable_default: true,
+            enable_warm_start: true,
+            enable_fuzzy: true,
+            fuzzy_sigma: 1.0,
         }
     }
 }
@@ -301,14 +313,17 @@ impl Default for ConductorStrategy {
 impl ConductorStrategy {
     /// Build a conductor with one worker slot per available CPU core, as reported by
     /// [`std::thread::available_parallelism`]. Falls back to a single worker when the
-    /// available parallelism cannot be determined.
+    /// available parallelism cannot be determined. Every substrategy toggle is on.
     pub fn with_available_parallelism() -> Self {
         let worker_count = std::thread::available_parallelism()
             .ok()
             .and_then(|n| u32::try_from(n.get()).ok())
             .and_then(NonZeroU32::new)
             .unwrap_or(NonZeroU32::MIN);
-        Self { worker_count }
+        Self {
+            worker_count,
+            ..Self::default()
+        }
     }
 
     fn default_status<V: UsableData + Send>() -> ConductorStatus<V> {
@@ -316,6 +331,57 @@ impl ConductorStrategy {
             best_solution: None,
             best_bound: None,
         }
+    }
+
+    /// Build a fuzzy exploration substrategy tuned by this conductor's `fuzzy_sigma`.
+    fn fuzzy_substrategy(&self) -> FuzzyStrategy {
+        FuzzyStrategy {
+            sigma: self.fuzzy_sigma,
+            // Entropy-seeded: each spawned fuzzy worker perturbs the incumbent differently.
+            seed: None,
+            find_closest: FindClosestStrategy {
+                closeness_time_limit_seconds: None,
+                reconstruction_time_limit_seconds: None,
+                disable_logging: false,
+            },
+        }
+    }
+
+    /// Build the initial worker queue from the toggles: warm-start first (so it produces an
+    /// incumbent everything else can lean on), default last (so it does not monopolize the
+    /// only slot when cores are scarce).
+    fn seed_queue(&self) -> VecDeque<StrategyKind> {
+        let mut queue = VecDeque::new();
+        if self.enable_warm_start {
+            queue.push_back(StrategyKind::NoObjective(NoObjectiveStrategy {
+                checker_time_limit_seconds: None,
+                reconstruction_time_limit_seconds: None,
+                disable_logging: false,
+            }));
+        }
+        if self.enable_default {
+            queue.push_back(StrategyKind::Default(DefaultStrategy::default()));
+        }
+        queue
+    }
+}
+
+/// Absolute gap tolerance for declaring the incumbent optimal. Objectives here are
+/// integer-valued in practice, so anything below 1 closes the gap; keep a tight epsilon.
+const OPTIMALITY_GAP_EPS: f64 = 1e-6;
+
+/// True once a feasible incumbent exists and the best bound has met it (gap closed), i.e. the
+/// incumbent is proven optimal. Used to stop launching new fuzzy exploration work.
+fn optimum_reached<V: UsableData + Send>(
+    status: &ConductorStatus<V>,
+    sense: ObjectiveSense,
+) -> bool {
+    let (Some(sol), Some(bound)) = (&status.best_solution, status.best_bound) else {
+        return false;
+    };
+    match sense {
+        ObjectiveSense::Minimize => bound + OPTIMALITY_GAP_EPS >= sol.objective,
+        ObjectiveSense::Maximize => bound - OPTIMALITY_GAP_EPS <= sol.objective,
     }
 }
 
@@ -603,18 +669,34 @@ impl Strategy for ConductorStrategy {
 
         // A fixed-size pool of worker slots (one busy flag per slot) and a queue of
         // substrategies waiting for a free slot. The slot index *is* the `worker_num`.
-        // For now the queue holds a single entry — the default strategy — so behaviour is
-        // unchanged; this is the isolated extension point for future substrategies.
+        // The queue is seeded from the toggles (warm-start first, default last); idle slots
+        // are later topped up with fuzzy exploration once an incumbent exists.
         let worker_count = self.worker_count.get() as usize;
         let mut slots: Vec<bool> = vec![false; worker_count];
-        let mut queue: VecDeque<StrategyKind> = VecDeque::new();
-        queue.push_back(StrategyKind::Default(DefaultStrategy::default()));
+        let mut queue: VecDeque<StrategyKind> = self.seed_queue();
 
         let mut workers: FuturesUnordered<
             Pin<Box<dyn Future<Output = WorkerResult<InternalVar<B, E>>> + Send + '_>>,
         > = FuturesUnordered::new();
 
         loop {
+            // Keep spare workers exploring around the incumbent: once the seeded queue is
+            // drained, a warm start exists, and we are not yet at a proven optimum, fill every
+            // idle slot with a fuzzy perturbation attempt. Fuzzy needs an incumbent, so this
+            // can only start after warm_start/default has produced one.
+            if self.enable_fuzzy && queue.is_empty() {
+                let free = slots.iter().filter(|busy| !**busy).count();
+                let (has_incumbent, solved) = {
+                    let st = status.lock().expect("conductor status mutex");
+                    (st.best_solution.is_some(), optimum_reached(&st, sense))
+                };
+                if free > 0 && has_incumbent && !solved {
+                    for _ in 0..free {
+                        queue.push_back(StrategyKind::Fuzzy(self.fuzzy_substrategy()));
+                    }
+                }
+            }
+
             // Fill every free slot from the queue, spawning a worker for each. A worker is
             // assigned -> emit `WorkerAssigned { Some }`.
             while let Some(slot) = slots.iter().position(|busy| !*busy) {
@@ -999,5 +1081,93 @@ mod tests {
         assert_eq!(st.best_solution.as_ref().unwrap().objective, 1.0);
         // The NoObjective bound is never used.
         assert!(st.best_bound.is_none());
+    }
+
+    fn status_with(best_obj: Option<f64>, best_bound: Option<f64>) -> ConductorStatus<usize> {
+        ConductorStatus {
+            best_solution: best_obj.map(|objective| Solution {
+                config: config(&[(0, 1.0)]),
+                objective,
+            }),
+            best_bound,
+        }
+    }
+
+    #[test]
+    fn optimum_reached_needs_both_solution_and_bound() {
+        assert!(!optimum_reached(
+            &status_with(None, None),
+            ObjectiveSense::Minimize
+        ));
+        assert!(!optimum_reached(
+            &status_with(Some(3.0), None),
+            ObjectiveSense::Minimize
+        ));
+        assert!(!optimum_reached(
+            &status_with(None, Some(3.0)),
+            ObjectiveSense::Minimize
+        ));
+    }
+
+    #[test]
+    fn optimum_reached_closes_gap_per_sense() {
+        // Minimize: the bound is a lower bound; proven optimal once it reaches the incumbent.
+        assert!(!optimum_reached(
+            &status_with(Some(3.0), Some(1.0)),
+            ObjectiveSense::Minimize
+        ));
+        assert!(optimum_reached(
+            &status_with(Some(3.0), Some(3.0)),
+            ObjectiveSense::Minimize
+        ));
+        // A bound at or above the incumbent (within epsilon) counts as closed.
+        assert!(optimum_reached(
+            &status_with(Some(3.0), Some(3.0 - OPTIMALITY_GAP_EPS / 2.0)),
+            ObjectiveSense::Minimize
+        ));
+
+        // Maximize: the bound is an upper bound; proven optimal once it drops to the incumbent.
+        assert!(!optimum_reached(
+            &status_with(Some(3.0), Some(5.0)),
+            ObjectiveSense::Maximize
+        ));
+        assert!(optimum_reached(
+            &status_with(Some(3.0), Some(3.0)),
+            ObjectiveSense::Maximize
+        ));
+    }
+
+    fn kinds(queue: &VecDeque<StrategyKind>) -> Vec<&'static str> {
+        queue
+            .iter()
+            .map(|k| match k {
+                StrategyKind::NoObjective(_) => "no_objective",
+                StrategyKind::Default(_) => "default",
+                StrategyKind::Fuzzy(_) => "fuzzy",
+                _ => "other",
+            })
+            .collect()
+    }
+
+    #[test]
+    fn seed_queue_orders_warm_start_before_default() {
+        let conductor = |warm, default| ConductorStrategy {
+            enable_warm_start: warm,
+            enable_default: default,
+            ..ConductorStrategy::default()
+        };
+
+        assert_eq!(
+            kinds(&conductor(true, true).seed_queue()),
+            vec!["no_objective", "default"]
+        );
+        assert_eq!(kinds(&conductor(false, true).seed_queue()), vec!["default"]);
+        assert_eq!(
+            kinds(&conductor(true, false).seed_queue()),
+            vec!["no_objective"]
+        );
+        assert!(conductor(false, false).seed_queue().is_empty());
+        // Fuzzy is never seeded up front; it is only added dynamically once an incumbent exists.
+        assert!(!kinds(&conductor(true, true).seed_queue()).contains(&"fuzzy"));
     }
 }
