@@ -4,8 +4,8 @@ use relm4::prelude::DynamicIndex;
 use relm4::{Component, ComponentController, Controller, RelmWidgetExt, adw, gtk};
 
 use collomatique_strategies::{
-    ConductorProgressData, NoObjectiveProgressData, NoObjectiveStarterProgressData, StrategyKind,
-    StrategyProgressData,
+    ConductorProgressData, FindClosestProgressData, NoObjectiveProgressData,
+    NoObjectiveStarterProgressData, StrategyKind, StrategyProgressData,
 };
 
 use crate::widgets::debug_view::{DebugView, DebugViewInput};
@@ -228,6 +228,39 @@ impl FactoryComponent for StrategyFrame {
                             set_valign: gtk::Align::Center,
                             set_spacing: 5,
                             #[watch]
+                            set_visible: matches!(self.strategy_kind, Some(StrategyKind::FindClosest { .. })),
+                            gtk::Box {
+                                set_orientation: gtk::Orientation::Horizontal,
+                                gtk::Label {
+                                    set_label: "Étape : ",
+                                    set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                                },
+                                gtk::Label {
+                                    #[watch]
+                                    set_label: &self.find_closest_step(),
+                                },
+                            },
+                            gtk::Box {
+                                set_orientation: gtk::Orientation::Horizontal,
+                                gtk::Label {
+                                    set_label: "Coût obtenu : ",
+                                    set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                                },
+                                gtk::Label {
+                                    #[watch]
+                                    set_label: &self.find_closest_cost(),
+                                },
+                            },
+                        },
+                        gtk::Box {
+                            set_orientation: gtk::Orientation::Vertical,
+                            set_margin_all: 5,
+                            set_hexpand: true,
+                            set_vexpand: true,
+                            set_halign: gtk::Align::Center,
+                            set_valign: gtk::Align::Center,
+                            set_spacing: 5,
+                            #[watch]
                             set_visible: matches!(self.strategy_kind, Some(StrategyKind::NoObjectiveStarter { .. })),
                             gtk::Box {
                                 set_orientation: gtk::Orientation::Horizontal,
@@ -424,8 +457,6 @@ impl StrategyFrame {
             StrategyProgressData::Default(_) => true,
             StrategyProgressData::NoObjective(_) => true,
             StrategyProgressData::NoObjectiveStarter(_) => true,
-            // Minimal stub: retained so the latest line renders; no dedicated
-            // metric panel yet (see Commit 3).
             StrategyProgressData::FindClosest(_) => true,
             StrategyProgressData::Conductor(ConductorProgressData::Conductor(_)) => true,
             StrategyProgressData::Conductor(_) => false,
@@ -474,6 +505,31 @@ impl StrategyFrame {
         match &self.last_progress {
             Some(StrategyProgressData::NoObjective(
                 NoObjectiveProgressData::ObjectiveReconstruction(p),
+            )) => format!("{:.1}", p.best_obj),
+            _ => "-".to_owned(),
+        }
+    }
+
+    fn find_closest_step(&self) -> String {
+        match &self.last_progress {
+            // No progress message yet: the surrogate model is still being
+            // assembled (this can take a while, hence a dedicated step).
+            None => "1/3 (construction du modèle)".to_string(),
+            Some(StrategyProgressData::FindClosest(FindClosestProgressData::ModelReady))
+            | Some(StrategyProgressData::FindClosest(FindClosestProgressData::ClosenessSolve(_))) => {
+                "2/3 (recherche du plus proche)".to_string()
+            }
+            Some(StrategyProgressData::FindClosest(
+                FindClosestProgressData::ObjectiveReconstruction(_),
+            )) => "3/3 (calcul du coût)".to_string(),
+            _ => "-".to_owned(),
+        }
+    }
+
+    fn find_closest_cost(&self) -> String {
+        match &self.last_progress {
+            Some(StrategyProgressData::FindClosest(
+                FindClosestProgressData::ObjectiveReconstruction(p),
             )) => format!("{:.1}", p.best_obj),
             _ => "-".to_owned(),
         }
