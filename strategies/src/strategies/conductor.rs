@@ -1,4 +1,4 @@
-use std::collections::{HashSet, VecDeque};
+use std::collections::{BTreeSet, VecDeque};
 use std::convert::Infallible;
 use std::fmt;
 use std::future::Future;
@@ -309,7 +309,7 @@ impl Default for FuzzyConfig {
 
 /// A misconfiguration the conductor can detect before running. Surfaced via
 /// [`ConductorStrategy::warnings`] so a UI can flag setups that waste work or never finish.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum ConductorWarning {
     /// No substrategy is enabled at all: nothing would run.
     NoStrategyEnabled,
@@ -376,14 +376,15 @@ impl ConductorStrategy {
     }
 
     /// Misconfigurations detectable before running (see [`ConductorWarning`]). Returned as a set
-    /// so a UI can flag any combination that would waste work or never terminate.
-    pub fn warnings(&self) -> HashSet<ConductorWarning> {
+    /// (ordered by the variants' declaration order) so a UI can flag any combination that would
+    /// waste work or never terminate.
+    pub fn warnings(&self) -> BTreeSet<ConductorWarning> {
         let d = self.enable_default;
         let w = self.enable_warm_start;
         let f = self.fuzzy_config.is_some();
         let wc = self.worker_count.get();
 
-        let mut warnings = HashSet::new();
+        let mut warnings = BTreeSet::new();
         if !d && !w && !f {
             warnings.insert(ConductorWarning::NoStrategyEnabled);
         }

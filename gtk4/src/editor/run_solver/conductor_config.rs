@@ -1,11 +1,12 @@
 use adw::prelude::{PreferencesGroupExt, PreferencesRowExt};
 use gtk::prelude::{AdjustmentExt, BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
+use relm4::typed_view::list::{RelmListItem, TypedListView};
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
 use relm4::{adw, gtk};
 
 use std::num::NonZeroU32;
 
-use collomatique_strategies::{ConductorStrategy, FuzzyConfig};
+use collomatique_strategies::{ConductorStrategy, ConductorWarning, FuzzyConfig};
 
 pub struct Dialog {
     hidden: bool,
@@ -21,6 +22,8 @@ pub struct Dialog {
 
     /// The `ConductorStrategy` these widget states would produce, rebuilt after every update.
     strategy: ConductorStrategy,
+    /// Live warnings for `strategy`, refreshed after every update.
+    warnings_view: TypedListView<WarningEntry, gtk::SingleSelection>,
 }
 
 #[derive(Debug)]
@@ -204,6 +207,30 @@ impl SimpleComponent for Dialog {
                             },
                         },
                     },
+                    gtk::Box {
+                            set_orientation: gtk::Orientation::Vertical,
+                            set_hexpand: true,
+                            set_spacing: 5,
+                            set_margin_all: 5,
+                            #[watch]
+                            set_visible: model.has_warnings(),
+                            gtk::Label {
+                                set_halign: gtk::Align::Start,
+                                set_label: "Avertissements",
+                                set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                            },
+                            gtk::ScrolledWindow {
+                                set_propagate_natural_height: true,
+                                set_vexpand: false,
+                                set_hscrollbar_policy: gtk::PolicyType::Never,
+                                set_vscrollbar_policy: gtk::PolicyType::Automatic,
+                                #[local_ref]
+                                warnings_listview -> gtk::ListView {
+                                    set_hexpand: true,
+                                    add_css_class: "boxed-list",
+                                },
+                            },
+                        },
                 },
             }
         }
@@ -226,7 +253,10 @@ impl SimpleComponent for Dialog {
             fuzzy_sigma: fuzzy_defaults.fuzzy_sigma,
             find_closest_tolerance: fuzzy_defaults.find_closest_tolerance,
             strategy,
+            warnings_view: TypedListView::new(),
         };
+
+        let warnings_listview = &model.warnings_view.view;
 
         let widgets = view_output!();
 
@@ -289,6 +319,7 @@ impl SimpleComponent for Dialog {
             }
         }
         self.strategy = self.build_strategy();
+        self.update_warnings();
     }
 
     fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
@@ -327,5 +358,86 @@ impl Dialog {
                 find_closest_tolerance: self.find_closest_tolerance,
             }),
         }
+    }
+
+    fn update_warnings(&mut self) {
+        self.warnings_view.clear();
+        self.warnings_view
+            .extend_from_iter(self.strategy.warnings().into_iter().map(|w| WarningEntry {
+                message: warning_message(w).to_string(),
+            }));
+    }
+
+    fn has_warnings(&self) -> bool {
+        self.warnings_view.len() != 0
+    }
+}
+
+fn warning_message(warning: ConductorWarning) -> &'static str {
+    match warning {
+        ConductorWarning::NoStrategyEnabled => {
+            "Aucune stratégie n'est activée : rien ne sera exécuté."
+        }
+        ConductorWarning::NoSeed => {
+            "L'exploration aléatoire est activée mais aucune stratégie ne produit de solution \
+             initiale : elle ne démarrera jamais et le solveur s'arrêtera immédiatement."
+        }
+        ConductorWarning::StarvedFuzzy => {
+            "L'exploration aléatoire est activée mais l'unique tâche est occupée par la stratégie \
+             par défaut : elle n'aura jamais de créneau libre. Augmentez le nombre de tâches en \
+             parallèle."
+        }
+        ConductorWarning::WontFinish => {
+            "La stratégie par défaut est désactivée : sans elle, aucune borne ne prouve \
+             l'optimalité et le solveur tournera indéfiniment."
+        }
+        ConductorWarning::ColdFuzzy => {
+            "L'exploration aléatoire est activée sans démarrage à chaud : elle ne se déclenchera \
+             qu'une fois la stratégie par défaut bien avancée et sera donc souvent inutile."
+        }
+        ConductorWarning::OverwhelmedCpu => {
+            "Le nombre de tâches en parallèle dépasse le nombre de cœurs du processeur."
+        }
+    }
+}
+
+struct WarningEntry {
+    message: String,
+}
+
+struct WarningEntryWidgets {
+    icon: gtk::Image,
+    label: gtk::Label,
+}
+
+impl RelmListItem for WarningEntry {
+    type Root = gtk::Box;
+    type Widgets = WarningEntryWidgets;
+
+    fn setup(_list_item: &gtk::ListItem) -> (Self::Root, Self::Widgets) {
+        let root = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .margin_start(5)
+            .margin_end(5)
+            .margin_top(5)
+            .margin_bottom(5)
+            .build();
+        root.add_css_class("warning");
+
+        let icon = gtk::Image::builder().margin_end(5).build();
+        let label = gtk::Label::builder()
+            .halign(gtk::Align::Start)
+            .wrap(true)
+            .build();
+
+        root.append(&icon);
+        root.append(&label);
+
+        (root, WarningEntryWidgets { icon, label })
+    }
+
+    fn bind(&mut self, widgets: &mut Self::Widgets, _root: &mut Self::Root) {
+        widgets.icon.set_icon_name(Some("dialog-warning-symbolic"));
+        widgets.label.set_label(&self.message);
     }
 }
