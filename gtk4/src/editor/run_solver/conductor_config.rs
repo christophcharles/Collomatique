@@ -1,7 +1,8 @@
 use adw::prelude::{PreferencesGroupExt, PreferencesRowExt};
 use gtk::prelude::{AdjustmentExt, BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
-use relm4::typed_view::list::{RelmListItem, TypedListView};
-use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
+use relm4::factory::FactoryVecDeque;
+use relm4::prelude::{DynamicIndex, FactoryComponent};
+use relm4::{ComponentParts, ComponentSender, FactorySender, RelmWidgetExt, SimpleComponent};
 use relm4::{adw, gtk};
 
 use std::num::NonZeroU32;
@@ -23,7 +24,7 @@ pub struct Dialog {
     /// The `ConductorStrategy` these widget states would produce, rebuilt after every update.
     strategy: ConductorStrategy,
     /// Live warnings for `strategy`, refreshed after every update.
-    warnings_view: TypedListView<WarningEntry, gtk::SingleSelection>,
+    warnings: FactoryVecDeque<WarningItem>,
 }
 
 #[derive(Debug)]
@@ -225,9 +226,10 @@ impl SimpleComponent for Dialog {
                                 set_hscrollbar_policy: gtk::PolicyType::Never,
                                 set_vscrollbar_policy: gtk::PolicyType::Automatic,
                                 #[local_ref]
-                                warnings_listview -> gtk::ListView {
+                                warnings_listbox -> gtk::ListBox {
                                     set_hexpand: true,
                                     add_css_class: "boxed-list",
+                                    set_selection_mode: gtk::SelectionMode::None,
                                 },
                             },
                         },
@@ -253,10 +255,12 @@ impl SimpleComponent for Dialog {
             fuzzy_sigma: fuzzy_defaults.fuzzy_sigma,
             find_closest_tolerance: fuzzy_defaults.find_closest_tolerance,
             strategy,
-            warnings_view: TypedListView::new(),
+            warnings: FactoryVecDeque::builder()
+                .launch(gtk::ListBox::default())
+                .detach(),
         };
 
-        let warnings_listview = &model.warnings_view.view;
+        let warnings_listbox = model.warnings.widget();
 
         let widgets = view_output!();
 
@@ -361,15 +365,15 @@ impl Dialog {
     }
 
     fn update_warnings(&mut self) {
-        self.warnings_view.clear();
-        self.warnings_view
-            .extend_from_iter(self.strategy.warnings().into_iter().map(|w| WarningEntry {
-                message: warning_message(w).to_string(),
-            }));
+        let mut guard = self.warnings.guard();
+        guard.clear();
+        for warning in self.strategy.warnings() {
+            guard.push_back(warning_message(warning).to_string());
+        }
     }
 
     fn has_warnings(&self) -> bool {
-        self.warnings_view.len() != 0
+        !self.warnings.is_empty()
     }
 }
 
@@ -401,43 +405,44 @@ fn warning_message(warning: ConductorWarning) -> &'static str {
     }
 }
 
-struct WarningEntry {
+#[derive(Debug)]
+struct WarningItem {
     message: String,
 }
 
-struct WarningEntryWidgets {
-    icon: gtk::Image,
-    label: gtk::Label,
-}
+#[relm4::factory]
+impl FactoryComponent for WarningItem {
+    type Init = String;
+    type Input = ();
+    type Output = ();
+    type CommandOutput = ();
+    type ParentWidget = gtk::ListBox;
 
-impl RelmListItem for WarningEntry {
-    type Root = gtk::Box;
-    type Widgets = WarningEntryWidgets;
-
-    fn setup(_list_item: &gtk::ListItem) -> (Self::Root, Self::Widgets) {
-        let root = gtk::Box::builder()
-            .orientation(gtk::Orientation::Horizontal)
-            .margin_start(5)
-            .margin_end(5)
-            .margin_top(5)
-            .margin_bottom(5)
-            .build();
-        root.add_css_class("warning");
-
-        let icon = gtk::Image::builder().margin_end(5).build();
-        let label = gtk::Label::builder()
-            .halign(gtk::Align::Start)
-            .wrap(true)
-            .build();
-
-        root.append(&icon);
-        root.append(&label);
-
-        (root, WarningEntryWidgets { icon, label })
+    view! {
+        #[root]
+        gtk::Box {
+            set_margin_all: 5,
+            set_orientation: gtk::Orientation::Horizontal,
+            add_css_class: "warning",
+            gtk::Image {
+                set_margin_end: 5,
+                set_icon_name: Some("dialog-warning-symbolic"),
+            },
+            gtk::Label {
+                set_halign: gtk::Align::Start,
+                set_wrap: true,
+                set_label: &self.message,
+            },
+        },
     }
 
-    fn bind(&mut self, widgets: &mut Self::Widgets, _root: &mut Self::Root) {
-        widgets.icon.set_icon_name(Some("dialog-warning-symbolic"));
-        widgets.label.set_label(&self.message);
+    fn init_model(
+        message: Self::Init,
+        _index: &DynamicIndex,
+        _sender: FactorySender<Self>,
+    ) -> Self {
+        Self { message }
     }
+
+    fn update(&mut self, _msg: Self::Input, _sender: FactorySender<Self>) {}
 }
