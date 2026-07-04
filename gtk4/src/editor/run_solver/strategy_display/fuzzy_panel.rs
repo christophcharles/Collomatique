@@ -129,7 +129,7 @@ impl FuzzyPanel {
         match &self.last {
             // No progress message yet: the warm start is still being
             // perturbed (a dedicated first step, one more than FindClosest).
-            None => "1/4 (perturbation de la solution)".to_string(),
+            None => "1/4 (perturbation)".to_string(),
             Some(FuzzyProgressData::Perturbed { .. }) => "2/4 (construction du modèle)".to_string(),
             Some(FuzzyProgressData::FindClosest(
                 FindClosestProgressData::ModelReady | FindClosestProgressData::ClosenessSolve(_),

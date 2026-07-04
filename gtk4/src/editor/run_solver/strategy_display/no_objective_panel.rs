@@ -90,9 +90,8 @@ impl SimpleComponent for NoObjectivePanel {
 impl NoObjectivePanel {
     fn step(&self) -> String {
         match &self.last {
-            Some(NoObjectiveProgressData::CheckerSolve(_)) => "1/2 (démarrage)".to_string(),
+            None | Some(NoObjectiveProgressData::CheckerSolve(_)) => "1/2 (démarrage)".to_string(),
             Some(_) => "2/2 (calcul du coût)".to_string(),
-            None => "-".to_owned(),
         }
     }
 

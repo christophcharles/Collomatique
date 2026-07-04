@@ -123,12 +123,12 @@ impl SimpleComponent for NoObjectiveStarterPanel {
 impl NoObjectiveStarterPanel {
     fn step(&self) -> String {
         match &self.last {
-            Some(NoObjectiveStarterProgressData::Starter(
+            None
+            | Some(NoObjectiveStarterProgressData::Starter(
                 NoObjectiveProgressData::CheckerSolve(_),
             )) => "1/3 (démarrage)".to_string(),
             Some(NoObjectiveStarterProgressData::Starter(_)) => "2/3 (calcul du coût)".to_string(),
             Some(_) => "3/3 (optimisation)".to_string(),
-            None => "-".to_owned(),
         }
     }
 
