@@ -1,7 +1,7 @@
 use gtk::prelude::{BoxExt, OrientableExt, WidgetExt};
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent, gtk};
 
-use collomatique_strategies::NoObjectiveProgressData;
+use collomatique_strategies::{NoObjectiveProgressData, NoObjectiveSolveProgress};
 
 #[derive(Debug)]
 pub enum NoObjectivePanelInput {
@@ -16,6 +16,9 @@ pub enum NoObjectivePanelInput {
 pub struct NoObjectivePanel {
     visible: bool,
     last: Option<NoObjectiveProgressData>,
+    // Retained node/solution counts from the phase-1 feasibility search (CheckerSolve).
+    // Reconstruction counts are intentionally ignored; kept across SolutionFound/phase 2.
+    checker: Option<NoObjectiveSolveProgress>,
 }
 
 #[relm4::component(pub)]
@@ -58,6 +61,28 @@ impl SimpleComponent for NoObjectivePanel {
                     set_label: &model.cost(),
                 },
             },
+            gtk::Box {
+                set_orientation: gtk::Orientation::Horizontal,
+                gtk::Label {
+                    set_label: "Nœuds explorés : ",
+                    set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                },
+                gtk::Label {
+                    #[watch]
+                    set_label: &model.node_count(),
+                },
+            },
+            gtk::Box {
+                set_orientation: gtk::Orientation::Horizontal,
+                gtk::Label {
+                    set_label: "Solutions trouvées : ",
+                    set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                },
+                gtk::Label {
+                    #[watch]
+                    set_label: &model.solutions_found(),
+                },
+            },
         }
     }
 
@@ -69,6 +94,7 @@ impl SimpleComponent for NoObjectivePanel {
         let model = NoObjectivePanel {
             visible: false,
             last: None,
+            checker: None,
         };
         let widgets = view_output!();
         ComponentParts { model, widgets }
@@ -79,8 +105,12 @@ impl SimpleComponent for NoObjectivePanel {
             NoObjectivePanelInput::Reset { visible } => {
                 self.visible = visible;
                 self.last = None;
+                self.checker = None;
             }
             NoObjectivePanelInput::Update(data) => {
+                if let NoObjectiveProgressData::CheckerSolve(p) = &data {
+                    self.checker = Some(p.clone());
+                }
                 self.last = Some(data);
             }
         }
@@ -90,7 +120,7 @@ impl SimpleComponent for NoObjectivePanel {
 impl NoObjectivePanel {
     fn step(&self) -> String {
         match &self.last {
-            None | Some(NoObjectiveProgressData::CheckerSolve(_)) => "1/2 (démarrage)".to_string(),
+            None | Some(NoObjectiveProgressData::CheckerSolve(_)) => "1/2 (amorçage)".to_string(),
             Some(_) => "2/2 (calcul du coût)".to_string(),
         }
     }
@@ -101,6 +131,20 @@ impl NoObjectivePanel {
                 format!("{:.1}", p.best_obj)
             }
             _ => "-".to_owned(),
+        }
+    }
+
+    fn node_count(&self) -> String {
+        match &self.checker {
+            Some(p) => format!("{}", p.node_count),
+            None => "0".to_owned(),
+        }
+    }
+
+    fn solutions_found(&self) -> String {
+        match &self.checker {
+            Some(p) => format!("{}", p.solutions_found),
+            None => "0".to_owned(),
         }
     }
 }
