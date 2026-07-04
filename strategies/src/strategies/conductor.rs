@@ -306,7 +306,7 @@ impl Default for ConductorStrategy {
             enable_default: true,
             enable_warm_start: true,
             enable_fuzzy: true,
-            fuzzy_sigma: 1.0,
+            fuzzy_sigma: 0.2, // gives ~1.2% of variables flipped if they're all binary
         }
     }
 }
