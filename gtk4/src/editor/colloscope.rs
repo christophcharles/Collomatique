@@ -8,6 +8,7 @@ use relm4::{adw, gtk};
 use collomatique_ops::ColloscopeUpdateOp;
 
 use crate::editor::run_solver;
+use crate::editor::run_solver::conductor_config;
 
 /// The solver dialog instantiated for the colloscope ILP model.
 type SolverDialog = run_solver::Dialog<
@@ -42,6 +43,8 @@ pub enum ColloscopeInput {
     InterrogationAccepted(collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation),
 
     SolveColloscopeClicked,
+    ConductorConfigAccepted(collomatique_strategies::ConductorStrategy),
+    ConductorConfigCancelled,
     SolveResult(
         collomatique_ilp::ConfigData<collomatique_constraints_colloscopes::ProblemInternalVar>,
     ),
@@ -107,6 +110,7 @@ pub struct Colloscope {
     interrogation_dialog: Controller<interrogation_dialog::Dialog>,
     blame_dialog: Controller<blame_dialog::Dialog>,
     run_solver_dialog: Controller<SolverDialog>,
+    conductor_config_dialog: Controller<conductor_config::Dialog>,
 
     // The problem currently being solved, kept so its solution config can be
     // turned back into a colloscope when the solver dialog returns.
@@ -463,6 +467,18 @@ impl Component for Colloscope {
                 run_solver::DialogOutput::NewConfig(config) => ColloscopeInput::SolveResult(config),
             });
 
+        let conductor_config_dialog = conductor_config::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                conductor_config::DialogOutput::Accepted(strategy) => {
+                    ColloscopeInput::ConductorConfigAccepted(strategy)
+                }
+                conductor_config::DialogOutput::Cancelled => {
+                    ColloscopeInput::ConductorConfigCancelled
+                }
+            });
+
         let model = Colloscope {
             params: collomatique_state_colloscopes::colloscope_params::Parameters::default(),
             colloscope: collomatique_state_colloscopes::colloscopes::Colloscope::default(),
@@ -475,6 +491,7 @@ impl Component for Colloscope {
             computation_state: None,
             blame_dialog,
             run_solver_dialog,
+            conductor_config_dialog,
             solving_problem: None,
         };
 
@@ -630,15 +647,29 @@ impl Component for Colloscope {
                 // problem is ready yet, ignore the click.
                 if let Some(Ok(ilp_repr)) = self.get_ilp_repr() {
                     let ilp_problem = ilp_repr.ilp_problem.clone();
-                    let model = ilp_problem.problem.clone();
                     self.solving_problem = Some(ilp_problem);
                     let strategy =
                         collomatique_strategies::ConductorStrategy::with_parallelism_defaults();
+                    self.conductor_config_dialog
+                        .sender()
+                        .send(conductor_config::DialogInput::Show(strategy))
+                        .unwrap();
+                }
+            }
+            ColloscopeInput::ConductorConfigAccepted(strategy) => {
+                // The problem was stashed when the solve was requested; launch the solver
+                // dialog now that the conductor configuration has been confirmed.
+                if let Some(ilp_problem) = &self.solving_problem {
+                    let model = ilp_problem.problem.clone();
                     self.run_solver_dialog
                         .sender()
                         .send(run_solver::DialogInput::Run(strategy, model))
                         .unwrap();
                 }
+            }
+            ColloscopeInput::ConductorConfigCancelled => {
+                // Drop the stashed problem: the solve was abandoned before it started.
+                self.solving_problem = None;
             }
             ColloscopeInput::SolveResult(config_data) => {
                 // Translate the raw ILP config back into a colloscope, using the

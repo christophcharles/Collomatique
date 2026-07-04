@@ -14,6 +14,7 @@ use collomatique_strategies::{
 };
 use collomatique_subprocesses::StrategySubprocess;
 
+pub mod conductor_config;
 mod error_dialog;
 mod strategy_display;
 mod warning_icon;
