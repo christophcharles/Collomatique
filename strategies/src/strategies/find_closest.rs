@@ -308,6 +308,16 @@ impl Strategy for FindClosestStrategy {
             StrategyError::SolveError("closeness solve optimal but no solution returned".into())
         })?;
 
+        let should_continue = on_progress(FindClosestProgressData::ClosestFound);
+        if !should_continue {
+            return Ok(StrategyOutcome {
+                status: SolveStatus::Stopped,
+                objective: None,
+                best_bound: None,
+                solution: None,
+            });
+        }
+
         // Phase 3: reconstruct the extra variables (and the real
         // objective) against the *original* model, fixing the base
         // values we just found.
@@ -383,6 +393,8 @@ pub enum FindClosestProgressData {
     ModelReady,
     /// Progress from solving the surrogate closeness model.
     ClosenessSolve(NoObjectiveSolveProgress),
+    /// A solution has been found. We still need to evaluate its objective value
+    ClosestFound,
     /// Progress from reconstructing the extra variables and objective.
     ObjectiveReconstruction(NoObjectiveSolveProgress),
 }
@@ -395,6 +407,12 @@ impl fmt::Display for FindClosestProgressData {
             }
             FindClosestProgressData::ClosenessSolve(p) => {
                 write!(f, "[closeness solver progress] {p}")
+            }
+            FindClosestProgressData::ClosestFound => {
+                write!(
+                    f,
+                    "Closest solution found. Starting rebuilding its objective value..."
+                )
             }
             FindClosestProgressData::ObjectiveReconstruction(p) => {
                 write!(f, "[reconstruction solver progress] {p}")

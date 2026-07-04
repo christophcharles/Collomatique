@@ -97,9 +97,10 @@ impl FindClosestPanel {
             | Some(FindClosestProgressData::ClosenessSolve(_)) => {
                 "2/3 (recherche du plus proche)".to_string()
             }
-            Some(FindClosestProgressData::ObjectiveReconstruction(_)) => {
-                "3/3 (calcul du coût)".to_string()
-            }
+            Some(
+                FindClosestProgressData::ClosestFound
+                | FindClosestProgressData::ObjectiveReconstruction(_),
+            ) => "3/3 (calcul du coût)".to_string(),
         }
     }
 

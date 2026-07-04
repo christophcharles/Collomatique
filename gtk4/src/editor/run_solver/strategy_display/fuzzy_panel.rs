@@ -135,7 +135,8 @@ impl FuzzyPanel {
                 FindClosestProgressData::ModelReady | FindClosestProgressData::ClosenessSolve(_),
             )) => "3/4 (recherche du plus proche)".to_string(),
             Some(FuzzyProgressData::FindClosest(
-                FindClosestProgressData::ObjectiveReconstruction(_),
+                FindClosestProgressData::ObjectiveReconstruction(_)
+                | FindClosestProgressData::ClosestFound,
             )) => "4/4 (calcul du coût)".to_string(),
         }
     }
