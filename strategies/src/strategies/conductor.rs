@@ -385,6 +385,21 @@ fn optimum_reached<V: UsableData + Send>(
     }
 }
 
+/// Assemble the conductor's final outcome from its accumulated status: `Optimal` when a
+/// feasible incumbent exists, `Stopped` otherwise. Carries the best bound and solution.
+fn conductor_outcome<V: UsableData + Send>(status: &ConductorStatus<V>) -> StrategyOutcome<V> {
+    StrategyOutcome {
+        status: if status.best_solution.is_some() {
+            SolveStatus::Optimal
+        } else {
+            SolveStatus::Stopped
+        },
+        objective: status.best_solution.as_ref().map(|s| s.objective),
+        best_bound: status.best_bound,
+        solution: status.best_solution.as_ref().map(|s| s.config.clone()),
+    }
+}
+
 pub fn update_best_solution<V: UsableData + Send>(
     status: &mut ConductorStatus<V>,
     new_solution: ConfigData<V>,
@@ -529,10 +544,16 @@ where
     if !cont {
         return false;
     }
-    match snapshot {
-        Some(s) => on_progress(ConductorProgress::Conductor(s)),
-        None => true,
+    if let Some(s) = snapshot {
+        if !on_progress(ConductorProgress::Conductor(s)) {
+            return false;
+        }
     }
+    // If folding this update closed the optimality gap, ask this worker to stop: the conductor
+    // will finish with the proven-optimal incumbent once control returns to the main loop
+    // (which re-checks `optimum_reached` and returns `Optimal`).
+    let proven = optimum_reached(&status.lock().expect("conductor status mutex"), sense);
+    !proven
 }
 
 /// How the conductor should treat a finished worker's outcome.
@@ -727,12 +748,29 @@ impl Strategy for ConductorStrategy {
             slots[slot] = false;
             let outcome = worker_result.outcome?;
 
-            match resolve_worker_outcome(&worker_result.kind, outcome, &status, sense, on_progress)
-            {
+            let resolution =
+                resolve_worker_outcome(&worker_result.kind, outcome, &status, sense, on_progress);
+
+            // A feasible incumbent whose cost meets the best proven bound is optimal — whichever
+            // workers produced the incumbent and the bound. If the gap is now closed, finish with
+            // the conductor's best solution regardless of this worker's own (possibly `Stopped`)
+            // status. Dropping `workers` on return kills every still-live worker subprocess via
+            // `StrategySubprocess`'s `Drop`.
+            let proven = {
+                let st = status.lock().expect("conductor status mutex");
+                optimum_reached(&st, sense).then(|| conductor_outcome(&st))
+            };
+            if let Some(outcome) = proven {
+                on_progress(ConductorProgress::WorkerAssigned {
+                    worker_num: slot as u32,
+                    strategy: None,
+                });
+                return Ok(outcome);
+            }
+
+            match resolution {
                 WorkerResolution::Definitive(outcome) => {
-                    // The freed slot goes idle and we return. Dropping `workers` here
-                    // forcefully kills every still-live worker subprocess via
-                    // `StrategySubprocess`'s `Drop`.
+                    // The freed slot goes idle and we return.
                     on_progress(ConductorProgress::WorkerAssigned {
                         worker_num: slot as u32,
                         strategy: None,
@@ -752,17 +790,8 @@ impl Strategy for ConductorStrategy {
             }
         }
 
-        let status = status.lock().expect("conductor status mutex").clone();
-        Ok(StrategyOutcome {
-            status: if status.best_solution.is_some() {
-                SolveStatus::Optimal
-            } else {
-                SolveStatus::Stopped
-            },
-            objective: status.best_solution.as_ref().map(|s| s.objective),
-            best_bound: status.best_bound,
-            solution: status.best_solution.map(|s| s.config),
-        })
+        let status = status.lock().expect("conductor status mutex");
+        Ok(conductor_outcome(&status))
     }
 }
 
@@ -1169,5 +1198,68 @@ mod tests {
         assert!(conductor(false, false).seed_queue().is_empty());
         // Fuzzy is never seeded up front; it is only added dynamically once an incumbent exists.
         assert!(!kinds(&conductor(true, true).seed_queue()).contains(&"fuzzy"));
+    }
+
+    #[test]
+    fn progress_closing_gap_asks_worker_to_stop() {
+        // A worker already knows a bound of 3.0; folding an incumbent whose cost meets it closes
+        // the gap, so the worker is asked to stop (callback returns false).
+        let status = Mutex::new(ConductorStatus {
+            best_solution: None,
+            best_bound: Some(3.0),
+        });
+        let progress = SolveProgress {
+            best_obj: 3.0,
+            best_bound: 3.0,
+            node_count: 5,
+            solutions_found: 1,
+            incumbent: Some(config(&[(0, 1.0)])),
+        };
+        let cont = report_worker_progress(
+            0,
+            progress,
+            &status,
+            ObjectiveSense::Minimize,
+            &|_p: ConductorProgress<usize>| true,
+        );
+        assert!(!cont, "closing the gap should ask the worker to stop");
+        let st = status.lock().unwrap();
+        assert_eq!(st.best_solution.as_ref().unwrap().objective, 3.0);
+
+        // Mirror case: a still-open gap keeps the worker running.
+        let status = Mutex::new(ConductorStatus {
+            best_solution: None,
+            best_bound: Some(1.0),
+        });
+        let progress = SolveProgress {
+            best_obj: 3.0,
+            best_bound: 1.0,
+            node_count: 5,
+            solutions_found: 1,
+            incumbent: Some(config(&[(0, 1.0)])),
+        };
+        let cont = report_worker_progress(
+            0,
+            progress,
+            &status,
+            ObjectiveSense::Minimize,
+            &|_p: ConductorProgress<usize>| true,
+        );
+        assert!(cont, "an open gap should keep the worker running");
+    }
+
+    #[test]
+    fn conductor_outcome_labels_optimal_with_incumbent() {
+        let outcome = conductor_outcome(&status_with(Some(3.0), Some(3.0)));
+        assert_eq!(outcome.status, SolveStatus::Optimal);
+        assert_eq!(outcome.objective, Some(3.0));
+        assert_eq!(outcome.best_bound, Some(3.0));
+        assert!(outcome.solution.is_some());
+
+        let outcome = conductor_outcome(&status_with(None, Some(2.0)));
+        assert_eq!(outcome.status, SolveStatus::Stopped);
+        assert_eq!(outcome.objective, None);
+        assert_eq!(outcome.best_bound, Some(2.0));
+        assert!(outcome.solution.is_none());
     }
 }
