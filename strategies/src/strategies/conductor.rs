@@ -297,6 +297,10 @@ pub struct ConductorStrategy {
     pub enable_fuzzy: bool,
     /// Gaussian per-variable perturbation strength used by the fuzzy exploration workers.
     pub fuzzy_sigma: f64,
+    /// Absolute L1-distance tolerance handed to every `FindClosestStrategy` the conductor
+    /// builds: the closeness repair stops at the first feasible point within this distance
+    /// of the closest possible one.
+    pub find_closest_tolerance: f64,
 }
 
 impl Default for ConductorStrategy {
@@ -307,6 +311,7 @@ impl Default for ConductorStrategy {
             enable_warm_start: true,
             enable_fuzzy: true,
             fuzzy_sigma: 0.2, // gives ~1.2% of variables flipped if they're all binary
+            find_closest_tolerance: 10.0,
         }
     }
 }
@@ -339,7 +344,8 @@ impl ConductorStrategy {
         }
     }
 
-    /// Build a fuzzy exploration substrategy tuned by this conductor's `fuzzy_sigma`.
+    /// Build a fuzzy exploration substrategy tuned by this conductor's `fuzzy_sigma`
+    /// and `find_closest_tolerance`.
     fn fuzzy_substrategy(&self) -> FuzzyStrategy {
         FuzzyStrategy {
             sigma: self.fuzzy_sigma,
@@ -349,6 +355,7 @@ impl ConductorStrategy {
                 closeness_time_limit_seconds: None,
                 reconstruction_time_limit_seconds: None,
                 disable_logging: false,
+                distance_tolerance: self.find_closest_tolerance,
             },
         }
     }

@@ -385,6 +385,8 @@ mod tests {
             closeness_time_limit_seconds: None,
             reconstruction_time_limit_seconds: None,
             disable_logging: true,
+            // Solve to the exact closest point so the end-to-end assertions are stable.
+            distance_tolerance: 0.0,
         }
     }
 

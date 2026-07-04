@@ -44,6 +44,16 @@ pub struct FindClosestStrategy {
     pub closeness_time_limit_seconds: Option<u32>,
     pub reconstruction_time_limit_seconds: Option<u32>,
     pub disable_logging: bool,
+    /// Absolute tolerance on the L1 closeness distance (Phase 2): accept the first feasible
+    /// point found within this distance of the closest possible one, instead of solving the
+    /// closeness model to proven optimality. `0.0` means "find the exact closest point".
+    pub distance_tolerance: f64,
+}
+
+/// Whether the closeness incumbent `best_obj` is within `tolerance` of the best bound.
+/// The closeness objective is always minimized, so this is a one-sided absolute gap.
+fn within_distance_tolerance(best_obj: f64, best_bound: f64, tolerance: f64) -> bool {
+    best_obj <= best_bound + tolerance
 }
 
 /// Wrap a flattened variable of the original model into the surrogate
@@ -231,6 +241,7 @@ impl Strategy for FindClosestStrategy {
 
         // Phase 2: solve the surrogate model for the closest feasible
         // base assignment.
+        let tolerance = self.distance_tolerance;
         let closeness_outcome = ctx
             .solve_problem_with_echo(
                 closest_model.problem(),
@@ -239,7 +250,20 @@ impl Strategy for FindClosestStrategy {
                     time_limit_seconds: self.closeness_time_limit_seconds,
                     disable_logging: self.disable_logging,
                 },
-                &|p| on_progress(FindClosestProgressData::ClosenessSolve((&p).into())),
+                &|p| {
+                    let keep_going =
+                        on_progress(FindClosestProgressData::ClosenessSolve((&p).into()));
+                    if !keep_going {
+                        return false;
+                    }
+                    // Stop once a feasible incumbent is within tolerance of the best
+                    // bound. `best_bound.is_finite()` guards the pre-bound phase (best_bound
+                    // starts at -inf for a minimize solve).
+                    let good_enough = p.incumbent.is_some()
+                        && p.best_bound.is_finite()
+                        && within_distance_tolerance(p.best_obj, p.best_bound, tolerance);
+                    !good_enough
+                },
                 &|line| Some(format!("[closeness solver] {line}")),
             )
             .await?;
@@ -259,12 +283,23 @@ impl Strategy for FindClosestStrategy {
                 ));
             }
             SolveStatus::Stopped => {
-                return Ok(StrategyOutcome {
-                    status: SolveStatus::Stopped,
-                    objective: None,
-                    best_bound: None,
-                    solution: None,
-                });
+                // A stop is either external (cancel / time limit) or our own tolerance
+                // cutoff. Carry on only if the outcome actually holds a within-tolerance
+                // closest point; otherwise bail as before.
+                let good_enough = match (closeness_outcome.objective, closeness_outcome.best_bound)
+                {
+                    (Some(obj), Some(bound)) => within_distance_tolerance(obj, bound, tolerance),
+                    _ => false,
+                };
+                if !(good_enough && closeness_outcome.solution.is_some()) {
+                    return Ok(StrategyOutcome {
+                        status: SolveStatus::Stopped,
+                        objective: None,
+                        best_bound: None,
+                        solution: None,
+                    });
+                }
+                // else: we hold a within-tolerance closest point — carry on to reconstruction.
             }
             SolveStatus::Optimal => {}
         }
@@ -447,7 +482,20 @@ mod tests {
             closeness_time_limit_seconds: None,
             reconstruction_time_limit_seconds: None,
             disable_logging: true,
+            // Solve to the exact closest point so distance-based assertions are stable.
+            distance_tolerance: 0.0,
         }
+    }
+
+    #[test]
+    fn within_distance_tolerance_is_a_one_sided_absolute_gap() {
+        // bound = 1000, tolerance = 10: accept up to 1010, reject beyond.
+        assert!(within_distance_tolerance(1010.0, 1000.0, 10.0));
+        assert!(!within_distance_tolerance(1011.0, 1000.0, 10.0));
+        assert!(within_distance_tolerance(1000.0, 1000.0, 10.0));
+        // Zero tolerance: accept only when the incumbent reaches the bound.
+        assert!(within_distance_tolerance(1000.0, 1000.0, 0.0));
+        assert!(!within_distance_tolerance(1001.0, 1000.0, 0.0));
     }
 
     /// Binary base variables, warm start (1, 1) is infeasible under a + b <= 1.
