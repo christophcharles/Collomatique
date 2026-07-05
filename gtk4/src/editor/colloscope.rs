@@ -87,7 +87,7 @@ pub struct IlpRepr {
 enum ComputationState {
     Debouncing(std::time::Instant),
     ComputingConstraints,
-    RecomputingWarnings,
+    RecomputingWarnings(IlpProblem),
     ResultAvailable(Result<IlpRepr, String>),
 }
 
@@ -131,6 +131,14 @@ impl Colloscope {
         self.computation_state.as_ref().and_then(|s| s.as_ref())
     }
 
+    fn get_ilp_problem(&self) -> Option<&IlpProblem> {
+        match &self.computation_state {
+            Some(ComputationState::RecomputingWarnings(ilp_problem)) => Some(ilp_problem),
+            Some(ComputationState::ResultAvailable(Ok(ilp_repr))) => Some(&ilp_repr.ilp_problem),
+            _ => None,
+        }
+    }
+
     fn is_debouncing(&self) -> bool {
         match &self.computation_state {
             None => true,
@@ -148,7 +156,7 @@ impl Colloscope {
     fn is_rebuilding_warnings(&self) -> bool {
         matches!(
             &self.computation_state,
-            Some(ComputationState::RecomputingWarnings)
+            Some(ComputationState::RecomputingWarnings(_))
         )
     }
 
@@ -351,6 +359,8 @@ impl Component for Colloscope {
                             set_icon_name: "system-run-symbolic",
                             set_label: "Générer le colloscope automatiquement",
                         },
+                        #[watch]
+                        set_sensitive: model.get_ilp_problem().is_some(),
                         connect_clicked => ColloscopeInput::SolveColloscopeClicked,
                     },
                 },
@@ -642,10 +652,9 @@ impl Component for Colloscope {
             }
             ColloscopeInput::SolveColloscopeClicked => {
                 // Only solvable once the ILP model is built (debounce finished). If no
-                // problem is ready yet, ignore the click.
-                if let Some(Ok(ilp_repr)) = self.get_ilp_repr() {
-                    let ilp_problem = ilp_repr.ilp_problem.clone();
-                    self.solving_problem = Some(ilp_problem);
+                // problem is ready yet, ignore the click (should not happen since the button is not sensitive then).
+                if let Some(ilp_problem) = self.get_ilp_problem() {
+                    self.solving_problem = Some(ilp_problem.clone());
                     self.config_dialog
                         .sender()
                         .send(config_dialog::DialogInput::Show)
@@ -737,7 +746,10 @@ impl Component for Colloscope {
 
 impl Colloscope {
     fn recompute_warnings(&mut self, sender: ComponentSender<Self>, ilp_problem: IlpProblem) {
-        self.update_ilp_repr(ComputationState::RecomputingWarnings, &sender);
+        self.update_ilp_repr(
+            ComputationState::RecomputingWarnings(ilp_problem.clone()),
+            &sender,
+        );
 
         let inner_problem = ilp_problem.problem.problem().clone();
         sender
@@ -824,7 +836,7 @@ impl Colloscope {
             Some(ComputationState::ComputingConstraints) => {
                 blame_dialog::ComputationState::ComputingConstraints
             }
-            Some(ComputationState::RecomputingWarnings) => {
+            Some(ComputationState::RecomputingWarnings(_)) => {
                 blame_dialog::ComputationState::RecomputingWarnings
             }
             Some(ComputationState::ResultAvailable(r)) => {
