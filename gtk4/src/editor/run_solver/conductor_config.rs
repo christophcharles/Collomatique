@@ -382,6 +382,10 @@ fn warning_message(warning: ConductorWarning) -> &'static str {
         ConductorWarning::NoStrategyEnabled => {
             "Aucune stratégie n'est activée : rien ne sera exécuté."
         }
+        ConductorWarning::NoOptimizing => {
+            "Aucune stratégie d'optimisation n'est activée : le solveur cherchera une solution \
+             réalisable sans tenter de l'améliorer."
+        }
         ConductorWarning::NoSeed => {
             "L'exploration aléatoire est activée mais aucune stratégie ne produit de solution \
              initiale : elle ne démarrera jamais et le solveur s'arrêtera immédiatement."

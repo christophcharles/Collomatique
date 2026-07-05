@@ -9,8 +9,9 @@ use std::time::{Duration, Instant};
 use collomatique_ilp::{ConfigData, UsableData};
 use collomatique_ilp_modeler::{InternalVar, Model};
 use collomatique_strategies::{
-    ConductorProgress, ConductorStatus, ConductorStrategy, SerializableProgress, Solution,
-    SolveStatus, Strategy, StrategyKind, StrategyOutcome, StrategyProgressData,
+    ConductorProgress, ConductorStatus, ConductorStrategy, OPTIMALITY_GAP_EPS,
+    SerializableProgress, Solution, SolveStatus, Strategy, StrategyKind, StrategyOutcome,
+    StrategyProgressData,
 };
 use collomatique_subprocesses::StrategySubprocess;
 
@@ -290,7 +291,14 @@ where
                                             set_label: "Solution optimale trouvée !",
                                             set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
                                             #[watch]
-                                            set_visible: !model.is_running && model.conductor_status.best_solution.is_some(),
+                                            set_visible: !model.is_running && model.conductor_status.best_solution.is_some() && model.is_provably_optimal(),
+                                        },
+                                        gtk::Label {
+                                            set_margin_top: 15,
+                                            set_label: "Solution trouvée !",
+                                            set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
+                                            #[watch]
+                                            set_visible: !model.is_running && model.conductor_status.best_solution.is_some() && !model.is_provably_optimal(),
                                         },
                                         gtk::Label {
                                             set_margin_top: 15,
@@ -790,6 +798,19 @@ impl<B: UsableData, E: UsableData, C: UsableData> Dialog<B, E, C> {
         match self.conductor_status.best_bound {
             Some(bound) => format!("{:.1}", bound),
             None => "-".to_string(),
+        }
+    }
+
+    /// Provably optimal: a feasible incumbent exists and the best bound has met it within tolerance.
+    /// Sense-independent — the bound brackets the optimum, so the gap is |objective − bound|. Only
+    /// meaningful at final display time; the mid-solve bound can be transiently sign-flipped.
+    fn is_provably_optimal(&self) -> bool {
+        match (
+            &self.conductor_status.best_solution,
+            self.conductor_status.best_bound,
+        ) {
+            (Some(sol), Some(bound)) => (sol.objective - bound).abs() <= OPTIMALITY_GAP_EPS,
+            _ => false,
         }
     }
 

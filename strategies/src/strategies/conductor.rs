@@ -313,6 +313,9 @@ impl Default for FuzzyConfig {
 pub enum ConductorWarning {
     /// No substrategy is enabled at all: nothing would run.
     NoStrategyEnabled,
+    /// A feasible search runs (warm-start) but neither the default branch-and-bound nor fuzzy is
+    /// enabled: solutions are found but never optimised.
+    NoOptimizing,
     /// Fuzzy is enabled but neither default nor warm-start is, so no incumbent is ever produced
     /// to seed it: fuzzy never fires and the conductor exits immediately.
     NoSeed,
@@ -392,6 +395,9 @@ impl ConductorStrategy {
         if !d && !w && !f {
             warnings.insert(ConductorWarning::NoStrategyEnabled);
         }
+        if !d && !f && w {
+            warnings.insert(ConductorWarning::NoOptimizing);
+        }
         if f && !d && !w {
             warnings.insert(ConductorWarning::NoSeed);
         }
@@ -456,7 +462,7 @@ impl ConductorStrategy {
 
 /// Absolute gap tolerance for declaring the incumbent optimal. Objectives here are
 /// integer-valued in practice, so anything below 1 closes the gap; keep a tight epsilon.
-const OPTIMALITY_GAP_EPS: f64 = 1e-6;
+pub const OPTIMALITY_GAP_EPS: f64 = 1e-6;
 
 /// True once a feasible incumbent exists and the best bound has met it (gap closed), i.e. the
 /// incumbent is proven optimal. Used to stop launching new fuzzy exploration work.
@@ -1468,6 +1474,26 @@ mod tests {
         assert!(!w.contains(&ConductorWarning::NoStrategyEnabled));
         // NoSeed and ColdFuzzy are mutually exclusive (ColdFuzzy requires default).
         assert!(!w.contains(&ConductorWarning::ColdFuzzy));
+        // Nothing runs: NoOptimizing does not pile on top of NoStrategyEnabled (it needs warm-start).
+        assert!(
+            !conductor(1, false, false, false)
+                .warnings()
+                .contains(&ConductorWarning::NoOptimizing)
+        );
+    }
+
+    #[test]
+    fn warnings_flag_no_optimizing() {
+        // Warm-start only: a feasible search runs but nothing optimises it.
+        let w = conductor(1, false, true, false).warnings();
+        assert!(w.contains(&ConductorWarning::NoOptimizing));
+        assert!(!w.contains(&ConductorWarning::NoStrategyEnabled));
+        // Default (branch-and-bound) does optimise, so NoOptimizing must not fire.
+        assert!(
+            !conductor(1, true, true, false)
+                .warnings()
+                .contains(&ConductorWarning::NoOptimizing)
+        );
     }
 
     #[test]
