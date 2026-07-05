@@ -106,7 +106,6 @@ where
             #[watch]
             set_visible: !model.hidden,
             set_title: Some(model.title.as_str()),
-            add_css_class: "devel",
 
             adw::ToolbarView {
                 add_top_bar = &adw::HeaderBar {
@@ -262,7 +261,7 @@ where
                                         gtk::Box {
                                             set_orientation: gtk::Orientation::Horizontal,
                                             gtk::Label {
-                                                set_label: "Meilleure solution il y a : ",
+                                                set_label: "Meilleure solution depuis : ",
                                                 set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
                                             },
                                             gtk::Label {
