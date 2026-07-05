@@ -621,8 +621,8 @@ where
         | StrategyProgress::NoObjectiveStarter(NoObjectiveStarterProgress::Default(p)) => {
             emit_if_changed(status, |st| {
                 update_best_bound(st, p.best_bound, sense);
-                if let Some(incumbent) = p.incumbent.clone() {
-                    update_best_solution(st, incumbent, p.best_obj, sense);
+                if let (Some(incumbent), Some(objective)) = (p.incumbent.clone(), p.best_obj) {
+                    update_best_solution(st, incumbent, objective, sense);
                 }
             })
         }
@@ -824,9 +824,9 @@ where
         // Only the Default worker emits real-coordinate Default progress in the conductor's
         // worker set, so this unambiguously tracks Default's own incumbent objective.
         if let StrategyProgress::Default(sp) = &p {
-            if sp.incumbent.is_some() {
+            if let Some(objective) = sp.best_obj {
                 let mut d = default_obj.lock().expect("default obj mutex");
-                *d = Some(merge_default_obj(*d, sp.best_obj, sense));
+                *d = Some(merge_default_obj(*d, objective, sense));
             }
         }
         report_worker_progress(worker_num, p, status, sense, on_progress)
@@ -1101,7 +1101,7 @@ mod tests {
         let inner = ConductorProgressData::WorkerProgress {
             worker_num: 0,
             progress: Box::new(StrategyProgressData::Default(SolveProgressData {
-                best_obj: 1.5,
+                best_obj: None,
                 best_bound: 0.5,
                 node_count: 7,
                 solutions_found: 2,
@@ -1185,7 +1185,7 @@ mod tests {
         };
 
         let progress = SolveProgress {
-            best_obj: 3.0,
+            best_obj: Some(3.0),
             best_bound: 1.0,
             node_count: 5,
             solutions_found: 1,
@@ -1237,7 +1237,7 @@ mod tests {
         };
 
         let progress = SolveProgress {
-            best_obj: 3.0,
+            best_obj: Some(3.0),
             best_bound: 1.0,
             node_count: 5,
             solutions_found: 1,
@@ -1560,7 +1560,7 @@ mod tests {
             best_bound: Some(3.0),
         });
         let progress = SolveProgress {
-            best_obj: 3.0,
+            best_obj: Some(3.0),
             best_bound: 3.0,
             node_count: 5,
             solutions_found: 1,
@@ -1583,7 +1583,7 @@ mod tests {
             best_bound: Some(1.0),
         });
         let progress = SolveProgress {
-            best_obj: 3.0,
+            best_obj: Some(3.0),
             best_bound: 1.0,
             node_count: 5,
             solutions_found: 1,

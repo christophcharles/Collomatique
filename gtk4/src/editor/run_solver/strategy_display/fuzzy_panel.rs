@@ -159,7 +159,9 @@ impl FuzzyPanel {
         match &self.last {
             Some(FuzzyProgressData::FindClosest(
                 FindClosestProgressData::ObjectiveReconstruction(p),
-            )) => format!("{:.1}", p.best_obj),
+            )) => p
+                .best_obj
+                .map_or_else(|| "-".to_owned(), |o| format!("{o:.1}")),
             _ => "-".to_owned(),
         }
     }

@@ -347,8 +347,10 @@ fn subprocess_solve(model: &collomatique_constraints_colloscopes::ColloscopeMode
         },
         |progress| {
             eprintln!(
-                "  [subprocess progress] obj={:.4} bound={:.4} nodes={} solutions={}",
-                progress.best_obj,
+                "  [subprocess progress] obj={} bound={:.4} nodes={} solutions={}",
+                progress
+                    .best_obj
+                    .map_or_else(|| "-".to_owned(), |o| format!("{o:.4}")),
                 progress.best_bound,
                 progress.node_count,
                 progress.solutions_found
@@ -421,7 +423,9 @@ fn subprocess_solve(model: &collomatique_constraints_colloscopes::ColloscopeMode
             if let Some(progress) = handle.last_progress() {
                 eprintln!(
                     "  Last progress: obj={}, bound={}, nodes={}, solutions={}",
-                    progress.best_obj,
+                    progress
+                        .best_obj
+                        .map_or_else(|| "-".to_owned(), |o| format!("{o}")),
                     progress.best_bound,
                     progress.node_count,
                     progress.solutions_found

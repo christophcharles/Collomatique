@@ -337,7 +337,7 @@ mod tests {
             _on_echo: &(dyn Fn(String) + Send + Sync),
         ) -> Result<RawSolveOutcome, StrategyError> {
             on_progress(SolveProgressData {
-                best_obj: 0.0,
+                best_obj: None,
                 best_bound: 0.0,
                 node_count: 0,
                 solutions_found: 0,

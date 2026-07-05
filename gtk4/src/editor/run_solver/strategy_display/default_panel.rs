@@ -112,7 +112,9 @@ impl SimpleComponent for DefaultPanel {
 impl DefaultPanel {
     fn best_obj(&self) -> String {
         match &self.last {
-            Some(p) => format!("{:.1}", p.best_obj),
+            Some(p) => p
+                .best_obj
+                .map_or_else(|| "-".to_owned(), |o| format!("{o:.1}")),
             None => "-".to_owned(),
         }
     }

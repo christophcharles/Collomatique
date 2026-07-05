@@ -86,7 +86,8 @@ pub struct StrategyOutcome<V: UsableData> {
 /// typed [`SolveProgress`] once a `var_order` is available.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SolveProgressData {
-    pub best_obj: f64,
+    /// Objective of the current incumbent, or `None` if none has been found yet.
+    pub best_obj: Option<f64>,
     pub best_bound: f64,
     pub node_count: u64,
     pub solutions_found: u64,
@@ -95,10 +96,14 @@ pub struct SolveProgressData {
 
 impl fmt::Display for SolveProgressData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "obj=")?;
+        match self.best_obj {
+            Some(obj) => write!(f, "{obj:.4}")?,
+            None => write!(f, "—")?,
+        }
         write!(
             f,
-            "obj={:.4} bound={:.4} nodes={} solutions={} incumbent={}",
-            self.best_obj,
+            " bound={:.4} nodes={} solutions={} incumbent={}",
             self.best_bound,
             self.node_count,
             self.solutions_found,
@@ -134,7 +139,8 @@ impl SolveProgressData {
 /// is not guaranteed. The serializable counterpart is [`SolveProgressData`].
 #[derive(Debug, Clone)]
 pub struct SolveProgress<V: UsableData> {
-    pub best_obj: f64,
+    /// Objective of the current incumbent, or `None` if none has been found yet.
+    pub best_obj: Option<f64>,
     pub best_bound: f64,
     pub node_count: u64,
     pub solutions_found: u64,
@@ -159,10 +165,14 @@ impl<V: UsableData> SolveProgress<V> {
 
 impl<V: UsableData> fmt::Display for SolveProgress<V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "obj=")?;
+        match self.best_obj {
+            Some(obj) => write!(f, "{obj:.4}")?,
+            None => write!(f, "—")?,
+        }
         write!(
             f,
-            "obj={:.4} bound={:.4} nodes={} solutions={} incumbent={}",
-            self.best_obj,
+            " bound={:.4} nodes={} solutions={} incumbent={}",
             self.best_bound,
             self.node_count,
             self.solutions_found,
@@ -1084,7 +1094,7 @@ mod tests {
     #[test]
     fn solve_progress_data_display_signals_incumbent_presence() {
         let base = SolveProgressData {
-            best_obj: 1.5,
+            best_obj: None,
             best_bound: 0.5,
             node_count: 7,
             solutions_found: 2,
@@ -1229,7 +1239,7 @@ mod tests {
 
         let backend = Arc::new(ProgressMockBackend {
             progress: SolveProgressData {
-                best_obj: 1.0,
+                best_obj: Some(1.0),
                 best_bound: 2.0,
                 node_count: 3,
                 solutions_found: 1,

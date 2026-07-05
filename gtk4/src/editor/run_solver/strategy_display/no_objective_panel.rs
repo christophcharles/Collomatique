@@ -127,9 +127,9 @@ impl NoObjectivePanel {
 
     fn cost(&self) -> String {
         match &self.last {
-            Some(NoObjectiveProgressData::ObjectiveReconstruction(p)) => {
-                format!("{:.1}", p.best_obj)
-            }
+            Some(NoObjectiveProgressData::ObjectiveReconstruction(p)) => p
+                .best_obj
+                .map_or_else(|| "-".to_owned(), |o| format!("{o:.1}")),
             _ => "-".to_owned(),
         }
     }

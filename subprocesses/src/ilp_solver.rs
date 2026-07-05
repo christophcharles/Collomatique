@@ -19,7 +19,8 @@ pub struct IlpSolverConfig {
 
 #[derive(Debug, Clone)]
 pub struct IlpProgress {
-    pub best_obj: f64,
+    /// Objective of the current incumbent, or `None` if none has been found yet.
+    pub best_obj: Option<f64>,
     pub best_bound: f64,
     pub node_count: u64,
     pub solutions_found: u64,
@@ -29,10 +30,14 @@ pub struct IlpProgress {
 
 impl fmt::Display for IlpProgress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "obj=")?;
+        match self.best_obj {
+            Some(obj) => write!(f, "{obj:.4}")?,
+            None => write!(f, "—")?,
+        }
         write!(
             f,
-            "obj={:.4} bound={:.4} nodes={} solutions={} incumbent={}",
-            self.best_obj,
+            " bound={:.4} nodes={} solutions={} incumbent={}",
             self.best_bound,
             self.node_count,
             self.solutions_found,
@@ -117,7 +122,7 @@ impl SolverSubprocess {
             WorkerEvent::RpcCommand(Ok(cmd)) => match cmd {
                 collomatique_rpc::CmdMsg::Solver(SolverMsg::Progress(data)) => {
                     let progress = IlpProgress {
-                        best_obj: data.best_obj.into_inner(),
+                        best_obj: data.best_obj.map(|v| v.into_inner()),
                         best_bound: data.best_bound.into_inner(),
                         node_count: data.node_count,
                         solutions_found: data.solutions_found,

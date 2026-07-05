@@ -24,12 +24,25 @@ pub enum ColloCbcEventType {
 }
 
 #[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ColloCbcIncumbentStatus {
+    None = 0,
+    Ok = 1,
+    Failed = 2,
+}
+
+#[repr(C)]
 pub struct ColloCbcProgress {
     pub event_type: ColloCbcEventType,
+    pub incumbent_status: ColloCbcIncumbentStatus,
+    /// Original-space objective of the incumbent. Valid only when
+    /// `incumbent_status == ColloCbcIncumbentStatus::Ok`.
     pub best_obj: f64,
     pub best_bound: f64,
     pub node_count: i32,
     pub solutions_found: i32,
+    /// Original-space incumbent. Valid only when
+    /// `incumbent_status == ColloCbcIncumbentStatus::Ok`.
     pub solution: *const f64,
     pub num_cols: i32,
 }

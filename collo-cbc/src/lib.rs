@@ -36,14 +36,30 @@ pub enum EventType {
     TreeStatus,
 }
 
+/// The incumbent-reconstruction outcome for a single progress event.
+///
+/// An objective only ever exists as a property of a successfully reconstructed,
+/// original-space incumbent — there is no free-floating running objective (CBC's
+/// `getObjValue()`, in preprocessed space, is never transmitted).
+#[derive(Debug, Clone)]
+pub enum IncumbentEvent {
+    /// No fresh incumbent on this event: a tree-status update, or a duplicate
+    /// solution id already reported.
+    None,
+    /// A fresh incumbent, reconstructed into the problem's original column space.
+    Reconstructed { objective: f64, solution: Vec<f64> },
+    /// CBC reported a fresh incumbent but it could not be reconstructed into
+    /// original column space. No objective and no solution are available.
+    ReconstructionFailed,
+}
+
 #[derive(Debug, Clone)]
 pub struct Progress {
     pub event_type: EventType,
-    pub best_obj: f64,
     pub best_bound: f64,
     pub node_count: i32,
     pub solutions_found: i32,
-    pub solution: Option<Vec<f64>>,
+    pub incumbent: IncumbentEvent,
 }
 
 impl Progress {
@@ -52,20 +68,36 @@ impl Progress {
             sys::ColloCbcEventType::Solution => EventType::Solution,
             sys::ColloCbcEventType::TreeStatus => EventType::TreeStatus,
         };
-        let solution = if !raw.solution.is_null() && raw.num_cols > 0 {
-            Some(
-                unsafe { std::slice::from_raw_parts(raw.solution, raw.num_cols as usize) }.to_vec(),
-            )
-        } else {
-            None
+        let incumbent = match raw.incumbent_status {
+            sys::ColloCbcIncumbentStatus::None => IncumbentEvent::None,
+            sys::ColloCbcIncumbentStatus::Ok => {
+                let solution = if !raw.solution.is_null() && raw.num_cols > 0 {
+                    unsafe { std::slice::from_raw_parts(raw.solution, raw.num_cols as usize) }
+                        .to_vec()
+                } else {
+                    // OK status guarantees a valid solution pointer; treat a
+                    // missing one defensively as a reconstruction failure.
+                    return Progress {
+                        event_type,
+                        best_bound: raw.best_bound,
+                        node_count: raw.node_count,
+                        solutions_found: raw.solutions_found,
+                        incumbent: IncumbentEvent::ReconstructionFailed,
+                    };
+                };
+                IncumbentEvent::Reconstructed {
+                    objective: raw.best_obj,
+                    solution,
+                }
+            }
+            sys::ColloCbcIncumbentStatus::Failed => IncumbentEvent::ReconstructionFailed,
         };
         Progress {
             event_type,
-            best_obj: raw.best_obj,
             best_bound: raw.best_bound,
             node_count: raw.node_count,
             solutions_found: raw.solutions_found,
-            solution,
+            incumbent,
         }
     }
 }

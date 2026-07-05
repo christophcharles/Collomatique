@@ -174,8 +174,23 @@ public:
         progress.event_type = is_solution
             ? COLLO_CBC_EVENT_SOLUTION
             : COLLO_CBC_EVENT_TREE_STATUS;
-        progress.best_obj = m->getObjValue();
-        progress.best_bound = m->getBestPossibleObjValue();
+        progress.incumbent_status = COLLO_CBC_INCUMBENT_NONE;
+        // best_obj is only meaningful with a reconstructed incumbent (set on the
+        // OK path below). We never report m->getObjValue(): it is in CBC's
+        // preprocessed column space and carries a preprocessing offset. The whole
+        // Rust side lives in original space, so an objective only exists as a
+        // property of a successfully reconstructed, original-space incumbent.
+        progress.best_obj = 0.0;
+        // getBestPossibleObjValue() is reported in the sense of `m`, CBC's
+        // *preprocessed* model. CBC tends to negate the objective and minimize a
+        // maximization problem, so `m`'s sense can differ from the user's — but
+        // this isn't guaranteed, so we don't blanket-flip. Instead we correct
+        // only when the two senses actually differ: the product of the original
+        // solver's sense and `m`'s sense is +1 when they agree (bound already in
+        // user space) and -1 when they don't (bound negated, flip it back).
+        double orig_sense = orig_solver_ ? orig_solver_->getObjSense() : 1.0;
+        double sense_correction = orig_sense * m->getObjSense();
+        progress.best_bound = sense_correction * m->getBestPossibleObjValue();
         progress.node_count = m->getNodeCount();
         progress.solutions_found = m->getSolutionCount();
         progress.solution = nullptr;
@@ -183,19 +198,27 @@ public:
 
         // Reconstruct the incumbent (preprocessed -> original column space) once
         // per distinct solution. m->bestSolution() is in CBC's preprocessed space.
+        //
+        // Reconstruct *first* and only commit the solution id to seen_solutions_
+        // on success: a transient reconstruction failure must not permanently
+        // drop the incumbent (getSolutionCount() is monotonic, so the id would
+        // never recur). On failure we report COLLO_CBC_INCUMBENT_FAILED and let
+        // the consumer decide.
         if (is_solution) {
             int solution_id = m->getSolutionCount();
             if (seen_solutions_.find(solution_id) == seen_solutions_.end()) {
-                seen_solutions_.insert(solution_id);
-                if (reconstruct_incumbent(m, orig_num_cols_, original_solution_)) {
+                if (orig_solver_ &&
+                    reconstruct_incumbent(m, orig_num_cols_, original_solution_)) {
+                    seen_solutions_.insert(solution_id);
+                    progress.incumbent_status = COLLO_CBC_INCUMBENT_OK;
                     progress.solution = original_solution_.data();
                     progress.num_cols = orig_num_cols_;
                     // Objective from the original problem, offset-safe and
                     // consistent with the final solution's objective.
-                    if (orig_solver_) {
-                        progress.best_obj =
-                            original_objective(orig_solver_, original_solution_);
-                    }
+                    progress.best_obj =
+                        original_objective(orig_solver_, original_solution_);
+                } else {
+                    progress.incumbent_status = COLLO_CBC_INCUMBENT_FAILED;
                 }
             }
         }
@@ -381,6 +404,9 @@ ColloCbcStatus collo_cbc_solve(ColloCbcModel* m, ColloCbcCallback cb, void* user
     // Extract results. CbcMain1 postprocesses, so bestSolution() is already in
     // original column space.
     m->node_count = cbcModel.getNodeCount();
+    // Unlike the mid-solve event handler (which sees CBC's preprocessed model in
+    // internal minimization sense), CbcMain1 has postprocessed by the time it
+    // returns, so cbcModel reports the bound in the user's sense already.
     m->best_bound = cbcModel.getBestPossibleObjValue();
 
     if (cbcModel.bestSolution()) {

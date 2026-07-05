@@ -261,7 +261,9 @@ impl Strategy for FindClosestStrategy {
                     // starts at -inf for a minimize solve).
                     let good_enough = p.incumbent.is_some()
                         && p.best_bound.is_finite()
-                        && within_distance_tolerance(p.best_obj, p.best_bound, tolerance);
+                        && p.best_obj.is_some_and(|obj| {
+                            within_distance_tolerance(obj, p.best_bound, tolerance)
+                        });
                     !good_enough
                 },
                 &|line| Some(format!("[closeness solver] {line}")),
@@ -452,7 +454,7 @@ mod tests {
             _on_echo: &(dyn Fn(String) + Send + Sync),
         ) -> Result<RawSolveOutcome, StrategyError> {
             on_progress(SolveProgressData {
-                best_obj: 0.0,
+                best_obj: None,
                 best_bound: 0.0,
                 node_count: 0,
                 solutions_found: 0,

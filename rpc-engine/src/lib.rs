@@ -134,7 +134,7 @@ fn solve_ilp(serialized: SerializedIlpProblem) -> Result<(), anyhow::Error> {
         last_node_count = progress.nodes();
 
         let progress_data = SolverProgressData {
-            best_obj: OrderedFloat(progress.best_objective()),
+            best_obj: progress.best_objective().map(OrderedFloat),
             best_bound: OrderedFloat(progress.best_bound()),
             node_count: progress.nodes(),
             solutions_found: progress.solutions(),

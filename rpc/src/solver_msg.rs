@@ -46,7 +46,11 @@ impl From<SerializedIlpProblem> for IlpSolveRequest {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SolverProgressData {
-    pub best_obj: OrderedFloat<f64>,
+    /// Objective of the current incumbent, or `None` if none has been found yet.
+    /// An objective only exists as a property of an incumbent — this is never a
+    /// free-floating running value. (`Option` also keeps infinities out of the
+    /// serialized form.)
+    pub best_obj: Option<OrderedFloat<f64>>,
     pub best_bound: OrderedFloat<f64>,
     pub node_count: u64,
     pub solutions_found: u64,
@@ -56,10 +60,14 @@ pub struct SolverProgressData {
 
 impl fmt::Display for SolverProgressData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "obj=")?;
+        match self.best_obj {
+            Some(obj) => write!(f, "{:.4}", obj.into_inner())?,
+            None => write!(f, "—")?,
+        }
         write!(
             f,
-            "obj={:.4} bound={:.4} nodes={} solutions={} incumbent={}",
-            self.best_obj.into_inner(),
+            " bound={:.4} nodes={} solutions={} incumbent={}",
             self.best_bound.into_inner(),
             self.node_count,
             self.solutions_found,

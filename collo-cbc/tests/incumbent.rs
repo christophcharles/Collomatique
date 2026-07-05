@@ -10,7 +10,7 @@
 // and a naive forwarding of CBC's internal `bestSolution()` would have the
 // wrong length/ordering.
 
-use collo_cbc::{EventType, Model, ProblemDesc, Status};
+use collo_cbc::{IncumbentEvent, Model, ProblemDesc, Status};
 
 /// Small helper to author a MIP with a dense, row-major constraint matrix and
 /// convert it to the compressed-sparse-column form `ProblemDesc` expects.
@@ -134,12 +134,10 @@ fn solve_collecting_incumbents(builder: &Builder) -> (Status, Vec<f64>, usize) {
     let mut events = 0usize;
     let mut last_incumbent: Vec<f64> = Vec::new();
     let result = model.solve_with_callback(|p| {
-        if p.event_type == EventType::Solution {
-            if let Some(sol) = &p.solution {
-                builder.assert_feasible(sol);
-                last_incumbent = sol.clone();
-                events += 1;
-            }
+        if let IncumbentEvent::Reconstructed { solution, .. } = &p.incumbent {
+            builder.assert_feasible(solution);
+            last_incumbent = solution.clone();
+            events += 1;
         }
         true
     });
@@ -244,12 +242,14 @@ fn multiple_distinct_incumbents_reconstruct_correctly() {
 
     let mut objectives: Vec<f64> = Vec::new();
     let result = model.solve_with_callback(|p| {
-        if p.event_type == EventType::Solution {
-            if let Some(sol) = &p.solution {
-                // Every reconstructed incumbent must be original-space + feasible.
-                b.assert_feasible(sol);
-                objectives.push(p.best_obj);
-            }
+        if let IncumbentEvent::Reconstructed {
+            objective,
+            solution,
+        } = &p.incumbent
+        {
+            // Every reconstructed incumbent must be original-space + feasible.
+            b.assert_feasible(solution);
+            objectives.push(*objective);
         }
         true
     });
@@ -313,4 +313,138 @@ fn repeated_postsolve_is_stable() {
     let (status, _last, events) = solve_collecting_incumbents(&b);
     assert_eq!(status, Status::Optimal);
     assert!(events >= 1, "expected at least one incumbent");
+}
+
+#[test]
+fn best_bound_is_in_original_column_space() {
+    // The bound (`getBestPossibleObjValue`) is a dual value with no vector to
+    // reconstruct, so — unlike the incumbent objective — we cannot rebuild it in
+    // original space; we transmit CBC's value directly and rely on its
+    // objective-offset bookkeeping. This test pins that reliance: fix a variable
+    // with a *large* objective coefficient so preprocessing introduces a big
+    // objective offset. If the bound were reported in CBC's preprocessed space,
+    // it would be offset *down* by that fixed contribution and fall below the
+    // true optimum. Asserting the bound stays a valid upper bound on the
+    // original-space objective at every event proves the offset bookkeeping is
+    // live — the same mechanism that keeps the bound in original units.
+    let mut b = Builder::new(6, -1, vec![100.0, 4.0, 3.0, 7.0, 8.0, 6.0]); // maximize
+    b.fix(0, 1.0); // fixed var, objective coeff 100 -> offset of 100
+    b.add_row(vec![3.0, 3.0, 4.0, 5.0, 6.0, 4.0], f64::NEG_INFINITY, 11.0); // knapsack
+    b.add_row(vec![0.0, 1.0, -1.0, 0.0, 0.0, 0.0], 0.0, 0.0); // x1 - x2 = 0 (doubleton)
+
+    let desc = b.build();
+
+    // Final original-space optimum.
+    let mut model = Model::new();
+    model.load_problem(&desc);
+    model.set_log_level(0);
+    model.set_disable_heuristics(true);
+    model.set_disable_cuts(true);
+    let final_result = model.solve();
+    assert_eq!(final_result.status, Status::Optimal);
+    let final_obj = final_result.obj_value; // original space (post-processed)
+    b.assert_feasible(&final_result.solution.expect("a final solution"));
+    // The fixed var alone contributes 100; a preprocessed-space value would be
+    // ~100 lower. Sanity-check the optimum is well above that offset.
+    assert!(
+        final_obj >= 100.0,
+        "final objective {final_obj} should include the fixed variable's 100"
+    );
+
+    // Collect the bound at every event and check it never drops below the
+    // original-space optimum (it is an upper bound for a maximization problem).
+    let mut model = Model::new();
+    model.load_problem(&desc);
+    model.set_log_level(0);
+    model.set_disable_heuristics(true);
+    model.set_disable_cuts(true);
+    let mut bounds: Vec<f64> = Vec::new();
+    let result = model.solve_with_callback(|p| {
+        bounds.push(p.best_bound);
+        true
+    });
+    assert_eq!(result.status, Status::Optimal);
+    assert!(
+        !bounds.is_empty(),
+        "expected progress events carrying a bound"
+    );
+    for bound in &bounds {
+        assert!(
+            *bound >= final_obj - 1e-6,
+            "best_bound {bound} is below the original-space optimum {final_obj}; \
+             it looks offset into preprocessed space"
+        );
+    }
+    // Proven optimal: the final bound meets the original-space optimum.
+    assert!(
+        (result.best_bound - final_obj).abs() < 1e-6,
+        "final best_bound {} should equal the original-space optimum {final_obj}",
+        result.best_bound
+    );
+}
+
+#[test]
+fn best_bound_is_in_original_column_space_minimize() {
+    // Minimization counterpart of best_bound_is_in_original_column_space. CBC
+    // minimizes natively, so the preprocessed model keeps the user's sense and
+    // the bound is NOT flipped — this guards that the sense-correction leaves the
+    // minimize path untouched, and that the bound still reflects the original
+    // objective offset introduced by a fixed variable.
+    let mut b = Builder::new(6, 1, vec![100.0, 4.0, 3.0, 7.0, 8.0, 6.0]); // minimize
+    b.fix(0, 1.0); // fixed var, objective coeff 100 -> offset of 100
+    b.add_row(vec![3.0, 3.0, 4.0, 5.0, 6.0, 4.0], 10.0, f64::INFINITY); // covering
+    b.add_row(vec![0.0, 1.0, -1.0, 0.0, 0.0, 0.0], 0.0, 0.0); // x1 - x2 = 0 (doubleton)
+
+    let desc = b.build();
+
+    // Final original-space optimum.
+    let mut model = Model::new();
+    model.load_problem(&desc);
+    model.set_log_level(0);
+    model.set_disable_heuristics(true);
+    model.set_disable_cuts(true);
+    let final_result = model.solve();
+    assert_eq!(final_result.status, Status::Optimal);
+    let final_obj = final_result.obj_value; // original space (post-processed)
+    b.assert_feasible(&final_result.solution.expect("a final solution"));
+    assert!(
+        final_obj >= 100.0,
+        "final objective {final_obj} should include the fixed variable's 100"
+    );
+
+    // Collect the bound at every event. For a minimization problem it is a *lower*
+    // bound: it must never exceed the optimum, and it must include the fixed
+    // variable's offset (a preprocessed-space bound would omit the 100 and sit
+    // far below it).
+    let mut model = Model::new();
+    model.load_problem(&desc);
+    model.set_log_level(0);
+    model.set_disable_heuristics(true);
+    model.set_disable_cuts(true);
+    let mut bounds: Vec<f64> = Vec::new();
+    let result = model.solve_with_callback(|p| {
+        bounds.push(p.best_bound);
+        true
+    });
+    assert_eq!(result.status, Status::Optimal);
+    assert!(
+        !bounds.is_empty(),
+        "expected progress events carrying a bound"
+    );
+    for bound in &bounds {
+        assert!(
+            *bound <= final_obj + 1e-6,
+            "best_bound {bound} exceeds the original-space optimum {final_obj}"
+        );
+        assert!(
+            *bound >= 100.0 - 1e-6,
+            "best_bound {bound} omits the fixed variable's offset; it looks like \
+             preprocessed space"
+        );
+    }
+    assert!(
+        (result.best_bound - final_obj).abs() < 1e-6,
+        "final best_bound {} should equal the original-space optimum {final_obj}",
+        result.best_bound
+    );
 }

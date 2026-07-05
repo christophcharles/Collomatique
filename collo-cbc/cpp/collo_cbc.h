@@ -28,12 +28,31 @@ typedef enum {
     COLLO_CBC_EVENT_TREE_STATUS = 1,
 } ColloCbcEventType;
 
+// Whether this event carries a freshly reconstructed incumbent.
+//   NONE   - no fresh incumbent (tree-status event, or a duplicate solution id
+//            already reported). `best_obj`/`solution` are unset.
+//   OK     - a fresh incumbent, reconstructed into original column space.
+//            `best_obj` and `solution`/`num_cols` are valid.
+//   FAILED - CBC reported a fresh incumbent but it could not be reconstructed
+//            into original column space. `best_obj`/`solution` are unset; the
+//            consumer is told the reconstruction failed and decides what to do.
+typedef enum {
+    COLLO_CBC_INCUMBENT_NONE = 0,
+    COLLO_CBC_INCUMBENT_OK = 1,
+    COLLO_CBC_INCUMBENT_FAILED = 2,
+} ColloCbcIncumbentStatus;
+
 typedef struct {
     ColloCbcEventType event_type;
+    ColloCbcIncumbentStatus incumbent_status;
+    // Original-space objective of the incumbent. Valid only when
+    // incumbent_status == COLLO_CBC_INCUMBENT_OK.
     double best_obj;
     double best_bound;
     int32_t node_count;
     int32_t solutions_found;
+    // Original-space incumbent. Valid only when
+    // incumbent_status == COLLO_CBC_INCUMBENT_OK.
     const double* solution;
     int32_t num_cols;
 } ColloCbcProgress;

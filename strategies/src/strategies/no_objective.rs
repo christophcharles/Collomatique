@@ -170,7 +170,8 @@ impl Strategy for NoObjectiveStrategy {
 /// expressed in the sub-problem's coordinate system), so they are pruned here by construction.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NoObjectiveSolveProgress {
-    pub best_obj: f64,
+    /// Objective of the current incumbent, or `None` if none has been found yet.
+    pub best_obj: Option<f64>,
     pub best_bound: f64,
     pub node_count: u64,
     pub solutions_found: u64,
@@ -189,10 +190,15 @@ impl<V: UsableData> From<&SolveProgress<V>> for NoObjectiveSolveProgress {
 
 impl fmt::Display for NoObjectiveSolveProgress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "obj=")?;
+        match self.best_obj {
+            Some(obj) => write!(f, "{obj:.4}")?,
+            None => write!(f, "—")?,
+        }
         write!(
             f,
-            "obj={:.4} bound={:.4} nodes={} solutions={}",
-            self.best_obj, self.best_bound, self.node_count, self.solutions_found
+            " bound={:.4} nodes={} solutions={}",
+            self.best_bound, self.node_count, self.solutions_found
         )
     }
 }
@@ -225,7 +231,7 @@ mod tests {
     #[test]
     fn checker_progress_round_trips_without_incumbent() {
         let progress = NoObjectiveProgressData::CheckerSolve(NoObjectiveSolveProgress {
-            best_obj: 1.5,
+            best_obj: Some(1.5),
             best_bound: 0.5,
             node_count: 7,
             solutions_found: 2,

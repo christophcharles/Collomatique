@@ -21,7 +21,7 @@ pub struct ColloCbcBuiltModel<'a, V: UsableData, C: UsableData, P: ProblemRepr<V
 }
 
 pub struct Progress<V: UsableData> {
-    best_objective: f64,
+    best_objective: Option<f64>,
     best_bound: f64,
     nodes: u64,
     solutions: u64,
@@ -33,7 +33,7 @@ impl<V: UsableData> ProgressBounds for Progress<V> {
     fn best_bound(&self) -> f64 {
         self.best_bound
     }
-    fn best_objective(&self) -> f64 {
+    fn best_objective(&self) -> Option<f64> {
         self.best_objective
     }
 }
@@ -295,7 +295,7 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> CallbackSolverModel<'a
         F: FnMut(&Self::Progress) -> bool,
     {
         let mut progress = Progress {
-            best_objective: f64::INFINITY,
+            best_objective: None,
             best_bound: -f64::INFINITY,
             nodes: 0,
             solutions: 0,
@@ -305,22 +305,39 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> CallbackSolverModel<'a
 
         let col_indices = &self.col_indices;
         let result = self.model.solve_with_callback(|raw_progress| {
-            progress.best_objective = raw_progress.best_obj;
             progress.best_bound = raw_progress.best_bound;
             progress.nodes = raw_progress.node_count as u64;
             progress.solutions = raw_progress.solutions_found as u64;
-            if let Some(sol) = raw_progress.solution.as_ref() {
-                progress.incumbent = Some(IncumbentInfo {
-                    objective: raw_progress.best_obj,
-                    feasible: true,
-                });
-                progress.incumbent_config = Some(
-                    ConfigData::new().set_iter(
-                        col_indices
-                            .iter()
-                            .map(|(var, &col)| (var.clone(), sol[col])),
-                    ),
-                );
+            match &raw_progress.incumbent {
+                collo_cbc::IncumbentEvent::Reconstructed {
+                    objective,
+                    solution,
+                } => {
+                    progress.best_objective = Some(*objective);
+                    progress.incumbent = Some(IncumbentInfo {
+                        objective: *objective,
+                        feasible: true,
+                    });
+                    progress.incumbent_config = Some(
+                        ConfigData::new().set_iter(
+                            col_indices
+                                .iter()
+                                .map(|(var, &col)| (var.clone(), solution[col])),
+                        ),
+                    );
+                }
+                // No fresh incumbent this event: keep the last known objective
+                // and incumbent (they carry forward through tree-status events).
+                collo_cbc::IncumbentEvent::None => {}
+                // CBC found an incumbent but it couldn't be reconstructed into
+                // original column space. We keep the last good incumbent rather
+                // than reporting a bogus one; surface it for diagnostics.
+                collo_cbc::IncumbentEvent::ReconstructionFailed => {
+                    eprintln!(
+                        "collo_cbc: failed to reconstruct an incumbent into original \
+                         column space; skipping it"
+                    );
+                }
             }
             callback(&progress)
         });

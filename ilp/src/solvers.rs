@@ -153,7 +153,9 @@ pub trait CallbackSolverModel<'a, V: UsableData, C: UsableData, P: ProblemRepr<V
 
 pub trait ProgressBounds {
     fn best_bound(&self) -> f64;
-    fn best_objective(&self) -> f64;
+    /// The objective of the current incumbent, or `None` if no incumbent has
+    /// been found yet. An objective only exists as a property of an incumbent.
+    fn best_objective(&self) -> Option<f64>;
 }
 
 pub trait ProgressStats {
