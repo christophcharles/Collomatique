@@ -528,6 +528,14 @@ impl Component for Colloscope {
                             self.recompute_warnings(sender.clone(), ilp_problem);
                         }
                     }
+                    Some(ComputationState::RecomputingWarnings(ilp_problem)) => {
+                        if ilp_problem.env != self.params {
+                            self.debounce_compute(sender.clone());
+                        } else {
+                            let ilp_problem = ilp_problem.clone();
+                            self.recompute_warnings(sender.clone(), ilp_problem);
+                        }
+                    }
                     Some(_) => {
                         self.debounce_compute(sender.clone());
                     }
