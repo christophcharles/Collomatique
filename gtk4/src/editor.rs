@@ -32,7 +32,8 @@ mod general_planning;
 mod group_lists;
 mod incompats;
 mod pairings;
-mod run_second_instance;
+mod run_python_script;
+mod run_solver;
 mod settings;
 mod slot_pairings;
 mod slots;
@@ -65,7 +66,7 @@ pub enum EditorInput {
     RunScriptClicked,
     RunScript(PathBuf, String),
     NewStateFromSecondInstance(AppState<Data, Desc>),
-    SolveColloscopeClicked,
+    UpdateFullColloscope(collomatique_state_colloscopes::colloscopes::Colloscope),
     ExportColloscopeAs(PathBuf, collomatique_xlsx::Config),
     ExportSqliteAs(PathBuf),
     ExportMpsAs(PathBuf, export_panel::IlpInnerProblem),
@@ -224,7 +225,7 @@ pub struct EditorPanel {
     colloscope: Controller<colloscope::Colloscope>,
     export_panel: Controller<export_panel::ExportPanel>,
     check_script_dialog: Controller<check_script::Dialog>,
-    run_second_instance_dialog: Controller<run_second_instance::Dialog>,
+    run_python_script_dialog: Controller<run_python_script::Dialog>,
     warning_op_dialog: Controller<warning_op::Dialog>,
 }
 
@@ -808,7 +809,9 @@ impl Component for EditorPanel {
                     ColloscopeOutput::UpdateOp(op) => {
                         EditorInput::UpdateOp(collomatique_ops::UpdateOp::Colloscope(op))
                     }
-                    ColloscopeOutput::SolveColloscopeClicked => EditorInput::SolveColloscopeClicked,
+                    ColloscopeOutput::NewColloscope(colloscope) => {
+                        EditorInput::UpdateFullColloscope(colloscope)
+                    }
                     ColloscopeOutput::UpdateIlpProblem(problem) => {
                         EditorInput::UpdateIlpProblem(problem)
                     }
@@ -841,11 +844,11 @@ impl Component for EditorPanel {
                 }
             });
 
-        let run_second_instance_dialog = run_second_instance::Dialog::builder()
+        let run_python_script_dialog = run_python_script::Dialog::builder()
             .transient_for(&root)
             .launch(())
             .forward(sender.input_sender(), |msg| match msg {
-                run_second_instance::DialogOutput::NewData(new_data) => {
+                run_python_script::DialogOutput::NewData(new_data) => {
                     EditorInput::NewStateFromSecondInstance(new_data)
                 }
             });
@@ -893,7 +896,7 @@ impl Component for EditorPanel {
             colloscope,
             export_panel,
             check_script_dialog,
-            run_second_instance_dialog,
+            run_python_script_dialog,
             warning_op_dialog,
         };
         let widgets = view_output!();
@@ -1058,10 +1061,11 @@ impl Component for EditorPanel {
                 });
             }
             EditorInput::RunScript(path, script) => {
-                self.run_second_instance_dialog
+                self.run_python_script_dialog
                     .sender()
-                    .send(run_second_instance::DialogInput::Run(
-                        run_second_instance::RunType::Script(path, script),
+                    .send(run_python_script::DialogInput::Run(
+                        path,
+                        script,
                         self.data.clone(),
                     ))
                     .unwrap();
@@ -1074,14 +1078,26 @@ impl Component for EditorPanel {
                 self.dirty = true;
                 self.send_msg_for_interface_update(sender);
             }
-            EditorInput::SolveColloscopeClicked => {
-                self.run_second_instance_dialog
-                    .sender()
-                    .send(run_second_instance::DialogInput::Run(
-                        run_second_instance::RunType::SolveColloscope,
-                        self.data.clone(),
-                    ))
-                    .unwrap();
+            EditorInput::UpdateFullColloscope(new_colloscope) => {
+                let mut inner = self.data.get_data().get_inner_data().clone();
+                inner.colloscope = new_colloscope;
+                let op = collomatique_state_colloscopes::Op::GlobalUpdate(inner);
+                let desc = (
+                    collomatique_ops::OpCategory::None,
+                    "Résolution du colloscope".to_string(),
+                );
+                match Manager::apply(&mut self.data, op, desc) {
+                    Ok(_) => {
+                        self.dirty = true;
+                        self.send_msg_for_interface_update(sender);
+                    }
+                    Err(e) => {
+                        self.error_dialog
+                            .sender()
+                            .send(error_dialog::DialogInput::Show(e.to_string()))
+                            .unwrap();
+                    }
+                }
             }
             EditorInput::ExportColloscopeAs(path, xlsx_config) => {
                 self.toast_info = Some(ToastInfo::Toast {

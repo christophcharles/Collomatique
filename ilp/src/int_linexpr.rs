@@ -73,6 +73,16 @@ impl<V: UsableData> IntLinExpr<V> {
         self.0.try_transmute(f).map(IntLinExpr)
     }
 
+    /// Keep only variables for which the predicate returns `true`.
+    pub fn retain(&mut self, f: impl FnMut(&V) -> bool) {
+        self.0.retain(f);
+    }
+
+    /// Like [`IntLinExpr::retain`] but returns a new expression instead of mutating.
+    pub fn retained(&self, f: impl FnMut(&V) -> bool) -> IntLinExpr<V> {
+        IntLinExpr(self.0.retained(f))
+    }
+
     /// Build constraint: `self <= rhs`
     pub fn leq(&self, rhs: &IntLinExpr<V>) -> IntConstraint<V> {
         IntConstraint(self.0.leq(&rhs.0))
@@ -357,6 +367,16 @@ impl<V: UsableData> IntConstraint<V> {
         f: F,
     ) -> Option<IntConstraint<U>> {
         self.0.try_transmute(f).map(IntConstraint)
+    }
+
+    /// Keep only variables for which the predicate returns `true`.
+    pub fn retain(&mut self, f: impl FnMut(&V) -> bool) {
+        self.0.retain(f);
+    }
+
+    /// Like [`IntConstraint::retain`] but returns a new constraint instead of mutating.
+    pub fn retained(&self, f: impl FnMut(&V) -> bool) -> IntConstraint<V> {
+        IntConstraint(self.0.retained(f))
     }
 
     /// Get the equality/inequality symbol.

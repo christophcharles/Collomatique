@@ -41,9 +41,9 @@ Sous Ubuntu (testé sur 25.11), il faut d'abord installer Rust (dernière versio
 ```bash
 sudo apt install build-essential libglib2.0-dev libpango1.0-dev libgdk-pixbuf-2.0-dev libgraphene-1.0-dev libgtk-4-dev libadwaita-1-dev coinor-libcbc-dev coinor-cbc libpython3-dev
 cargo build --release
-cargo run --release
+cargo rr --release
 ```
-Le mode `--release` est fortement recommandé : le solveur ILP est très lent en mode debug.
+`cargo rr` est un alias défini dans `.cargo/config.toml` qui lance l'interface graphique GTK4 (`collomatique-gtk4`). Le mode `--release` est fortement recommandé : le solveur ILP est très lent en mode debug.
 
 Le paquet `coinor-cbc` n'est nécessaire que pour l'exécution des tests.
 
@@ -102,3 +102,8 @@ Le projet est un workspace Rust composé des crates suivantes :
 | `ops/` | Opérations de haut-niveau (GUI et Python) sur l'état de l'application |
 | `xlsx/` | Export du colloscope au format xlsx |
 | `mps/` | Export de problèmes ILP au format MPS |
+| `collo-cbc/` | Interface C++ pour le solveur CBC avec CbcEventHandler |
+| `subprocesses/` | Gestion de sous-processus (UI-agnostique) |
+| `rooms/` | Outil CLI pour la planification des salles |
+| `rooms-model/` | Modèle de données pour la planification des salles |
+| `constraints-rooms/` | Modélisation des contraintes de salles |

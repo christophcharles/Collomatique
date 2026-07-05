@@ -100,6 +100,7 @@ impl<V: UsableData> Default for LinExpr<V> {
 ///
 /// Normally, you don't have to handle EqSymbol directly.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum EqSymbol {
     /// Represents an "equal" ("=") symbol
     Equals,
@@ -161,6 +162,16 @@ impl<V: UsableData> LinExpr<V> {
         LinExpr {
             coefs: HashMap::new(),
             constant: ordered_float::OrderedFloat(number),
+        }
+    }
+
+    pub fn from_coefficients(coeffs: impl IntoIterator<Item = (V, f64)>, constant: f64) -> Self {
+        LinExpr {
+            coefs: coeffs
+                .into_iter()
+                .map(|(v, c)| (v, ordered_float::OrderedFloat(c)))
+                .collect(),
+            constant: ordered_float::OrderedFloat(constant),
         }
     }
 }
@@ -401,6 +412,20 @@ impl<V: UsableData> LinExpr<V> {
     pub fn cleaned(&self) -> LinExpr<V> {
         let mut output = self.clone();
         output.clean();
+        output
+    }
+
+    /// Keep only variables for which the predicate returns `true`.
+    ///
+    /// Removed terms are effectively set to zero. The constant is unchanged.
+    pub fn retain(&mut self, mut f: impl FnMut(&V) -> bool) {
+        self.coefs.retain(|k, _| f(k));
+    }
+
+    /// Like [`LinExpr::retain`] but returns a new expression instead of mutating.
+    pub fn retained(&self, f: impl FnMut(&V) -> bool) -> LinExpr<V> {
+        let mut output = self.clone();
+        output.retain(f);
         output
     }
 
@@ -804,13 +829,15 @@ impl<V: UsableData> LinExpr<V> {
     ///
     /// Works like [Self::transmute] but consumes the expression
     pub fn into_transmuted<U: UsableData, F: FnMut(V) -> U>(self, mut f: F) -> LinExpr<U> {
-        let mut expr = LinExpr::constant(self.get_constant());
-
+        let mut coefs: HashMap<U, ordered_float::OrderedFloat<f64>> =
+            HashMap::with_capacity(self.coefs.len());
         for (v, c) in self.coefs {
-            expr = expr + c.into_inner() * LinExpr::var(f(v));
+            *coefs.entry(f(v)).or_default() += c;
         }
-
-        expr
+        LinExpr {
+            coefs,
+            constant: self.constant,
+        }
     }
 
     /// Transmute variables
@@ -888,13 +915,15 @@ impl<V: UsableData> LinExpr<V> {
         &self,
         mut f: F,
     ) -> Option<LinExpr<U>> {
-        let mut expr = LinExpr::constant(self.get_constant());
-
+        let mut coefs: HashMap<U, ordered_float::OrderedFloat<f64>> =
+            HashMap::with_capacity(self.coefs.len());
         for (v, c) in &self.coefs {
-            expr = expr + c.into_inner() * LinExpr::var(f(v)?);
+            *coefs.entry(f(v)?).or_default() += *c;
         }
-
-        Some(expr)
+        Some(LinExpr {
+            coefs,
+            constant: self.constant,
+        })
     }
 }
 
@@ -1307,6 +1336,20 @@ impl<V: UsableData> Constraint<V> {
     pub fn cleaned(&self) -> Constraint<V> {
         let mut output = self.clone();
         output.clean();
+        output
+    }
+
+    /// Keep only variables for which the predicate returns `true`.
+    ///
+    /// Removed terms are effectively set to zero in the constraint.
+    pub fn retain(&mut self, f: impl FnMut(&V) -> bool) {
+        self.expr.retain(f);
+    }
+
+    /// Like [`Constraint::retain`] but returns a new constraint instead of mutating.
+    pub fn retained(&self, f: impl FnMut(&V) -> bool) -> Constraint<V> {
+        let mut output = self.clone();
+        output.retain(f);
         output
     }
 

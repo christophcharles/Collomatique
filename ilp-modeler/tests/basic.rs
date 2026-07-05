@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use collomatique_ilp::linexpr::LinExpr;
-use collomatique_ilp::solvers::{Solver, coin_cbc::CbcSolver};
+use collomatique_ilp::solvers::{Solver, SolverModel, collo_cbc::ColloCbcSolver};
 use collomatique_ilp::{Objective, ObjectiveSense, Variable};
 
 use collomatique_ilp_modeler::{
@@ -42,8 +42,11 @@ fn trivial_problem() {
     m.add_constraint((&a + &b).leq(&LinExpr::constant(1.0)), "a+b<=1".into());
     m.add_objective(1.0, Objective::new(a + b, ObjectiveSense::Maximize));
     let model = m.build(&()).unwrap();
-    let solver = CbcSolver::new();
-    let cfg = solver.solve(model.problem()).expect("solvable");
+    let solver = ColloCbcSolver::new();
+    let cfg = solver
+        .build_model(model.problem())
+        .solve()
+        .expect("solvable");
     let sum = cfg
         .get(InternalVar::<B, E>::Base("a".to_string()))
         .unwrap_or(0.0)
@@ -77,7 +80,10 @@ fn referenced_extra_runs() {
     );
     let model = m.build(&()).unwrap();
     assert!(*ran.lock().unwrap());
-    let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
+    let cfg = ColloCbcSolver::new()
+        .build_model(model.problem())
+        .solve()
+        .expect("solvable");
     assert_eq!(
         cfg.get(InternalVar::<B, E>::Extra("s".to_string()))
             .unwrap(),
@@ -136,7 +142,10 @@ fn extra_chain() {
         "ax=1".into(),
     );
     let model = m.build(&()).unwrap();
-    let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
+    let cfg = ColloCbcSolver::new()
+        .build_model(model.problem())
+        .solve()
+        .expect("solvable");
     assert_eq!(
         cfg.get(InternalVar::<B, E>::Base("b".to_string())).unwrap(),
         1.0
@@ -146,6 +155,24 @@ fn extra_chain() {
 #[test]
 fn undeclared_extra() {
     let mut m = fresh();
+    m.add_constraint(
+        LinExpr::var(xtra("ghost")).eq(&LinExpr::constant(0.0)),
+        "ghost".into(),
+    );
+    let err = m.build(&()).unwrap_err();
+    match err {
+        BuildError::UndeclaredExtra(e) => assert_eq!(e, "ghost"),
+        other => panic!("expected UndeclaredExtra, got {:?}", other),
+    }
+}
+
+#[test]
+fn undeclared_extra_slow_path() {
+    let mut m = fresh();
+    m.declare_extra("real".to_string(), Variable::integer(), |_f, _ctx, _e| {
+        Ok(vec![])
+    })
+    .unwrap();
     m.add_constraint(
         LinExpr::var(xtra("ghost")).eq(&LinExpr::constant(0.0)),
         "ghost".into(),
@@ -334,7 +361,10 @@ fn fix_undeclared_variable() {
         },
     );
     let model = m.build(&()).unwrap();
-    let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
+    let cfg = ColloCbcSolver::new()
+        .build_model(model.problem())
+        .solve()
+        .expect("solvable");
     assert_eq!(
         cfg.get(InternalVar::<B, E>::Base("a".to_string())).unwrap(),
         0.0
@@ -361,7 +391,10 @@ fn fixer_chain_first_wins() {
         },
     );
     let model = m.build(&()).unwrap();
-    let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
+    let cfg = ColloCbcSolver::new()
+        .build_model(model.problem())
+        .solve()
+        .expect("solvable");
     // c fixed to 1.0 by first fixer → a <= 0 → a = 0
     assert_eq!(
         cfg.get(InternalVar::<B, E>::Base("a".to_string())).unwrap(),
@@ -395,7 +428,10 @@ fn fix_in_extra_closure() {
         },
     );
     let model = m.build(&()).unwrap();
-    let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
+    let cfg = ColloCbcSolver::new()
+        .build_model(model.problem())
+        .solve()
+        .expect("solvable");
     // s = a + 1, s <= 2, maximize s → a = 1, s = 2.
     assert_eq!(
         cfg.get(InternalVar::<B, E>::Extra("s".to_string()))
@@ -429,14 +465,20 @@ fn reconstruction_basic() {
     let model = m.build(&()).unwrap();
 
     // Solve the main problem.
-    let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
+    let cfg = ColloCbcSolver::new()
+        .build_model(model.problem())
+        .solve()
+        .expect("solvable");
     let av = cfg.get(InternalVar::<B, E>::Base("a".to_string())).unwrap();
     let bv = cfg.get(InternalVar::<B, E>::Base("b".to_string())).unwrap();
 
     // Reconstruct from base values.
     let base_values = HashMap::from([("a".to_string(), av), ("b".to_string(), bv)]);
     let recon_pb = model.reconstruction_problem(&base_values).unwrap();
-    let recon_cfg = CbcSolver::new().solve(&recon_pb).expect("solvable");
+    let recon_cfg = ColloCbcSolver::new()
+        .build_model(&recon_pb)
+        .solve()
+        .expect("solvable");
     let sv = recon_cfg
         .get(InternalVar::<B, E>::Extra("s".to_string()))
         .unwrap();
@@ -492,7 +534,10 @@ fn reconstruction_with_fixed_vars() {
     // Reconstruct with a=1 only (c was fixed, not a base var).
     let base_values = HashMap::from([("a".to_string(), 1.0)]);
     let recon_pb = model.reconstruction_problem(&base_values).unwrap();
-    let recon_cfg = CbcSolver::new().solve(&recon_pb).expect("solvable");
+    let recon_cfg = ColloCbcSolver::new()
+        .build_model(&recon_pb)
+        .solve()
+        .expect("solvable");
     let sv = recon_cfg
         .get(InternalVar::<B, E>::Extra("s".to_string()))
         .unwrap();
@@ -618,7 +663,10 @@ fn from_described_creates_modeler_testvar() {
     m.add_constraint((&x + &y).leq(&LinExpr::constant(1.0)), "x+y<=1".into());
     m.add_objective(1.0, Objective::new(x + y, ObjectiveSense::Maximize));
     let model = m.build(&()).unwrap();
-    let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
+    let cfg = ColloCbcSolver::new()
+        .build_model(model.problem())
+        .solve()
+        .expect("solvable");
     let sum = cfg.get(InternalVar::Base(TestVar::X)).unwrap_or(0.0)
         + cfg.get(InternalVar::Base(TestVar::Y)).unwrap_or(0.0);
     assert_eq!(sum, 1.0);
@@ -635,7 +683,10 @@ fn from_described_auto_fixes_via_check_fix() {
     m.add_constraint((&x + &z).leq(&LinExpr::constant(1.0)), "x+z<=1".into());
     m.add_objective(1.0, Objective::new(x, ObjectiveSense::Maximize));
     let model = m.build(&()).unwrap();
-    let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
+    let cfg = ColloCbcSolver::new()
+        .build_model(model.problem())
+        .solve()
+        .expect("solvable");
     assert_eq!(cfg.get(InternalVar::Base(TestVar::X)).unwrap(), 0.0);
 }
 
@@ -654,7 +705,10 @@ fn from_described_additional_fixer_composes() {
     // Shouldn't break anything — the check_fix fixer handles Z.
     m.add_fixer(|_b: &TestVar, _env: &()| None);
     let model = m.build(&()).unwrap();
-    let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
+    let cfg = ColloCbcSolver::new()
+        .build_model(model.problem())
+        .solve()
+        .expect("solvable");
     assert_eq!(cfg.get(InternalVar::Base(TestVar::X)).unwrap(), 0.0);
 }
 
@@ -700,7 +754,10 @@ fn from_described_creates_modeler() {
     m.add_constraint((&a + &b).leq(&LinExpr::constant(1.0)), "a+b<=1".into());
     m.add_objective(1.0, Objective::new(a + b, ObjectiveSense::Maximize));
     let model = m.build(&env).unwrap();
-    let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
+    let cfg = ColloCbcSolver::new()
+        .build_model(model.problem())
+        .solve()
+        .expect("solvable");
     let sum = cfg.get(InternalVar::Base(DescVar::A)).unwrap_or(0.0)
         + cfg.get(InternalVar::Base(DescVar::B)).unwrap_or(0.0);
     assert_eq!(sum, 1.0);
@@ -717,7 +774,10 @@ fn from_described_fixes_via_env() {
     m.add_constraint((&a + &c).leq(&LinExpr::constant(1.0)), "a+c<=1".into());
     m.add_objective(1.0, Objective::new(a, ObjectiveSense::Maximize));
     let model = m.build(&env).unwrap();
-    let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
+    let cfg = ColloCbcSolver::new()
+        .build_model(model.problem())
+        .solve()
+        .expect("solvable");
     assert_eq!(cfg.get(InternalVar::Base(DescVar::A)).unwrap(), 0.0);
 }
 
@@ -732,7 +792,10 @@ fn describe_var_via_from_described() {
     m.add_constraint((&a + &c).leq(&LinExpr::constant(1.0)), "a+c<=1".into());
     m.add_objective(1.0, Objective::new(a, ObjectiveSense::Maximize));
     let model = m.build(&env).unwrap();
-    let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
+    let cfg = ColloCbcSolver::new()
+        .build_model(model.problem())
+        .solve()
+        .expect("solvable");
     assert_eq!(cfg.get(InternalVar::Base(DescVar::A)).unwrap(), 0.0);
 }
 
@@ -854,7 +917,10 @@ fn derive_integration_from_described() {
     m.add_constraint((&s0 + &s1).leq(&LinExpr::constant(1.0)), "s0+s1<=1".into());
     m.add_objective(1.0, Objective::new(s0 + s1, ObjectiveSense::Maximize));
     let model = m.build(&env).unwrap();
-    let cfg = CbcSolver::new().solve(model.problem()).expect("solvable");
+    let cfg = ColloCbcSolver::new()
+        .build_model(model.problem())
+        .solve()
+        .expect("solvable");
     let sum = cfg
         .get(InternalVar::Base(DeriveVar::Slot { slot: 0 }))
         .unwrap_or(0.0)
@@ -1024,7 +1090,10 @@ fn checker_reconstruction_basic() {
 
     let base_values = HashMap::from([("a".to_string(), 0.0), ("b".to_string(), 1.0)]);
     let checker_recon = model.checker_reconstruction_problem(&base_values).unwrap();
-    let recon_cfg = CbcSolver::new().solve(&checker_recon).expect("solvable");
+    let recon_cfg = ColloCbcSolver::new()
+        .build_model(&checker_recon)
+        .solve()
+        .expect("solvable");
 
     // s should be reconstructed.
     assert_eq!(
@@ -1059,4 +1128,269 @@ fn checker_no_extras() {
     let checker_recon = model.checker_reconstruction_problem(&base_values).unwrap();
     assert_eq!(checker_recon.get_constraints().len(), 0);
     assert_eq!(checker_recon.get_variables().len(), 0);
+}
+
+// ----- ModelDesc round-trip test -------------------------------------------
+
+#[test]
+fn model_desc_round_trip_preserves_solution() {
+    let mut vars = HashMap::new();
+    vars.insert("a".to_string(), Variable::binary());
+    vars.insert("b".to_string(), Variable::binary());
+    vars.insert("c".to_string(), Variable::binary());
+    vars.insert("d".to_string(), Variable::binary());
+    let mut m: Modeler<'_, B, E, C, (), String> = Modeler::new(vars);
+
+    let a = LinExpr::var(base("a"));
+    let b = LinExpr::var(base("b"));
+    let c = LinExpr::var(base("c"));
+    let d = LinExpr::var(base("d"));
+
+    m.add_constraint((&a + &b).eq(&LinExpr::constant(1.0)), "a+b=1".into());
+    m.add_constraint((&c + &d).eq(&LinExpr::constant(1.0)), "c+d=1".into());
+    m.add_constraint((&a + &c).eq(&LinExpr::constant(1.0)), "a+c=1".into());
+    m.add_constraint((&b + &d).eq(&LinExpr::constant(1.0)), "b+d=1".into());
+    m.add_objective(1.0, Objective::new(a, ObjectiveSense::Maximize));
+
+    let model = m.build(&()).unwrap();
+
+    // Solve the original model.
+    let original_cfg = ColloCbcSolver::new()
+        .build_model(model.problem())
+        .solve()
+        .expect("solvable");
+
+    // Simulate the IPC round-trip:
+    // Parent side: extract typed var_order alongside ModelDesc.
+    let (model_desc, parent_var_order) = model.to_desc();
+
+    // Subprocess side: rebuild model and extract var_order.
+    let (rebuilt_model, subprocess_var_order) = model_desc.to_model();
+
+    // Subprocess solves and encodes solution as Vec<f64> using var_order.
+    let rebuilt_cfg = ColloCbcSolver::new()
+        .build_model(rebuilt_model.problem())
+        .solve()
+        .expect("solvable");
+    let solution_vec: Vec<f64> = subprocess_var_order
+        .iter()
+        .map(|iv| rebuilt_cfg.get(iv.clone()).unwrap_or(0.0))
+        .collect();
+
+    // Parent side: decode Vec<f64> back to ConfigData using its typed var_order.
+    let round_tripped = collomatique_ilp::solution_to_config_data(&solution_vec, &parent_var_order);
+
+    // Compare: both should give (a=1, b=0, c=0, d=1).
+    for name in ["a", "b", "c", "d"] {
+        let iv = InternalVar::<B, E>::Base(name.to_string());
+        assert_eq!(
+            original_cfg.get(iv.clone()).unwrap_or(0.0),
+            round_tripped.get(iv).unwrap_or(0.0),
+            "mismatch for variable {name}"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Modeler::from_model_problem round trips
+// ---------------------------------------------------------------------------
+
+/// Base variables + a user constraint + an objective, no extras.
+/// Rebuilding from the assembled problem and re-solving must yield
+/// the same optimum.
+#[test]
+fn from_model_problem_basic_round_trip() {
+    let mut m = fresh();
+    let a = LinExpr::var(base("a"));
+    let b = LinExpr::var(base("b"));
+    m.add_constraint((&a + &b).leq(&LinExpr::constant(1.0)), "a+b<=1".into());
+    m.add_objective(1.0, Objective::new(a + b, ObjectiveSense::Maximize));
+    let model = m.build(&()).unwrap();
+
+    let rebuilt: Modeler<'_, B, E, C, (), String> = Modeler::from_model_problem(model.problem());
+    let model2 = rebuilt.build(&()).unwrap();
+
+    // Same variable set.
+    assert_eq!(
+        model.problem().get_variables().len(),
+        model2.problem().get_variables().len()
+    );
+    assert_eq!(
+        model.problem().get_constraints().len(),
+        model2.problem().get_constraints().len()
+    );
+
+    // Same optimum.
+    let cfg = ColloCbcSolver::new()
+        .build_model(model2.problem())
+        .solve()
+        .expect("solvable");
+    let sum = cfg
+        .get(InternalVar::<B, E>::Base("a".to_string()))
+        .unwrap_or(0.0)
+        + cfg
+            .get(InternalVar::<B, E>::Base("b".to_string()))
+            .unwrap_or(0.0);
+    assert_eq!(sum, 1.0);
+}
+
+/// An extra that mints a helper survives the round trip: the
+/// rebuilt problem has the same extra + helper variables and the
+/// extra is still constrained to `a + b`.
+#[test]
+fn from_model_problem_with_extra_and_helper() {
+    let mut m = fresh();
+    // s = a + b, with a helper h forced equal to s (exercises the
+    // helper re-minting path).
+    m.declare_extra("s".to_string(), Variable::integer(), |f, _ctx, e| {
+        let h = f.new_helper(Variable::integer());
+        let s = LinExpr::var(ExtraVar::Extra(e));
+        let sum = LinExpr::var(ebase("a")) + LinExpr::var(ebase("b"));
+        Ok(vec![s.eq(&sum), LinExpr::var(h).eq(&s)])
+    })
+    .unwrap();
+    m.add_constraint(
+        LinExpr::var(xtra("s")).leq(&LinExpr::constant(1.0)),
+        "s<=1".into(),
+    );
+    m.add_objective(
+        1.0,
+        Objective::new(LinExpr::var(xtra("s")), ObjectiveSense::Maximize),
+    );
+    let model = m.build(&()).unwrap();
+
+    let rebuilt: Modeler<'_, B, E, C, (), String> = Modeler::from_model_problem(model.problem());
+    let model2 = rebuilt.build(&()).unwrap();
+
+    // Variable roles are preserved (base/extra/helper counts).
+    let count_roles = |mdl: &collomatique_ilp_modeler::Model<B, E, C>| {
+        let vars = mdl.problem().get_variables();
+        let base = vars
+            .keys()
+            .filter(|v| matches!(v, InternalVar::Base(_)))
+            .count();
+        let extra = vars
+            .keys()
+            .filter(|v| matches!(v, InternalVar::Extra(_)))
+            .count();
+        let helper = vars
+            .keys()
+            .filter(|v| matches!(v, InternalVar::Helper { .. }))
+            .count();
+        (base, extra, helper)
+    };
+    assert_eq!(count_roles(&model), count_roles(&model2));
+    assert_eq!(count_roles(&model2), (2, 1, 1));
+
+    // Same optimum, and s is still tied to a + b.
+    let cfg = ColloCbcSolver::new()
+        .build_model(model2.problem())
+        .solve()
+        .expect("solvable");
+    assert_eq!(
+        cfg.get(InternalVar::<B, E>::Extra("s".to_string()))
+            .unwrap(),
+        1.0
+    );
+}
+
+/// Rebuilding from `checker_problem()` (which carries only the
+/// constraint-defining extras) yields a feasible checker problem.
+#[test]
+fn from_model_problem_checker_round_trip() {
+    let mut m = fresh();
+    m.declare_extra("s".to_string(), Variable::integer(), |_f, _ctx, e| {
+        let s = LinExpr::var(ExtraVar::Extra(e));
+        let sum = LinExpr::var(ebase("a")) + LinExpr::var(ebase("b"));
+        Ok(vec![s.eq(&sum)])
+    })
+    .unwrap();
+    m.add_constraint(
+        LinExpr::var(xtra("s")).leq(&LinExpr::constant(1.0)),
+        "s<=1".into(),
+    );
+    let model = m.build(&()).unwrap();
+
+    let rebuilt: Modeler<'_, B, E, C, (), String> =
+        Modeler::from_model_problem(model.checker_problem());
+    let model2 = rebuilt.build(&()).unwrap();
+
+    assert_eq!(
+        model.checker_problem().get_variables().len(),
+        model2.problem().get_variables().len()
+    );
+    let cfg = ColloCbcSolver::new().build_model(model2.problem()).solve();
+    assert!(cfg.is_some(), "rebuilt checker problem should be feasible");
+}
+
+/// Rebuilding from the full problem recomputes `for_constraints`
+/// identically: an extra reached only through the objective stays
+/// out of the checker problem, and one reached through a user
+/// constraint stays in it.
+#[test]
+fn from_model_problem_preserves_for_constraints() {
+    let mut m = fresh();
+    // Constraint extra: reached via a user constraint -> for_constraints = true.
+    m.declare_extra("cs".to_string(), Variable::integer(), |_f, _ctx, e| {
+        let cs = LinExpr::var(ExtraVar::Extra(e));
+        let sum = LinExpr::var(ebase("a")) + LinExpr::var(ebase("b"));
+        Ok(vec![cs.eq(&sum)])
+    })
+    .unwrap();
+    // Objective-only extra: reached only via the objective -> for_constraints = false.
+    m.declare_extra("os".to_string(), Variable::integer(), |_f, _ctx, e| {
+        let os = LinExpr::var(ExtraVar::Extra(e));
+        Ok(vec![os.eq(&LinExpr::var(ebase("a")))])
+    })
+    .unwrap();
+    m.add_constraint(
+        LinExpr::var(xtra("cs")).leq(&LinExpr::constant(1.0)),
+        "cs<=1".into(),
+    );
+    m.add_objective(
+        1.0,
+        Objective::new(LinExpr::var(xtra("os")), ObjectiveSense::Maximize),
+    );
+    let model = m.build(&()).unwrap();
+
+    // `checker` selects the checker problem (which drops objective-only extras).
+    let has_extra = |mdl: &collomatique_ilp_modeler::Model<B, E, C>, name: &str, checker: bool| {
+        let problem = if checker {
+            mdl.checker_problem()
+        } else {
+            mdl.problem()
+        };
+        problem
+            .get_variables()
+            .keys()
+            .any(|v| matches!(v, InternalVar::Extra(e) if e == name))
+    };
+
+    // Sanity on the original: cs is a checker constraint, os is objective-only.
+    assert!(has_extra(&model, "cs", true));
+    assert!(!has_extra(&model, "os", true));
+    assert!(has_extra(&model, "os", false));
+
+    // Rebuild from the FULL problem and build again.
+    let rebuilt: Modeler<'_, B, E, C, (), String> = Modeler::from_model_problem(model.problem());
+    let model2 = rebuilt.build(&()).unwrap();
+
+    // for_constraints is recomputed identically.
+    assert!(
+        has_extra(&model2, "cs", true),
+        "cs must remain a checker constraint after rebuild"
+    );
+    assert!(
+        !has_extra(&model2, "os", true),
+        "os must remain objective-only after rebuild"
+    );
+    // Checker problems match structurally.
+    assert_eq!(
+        model.checker_problem().get_variables().len(),
+        model2.checker_problem().get_variables().len()
+    );
+    assert_eq!(
+        model.checker_problem().get_constraints().len(),
+        model2.checker_problem().get_constraints().len()
+    );
 }

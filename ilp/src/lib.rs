@@ -143,11 +143,11 @@
 //!
 //! // Now pb represents our ILP problem. We can solve it using a solver
 //! # use collomatique_ilp::solvers;
-//! let solver = solvers::coin_cbc::CbcSolver::new();
+//! let solver = solvers::collo_cbc::ColloCbcSolver::new();
 //!
-//! use solvers::Solver;
-//! // Solver::solve returns None when there is no solution
-//! let config = solver.solve(&pb).expect("There should be a solution");
+//! use solvers::{Solver, SolverModel};
+//! // SolverModel::solve returns None when there is no solution
+//! let config = solver.build_model(&pb).solve().expect("There should be a solution");
 //!
 //! // Now config is the optimal solution. We can prob it/
 //! // Because Group X should have course 1 on week 1 (this is prefered by the objective function)
@@ -159,6 +159,7 @@ pub mod int_linexpr;
 pub mod linexpr;
 pub mod mat_repr;
 pub mod objectives;
+pub mod problem_desc;
 pub mod solvers;
 
 #[cfg(test)]
@@ -170,6 +171,9 @@ use thiserror::Error;
 pub use int_linexpr::{IntConstraint, IntLinExpr, NonIntegerError};
 pub use linexpr::{Constraint, LinExpr};
 pub use objectives::{Objective, ObjectiveSense};
+pub use problem_desc::{
+    ConstraintDesc, ObjectiveDesc, ProblemDesc, config_data_to_hint, solution_to_config_data,
+};
 
 use mat_repr::{ConfigRepr, ProblemRepr};
 
@@ -210,6 +214,16 @@ pub fn f64_equals(v1: f64, v2: f64) -> bool {
     f64_is_zero(v1 - v2)
 }
 
+/// Tests if `v1 > v2` with [TOLERANCE].
+pub fn f64_gt(v1: f64, v2: f64) -> bool {
+    v1 > v2 + TOLERANCE
+}
+
+/// Tests if `v1 < v2` with [TOLERANCE].
+pub fn f64_lt(v1: f64, v2: f64) -> bool {
+    v1 < v2 - TOLERANCE
+}
+
 /// Default matrix representation for [Problem].
 ///
 /// In most cases, the default representation is just fine
@@ -244,6 +258,7 @@ impl<T: std::fmt::Debug + std::hash::Hash + PartialEq + Eq + Clone + Send + Sync
 ///
 /// Further constraints can be imposed with [Variable::min] and [Variable::max].
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Variable {
     integer_var: bool,
     min: Option<ordered_float::OrderedFloat<f64>>,
@@ -467,6 +482,22 @@ impl Variable {
         self.integer_var
     }
 
+    /// Returns whether the variable is binary, i.e. an integer variable bounded to `[0, 1]`.
+    ///
+    /// This is exactly the shape produced by [`Variable::binary`].
+    ///
+    /// ```
+    /// # use collomatique_ilp::Variable;
+    /// assert_eq!(Variable::binary().is_binary(), true);
+    /// assert_eq!(Variable::integer().min(0.0).max(1.0).is_binary(), true);
+    /// assert_eq!(Variable::integer().min(0.0).max(5.0).is_binary(), false);
+    /// assert_eq!(Variable::continuous().min(0.0).max(1.0).is_binary(), false);
+    /// assert_eq!(Variable::integer().is_binary(), false);
+    /// ```
+    pub fn is_binary(&self) -> bool {
+        self.integer_var && self.get_min() == Some(0.0) && self.get_max() == Some(1.0)
+    }
+
     /// Returns the minimum bound of the variable.
     ///
     /// ```
@@ -520,13 +551,13 @@ impl Variable {
         }
 
         if let Some(m) = self.max
-            && value > m.0
+            && f64_gt(value, m.0)
         {
             return false;
         }
 
         if let Some(m) = self.min
-            && value < m.0
+            && f64_lt(value, m.0)
         {
             return false;
         }
@@ -1282,8 +1313,8 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Problem<V, C, P> {
 /// This means two things:
 /// - first, it can be built easily incrementaly. You can
 ///   modify the values of the variables with its various methods.
-/// - second, it is not, in a absolute sense, feasable or not feasable.
-///   A configuration is feasable if it satisfies all the hard
+/// - second, it is not, in a absolute sense, feasible or not feasible.
+///   A configuration is feasible if it satisfies all the hard
 ///   constraints of a problem. This of course depends on the problem
 ///   and assumes *some* compatibility between the problem and the configuration.
 ///
@@ -1641,7 +1672,7 @@ impl<V: UsableData> ConfigData<V> {
 /// A configuration is the affectation of a value to every variable of a
 /// problem. As such, a [Config] is specific to a [Problem].
 ///
-/// Such a configuration does not need to be *feasable* (meaning that
+/// Such a configuration does not need to be *feasible* (meaning that
 /// it does not have to satisfy the various inequalities and so it does
 /// not have to be a solution of the problem). But it does need
 /// to be a valid configuration, which means that all the variables
@@ -1703,7 +1734,7 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> Config<'a, V, C, P> {
     /// Returns the value of objective function for this configuration.
     ///
     /// Though it has less of a purpose in this case, this is also
-    /// defined for non-feasable configuration.
+    /// defined for non-feasible configuration.
     pub fn eval(&self) -> f64 {
         let value_map: HashMap<V, f64> = self
             .values
@@ -1717,25 +1748,25 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> Config<'a, V, C, P> {
             .expect("There should be no variable missing")
     }
 
-    /// Returns true if the configuration is feasable
-    pub fn is_feasable(&self) -> bool {
+    /// Returns true if the configuration is feasible
+    pub fn is_feasible(&self) -> bool {
         for (var, value) in &self.values {
             let desc = &self.problem.variables[var];
             let v = value.into_inner();
 
             if let Some(m) = desc.get_min()
-                && v < m
+                && f64_lt(v, m)
             {
                 return false;
             }
             if let Some(m) = desc.get_max()
-                && v > m
+                && f64_gt(v, m)
             {
                 return false;
             }
         }
 
-        self.repr.is_feasable()
+        self.repr.is_feasible()
     }
 
     /// Blames unsatisfied constraints
@@ -1754,25 +1785,25 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> Config<'a, V, C, P> {
             .map(|i| &self.problem.constraints[i])
     }
 
-    /// Turns a configuration into a feasable configuration
+    /// Turns a configuration into a feasible configuration
     ///
-    /// If the configuration is feasable, it is turned into a [FeasableConfig].
+    /// If the configuration is feasible, it is turned into a [FeasibleConfig].
     /// Otherwise, this returns `None`.
-    pub fn into_feasable(self) -> Option<FeasableConfig<'a, V, C, P>> {
-        if !self.is_feasable() {
+    pub fn into_feasible(self) -> Option<FeasibleConfig<'a, V, C, P>> {
+        if !self.is_feasible() {
             return None;
         }
 
-        Some(unsafe { self.into_feasable_unchecked() })
+        Some(unsafe { self.into_feasible_unchecked() })
     }
 
-    /// Turns a configuration into a feasable configuration
+    /// Turns a configuration into a feasible configuration
     ///
     /// # Safety
     ///
-    /// This is the unchecked (and therefore unsafe) version of [Config::into_feasable].
-    pub unsafe fn into_feasable_unchecked(self) -> FeasableConfig<'a, V, C, P> {
-        FeasableConfig(self)
+    /// This is the unchecked (and therefore unsafe) version of [Config::into_feasible].
+    pub unsafe fn into_feasible_unchecked(self) -> FeasibleConfig<'a, V, C, P> {
+        FeasibleConfig(self)
     }
 }
 
@@ -1788,27 +1819,27 @@ impl<'a, V: UsableData + std::fmt::Display, C: UsableData + std::fmt::Display, P
     }
 }
 
-/// A feasable configuration
+/// A feasible configuration
 ///
-/// A feasable configuration is a configuration that satisfies all
+/// A feasible configuration is a configuration that satisfies all
 /// the *hard* constraints (all the inequalities and equalities).
 ///
-/// This type represents a configuration that is known to be feasable.
-/// It is constructed by [Config::into_feasable].
+/// This type represents a configuration that is known to be feasible.
+/// It is constructed by [Config::into_feasible].
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FeasableConfig<'a, V: UsableData, C: UsableData, P: ProblemRepr<V> = DefaultRepr<V>>(
+pub struct FeasibleConfig<'a, V: UsableData, C: UsableData, P: ProblemRepr<V> = DefaultRepr<V>>(
     Config<'a, V, C, P>,
 );
 
-impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> FeasableConfig<'a, V, C, P> {
-    /// Turns a [FeasableConfig] back into a [Config].
+impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> FeasibleConfig<'a, V, C, P> {
+    /// Turns a [FeasibleConfig] back into a [Config].
     pub fn into_inner(self) -> Config<'a, V, C, P> {
         self.0
     }
 
     /// Gives a reference to the inner [Config].
     ///
-    /// This is normally not needed as [FeasableConfig]
+    /// This is normally not needed as [FeasibleConfig]
     /// implements [std::ops::Deref].
     pub fn inner(&self) -> &Config<'a, V, C, P> {
         &self.0
@@ -1816,7 +1847,7 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> FeasableConfig<'a, V, 
 }
 
 impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> std::ops::Deref
-    for FeasableConfig<'a, V, C, P>
+    for FeasibleConfig<'a, V, C, P>
 {
     type Target = Config<'a, V, C, P>;
 
@@ -1826,7 +1857,7 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> std::ops::Deref
 }
 
 impl<'a, V: UsableData + std::fmt::Display, C: UsableData + std::fmt::Display, P: ProblemRepr<V>>
-    std::fmt::Display for FeasableConfig<'a, V, C, P>
+    std::fmt::Display for FeasibleConfig<'a, V, C, P>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.inner().fmt(f)

@@ -1,0 +1,19 @@
+[package]
+name = "collomatique-subprocesses"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+collomatique-rpc = { path = "../rpc" }
+collomatique-ilp = { path = "../ilp", features = ["serde"] }
+collomatique-ilp-modeler = { path = "../ilp-modeler", features = ["serde"] }
+collomatique-strategies = { path = "../strategies" }
+ordered-float.workspace = true
+async-trait.workspace = true
+futures.workspace = true
+thiserror.workspace = true
+portable-pty = "0.9"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

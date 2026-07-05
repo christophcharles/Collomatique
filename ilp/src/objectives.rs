@@ -15,6 +15,7 @@ use super::{LinExpr, UsableData};
 /// This enum represents the sense in which
 /// we try to optimize the objective function
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ObjectiveSense {
     /// Minimize the objective function (default)
     #[default]
@@ -389,6 +390,21 @@ impl<V: UsableData> Objective<V> {
 
         Objective {
             func: new_func,
+            sense: self.sense,
+        }
+    }
+
+    /// Keep only variables for which the predicate returns `true`.
+    ///
+    /// Removed terms are effectively set to zero. The sense is unchanged.
+    pub fn retain(&mut self, f: impl FnMut(&V) -> bool) {
+        self.func.retain(f);
+    }
+
+    /// Like [`Objective::retain`] but returns a new objective instead of mutating.
+    pub fn retained(&self, f: impl FnMut(&V) -> bool) -> Objective<V> {
+        Objective {
+            func: self.func.retained(f),
             sense: self.sense,
         }
     }

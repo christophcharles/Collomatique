@@ -1,0 +1,3 @@
+Salle,Étage,X,Y,Tableaux noirs,Tableaux blancs,Capacité,Fenêtre,Priorité,Réservée
+GOOD,0,0.0,0.0,1,0,30,Extérieur,0,0
+BAD,0,1.0,0.0,1,0,30,Non,0,0

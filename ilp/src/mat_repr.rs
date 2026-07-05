@@ -23,7 +23,7 @@ use std::collections::HashMap;
 ///
 /// This trait is implemented by internal matrix representation of problems.
 /// Indeed, in order to make computations (most notably to check if a configuration
-/// is feasable), [crate::Problem] uses an internal representation, usually a matrix
+/// is feasible), [crate::Problem] uses an internal representation, usually a matrix
 /// representation.
 ///
 /// This trait must be implemented by any such internal representation.
@@ -69,13 +69,13 @@ pub trait ConfigRepr<'a, V: UsableData>:
     /// The list can be empty if all the constraints are satisfied.
     fn unsatisfied_constraints(&self) -> Vec<usize>;
 
-    /// Returns true if the configuration is feasable.
+    /// Returns true if the configuration is feasible.
     ///
-    /// Here, the definition of feasable is restricted:
+    /// Here, the definition of feasible is restricted:
     /// we do not have to check the domain of the different variables.
     ///
     /// The default implementation uses [ConfigRepr::unsatisfied_constraints].
-    fn is_feasable(&self) -> bool {
+    fn is_feasible(&self) -> bool {
         let unsatisfied_constraints = self.unsatisfied_constraints();
 
         unsatisfied_constraints.is_empty()

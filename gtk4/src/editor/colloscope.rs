@@ -7,6 +7,16 @@ use relm4::{adw, gtk};
 
 use collomatique_ops::ColloscopeUpdateOp;
 
+use crate::editor::run_solver;
+use crate::editor::run_solver::conductor_config;
+
+/// The solver dialog instantiated for the colloscope ILP model.
+type SolverDialog = run_solver::Dialog<
+    collomatique_constraints_colloscopes::Var,
+    collomatique_constraints_colloscopes::ExtraVarName,
+    collomatique_constraints_colloscopes::ConstraintDesc,
+>;
+
 const DEBOUNCE_DURATION: std::time::Duration = std::time::Duration::from_millis(500);
 
 mod blame_dialog;
@@ -33,6 +43,11 @@ pub enum ColloscopeInput {
     InterrogationAccepted(collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation),
 
     SolveColloscopeClicked,
+    ConductorConfigAccepted(collomatique_strategies::ConductorStrategy),
+    ConductorConfigCancelled,
+    SolveResult(
+        collomatique_ilp::ConfigData<collomatique_constraints_colloscopes::ProblemInternalVar>,
+    ),
     EraseColloscopeClicked,
     EraseGroupListsClicked,
 
@@ -49,10 +64,12 @@ pub enum ColloscopeCommandOutput {
 #[derive(Debug)]
 pub enum ColloscopeOutput {
     UpdateOp(ColloscopeUpdateOp),
-    SolveColloscopeClicked,
+    NewColloscope(collomatique_state_colloscopes::colloscopes::Colloscope),
     UpdateIlpProblem(Option<super::export_panel::IlpInnerProblem>),
 }
 
+/// The ILP problem together with the parameters needed to rebuild a colloscope
+/// from a solver solution. Built on a debounce and handed to the solver dialog.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IlpProblem {
     env: collomatique_state_colloscopes::colloscope_params::Parameters,
@@ -92,6 +109,12 @@ pub struct Colloscope {
     colloscope_display: Controller<colloscope_display::Display>,
     interrogation_dialog: Controller<interrogation_dialog::Dialog>,
     blame_dialog: Controller<blame_dialog::Dialog>,
+    run_solver_dialog: Controller<SolverDialog>,
+    conductor_config_dialog: Controller<conductor_config::Dialog>,
+
+    // The problem currently being solved, kept so its solution config can be
+    // turned back into a colloscope when the solver dialog returns.
+    solving_problem: Option<IlpProblem>,
 
     edited_group_list: Option<collomatique_state_colloscopes::GroupListId>,
     edited_interrogation: Option<(
@@ -391,7 +414,7 @@ impl Component for Colloscope {
     }
 
     fn init(
-        _params: Self::Init,
+        _: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
@@ -437,6 +460,25 @@ impl Component for Colloscope {
             .launch(())
             .detach();
 
+        let run_solver_dialog = SolverDialog::builder()
+            .transient_for(&root)
+            .launch("Résolution du colloscope".to_string())
+            .forward(sender.input_sender(), |msg| match msg {
+                run_solver::DialogOutput::NewConfig(config) => ColloscopeInput::SolveResult(config),
+            });
+
+        let conductor_config_dialog = conductor_config::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                conductor_config::DialogOutput::Accepted(strategy) => {
+                    ColloscopeInput::ConductorConfigAccepted(strategy)
+                }
+                conductor_config::DialogOutput::Cancelled => {
+                    ColloscopeInput::ConductorConfigCancelled
+                }
+            });
+
         let model = Colloscope {
             params: collomatique_state_colloscopes::colloscope_params::Parameters::default(),
             colloscope: collomatique_state_colloscopes::colloscopes::Colloscope::default(),
@@ -448,6 +490,9 @@ impl Component for Colloscope {
             edited_interrogation: None,
             computation_state: None,
             blame_dialog,
+            run_solver_dialog,
+            conductor_config_dialog,
+            solving_problem: None,
         };
 
         let list_box = model.group_list_entries.widget();
@@ -598,9 +643,54 @@ impl Component for Colloscope {
                     .unwrap();
             }
             ColloscopeInput::SolveColloscopeClicked => {
-                sender
-                    .output(ColloscopeOutput::SolveColloscopeClicked)
-                    .unwrap();
+                // Only solvable once the ILP model is built (debounce finished). If no
+                // problem is ready yet, ignore the click.
+                if let Some(Ok(ilp_repr)) = self.get_ilp_repr() {
+                    let ilp_problem = ilp_repr.ilp_problem.clone();
+                    self.solving_problem = Some(ilp_problem);
+                    let strategy =
+                        collomatique_strategies::ConductorStrategy::with_parallelism_defaults();
+                    self.conductor_config_dialog
+                        .sender()
+                        .send(conductor_config::DialogInput::Show(strategy))
+                        .unwrap();
+                }
+            }
+            ColloscopeInput::ConductorConfigAccepted(strategy) => {
+                // The problem was stashed when the solve was requested; launch the solver
+                // dialog now that the conductor configuration has been confirmed.
+                if let Some(ilp_problem) = &self.solving_problem {
+                    let model = ilp_problem.problem.clone();
+                    self.run_solver_dialog
+                        .sender()
+                        .send(run_solver::DialogInput::Run(strategy, model))
+                        .unwrap();
+                }
+            }
+            ColloscopeInput::ConductorConfigCancelled => {
+                // Drop the stashed problem: the solve was abandoned before it started.
+                self.solving_problem = None;
+            }
+            ColloscopeInput::SolveResult(config_data) => {
+                // Translate the raw ILP config back into a colloscope, using the
+                // problem we dispatched. A real solution should always rebuild; a
+                // failure here is dropped rather than surfaced.
+                if let Some(ilp_problem) = self.solving_problem.take() {
+                    if let Some(sol) = ilp_problem.problem.solution_from_complete_data(config_data)
+                    {
+                        let base_config = sol.get_data();
+                        if let Some(colloscope) =
+                            collomatique_constraints_colloscopes::convert::build_colloscope(
+                                &ilp_problem.env,
+                                &base_config,
+                            )
+                        {
+                            sender
+                                .output(ColloscopeOutput::NewColloscope(colloscope))
+                                .unwrap();
+                        }
+                    }
+                }
             }
             ColloscopeInput::ShowBlamedConstraints => {
                 self.blame_dialog
@@ -665,7 +755,8 @@ impl Colloscope {
                 &ilp_problem.env,
                 &colloscope,
             );
-            let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::with_disable_logging(true);
+            let solver =
+                collomatique_ilp::solvers::collo_cbc::ColloCbcSolver::with_disable_logging(true);
             let sol = ilp_problem
                 .problem
                 .checker_solution_from_data(&config_data, &solver)

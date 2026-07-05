@@ -167,7 +167,7 @@ impl SimpleComponent for Dialog {
                             #[watch]
                             set_visible: matches!(&model.warnings, ComputationState::ResultAvailable(Ok(w)) if w.is_empty()),
                             gtk::Image {
-                                set_icon_size: gtk::IconSize::Large,
+                                set_pixel_size: 30,
                                 set_icon_name: Some("emblem-ok-symbolic"),
                             },
                             gtk::Label {
@@ -190,7 +190,7 @@ impl SimpleComponent for Dialog {
                             #[watch]
                             set_visible: matches!(&model.warnings, ComputationState::ResultAvailable(Err(_))),
                             gtk::Image {
-                                set_icon_size: gtk::IconSize::Large,
+                                set_pixel_size: 30,
                                 set_icon_name: Some("dialog-error-symbolic"),
                             },
                             gtk::Label {

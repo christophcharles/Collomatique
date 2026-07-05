@@ -1,0 +1,602 @@
+pub mod parsing;
+
+use std::collections::HashSet;
+use std::path::Path;
+use std::time::Instant;
+
+pub use collomatique_rooms_model::{
+    BoardRequirement, Config, DemandConflict, DemandConflictKind, DemandKind, Hour, Incompat,
+    InterrogationRoomStatus, Periods, PrepRoomStatus, ProximityDetails, ProximityType, Request,
+    Room, RoomSol, ScheduleData, SolutionColumns, TeacherConflict, TimeZones, Window,
+};
+pub use parsing::{RoomPreferenceWarning, ScheduleError};
+
+pub enum SolveMode {
+    Solve { no_objective: bool, warm: bool },
+    Check,
+    Fix,
+    Complete { no_objective: bool },
+    UpdateCsv,
+}
+
+pub fn run(
+    rooms: Option<&Path>,
+    requests: &Path,
+    incompats: Option<&Path>,
+    mode: SolveMode,
+    out: Option<&Path>,
+    config: Config,
+    timeout_minutes: u32,
+) -> Result<(), ScheduleError> {
+    if matches!(mode, SolveMode::UpdateCsv) {
+        return run_update_csv(requests, out);
+    }
+
+    let rooms = rooms.expect("rooms path required for all modes except --update-csv");
+    let (data, raw_request_rows, solution_columns, pref_warnings) =
+        parsing::parse_schedule(rooms, requests, incompats, config)?;
+    eprintln!(
+        "Parsed {} rooms, {} requests, and {} incompatibilities",
+        data.rooms.len(),
+        data.requests.len(),
+        data.incompats.len(),
+    );
+    for w in &pref_warnings {
+        match w {
+            RoomPreferenceWarning::Redundancy {
+                row,
+                column,
+                room,
+                original_entries,
+                merged_result,
+                ..
+            } => {
+                eprintln!(
+                    "Warning: request row {row}, column \"{column}\": room \"{room}\" \
+                     specified multiple times ({entries}), merged to {merged_result}",
+                    entries = original_entries.join(", "),
+                );
+            }
+            RoomPreferenceWarning::InterrogationAndPrepWithoutSharing { row, room } => {
+                eprintln!(
+                    "Warning: request row {row}: room \"{room}\" appears in both Salle and Prep \
+                     but is not marked for sharing (+). Did you mean to add + to enable sharing?",
+                );
+            }
+            RoomPreferenceWarning::ConflictingPreferences {
+                row,
+                room,
+                positive_entries,
+                negative_entries,
+            } => {
+                eprintln!(
+                    "Error: request row {row}, column \"Salle\": room \"{room}\" has both \
+                     positive ({pos}) and negative ({neg}) preferences",
+                    pos = positive_entries.join(", "),
+                    neg = negative_entries.join(", "),
+                );
+            }
+        }
+    }
+    let has_conflicts = pref_warnings
+        .iter()
+        .any(|w| matches!(w, RoomPreferenceWarning::ConflictingPreferences { .. }));
+    let unreg = data.unregistered_rooms();
+    for name in &unreg.demanded {
+        eprintln!(
+            "Warning: room \"{name}\" is not registered in the rooms file. \
+             In case of double occupancy, we will not be able to find the closest available room."
+        );
+    }
+    for name in &unreg.suggested {
+        eprintln!(
+            "Error: room \"{name}\" is suggested but not registered in the rooms file. \
+             Cannot determine location for proximity matching."
+        );
+    }
+    for conflict in data.demand_conflicts() {
+        print_demand_conflict(&data, &conflict);
+    }
+    if has_conflicts {
+        let rooms: Vec<String> = pref_warnings
+            .iter()
+            .filter_map(|w| match w {
+                RoomPreferenceWarning::ConflictingPreferences { room, .. } => Some(room.clone()),
+                RoomPreferenceWarning::Redundancy { .. }
+                | RoomPreferenceWarning::InterrogationAndPrepWithoutSharing { .. } => None,
+            })
+            .collect();
+        return Err(ScheduleError::ConflictingRoomPreferences(rooms));
+    }
+    if !unreg.suggested.is_empty() {
+        return Err(ScheduleError::UnregisteredSuggestedRooms(
+            unreg.suggested.iter().map(|s| s.to_string()).collect(),
+        ));
+    }
+
+    let teacher_conflicts = data.teacher_continuity_conflicts();
+    for conflict in &teacher_conflicts {
+        let teacher: &str = conflict.teacher.as_ref();
+        eprintln!(
+            "Error: teacher \"{teacher}\" has multiple non-isolated requests \
+             with overlapping periods on {} at {} (requests: {:?})",
+            conflict.day, conflict.hour, conflict.requests,
+        );
+    }
+    if !teacher_conflicts.is_empty() {
+        return Err(ScheduleError::TeacherConflicts(teacher_conflicts));
+    }
+
+    match mode {
+        SolveMode::Check => {
+            eprintln!("Building ILP model...");
+            let start = Instant::now();
+            let model = collomatique_constraints_rooms::build_model(&data);
+            let elapsed = start.elapsed();
+            let stats = model.stats();
+            eprintln!(
+                "  {} base variables, {} constraints (built in {:.2?})",
+                stats.base_variable_count, stats.user_constraint_count, elapsed,
+            );
+
+            eprintln!("Checking solution from SolSalle/SolPrep columns...");
+            let config_data = collomatique_constraints_rooms::build_config_from_solution(
+                &data,
+                &solution_columns,
+            )?;
+
+            let solver =
+                collomatique_ilp::solvers::collo_cbc::ColloCbcSolver::with_disable_logging(true);
+            let solution = model
+                .checker_solution_from_data(&config_data, &solver)
+                .map_err(|e| ScheduleError::CheckReconstructionFailed(e.to_string()))?;
+
+            if solution.is_feasible() {
+                eprintln!("Solution is feasible. No constraint violations found.");
+                return Ok(());
+            }
+
+            let mut violations: HashSet<&collomatique_constraints_rooms::ConstraintDesc> =
+                HashSet::new();
+            for (_constraint, source) in solution.blame() {
+                if let collomatique_ilp_modeler::ConstraintSource::User(desc) = source {
+                    violations.insert(desc);
+                }
+            }
+
+            eprintln!("{} constraint violation(s):", violations.len());
+            for desc in &violations {
+                eprintln!("  - {}", desc.user_readable(&data));
+            }
+            Ok(())
+        }
+
+        SolveMode::Fix => {
+            eprintln!("Building ILP model...");
+            let start = Instant::now();
+            let (mut modeler, env) = collomatique_constraints_rooms::build_modeler(&data);
+            let pinning =
+                collomatique_constraints_rooms::build_pinning_bundles(&data, &solution_columns);
+            for w in &pinning.warnings {
+                eprintln!("Warning: {w}");
+            }
+
+            modeler.clear_objectives();
+            modeler
+                .apply_bundle(pinning.fixed)
+                .expect("no duplicate extras");
+            if let Ok(objectified) = pinning
+                .unfixed
+                .objectify(collomatique_constraints_rooms::ExtraVarName::FixPenalty)
+            {
+                modeler
+                    .apply_bundle(objectified.into_general())
+                    .expect("no duplicate extras");
+            }
+
+            let model = modeler
+                .build_with_log(&env, &mut |msg| eprintln!("{msg}"))
+                .unwrap_or_else(|e| panic!("model build should succeed: {:?}", e));
+            let elapsed = start.elapsed();
+            let stats = model.stats();
+            eprintln!(
+                "  {} base variables, {} constraints (built in {:.2?})",
+                stats.base_variable_count, stats.user_constraint_count, elapsed,
+            );
+
+            solve_and_output(
+                &model,
+                &data,
+                &raw_request_rows,
+                &solution_columns,
+                out,
+                false,
+                timeout_minutes,
+                None,
+            )
+        }
+
+        SolveMode::Complete { no_objective } => {
+            eprintln!("Building ILP model...");
+            let start = Instant::now();
+            let (mut modeler, env) = collomatique_constraints_rooms::build_modeler(&data);
+            let pinning =
+                collomatique_constraints_rooms::build_pinning_bundles(&data, &solution_columns);
+            for w in &pinning.warnings {
+                eprintln!("Warning: {w}");
+            }
+
+            if no_objective {
+                modeler.clear_objectives();
+            }
+            let bundle = pinning
+                .fixed
+                .merge(pinning.unfixed)
+                .expect("no duplicate extras");
+            modeler.apply_bundle(bundle).expect("no duplicate extras");
+
+            let model = modeler
+                .build_with_log(&env, &mut |msg| eprintln!("{msg}"))
+                .unwrap_or_else(|e| panic!("model build should succeed: {:?}", e));
+            let elapsed = start.elapsed();
+            let stats = model.stats();
+            eprintln!(
+                "  {} base variables, {} constraints (built in {:.2?})",
+                stats.base_variable_count, stats.user_constraint_count, elapsed,
+            );
+
+            solve_and_output(
+                &model,
+                &data,
+                &raw_request_rows,
+                &solution_columns,
+                out,
+                no_objective,
+                timeout_minutes,
+                None,
+            )
+        }
+
+        SolveMode::Solve { no_objective, warm } => {
+            eprintln!("Building ILP model...");
+            let start = Instant::now();
+            let model = collomatique_constraints_rooms::build_model(&data);
+            let elapsed = start.elapsed();
+            let stats = model.stats();
+            eprintln!(
+                "  {} base variables, {} constraints (built in {:.2?})",
+                stats.base_variable_count, stats.user_constraint_count, elapsed,
+            );
+
+            let warm_hint = if warm {
+                eprintln!("Reconstructing warm start hint from SolSalle/SolPrep...");
+                let recon =
+                    collomatique_constraints_rooms::reconstruct_solution(&data, &solution_columns);
+                for w in &recon.warnings {
+                    eprintln!("Warning: {w}");
+                }
+                let recon_solver =
+                    collomatique_ilp::solvers::collo_cbc::ColloCbcSolver::with_disable_logging(
+                        true,
+                    );
+                match model.solution_from_data(&recon.full_config, &recon_solver) {
+                    Ok(solution) => {
+                        eprintln!("  Warm start hint ready.");
+                        Some(solution.get_complete_data())
+                    }
+                    Err(e) => {
+                        eprintln!("Warning: warm start reconstruction failed: {e}");
+                        None
+                    }
+                }
+            } else {
+                None
+            };
+
+            solve_and_output(
+                &model,
+                &data,
+                &raw_request_rows,
+                &solution_columns,
+                out,
+                no_objective,
+                timeout_minutes,
+                warm_hint.as_ref(),
+            )
+        }
+
+        SolveMode::UpdateCsv => unreachable!("handled above"),
+    }
+}
+
+fn run_update_csv(requests: &Path, out: Option<&Path>) -> Result<(), ScheduleError> {
+    eprintln!("Reading old-format requests from {}...", requests.display());
+    let (parsed_requests, solution_columns, warnings) =
+        parsing::parse_requests_old_format(requests)?;
+    eprintln!("Parsed {} requests", parsed_requests.len());
+    for w in &warnings {
+        match w {
+            RoomPreferenceWarning::Redundancy {
+                row,
+                column,
+                room,
+                original_entries,
+                merged_result,
+                ..
+            } => {
+                eprintln!(
+                    "Warning: request row {row}, column \"{column}\": room \"{room}\" \
+                     specified multiple times ({entries}), merged to {merged_result}",
+                    entries = original_entries.join(", "),
+                );
+            }
+            RoomPreferenceWarning::InterrogationAndPrepWithoutSharing { row, room } => {
+                eprintln!(
+                    "Warning: request row {row}: room \"{room}\" appears in both Salle and Prep \
+                     but is not marked for sharing (+). Did you mean to add + to enable sharing?",
+                );
+            }
+            RoomPreferenceWarning::ConflictingPreferences {
+                row,
+                room,
+                positive_entries,
+                negative_entries,
+            } => {
+                eprintln!(
+                    "Warning: request row {row}, column \"Salle\": room \"{room}\" has both \
+                     positive ({pos}) and negative ({neg}) preferences",
+                    pos = positive_entries.join(", "),
+                    neg = negative_entries.join(", "),
+                );
+            }
+        }
+    }
+
+    if let Some(path) = out {
+        let file = std::fs::File::create(path).map_err(ScheduleError::Io)?;
+        parsing::write_updated_csv(file, &parsed_requests, &solution_columns);
+        eprintln!("Updated CSV saved to {}", path.display());
+    } else {
+        parsing::write_updated_csv(std::io::stdout(), &parsed_requests, &solution_columns);
+    }
+
+    Ok(())
+}
+
+type InternalVar = collomatique_ilp_modeler::InternalVar<
+    collomatique_constraints_rooms::Var,
+    collomatique_constraints_rooms::ExtraVarName,
+>;
+
+fn solve_and_output(
+    model: &collomatique_constraints_rooms::RoomModel,
+    data: &ScheduleData,
+    raw_request_rows: &[Vec<String>],
+    solution_columns: &SolutionColumns,
+    out: Option<&Path>,
+    no_objective: bool,
+    timeout_minutes: u32,
+    warm_hint: Option<&collomatique_ilp::ConfigData<InternalVar>>,
+) -> Result<(), ScheduleError> {
+    if no_objective {
+        eprintln!("Solving (checker only, no objective)...");
+    } else {
+        eprintln!("Solving...");
+    }
+    let solver = collomatique_ilp::solvers::collo_cbc::ColloCbcSolver::with_disable_logging(false);
+    let solved = if timeout_minutes == 0 {
+        if no_objective {
+            model
+                .solve_checker_with(|pb| {
+                    use collomatique_ilp::solvers::{Solver, SolverModel, WarmSolver};
+                    if let Some(hint) = warm_hint {
+                        solver.build_warm_model(pb, hint).solve()
+                    } else {
+                        solver.build_model(pb).solve()
+                    }
+                })
+                .map(|s| s.get_data())
+        } else {
+            model
+                .solve_with(|pb| {
+                    use collomatique_ilp::solvers::{Solver, SolverModel, WarmSolver};
+                    if let Some(hint) = warm_hint {
+                        solver.build_warm_model(pb, hint).solve()
+                    } else {
+                        solver.build_model(pb).solve()
+                    }
+                })
+                .map(|s| s.get_data())
+        }
+    } else {
+        use collomatique_ilp::solvers::{Solver, TimeLimitSolverModel, WarmSolver};
+        let solve_with_timeout = move |pb| {
+            let built = if let Some(hint) = warm_hint {
+                solver.build_warm_model(pb, hint)
+            } else {
+                solver.build_model(pb)
+            };
+            let result = built.solve_with_time_limit(timeout_minutes * 60);
+            if result.time_limit_reached {
+                eprintln!("Warning: solver time limit ({timeout_minutes} min) reached.");
+            }
+            result.config
+        };
+        if no_objective {
+            model
+                .solve_checker_with(solve_with_timeout)
+                .map(|s| s.get_data())
+        } else {
+            model.solve_with(solve_with_timeout).map(|s| s.get_data())
+        }
+    };
+    match solved {
+        Some(config) => {
+            let assignments = collomatique_constraints_rooms::extract_assignments(data, &config);
+            if let Some(path) = out {
+                let file = std::fs::File::create(path).map_err(ScheduleError::Io)?;
+                write_solution_csv(file, raw_request_rows, solution_columns, &assignments);
+                eprintln!("Solution saved to {}", path.display());
+            } else {
+                write_solution_csv(
+                    std::io::stdout(),
+                    raw_request_rows,
+                    solution_columns,
+                    &assignments,
+                );
+            }
+            eprintln!("Solved: {} assignments", assignments.len());
+        }
+        None => {
+            eprintln!("No feasible solution found.");
+        }
+    }
+
+    Ok(())
+}
+
+fn write_solution_csv(
+    writer: impl std::io::Write,
+    raw_request_rows: &[Vec<String>],
+    solution_columns: &SolutionColumns,
+    assignments: &[collomatique_constraints_rooms::Assignment],
+) {
+    let mut wtr = csv::Writer::from_writer(writer);
+
+    let mut header: Vec<&str> = parsing::REQUESTS_COLUMNS.to_vec();
+    header.push("SolSalle");
+    header.push("SolPrep");
+    wtr.write_record(&header).unwrap();
+
+    let mut assignment_by_request: Vec<Option<&collomatique_constraints_rooms::Assignment>> =
+        vec![None; raw_request_rows.len()];
+    for assignment in assignments {
+        assignment_by_request[assignment.request] = Some(assignment);
+    }
+
+    for (i, raw_row) in raw_request_rows.iter().enumerate() {
+        let mut fields: Vec<&str> = raw_row.iter().map(|s| s.as_str()).collect();
+        let (sol_salle, sol_prep);
+        if let Some(assignment) = assignment_by_request[i] {
+            let room_str: &str = assignment.room.as_ref();
+            let orig_salle = solution_columns[i].0.as_ref();
+            sol_salle = if orig_salle.is_some_and(|s| s.mark_fixed && s.room == assignment.room) {
+                format!("!{room_str}")
+            } else {
+                room_str.to_string()
+            };
+            sol_prep = match &assignment.prep_room {
+                Some(prep_room) => {
+                    let prep_str: &str = prep_room.as_ref();
+                    let orig_prep = solution_columns[i].1.as_ref();
+                    if orig_prep.is_some_and(|s| s.mark_fixed && s.room == *prep_room) {
+                        format!("!{prep_str}")
+                    } else {
+                        prep_str.to_string()
+                    }
+                }
+                None => String::new(),
+            };
+        } else {
+            sol_salle = String::new();
+            sol_prep = String::new();
+        }
+        fields.push(&sol_salle);
+        fields.push(&sol_prep);
+        wtr.write_record(&fields).unwrap();
+    }
+
+    wtr.flush().unwrap();
+}
+
+fn print_demand_conflict(data: &ScheduleData, conflict: &DemandConflict) {
+    let room: &str = conflict.room.as_ref();
+    match &conflict.kind {
+        DemandConflictKind::InterrogationInterrogation => {
+            eprintln!(
+                "Warning: room \"{room}\" demanded for interrogation \
+                 by conflicting requests on {} at {}:",
+                conflict.day, conflict.hour,
+            );
+            for &(req_idx, _) in &conflict.requests {
+                print_demand_request(data, req_idx, "interrogation");
+            }
+        }
+        DemandConflictKind::InterrogationPrep {
+            can_share_with_prep,
+        } => {
+            if *can_share_with_prep {
+                eprintln!(
+                    "Warning: room \"{room}\" demanded for interrogation (with prep sharing) \
+                     and prep on {} at {} — might not conflict if capacity allows:",
+                    conflict.day, conflict.hour,
+                );
+            } else {
+                eprintln!(
+                    "Warning: room \"{room}\" demanded for both interrogation \
+                     and prep on {} at {}:",
+                    conflict.day, conflict.hour,
+                );
+            }
+            for &(req_idx, ref kind) in &conflict.requests {
+                let label = match kind {
+                    DemandKind::Interrogation => "interrogation",
+                    DemandKind::Prep => "prep",
+                };
+                print_demand_request(data, req_idx, label);
+            }
+        }
+        DemandConflictKind::PrepOverCapacity {
+            total_students,
+            capacity,
+        } => {
+            eprintln!(
+                "Warning: prep demands for room \"{room}\" on {} at {} \
+                 exceed capacity ({total_students} students for {capacity} seats):",
+                conflict.day, conflict.hour,
+            );
+            for &(req_idx, _) in &conflict.requests {
+                print_prep_demand_request(data, req_idx);
+            }
+        }
+        DemandConflictKind::PrepUnknownCapacity { total_students } => {
+            eprintln!(
+                "Warning: multiple prep demands for unlisted room \"{room}\" \
+                 on {} at {} ({total_students} students total, capacity unknown):",
+                conflict.day, conflict.hour,
+            );
+            for &(req_idx, _) in &conflict.requests {
+                print_prep_demand_request(data, req_idx);
+            }
+        }
+    }
+}
+
+fn format_subjects(req: &Request) -> String {
+    req.subjects
+        .iter()
+        .map(|s| s.as_ref() as &str)
+        .collect::<Vec<&str>>()
+        .join(";")
+}
+
+fn print_demand_request(data: &ScheduleData, request: usize, kind: &str) {
+    let req = &data.requests[request];
+    eprintln!(
+        "  - Request {request} ({kind}): {}, teacher: {}, requester: {}",
+        format_subjects(req),
+        req.teacher.as_ref() as &str,
+        req.requester.as_ref() as &str,
+    );
+}
+
+fn print_prep_demand_request(data: &ScheduleData, request: usize) {
+    let req = &data.requests[request];
+    eprintln!(
+        "  - Request {request} ({} prep students): {}, teacher: {}, requester: {}",
+        req.prep_students,
+        format_subjects(req),
+        req.teacher.as_ref() as &str,
+        req.requester.as_ref() as &str,
+    );
+}

@@ -1,10 +1,16 @@
 use anyhow::anyhow;
 use collomatique_rpc::InternalDataStream;
-use collomatique_rpc::{CmdMsg, CompleteCmdMsg, EncodedMsg, InitMsg, ResultMsg};
+use collomatique_rpc::{
+    CmdMsg, CompleteCmdMsg, EncodedMsg, InitMsg, ResultMsg, RpcDecodeError, SerializedIlpProblem,
+    SerializedStrategyRequest, SolverIncumbentInfo, SolverMsg, SolverProgressData,
+    SolverResultData, SolverStatus, StrategyMsg, StrategyResultData, StrategyStatus,
+};
 
 pub fn wait_for_init_msg() -> Result<InitMsg, String> {
-    let encoded_msg = EncodedMsg::receive()?;
-    encoded_msg.try_into()
+    let encoded_msg = EncodedMsg::receive().map_err(|e| e.to_string())?;
+    encoded_msg
+        .try_into()
+        .map_err(|e: RpcDecodeError| e.to_string())
 }
 
 pub fn send_exit() {
@@ -57,20 +63,20 @@ async fn try_solve() -> Result<(), anyhow::Error> {
         stats.objective_extra_count, stats.objective_defining_constraint_count,
     );
 
-    println!("Solving ILP problem...");
-    let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::with_disable_logging(false);
+    eprintln!("Solving ILP problem...");
+    let solver = collomatique_ilp::solvers::collo_cbc::ColloCbcSolver::with_disable_logging(false);
     let sol_opt = problem.solve(&solver);
     let Some(sol) = sol_opt else {
-        println!("No solution found");
+        eprintln!("No solution found");
         return Ok(());
     };
-    println!("Solution found!");
+    eprintln!("Solution found!");
     let config_data = sol.get_data();
     let new_colloscope =
         collomatique_constraints_colloscopes::convert::build_colloscope(&env, &config_data)
             .expect("Config data should be compatible with colloscope parameters");
 
-    println!("Sending updated data...");
+    eprintln!("Sending updated data...");
     let new_inner_data = collomatique_state_colloscopes::InnerData {
         params: env,
         colloscope: new_colloscope,
@@ -80,7 +86,206 @@ async fn try_solve() -> Result<(), anyhow::Error> {
     EncodedMsg::send_rpc(CmdMsg::SetData(data_stream))
         .map_err(|e| anyhow!("Error on SetData: {}", e))?;
 
-    println!("Done.");
+    eprintln!("Done.");
+
+    Ok(())
+}
+
+fn solve_ilp(serialized: SerializedIlpProblem) -> Result<(), anyhow::Error> {
+    use collomatique_ilp::solvers::collo_cbc::ColloCbcSolver;
+    use collomatique_ilp::solvers::{
+        CallbackSolverModel, ProgressBounds, ProgressIncumbentData, ProgressIncumbentInfo,
+        ProgressStats, Solver, WarmSolver,
+    };
+    use collomatique_ilp::{DefaultRepr, ProblemBuilder};
+    use ordered_float::OrderedFloat;
+    use std::time::Instant;
+
+    let request = collomatique_rpc::IlpSolveRequest::from(serialized);
+
+    eprintln!("Building problem from desc...");
+    let problem = ProblemBuilder::<usize, (), DefaultRepr<usize>>::from_desc(request.problem_desc)
+        .build()
+        .map_err(|e| anyhow!("Failed to build problem from desc: {:?}", e))?;
+
+    let solver = ColloCbcSolver::with_disable_logging(request.disable_logging);
+
+    let num_vars = problem.get_variables().len();
+    let var_indices: Vec<usize> = (0..num_vars).collect();
+
+    let model = if let Some(ref warm_start) = request.warm_start {
+        let hint = collomatique_ilp::solution_to_config_data(warm_start, &var_indices);
+        solver.build_warm_model(&problem, &hint)
+    } else {
+        solver.build_model(&problem)
+    };
+
+    let start = Instant::now();
+    let time_limit = request
+        .time_limit_seconds
+        .map(|s| std::time::Duration::from_secs(s as u64));
+
+    let mut last_best_bound = 0.0f64;
+    let mut last_node_count = 0u64;
+
+    eprintln!("Solving...");
+    let result = model.solve_with_callback(|progress| {
+        last_best_bound = progress.best_bound();
+        last_node_count = progress.nodes();
+
+        let progress_data = SolverProgressData {
+            best_obj: OrderedFloat(progress.best_objective()),
+            best_bound: OrderedFloat(progress.best_bound()),
+            node_count: progress.nodes(),
+            solutions_found: progress.solutions(),
+            incumbent_info: progress.incumbent_info().map(|info| SolverIncumbentInfo {
+                objective: OrderedFloat(info.objective),
+                feasible: info.feasible,
+            }),
+            incumbent_solution: progress.incumbent_data().map(|cfg| {
+                var_indices
+                    .iter()
+                    .map(|&i| OrderedFloat(cfg.get(i).unwrap_or(0.0)))
+                    .collect()
+            }),
+        };
+
+        let response = EncodedMsg::send_rpc(CmdMsg::Solver(SolverMsg::Progress(progress_data)));
+        let should_continue = match response {
+            Ok(ResultMsg::SolverControl(cont)) => cont,
+            _ => false,
+        };
+
+        let time_ok = time_limit
+            .map(|limit| start.elapsed() < limit)
+            .unwrap_or(true);
+
+        should_continue && time_ok
+    });
+
+    let status = if result.config.is_some() {
+        if result.stopped_by_callback {
+            SolverStatus::Stopped
+        } else {
+            SolverStatus::Optimal
+        }
+    } else if result.stopped_by_callback {
+        SolverStatus::Stopped
+    } else {
+        SolverStatus::Infeasible
+    };
+
+    let obj_value = result.config.as_ref().map(|c| OrderedFloat(c.eval()));
+
+    let best_bound = if last_node_count > 0 || obj_value.is_some() {
+        Some(OrderedFloat(last_best_bound))
+    } else {
+        None
+    };
+
+    let solution = result.config.map(|config| {
+        var_indices
+            .iter()
+            .map(|&i| OrderedFloat(config.get(i).unwrap_or(0.0)))
+            .collect::<Vec<_>>()
+    });
+
+    let result_data = SolverResultData {
+        status,
+        obj_value,
+        best_bound,
+        node_count: last_node_count,
+        solution,
+    };
+
+    eprintln!("Sending result...");
+    EncodedMsg::send_rpc(CmdMsg::Solver(SolverMsg::Result(result_data)))
+        .map_err(|e| anyhow!("Error sending SolverResult: {}", e))?;
+
+    Ok(())
+}
+
+fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Error> {
+    use collomatique_ilp_modeler::InternalVar;
+    use collomatique_rpc::{SerializedStrategyProgress, StrategyProgressRaw};
+    use collomatique_strategies::{
+        SerializableProgress, Strategy, StrategyContext, StrategyProgress, StrategyRequest,
+    };
+    use collomatique_subprocesses::SubprocessSolveBackend;
+    use ordered_float::OrderedFloat;
+    use std::sync::Arc;
+
+    let request_str: String = serialized.into();
+    let request = StrategyRequest::deserialize(&request_str)
+        .map_err(|e| anyhow!("Failed to deserialize strategy request: {e}"))?;
+
+    eprintln!("Building model from desc...");
+    let (model, var_order) = request.model_desc.to_model();
+
+    let warm_start = request
+        .warm_start
+        .as_ref()
+        .map(|raw| collomatique_ilp::solution_to_config_data(raw, &var_order));
+
+    let backend = Arc::new(SubprocessSolveBackend::new());
+    let strategy_name = request.strategy.name();
+    let on_echo: Arc<dyn Fn(String) + Send + Sync> = Arc::new(move |line: String| {
+        eprint!("[{strategy_name} strategy] {}", line);
+    });
+    let ctx = StrategyContext::with_echo(backend, on_echo);
+
+    let progress_callback = |progress: StrategyProgress<InternalVar<usize, usize>>| -> bool {
+        // Erase the typed progress to its serializable form for the IPC barrier.
+        let data =
+            SerializableProgress::into_data(&progress, &var_order).unwrap_or_else(|e| match e {});
+        eprintln!("[{strategy_name} strategy progress] {data}");
+        let serialized_progress = data.serialize();
+        let progress_raw = StrategyProgressRaw {
+            progress: SerializedStrategyProgress::from(serialized_progress),
+        };
+        let response = EncodedMsg::send_rpc(CmdMsg::Strategy(StrategyMsg::Progress(progress_raw)));
+        match response {
+            Ok(ResultMsg::StrategyControl(cont)) => cont,
+            _ => false,
+        }
+    };
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    eprintln!("Running strategy...");
+    let outcome = rt
+        .block_on(
+            request
+                .strategy
+                .run_with_callback(&ctx, &model, warm_start, &progress_callback),
+        )
+        .map_err(|e| anyhow!("Strategy failed: {e}"))?;
+
+    let status = match outcome.status {
+        collomatique_strategies::SolveStatus::Optimal => StrategyStatus::Optimal,
+        collomatique_strategies::SolveStatus::Infeasible => StrategyStatus::Infeasible,
+        collomatique_strategies::SolveStatus::Stopped => StrategyStatus::Stopped,
+        collomatique_strategies::SolveStatus::Error => StrategyStatus::Error,
+    };
+
+    let solution = outcome.solution.map(|config| {
+        var_order
+            .iter()
+            .map(|iv: &InternalVar<usize, usize>| {
+                OrderedFloat(config.get(iv.clone()).unwrap_or(0.0))
+            })
+            .collect::<Vec<_>>()
+    });
+
+    let result_data = StrategyResultData {
+        status,
+        objective: outcome.objective.map(OrderedFloat),
+        best_bound: outcome.best_bound.map(OrderedFloat),
+        solution,
+    };
+
+    eprintln!("Sending strategy result...");
+    EncodedMsg::send_rpc(CmdMsg::Strategy(StrategyMsg::Result(result_data)))
+        .map_err(|e| anyhow!("Error sending StrategyResult: {e}"))?;
 
     Ok(())
 }
@@ -130,6 +335,12 @@ pub fn run_rpc_engine() -> Result<(), anyhow::Error> {
         InitMsg::SolveColloscope => {
             let rt = tokio::runtime::Runtime::new().unwrap();
             rt.block_on(try_solve())?;
+        }
+        InitMsg::SolveIlp(serialized) => {
+            solve_ilp(serialized)?;
+        }
+        InitMsg::RunStrategy(serialized) => {
+            run_strategy(serialized)?;
         }
     }
 

@@ -8,8 +8,8 @@
 #[cfg(test)]
 mod tests;
 
-use super::{ProblemRepr, Solver};
-use crate::{ConfigData, FeasableConfig, ObjectiveSense, Problem, UsableData, linexpr::EqSymbol};
+use super::{ProblemRepr, Solver, SolverModel};
+use crate::{ConfigData, FeasibleConfig, ObjectiveSense, Problem, UsableData, linexpr::EqSymbol};
 
 /// [good_lp] solver
 ///
@@ -17,47 +17,24 @@ use crate::{ConfigData, FeasableConfig, ObjectiveSense, Problem, UsableData, lin
 #[derive(Debug, Clone)]
 pub struct GoodSolver {}
 
-impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Solver<V, C, P> for GoodSolver {
-    fn solve<'a>(&self, problem: &'a Problem<V, C, P>) -> Option<FeasableConfig<'a, V, C, P>> {
-        self.solve_internal(problem)
-    }
-}
-
-struct GoodModel<V: UsableData> {
+/// A good_lp model ready to be solved.
+///
+/// Produced by [GoodSolver::build_model].
+pub struct GoodBuiltModel<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> {
     unsolved_problem: good_lp::variable::UnsolvedProblem,
     vars: std::collections::HashMap<V, good_lp::Variable>,
+    problem: &'a Problem<V, C, P>,
 }
 
-impl Default for GoodSolver {
-    fn default() -> Self {
-        GoodSolver::new()
-    }
-}
+impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Solver<V, C, P> for GoodSolver {
+    type Model<'a>
+        = GoodBuiltModel<'a, V, C, P>
+    where
+        V: 'a,
+        C: 'a,
+        P: 'a;
 
-impl GoodSolver {
-    /// Returns a default [good_lp] solver.
-    ///
-    /// At this moment, no configuration is allowed.
-    /// This will use the lp_solvers feature of [good_lp]
-    /// and try various solvers.
-    pub fn new() -> Self {
-        GoodSolver {}
-    }
-}
-
-impl GoodSolver {
-    fn solve_internal<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>>(
-        &self,
-        problem: &'a Problem<V, C, P>,
-    ) -> Option<FeasableConfig<'a, V, C, P>> {
-        let good_model = Self::build_model(problem);
-        let (sol, vars) = Self::solve_problem(good_model, problem)?;
-        Self::reconstruct_config(problem, sol, &vars)
-    }
-
-    fn build_model<V: UsableData, C: UsableData, P: ProblemRepr<V>>(
-        problem: &Problem<V, C, P>,
-    ) -> GoodModel<V> {
+    fn build_model<'a>(&self, problem: &'a Problem<V, C, P>) -> Self::Model<'a> {
         use good_lp::ProblemVariables;
         use std::collections::HashMap;
 
@@ -102,29 +79,29 @@ impl GoodSolver {
             ObjectiveSense::Minimize => pb_vars.minimise(expr),
         };
 
-        GoodModel {
+        GoodBuiltModel {
             unsolved_problem,
             vars,
+            problem,
         }
     }
+}
 
-    fn solve_problem<V: UsableData, C: UsableData, P: ProblemRepr<V>>(
-        good_model: GoodModel<V>,
-        problem: &Problem<V, C, P>,
-    ) -> Option<(
-        Box<dyn good_lp::Solution>,
-        std::collections::HashMap<V, good_lp::Variable>,
-    )> {
-        use good_lp::SolverModel;
+impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> SolverModel<'a, V, C, P>
+    for GoodBuiltModel<'a, V, C, P>
+{
+    fn solve(self) -> Option<FeasibleConfig<'a, V, C, P>> {
+        use good_lp::Solution as _;
+        use good_lp::SolverModel as _;
 
         let solver = good_lp::solvers::lp_solvers::auto::AllSolvers::new();
-        let mut vars_desc = good_model.unsolved_problem.using(good_lp::LpSolver(solver));
+        let mut vars_desc = self.unsolved_problem.using(good_lp::LpSolver(solver));
 
-        for (c, _desc) in problem.get_constraints() {
+        for (c, _desc) in self.problem.get_constraints() {
             let mut expr = good_lp::Expression::from_other_affine(c.get_constant());
 
             for (v, c) in c.coefficients() {
-                expr.add_mul(c, good_model.vars[v]);
+                expr.add_mul(c, self.vars[v]);
             }
 
             let constraint = match c.get_symbol() {
@@ -137,19 +114,31 @@ impl GoodSolver {
 
         let solution = vars_desc.solve().ok()?;
 
-        Some((Box::new(solution), good_model.vars))
+        let config_data = ConfigData::new().set_iter(
+            self.vars
+                .iter()
+                .map(|(v, var)| (v.clone(), solution.value(*var))),
+        );
+
+        let config = self.problem.build_config(config_data).ok()?;
+
+        config.into_feasible()
     }
+}
 
-    fn reconstruct_config<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>>(
-        problem: &'a Problem<V, C, P>,
-        sol: Box<dyn good_lp::Solution>,
-        vars: &std::collections::HashMap<V, good_lp::Variable>,
-    ) -> Option<FeasableConfig<'a, V, C, P>> {
-        let config_data =
-            ConfigData::new().set_iter(vars.iter().map(|(v, var)| (v.clone(), sol.value(*var))));
+impl Default for GoodSolver {
+    fn default() -> Self {
+        GoodSolver::new()
+    }
+}
 
-        let config = problem.build_config(config_data).ok()?;
-
-        config.into_feasable()
+impl GoodSolver {
+    /// Returns a default [good_lp] solver.
+    ///
+    /// At this moment, no configuration is allowed.
+    /// This will use the lp_solvers feature of [good_lp]
+    /// and try various solvers.
+    pub fn new() -> Self {
+        GoodSolver {}
     }
 }

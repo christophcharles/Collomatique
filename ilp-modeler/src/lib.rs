@@ -15,13 +15,14 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::sync::Mutex;
 
-use collomatique_ilp::solvers::Solver;
+use collomatique_ilp::solvers::{Solver, SolverModel};
 use collomatique_ilp::{
-    Config, ConfigData, Constraint, DefaultRepr, FeasableConfig, LinExpr, Objective,
-    ObjectiveSense, Problem, ProblemBuilder, UsableData, Variable,
+    Config, ConfigData, ConfigDataVarCheck, Constraint, DefaultRepr, FeasibleConfig, LinExpr,
+    Objective, ObjectiveSense, Problem, ProblemBuilder, UsableData, Variable,
 };
 
 pub mod bundle;
+pub mod model_desc;
 pub use bundle::{
     ConstraintBundle, EagerObjectifyError, EagerReifyError, ExtraEntry, IntConstraintBundle,
     ReifyError,
@@ -211,6 +212,20 @@ pub struct DuplicateExtra<E: UsableData>(pub E);
 #[error("base variable `{0:?}` is required for reconstruction but no value was provided")]
 pub struct ReconstructionError<B: UsableData>(pub B);
 
+/// Errors that can occur when reconstructing a [`Solution`] from base variable data.
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum SolutionFromDataError<B: UsableData, E: UsableData> {
+    /// The provided config data has invalid variables (unknown, missing, or non-conforming).
+    #[error("config data has invalid variables for reconstruction")]
+    MissingVariables,
+    /// The solver did not produce a feasible solution for the reconstruction problem.
+    #[error("reconstruction solver did not produce a feasible solution")]
+    NoSolutionFromSolver,
+    /// The reconstructed complete configuration failed validation against the problem.
+    #[error("reconstructed configuration failed validation: {0:?}")]
+    BuildConfigError(ConfigDataVarCheck<InternalVar<B, E>>),
+}
+
 /// Errors surfaced by [`Modeler::build`].
 #[derive(Debug, thiserror::Error)]
 pub enum BuildError<B, E, C, Err>
@@ -274,6 +289,8 @@ where
         Vec<(Constraint<InternalVar<B, E>>, ConstraintSource<E, C>)>,
     checker_reconstruction_variables: HashMap<InternalVar<B, E>, Variable>,
     checker_base_variable_set: HashSet<B>,
+    reconstruction_objective: Objective<InternalVar<B, E>>,
+    checker_reconstruction_objective: Objective<InternalVar<B, E>>,
     base_var_list: HashMap<B, Variable>,
 }
 
@@ -301,9 +318,9 @@ where
     /// constraints must be present in `base_values`. Returns
     /// [`ReconstructionError`] if any is missing.
     ///
-    /// The returned problem has a trivial objective (minimize 0)
-    /// and only contains the defining constraints of extras, with
-    /// base variables substituted out.
+    /// The returned problem contains the defining constraints of
+    /// extras (with base variables substituted out) and the full
+    /// objective reduced by the given base variable values.
     pub fn reconstruction_problem(
         &self,
         base_values: &HashMap<B, f64>,
@@ -342,10 +359,7 @@ where
             ProblemBuilder::new()
                 .set_variables(recon_vars)
                 .add_constraints(reduced_constraints)
-                .set_objective(Objective::new(
-                    LinExpr::constant(0.0),
-                    ObjectiveSense::Minimize,
-                ));
+                .set_objective(self.reconstruction_objective.reduce(&fixes));
         Ok(builder
             .build()
             .expect("reconstruction problem should always be valid"))
@@ -431,33 +445,105 @@ where
             ProblemBuilder::new()
                 .set_variables(recon_vars)
                 .add_constraints(reduced_constraints)
-                .set_objective(Objective::new(
-                    LinExpr::constant(0.0),
-                    ObjectiveSense::Minimize,
-                ));
+                .set_objective(self.checker_reconstruction_objective.reduce(&fixes));
         Ok(builder
             .build()
             .expect("checker reconstruction problem should always be valid"))
     }
 
+    /// Solve the full optimization problem using a callback.
+    ///
+    /// The callback receives the problem and should return
+    /// the solver's result. This allows customizing the solving
+    /// strategy (e.g., time limits).
+    pub fn solve_with<'a>(
+        &'a self,
+        f: impl FnOnce(
+            &'a Problem<InternalVar<B, E>, ConstraintSource<E, C>, DefaultRepr<InternalVar<B, E>>>,
+        ) -> Option<
+            FeasibleConfig<
+                'a,
+                InternalVar<B, E>,
+                ConstraintSource<E, C>,
+                DefaultRepr<InternalVar<B, E>>,
+            >,
+        >,
+    ) -> Option<FeasibleSolution<'a, B, E, C>> {
+        f(&self.problem).map(|feasible_config| FeasibleSolution { feasible_config })
+    }
+
     /// Solve the full optimization problem.
-    pub fn solve<S>(&self, solver: &S) -> Option<FeasableSolution<'_, B, E, C>>
+    pub fn solve<'a, S>(&'a self, solver: &S) -> Option<FeasibleSolution<'a, B, E, C>>
     where
         S: Solver<InternalVar<B, E>, ConstraintSource<E, C>, DefaultRepr<InternalVar<B, E>>>,
     {
-        solver
-            .solve(&self.problem)
-            .map(|feasable_config| FeasableSolution { feasable_config })
+        self.solve_with(|pb| solver.build_model(pb).solve())
+    }
+
+    /// Solve the checker problem (feasibility only) using a callback.
+    pub fn solve_checker_with<'a>(
+        &'a self,
+        f: impl FnOnce(
+            &'a Problem<InternalVar<B, E>, ConstraintSource<E, C>, DefaultRepr<InternalVar<B, E>>>,
+        ) -> Option<
+            FeasibleConfig<
+                'a,
+                InternalVar<B, E>,
+                ConstraintSource<E, C>,
+                DefaultRepr<InternalVar<B, E>>,
+            >,
+        >,
+    ) -> Option<FeasibleSolution<'a, B, E, C>> {
+        f(&self.checker_problem).map(|feasible_config| FeasibleSolution { feasible_config })
     }
 
     /// Solve the checker problem (feasibility only, no objective optimization).
-    pub fn solve_checker<S>(&self, solver: &S) -> Option<FeasableSolution<'_, B, E, C>>
+    pub fn solve_checker<'a, S>(&'a self, solver: &S) -> Option<FeasibleSolution<'a, B, E, C>>
     where
         S: Solver<InternalVar<B, E>, ConstraintSource<E, C>, DefaultRepr<InternalVar<B, E>>>,
     {
-        solver
-            .solve(&self.checker_problem)
-            .map(|feasable_config| FeasableSolution { feasable_config })
+        self.solve_checker_with(|pb| solver.build_model(pb).solve())
+    }
+
+    /// Build a [`Solution`] by reconstructing extra variable
+    /// values from base variable values (full reconstruction),
+    /// using a callback.
+    pub fn solution_from_data_with(
+        &self,
+        config_data: &ConfigData<B>,
+        f: impl for<'a> FnOnce(
+            &'a Problem<InternalVar<B, E>, ConstraintSource<E, C>, DefaultRepr<InternalVar<B, E>>>,
+        ) -> Option<
+            FeasibleConfig<
+                'a,
+                InternalVar<B, E>,
+                ConstraintSource<E, C>,
+                DefaultRepr<InternalVar<B, E>>,
+            >,
+        >,
+    ) -> Result<Solution<'_, B, E, C>, SolutionFromDataError<B, E>> {
+        if !self.check_no_missing_variables(config_data) {
+            return Err(SolutionFromDataError::MissingVariables);
+        }
+
+        let base_values: HashMap<B, f64> = config_data.get_values().into_iter().collect();
+        let recon_problem = self
+            .reconstruction_problem(&base_values)
+            .map_err(|_| SolutionFromDataError::MissingVariables)?;
+        let recon_sol = f(&recon_problem).ok_or(SolutionFromDataError::NoSolutionFromSolver)?;
+
+        let mut complete_values: HashMap<InternalVar<B, E>, f64> = base_values
+            .into_iter()
+            .map(|(b, v)| (InternalVar::Base(b), v))
+            .collect();
+        complete_values.extend(recon_sol.get_values());
+        let new_config_data = ConfigData::from(complete_values);
+
+        let config = self
+            .problem
+            .build_config(new_config_data)
+            .map_err(SolutionFromDataError::BuildConfigError)?;
+        Ok(Solution { config })
     }
 
     /// Build a [`Solution`] by reconstructing extra variable
@@ -466,19 +552,39 @@ where
         &self,
         config_data: &ConfigData<B>,
         solver: &S,
-    ) -> Option<Solution<'_, B, E, C>>
+    ) -> Result<Solution<'_, B, E, C>, SolutionFromDataError<B, E>>
     where
         S: Solver<InternalVar<B, E>, ConstraintSource<E, C>, DefaultRepr<InternalVar<B, E>>>,
     {
+        self.solution_from_data_with(config_data, |pb| solver.build_model(pb).solve())
+    }
+
+    /// Build a [`Solution`] by reconstructing only the extra
+    /// variable values needed for constraint checking,
+    /// using a callback.
+    pub fn checker_solution_from_data_with(
+        &self,
+        config_data: &ConfigData<B>,
+        f: impl for<'a> FnOnce(
+            &'a Problem<InternalVar<B, E>, ConstraintSource<E, C>, DefaultRepr<InternalVar<B, E>>>,
+        ) -> Option<
+            FeasibleConfig<
+                'a,
+                InternalVar<B, E>,
+                ConstraintSource<E, C>,
+                DefaultRepr<InternalVar<B, E>>,
+            >,
+        >,
+    ) -> Result<Solution<'_, B, E, C>, SolutionFromDataError<B, E>> {
         if !self.check_no_missing_variables(config_data) {
-            return None;
+            return Err(SolutionFromDataError::MissingVariables);
         }
 
         let base_values: HashMap<B, f64> = config_data.get_values().into_iter().collect();
-        let recon_problem = self.reconstruction_problem(&base_values).ok()?;
-        let recon_sol = solver
-            .solve(&recon_problem)
-            .expect("There should always be a (unique!) solution to the reconstruction problem");
+        let recon_problem = self
+            .checker_reconstruction_problem(&base_values)
+            .map_err(|_| SolutionFromDataError::MissingVariables)?;
+        let recon_sol = f(&recon_problem).ok_or(SolutionFromDataError::NoSolutionFromSolver)?;
 
         let mut complete_values: HashMap<InternalVar<B, E>, f64> = base_values
             .into_iter()
@@ -487,10 +593,11 @@ where
         complete_values.extend(recon_sol.get_values());
         let new_config_data = ConfigData::from(complete_values);
 
-        Some(
-            self.solution_from_complete_data(new_config_data)
-                .expect("The configuration data should be valid!"),
-        )
+        let config = self
+            .checker_problem
+            .build_config(new_config_data)
+            .map_err(SolutionFromDataError::BuildConfigError)?;
+        Ok(Solution { config })
     }
 
     /// Build a [`Solution`] by reconstructing only the extra
@@ -499,30 +606,11 @@ where
         &self,
         config_data: &ConfigData<B>,
         solver: &S,
-    ) -> Option<Solution<'_, B, E, C>>
+    ) -> Result<Solution<'_, B, E, C>, SolutionFromDataError<B, E>>
     where
         S: Solver<InternalVar<B, E>, ConstraintSource<E, C>, DefaultRepr<InternalVar<B, E>>>,
     {
-        if !self.check_no_missing_variables(config_data) {
-            return None;
-        }
-
-        let base_values: HashMap<B, f64> = config_data.get_values().into_iter().collect();
-        let recon_problem = self.checker_reconstruction_problem(&base_values).ok()?;
-        let recon_sol = solver.solve(&recon_problem).expect(
-            "There should always be a (unique!) solution to the checker reconstruction problem",
-        );
-
-        let mut complete_values: HashMap<InternalVar<B, E>, f64> = base_values
-            .into_iter()
-            .map(|(b, v)| (InternalVar::Base(b), v))
-            .collect();
-        complete_values.extend(recon_sol.get_values());
-        let new_config_data = ConfigData::from(complete_values);
-
-        Some(Solution {
-            config: self.checker_problem.build_config(new_config_data).ok()?,
-        })
+        self.checker_solution_from_data_with(config_data, |pb| solver.build_model(pb).solve())
     }
 
     /// Build a [`Solution`] from a complete set of variable values
@@ -555,7 +643,7 @@ where
 }
 
 // ---------------------------------------------------------------------------
-// Solution / FeasableSolution
+// Solution / FeasibleSolution
 // ---------------------------------------------------------------------------
 
 /// A solution (possibly infeasible) evaluated against a [`Model`].
@@ -580,13 +668,13 @@ impl<'a, B: UsableData, E: UsableData, C: UsableData> Solution<'a, B, E, C> {
         ConfigData::from(self.config.get_values())
     }
 
-    pub fn is_feasable(&self) -> bool {
-        self.config.is_feasable()
+    pub fn is_feasible(&self) -> bool {
+        self.config.is_feasible()
     }
 
-    pub fn into_feasable(self) -> Option<FeasableSolution<'a, B, E, C>> {
-        Some(FeasableSolution {
-            feasable_config: self.config.into_feasable()?,
+    pub fn into_feasible(self) -> Option<FeasibleSolution<'a, B, E, C>> {
+        Some(FeasibleSolution {
+            feasible_config: self.config.into_feasible()?,
         })
     }
 
@@ -620,8 +708,8 @@ impl<'a, B: UsableData, E: UsableData, C: UsableData> Solution<'a, B, E, C> {
 
 /// A feasible solution evaluated against a [`Model`].
 #[derive(Debug, Clone)]
-pub struct FeasableSolution<'a, B: UsableData, E: UsableData, C: UsableData> {
-    feasable_config: FeasableConfig<
+pub struct FeasibleSolution<'a, B: UsableData, E: UsableData, C: UsableData> {
+    feasible_config: FeasibleConfig<
         'a,
         InternalVar<B, E>,
         ConstraintSource<E, C>,
@@ -629,16 +717,16 @@ pub struct FeasableSolution<'a, B: UsableData, E: UsableData, C: UsableData> {
     >,
 }
 
-impl<'a, B: UsableData, E: UsableData, C: UsableData> FeasableSolution<'a, B, E, C> {
+impl<'a, B: UsableData, E: UsableData, C: UsableData> FeasibleSolution<'a, B, E, C> {
     pub fn into_solution(self) -> Solution<'a, B, E, C> {
         Solution {
-            config: self.feasable_config.into_inner(),
+            config: self.feasible_config.into_inner(),
         }
     }
 
     /// Extract base variable values only.
     pub fn get_data(&self) -> ConfigData<B> {
-        ConfigData::from(self.feasable_config.get_values().into_iter().filter_map(
+        ConfigData::from(self.feasible_config.get_values().into_iter().filter_map(
             |(var, value)| match var {
                 InternalVar::Base(v) => Some((v, value)),
                 _ => None,
@@ -648,7 +736,7 @@ impl<'a, B: UsableData, E: UsableData, C: UsableData> FeasableSolution<'a, B, E,
 
     /// Get all variable values (base + extra + helper).
     pub fn get_complete_data(&self) -> ConfigData<InternalVar<B, E>> {
-        ConfigData::from(self.feasable_config.get_values())
+        ConfigData::from(self.feasible_config.get_values())
     }
 }
 
@@ -908,6 +996,11 @@ where
         self.add_objective(coef, Objective::new(expr, ObjectiveSense::Maximize));
     }
 
+    /// Remove all accumulated objectives.
+    pub fn clear_objectives(&mut self) {
+        self.objectives.clear();
+    }
+
     /// Register a fixer closure. At build time, for every
     /// undeclared base variable found in constraints/objectives,
     /// fixers are called in registration order; the first to return
@@ -986,6 +1079,150 @@ where
             self.extras.insert(name, ExtraDef { kind, define });
         }
         Ok(())
+    }
+
+    /// Rebuild a [`Modeler`] from an already-assembled
+    /// [`Problem`], reversing [`Modeler::build`]'s flattening.
+    ///
+    /// The [`ConstraintSource`] tag on each constraint is what
+    /// makes this possible: [`ConstraintSource::User`] constraints
+    /// become user constraints again, while
+    /// [`ConstraintSource::DefiningExtra`] constraints are grouped
+    /// per extra and replayed by a synthesized definition closure.
+    /// Extra and helper variable kinds are recovered from the
+    /// problem's variable set.
+    ///
+    /// Passed the full [`Model::problem`], the reconstruction is
+    /// faithful: the user constraints and the objective reference
+    /// the same extras, so [`Modeler::build`] rediscovers the exact
+    /// same constraint/objective roots and recomputes each extra's
+    /// `for_constraints` flag identically — an objective-only extra
+    /// stays out of the checker problem, a constraint extra stays
+    /// in. The only differences are constraint ordering and helper
+    /// variable renumbering (helpers are re-minted with fresh ids),
+    /// neither of which changes the problem's meaning. The
+    /// synthesized closures ignore `Env` and never fail, so both
+    /// type parameters are free at the call site.
+    ///
+    /// The folded objective is re-added as a single weighted
+    /// objective; callers that want to optimize a different
+    /// surrogate can follow with [`Modeler::clear_objectives`].
+    pub fn from_model_problem(problem: &Problem<InternalVar<B, E>, ConstraintSource<E, C>>) -> Self
+    where
+        B: 'm,
+        E: 'm,
+    {
+        // Recover variable kinds, split by role.
+        let mut base_vars: HashMap<B, Variable> = HashMap::new();
+        let mut extra_kinds: HashMap<E, Variable> = HashMap::new();
+        let mut helper_kinds: HashMap<E, HashMap<HelperId, Variable>> = HashMap::new();
+        for (var, kind) in problem.get_variables() {
+            match var {
+                InternalVar::Base(b) => {
+                    base_vars.insert(b.clone(), kind.clone());
+                }
+                InternalVar::Extra(e) => {
+                    extra_kinds.insert(e.clone(), kind.clone());
+                }
+                InternalVar::Helper { owner, id } => {
+                    helper_kinds
+                        .entry(owner.clone())
+                        .or_default()
+                        .insert(id.clone(), kind.clone());
+                }
+            }
+        }
+
+        let mut modeler = Self::new(base_vars);
+
+        // Partition constraints: user constraints go back verbatim,
+        // defining-extra constraints are grouped per extra (later
+        // ordered by their original index).
+        let mut per_extra: HashMap<E, Vec<(usize, Constraint<InternalVar<B, E>>)>> = HashMap::new();
+        for (constraint, source) in problem.get_constraints() {
+            match source {
+                ConstraintSource::User(desc) => {
+                    modeler.add_constraint(constraint.transmute(internal_to_var), desc.clone());
+                }
+                ConstraintSource::DefiningExtra { extra, index, .. } => {
+                    per_extra
+                        .entry(extra.clone())
+                        .or_default()
+                        .push((*index, constraint.clone()));
+                }
+            }
+        }
+
+        // Synthesize a definition closure for every extra. We cover
+        // every extra name that has a kind, even one with no defining
+        // constraints (its closure simply returns nothing).
+        for (extra, kind) in extra_kinds {
+            let mut defs = per_extra.remove(&extra).unwrap_or_default();
+            defs.sort_by_key(|(index, _)| *index);
+            let constraints: Vec<Constraint<InternalVar<B, E>>> =
+                defs.into_iter().map(|(_, c)| c).collect();
+            let owned_helper_kinds = helper_kinds.remove(&extra).unwrap_or_default();
+
+            modeler
+                .declare_extra(extra, kind, move |factory, _ctx, _name| {
+                    // Re-mint this extra's helpers in first-seen
+                    // order, mapping each original id to a fresh one.
+                    let mut remap: HashMap<HelperId, ExtraVar<B, E>> = HashMap::new();
+                    for c in &constraints {
+                        for v in c.variable_refs() {
+                            if let InternalVar::Helper { id, .. } = v
+                                && !remap.contains_key(id)
+                            {
+                                let helper_kind = owned_helper_kinds
+                                    .get(id)
+                                    .cloned()
+                                    .expect("helper kind recorded for defining constraint");
+                                remap.insert(id.clone(), factory.new_helper(helper_kind));
+                            }
+                        }
+                    }
+                    let translated = constraints
+                        .iter()
+                        .map(|c| {
+                            c.transmute(|v| match v {
+                                InternalVar::Base(b) => ExtraVar::Base(b.clone()),
+                                InternalVar::Extra(e) => ExtraVar::Extra(e.clone()),
+                                InternalVar::Helper { id, .. } => remap
+                                    .get(id)
+                                    .cloned()
+                                    .expect("helper remapped before translation"),
+                            })
+                        })
+                        .collect();
+                    Ok(translated)
+                })
+                .expect("extra names are unique in a built problem");
+        }
+
+        // Re-add the folded objective (weight 1.0). No helpers here.
+        modeler.add_objective(1.0, problem.get_objective().transmute(internal_to_var));
+
+        modeler
+    }
+}
+
+/// Translate a flattened [`InternalVar`] back to the user-facing
+/// [`Var`] used in constraints and objectives. Helpers never appear
+/// in user constraints or the objective, so encountering one means
+/// the problem was not produced by [`Modeler::build`].
+fn internal_to_var<B, E>(var: &InternalVar<B, E>) -> Var<B, E>
+where
+    B: UsableData,
+    E: UsableData,
+{
+    match var {
+        InternalVar::Base(b) => Var::Base(b.clone()),
+        InternalVar::Extra(e) => Var::Extra(e.clone()),
+        InternalVar::Helper { .. } => {
+            panic!(
+                "expected a Modeler-built problem: helper variable found in a user constraint or the objective"
+            )
+        }
     }
 }
 
@@ -1152,6 +1389,84 @@ where
             "[Modeler::build] Step 1: Transmutation ({:.2?})",
             t_step.elapsed()
         ));
+
+        // Fast path: no extras means no DFS, no reconstruction.
+        if extras.is_empty() {
+            log("[Modeler::build] Steps 2-3: Skipped (no extras)");
+
+            for (c, _) in &user_constraints {
+                for v in c.variable_refs() {
+                    if let InternalVar::Extra(e) = v {
+                        return Err(BuildError::UndeclaredExtra(e.clone()));
+                    }
+                }
+            }
+            for v in folded_obj.get_function().variable_refs() {
+                if let InternalVar::Extra(e) = v {
+                    return Err(BuildError::UndeclaredExtra(e.clone()));
+                }
+            }
+
+            let t_step = Instant::now();
+            let mut all_vars: HashMap<InternalVar<B, E>, Variable> = HashMap::new();
+            for (b, kind) in &base_vars {
+                all_vars.insert(InternalVar::Base(b.clone()), kind.clone());
+            }
+
+            let checker_constraints = user_constraints.clone();
+            let checker_vars = all_vars.clone();
+
+            log(&format!(
+                "[Modeler::build] Step 4: Constraint cloning ({:.2?})",
+                t_step.elapsed()
+            ));
+
+            let t_step = Instant::now();
+            let builder: ProblemBuilder<InternalVar<B, E>, ConstraintSource<E, C>> =
+                ProblemBuilder::new()
+                    .set_variables(all_vars)
+                    .add_constraints(user_constraints)
+                    .set_objective(folded_obj);
+            let problem = builder.build().map_err(BuildError::Ilp)?;
+            log(&format!(
+                "[Modeler::build] Step 5a: Main problem ({:.2?})",
+                t_step.elapsed()
+            ));
+
+            let t_step = Instant::now();
+            let checker_builder: ProblemBuilder<InternalVar<B, E>, ConstraintSource<E, C>> =
+                ProblemBuilder::new()
+                    .set_variables(checker_vars)
+                    .add_constraints(checker_constraints)
+                    .set_objective(Objective::new(
+                        LinExpr::constant(0.0),
+                        ObjectiveSense::Minimize,
+                    ));
+            let checker_problem = checker_builder.build().map_err(BuildError::Ilp)?;
+            log(&format!(
+                "[Modeler::build] Step 5b: Checker problem ({:.2?})",
+                t_step.elapsed()
+            ));
+
+            log(&format!(
+                "[Modeler::build] Total ({:.2?})",
+                t_total.elapsed()
+            ));
+
+            return Ok(Model {
+                problem,
+                reconstruction_constraints: Vec::new(),
+                reconstruction_variables: HashMap::new(),
+                base_variable_set: HashSet::new(),
+                checker_problem,
+                checker_reconstruction_constraints: Vec::new(),
+                checker_reconstruction_variables: HashMap::new(),
+                checker_base_variable_set: HashSet::new(),
+                reconstruction_objective: Objective::default(),
+                checker_reconstruction_objective: Objective::default(),
+                base_var_list: base_vars,
+            });
+        }
 
         // Step 2: collect initial roots (two passes).
         let t_step = Instant::now();
@@ -1331,6 +1646,12 @@ where
             t_step.elapsed()
         ));
 
+        // Precompute reconstruction objectives before step 5 consumes folded_obj.
+        let reconstruction_objective = folded_obj.clone();
+        let checker_reconstruction_objective = folded_obj.retained(|v| {
+            matches!(v, InternalVar::Base(_)) || checker_reconstruction_variables.contains_key(v)
+        });
+
         // Step 5: feed everything into ProblemBuilder.
         let t_step = Instant::now();
         let builder: ProblemBuilder<InternalVar<B, E>, ConstraintSource<E, C>> =
@@ -1339,7 +1660,12 @@ where
                 .add_constraints(state.out_constraints)
                 .set_objective(folded_obj);
         let problem = builder.build().map_err(BuildError::Ilp)?;
+        log(&format!(
+            "[Modeler::build] Step 5a: Main problem ({:.2?})",
+            t_step.elapsed()
+        ));
 
+        let t_step = Instant::now();
         let checker_builder: ProblemBuilder<InternalVar<B, E>, ConstraintSource<E, C>> =
             ProblemBuilder::new()
                 .set_variables(checker_vars)
@@ -1349,9 +1675,8 @@ where
                     ObjectiveSense::Minimize,
                 ));
         let checker_problem = checker_builder.build().map_err(BuildError::Ilp)?;
-
         log(&format!(
-            "[Modeler::build] Step 5: Problem assembly ({:.2?})",
+            "[Modeler::build] Step 5b: Checker problem ({:.2?})",
             t_step.elapsed()
         ));
         log(&format!(
@@ -1368,6 +1693,8 @@ where
             checker_reconstruction_constraints,
             checker_reconstruction_variables,
             checker_base_variable_set,
+            reconstruction_objective,
+            checker_reconstruction_objective,
             base_var_list: base_vars,
         })
     }

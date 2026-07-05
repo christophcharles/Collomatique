@@ -1,0 +1,1580 @@
+use std::path::PathBuf;
+
+use std::collections::BTreeMap;
+use std::num::NonZeroU32;
+
+use collomatique_ilp::solvers::collo_cbc::ColloCbcSolver;
+use collomatique_rooms::ScheduleError;
+use collomatique_rooms::parsing;
+use collomatique_rooms::{
+    BoardRequirement, Config, DemandConflictKind, DemandKind, Hour, InterrogationRoomStatus,
+    Periods, PrepRoomStatus, ProximityDetails, ProximityType, Request, Room, RoomPreferenceWarning,
+    RoomSol, ScheduleData, Window,
+};
+use collomatique_time::Weekday;
+use non_empty_string::NonEmptyString;
+
+fn fixture(name: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures")
+        .join(name)
+}
+
+fn run(rooms: &str, requests: &str) -> Result<(), ScheduleError> {
+    collomatique_rooms::run(
+        Some(fixture(rooms).as_path()),
+        &fixture(requests),
+        None,
+        collomatique_rooms::SolveMode::Solve {
+            no_objective: false,
+            warm: false,
+        },
+        None,
+        Default::default(),
+        0,
+    )
+}
+
+fn run_with_incompats(rooms: &str, requests: &str, incompats: &str) -> Result<(), ScheduleError> {
+    collomatique_rooms::run(
+        Some(fixture(rooms).as_path()),
+        &fixture(requests),
+        Some(&fixture(incompats)),
+        collomatique_rooms::SolveMode::Solve {
+            no_objective: false,
+            warm: false,
+        },
+        None,
+        Default::default(),
+        0,
+    )
+}
+
+fn nes(s: &str) -> NonEmptyString {
+    NonEmptyString::try_from(s).unwrap()
+}
+
+// --- Rooms header errors ---
+
+#[test]
+fn rooms_missing_column() {
+    let err = run("rooms_missing_column.csv", "valid_requests.csv").unwrap_err();
+    assert!(matches!(
+        err,
+        ScheduleError::RoomsMissingColumn(col) if col == "Étage"
+    ));
+}
+
+#[test]
+fn rooms_unknown_column() {
+    let err = run("rooms_unknown_column.csv", "valid_requests.csv").unwrap_err();
+    assert!(matches!(
+        err,
+        ScheduleError::RoomsUnknownColumn(col) if col == "Extra"
+    ));
+}
+
+// --- Rooms row errors ---
+
+#[test]
+fn rooms_bad_floor() {
+    let err = run("rooms_bad_floor.csv", "valid_requests.csv").unwrap_err();
+    assert!(matches!(err, ScheduleError::RoomsRowError { row: 1, .. }));
+}
+
+#[test]
+fn rooms_empty_name() {
+    let err = run("rooms_empty_name.csv", "valid_requests.csv").unwrap_err();
+    assert!(matches!(err, ScheduleError::RoomsRowError { row: 1, .. }));
+}
+
+#[test]
+fn rooms_zero_capacity() {
+    let err = run("rooms_zero_capacity.csv", "valid_requests.csv").unwrap_err();
+    assert!(matches!(err, ScheduleError::RoomsRowError { row: 1, .. }));
+}
+
+#[test]
+fn rooms_bad_priority() {
+    let err = run("rooms_bad_priority.csv", "valid_requests.csv").unwrap_err();
+    assert!(matches!(err, ScheduleError::RoomsRowError { row: 1, .. }));
+}
+
+#[test]
+fn rooms_priority_minus_one() {
+    let rooms = parsing::parse_rooms(&fixture("rooms_priority_minus_one.csv")).unwrap();
+    assert_eq!(rooms.len(), 1);
+    let (_, room) = rooms.iter().next().unwrap();
+    assert_eq!(room.priority, None);
+}
+
+#[test]
+fn rooms_bad_window() {
+    let err = run("rooms_bad_window.csv", "valid_requests.csv").unwrap_err();
+    assert!(matches!(err, ScheduleError::RoomsRowError { row: 1, .. }));
+}
+
+#[test]
+fn rooms_duplicate_name() {
+    let err = run("rooms_duplicate_name.csv", "valid_requests.csv").unwrap_err();
+    assert!(matches!(
+        err,
+        ScheduleError::RoomsDuplicateName {
+            first_row: 1,
+            duplicate_row: 2,
+            ..
+        }
+    ));
+}
+
+// --- Requests header errors ---
+
+#[test]
+fn requests_missing_column() {
+    let err = run("valid_rooms.csv", "requests_missing_column.csv").unwrap_err();
+    assert!(matches!(
+        err,
+        ScheduleError::RequestsMissingColumn(col) if col == "Jour"
+    ));
+}
+
+#[test]
+fn requests_unknown_column() {
+    let err = run("valid_rooms.csv", "requests_unknown_column.csv").unwrap_err();
+    assert!(matches!(
+        err,
+        ScheduleError::RequestsUnknownColumn(col) if col == "Extra"
+    ));
+}
+
+// --- Requests row errors ---
+
+#[test]
+fn requests_invalid_day() {
+    let err = run("valid_rooms.csv", "requests_invalid_day.csv").unwrap_err();
+    assert!(matches!(err, ScheduleError::InvalidDay { row: 1, .. }));
+}
+
+#[test]
+fn requests_invalid_hour() {
+    let err = run("valid_rooms.csv", "requests_invalid_hour.csv").unwrap_err();
+    assert!(matches!(
+        err,
+        ScheduleError::InvalidHour { row: 1, value: 20 }
+    ));
+}
+
+#[test]
+fn requests_bad_bool() {
+    let err = run("valid_rooms.csv", "requests_bad_bool.csv").unwrap_err();
+    assert!(matches!(
+        err,
+        ScheduleError::RequestsRowError { row: 1, .. }
+    ));
+}
+
+#[test]
+fn requests_bad_subject() {
+    let err = run("valid_rooms.csv", "requests_bad_subject.csv").unwrap_err();
+    assert!(matches!(
+        err,
+        ScheduleError::RequestsRowError { row: 1, ref message }
+        if message.contains("unknown subject")
+    ));
+}
+
+#[test]
+fn requests_bad_subject_case() {
+    let err = run("valid_rooms.csv", "requests_bad_subject_case.csv").unwrap_err();
+    assert!(matches!(
+        err,
+        ScheduleError::RequestsRowError { row: 1, ref message }
+        if message.contains("unknown subject")
+    ));
+}
+
+#[test]
+fn requests_bad_class() {
+    let err = run("valid_rooms.csv", "requests_bad_class.csv").unwrap_err();
+    assert!(matches!(
+        err,
+        ScheduleError::RequestsRowError { row: 1, ref message }
+        if message.contains("unknown class")
+    ));
+}
+
+#[test]
+fn requests_empty_classes() {
+    let err = run("valid_rooms.csv", "requests_empty_classes.csv").unwrap_err();
+    assert!(matches!(
+        err,
+        ScheduleError::RequestsRowError { row: 1, ref message }
+        if message.contains("at least one class")
+    ));
+}
+
+// --- Happy-path parsing ---
+
+#[test]
+fn parse_rooms_valid() {
+    let rooms = parsing::parse_rooms(&fixture("valid_rooms.csv")).unwrap();
+    assert_eq!(rooms.len(), 1);
+    let room = &rooms[&nes("A101")];
+    assert_eq!(room.floor, 1);
+    assert_eq!(room.x, 2.5);
+    assert_eq!(room.y, 3.0);
+    assert_eq!(room.blackboards, 2.0);
+    assert_eq!(room.whiteboards, 1.0);
+    assert_eq!(room.capacity.get(), 30);
+    assert_eq!(room.window, Window::Exterior);
+    assert_eq!(room.priority, Some(0));
+    assert!(!room.reserved);
+}
+
+#[test]
+fn rooms_reserved() {
+    let rooms = parsing::parse_rooms(&fixture("rooms_reserved.csv")).unwrap();
+    assert_eq!(rooms.len(), 1);
+    let (_, room) = rooms.iter().next().unwrap();
+    assert!(room.reserved);
+}
+
+#[test]
+fn parse_requests_valid() {
+    let (requests, _, _, _) = parsing::parse_requests(&fixture("valid_requests.csv")).unwrap();
+    assert_eq!(requests.len(), 1);
+    let r = &requests[0];
+    assert!(r.periods.p1);
+    assert!(!r.periods.p2);
+    assert!(r.periods.p3);
+    assert_eq!(r.day, Weekday(chrono::Weekday::Mon));
+    assert_eq!(r.hour, Hour::new(8).unwrap());
+    assert_eq!(r.subjects, vec![nes("Mathématiques")]);
+    assert_eq!(r.classes, vec![nes("MP"), nes("PC")]);
+    assert_eq!(r.requester, nes("Dupont"));
+    assert_eq!(r.teacher, nes("Martin"));
+    assert_eq!(r.boards, BoardRequirement::One);
+    assert!(!r.window);
+    assert_eq!(r.students.get(), 3);
+    assert_eq!(r.prep_students, 2);
+    assert_eq!(
+        r.room_statuses,
+        BTreeMap::from([(
+            nes("A101"),
+            InterrogationRoomStatus::Accepted {
+                can_share_with_prep: false,
+            }
+        )])
+    );
+    assert!(r.prep_statuses.is_empty());
+}
+
+#[test]
+fn parse_requests_room_demand() {
+    let (requests, _, _, _) =
+        parsing::parse_requests(&fixture("requests_room_demand.csv")).unwrap();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(
+        requests[0].room_statuses,
+        BTreeMap::from([(
+            nes("A101"),
+            InterrogationRoomStatus::Demanded {
+                can_share_with_prep: false,
+            }
+        )])
+    );
+}
+
+#[test]
+fn parse_schedule_valid() {
+    let (data, _, _, _) = parsing::parse_schedule(
+        &fixture("valid_rooms.csv"),
+        &fixture("valid_requests.csv"),
+        None,
+        Default::default(),
+    )
+    .unwrap();
+    assert_eq!(data.rooms.len(), 1);
+    assert_eq!(data.requests.len(), 1);
+    let unreg = data.unregistered_rooms();
+    assert!(unreg.suggested.is_empty());
+    assert!(unreg.demanded.is_empty());
+}
+
+#[test]
+fn unregistered_suggested_room_detected() {
+    let (data, _, _, _) = parsing::parse_schedule(
+        &fixture("valid_rooms.csv"),
+        &fixture("requests_unregistered_room.csv"),
+        None,
+        Default::default(),
+    )
+    .unwrap();
+    let unreg = data.unregistered_rooms();
+    assert_eq!(unreg.suggested, vec!["Z999"]);
+    assert!(unreg.demanded.is_empty());
+}
+
+#[test]
+fn unregistered_demanded_room_detected() {
+    let (data, _, _, _) = parsing::parse_schedule(
+        &fixture("valid_rooms.csv"),
+        &fixture("requests_unregistered_demanded_room.csv"),
+        None,
+        Default::default(),
+    )
+    .unwrap();
+    let unreg = data.unregistered_rooms();
+    assert!(unreg.suggested.is_empty());
+    assert_eq!(unreg.demanded, vec!["Z999"]);
+}
+
+// --- Incompats happy path ---
+
+#[test]
+fn parse_incompats_valid() {
+    let incompats = parsing::parse_incompats(&fixture("valid_incompats.csv")).unwrap();
+    assert_eq!(incompats.len(), 1);
+    let i = &incompats[0];
+    assert_eq!(i.room, nes("A101"));
+    assert!(i.periods.p1);
+    assert!(!i.periods.p2);
+    assert!(i.periods.p3);
+    assert_eq!(i.day, Weekday(chrono::Weekday::Mon));
+    assert_eq!(i.hour, Hour::new(8).unwrap());
+}
+
+#[test]
+fn parse_schedule_with_incompats() {
+    let (data, _, _, _) = parsing::parse_schedule(
+        &fixture("valid_rooms.csv"),
+        &fixture("valid_requests.csv"),
+        Some(&fixture("valid_incompats.csv")),
+        Default::default(),
+    )
+    .unwrap();
+    assert_eq!(data.incompats.len(), 1);
+}
+
+// --- Incompats header errors ---
+
+#[test]
+fn incompats_missing_column() {
+    let err = run_with_incompats(
+        "valid_rooms.csv",
+        "valid_requests.csv",
+        "incompats_missing_column.csv",
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        ScheduleError::IncompatsMissingColumn(col) if col == "Jour"
+    ));
+}
+
+#[test]
+fn incompats_unknown_column() {
+    let err = run_with_incompats(
+        "valid_rooms.csv",
+        "valid_requests.csv",
+        "incompats_unknown_column.csv",
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        ScheduleError::IncompatsUnknownColumn(col) if col == "Extra"
+    ));
+}
+
+// --- Incompats row errors ---
+
+#[test]
+fn incompats_bad_bool() {
+    let err = run_with_incompats(
+        "valid_rooms.csv",
+        "valid_requests.csv",
+        "incompats_bad_bool.csv",
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        ScheduleError::IncompatsRowError { row: 1, .. }
+    ));
+}
+
+#[test]
+fn incompats_bad_day() {
+    let err = run_with_incompats(
+        "valid_rooms.csv",
+        "valid_requests.csv",
+        "incompats_bad_day.csv",
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        ScheduleError::IncompatsRowError { row: 1, ref message }
+        if message.contains("invalid day")
+    ));
+}
+
+#[test]
+fn incompats_bad_hour() {
+    let err = run_with_incompats(
+        "valid_rooms.csv",
+        "valid_requests.csv",
+        "incompats_bad_hour.csv",
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        ScheduleError::IncompatsRowError { row: 1, ref message }
+        if message.contains("hour must be between 8 and 19")
+    ));
+}
+
+// --- Incompats cross-file validation ---
+
+#[test]
+fn incompats_undeclared_room() {
+    let err = run_with_incompats(
+        "valid_rooms.csv",
+        "valid_requests.csv",
+        "incompats_undeclared_room.csv",
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        ScheduleError::IncompatsUndeclaredRoom { row: 1, ref room }
+        if room == "Z999"
+    ));
+}
+
+// --- Demand conflict detection ---
+
+fn make_room(capacity: u32) -> Room {
+    Room {
+        floor: 0,
+        x: 0.0,
+        y: 0.0,
+        blackboards: 0.0,
+        whiteboards: 0.0,
+        capacity: NonZeroU32::new(capacity).unwrap(),
+        window: Window::None,
+        priority: Some(0),
+        reserved: false,
+    }
+}
+
+fn make_request(
+    day: chrono::Weekday,
+    hour: u32,
+    periods: (bool, bool, bool),
+    room_statuses: BTreeMap<NonEmptyString, InterrogationRoomStatus>,
+    prep_statuses: BTreeMap<NonEmptyString, PrepRoomStatus>,
+    prep_students: u32,
+) -> Request {
+    Request {
+        periods: Periods {
+            p1: periods.0,
+            p2: periods.1,
+            p3: periods.2,
+        },
+        day: Weekday(day),
+        hour: Hour::new(hour).unwrap(),
+        subjects: vec![nes("Mathématiques")],
+        classes: vec![nes("MP")],
+        requester: nes("Dupont"),
+        teacher: nes("Martin"),
+        boards: BoardRequirement::Zero,
+        window: false,
+        students: NonZeroU32::new(3).unwrap(),
+        prep_students,
+        room_statuses,
+        proximity: BTreeMap::new(),
+        prep_statuses,
+        prep_proximity: BTreeMap::new(),
+        skip_room_continuity: false,
+    }
+}
+
+#[test]
+fn demand_no_conflict_non_overlapping_periods() {
+    let mut rooms = BTreeMap::new();
+    rooms.insert(nes("A101"), make_room(30));
+    let demanded = BTreeMap::from([(
+        nes("A101"),
+        InterrogationRoomStatus::Demanded {
+            can_share_with_prep: false,
+        },
+    )]);
+    let data = ScheduleData {
+        rooms,
+        requests: vec![
+            make_request(
+                chrono::Weekday::Mon,
+                8,
+                (true, false, false),
+                demanded.clone(),
+                BTreeMap::new(),
+                0,
+            ),
+            make_request(
+                chrono::Weekday::Mon,
+                8,
+                (false, true, false),
+                demanded,
+                BTreeMap::new(),
+                0,
+            ),
+        ],
+        incompats: vec![],
+        config: Config::default(),
+    };
+    assert!(data.demand_conflicts().is_empty());
+}
+
+#[test]
+fn demand_interro_interro_conflict() {
+    let mut rooms = BTreeMap::new();
+    rooms.insert(nes("A101"), make_room(30));
+    let demanded = BTreeMap::from([(
+        nes("A101"),
+        InterrogationRoomStatus::Demanded {
+            can_share_with_prep: false,
+        },
+    )]);
+    let data = ScheduleData {
+        rooms,
+        requests: vec![
+            make_request(
+                chrono::Weekday::Mon,
+                8,
+                (true, false, false),
+                demanded.clone(),
+                BTreeMap::new(),
+                0,
+            ),
+            make_request(
+                chrono::Weekday::Mon,
+                8,
+                (true, true, false),
+                demanded,
+                BTreeMap::new(),
+                0,
+            ),
+        ],
+        incompats: vec![],
+        config: Config::default(),
+    };
+    let conflicts = data.demand_conflicts();
+    assert_eq!(conflicts.len(), 1);
+    assert_eq!(
+        conflicts[0].kind,
+        DemandConflictKind::InterrogationInterrogation
+    );
+    assert_eq!(conflicts[0].requests.len(), 2);
+    assert_eq!(conflicts[0].requests[0], (0, DemandKind::Interrogation));
+    assert_eq!(conflicts[0].requests[1], (1, DemandKind::Interrogation));
+}
+
+#[test]
+fn demand_interro_prep_conflict() {
+    let mut rooms = BTreeMap::new();
+    rooms.insert(nes("A101"), make_room(30));
+    let data = ScheduleData {
+        rooms,
+        requests: vec![
+            make_request(
+                chrono::Weekday::Mon,
+                8,
+                (true, false, false),
+                BTreeMap::from([(
+                    nes("A101"),
+                    InterrogationRoomStatus::Demanded {
+                        can_share_with_prep: false,
+                    },
+                )]),
+                BTreeMap::new(),
+                0,
+            ),
+            make_request(
+                chrono::Weekday::Mon,
+                8,
+                (true, true, false),
+                BTreeMap::new(),
+                BTreeMap::from([(nes("A101"), PrepRoomStatus::Demanded)]),
+                5,
+            ),
+        ],
+        incompats: vec![],
+        config: Config::default(),
+    };
+    let conflicts = data.demand_conflicts();
+    assert_eq!(conflicts.len(), 1);
+    assert_eq!(
+        conflicts[0].kind,
+        DemandConflictKind::InterrogationPrep {
+            can_share_with_prep: false,
+        }
+    );
+    assert_eq!(conflicts[0].requests[0], (0, DemandKind::Interrogation));
+    assert_eq!(conflicts[0].requests[1], (1, DemandKind::Prep));
+}
+
+#[test]
+fn demand_prep_prep_over_capacity() {
+    let mut rooms = BTreeMap::new();
+    rooms.insert(nes("A101"), make_room(10));
+    let prep_demanded = BTreeMap::from([(nes("A101"), PrepRoomStatus::Demanded)]);
+    let data = ScheduleData {
+        rooms,
+        requests: vec![
+            make_request(
+                chrono::Weekday::Mon,
+                8,
+                (true, false, false),
+                BTreeMap::new(),
+                prep_demanded.clone(),
+                6,
+            ),
+            make_request(
+                chrono::Weekday::Mon,
+                8,
+                (true, false, false),
+                BTreeMap::new(),
+                prep_demanded,
+                7,
+            ),
+        ],
+        incompats: vec![],
+        config: Config::default(),
+    };
+    let conflicts = data.demand_conflicts();
+    assert_eq!(conflicts.len(), 1);
+    assert_eq!(
+        conflicts[0].kind,
+        DemandConflictKind::PrepOverCapacity {
+            total_students: 13,
+            capacity: NonZeroU32::new(10).unwrap(),
+        }
+    );
+}
+
+#[test]
+fn demand_prep_prep_fits() {
+    let mut rooms = BTreeMap::new();
+    rooms.insert(nes("A101"), make_room(20));
+    let prep_demanded = BTreeMap::from([(nes("A101"), PrepRoomStatus::Demanded)]);
+    let data = ScheduleData {
+        rooms,
+        requests: vec![
+            make_request(
+                chrono::Weekday::Mon,
+                8,
+                (true, false, false),
+                BTreeMap::new(),
+                prep_demanded.clone(),
+                6,
+            ),
+            make_request(
+                chrono::Weekday::Mon,
+                8,
+                (true, false, false),
+                BTreeMap::new(),
+                prep_demanded,
+                7,
+            ),
+        ],
+        incompats: vec![],
+        config: Config::default(),
+    };
+    assert!(data.demand_conflicts().is_empty());
+}
+
+#[test]
+fn demand_prep_prep_unlisted_room() {
+    let prep_demanded = BTreeMap::from([(nes("Z999"), PrepRoomStatus::Demanded)]);
+    let data = ScheduleData {
+        rooms: BTreeMap::new(),
+        requests: vec![
+            make_request(
+                chrono::Weekday::Mon,
+                8,
+                (true, false, false),
+                BTreeMap::new(),
+                prep_demanded.clone(),
+                3,
+            ),
+            make_request(
+                chrono::Weekday::Mon,
+                8,
+                (true, false, false),
+                BTreeMap::new(),
+                prep_demanded,
+                4,
+            ),
+        ],
+        incompats: vec![],
+        config: Config::default(),
+    };
+    let conflicts = data.demand_conflicts();
+    assert_eq!(conflicts.len(), 1);
+    assert_eq!(
+        conflicts[0].kind,
+        DemandConflictKind::PrepUnknownCapacity { total_students: 7 }
+    );
+}
+
+#[test]
+fn demand_suggestions_ignored() {
+    let mut rooms = BTreeMap::new();
+    rooms.insert(nes("A101"), make_room(30));
+    let accepted = BTreeMap::from([(
+        nes("A101"),
+        InterrogationRoomStatus::Accepted {
+            can_share_with_prep: false,
+        },
+    )]);
+    let data = ScheduleData {
+        rooms,
+        requests: vec![
+            make_request(
+                chrono::Weekday::Mon,
+                8,
+                (true, false, false),
+                accepted.clone(),
+                BTreeMap::new(),
+                0,
+            ),
+            make_request(
+                chrono::Weekday::Mon,
+                8,
+                (true, false, false),
+                accepted,
+                BTreeMap::new(),
+                0,
+            ),
+        ],
+        incompats: vec![],
+        config: Config::default(),
+    };
+    assert!(data.demand_conflicts().is_empty());
+}
+
+fn assert_checker_feasible(rooms: &str, requests: &str) {
+    let (data, _, _, _) = parsing::parse_schedule(
+        &fixture(rooms),
+        &fixture(requests),
+        None,
+        Default::default(),
+    )
+    .unwrap();
+    let model = collomatique_constraints_rooms::build_model(&data);
+    let solver = ColloCbcSolver::with_disable_logging(true);
+    assert!(
+        model.solve_checker(&solver).is_some(),
+        "expected feasible checker problem for {rooms} + {requests}"
+    );
+}
+
+#[test]
+fn priority_base_feasible() {
+    assert_checker_feasible("priority_base_rooms.csv", "priority_base_requests.csv");
+}
+
+#[test]
+fn priority_demand_feasible() {
+    assert_checker_feasible("priority_demand_rooms.csv", "priority_demand_requests.csv");
+}
+
+#[test]
+fn priority_overflow_feasible() {
+    assert_checker_feasible(
+        "priority_overflow_rooms.csv",
+        "priority_overflow_requests.csv",
+    );
+}
+
+#[test]
+fn priority_many_rooms_feasible() {
+    assert_checker_feasible("priority_many_rooms.csv", "priority_many_requests.csv");
+}
+
+#[test]
+fn priority_prep_feasible() {
+    assert_checker_feasible("priority_prep_rooms.csv", "priority_prep_requests.csv");
+}
+
+#[test]
+fn priority_prep_full_feasible() {
+    assert_checker_feasible("priority_prep_rooms.csv", "priority_prep_full_requests.csv");
+}
+
+#[test]
+fn priority_reserved_feasible() {
+    assert_checker_feasible(
+        "priority_reserved_rooms.csv",
+        "priority_prep_full_requests.csv",
+    );
+}
+
+#[test]
+fn priority_global_feasible() {
+    assert_checker_feasible("priority_global_rooms.csv", "priority_global_requests.csv");
+}
+
+// --- Prep sharing (+ suffix) ---
+
+#[test]
+fn parse_requests_suggestion_sharing() {
+    let (requests, _, _, _) =
+        parsing::parse_requests(&fixture("requests_room_suggestion_sharing.csv")).unwrap();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(
+        requests[0].room_statuses,
+        BTreeMap::from([(
+            nes("A101"),
+            InterrogationRoomStatus::Accepted {
+                can_share_with_prep: true,
+            }
+        )])
+    );
+}
+
+#[test]
+fn parse_requests_demand_sharing() {
+    let (requests, _, _, _) =
+        parsing::parse_requests(&fixture("requests_room_demand_sharing.csv")).unwrap();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(
+        requests[0].room_statuses,
+        BTreeMap::from([(
+            nes("A101"),
+            InterrogationRoomStatus::Demanded {
+                can_share_with_prep: true,
+            }
+        )])
+    );
+}
+
+#[test]
+fn sharing_feasible() {
+    assert_checker_feasible("sharing_rooms.csv", "sharing_requests.csv");
+}
+
+#[test]
+fn demand_interro_prep_conflict_with_sharing() {
+    let mut rooms = BTreeMap::new();
+    rooms.insert(nes("A101"), make_room(30));
+    let data = ScheduleData {
+        rooms,
+        requests: vec![
+            make_request(
+                chrono::Weekday::Mon,
+                8,
+                (true, false, false),
+                BTreeMap::from([(
+                    nes("A101"),
+                    InterrogationRoomStatus::Demanded {
+                        can_share_with_prep: true,
+                    },
+                )]),
+                BTreeMap::new(),
+                0,
+            ),
+            make_request(
+                chrono::Weekday::Mon,
+                8,
+                (true, true, false),
+                BTreeMap::new(),
+                BTreeMap::from([(nes("A101"), PrepRoomStatus::Demanded)]),
+                5,
+            ),
+        ],
+        incompats: vec![],
+        config: Config::default(),
+    };
+    let conflicts = data.demand_conflicts();
+    assert_eq!(conflicts.len(), 1);
+    assert_eq!(
+        conflicts[0].kind,
+        DemandConflictKind::InterrogationPrep {
+            can_share_with_prep: true,
+        }
+    );
+}
+
+// --- Multiple room preferences ---
+
+#[test]
+fn parse_requests_multi_room() {
+    let (requests, _, _, warnings) =
+        parsing::parse_requests(&fixture("requests_multi_room.csv")).unwrap();
+    assert_eq!(requests.len(), 1);
+    assert!(warnings.is_empty());
+    let r = &requests[0];
+    assert_eq!(
+        r.room_statuses,
+        BTreeMap::from([
+            (
+                nes("A101"),
+                InterrogationRoomStatus::Accepted {
+                    can_share_with_prep: true,
+                }
+            ),
+            (
+                nes("B302"),
+                InterrogationRoomStatus::Demanded {
+                    can_share_with_prep: false,
+                }
+            ),
+        ])
+    );
+    assert_eq!(
+        r.prep_statuses,
+        BTreeMap::from([
+            (nes("C205"), PrepRoomStatus::Demanded),
+            (nes("D410"), PrepRoomStatus::Accepted),
+        ])
+    );
+}
+
+#[test]
+fn parse_requests_redundant_merge() {
+    let (requests, _, _, warnings) =
+        parsing::parse_requests(&fixture("requests_redundant_room.csv")).unwrap();
+    assert_eq!(requests.len(), 1);
+    let r = &requests[0];
+    assert_eq!(
+        r.room_statuses,
+        BTreeMap::from([(
+            nes("A101"),
+            InterrogationRoomStatus::Demanded {
+                can_share_with_prep: true,
+            }
+        )])
+    );
+    assert_eq!(
+        r.prep_statuses,
+        BTreeMap::from([(nes("B302"), PrepRoomStatus::Demanded)])
+    );
+    assert_eq!(warnings.len(), 2);
+    assert!(matches!(
+        &warnings[0],
+        RoomPreferenceWarning::Redundancy {
+            column: "Salle",
+            room,
+            merged_result,
+            ..
+        } if room == "A101" && merged_result == "!A101+"
+    ));
+    assert!(matches!(
+        &warnings[1],
+        RoomPreferenceWarning::Redundancy {
+            column: "Prep",
+            room,
+            merged_result,
+            ..
+        } if room == "B302" && merged_result == "!B302"
+    ));
+}
+
+#[test]
+fn parse_requests_interro_prep_no_sharing_warning() {
+    let (requests, _, _, warnings) =
+        parsing::parse_requests(&fixture("requests_interro_prep_no_sharing.csv")).unwrap();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(warnings.len(), 1);
+    assert!(matches!(
+        &warnings[0],
+        RoomPreferenceWarning::InterrogationAndPrepWithoutSharing { row: 1, room }
+        if room == "A101"
+    ));
+}
+
+#[test]
+fn parse_requests_interro_prep_with_sharing_no_warning() {
+    let (requests, _, _, warnings) =
+        parsing::parse_requests(&fixture("requests_interro_prep_with_sharing.csv")).unwrap();
+    assert_eq!(requests.len(), 1);
+    assert!(warnings.is_empty());
+}
+
+// --- Avoidance and exclusion ---
+
+#[test]
+fn parse_requests_avoidance() {
+    let (requests, _, _, warnings) =
+        parsing::parse_requests(&fixture("requests_avoidance.csv")).unwrap();
+    assert_eq!(requests.len(), 1);
+    assert!(warnings.is_empty());
+    assert!(requests[0].room_statuses.is_empty());
+    assert_eq!(
+        requests[0].proximity.get(&ProximityType::Room(nes("A101"))),
+        Some(&ProximityDetails {
+            fuzzy: false,
+            level: -1.0,
+        })
+    );
+}
+
+#[test]
+fn parse_requests_exclusion() {
+    let (requests, _, _, warnings) =
+        parsing::parse_requests(&fixture("requests_exclusion.csv")).unwrap();
+    assert_eq!(requests.len(), 1);
+    assert!(warnings.is_empty());
+    assert_eq!(
+        requests[0].room_statuses,
+        BTreeMap::from([(nes("A101"), InterrogationRoomStatus::Excluded)])
+    );
+}
+
+#[test]
+fn parse_requests_conflicting_prefs() {
+    let (requests, _, _, warnings) =
+        parsing::parse_requests(&fixture("requests_conflicting_prefs.csv")).unwrap();
+    assert_eq!(requests.len(), 1);
+    assert!(requests[0].room_statuses.is_empty());
+    assert_eq!(warnings.len(), 1);
+    assert!(matches!(
+        &warnings[0],
+        RoomPreferenceWarning::ConflictingPreferences {
+            row: 1,
+            room,
+            ..
+        } if room == "A101"
+    ));
+}
+
+#[test]
+fn parse_requests_negative_merge() {
+    let (requests, _, _, warnings) =
+        parsing::parse_requests(&fixture("requests_negative_merge.csv")).unwrap();
+    assert_eq!(requests.len(), 1);
+    // ~A101 is in Salle (exclusion status), A101:-1 is in Proximité (avoidance)
+    assert_eq!(
+        requests[0].room_statuses,
+        BTreeMap::from([(nes("A101"), InterrogationRoomStatus::Excluded)])
+    );
+    assert_eq!(
+        requests[0].proximity.get(&ProximityType::Room(nes("A101"))),
+        Some(&ProximityDetails {
+            fuzzy: false,
+            level: -1.0,
+        })
+    );
+    assert!(warnings.is_empty());
+}
+
+#[test]
+fn conflicting_prefs_is_fatal_error() {
+    let err = run("valid_rooms.csv", "requests_conflicting_prefs.csv").unwrap_err();
+    assert!(matches!(err, ScheduleError::ConflictingRoomPreferences(_)));
+}
+
+#[test]
+fn exclusion_constraint_feasible() {
+    assert_checker_feasible("exclusion_rooms.csv", "exclusion_requests.csv");
+}
+
+#[test]
+fn exclusion_constraint_assigns_other_room() {
+    let (data, _, _, _) = parsing::parse_schedule(
+        &fixture("exclusion_rooms.csv"),
+        &fixture("exclusion_requests.csv"),
+        None,
+        Default::default(),
+    )
+    .unwrap();
+    let model = collomatique_constraints_rooms::build_model(&data);
+    let solver = ColloCbcSolver::with_disable_logging(true);
+    let solved = model.solve_checker(&solver).unwrap();
+    let config = solved.get_data();
+    let assignments = collomatique_constraints_rooms::extract_assignments(&data, &config);
+    assert_eq!(assignments.len(), 1);
+    assert_eq!(assignments[0].room, nes("ROOM_B"));
+}
+
+#[test]
+fn parse_requests_multi_subject() {
+    let (requests, _, _, _) =
+        parsing::parse_requests(&fixture("requests_multi_subject.csv")).unwrap();
+    assert_eq!(requests.len(), 1);
+    let r = &requests[0];
+    assert_eq!(r.subjects, vec![nes("Physique"), nes("Chimie")]);
+}
+
+#[test]
+fn parse_requests_floor_suggestion_with_room() {
+    let (requests, _, _, _) =
+        parsing::parse_requests(&fixture("requests_floor_suggestion.csv")).unwrap();
+    assert_eq!(requests.len(), 1);
+    let r = &requests[0];
+    assert_eq!(
+        r.room_statuses,
+        BTreeMap::from([(
+            nes("A101"),
+            InterrogationRoomStatus::Accepted {
+                can_share_with_prep: false,
+            }
+        )])
+    );
+    assert_eq!(
+        r.proximity.get(&ProximityType::Floor(2)),
+        Some(&ProximityDetails {
+            fuzzy: true,
+            level: 1.0,
+        })
+    );
+}
+
+#[test]
+fn parse_requests_floor_only() {
+    let (requests, _, _, _) = parsing::parse_requests(&fixture("requests_floor_only.csv")).unwrap();
+    assert_eq!(requests.len(), 1);
+    let r = &requests[0];
+    assert!(r.room_statuses.is_empty());
+    assert_eq!(
+        r.proximity.get(&ProximityType::Floor(2)),
+        Some(&ProximityDetails {
+            fuzzy: true,
+            level: 1.0,
+        })
+    );
+}
+
+#[test]
+fn parse_requests_floor_multiple() {
+    let (requests, _, _, _) =
+        parsing::parse_requests(&fixture("requests_floor_multiple.csv")).unwrap();
+    assert_eq!(requests.len(), 1);
+    let r = &requests[0];
+    assert!(r.proximity.contains_key(&ProximityType::Floor(2)));
+    assert!(r.proximity.contains_key(&ProximityType::Floor(3)));
+}
+
+#[test]
+fn parse_requests_floor_bad() {
+    let err = parsing::parse_requests(&fixture("requests_floor_bad.csv")).unwrap_err();
+    assert!(matches!(
+        err,
+        ScheduleError::RequestsRowError { row: 1, ref message }
+        if message.contains("invalid floor")
+    ));
+}
+
+#[test]
+fn parse_requests_floor_empty() {
+    let err = parsing::parse_requests(&fixture("requests_floor_empty.csv")).unwrap_err();
+    assert!(matches!(
+        err,
+        ScheduleError::RequestsRowError { row: 1, ref message }
+        if message.contains("invalid floor")
+    ));
+}
+
+// --- Room continuity ---
+
+#[test]
+fn continuity_same_room() {
+    let (data, _, _, _) = parsing::parse_schedule(
+        &fixture("continuity_rooms.csv"),
+        &fixture("continuity_requests.csv"),
+        None,
+        Default::default(),
+    )
+    .unwrap();
+    let model = collomatique_constraints_rooms::build_model(&data);
+    let solver = ColloCbcSolver::with_disable_logging(true);
+    let solved = model.solve_checker(&solver).unwrap();
+    let config = solved.get_data();
+    let assignments = collomatique_constraints_rooms::extract_assignments(&data, &config);
+    assert_eq!(assignments.len(), 2);
+    assert_eq!(assignments[0].room, assignments[1].room);
+}
+
+#[test]
+fn continuity_isolated_feasible() {
+    assert_checker_feasible("continuity_rooms.csv", "continuity_isolated_requests.csv");
+}
+
+#[test]
+fn teacher_conflict_detected() {
+    let mut rooms = BTreeMap::new();
+    rooms.insert(nes("A101"), make_room(30));
+    let data = ScheduleData {
+        rooms,
+        requests: vec![
+            make_request(
+                chrono::Weekday::Mon,
+                10,
+                (true, false, true),
+                BTreeMap::new(),
+                BTreeMap::new(),
+                0,
+            ),
+            make_request(
+                chrono::Weekday::Mon,
+                10,
+                (false, false, true),
+                BTreeMap::new(),
+                BTreeMap::new(),
+                0,
+            ),
+        ],
+        incompats: vec![],
+        config: Config::default(),
+    };
+    let conflicts = data.teacher_continuity_conflicts();
+    assert_eq!(conflicts.len(), 1);
+    assert_eq!(conflicts[0].teacher, nes("Martin"));
+    assert_eq!(conflicts[0].hour, Hour::new(10).unwrap());
+    assert_eq!(conflicts[0].requests, vec![0, 1]);
+}
+
+#[test]
+fn teacher_conflict_no_overlap() {
+    let mut rooms = BTreeMap::new();
+    rooms.insert(nes("A101"), make_room(30));
+    let data = ScheduleData {
+        rooms,
+        requests: vec![
+            make_request(
+                chrono::Weekday::Mon,
+                10,
+                (true, false, false),
+                BTreeMap::new(),
+                BTreeMap::new(),
+                0,
+            ),
+            make_request(
+                chrono::Weekday::Mon,
+                10,
+                (false, false, true),
+                BTreeMap::new(),
+                BTreeMap::new(),
+                0,
+            ),
+        ],
+        incompats: vec![],
+        config: Config::default(),
+    };
+    let conflicts = data.teacher_continuity_conflicts();
+    assert!(conflicts.is_empty());
+}
+
+#[test]
+fn teacher_conflict_skipped_when_isolated() {
+    let mut rooms = BTreeMap::new();
+    rooms.insert(nes("A101"), make_room(30));
+    let mut req1 = make_request(
+        chrono::Weekday::Mon,
+        10,
+        (true, false, true),
+        BTreeMap::new(),
+        BTreeMap::new(),
+        0,
+    );
+    let req2 = make_request(
+        chrono::Weekday::Mon,
+        10,
+        (false, false, true),
+        BTreeMap::new(),
+        BTreeMap::new(),
+        0,
+    );
+    req1.skip_room_continuity = true;
+    let data = ScheduleData {
+        rooms,
+        requests: vec![req1, req2],
+        incompats: vec![],
+        config: Config::default(),
+    };
+    let conflicts = data.teacher_continuity_conflicts();
+    assert!(conflicts.is_empty());
+}
+
+// --- Optional SolSalle / SolPrep columns ---
+
+#[test]
+fn parse_requests_with_solsalle() {
+    let (requests, raw_rows, solutions, _) =
+        parsing::parse_requests(&fixture("valid_requests_with_solsalle.csv")).unwrap();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(raw_rows.len(), 1);
+    assert_eq!(raw_rows[0].len(), 18);
+    assert_eq!(requests[0].subjects, vec![nes("Mathématiques")]);
+    assert_eq!(
+        solutions[0].0,
+        Some(RoomSol {
+            room: nes("B202"),
+            mark_fixed: false,
+        })
+    );
+    assert_eq!(solutions[0].1, None);
+}
+
+#[test]
+fn parse_requests_with_both_sol() {
+    let (requests, raw_rows, solutions, _) =
+        parsing::parse_requests(&fixture("valid_requests_with_both_sol.csv")).unwrap();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(raw_rows.len(), 1);
+    assert_eq!(raw_rows[0].len(), 18);
+    assert_eq!(requests[0].subjects, vec![nes("Mathématiques")]);
+    assert_eq!(
+        solutions[0].0,
+        Some(RoomSol {
+            room: nes("B202"),
+            mark_fixed: false,
+        })
+    );
+    assert_eq!(
+        solutions[0].1,
+        Some(RoomSol {
+            room: nes("C303"),
+            mark_fixed: false,
+        })
+    );
+}
+
+#[test]
+fn parse_requests_with_fixed_sol() {
+    let (requests, raw_rows, solutions, _) =
+        parsing::parse_requests(&fixture("valid_requests_with_fixed_sol.csv")).unwrap();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(raw_rows.len(), 1);
+    assert_eq!(raw_rows[0].len(), 18);
+    assert_eq!(
+        solutions[0].0,
+        Some(RoomSol {
+            room: nes("B202"),
+            mark_fixed: true,
+        })
+    );
+    assert_eq!(
+        solutions[0].1,
+        Some(RoomSol {
+            room: nes("C303"),
+            mark_fixed: true,
+        })
+    );
+}
+
+#[test]
+fn parse_requests_solprep_without_solsalle_error() {
+    let err =
+        parsing::parse_requests(&fixture("requests_solprep_without_solsalle.csv")).unwrap_err();
+    assert!(matches!(
+        err,
+        ScheduleError::RequestsUnknownColumn(col) if col == "SolPrep"
+    ));
+}
+
+#[test]
+fn parse_requests_raw_rows_match_input() {
+    let (_, raw_rows, _, _) = parsing::parse_requests(&fixture("valid_requests.csv")).unwrap();
+    assert_eq!(raw_rows.len(), 1);
+    assert_eq!(raw_rows[0][0], "1");
+    assert_eq!(raw_rows[0][3], "Lundi");
+    assert_eq!(raw_rows[0][5], "Mathématiques");
+    assert_eq!(raw_rows[0][13], "A101");
+    assert_eq!(raw_rows[0][17], "0");
+}
+
+// --- Accepted relaxes hard constraints ---
+
+#[test]
+fn accepted_boards_feasible() {
+    assert_checker_feasible("accepted_boards_rooms.csv", "accepted_boards_requests.csv");
+}
+
+#[test]
+fn accepted_boards_assigns_room() {
+    let (data, _, _, _) = parsing::parse_schedule(
+        &fixture("accepted_boards_rooms.csv"),
+        &fixture("accepted_boards_requests.csv"),
+        None,
+        Default::default(),
+    )
+    .unwrap();
+    let model = collomatique_constraints_rooms::build_model(&data);
+    let solver = ColloCbcSolver::with_disable_logging(true);
+    let solved = model.solve_checker(&solver).unwrap();
+    let config = solved.get_data();
+    let assignments = collomatique_constraints_rooms::extract_assignments(&data, &config);
+    assert_eq!(assignments.len(), 1);
+    assert_eq!(assignments[0].room, nes("ROOM_A"));
+}
+
+#[test]
+fn demanded_boards_feasible() {
+    assert_checker_feasible("demanded_boards_rooms.csv", "demanded_boards_requests.csv");
+}
+
+#[test]
+fn demanded_boards_assigns_room() {
+    let (data, _, _, _) = parsing::parse_schedule(
+        &fixture("demanded_boards_rooms.csv"),
+        &fixture("demanded_boards_requests.csv"),
+        None,
+        Default::default(),
+    )
+    .unwrap();
+    let model = collomatique_constraints_rooms::build_model(&data);
+    let solver = ColloCbcSolver::with_disable_logging(true);
+    let solved = model.solve_checker(&solver).unwrap();
+    let config = solved.get_data();
+    let assignments = collomatique_constraints_rooms::extract_assignments(&data, &config);
+    assert_eq!(assignments.len(), 1);
+    assert_eq!(assignments[0].room, nes("ROOM_A"));
+}
+
+#[test]
+fn accepted_windows_feasible() {
+    assert_checker_feasible(
+        "accepted_windows_rooms.csv",
+        "accepted_windows_requests.csv",
+    );
+}
+
+#[test]
+fn accepted_windows_assigns_room() {
+    let (data, _, _, _) = parsing::parse_schedule(
+        &fixture("accepted_windows_rooms.csv"),
+        &fixture("accepted_windows_requests.csv"),
+        None,
+        Default::default(),
+    )
+    .unwrap();
+    let model = collomatique_constraints_rooms::build_model(&data);
+    let solver = ColloCbcSolver::with_disable_logging(true);
+    let solved = model.solve_checker(&solver).unwrap();
+    let config = solved.get_data();
+    let assignments = collomatique_constraints_rooms::extract_assignments(&data, &config);
+    assert_eq!(assignments.len(), 1);
+    assert_eq!(assignments[0].room, nes("ROOM_A"));
+}
+
+#[test]
+fn demanded_windows_feasible() {
+    assert_checker_feasible(
+        "demanded_windows_rooms.csv",
+        "demanded_windows_requests.csv",
+    );
+}
+
+#[test]
+fn demanded_windows_assigns_room() {
+    let (data, _, _, _) = parsing::parse_schedule(
+        &fixture("demanded_windows_rooms.csv"),
+        &fixture("demanded_windows_requests.csv"),
+        None,
+        Default::default(),
+    )
+    .unwrap();
+    let model = collomatique_constraints_rooms::build_model(&data);
+    let solver = ColloCbcSolver::with_disable_logging(true);
+    let solved = model.solve_checker(&solver).unwrap();
+    let config = solved.get_data();
+    let assignments = collomatique_constraints_rooms::extract_assignments(&data, &config);
+    assert_eq!(assignments.len(), 1);
+    assert_eq!(assignments[0].room, nes("ROOM_A"));
+}
+
+// --- Soft penalties prefer rooms meeting requirements ---
+
+#[test]
+fn soft_boards_prefers_good_room() {
+    let (data, _, _, _) = parsing::parse_schedule(
+        &fixture("soft_boards_rooms.csv"),
+        &fixture("soft_boards_requests.csv"),
+        None,
+        Default::default(),
+    )
+    .unwrap();
+    let model = collomatique_constraints_rooms::build_model(&data);
+    let solver = ColloCbcSolver::with_disable_logging(true);
+    let solved = model.solve(&solver).unwrap();
+    let config = solved.get_data();
+    let assignments = collomatique_constraints_rooms::extract_assignments(&data, &config);
+    assert_eq!(assignments.len(), 1);
+    assert_eq!(assignments[0].room, nes("GOOD"));
+}
+
+#[test]
+fn soft_windows_prefers_good_room() {
+    let (data, _, _, _) = parsing::parse_schedule(
+        &fixture("soft_windows_rooms.csv"),
+        &fixture("soft_windows_requests.csv"),
+        None,
+        Default::default(),
+    )
+    .unwrap();
+    let model = collomatique_constraints_rooms::build_model(&data);
+    let solver = ColloCbcSolver::with_disable_logging(true);
+    let solved = model.solve(&solver).unwrap();
+    let config = solved.get_data();
+    let assignments = collomatique_constraints_rooms::extract_assignments(&data, &config);
+    assert_eq!(assignments.len(), 1);
+    assert_eq!(assignments[0].room, nes("GOOD"));
+}
+
+// --- Heat map prefers rooms with proximity preference ---
+
+#[test]
+fn heat_map_prefers_proximity_room() {
+    let (data, _, _, _) = parsing::parse_schedule(
+        &fixture("heat_rooms.csv"),
+        &fixture("heat_requests.csv"),
+        None,
+        Default::default(),
+    )
+    .unwrap();
+    let model = collomatique_constraints_rooms::build_model(&data);
+    let solver = ColloCbcSolver::with_disable_logging(true);
+    let solved = model.solve(&solver).unwrap();
+    let config = solved.get_data();
+    let assignments = collomatique_constraints_rooms::extract_assignments(&data, &config);
+    assert_eq!(assignments.len(), 1);
+    assert_eq!(assignments[0].room, nes("PREFERRED"));
+}
+
+#[test]
+fn prep_heat_map_prefers_proximity_room() {
+    let (data, _, _, _) = parsing::parse_schedule(
+        &fixture("prep_heat_rooms.csv"),
+        &fixture("prep_heat_requests.csv"),
+        None,
+        Default::default(),
+    )
+    .unwrap();
+    let model = collomatique_constraints_rooms::build_model(&data);
+    let solver = ColloCbcSolver::with_disable_logging(true);
+    let solved = model.solve(&solver).unwrap();
+    let config = solved.get_data();
+    let assignments = collomatique_constraints_rooms::extract_assignments(&data, &config);
+    assert_eq!(assignments.len(), 1);
+    assert!(assignments[0].prep_room.is_some());
+    assert_eq!(assignments[0].prep_room.as_ref().unwrap(), &nes("ROOM_B"));
+}
+
+// --- no-objective mode still finds a feasible solution ---
+
+#[test]
+fn no_objective_feasible_with_heat() {
+    let result = collomatique_rooms::run(
+        Some(fixture("heat_rooms.csv").as_path()),
+        &fixture("heat_requests.csv"),
+        None,
+        collomatique_rooms::SolveMode::Solve {
+            no_objective: true,
+            warm: false,
+        },
+        None,
+        Default::default(),
+        0,
+    );
+    assert!(result.is_ok());
+}

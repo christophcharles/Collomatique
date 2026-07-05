@@ -10,6 +10,7 @@ collomatique-state-colloscopes = { path = "../state-colloscopes" }
 collomatique-storage = { path = "../storage" }
 collomatique-time = { path = "../time" }
 collomatique-ilp = { path = "../ilp" }
+collomatique-ilp-modeler = { path = "../ilp-modeler" }
 collomatique-ops = { path = "../ops" }
 collomatique-rpc = { path = "../rpc" }
 collomatique-rpc-engine = { path = "../rpc-engine" }
@@ -17,6 +18,8 @@ collomatique-constraints-colloscopes = { path = "../constraints-colloscopes" }
 collomatique-sqlite-state = { path = "../sqlite-state" }
 collomatique-xlsx = { path = "../xlsx" }
 collomatique-mps = { path = "../mps" }
+collomatique-strategies = { path = "../strategies" }
+collomatique-subprocesses = { path = "../subprocesses" }
 libadwaita = { version = "0.7", features = [ "v1_7" ] }
 gtk4 = { version = "0.9", features = [ "v4_10" ] }
 relm4 = { version = "0.9", features = [ "libadwaita" ] }
