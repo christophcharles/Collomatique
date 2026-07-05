@@ -345,7 +345,7 @@ impl Default for ConductorStrategy {
     fn default() -> Self {
         Self {
             worker_count: NonZeroU32::new(1).expect("1 is non-zero"),
-            enable_default: true,
+            enable_default: false,
             enable_warm_start: true,
             fuzzy_config: None,
         }
@@ -370,6 +370,10 @@ impl ConductorStrategy {
             .unwrap_or(NonZeroU32::MIN);
         Self {
             worker_count,
+            // The full branch-and-bound is what makes this a "complete" optimisation: it lets the
+            // solve prove optimality (close the gap) rather than only hill-climb via fuzzy. Set
+            // explicitly so it does not track `Default`, where it is off (a warm-start-only search).
+            enable_default: true,
             fuzzy_config: Some(FuzzyConfig::default()),
             ..Self::default()
         }
