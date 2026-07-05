@@ -551,6 +551,7 @@ dependencies = [
  "collomatique-state-colloscopes",
  "collomatique-strategies",
  "collomatique-subprocesses",
+ "libc",
  "ordered-float",
  "sqlx",
  "tokio",
@@ -634,6 +635,7 @@ dependencies = [
  "ordered-float",
  "portable-pty",
  "thiserror 1.0.69",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

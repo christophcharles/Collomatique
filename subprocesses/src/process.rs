@@ -5,6 +5,16 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 
+// Killing a parent must tear down its whole subprocess subtree. On unix this happens for free:
+// each child is spawned with a controlling tty, so a parent's death closes the pty master and
+// hangs up the child (SIGHUP → terminate). On windows a kill-on-close Job Object provides the
+// equivalent guarantee (see `job` below). No other platform has a mechanism here, so refuse to
+// build rather than silently orphan solver processes.
+#[cfg(not(any(unix, windows)))]
+compile_error!(
+    "collomatique-subprocesses teardown requires a controlling-tty (unix) or job-object (windows) backend"
+);
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OutputData {
     Utf8(String),
@@ -56,6 +66,12 @@ pub enum SpawnError {
     PipeSpawn(#[source] std::io::Error),
     #[error("Impossible d'acquérir {0}")]
     StreamUnavailable(StdStream),
+    #[cfg(windows)]
+    #[error("Impossible d'obtenir le PID du sous-processus pour le Job Object")]
+    NoPid,
+    #[cfg(windows)]
+    #[error("Erreur à la création du Job Object : {0}")]
+    JobObject(#[source] std::io::Error),
 }
 
 /// Outcome of sending data to a process's stdin.
@@ -148,6 +164,11 @@ pub struct Process {
     /// idempotent and turns a post-exit `kill` into a no-op.
     terminated: Arc<AtomicBool>,
     _reader_handles: Vec<JoinHandle<()>>,
+    /// Windows kill-on-close Job Object owning the child (and its descendants). Held for its
+    /// whole lifetime: when this process dies for any reason the OS closes the handle and kills
+    /// everything in the job, which is what tears the subtree down. Killed explicitly in `kill`.
+    #[cfg(windows)]
+    _job: job::Job,
 }
 
 impl Process {
@@ -191,6 +212,15 @@ impl Process {
             .spawn_command(cmd)
             .map_err(|e| SpawnError::PtySpawn(e.to_string()))?;
 
+        // Bind the child to a kill-on-close job so its subtree dies when this process does.
+        // Safe against the spawn/assign race here: the child (`--rpc-engine`) spawns nothing
+        // until it has received its init payload over stdin, long after assignment.
+        #[cfg(windows)]
+        let job = {
+            let pid = child.process_id().ok_or(SpawnError::NoPid)?;
+            job::Job::kill_on_close_with(pid).map_err(SpawnError::JobObject)?
+        };
+
         let reader = pair
             .master
             .try_clone_reader()
@@ -227,6 +257,8 @@ impl Process {
             stdin,
             terminated,
             _reader_handles: vec![reader_handle],
+            #[cfg(windows)]
+            _job: job,
         })
     }
 
@@ -254,6 +286,10 @@ impl Process {
             .stdin
             .take()
             .ok_or(SpawnError::StreamUnavailable(StdStream::Stdin))?;
+
+        // Bind the child to a kill-on-close job so its subtree dies when this process does.
+        #[cfg(windows)]
+        let job = job::Job::kill_on_close_with(child.id()).map_err(SpawnError::JobObject)?;
 
         let child_handle = ChildHandle::Pipe { child };
         let child_arc = Arc::new(Mutex::new(child_handle));
@@ -287,6 +323,8 @@ impl Process {
             stdin,
             terminated,
             _reader_handles: vec![stdout_handle, stderr_handle],
+            #[cfg(windows)]
+            _job: job,
         })
     }
 
@@ -381,6 +419,11 @@ impl Process {
             let mut guard = self.stdin.lock().unwrap();
             *guard = None;
         }
+        // On windows, terminate the whole job (the child and any descendants) so an explicit
+        // cancel reaps grandchildren too, matching the unix SIGHUP cascade. The reap below then
+        // observes the now-dead child.
+        #[cfg(windows)]
+        self._job.terminate();
         let mut child = self.child.lock().unwrap();
         match child.try_wait() {
             Ok(Some(_)) => Ok(()),
@@ -398,6 +441,89 @@ impl Drop for Process {
     fn drop(&mut self) {
         // Idempotent: a no-op if the child already exited or was killed.
         let _ = self.kill();
+    }
+}
+
+/// Windows kill-on-close Job Object backend for subtree teardown.
+///
+/// A job created with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` kills every process it contains the
+/// moment the last handle to it is closed. Since the OS closes all of a process's handles when it
+/// dies — for any reason, including a hard kill or a crash — holding the job handle in the parent
+/// means the child and every descendant that inherited the job are killed when the parent dies.
+/// This is the windows equivalent of the unix pty-hangup/SIGHUP cascade.
+#[cfg(windows)]
+mod job {
+    use std::io;
+    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
+    use windows_sys::Win32::System::JobObjects::{
+        AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
+        SetInformationJobObject, TerminateJobObject,
+    };
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, PROCESS_SET_QUOTA, PROCESS_TERMINATE,
+    };
+
+    /// Owns a kill-on-close Job Object handle. Dropping it (or the owning process dying) closes
+    /// the handle and terminates every process still in the job.
+    pub struct Job {
+        handle: HANDLE,
+    }
+
+    // A job object is a plain kernel handle with no thread affinity.
+    unsafe impl Send for Job {}
+    unsafe impl Sync for Job {}
+
+    impl Job {
+        /// Create a kill-on-close job and assign the process `pid` to it.
+        pub fn kill_on_close_with(pid: u32) -> io::Result<Job> {
+            unsafe {
+                let handle = CreateJobObjectW(std::ptr::null(), std::ptr::null());
+                if handle.is_null() {
+                    return Err(io::Error::last_os_error());
+                }
+                // `job` now owns `handle`; any early return closes it via `Drop`.
+                let job = Job { handle };
+
+                let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+                info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+                if SetInformationJobObject(
+                    handle,
+                    JobObjectExtendedLimitInformation,
+                    &info as *const _ as *const core::ffi::c_void,
+                    std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+                ) == 0
+                {
+                    return Err(io::Error::last_os_error());
+                }
+
+                let process = OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, 0, pid);
+                if process.is_null() {
+                    return Err(io::Error::last_os_error());
+                }
+                let assigned = AssignProcessToJobObject(handle, process);
+                CloseHandle(process);
+                if assigned == 0 {
+                    return Err(io::Error::last_os_error());
+                }
+                Ok(job)
+            }
+        }
+
+        /// Immediately terminate every process in the job (the whole subtree).
+        pub fn terminate(&self) {
+            unsafe {
+                TerminateJobObject(self.handle, 1);
+            }
+        }
+    }
+
+    impl Drop for Job {
+        fn drop(&mut self) {
+            unsafe {
+                CloseHandle(self.handle);
+            }
+        }
     }
 }
 
@@ -420,6 +546,49 @@ mod tests {
         rx.recv_timeout(Duration::from_secs(5))
             .expect("child should exit promptly");
         process
+    }
+
+    /// The load-bearing unix teardown mechanism: a child spawned with a controlling tty dies
+    /// when the pty master is closed, because the kernel hangs up its controlling terminal and
+    /// delivers SIGHUP (default disposition: terminate). In production the master is closed by
+    /// the OS when a parent process dies (for any reason, including a hard kill), which is what
+    /// cascades the teardown down the subprocess tree. This asserts the primitive holds on the
+    /// current platform (Linux and macOS).
+    #[test]
+    fn closing_the_pty_master_hangs_up_the_child() {
+        use portable_pty::{PtySize, native_pty_system};
+
+        let pair = native_pty_system()
+            .openpty(PtySize {
+                rows: 24,
+                cols: 80,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .expect("openpty");
+
+        let mut cmd = CommandBuilder::new("sleep");
+        cmd.arg("300");
+        let mut child = pair.slave.spawn_command(cmd).expect("spawn");
+        drop(pair.slave);
+
+        // Close the master: this hangs up the child's controlling terminal.
+        drop(pair.master);
+
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            match child.try_wait() {
+                Ok(Some(_)) => break, // terminated by SIGHUP, as expected
+                Ok(None) => {
+                    if std::time::Instant::now() > deadline {
+                        let _ = child.kill();
+                        panic!("child survived pty master close — no SIGHUP hangup");
+                    }
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+                Err(e) => panic!("try_wait failed: {e}"),
+            }
+        }
     }
 
     #[test]

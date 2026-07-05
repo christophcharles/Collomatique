@@ -20,3 +20,6 @@ ordered-float.workspace = true
 anyhow.workspace = true
 tokio = { workspace = true, features = ["rt", "rt-multi-thread"] }
 sqlx = { workspace = true, features = ["runtime-tokio", "sqlite"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

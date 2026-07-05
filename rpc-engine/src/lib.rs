@@ -294,6 +294,16 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
 ///
 /// Runs the RPC engine through stdin/stdout
 pub fn run_rpc_engine() -> Result<(), anyhow::Error> {
+    // Insurance for the Unix subprocess-teardown mechanism: children die when their
+    // parent dies because closing the parent-held pty master hangs up the child's
+    // controlling terminal, delivering SIGHUP (default disposition: terminate). Reset
+    // SIGHUP to SIG_DFL up front so that a signal handler installed by a linked library
+    // (e.g. a future CBC build) can never leave a worker alive through the hangup.
+    #[cfg(unix)]
+    unsafe {
+        libc::signal(libc::SIGHUP, libc::SIG_DFL);
+    }
+
     eprintln!("Waiting for initial payload...");
     let init_msg = match wait_for_init_msg() {
         Ok(x) => x,
