@@ -28,6 +28,9 @@ use warning_icon::WarningIcon;
 pub struct Dialog<B: UsableData, E: UsableData, C: UsableData> {
     hidden: bool,
     is_running: bool,
+    // True while the (slow, off-thread) `StrategySubprocess::spawn` is in flight; the view shows
+    // a dedicated "Initialisation..." screen and hides the normal solve content meanwhile.
+    initializing: bool,
     end_with_error: bool,
     show_debug: bool,
     global_debug_view: Controller<DebugView>,
@@ -78,11 +81,30 @@ pub enum DialogOutput<B: UsableData, E: UsableData> {
     NewConfig(ConfigData<InternalVar<B, E>>),
 }
 
-/// Periodic elapsed-time refresh. Carries the run's start instant as a generation epoch so a
-/// stale tick from a previous run is dropped rather than reviving the loop.
-#[derive(Debug)]
+/// Outputs of the dialog's background commands.
+///
+/// `Tick` is the periodic elapsed-time refresh; it carries the run's start instant as a
+/// generation epoch so a stale tick from a previous run is dropped rather than reviving the loop.
+/// `SpawnResult` carries the outcome of the off-thread `StrategySubprocess::spawn`.
+///
+/// `Debug` is implemented by hand because `StrategySubprocess` is not `Debug` (its `Worker`
+/// holds a `Box<dyn Write + Send>`), yet relm4 requires `CommandOutput: Debug`.
 pub enum DialogCommandOutput {
     Tick(Instant),
+    SpawnResult(Result<StrategySubprocess, String>),
+}
+
+impl std::fmt::Debug for DialogCommandOutput {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DialogCommandOutput::Tick(i) => f.debug_tuple("Tick").field(i).finish(),
+            DialogCommandOutput::SpawnResult(Ok(_)) => write!(f, "SpawnResult(Ok(_))"),
+            DialogCommandOutput::SpawnResult(Err(e)) => f
+                .debug_tuple("SpawnResult")
+                .field(&Err::<(), _>(e))
+                .finish(),
+        }
+    }
 }
 
 #[relm4::component(pub)]
@@ -132,12 +154,32 @@ where
                     set_orientation: gtk::Orientation::Vertical,
                     set_hexpand: true,
                     set_vexpand: true,
+                    // Shown while the worker subprocess is being spawned off-thread; all the
+                    // normal solve content below is hidden meanwhile (gated on `!initializing`).
+                    gtk::Box {
+                        set_orientation: gtk::Orientation::Vertical,
+                        set_hexpand: true,
+                        set_vexpand: true,
+                        set_halign: gtk::Align::Center,
+                        set_valign: gtk::Align::Center,
+                        set_spacing: 5,
+                        #[watch]
+                        set_visible: model.initializing,
+                        adw::Spinner {
+                            set_size_request: (64, 64),
+                        },
+                        gtk::Label {
+                            set_margin_top: 15,
+                            set_label: "Initialisation...",
+                            set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
+                        },
+                    },
                     gtk::Box {
                         set_hexpand: true,
                         set_vexpand: true,
                         set_margin_all: 5,
                         #[watch]
-                        set_visible: model.displayed_worker.is_none() && !model.show_debug,
+                        set_visible: !model.initializing && model.displayed_worker.is_none() && !model.show_debug,
                         gtk::Frame {
                             set_margin_all: 5,
                             set_hexpand: true,
@@ -332,7 +374,7 @@ where
                         set_vexpand: true,
                         set_margin_all: 5,
                         #[watch]
-                        set_visible: model.displayed_worker.is_none() && model.show_debug,
+                        set_visible: !model.initializing && model.displayed_worker.is_none() && model.show_debug,
                         append: model.global_debug_view.widget(),
                     },
                     #[local_ref]
@@ -340,7 +382,7 @@ where
                         set_hexpand: true,
                         set_vexpand: true,
                         #[watch]
-                        set_visible: model.displayed_worker.is_some(),
+                        set_visible: !model.initializing && model.displayed_worker.is_some(),
                     },
                     gtk::Box {
                         set_orientation: gtk::Orientation::Horizontal,
@@ -348,6 +390,8 @@ where
                         set_margin_all: 10,
                         set_margin_top: 0,
                         set_spacing: 10,
+                        #[watch]
+                        set_visible: !model.initializing,
                         append: model.worker_dropdown.widget(),
                         #[local_ref]
                         report_errors_box -> gtk::Box {
@@ -462,6 +506,7 @@ where
         let model = Dialog {
             hidden: true,
             is_running: false,
+            initializing: false,
             end_with_error: false,
             show_debug: false,
             global_debug_view,
@@ -498,6 +543,7 @@ where
             DialogInput::Run(strategy, model) => {
                 self.hidden = false;
                 self.is_running = true;
+                self.initializing = true;
                 self.end_with_error = false;
                 self.show_debug = false;
                 self.last_line = String::new();
@@ -533,69 +579,74 @@ where
                     .unwrap();
                 self.global_debug_view.emit(DebugViewInput::Clear);
 
+                // Building the model description, serializing it and spawning the worker
+                // subprocess takes over a second of blocking work. Run it on the blocking
+                // thread pool so the UI stays responsive and shows the "Initialisation..."
+                // screen; the resulting handle (or error) comes back as a `SpawnResult`
+                // command output. See `update_cmd`.
                 let input = sender.input_sender().clone();
-                let log_input = input.clone();
-                let progress_input = input.clone();
-                let result_input = input.clone();
-                let log_cb = move |line: &str| {
-                    log_input.emit(DialogInput::Echo(line.to_owned()));
-                };
-                // The conductor hands us typed per-worker progress
-                let (_, progress_var_order) = model.to_desc();
-                let progress_cb = move |progress: Result<
-                    ConductorProgress<InternalVar<B, E>>,
-                    String,
-                >| {
-                    match progress {
-                        Ok(ConductorProgress::Conductor(status)) => {
-                            progress_input.emit(DialogInput::ConductorStatus(status));
-                        }
-                        Ok(ConductorProgress::WorkerProgress {
-                            worker_num,
-                            progress,
-                        }) => {
-                            let data =
-                                SerializableProgress::into_data(&*progress, &progress_var_order)
+                sender.spawn_oneshot_command(move || {
+                    let log_input = input.clone();
+                    let progress_input = input.clone();
+                    let result_input = input.clone();
+                    let log_cb = move |line: &str| {
+                        log_input.emit(DialogInput::Echo(line.to_owned()));
+                    };
+                    // The conductor hands us typed per-worker progress
+                    let (_, progress_var_order) = model.to_desc();
+                    let progress_cb =
+                        move |progress: Result<ConductorProgress<InternalVar<B, E>>, String>| {
+                            match progress {
+                                Ok(ConductorProgress::Conductor(status)) => {
+                                    progress_input.emit(DialogInput::ConductorStatus(status));
+                                }
+                                Ok(ConductorProgress::WorkerProgress {
+                                    worker_num,
+                                    progress,
+                                }) => {
+                                    let data = SerializableProgress::into_data(
+                                        &*progress,
+                                        &progress_var_order,
+                                    )
                                     .unwrap_or_else(|e| match e {});
-                            progress_input.emit(DialogInput::StrategyUpdate(worker_num, data));
-                        }
-                        Ok(ConductorProgress::WorkerEcho { worker_num, echo }) => {
-                            progress_input.emit(DialogInput::WorkerEcho(worker_num, echo));
-                        }
-                        Ok(ConductorProgress::WorkerAssigned {
-                            worker_num,
-                            strategy,
-                        }) => {
-                            progress_input.emit(DialogInput::WorkerAssigned(
-                                worker_num,
-                                strategy.map(|b| *b),
-                            ));
-                        }
-                        // A top-level Err is not attributable to a specific worker
-                        // (we can't decode which one), so surface it as a warning icon
-                        // next to the dropdown rather than dropping it.
-                        Err(e) => {
-                            progress_input.emit(DialogInput::ReportError(e));
-                        }
-                    }
-                };
-                let result_cb = move |outcome: StrategyOutcome<InternalVar<B, E>>| {
-                    result_input.emit(DialogInput::Finished(outcome));
-                };
+                                    progress_input
+                                        .emit(DialogInput::StrategyUpdate(worker_num, data));
+                                }
+                                Ok(ConductorProgress::WorkerEcho { worker_num, echo }) => {
+                                    progress_input.emit(DialogInput::WorkerEcho(worker_num, echo));
+                                }
+                                Ok(ConductorProgress::WorkerAssigned {
+                                    worker_num,
+                                    strategy,
+                                }) => {
+                                    progress_input.emit(DialogInput::WorkerAssigned(
+                                        worker_num,
+                                        strategy.map(|b| *b),
+                                    ));
+                                }
+                                // A top-level Err is not attributable to a specific worker
+                                // (we can't decode which one), so surface it as a warning icon
+                                // next to the dropdown rather than dropping it.
+                                Err(e) => {
+                                    progress_input.emit(DialogInput::ReportError(e));
+                                }
+                            }
+                        };
+                    let result_cb = move |outcome: StrategyOutcome<InternalVar<B, E>>| {
+                        result_input.emit(DialogInput::Finished(outcome));
+                    };
 
-                let spawn_result = StrategySubprocess::spawn(
-                    &model,
-                    &strategy,
-                    None,
-                    result_cb,
-                    progress_cb,
-                    log_cb,
-                );
+                    let spawn_result = StrategySubprocess::spawn(
+                        &model,
+                        &strategy,
+                        None,
+                        result_cb,
+                        progress_cb,
+                        log_cb,
+                    );
 
-                match spawn_result {
-                    Ok(handle) => self.subprocess = Some(handle),
-                    Err(e) => sender.input(DialogInput::SpawnError(e.to_string())),
-                }
+                    DialogCommandOutput::SpawnResult(spawn_result.map_err(|e| e.to_string()))
+                });
             }
             DialogInput::CancelRequest => {
                 if self.is_running {
@@ -740,20 +791,36 @@ where
         sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
-        let DialogCommandOutput::Tick(epoch) = msg;
-        // Drop stale ticks from a previous run and let the loop die once the solve has stopped.
-        // Running this handler is itself enough to re-render the global `#[watch]` timer label.
-        if !self.is_running || self.run_start != Some(epoch) {
-            return;
+        match msg {
+            DialogCommandOutput::Tick(epoch) => {
+                // Drop stale ticks from a previous run and let the loop die once the solve has
+                // stopped. Running this handler is itself enough to re-render the global
+                // `#[watch]` timer label.
+                if !self.is_running || self.run_start != Some(epoch) {
+                    return;
+                }
+                // Fan the refresh out to every worker frame so their timer labels recompute too.
+                for i in 0..self.strategy_frames.len() {
+                    self.strategy_frames.send(i, StrategyDisplayInput::Refresh);
+                }
+                sender.oneshot_command(async move {
+                    tokio::time::sleep(REFRESH_INTERVAL).await;
+                    DialogCommandOutput::Tick(epoch)
+                });
+            }
+            DialogCommandOutput::SpawnResult(result) => {
+                self.initializing = false;
+                match result {
+                    // If the solve was cancelled during initialization,
+                    // `hidden` is true; don't store (and thus leak) the worker —
+                    // kill it immediately.
+                    Ok(handle) if !self.hidden => self.subprocess = Some(handle),
+                    Ok(handle) => handle.kill(),
+                    Err(e) if !self.hidden => sender.input(DialogInput::SpawnError(e)),
+                    Err(_e) => {} // Ignore message if the dialog was hidden during init
+                }
+            }
         }
-        // Fan the refresh out to every worker frame so their timer labels recompute too.
-        for i in 0..self.strategy_frames.len() {
-            self.strategy_frames.send(i, StrategyDisplayInput::Refresh);
-        }
-        sender.oneshot_command(async move {
-            tokio::time::sleep(REFRESH_INTERVAL).await;
-            DialogCommandOutput::Tick(epoch)
-        });
     }
 }
 
