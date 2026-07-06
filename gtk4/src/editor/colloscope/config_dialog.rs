@@ -5,12 +5,50 @@ use relm4::{
 };
 use relm4::{adw, gtk};
 
+use collomatique_state_colloscopes::colloscope_params::Parameters;
 use collomatique_strategies::ConductorStrategy;
 
 use crate::editor::run_solver::conductor_config;
 
+/// The fully-assembled solve configuration handed off when the user validates this dialog. It
+/// owns everything needed to (re)build the model to be solved. For now that is just the problem
+/// parameters and the conductor strategy; model-refinement fields (problem scoping, ...) will be
+/// added here later.
+#[derive(Debug, Clone)]
+pub struct SolveConfig {
+    pub params: Parameters,
+    pub strategy: ConductorStrategy,
+}
+
+impl SolveConfig {
+    /// Build the ILP model to be solved, streaming build log lines through `log`. The build is a
+    /// pure function of the parameters (the colloscope is discarded by the model builder), so the
+    /// current assignments are intentionally left at their default here.
+    pub async fn build_model(
+        &self,
+        log: &mut (dyn FnMut(&str) + Send),
+    ) -> Result<collomatique_constraints_colloscopes::ColloscopeModel, String> {
+        let inner_data = collomatique_state_colloscopes::InnerData {
+            params: self.params.clone(),
+            ..Default::default()
+        };
+        let pool = sqlx::SqlitePool::connect(":memory:")
+            .await
+            .map_err(|e| e.to_string())?;
+        collomatique_sqlite_state::create_schema(&pool)
+            .await
+            .map_err(|e| e.to_string())?;
+        collomatique_sqlite_state::inner_data_to_sqlite(&pool, &inner_data)
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok(collomatique_constraints_colloscopes::build_model_with_log(&pool, log).await)
+    }
+}
+
 pub struct Dialog {
     hidden: bool,
+    /// The parameters the assembled [`SolveConfig`] will build its model from, set on `Show`.
+    params: Parameters,
     /// The problem/solver configuration this window is assembling. For now only the conductor
     /// strategy is tracked; problem-scoping widgets will be added here later.
     strategy: ConductorStrategy,
@@ -20,7 +58,7 @@ pub struct Dialog {
 
 #[derive(Debug)]
 pub enum DialogInput {
-    Show,
+    Show(Parameters),
     Cancel,
     Accept,
     OpenAdvanced,
@@ -31,7 +69,7 @@ pub enum DialogInput {
 #[derive(Debug)]
 pub enum DialogOutput {
     Cancelled,
-    Accepted(ConductorStrategy),
+    Accepted(SolveConfig),
 }
 
 impl Dialog {
@@ -192,6 +230,7 @@ impl SimpleComponent for Dialog {
 
         let model = Dialog {
             hidden: true,
+            params: Parameters::default(),
             strategy: ConductorStrategy::with_parallelism_defaults(),
             conductor_config_dialog,
         };
@@ -203,8 +242,9 @@ impl SimpleComponent for Dialog {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         match msg {
-            DialogInput::Show => {
+            DialogInput::Show(params) => {
                 self.hidden = false;
+                self.params = params;
                 self.strategy = ConductorStrategy::with_parallelism_defaults();
             }
             DialogInput::OpenAdvanced => {
@@ -224,7 +264,10 @@ impl SimpleComponent for Dialog {
             DialogInput::Accept => {
                 self.hidden = true;
                 sender
-                    .output(DialogOutput::Accepted(self.strategy.clone()))
+                    .output(DialogOutput::Accepted(SolveConfig {
+                        params: self.params.clone(),
+                        strategy: self.strategy.clone(),
+                    }))
                     .unwrap();
             }
         }

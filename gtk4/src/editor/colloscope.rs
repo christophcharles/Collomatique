@@ -24,6 +24,7 @@ mod config_dialog;
 mod group_list_dialog;
 mod group_lists_display;
 mod interrogation_dialog;
+mod loading_dialog;
 
 #[derive(Debug)]
 pub enum ColloscopeInput {
@@ -43,8 +44,12 @@ pub enum ColloscopeInput {
     InterrogationAccepted(collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation),
 
     SolveColloscopeClicked,
-    ConductorConfigAccepted(collomatique_strategies::ConductorStrategy),
+    ConductorConfigAccepted(config_dialog::SolveConfig),
     ConductorConfigCancelled,
+    ModelBuilt(
+        config_dialog::SolveConfig,
+        collomatique_constraints_colloscopes::ColloscopeModel,
+    ),
     SolveResult(
         collomatique_ilp::ConfigData<collomatique_constraints_colloscopes::ProblemInternalVar>,
     ),
@@ -143,6 +148,7 @@ pub struct Colloscope {
     blame_dialog: Controller<blame_dialog::Dialog>,
     run_solver_dialog: Controller<SolverDialog>,
     config_dialog: Controller<config_dialog::Dialog>,
+    loading_dialog: Controller<loading_dialog::Dialog>,
 
     edited_group_list: Option<collomatique_state_colloscopes::GroupListId>,
     edited_interrogation: Option<(
@@ -421,8 +427,6 @@ impl Component for Colloscope {
                             set_icon_name: "system-run-symbolic",
                             set_label: "Générer le colloscope automatiquement",
                         },
-                        #[watch]
-                        set_sensitive: model.get_ilp_problem().is_some(),
                         connect_clicked => ColloscopeInput::SolveColloscopeClicked,
                     },
                 },
@@ -543,10 +547,19 @@ impl Component for Colloscope {
             .transient_for(&root)
             .launch(())
             .forward(sender.input_sender(), |msg| match msg {
-                config_dialog::DialogOutput::Accepted(strategy) => {
-                    ColloscopeInput::ConductorConfigAccepted(strategy)
+                config_dialog::DialogOutput::Accepted(config) => {
+                    ColloscopeInput::ConductorConfigAccepted(config)
                 }
                 config_dialog::DialogOutput::Cancelled => ColloscopeInput::ConductorConfigCancelled,
+            });
+
+        let loading_dialog = loading_dialog::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                loading_dialog::DialogOutput::ModelReady(config, model) => {
+                    ColloscopeInput::ModelBuilt(config, model)
+                }
             });
 
         let model = Colloscope {
@@ -561,6 +574,7 @@ impl Component for Colloscope {
             blame_dialog,
             run_solver_dialog,
             config_dialog,
+            loading_dialog,
             last_update: None,
             computation_artifact: None,
             inflight_cmd: InflightCommand {
@@ -709,27 +723,28 @@ impl Component for Colloscope {
                     .unwrap();
             }
             ColloscopeInput::SolveColloscopeClicked => {
-                // Only solvable once the ILP model is built (debounce finished). If no
-                // problem is ready yet, ignore the click (should not happen since the button is not sensitive then).
-                if self.get_ilp_problem().is_some() {
-                    self.config_dialog
-                        .sender()
-                        .send(config_dialog::DialogInput::Show)
-                        .unwrap();
-                }
+                // The model is (re)built at solve time from the current parameters, so this no
+                // longer depends on the debounce artifact being ready. The solve dialogs are
+                // modal and freeze `params`, so the built model matches what is on screen.
+                self.config_dialog
+                    .sender()
+                    .send(config_dialog::DialogInput::Show(self.params.clone()))
+                    .unwrap();
             }
-            ColloscopeInput::ConductorConfigAccepted(strategy) => {
-                // Launch the solver now that the conductor configuration has been
-                // confirmed. The problem is read from the current artifact: the solve
-                // dialogs are modal and freeze `params`, so it is the same problem that
-                // was ready when the solve was requested.
-                if let Some(ilp_problem) = self.get_ilp_problem() {
-                    let model = ilp_problem.problem.clone();
-                    self.run_solver_dialog
-                        .sender()
-                        .send(run_solver::DialogInput::Run(strategy, model))
-                        .unwrap();
-                }
+            ColloscopeInput::ConductorConfigAccepted(config) => {
+                // Configuration confirmed: build the (possibly refined) model for this solve in
+                // the loading dialog, which streams the build log and hands back the model.
+                self.loading_dialog
+                    .sender()
+                    .send(loading_dialog::DialogInput::Show(config))
+                    .unwrap();
+            }
+            ColloscopeInput::ModelBuilt(config, model) => {
+                // The model has been built: launch the solver as before.
+                self.run_solver_dialog
+                    .sender()
+                    .send(run_solver::DialogInput::Run(config.strategy, model))
+                    .unwrap();
             }
             ColloscopeInput::ConductorConfigCancelled => {
                 // The solve was abandoned before it started; nothing to undo.
