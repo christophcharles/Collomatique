@@ -830,13 +830,21 @@ fn decode_soft_param_unit(soft_val: Option<i64>) -> Option<soft_param::SoftParam
     })
 }
 
+fn encode_bool_flag(enabled: bool) -> Option<i64> {
+    Some(enabled as i64)
+}
+
+fn decode_bool_flag(enabled_val: Option<i64>) -> bool {
+    matches!(enabled_val, Some(v) if v != 0)
+}
+
 async fn insert_balancing(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     balancing_data: &balancing::Balancing,
 ) -> Result<(), Error> {
     // Insert global balancing
     sqlx::query(
-        "INSERT INTO balancing_global (id, teacher_rotation_soft, slot_rotation_soft, avoid_twice_in_a_row_soft, year_teacher_rotation_soft, period_teacher_rotation_soft)
+        "INSERT INTO balancing_global (id, teacher_rotation_soft, slot_rotation_soft, avoid_twice_in_a_row_enabled, year_teacher_rotation_enabled, period_teacher_rotation_enabled)
          VALUES (1, ?, ?, ?, ?, ?)",
     )
     .bind(encode_soft_param_unit(
@@ -845,14 +853,14 @@ async fn insert_balancing(
     .bind(encode_soft_param_unit(
         &balancing_data.global.slot_rotation,
     ))
-    .bind(encode_soft_param_unit(
-        &balancing_data.global.avoid_twice_in_a_row,
+    .bind(encode_bool_flag(
+        balancing_data.global.avoid_twice_in_a_row,
     ))
-    .bind(encode_soft_param_unit(
-        &balancing_data.global.year_teacher_rotation,
+    .bind(encode_bool_flag(
+        balancing_data.global.year_teacher_rotation,
     ))
-    .bind(encode_soft_param_unit(
-        &balancing_data.global.period_teacher_rotation,
+    .bind(encode_bool_flag(
+        balancing_data.global.period_teacher_rotation,
     ))
     .execute(&mut **tx)
     .await?;
@@ -860,15 +868,15 @@ async fn insert_balancing(
     // Insert per-subject balancing
     for (subject_id, options) in &balancing_data.subjects {
         sqlx::query(
-            "INSERT INTO balancing_subjects (subject_id, teacher_rotation_soft, slot_rotation_soft, avoid_twice_in_a_row_soft, year_teacher_rotation_soft, period_teacher_rotation_soft)
+            "INSERT INTO balancing_subjects (subject_id, teacher_rotation_soft, slot_rotation_soft, avoid_twice_in_a_row_enabled, year_teacher_rotation_enabled, period_teacher_rotation_enabled)
              VALUES (?, ?, ?, ?, ?, ?)",
         )
         .bind(subject_id.inner() as i64)
         .bind(encode_soft_param_unit(&options.teacher_rotation))
         .bind(encode_soft_param_unit(&options.slot_rotation))
-        .bind(encode_soft_param_unit(&options.avoid_twice_in_a_row))
-        .bind(encode_soft_param_unit(&options.year_teacher_rotation))
-        .bind(encode_soft_param_unit(&options.period_teacher_rotation))
+        .bind(encode_bool_flag(options.avoid_twice_in_a_row))
+        .bind(encode_bool_flag(options.year_teacher_rotation))
+        .bind(encode_bool_flag(options.period_teacher_rotation))
         .execute(&mut **tx)
         .await?;
     }
@@ -2056,39 +2064,41 @@ type BalancingSubjectRow = (
 
 async fn read_balancing(pool: &SqlitePool) -> Result<balancing::Balancing, Error> {
     let global_row: Option<BalancingGlobalRow> = sqlx::query_as(
-        "SELECT teacher_rotation_soft, slot_rotation_soft, avoid_twice_in_a_row_soft, year_teacher_rotation_soft, period_teacher_rotation_soft
+        "SELECT teacher_rotation_soft, slot_rotation_soft, avoid_twice_in_a_row_enabled, year_teacher_rotation_enabled, period_teacher_rotation_enabled
          FROM balancing_global WHERE id = 1",
     )
     .fetch_optional(pool)
     .await?;
 
     let global = match global_row {
-        Some((tr_soft, sr_soft, atar_soft, ytr_soft, ptr_soft)) => balancing::BalancingOptions {
-            teacher_rotation: decode_soft_param_unit(tr_soft),
-            slot_rotation: decode_soft_param_unit(sr_soft),
-            avoid_twice_in_a_row: decode_soft_param_unit(atar_soft),
-            year_teacher_rotation: decode_soft_param_unit(ytr_soft),
-            period_teacher_rotation: decode_soft_param_unit(ptr_soft),
-        },
+        Some((tr_soft, sr_soft, atar_enabled, ytr_enabled, ptr_enabled)) => {
+            balancing::BalancingOptions {
+                teacher_rotation: decode_soft_param_unit(tr_soft),
+                slot_rotation: decode_soft_param_unit(sr_soft),
+                avoid_twice_in_a_row: decode_bool_flag(atar_enabled),
+                year_teacher_rotation: decode_bool_flag(ytr_enabled),
+                period_teacher_rotation: decode_bool_flag(ptr_enabled),
+            }
+        }
         None => balancing::BalancingOptions::default(),
     };
 
     let subject_rows: Vec<BalancingSubjectRow> = sqlx::query_as(
-        "SELECT subject_id, teacher_rotation_soft, slot_rotation_soft, avoid_twice_in_a_row_soft, year_teacher_rotation_soft, period_teacher_rotation_soft
+        "SELECT subject_id, teacher_rotation_soft, slot_rotation_soft, avoid_twice_in_a_row_enabled, year_teacher_rotation_enabled, period_teacher_rotation_enabled
          FROM balancing_subjects",
     )
     .fetch_all(pool)
     .await?;
 
     let mut subjects = BTreeMap::new();
-    for (subject_id, tr_soft, sr_soft, atar_soft, ytr_soft, ptr_soft) in subject_rows {
+    for (subject_id, tr_soft, sr_soft, atar_enabled, ytr_enabled, ptr_enabled) in subject_rows {
         let id = unsafe { SubjectId::new(subject_id as u64) };
         let options = balancing::BalancingOptions {
             teacher_rotation: decode_soft_param_unit(tr_soft),
             slot_rotation: decode_soft_param_unit(sr_soft),
-            avoid_twice_in_a_row: decode_soft_param_unit(atar_soft),
-            year_teacher_rotation: decode_soft_param_unit(ytr_soft),
-            period_teacher_rotation: decode_soft_param_unit(ptr_soft),
+            avoid_twice_in_a_row: decode_bool_flag(atar_enabled),
+            year_teacher_rotation: decode_bool_flag(ytr_enabled),
+            period_teacher_rotation: decode_bool_flag(ptr_enabled),
         };
         subjects.insert(id, options);
     }

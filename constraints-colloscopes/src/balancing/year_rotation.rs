@@ -1,15 +1,14 @@
 use crate::extras::{MyBundle, subject_interrogation_params};
 use crate::helpers::{
-    enrolled_students_for_subject, last_global_week, merge_objectified_weighted,
-    slot_week_pairs_for_subject,
+    enrolled_students_for_subject, last_global_week, slot_week_pairs_for_subject,
 };
 use crate::ids::GlobalWeek;
-use crate::types::{ExtraVarName, PreferenceConstraint};
+use crate::types::PreferenceConstraint;
 use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 
 use super::helpers::{
-    count_student_teacher_expr, effective_balancing_option, slot_week_pairs_for_teacher,
+    count_student_teacher_expr, effective_balancing_flag, slot_week_pairs_for_teacher,
     slot_weeks_in_range, teachers_for_subject, year_interrogation_count,
 };
 
@@ -23,12 +22,9 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         let Some(_params) = subject_interrogation_params(env, *subject_id) else {
             continue;
         };
-        let Some(sp) =
-            effective_balancing_option(env, *subject_id, |opts| &opts.year_teacher_rotation)
-        else {
+        if !effective_balancing_flag(env, *subject_id, |opts| opts.year_teacher_rotation) {
             continue;
-        };
-        let is_soft = sp.soft;
+        }
 
         let Some(nb_interr) = year_interrogation_count(env, *subject_id) else {
             continue;
@@ -48,7 +44,6 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         let teachers = teachers_for_subject(env, *subject_id);
 
         let mut hard_bundle = MyBundle::new();
-        let mut soft_bundle = MyBundle::new();
 
         for &teacher in &teachers {
             let teacher_pairs =
@@ -68,26 +63,12 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                     max_count,
                 }
                 .into();
-                if is_soft {
-                    soft_bundle = soft_bundle.with_constraint(constraint, desc);
-                } else {
-                    hard_bundle = hard_bundle.with_constraint(constraint, desc);
-                }
+                hard_bundle = hard_bundle.with_constraint(constraint, desc);
             }
         }
 
         output = output
-            .merge(merge_objectified_weighted(
-                hard_bundle,
-                soft_bundle,
-                ExtraVarName::BalancingYearRotationPenalty {
-                    subject: *subject_id,
-                },
-                // Single whole-year window (no window-size variation): a constant,
-                // light weight. Routing through the weighted sum still removes the
-                // 1/n normalization and global max of the old penalty.
-                |_| crate::weights::BASE,
-            ))
+            .merge(hard_bundle)
             .expect("no duplicate extras from balancing year rotation (distinct subjects)");
     }
 

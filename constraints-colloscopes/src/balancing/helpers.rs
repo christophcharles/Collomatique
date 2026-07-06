@@ -21,6 +21,17 @@ pub(super) fn effective_balancing_option<'a>(
         .or_else(|| extract(&env.balancing.global).as_ref())
 }
 
+pub(super) fn effective_balancing_flag(
+    env: &VarEnv,
+    subject_id: SubjectId,
+    extract: impl Fn(&BalancingOptions) -> bool,
+) -> bool {
+    match env.balancing.subjects.get(&subject_id) {
+        Some(b) => extract(b),
+        None => extract(&env.balancing.global),
+    }
+}
+
 pub(super) fn teachers_for_subject(env: &VarEnv, subject_id: SubjectId) -> BTreeSet<TeacherId> {
     let Some(subject_slots) = env.slots.subject_map.get(&subject_id) else {
         return BTreeSet::new();

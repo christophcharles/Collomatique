@@ -65,19 +65,10 @@ pub enum ExtraVarName {
         teacher: TeacherId,
         week: GlobalWeek,
     },
-    BalancingAvoidTwiceInARowPenalty {
-        subject: SubjectId,
-    },
-    BalancingYearRotationPenalty {
-        subject: SubjectId,
-    },
     BalancingRotationPenalty {
         subject: SubjectId,
     },
     BalancingSlotRotationPenalty {
-        subject: SubjectId,
-    },
-    BalancingPeriodRotationPenalty {
         subject: SubjectId,
     },
 }
