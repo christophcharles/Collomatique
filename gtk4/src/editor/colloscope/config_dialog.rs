@@ -10,26 +10,50 @@ use collomatique_strategies::ConductorStrategy;
 
 use crate::editor::run_solver::conductor_config;
 
-/// The fully-assembled solve configuration handed off when the user validates this dialog. It
-/// owns everything needed to (re)build the model to be solved. For now that is just the problem
-/// parameters and the conductor strategy; model-refinement fields (problem scoping, ...) will be
-/// added here later.
+/// The "how to solve" half of a solve request, handed off when the user validates this dialog.
+/// It is deliberately independent of the problem [`Parameters`] (the "what to solve" half), which
+/// travels alongside it. For now it is just the conductor strategy; model-refinement fields
+/// (problem scoping, ...) will be added here later, which is why it also owns a [`sanitize`] seam
+/// and the `params`-taking [`build_model`].
+///
+/// [`sanitize`]: SolveConfig::sanitize
+/// [`build_model`]: SolveConfig::build_model
 #[derive(Debug, Clone)]
 pub struct SolveConfig {
-    pub params: Parameters,
     pub strategy: ConductorStrategy,
+    // future: problem-scoping / model-refinement fields
+}
+
+impl Default for SolveConfig {
+    fn default() -> Self {
+        // Parallel full-optimisation is the default solve strategy (NOT ConductorStrategy's own
+        // Default, which is the simple-search strategy).
+        SolveConfig {
+            strategy: ConductorStrategy::with_parallelism_defaults(),
+        }
+    }
 }
 
 impl SolveConfig {
-    /// Build the ILP model to be solved, streaming build log lines through `log`. The build is a
-    /// pure function of the parameters (the colloscope is discarded by the model builder), so the
-    /// current assignments are intentionally left at their default here.
+    /// Reconcile this config against the parameters it will be solved against, dropping or
+    /// adjusting any refinements that no longer apply. Currently a no-op; kept as the seam for
+    /// future model-refinement fields.
+    pub fn sanitize(&mut self, _params: &Parameters) {}
+
+    /// Build the ILP model to be solved from `params`, streaming build log lines through `log`.
+    /// The build is a pure function of the parameters (the colloscope is discarded by the model
+    /// builder), so the current assignments are intentionally left at their default here.
     pub async fn build_model(
         &self,
+        params: &Parameters,
         log: &mut (dyn FnMut(&str) + Send),
     ) -> Result<collomatique_constraints_colloscopes::ColloscopeModel, String> {
         let inner_data = collomatique_state_colloscopes::InnerData {
-            params: self.params.clone(),
+            params: params.clone(),
+            colloscope:
+                collomatique_state_colloscopes::colloscopes::Colloscope::new_empty_from_params(
+                    params,
+                ),
             ..Default::default()
         };
         let pool = sqlx::SqlitePool::connect(":memory:")
@@ -58,7 +82,7 @@ pub struct Dialog {
 
 #[derive(Debug)]
 pub enum DialogInput {
-    Show(Parameters),
+    Show(SolveConfig, Parameters),
     Cancel,
     Accept,
     OpenAdvanced,
@@ -69,7 +93,7 @@ pub enum DialogInput {
 #[derive(Debug)]
 pub enum DialogOutput {
     Cancelled,
-    Accepted(SolveConfig),
+    Accepted(SolveConfig, Parameters),
 }
 
 impl Dialog {
@@ -242,10 +266,11 @@ impl SimpleComponent for Dialog {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         match msg {
-            DialogInput::Show(params) => {
+            DialogInput::Show(mut config, params) => {
+                config.sanitize(&params);
                 self.hidden = false;
                 self.params = params;
-                self.strategy = ConductorStrategy::with_parallelism_defaults();
+                self.strategy = config.strategy;
             }
             DialogInput::OpenAdvanced => {
                 self.conductor_config_dialog
@@ -264,10 +289,12 @@ impl SimpleComponent for Dialog {
             DialogInput::Accept => {
                 self.hidden = true;
                 sender
-                    .output(DialogOutput::Accepted(SolveConfig {
-                        params: self.params.clone(),
-                        strategy: self.strategy.clone(),
-                    }))
+                    .output(DialogOutput::Accepted(
+                        SolveConfig {
+                            strategy: self.strategy.clone(),
+                        },
+                        self.params.clone(),
+                    ))
                     .unwrap();
             }
         }

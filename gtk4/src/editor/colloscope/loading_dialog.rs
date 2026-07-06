@@ -5,6 +5,7 @@ use relm4::{
 };
 
 use collomatique_constraints_colloscopes::ColloscopeModel;
+use collomatique_state_colloscopes::colloscope_params::Parameters;
 
 use super::config_dialog::SolveConfig;
 use crate::widgets::debug_view::{DebugView, DebugViewInput};
@@ -22,7 +23,7 @@ pub struct Dialog {
 
 #[derive(Debug)]
 pub enum DialogInput {
-    Show(SolveConfig),
+    Show(SolveConfig, Parameters),
     Echo(String),
     Close,
 }
@@ -147,20 +148,21 @@ impl Component for Dialog {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match msg {
-            DialogInput::Show(config) => {
+            DialogInput::Show(config, params) => {
                 self.hidden = false;
                 self.error = None;
                 self.debug_view.emit(DebugViewInput::Clear);
 
                 // Building the model is heavy, async (in-memory sqlite) work. Run it off the UI
                 // thread; each log line is emitted back as `Echo` and streams live into the
-                // DebugView while the build runs.
+                // DebugView while the build runs. `params` is consumed by the build; `config`
+                // rides through and is handed back with the built model.
                 let input = sender.input_sender().clone();
                 sender.oneshot_command(async move {
                     let mut log = move |line: &str| {
                         input.emit(DialogInput::Echo(format!("{}\n", line)));
                     };
-                    let result = config.build_model(&mut log).await;
+                    let result = config.build_model(&params, &mut log).await;
                     DialogCommandOutput::Built(config, result)
                 });
             }

@@ -44,7 +44,10 @@ pub enum ColloscopeInput {
     InterrogationAccepted(collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation),
 
     SolveColloscopeClicked,
-    ConductorConfigAccepted(config_dialog::SolveConfig),
+    ConductorConfigAccepted(
+        config_dialog::SolveConfig,
+        collomatique_state_colloscopes::colloscope_params::Parameters,
+    ),
     ConductorConfigCancelled,
     ModelBuilt(
         config_dialog::SolveConfig,
@@ -149,6 +152,9 @@ pub struct Colloscope {
     run_solver_dialog: Controller<SolverDialog>,
     config_dialog: Controller<config_dialog::Dialog>,
     loading_dialog: Controller<loading_dialog::Dialog>,
+    /// The last-validated solve configuration, kept so the config dialog reopens pre-primed
+    /// instead of resetting every time. Defaults to the parallel strategy.
+    solve_config: config_dialog::SolveConfig,
 
     edited_group_list: Option<collomatique_state_colloscopes::GroupListId>,
     edited_interrogation: Option<(
@@ -547,8 +553,8 @@ impl Component for Colloscope {
             .transient_for(&root)
             .launch(())
             .forward(sender.input_sender(), |msg| match msg {
-                config_dialog::DialogOutput::Accepted(config) => {
-                    ColloscopeInput::ConductorConfigAccepted(config)
+                config_dialog::DialogOutput::Accepted(config, params) => {
+                    ColloscopeInput::ConductorConfigAccepted(config, params)
                 }
                 config_dialog::DialogOutput::Cancelled => ColloscopeInput::ConductorConfigCancelled,
             });
@@ -575,6 +581,7 @@ impl Component for Colloscope {
             run_solver_dialog,
             config_dialog,
             loading_dialog,
+            solve_config: config_dialog::SolveConfig::default(),
             last_update: None,
             computation_artifact: None,
             inflight_cmd: InflightCommand {
@@ -728,15 +735,20 @@ impl Component for Colloscope {
                 // modal and freeze `params`, so the built model matches what is on screen.
                 self.config_dialog
                     .sender()
-                    .send(config_dialog::DialogInput::Show(self.params.clone()))
+                    .send(config_dialog::DialogInput::Show(
+                        self.solve_config.clone(),
+                        self.params.clone(),
+                    ))
                     .unwrap();
             }
-            ColloscopeInput::ConductorConfigAccepted(config) => {
-                // Configuration confirmed: build the (possibly refined) model for this solve in
-                // the loading dialog, which streams the build log and hands back the model.
+            ColloscopeInput::ConductorConfigAccepted(config, params) => {
+                // Configuration confirmed: persist it so the next solve reopens pre-primed, then
+                // build the (possibly refined) model for this solve in the loading dialog, which
+                // streams the build log and hands back the model.
+                self.solve_config = config.clone();
                 self.loading_dialog
                     .sender()
-                    .send(loading_dialog::DialogInput::Show(config))
+                    .send(loading_dialog::DialogInput::Show(config, params))
                     .unwrap();
             }
             ColloscopeInput::ModelBuilt(config, model) => {
