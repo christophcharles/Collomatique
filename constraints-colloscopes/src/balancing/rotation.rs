@@ -15,6 +15,35 @@ use super::helpers::{
     year_interrogation_count,
 };
 
+/// Multi-scale sliding windows for the *soft* rotation path.
+///
+/// Unlike [`generate_windows`], this ignores the subject's periodicity type and
+/// treats every subject as if it were exactly periodic: for each window size
+/// `ws` (in active weeks), the density-based bound allows
+/// `nb_interr = ceil(ws · year_n / total)` interrogations, where `year_n` is the
+/// subject's whole-year interrogation count. This gives a uniform "spread it out"
+/// objective for any periodicity (`AmountInYear`, `AmountForEveryArbitraryBlock`,
+/// … now get the full multi-scale window set instead of a single whole-year one).
+pub(super) fn generate_soft_windows(
+    active_weeks: &[GlobalWeek],
+    year_n: u32,
+) -> Vec<(GlobalWeek, GlobalWeek, u32)> {
+    let total = active_weeks.len();
+    if total == 0 {
+        return vec![];
+    }
+    let mut windows = Vec::new();
+    for ws in 2..=total {
+        // ceil(ws · year_n / total)
+        let nb_interr =
+            ((ws as u64 * year_n.max(1) as u64 + total as u64 - 1) / total as u64) as u32;
+        for (fw, lw) in rolling_windows(active_weeks, ws, 1) {
+            windows.push((fw, lw, nb_interr));
+        }
+    }
+    windows
+}
+
 pub(super) fn generate_windows(
     active_weeks: &[GlobalWeek],
     last_week: GlobalWeek,
@@ -93,7 +122,12 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
             continue;
         }
 
-        let windows = generate_windows(&active_weeks, last_week, &params.periodicity);
+        let windows = if is_soft {
+            let year_n = year_interrogation_count(env, *subject_id).unwrap_or(0);
+            generate_soft_windows(&active_weeks, year_n)
+        } else {
+            generate_windows(&active_weeks, last_week, &params.periodicity)
+        };
         if windows.is_empty() {
             continue;
         }

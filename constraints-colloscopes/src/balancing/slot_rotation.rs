@@ -13,7 +13,7 @@ use super::helpers::{
     count_student_teacher_expr, effective_balancing_option, slot_weeks_in_range,
     subject_active_weeks, year_interrogation_count,
 };
-use super::rotation::generate_windows;
+use super::rotation::{generate_soft_windows, generate_windows};
 
 fn slot_week_pairs_for_slot(
     all_pairs: &[(SlotId, GlobalWeek)],
@@ -48,7 +48,12 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
             continue;
         }
 
-        let windows = generate_windows(&active_weeks, last_week, &params.periodicity);
+        let windows = if is_soft {
+            let year_n = year_interrogation_count(env, *subject_id).unwrap_or(0);
+            generate_soft_windows(&active_weeks, year_n)
+        } else {
+            generate_windows(&active_weeks, last_week, &params.periodicity)
+        };
         if windows.is_empty() {
             continue;
         }
