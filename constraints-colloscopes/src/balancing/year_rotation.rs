@@ -1,6 +1,7 @@
 use crate::extras::{MyBundle, subject_interrogation_params};
 use crate::helpers::{
-    enrolled_students_for_subject, last_global_week, merge_objectified, slot_week_pairs_for_subject,
+    enrolled_students_for_subject, last_global_week, merge_objectified_weighted,
+    slot_week_pairs_for_subject,
 };
 use crate::ids::GlobalWeek;
 use crate::types::{ExtraVarName, PreferenceConstraint};
@@ -76,12 +77,16 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         }
 
         output = output
-            .merge(merge_objectified(
+            .merge(merge_objectified_weighted(
                 hard_bundle,
                 soft_bundle,
                 ExtraVarName::BalancingYearRotationPenalty {
                     subject: *subject_id,
                 },
+                // Single whole-year window (no window-size variation): a constant,
+                // light weight. Routing through the weighted sum still removes the
+                // 1/n normalization and global max of the old penalty.
+                |_| crate::weights::BASE,
             ))
             .expect("no duplicate extras from balancing year rotation (distinct subjects)");
     }

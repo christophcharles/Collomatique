@@ -1,9 +1,10 @@
 use crate::extras::{MyBundle, subject_interrogation_params};
 use crate::helpers::{
-    enrolled_students_for_subject, last_global_week, merge_objectified, slot_week_pairs_for_subject,
+    enrolled_students_for_subject, last_global_week, merge_objectified_weighted,
+    slot_week_pairs_for_subject,
 };
 use crate::ids::GlobalWeek;
-use crate::types::{ExtraVarName, PreferenceConstraint};
+use crate::types::{ConstraintDesc, ExtraVarName, PreferenceConstraint};
 use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::subjects::SubjectPeriodicity;
@@ -11,6 +12,7 @@ use collomatique_state_colloscopes::subjects::SubjectPeriodicity;
 use super::helpers::{
     count_student_teacher_expr, effective_balancing_option, rolling_windows,
     slot_week_pairs_for_teacher, slot_weeks_in_range, subject_active_weeks, teachers_for_subject,
+    year_interrogation_count,
 };
 
 pub(super) fn generate_windows(
@@ -99,6 +101,15 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         let enrolled = enrolled_students_for_subject(env, *subject_id);
         let teachers = teachers_for_subject(env, *subject_id);
 
+        // Typical same-teacher spacing: over `total_weeks` a student sees each of
+        // `#teachers` teachers about `year_nb_interr / #teachers` times, so the
+        // gap between two visits from the same teacher is ~ that ratio inverted.
+        let total_weeks = active_weeks.len() as f64;
+        let year_n = year_interrogation_count(env, *subject_id)
+            .unwrap_or(1)
+            .max(1) as f64;
+        let t_typical = total_weeks * teachers.len().max(1) as f64 / year_n;
+
         let mut hard_bundle = MyBundle::new();
         let mut soft_bundle = MyBundle::new();
 
@@ -143,11 +154,22 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         }
 
         output = output
-            .merge(merge_objectified(
+            .merge(merge_objectified_weighted(
                 hard_bundle,
                 soft_bundle,
                 ExtraVarName::BalancingRotationPenalty {
                     subject: *subject_id,
+                },
+                move |desc| match desc {
+                    ConstraintDesc::Level4(PreferenceConstraint::BalancingRotation {
+                        first_week,
+                        last_week,
+                        ..
+                    }) => {
+                        let ws = (last_week.0 - first_week.0 + 1) as f64;
+                        crate::weights::window_weight(total_weeks, ws, t_typical)
+                    }
+                    _ => crate::weights::BASE,
                 },
             ))
             .expect("no duplicate extras from balancing rotation (distinct subjects)");

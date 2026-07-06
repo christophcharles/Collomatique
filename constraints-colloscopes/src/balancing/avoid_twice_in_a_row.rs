@@ -2,10 +2,10 @@ use crate::extras::{
     MyBundle, V, extra_var, is_at_most_once_per_week, subject_interrogation_params,
 };
 use crate::helpers::{
-    enrolled_students_for_subject, merge_objectified, slot_week_pairs_for_subject,
+    enrolled_students_for_subject, merge_objectified_weighted, slot_week_pairs_for_subject,
 };
 use crate::ids::GlobalWeek;
-use crate::types::{ExtraVarName, InfeasibleConstraint, PreferenceConstraint};
+use crate::types::{ConstraintDesc, ExtraVarName, InfeasibleConstraint, PreferenceConstraint};
 use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::ids::{StudentId, SubjectId, TeacherId};
@@ -187,6 +187,21 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         let slot_week_pairs =
             slot_week_pairs_for_subject(env, *subject_id, &subject.excluded_periods);
 
+        // Avoid-twice is the tightest family: its typical spacing is the raw
+        // periodicity (≈ 1 for the recursive at-most-once-per-week variant), so
+        // the per-window weight comes out high.
+        let total_weeks = subject_active_weeks(&slot_week_pairs).len() as f64;
+        let t_typical = match &params.periodicity {
+            SubjectPeriodicity::ExactlyPeriodic {
+                periodicity_in_weeks,
+            } => periodicity_in_weeks.get() as f64,
+            SubjectPeriodicity::OnceForEveryBlockOfWeeks {
+                weeks_per_block, ..
+            } => weeks_per_block.get() as f64,
+            SubjectPeriodicity::AmountInYear { .. }
+            | SubjectPeriodicity::AmountForEveryArbitraryBlock { .. } => 1.0,
+        };
+
         let mut bundle = MyBundle::new();
         let mut hard_bundle = MyBundle::new();
         let mut soft_bundle = MyBundle::new();
@@ -254,11 +269,28 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         bundle = bundle
             .merge(hard_bundle)
             .expect("no duplicate extras from balancing avoid_twice hard");
-        bundle = merge_objectified(
+        bundle = merge_objectified_weighted(
             bundle,
             soft_bundle,
             ExtraVarName::BalancingAvoidTwiceInARowPenalty {
                 subject: *subject_id,
+            },
+            move |desc| match desc {
+                ConstraintDesc::Level4(PreferenceConstraint::BalancingAvoidTwiceInARow {
+                    first_week,
+                    last_week,
+                    ..
+                }) => {
+                    let ws = (last_week.0 - first_week.0 + 1) as f64;
+                    crate::weights::window_weight(total_weeks, ws, t_typical)
+                }
+                ConstraintDesc::Level4(
+                    PreferenceConstraint::BalancingAvoidTwiceInARowRecursive { .. },
+                ) => {
+                    // A consecutive-week constraint: nominal 2-week span.
+                    crate::weights::window_weight(total_weeks, 2.0, t_typical)
+                }
+                _ => crate::weights::BASE,
             },
         );
         output = output
