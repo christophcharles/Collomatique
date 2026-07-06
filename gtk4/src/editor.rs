@@ -940,6 +940,10 @@ impl Component for EditorPanel {
                 self.dirty = dirty;
                 self.show_particular_panel = Some(PanelNumbers::GeneralPlanning);
                 self.update_data(DataUpdate::Replace(AppState::new(data)));
+                self.colloscope
+                    .sender()
+                    .send(colloscope::ColloscopeInput::ResetSolveConfig)
+                    .unwrap();
                 self.send_msg_for_interface_update(sender);
             }
             EditorInput::SaveClicked => match &self.file_name {

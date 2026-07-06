@@ -44,6 +44,7 @@ pub enum ColloscopeInput {
     InterrogationAccepted(collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation),
 
     SolveColloscopeClicked,
+    ResetSolveConfig,
     ConductorConfigAccepted(
         config_dialog::SolveConfig,
         collomatique_state_colloscopes::colloscope_params::Parameters,
@@ -760,6 +761,11 @@ impl Component for Colloscope {
             }
             ColloscopeInput::ConductorConfigCancelled => {
                 // The solve was abandoned before it started; nothing to undo.
+            }
+            ColloscopeInput::ResetSolveConfig => {
+                // A new document was loaded; drop the previous file's stored strategy back to
+                // the default so the config dialog reopens on the parallel default.
+                self.solve_config = config_dialog::SolveConfig::default();
             }
             ColloscopeInput::SolveResult(config_data) => {
                 // Translate the raw ILP config back into a colloscope, using the
