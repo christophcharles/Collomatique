@@ -144,7 +144,7 @@ impl SimpleComponent for Dialog {
                 set_content = &gtk::Box {
                     set_hexpand: true,
                     set_vexpand: true,
-                    set_margin_all: 5,
+                    set_margin_all: 0,
                     set_spacing: 0,
                     set_orientation: gtk::Orientation::Vertical,
                     gtk::Box {
