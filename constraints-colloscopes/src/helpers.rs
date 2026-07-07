@@ -1,6 +1,6 @@
 use crate::extras::{MyBundle, V, extra_var, weeks_for_slot};
 use crate::ids::GlobalWeek;
-use crate::types::ExtraVarName;
+use crate::types::{ConstraintDesc, ExtraVarName};
 use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::ids::{PeriodId, SlotId, StudentId, SubjectId};
@@ -80,12 +80,41 @@ pub(crate) fn last_global_week(env: &VarEnv) -> GlobalWeek {
     GlobalWeek(total.saturating_sub(1))
 }
 
+/// Objectify a soft bundle with the normalized `α·Λ + ((1-α)/n)·Σλᵢ` penalty
+/// (default balance) and merge it in, scaled to [`crate::weights::BASE`].
+///
+/// Used by the non-clustering soft families (limits, pairings), whose penalties
+/// are better left normalized — `BASE` only puts them on the same scale as the
+/// balancing terms so the objective stays well-conditioned. The clustering
+/// families use [`merge_objectified_weighted`] instead.
 pub(crate) fn merge_objectified(
     bundle: MyBundle,
     soft_bundle: MyBundle,
     penalty_var: ExtraVarName,
 ) -> MyBundle {
-    match soft_bundle.objectify_with_coef(penalty_var, 1.0) {
+    match soft_bundle.objectify_with_coef(penalty_var, crate::weights::BASE) {
+        Ok(objectified) => bundle
+            .merge(objectified)
+            .expect("no duplicate extras from objectification"),
+        Err(_) => bundle,
+    }
+}
+
+/// Objectify a soft bundle as a plain weighted sum and merge it in.
+///
+/// Like [`merge_objectified`], but instead of the normalized
+/// `α·Λ + ((1-α)/n)·Σλᵢ` penalty it emits `Σ wᵢ·λᵢ` where each `wᵢ` is
+/// `weight_fn` applied to that constraint's [`ConstraintDesc`]. This keeps the
+/// per-violation gradient extensive, so the objective distinguishes close from
+/// far clustering. The `Err → bundle unchanged` fallback matches
+/// [`merge_objectified`] (an empty soft bundle contributes nothing).
+pub(crate) fn merge_objectified_weighted(
+    bundle: MyBundle,
+    soft_bundle: MyBundle,
+    penalty_var: ExtraVarName,
+    weight_fn: impl Fn(&ConstraintDesc) -> f64,
+) -> MyBundle {
+    match soft_bundle.objectify_weighted_sum(penalty_var, weight_fn) {
         Ok(objectified) => bundle
             .merge(objectified)
             .expect("no duplicate extras from objectification"),

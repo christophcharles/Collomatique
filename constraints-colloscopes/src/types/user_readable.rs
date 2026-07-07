@@ -543,6 +543,23 @@ impl PreferenceConstraint {
                     week_range_text(*first_week, *last_week),
                 )
             }
+            PreferenceConstraint::BalancingRotationRegularity {
+                student,
+                subject,
+                teacher,
+                week,
+            } => {
+                let s_name = student_name(env, *student);
+                let subj_name = subject_name(env, *subject);
+                let t_name = teacher_name(env, *teacher);
+                format!(
+                    "Les colles de {} avec {} en {} devraient être réparties régulièrement (semaine {})",
+                    s_name,
+                    t_name,
+                    subj_name,
+                    week.0 + 1,
+                )
+            }
             PreferenceConstraint::BalancingSlotRotation {
                 student,
                 subject: _,
@@ -561,6 +578,21 @@ impl PreferenceConstraint {
                     plural,
                     sl_name,
                     week_range_text(*first_week, *last_week),
+                )
+            }
+            PreferenceConstraint::BalancingSlotRotationRegularity {
+                student,
+                subject: _,
+                slot,
+                week,
+            } => {
+                let s_name = student_name(env, *student);
+                let sl_name = slot_name(env, *slot);
+                format!(
+                    "Les colles de {} dans le créneau {} devraient être réparties régulièrement (semaine {})",
+                    s_name,
+                    sl_name,
+                    week.0 + 1,
                 )
             }
             PreferenceConstraint::BalancingPeriodRotation {

@@ -1,9 +1,7 @@
 use crate::extras::{
     MyBundle, V, extra_var, is_at_most_once_per_week, subject_interrogation_params,
 };
-use crate::helpers::{
-    enrolled_students_for_subject, merge_objectified, slot_week_pairs_for_subject,
-};
+use crate::helpers::{enrolled_students_for_subject, slot_week_pairs_for_subject};
 use crate::ids::GlobalWeek;
 use crate::types::{ExtraVarName, InfeasibleConstraint, PreferenceConstraint};
 use crate::vars::VarEnv;
@@ -12,7 +10,7 @@ use collomatique_state_colloscopes::ids::{StudentId, SubjectId, TeacherId};
 use collomatique_state_colloscopes::subjects::SubjectPeriodicity;
 
 use super::helpers::{
-    count_student_teacher_expr, effective_balancing_option, rolling_windows,
+    count_student_teacher_expr, effective_balancing_flag, rolling_windows,
     slot_week_pairs_for_teacher, subject_active_weeks, teachers_for_subject,
 };
 
@@ -30,9 +28,7 @@ fn build_window_constraints(
     slot_week_pairs: &[(crate::ids::SlotId, GlobalWeek)],
     window_size: usize,
     step_size: usize,
-    is_soft: bool,
-    hard_bundle: &mut MyBundle,
-    soft_bundle: &mut MyBundle,
+    bundle: &mut MyBundle,
 ) {
     let active_weeks = subject_active_weeks(slot_week_pairs);
     let windows = rolling_windows(&active_weeks, window_size, step_size);
@@ -55,11 +51,7 @@ fn build_window_constraints(
                     last_week,
                 }
                 .into();
-                if is_soft {
-                    *soft_bundle = std::mem::take(soft_bundle).with_constraint(constraint, desc);
-                } else {
-                    *hard_bundle = std::mem::take(hard_bundle).with_constraint(constraint, desc);
-                }
+                *bundle = std::mem::take(bundle).with_constraint(constraint, desc);
             }
         }
     }
@@ -69,10 +61,7 @@ fn build_recursive_constraints(
     env: &VarEnv,
     subject_id: SubjectId,
     slot_week_pairs: &[(crate::ids::SlotId, GlobalWeek)],
-    is_soft: bool,
     bundle: &mut MyBundle,
-    hard_bundle: &mut MyBundle,
-    soft_bundle: &mut MyBundle,
 ) {
     let active_weeks = subject_active_weeks(slot_week_pairs);
     if active_weeks.len() <= 1 {
@@ -157,13 +146,7 @@ fn build_recursive_constraints(
                         week,
                     }
                     .into();
-                    if is_soft {
-                        *soft_bundle =
-                            std::mem::take(soft_bundle).with_constraint(avoid_constraint, desc);
-                    } else {
-                        *hard_bundle =
-                            std::mem::take(hard_bundle).with_constraint(avoid_constraint, desc);
-                    }
+                    *bundle = std::mem::take(bundle).with_constraint(avoid_constraint, desc);
                 }
             }
         }
@@ -177,90 +160,46 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         let Some(params) = subject_interrogation_params(env, *subject_id) else {
             continue;
         };
-        let Some(sp) =
-            effective_balancing_option(env, *subject_id, |opts| &opts.avoid_twice_in_a_row)
-        else {
+        if !effective_balancing_flag(env, *subject_id, |opts| opts.avoid_twice_in_a_row) {
             continue;
-        };
-        let is_soft = sp.soft;
+        }
 
         let slot_week_pairs =
             slot_week_pairs_for_subject(env, *subject_id, &subject.excluded_periods);
 
         let mut bundle = MyBundle::new();
-        let mut hard_bundle = MyBundle::new();
-        let mut soft_bundle = MyBundle::new();
 
         match &params.periodicity {
             SubjectPeriodicity::ExactlyPeriodic {
                 periodicity_in_weeks,
             } => {
                 let p = periodicity_in_weeks.get() as usize;
-                build_window_constraints(
-                    env,
-                    *subject_id,
-                    &slot_week_pairs,
-                    2 * p,
-                    1,
-                    is_soft,
-                    &mut hard_bundle,
-                    &mut soft_bundle,
-                );
+                build_window_constraints(env, *subject_id, &slot_week_pairs, 2 * p, 1, &mut bundle);
             }
             SubjectPeriodicity::OnceForEveryBlockOfWeeks {
                 weeks_per_block, ..
             } => {
                 let b = weeks_per_block.get() as usize;
-                build_window_constraints(
-                    env,
-                    *subject_id,
-                    &slot_week_pairs,
-                    2 * b,
-                    b,
-                    is_soft,
-                    &mut hard_bundle,
-                    &mut soft_bundle,
-                );
+                build_window_constraints(env, *subject_id, &slot_week_pairs, 2 * b, b, &mut bundle);
             }
             SubjectPeriodicity::AmountInYear { .. }
             | SubjectPeriodicity::AmountForEveryArbitraryBlock { .. } => {
                 if !is_at_most_once_per_week(env, *subject_id) {
-                    hard_bundle = hard_bundle.with_infeasible(
+                    bundle = bundle.with_infeasible(
                         InfeasibleConstraint::BalancingAvoidTwiceUnsupported {
                             subject: *subject_id,
                         }
                         .into(),
                     );
-                    bundle = bundle
-                        .merge(hard_bundle)
-                        .expect("no duplicate extras from balancing avoid_twice hard");
                     output = output.merge(bundle).expect(
                         "no duplicate extras from balancing avoid_twice (distinct subjects)",
                     );
                     continue;
                 }
-                build_recursive_constraints(
-                    env,
-                    *subject_id,
-                    &slot_week_pairs,
-                    is_soft,
-                    &mut bundle,
-                    &mut hard_bundle,
-                    &mut soft_bundle,
-                );
+                build_recursive_constraints(env, *subject_id, &slot_week_pairs, &mut bundle);
             }
         }
 
-        bundle = bundle
-            .merge(hard_bundle)
-            .expect("no duplicate extras from balancing avoid_twice hard");
-        bundle = merge_objectified(
-            bundle,
-            soft_bundle,
-            ExtraVarName::BalancingAvoidTwiceInARowPenalty {
-                subject: *subject_id,
-            },
-        );
         output = output
             .merge(bundle)
             .expect("no duplicate extras from balancing avoid_twice (distinct subjects)");

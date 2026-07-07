@@ -267,23 +267,14 @@ fn options_to_string(options: &BalancingOptions) -> String {
             soft_constraint_symbol(sr.soft)
         ));
     }
-    if let Some(at) = &options.avoid_twice_in_a_row {
-        parts.push(format!(
-            "éviter 2× de suite le même colleur {}",
-            soft_constraint_symbol(at.soft)
-        ));
+    if options.avoid_twice_in_a_row {
+        parts.push("éviter 2× de suite le même colleur".to_string());
     }
-    if let Some(ytr) = &options.year_teacher_rotation {
-        parts.push(format!(
-            "rotation annuelle des colleurs {}",
-            soft_constraint_symbol(ytr.soft)
-        ));
+    if options.year_teacher_rotation {
+        parts.push("rotation annuelle des colleurs".to_string());
     }
-    if let Some(ptr) = &options.period_teacher_rotation {
-        parts.push(format!(
-            "rotation des colleurs par période {}",
-            soft_constraint_symbol(ptr.soft)
-        ));
+    if options.period_teacher_rotation {
+        parts.push("rotation des colleurs par période".to_string());
     }
     if parts.is_empty() {
         "aucune contrainte".into()

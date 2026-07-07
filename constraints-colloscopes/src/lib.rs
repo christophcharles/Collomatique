@@ -12,6 +12,7 @@ mod schedule_structure;
 pub mod tools;
 mod types;
 pub mod vars;
+mod weights;
 
 pub use builder::{build_model, build_model_with_log};
 pub use types::{

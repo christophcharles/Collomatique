@@ -65,19 +65,10 @@ pub enum ExtraVarName {
         teacher: TeacherId,
         week: GlobalWeek,
     },
-    BalancingAvoidTwiceInARowPenalty {
-        subject: SubjectId,
-    },
-    BalancingYearRotationPenalty {
-        subject: SubjectId,
-    },
     BalancingRotationPenalty {
         subject: SubjectId,
     },
     BalancingSlotRotationPenalty {
-        subject: SubjectId,
-    },
-    BalancingPeriodRotationPenalty {
         subject: SubjectId,
     },
 }
@@ -291,6 +282,15 @@ pub enum PreferenceConstraint {
         last_week: GlobalWeek,
         max_count: u32,
     },
+    /// Soft L1-regularity term: the student's cumulative count of interrogations
+    /// with `teacher` through `week` should track the ideal linear ramp. One per
+    /// (student, subject, teacher, prefix-boundary week).
+    BalancingRotationRegularity {
+        student: StudentId,
+        subject: SubjectId,
+        teacher: TeacherId,
+        week: GlobalWeek,
+    },
     BalancingSlotRotation {
         student: StudentId,
         subject: SubjectId,
@@ -298,6 +298,15 @@ pub enum PreferenceConstraint {
         first_week: GlobalWeek,
         last_week: GlobalWeek,
         max_count: u32,
+    },
+    /// Soft L1-regularity term for slot rotation: the student's cumulative count
+    /// of interrogations in `slot` through `week` should track the ideal linear
+    /// ramp. One per (student, subject, slot, prefix-boundary week).
+    BalancingSlotRotationRegularity {
+        student: StudentId,
+        subject: SubjectId,
+        slot: SlotId,
+        week: GlobalWeek,
     },
     BalancingPeriodRotation {
         student: StudentId,

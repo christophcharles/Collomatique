@@ -1,15 +1,13 @@
 use crate::extras::{MyBundle, subject_interrogation_params};
-use crate::helpers::{
-    enrolled_students_for_subject, merge_objectified, slot_week_pairs_for_subject,
-};
+use crate::helpers::{enrolled_students_for_subject, slot_week_pairs_for_subject};
 use crate::ids::GlobalWeek;
-use crate::types::{ExtraVarName, PreferenceConstraint};
+use crate::types::PreferenceConstraint;
 use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::ids::SubjectId;
 
 use super::helpers::{
-    count_student_teacher_expr, effective_balancing_option, slot_week_pairs_for_teacher,
+    count_student_teacher_expr, effective_balancing_flag, slot_week_pairs_for_teacher,
     slot_weeks_in_range, teachers_for_subject, year_interrogation_count,
 };
 
@@ -77,12 +75,9 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         let Some(_params) = subject_interrogation_params(env, *subject_id) else {
             continue;
         };
-        let Some(sp) =
-            effective_balancing_option(env, *subject_id, |opts| &opts.period_teacher_rotation)
-        else {
+        if !effective_balancing_flag(env, *subject_id, |opts| opts.period_teacher_rotation) {
             continue;
-        };
-        let is_soft = sp.soft;
+        }
 
         let slot_week_pairs =
             slot_week_pairs_for_subject(env, *subject_id, &subject.excluded_periods);
@@ -96,7 +91,6 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         let teachers = teachers_for_subject(env, *subject_id);
 
         let mut hard_bundle = MyBundle::new();
-        let mut soft_bundle = MyBundle::new();
 
         for (first_week, last_week, nb_interr, period) in &windows {
             let ntot = slot_weeks_in_range(&slot_week_pairs, *first_week, *last_week);
@@ -130,23 +124,13 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                         max_count,
                     }
                     .into();
-                    if is_soft {
-                        soft_bundle = soft_bundle.with_constraint(constraint, desc);
-                    } else {
-                        hard_bundle = hard_bundle.with_constraint(constraint, desc);
-                    }
+                    hard_bundle = hard_bundle.with_constraint(constraint, desc);
                 }
             }
         }
 
         output = output
-            .merge(merge_objectified(
-                hard_bundle,
-                soft_bundle,
-                ExtraVarName::BalancingPeriodRotationPenalty {
-                    subject: *subject_id,
-                },
-            ))
+            .merge(hard_bundle)
             .expect("no duplicate extras from balancing period rotation (distinct subjects)");
     }
 
