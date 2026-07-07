@@ -17,9 +17,9 @@ use collomatique_ilp_modeler::{InternalVar, Model};
 #[cfg(test)]
 use crate::SolveProgress;
 use crate::{
-    DefaultStrategy, FindClosestStrategy, FuzzyStrategy, NoObjectiveStarterProgress,
+    DefaultStrategy, FindClosestStrategy, FuzzyPayload, FuzzyStrategy, NoObjectiveStarterProgress,
     NoObjectiveStrategy, SolveStatus, Strategy, StrategyContext, StrategyError, StrategyKind,
-    StrategyOutcome, StrategyProgress, StrategyProgressData, VarOrderSerializable,
+    StrategyOutcome, StrategyPayload, StrategyProgress, StrategyProgressData, VarOrderSerializable,
 };
 
 #[derive(Debug, Clone)]
@@ -838,6 +838,7 @@ async fn run_one_worker<'a, B, E, C>(
     worker_num: u32,
     kind: StrategyKind,
     warm_start: Option<ConfigData<InternalVar<B, E>>>,
+    payload: StrategyPayload<InternalVar<B, E>>,
     cancel: Option<oneshot::Receiver<()>>,
 ) -> WorkerEnd<InternalVar<B, E>>
 where
@@ -867,7 +868,6 @@ where
         None
     };
 
-    let payload = kind.unit_payload();
     let fut = ctx.spawn_strategy_with_echo(&kind, model, warm_start, payload, &progress, &echo);
     match cancel {
         None => {
@@ -978,6 +978,23 @@ impl Strategy for ConductorStrategy {
                     strategy: Some(Box::new(kind.clone())),
                 });
                 let worker_warm_start = warm_start_for(&status, &warm_start);
+                // Fuzzy takes the incumbent as its target *payload* (and no warm-start hint);
+                // every other kind takes an empty payload and the incumbent as a genuine
+                // warm-start hint.
+                let (spawn_warm_start, payload) = match &kind {
+                    StrategyKind::Fuzzy(_) => {
+                        let target = worker_warm_start
+                            .clone()
+                            .expect("fuzzy is queued only once an incumbent exists");
+                        (None, StrategyPayload::Fuzzy(FuzzyPayload { target }))
+                    }
+                    other => (
+                        worker_warm_start.clone(),
+                        other
+                            .empty_payload()
+                            .expect("conductor runs only empty-payload kinds besides Fuzzy"),
+                    ),
+                };
                 // Only the Default worker is cancellable. Trace its slot + cancel handle and seed
                 // its tracked objective to the warm start's objective (the anti-thrash fuse).
                 let cancel = if matches!(kind, StrategyKind::Default(_)) {
@@ -1003,7 +1020,8 @@ impl Strategy for ConductorStrategy {
                     on_progress,
                     slot as u32,
                     kind,
-                    worker_warm_start,
+                    spawn_warm_start,
+                    payload,
                     cancel,
                 )));
             }
