@@ -1,3 +1,4 @@
+use std::convert::Infallible;
 use std::fmt;
 
 use async_trait::async_trait;
@@ -10,8 +11,27 @@ use serde::{Deserialize, Serialize};
 use collomatique_ilp::{ConfigData, UsableData, Variable};
 use collomatique_ilp_modeler::{InternalVar, Model};
 
-use crate::strategies::find_closest::{FindClosestProgressData, FindClosestStrategy};
-use crate::{SolveStatus, Strategy, StrategyContext, StrategyError, StrategyOutcome};
+use crate::strategies::find_closest::{
+    FindClosestPayload, FindClosestProgressData, FindClosestStrategy,
+};
+use crate::{
+    SolveStatus, Strategy, StrategyContext, StrategyError, StrategyOutcome, VarOrderSerializable,
+};
+
+/// Per-run payload for [`FuzzyStrategy`]. Empty for now.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct FuzzyPayload;
+
+impl<V: UsableData + Send> VarOrderSerializable<V> for FuzzyPayload {
+    type Data = FuzzyPayload;
+    type Error = Infallible;
+    fn into_data(&self, _var_order: &[V]) -> Result<FuzzyPayload, Infallible> {
+        Ok(self.clone())
+    }
+    fn from_data(data: &FuzzyPayload, _var_order: &[V]) -> Result<Self, Infallible> {
+        Ok(data.clone())
+    }
+}
 
 /// A diversification move: perturb every base variable of a warm start
 /// around its current value (typical displacement `sigma`), then hand
@@ -100,6 +120,7 @@ fn perturb_value(current: f64, kind: &Variable, sigma: f64, rng: &mut StdRng) ->
 #[async_trait]
 impl Strategy for FuzzyStrategy {
     type Progress<V: UsableData + Send> = FuzzyProgressData;
+    type Payload<V: UsableData + Send> = FuzzyPayload;
 
     fn name(&self) -> &'static str {
         "fuzzy"
@@ -114,6 +135,7 @@ impl Strategy for FuzzyStrategy {
         ctx: &StrategyContext,
         model: &Model<B, E, C>,
         warm_start: Option<ConfigData<InternalVar<B, E>>>,
+        _payload: FuzzyPayload,
         on_progress: &(dyn Fn(Self::Progress<InternalVar<B, E>>) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
@@ -187,9 +209,13 @@ impl Strategy for FuzzyStrategy {
 
         // Repair: find the feasible point closest to the perturbed proposal.
         self.find_closest
-            .run_with_callback(ctx, model, Some(proposal), &|p| {
-                on_progress(FuzzyProgressData::FindClosest(p))
-            })
+            .run_with_callback(
+                ctx,
+                model,
+                Some(proposal),
+                FindClosestPayload::default(),
+                &|p| on_progress(FuzzyProgressData::FindClosest(p)),
+            )
             .await
     }
 }
@@ -237,7 +263,7 @@ mod tests {
 
     use crate::{
         RawSolveOutcome, SolveBackend, SolveConfig, SolveProgressData, StrategyKind,
-        StrategyProgressData,
+        StrategyPayloadData, StrategyProgressData,
     };
 
     // ----- pure-helper unit tests -----
@@ -373,6 +399,7 @@ mod tests {
             _model_desc: &ModelDesc,
             _strategy: &StrategyKind,
             _warm_start: Option<Vec<f64>>,
+            _payload: StrategyPayloadData,
             _on_progress: &(dyn Fn(StrategyProgressData) -> bool + Send + Sync),
             _on_echo: &(dyn Fn(String) + Send + Sync),
         ) -> Result<RawSolveOutcome, StrategyError> {
@@ -421,17 +448,23 @@ mod tests {
         let ctx = StrategyContext::new(Arc::new(RealBackend));
         let captured: Mutex<Option<(usize, f64)>> = Mutex::new(None);
         strategy(sigma, Some(seed))
-            .run_with_callback(&ctx, &model, Some(all_zero_warm_start(n)), &|p| {
-                if let FuzzyProgressData::Perturbed {
-                    perturbed,
-                    l1_distance,
-                    ..
-                } = p
-                {
-                    *captured.lock().unwrap() = Some((perturbed, l1_distance));
-                }
-                true
-            })
+            .run_with_callback(
+                &ctx,
+                &model,
+                Some(all_zero_warm_start(n)),
+                FuzzyPayload::default(),
+                &|p| {
+                    if let FuzzyProgressData::Perturbed {
+                        perturbed,
+                        l1_distance,
+                        ..
+                    } = p
+                    {
+                        *captured.lock().unwrap() = Some((perturbed, l1_distance));
+                    }
+                    true
+                },
+            )
             .await
             .unwrap();
         captured.into_inner().unwrap().unwrap()
@@ -444,7 +477,13 @@ mod tests {
         let model = free_binary_model(n);
         let ctx = StrategyContext::new(Arc::new(RealBackend));
         let outcome = strategy(sigma, Some(seed))
-            .run_with_callback(&ctx, &model, Some(all_zero_warm_start(n)), &|_| true)
+            .run_with_callback(
+                &ctx,
+                &model,
+                Some(all_zero_warm_start(n)),
+                FuzzyPayload::default(),
+                &|_| true,
+            )
             .await
             .unwrap();
         let sol = outcome.solution.unwrap();
@@ -502,7 +541,7 @@ mod tests {
         let ctx = StrategyContext::new(Arc::new(RealBackend));
         let events: Mutex<Vec<FuzzyProgressData>> = Mutex::new(Vec::new());
         let outcome = strategy(3.0, Some(1))
-            .run_with_callback(&ctx, &model, Some(warm), &|p| {
+            .run_with_callback(&ctx, &model, Some(warm), FuzzyPayload::default(), &|p| {
                 events.lock().unwrap().push(p);
                 true
             })
@@ -536,7 +575,7 @@ mod tests {
         let model = free_binary_model(1);
         let ctx = StrategyContext::new(Arc::new(RealBackend));
         let err = strategy(1.0, Some(0))
-            .run_with_callback(&ctx, &model, None, &|_| true)
+            .run_with_callback(&ctx, &model, None, FuzzyPayload::default(), &|_| true)
             .await
             .unwrap_err();
         match err {

@@ -8,7 +8,7 @@ use collomatique_ilp_modeler::{InternalVar, Model};
 use collomatique_rpc::{EncodedMsg, InitMsg, ResultMsg, SerializedStrategyRequest, StrategyMsg};
 use collomatique_strategies::{
     RawSolveOutcome, SolveStatus, SpawnableStrategy, StrategyKind, StrategyOutcome,
-    StrategyProgressData, StrategyRequest,
+    StrategyPayloadData, StrategyProgressData, StrategyRequest,
 };
 
 use crate::process::StdinWriter;
@@ -73,6 +73,7 @@ impl StrategySubprocess {
         model: &Model<B, E, C>,
         strategy: &S,
         warm_start: Option<ConfigData<InternalVar<B, E>>>,
+        payload: S::Payload,
         result_callback: impl Fn(StrategyOutcome<InternalVar<B, E>>) + Send + 'static,
         progress_callback: impl Fn(Result<S::Progress, String>) + Send + 'static,
         log_callback: impl Fn(&str) + Send + 'static,
@@ -89,6 +90,7 @@ impl StrategySubprocess {
         let raw_warm_start = warm_start
             .as_ref()
             .map(|hint| collomatique_ilp::config_data_to_hint(hint, &var_order));
+        let payload_data = S::payload_into_data(payload, &var_order);
         let raw_result_callback = move |result: StrategyResult| {
             let outcome = result.into_raw_outcome().into_typed(&var_order);
             result_callback(outcome);
@@ -107,6 +109,7 @@ impl StrategySubprocess {
             model_desc,
             strategy_kind,
             raw_warm_start,
+            payload_data,
             raw_result_callback,
             wrapped_progress,
             log_callback,
@@ -117,6 +120,7 @@ impl StrategySubprocess {
         model_desc: ModelDesc,
         strategy: StrategyKind,
         warm_start: Option<Vec<f64>>,
+        payload: StrategyPayloadData,
         result_callback: impl Fn(StrategyResult) + Send + 'static,
         progress_callback: impl Fn(Result<StrategyProgressData, String>) + Send + 'static,
         log_callback: impl Fn(&str) + Send + 'static,
@@ -125,6 +129,7 @@ impl StrategySubprocess {
             model_desc,
             strategy,
             warm_start,
+            payload,
         };
         let serialized_str = request.serialize();
         let serialized = SerializedStrategyRequest::from(serialized_str);

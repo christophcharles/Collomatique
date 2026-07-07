@@ -437,7 +437,8 @@ fn subprocess_solve(model: &collomatique_constraints_colloscopes::ColloscopeMode
 
 fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::ColloscopeModel) {
     use collomatique_strategies::{
-        DefaultStrategy, SolveProgress, SolveStatus, StrategyOutcome, StrategyProgressData,
+        DefaultPayload, DefaultStrategy, SolveProgress, SolveStatus, StrategyOutcome,
+        StrategyProgressData,
     };
     use collomatique_subprocesses::StrategySubprocess;
     use std::sync::mpsc;
@@ -471,6 +472,7 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
         model,
         &strategy,
         None,
+        DefaultPayload::default(),
         move |outcome: Outcome| {
             let _ = tx.send(outcome);
         },
@@ -552,8 +554,8 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
 
 fn no_objective_solve(model: &collomatique_constraints_colloscopes::ColloscopeModel) {
     use collomatique_strategies::{
-        NoObjectiveProgressData, NoObjectiveStrategy, SolveStatus, StrategyOutcome,
-        StrategyProgressData,
+        NoObjectivePayload, NoObjectiveProgressData, NoObjectiveStrategy, SolveStatus,
+        StrategyOutcome, StrategyProgressData,
     };
     use collomatique_subprocesses::StrategySubprocess;
     use std::sync::mpsc;
@@ -588,6 +590,7 @@ fn no_objective_solve(model: &collomatique_constraints_colloscopes::ColloscopeMo
         model,
         &strategy,
         None,
+        NoObjectivePayload::default(),
         move |outcome: Outcome| {
             let _ = tx.send(outcome);
         },
@@ -669,8 +672,8 @@ fn no_objective_solve(model: &collomatique_constraints_colloscopes::ColloscopeMo
 
 fn no_objective_starter_solve(model: &collomatique_constraints_colloscopes::ColloscopeModel) {
     use collomatique_strategies::{
-        DefaultStrategy, NoObjectiveStarterProgress, NoObjectiveStarterStrategy,
-        NoObjectiveStrategy, SolveStatus, StrategyOutcome,
+        DefaultStrategy, NoObjectiveStarterPayload, NoObjectiveStarterProgress,
+        NoObjectiveStarterStrategy, NoObjectiveStrategy, SolveStatus, StrategyOutcome,
     };
     use collomatique_subprocesses::StrategySubprocess;
     use std::sync::mpsc;
@@ -716,6 +719,7 @@ fn no_objective_starter_solve(model: &collomatique_constraints_colloscopes::Coll
         model,
         &strategy,
         None,
+        NoObjectiveStarterPayload::default(),
         move |outcome: Outcome| {
             let _ = tx.send(outcome);
         },
@@ -800,7 +804,8 @@ fn no_objective_starter_solve(model: &collomatique_constraints_colloscopes::Coll
 
 async fn conductor_solve(model: &collomatique_constraints_colloscopes::ColloscopeModel) {
     use collomatique_strategies::{
-        ConductorProgress, ConductorStrategy, SolveStatus, Strategy, StrategyContext,
+        ConductorPayload, ConductorProgress, ConductorStrategy, SolveStatus, Strategy,
+        StrategyContext,
     };
     use collomatique_subprocesses::SubprocessSolveBackend;
     use std::sync::Arc;
@@ -831,41 +836,47 @@ async fn conductor_solve(model: &collomatique_constraints_colloscopes::Colloscop
     eprintln!("Running conductor strategy...");
     let t = Instant::now();
     let result = conductor
-        .run_with_callback(&ctx, model, None, &|progress: ConductorProgress<V>| {
-            match &progress {
-                ConductorProgress::Conductor(status) => {
-                    let obj_str = status
-                        .best_solution
-                        .as_ref()
-                        .map(|s| format!("{:.4}", s.objective))
-                        .unwrap_or_else(|| "N/A".to_string());
-                    let bound_str = status
-                        .best_bound
-                        .map(|b| format!("{:.4}", b))
-                        .unwrap_or_else(|| "N/A".to_string());
-                    eprintln!("  [conductor] obj={} bound={}", obj_str, bound_str,);
-                }
-                ConductorProgress::WorkerAssigned {
-                    worker_num,
-                    strategy,
-                } => match strategy {
-                    Some(s) => {
-                        eprintln!("  [conductor] worker {worker_num} assigned: {}", s.name())
+        .run_with_callback(
+            &ctx,
+            model,
+            None,
+            ConductorPayload::default(),
+            &|progress: ConductorProgress<V>| {
+                match &progress {
+                    ConductorProgress::Conductor(status) => {
+                        let obj_str = status
+                            .best_solution
+                            .as_ref()
+                            .map(|s| format!("{:.4}", s.objective))
+                            .unwrap_or_else(|| "N/A".to_string());
+                        let bound_str = status
+                            .best_bound
+                            .map(|b| format!("{:.4}", b))
+                            .unwrap_or_else(|| "N/A".to_string());
+                        eprintln!("  [conductor] obj={} bound={}", obj_str, bound_str,);
                     }
-                    None => eprintln!("  [conductor] worker {worker_num} idle"),
-                },
-                ConductorProgress::WorkerProgress {
-                    worker_num,
-                    progress,
-                } => {
-                    eprintln!("  [conductor] worker {worker_num}: {progress}");
+                    ConductorProgress::WorkerAssigned {
+                        worker_num,
+                        strategy,
+                    } => match strategy {
+                        Some(s) => {
+                            eprintln!("  [conductor] worker {worker_num} assigned: {}", s.name())
+                        }
+                        None => eprintln!("  [conductor] worker {worker_num} idle"),
+                    },
+                    ConductorProgress::WorkerProgress {
+                        worker_num,
+                        progress,
+                    } => {
+                        eprintln!("  [conductor] worker {worker_num}: {progress}");
+                    }
+                    ConductorProgress::WorkerEcho { worker_num, echo } => {
+                        eprint!("  [conductor] [worker {worker_num}] {}", echo);
+                    }
                 }
-                ConductorProgress::WorkerEcho { worker_num, echo } => {
-                    eprint!("  [conductor] [worker {worker_num}] {}", echo);
-                }
-            }
-            true
-        })
+                true
+            },
+        )
         .await;
 
     match result {

@@ -9,9 +9,9 @@ use std::time::{Duration, Instant};
 use collomatique_ilp::{ConfigData, UsableData};
 use collomatique_ilp_modeler::{InternalVar, Model};
 use collomatique_strategies::{
-    ConductorProgress, ConductorStatus, ConductorStrategy, OPTIMALITY_GAP_EPS,
-    SerializableProgress, Solution, SolveStatus, Strategy, StrategyKind, StrategyOutcome,
-    StrategyProgressData,
+    ConductorPayload, ConductorProgress, ConductorStatus, ConductorStrategy, OPTIMALITY_GAP_EPS,
+    Solution, SolveStatus, Strategy, StrategyKind, StrategyOutcome, StrategyProgressData,
+    VarOrderSerializable,
 };
 use collomatique_subprocesses::StrategySubprocess;
 
@@ -603,7 +603,7 @@ where
                                     worker_num,
                                     progress,
                                 }) => {
-                                    let data = SerializableProgress::into_data(
+                                    let data = VarOrderSerializable::into_data(
                                         &*progress,
                                         &progress_var_order,
                                     )
@@ -639,6 +639,7 @@ where
                         &model,
                         &strategy,
                         None,
+                        ConductorPayload::default(),
                         result_cb,
                         progress_cb,
                         log_cb,

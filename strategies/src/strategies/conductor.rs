@@ -18,8 +18,8 @@ use collomatique_ilp_modeler::{InternalVar, Model};
 use crate::SolveProgress;
 use crate::{
     DefaultStrategy, FindClosestStrategy, FuzzyStrategy, NoObjectiveStarterProgress,
-    NoObjectiveStrategy, SerializableProgress, SolveStatus, Strategy, StrategyContext,
-    StrategyError, StrategyKind, StrategyOutcome, StrategyProgress, StrategyProgressData,
+    NoObjectiveStrategy, SolveStatus, Strategy, StrategyContext, StrategyError, StrategyKind,
+    StrategyOutcome, StrategyProgress, StrategyProgressData, VarOrderSerializable,
 };
 
 #[derive(Debug, Clone)]
@@ -226,7 +226,7 @@ impl<V: UsableData + Send> ConductorProgress<V> {
                 worker_num,
                 progress,
             } => {
-                let data = SerializableProgress::into_data(progress.as_ref(), var_order)
+                let data = VarOrderSerializable::into_data(progress.as_ref(), var_order)
                     .unwrap_or_else(|e: Infallible| match e {});
                 ConductorProgressData::WorkerProgress {
                     worker_num,
@@ -258,7 +258,7 @@ impl ConductorProgressData {
                 worker_num,
                 progress,
             } => {
-                let typed = <StrategyProgress<V> as SerializableProgress<V>>::from_data(
+                let typed = <StrategyProgress<V> as VarOrderSerializable<V>>::from_data(
                     progress.as_ref(),
                     var_order,
                 )
@@ -275,7 +275,7 @@ impl ConductorProgressData {
     }
 }
 
-impl<V: UsableData + Send> SerializableProgress<V> for ConductorProgress<V> {
+impl<V: UsableData + Send> VarOrderSerializable<V> for ConductorProgress<V> {
     type Data = ConductorProgressData;
     type Error = Infallible;
     fn into_data(&self, var_order: &[V]) -> Result<ConductorProgressData, Infallible> {
@@ -352,6 +352,21 @@ impl Default for ConductorStrategy {
             enable_warm_start: true,
             fuzzy_config: None,
         }
+    }
+}
+
+/// Per-run payload for [`ConductorStrategy`]. Empty for now.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct ConductorPayload;
+
+impl<V: UsableData + Send> VarOrderSerializable<V> for ConductorPayload {
+    type Data = ConductorPayload;
+    type Error = Infallible;
+    fn into_data(&self, _var_order: &[V]) -> Result<ConductorPayload, Infallible> {
+        Ok(self.clone())
+    }
+    fn from_data(data: &ConductorPayload, _var_order: &[V]) -> Result<Self, Infallible> {
+        Ok(data.clone())
     }
 }
 
@@ -852,7 +867,8 @@ where
         None
     };
 
-    let fut = ctx.spawn_strategy_with_echo(&kind, model, warm_start, &progress, &echo);
+    let payload = kind.unit_payload();
+    let fut = ctx.spawn_strategy_with_echo(&kind, model, warm_start, payload, &progress, &echo);
     match cancel {
         None => {
             let outcome = fut.await;
@@ -880,6 +896,7 @@ where
 #[async_trait]
 impl Strategy for ConductorStrategy {
     type Progress<V: UsableData + Send> = ConductorProgress<V>;
+    type Payload<V: UsableData + Send> = ConductorPayload;
 
     fn name(&self) -> &'static str {
         "conductor"
@@ -894,6 +911,7 @@ impl Strategy for ConductorStrategy {
         ctx: &StrategyContext,
         model: &Model<B, E, C>,
         warm_start: Option<ConfigData<InternalVar<B, E>>>,
+        _payload: ConductorPayload,
         on_progress: &(dyn Fn(Self::Progress<InternalVar<B, E>>) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where

@@ -12,8 +12,23 @@ use collomatique_ilp_modeler::{
 
 use crate::{
     NoObjectiveSolveProgress, SolveProblemOpts, SolveStatus, Strategy, StrategyContext,
-    StrategyError, StrategyOutcome,
+    StrategyError, StrategyOutcome, VarOrderSerializable,
 };
+
+/// Per-run payload for [`FindClosestStrategy`]. Empty for now.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct FindClosestPayload;
+
+impl<V: UsableData + Send> VarOrderSerializable<V> for FindClosestPayload {
+    type Data = FindClosestPayload;
+    type Error = Infallible;
+    fn into_data(&self, _var_order: &[V]) -> Result<FindClosestPayload, Infallible> {
+        Ok(self.clone())
+    }
+    fn from_data(data: &FindClosestPayload, _var_order: &[V]) -> Result<Self, Infallible> {
+        Ok(data.clone())
+    }
+}
 
 /// Extra-variable name for the surrogate "closeness" model. The
 /// original extras are wrapped as [`ClosestExtra::Inner`]; the L1
@@ -131,6 +146,7 @@ where
 #[async_trait]
 impl Strategy for FindClosestStrategy {
     type Progress<V: UsableData + Send> = FindClosestProgressData;
+    type Payload<V: UsableData + Send> = FindClosestPayload;
 
     fn name(&self) -> &'static str {
         "find-closest"
@@ -145,6 +161,7 @@ impl Strategy for FindClosestStrategy {
         ctx: &StrategyContext,
         model: &Model<B, E, C>,
         warm_start: Option<ConfigData<InternalVar<B, E>>>,
+        _payload: FindClosestPayload,
         on_progress: &(dyn Fn(Self::Progress<InternalVar<B, E>>) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
@@ -435,7 +452,7 @@ mod tests {
 
     use crate::{
         RawSolveOutcome, SolveBackend, SolveConfig, SolveProgressData, StrategyContext,
-        StrategyKind, StrategyProgressData,
+        StrategyKind, StrategyPayloadData, StrategyProgressData,
     };
 
     /// A backend that actually solves each problem it is handed with CBC, so the
@@ -490,6 +507,7 @@ mod tests {
             _model_desc: &ModelDesc,
             _strategy: &StrategyKind,
             _warm_start: Option<Vec<f64>>,
+            _payload: StrategyPayloadData,
             _on_progress: &(dyn Fn(StrategyProgressData) -> bool + Send + Sync),
             _on_echo: &(dyn Fn(String) + Send + Sync),
         ) -> Result<RawSolveOutcome, StrategyError> {
@@ -539,10 +557,16 @@ mod tests {
         let ctx = StrategyContext::new(Arc::new(RealBackend));
         let events: Mutex<Vec<FindClosestProgressData>> = Mutex::new(Vec::new());
         let outcome = strategy()
-            .run_with_callback(&ctx, &model, Some(warm), &|p| {
-                events.lock().unwrap().push(p);
-                true
-            })
+            .run_with_callback(
+                &ctx,
+                &model,
+                Some(warm),
+                FindClosestPayload::default(),
+                &|p| {
+                    events.lock().unwrap().push(p);
+                    true
+                },
+            )
             .await
             .unwrap();
 
@@ -585,7 +609,13 @@ mod tests {
 
         let ctx = StrategyContext::new(Arc::new(RealBackend));
         let outcome = strategy()
-            .run_with_callback(&ctx, &model, Some(warm), &|_| true)
+            .run_with_callback(
+                &ctx,
+                &model,
+                Some(warm),
+                FindClosestPayload::default(),
+                &|_| true,
+            )
             .await
             .unwrap();
 
@@ -603,7 +633,7 @@ mod tests {
 
         let ctx = StrategyContext::new(Arc::new(RealBackend));
         let err = strategy()
-            .run_with_callback(&ctx, &model, None, &|_| true)
+            .run_with_callback(&ctx, &model, None, FindClosestPayload::default(), &|_| true)
             .await
             .unwrap_err();
         match err {

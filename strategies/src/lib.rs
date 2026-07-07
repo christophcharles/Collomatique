@@ -1,18 +1,21 @@
 mod strategies;
 
 pub use strategies::conductor::{
-    ConductorProgress, ConductorProgressData, ConductorStatus, ConductorStatusData,
-    ConductorStrategy, ConductorWarning, FuzzyConfig, OPTIMALITY_GAP_EPS, Solution, SolutionData,
-    update_best_bound, update_best_solution,
+    ConductorPayload, ConductorProgress, ConductorProgressData, ConductorStatus,
+    ConductorStatusData, ConductorStrategy, ConductorWarning, FuzzyConfig, OPTIMALITY_GAP_EPS,
+    Solution, SolutionData, update_best_bound, update_best_solution,
 };
-pub use strategies::default::DefaultStrategy;
-pub use strategies::find_closest::{FindClosestProgressData, FindClosestStrategy};
-pub use strategies::fuzzy::{FuzzyProgressData, FuzzyStrategy};
+pub use strategies::default::{DefaultPayload, DefaultStrategy};
+pub use strategies::find_closest::{
+    FindClosestPayload, FindClosestProgressData, FindClosestStrategy,
+};
+pub use strategies::fuzzy::{FuzzyPayload, FuzzyProgressData, FuzzyStrategy};
 pub use strategies::no_objective::{
-    NoObjectiveProgressData, NoObjectiveSolveProgress, NoObjectiveStrategy,
+    NoObjectivePayload, NoObjectiveProgressData, NoObjectiveSolveProgress, NoObjectiveStrategy,
 };
 pub use strategies::no_objective_starter::{
-    NoObjectiveStarterProgress, NoObjectiveStarterProgressData, NoObjectiveStarterStrategy,
+    NoObjectiveStarterPayload, NoObjectiveStarterProgress, NoObjectiveStarterProgressData,
+    NoObjectiveStarterStrategy,
 };
 
 use std::convert::Infallible;
@@ -217,6 +220,7 @@ pub trait SolveBackend: Send + Sync {
         model_desc: &ModelDesc,
         strategy: &StrategyKind,
         warm_start: Option<Vec<f64>>,
+        payload: StrategyPayloadData,
         on_progress: &(dyn Fn(StrategyProgressData) -> bool + Send + Sync),
         on_echo: &(dyn Fn(String) + Send + Sync),
     ) -> Result<RawSolveOutcome, StrategyError>;
@@ -379,6 +383,9 @@ impl StrategyContext {
 #[async_trait]
 pub trait Strategy: Send + Sync {
     type Progress<V: UsableData + Send>: Send + Sync + Clone;
+    /// Per-run payload carrying data specific to *this* problem instance (as opposed to the
+    /// strategy's own configuration). Empty (`*Payload`) for strategies that need none.
+    type Payload<V: UsableData + Send>: Send + Sync + Clone;
 
     fn name(&self) -> &'static str;
 
@@ -390,6 +397,7 @@ pub trait Strategy: Send + Sync {
         ctx: &StrategyContext,
         model: &Model<B, E, C>,
         warm_start: Option<ConfigData<InternalVar<B, E>>>,
+        payload: Self::Payload<InternalVar<B, E>>,
         on_progress: &(dyn Fn(Self::Progress<InternalVar<B, E>>) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
@@ -401,13 +409,15 @@ pub trait Strategy: Send + Sync {
         &self,
         ctx: &StrategyContext,
         model: &Model<B, E, C>,
+        payload: Self::Payload<InternalVar<B, E>>,
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
         B: UsableData + Send,
         E: UsableData + Send,
         C: UsableData + Send,
     {
-        self.run_with_callback(ctx, model, None, &|_| true).await
+        self.run_with_callback(ctx, model, None, payload, &|_| true)
+            .await
     }
 }
 
@@ -425,7 +435,7 @@ pub enum StrategyKind {
 /// parameterized by the model's `var_order` (used to encode/decode incumbents as
 /// column-indexed `Vec<f64>`). Implemented by every progress type; [`StrategyProgress<V>`]
 /// implements it by delegating to its sub-progress types.
-pub trait SerializableProgress<V: UsableData + Send>: Sized {
+pub trait VarOrderSerializable<V: UsableData + Send>: Sized {
     type Data: serde::Serialize + serde::de::DeserializeOwned;
     type Error;
 
@@ -447,7 +457,7 @@ pub trait StrategyProgressVariant<V: UsableData + Send>: Sized {
 ///
 /// Not serializable by design (mirrors the per-strategy typed/erased split). The
 /// serializable counterpart is [`StrategyProgressData`]; convert via the
-/// [`SerializableProgress`] impl.
+/// [`VarOrderSerializable`] impl.
 #[derive(Debug, Clone)]
 pub enum StrategyProgress<V: UsableData + Send> {
     Default(SolveProgress<V>),
@@ -511,7 +521,7 @@ impl<V: UsableData + Send> From<ConductorProgress<V>> for StrategyProgress<V> {
 
 /// Serializable, type-erased union of every strategy's progress. This is the only progress
 /// form that crosses the IPC barrier; reconstruct the typed [`StrategyProgress<V>`] with
-/// [`SerializableProgress::from_data`] once a `var_order` is available.
+/// [`VarOrderSerializable::from_data`] once a `var_order` is available.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum StrategyProgressData {
     Default(SolveProgressData),
@@ -548,7 +558,146 @@ impl StrategyProgressData {
     }
 }
 
-impl<V: UsableData + Send> SerializableProgress<V> for SolveProgress<V> {
+/// Typed union of every strategy's per-run payload.
+///
+/// Mirrors [`StrategyProgress`] but flows parent → subprocess. Every variant is an empty
+/// payload for now; when a real variable-keyed payload appears its erased form diverges from
+/// the typed one and this splits from [`StrategyPayloadData`] exactly as the progress types do.
+#[derive(Debug, Clone, PartialEq)]
+pub enum StrategyPayload {
+    Default(DefaultPayload),
+    NoObjective(NoObjectivePayload),
+    NoObjectiveStarter(NoObjectiveStarterPayload),
+    FindClosest(FindClosestPayload),
+    Fuzzy(FuzzyPayload),
+    Conductor(ConductorPayload),
+}
+
+/// Serializable, type-erased union of every strategy's per-run payload — the only payload form
+/// that crosses the IPC barrier. Reconstruct the typed [`StrategyPayload`] with
+/// [`VarOrderSerializable::from_data`] once a `var_order` is available.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum StrategyPayloadData {
+    Default(DefaultPayload),
+    NoObjective(NoObjectivePayload),
+    NoObjectiveStarter(NoObjectiveStarterPayload),
+    FindClosest(FindClosestPayload),
+    Fuzzy(FuzzyPayload),
+    Conductor(ConductorPayload),
+}
+
+impl StrategyPayloadData {
+    pub fn serialize(&self) -> String {
+        serde_json::to_string(self).expect("Serialization of StrategyPayloadData should never fail")
+    }
+
+    pub fn deserialize(s: &str) -> Result<Self, StrategyError> {
+        serde_json::from_str(s).map_err(|e| {
+            StrategyError::Other(format!("failed to deserialize StrategyPayloadData: {e}"))
+        })
+    }
+}
+
+// Lift each strategy's own payload into the typed union, so the spawnable-strategy machinery can
+// erase any strategy's payload via `Into<StrategyPayload>` (mirrors the progress `From` impls).
+impl From<DefaultPayload> for StrategyPayload {
+    fn from(p: DefaultPayload) -> Self {
+        StrategyPayload::Default(p)
+    }
+}
+impl From<NoObjectivePayload> for StrategyPayload {
+    fn from(p: NoObjectivePayload) -> Self {
+        StrategyPayload::NoObjective(p)
+    }
+}
+impl From<NoObjectiveStarterPayload> for StrategyPayload {
+    fn from(p: NoObjectiveStarterPayload) -> Self {
+        StrategyPayload::NoObjectiveStarter(p)
+    }
+}
+impl From<FindClosestPayload> for StrategyPayload {
+    fn from(p: FindClosestPayload) -> Self {
+        StrategyPayload::FindClosest(p)
+    }
+}
+impl From<FuzzyPayload> for StrategyPayload {
+    fn from(p: FuzzyPayload) -> Self {
+        StrategyPayload::Fuzzy(p)
+    }
+}
+impl From<ConductorPayload> for StrategyPayload {
+    fn from(p: ConductorPayload) -> Self {
+        StrategyPayload::Conductor(p)
+    }
+}
+
+impl<V: UsableData + Send> VarOrderSerializable<V> for StrategyPayload {
+    type Data = StrategyPayloadData;
+    type Error = Infallible;
+    fn into_data(&self, var_order: &[V]) -> Result<StrategyPayloadData, Infallible> {
+        Ok(match self {
+            StrategyPayload::Default(p) => {
+                StrategyPayloadData::Default(VarOrderSerializable::into_data(p, var_order)?)
+            }
+            StrategyPayload::NoObjective(p) => {
+                StrategyPayloadData::NoObjective(VarOrderSerializable::into_data(p, var_order)?)
+            }
+            StrategyPayload::NoObjectiveStarter(p) => StrategyPayloadData::NoObjectiveStarter(
+                VarOrderSerializable::into_data(p, var_order)?,
+            ),
+            StrategyPayload::FindClosest(p) => {
+                StrategyPayloadData::FindClosest(VarOrderSerializable::into_data(p, var_order)?)
+            }
+            StrategyPayload::Fuzzy(p) => {
+                StrategyPayloadData::Fuzzy(VarOrderSerializable::into_data(p, var_order)?)
+            }
+            StrategyPayload::Conductor(p) => {
+                StrategyPayloadData::Conductor(VarOrderSerializable::into_data(p, var_order)?)
+            }
+        })
+    }
+    fn from_data(data: &StrategyPayloadData, var_order: &[V]) -> Result<Self, Infallible> {
+        Ok(match data {
+            StrategyPayloadData::Default(d) => StrategyPayload::Default(
+                <DefaultPayload as VarOrderSerializable<V>>::from_data(d, var_order)?,
+            ),
+            StrategyPayloadData::NoObjective(d) => StrategyPayload::NoObjective(
+                <NoObjectivePayload as VarOrderSerializable<V>>::from_data(d, var_order)?,
+            ),
+            StrategyPayloadData::NoObjectiveStarter(d) => StrategyPayload::NoObjectiveStarter(
+                <NoObjectiveStarterPayload as VarOrderSerializable<V>>::from_data(d, var_order)?,
+            ),
+            StrategyPayloadData::FindClosest(d) => StrategyPayload::FindClosest(
+                <FindClosestPayload as VarOrderSerializable<V>>::from_data(d, var_order)?,
+            ),
+            StrategyPayloadData::Fuzzy(d) => StrategyPayload::Fuzzy(
+                <FuzzyPayload as VarOrderSerializable<V>>::from_data(d, var_order)?,
+            ),
+            StrategyPayloadData::Conductor(d) => StrategyPayload::Conductor(
+                <ConductorPayload as VarOrderSerializable<V>>::from_data(d, var_order)?,
+            ),
+        })
+    }
+}
+
+impl StrategyKind {
+    /// The empty payload matching this strategy's variant — for callers that have no per-run
+    /// payload to supply. Each `StrategyKind` variant's payload is its strategy's `Payload`.
+    pub fn unit_payload(&self) -> StrategyPayload {
+        match self {
+            StrategyKind::Default(_) => StrategyPayload::Default(DefaultPayload),
+            StrategyKind::NoObjective(_) => StrategyPayload::NoObjective(NoObjectivePayload),
+            StrategyKind::NoObjectiveStarter(_) => {
+                StrategyPayload::NoObjectiveStarter(NoObjectiveStarterPayload)
+            }
+            StrategyKind::FindClosest(_) => StrategyPayload::FindClosest(FindClosestPayload),
+            StrategyKind::Fuzzy(_) => StrategyPayload::Fuzzy(FuzzyPayload),
+            StrategyKind::Conductor(_) => StrategyPayload::Conductor(ConductorPayload),
+        }
+    }
+}
+
+impl<V: UsableData + Send> VarOrderSerializable<V> for SolveProgress<V> {
     type Data = SolveProgressData;
     type Error = Infallible;
     fn into_data(&self, var_order: &[V]) -> Result<SolveProgressData, Infallible> {
@@ -559,7 +708,7 @@ impl<V: UsableData + Send> SerializableProgress<V> for SolveProgress<V> {
     }
 }
 
-impl<V: UsableData + Send> SerializableProgress<V> for NoObjectiveProgressData {
+impl<V: UsableData + Send> VarOrderSerializable<V> for NoObjectiveProgressData {
     type Data = NoObjectiveProgressData;
     type Error = Infallible;
     fn into_data(&self, _var_order: &[V]) -> Result<NoObjectiveProgressData, Infallible> {
@@ -570,7 +719,7 @@ impl<V: UsableData + Send> SerializableProgress<V> for NoObjectiveProgressData {
     }
 }
 
-impl<V: UsableData + Send> SerializableProgress<V> for FindClosestProgressData {
+impl<V: UsableData + Send> VarOrderSerializable<V> for FindClosestProgressData {
     type Data = FindClosestProgressData;
     type Error = Infallible;
     fn into_data(&self, _var_order: &[V]) -> Result<FindClosestProgressData, Infallible> {
@@ -581,7 +730,7 @@ impl<V: UsableData + Send> SerializableProgress<V> for FindClosestProgressData {
     }
 }
 
-impl<V: UsableData + Send> SerializableProgress<V> for FuzzyProgressData {
+impl<V: UsableData + Send> VarOrderSerializable<V> for FuzzyProgressData {
     type Data = FuzzyProgressData;
     type Error = Infallible;
     fn into_data(&self, _var_order: &[V]) -> Result<FuzzyProgressData, Infallible> {
@@ -592,56 +741,56 @@ impl<V: UsableData + Send> SerializableProgress<V> for FuzzyProgressData {
     }
 }
 
-impl<V: UsableData + Send> SerializableProgress<V> for StrategyProgress<V> {
+impl<V: UsableData + Send> VarOrderSerializable<V> for StrategyProgress<V> {
     type Data = StrategyProgressData;
     type Error = Infallible;
     fn into_data(&self, var_order: &[V]) -> Result<StrategyProgressData, Infallible> {
         Ok(match self {
             StrategyProgress::Default(p) => {
-                StrategyProgressData::Default(SerializableProgress::into_data(p, var_order)?)
+                StrategyProgressData::Default(VarOrderSerializable::into_data(p, var_order)?)
             }
             StrategyProgress::NoObjective(p) => {
-                StrategyProgressData::NoObjective(SerializableProgress::into_data(p, var_order)?)
+                StrategyProgressData::NoObjective(VarOrderSerializable::into_data(p, var_order)?)
             }
             StrategyProgress::NoObjectiveStarter(p) => StrategyProgressData::NoObjectiveStarter(
-                SerializableProgress::into_data(p, var_order)?,
+                VarOrderSerializable::into_data(p, var_order)?,
             ),
             StrategyProgress::FindClosest(p) => {
-                StrategyProgressData::FindClosest(SerializableProgress::into_data(p, var_order)?)
+                StrategyProgressData::FindClosest(VarOrderSerializable::into_data(p, var_order)?)
             }
             StrategyProgress::Fuzzy(p) => {
-                StrategyProgressData::Fuzzy(SerializableProgress::into_data(p, var_order)?)
+                StrategyProgressData::Fuzzy(VarOrderSerializable::into_data(p, var_order)?)
             }
             StrategyProgress::Conductor(p) => {
-                StrategyProgressData::Conductor(SerializableProgress::into_data(p, var_order)?)
+                StrategyProgressData::Conductor(VarOrderSerializable::into_data(p, var_order)?)
             }
         })
     }
     fn from_data(data: &StrategyProgressData, var_order: &[V]) -> Result<Self, Infallible> {
         Ok(match data {
             StrategyProgressData::Default(d) => StrategyProgress::Default(
-                <SolveProgress<V> as SerializableProgress<V>>::from_data(d, var_order)?,
+                <SolveProgress<V> as VarOrderSerializable<V>>::from_data(d, var_order)?,
             ),
             StrategyProgressData::NoObjective(d) => {
-                StrategyProgress::NoObjective(<NoObjectiveProgressData as SerializableProgress<
+                StrategyProgress::NoObjective(<NoObjectiveProgressData as VarOrderSerializable<
                     V,
                 >>::from_data(d, var_order)?)
             }
             StrategyProgressData::NoObjectiveStarter(d) => StrategyProgress::NoObjectiveStarter(
-                <NoObjectiveStarterProgress<V> as SerializableProgress<V>>::from_data(
+                <NoObjectiveStarterProgress<V> as VarOrderSerializable<V>>::from_data(
                     d, var_order,
                 )?,
             ),
             StrategyProgressData::FindClosest(d) => {
-                StrategyProgress::FindClosest(<FindClosestProgressData as SerializableProgress<
+                StrategyProgress::FindClosest(<FindClosestProgressData as VarOrderSerializable<
                     V,
                 >>::from_data(d, var_order)?)
             }
             StrategyProgressData::Fuzzy(d) => StrategyProgress::Fuzzy(
-                <FuzzyProgressData as SerializableProgress<V>>::from_data(d, var_order)?,
+                <FuzzyProgressData as VarOrderSerializable<V>>::from_data(d, var_order)?,
             ),
             StrategyProgressData::Conductor(d) => StrategyProgress::Conductor(
-                <ConductorProgress<V> as SerializableProgress<V>>::from_data(d, var_order)?,
+                <ConductorProgress<V> as VarOrderSerializable<V>>::from_data(d, var_order)?,
             ),
         })
     }
@@ -750,6 +899,7 @@ impl From<ConductorStrategy> for StrategyKind {
 /// `where` clause — a GAT would require an (inexpressible) `for<V>` bound.
 pub trait SpawnableStrategy<V: UsableData + Send> {
     type Progress: Send;
+    type Payload: Send;
     fn to_strategy_kind(&self) -> StrategyKind;
     /// Reconstruct the typed progress from the erased form received over IPC, returning
     /// the typed union unchanged if it carries a variant this strategy never emits.
@@ -757,18 +907,24 @@ pub trait SpawnableStrategy<V: UsableData + Send> {
         data: StrategyProgressData,
         var_order: &[V],
     ) -> Result<Self::Progress, StrategyProgress<V>>;
+    /// Erase this strategy's typed payload into the serializable form sent over IPC, encoding
+    /// any variable-keyed data against `var_order` (the inverse of [`Self::convert_progress`]).
+    fn payload_into_data(payload: Self::Payload, var_order: &[V]) -> StrategyPayloadData;
 }
 
-/// Every `Strategy` that can be turned into a `StrategyKind` and whose progress is a
-/// variant of the typed union is spawnable: deserialize-then-project.
+/// Every `Strategy` that can be turned into a `StrategyKind`, whose progress is a variant of
+/// the typed union and whose payload lifts into [`StrategyPayload`], is spawnable:
+/// deserialize-then-project for progress, lift-then-erase for the payload.
 impl<V, S> SpawnableStrategy<V> for S
 where
     V: UsableData + Send,
     S: Strategy + Clone,
     StrategyKind: From<S>,
     <S as Strategy>::Progress<V>: StrategyProgressVariant<V>,
+    StrategyPayload: From<<S as Strategy>::Payload<V>>,
 {
     type Progress = <S as Strategy>::Progress<V>;
+    type Payload = <S as Strategy>::Payload<V>;
     fn to_strategy_kind(&self) -> StrategyKind {
         StrategyKind::from(self.clone())
     }
@@ -776,15 +932,21 @@ where
         data: StrategyProgressData,
         var_order: &[V],
     ) -> Result<Self::Progress, StrategyProgress<V>> {
-        let typed = <StrategyProgress<V> as SerializableProgress<V>>::from_data(&data, var_order)
+        let typed = <StrategyProgress<V> as VarOrderSerializable<V>>::from_data(&data, var_order)
             .unwrap_or_else(|e| match e {});
         <Self::Progress as StrategyProgressVariant<V>>::from_strategy_progress(typed)
+    }
+    fn payload_into_data(payload: Self::Payload, var_order: &[V]) -> StrategyPayloadData {
+        let union = StrategyPayload::from(payload);
+        <StrategyPayload as VarOrderSerializable<V>>::into_data(&union, var_order)
+            .unwrap_or_else(|e| match e {})
     }
 }
 
 #[async_trait]
 impl Strategy for StrategyKind {
     type Progress<V: UsableData + Send> = StrategyProgress<V>;
+    type Payload<V: UsableData + Send> = StrategyPayload;
 
     fn name(&self) -> &'static str {
         match self {
@@ -813,6 +975,7 @@ impl Strategy for StrategyKind {
         ctx: &StrategyContext,
         model: &Model<B, E, C>,
         warm_start: Option<ConfigData<InternalVar<B, E>>>,
+        payload: StrategyPayload,
         on_progress: &(dyn Fn(StrategyProgress<InternalVar<B, E>>) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
@@ -820,39 +983,65 @@ impl Strategy for StrategyKind {
         E: UsableData + Send,
         C: UsableData + Send,
     {
+        // Project the payload union down to the variant this strategy expects. A mismatch means
+        // the caller built a payload for a different `StrategyKind` and is a programming error.
+        let mismatch = || {
+            StrategyError::Other(format!(
+                "payload variant does not match strategy `{}`",
+                self.name()
+            ))
+        };
         match self {
             StrategyKind::Default(s) => {
-                s.run_with_callback(ctx, model, warm_start, &|p| {
+                let StrategyPayload::Default(payload) = payload else {
+                    return Err(mismatch());
+                };
+                s.run_with_callback(ctx, model, warm_start, payload, &|p| {
                     on_progress(StrategyProgress::Default(p))
                 })
                 .await
             }
             StrategyKind::NoObjective(s) => {
-                s.run_with_callback(ctx, model, warm_start, &|p| {
+                let StrategyPayload::NoObjective(payload) = payload else {
+                    return Err(mismatch());
+                };
+                s.run_with_callback(ctx, model, warm_start, payload, &|p| {
                     on_progress(StrategyProgress::NoObjective(p))
                 })
                 .await
             }
             StrategyKind::NoObjectiveStarter(s) => {
-                s.run_with_callback(ctx, model, warm_start, &|p| {
+                let StrategyPayload::NoObjectiveStarter(payload) = payload else {
+                    return Err(mismatch());
+                };
+                s.run_with_callback(ctx, model, warm_start, payload, &|p| {
                     on_progress(StrategyProgress::NoObjectiveStarter(p))
                 })
                 .await
             }
             StrategyKind::FindClosest(s) => {
-                s.run_with_callback(ctx, model, warm_start, &|p| {
+                let StrategyPayload::FindClosest(payload) = payload else {
+                    return Err(mismatch());
+                };
+                s.run_with_callback(ctx, model, warm_start, payload, &|p| {
                     on_progress(StrategyProgress::FindClosest(p))
                 })
                 .await
             }
             StrategyKind::Fuzzy(s) => {
-                s.run_with_callback(ctx, model, warm_start, &|p| {
+                let StrategyPayload::Fuzzy(payload) = payload else {
+                    return Err(mismatch());
+                };
+                s.run_with_callback(ctx, model, warm_start, payload, &|p| {
                     on_progress(StrategyProgress::Fuzzy(p))
                 })
                 .await
             }
             StrategyKind::Conductor(s) => {
-                s.run_with_callback(ctx, model, warm_start, &|p| {
+                let StrategyPayload::Conductor(payload) = payload else {
+                    return Err(mismatch());
+                };
+                s.run_with_callback(ctx, model, warm_start, payload, &|p| {
                     on_progress(StrategyProgress::Conductor(p))
                 })
                 .await
@@ -911,6 +1100,7 @@ impl StrategyContext {
         strategy: &StrategyKind,
         model: &Model<B, E, C>,
         warm_start: Option<ConfigData<InternalVar<B, E>>>,
+        payload: StrategyPayload,
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
         B: UsableData + Send,
@@ -918,7 +1108,7 @@ impl StrategyContext {
         C: UsableData + Send,
     {
         strategy
-            .run_with_callback(self, model, warm_start, &|_| true)
+            .run_with_callback(self, model, warm_start, payload, &|_| true)
             .await
     }
 
@@ -927,6 +1117,7 @@ impl StrategyContext {
         strategy: &StrategyKind,
         model: &Model<B, E, C>,
         warm_start: Option<ConfigData<InternalVar<B, E>>>,
+        payload: StrategyPayload,
         on_progress: &(dyn Fn(StrategyProgress<InternalVar<B, E>>) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
@@ -935,7 +1126,7 @@ impl StrategyContext {
         C: UsableData + Send,
     {
         strategy
-            .run_with_callback(self, model, warm_start, on_progress)
+            .run_with_callback(self, model, warm_start, payload, on_progress)
             .await
     }
 
@@ -944,6 +1135,7 @@ impl StrategyContext {
         strategy: &S,
         model: &Model<B, E, C>,
         warm_start: Option<ConfigData<InternalVar<B, E>>>,
+        payload: S::Payload,
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
         B: UsableData,
@@ -951,7 +1143,7 @@ impl StrategyContext {
         C: UsableData,
         S: SpawnableStrategy<InternalVar<B, E>>,
     {
-        self.spawn_strategy_with_callback(strategy, model, warm_start, &|_| true)
+        self.spawn_strategy_with_callback(strategy, model, warm_start, payload, &|_| true)
             .await
     }
 
@@ -960,6 +1152,7 @@ impl StrategyContext {
         strategy: &S,
         model: &Model<B, E, C>,
         warm_start: Option<ConfigData<InternalVar<B, E>>>,
+        payload: S::Payload,
         on_progress: &(dyn Fn(S::Progress) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
@@ -974,6 +1167,7 @@ impl StrategyContext {
         let raw_warm_start = warm_start
             .as_ref()
             .map(|hint| collomatique_ilp::config_data_to_hint(hint, &var_order));
+        let payload_data = S::payload_into_data(payload, &var_order);
 
         let noop_echo = |_: String| {};
         let echo_fn: &(dyn Fn(String) + Send + Sync) = match &self.on_echo {
@@ -997,6 +1191,7 @@ impl StrategyContext {
                 &model_desc,
                 &strategy_kind,
                 raw_warm_start,
+                payload_data,
                 &raw_on_progress,
                 echo_fn,
             )
@@ -1010,6 +1205,7 @@ impl StrategyContext {
         strategy: &S,
         model: &Model<B, E, C>,
         warm_start: Option<ConfigData<InternalVar<B, E>>>,
+        payload: S::Payload,
         on_progress: &(dyn Fn(S::Progress) -> bool + Send + Sync),
         handle_echo: &(dyn Fn(String) -> Option<String> + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
@@ -1025,6 +1221,7 @@ impl StrategyContext {
         let raw_warm_start = warm_start
             .as_ref()
             .map(|hint| collomatique_ilp::config_data_to_hint(hint, &var_order));
+        let payload_data = S::payload_into_data(payload, &var_order);
 
         let echo_impl: Box<dyn Fn(String) + Send + Sync + '_> = match &self.on_echo {
             Some(ctx_echo) => Box::new(move |line| {
@@ -1054,6 +1251,7 @@ impl StrategyContext {
                 &model_desc,
                 &strategy_kind,
                 raw_warm_start,
+                payload_data,
                 &raw_on_progress,
                 &*echo_impl,
             )
@@ -1069,6 +1267,9 @@ pub struct StrategyRequest {
     pub strategy: StrategyKind,
     #[serde(default)]
     pub warm_start: Option<Vec<f64>>,
+    /// Erased per-run payload, reconstructed to the typed [`StrategyPayload`] in the subprocess
+    /// against the model's `var_order`.
+    pub payload: StrategyPayloadData,
 }
 
 impl StrategyRequest {
@@ -1130,6 +1331,7 @@ mod tests {
             _model_desc: &ModelDesc,
             _strategy: &StrategyKind,
             _warm_start: Option<Vec<f64>>,
+            _payload: StrategyPayloadData,
             _on_progress: &(dyn Fn(StrategyProgressData) -> bool + Send + Sync),
             _on_echo: &(dyn Fn(String) + Send + Sync),
         ) -> Result<RawSolveOutcome, StrategyError> {
@@ -1172,6 +1374,7 @@ mod tests {
             _model_desc: &ModelDesc,
             _strategy: &StrategyKind,
             _warm_start: Option<Vec<f64>>,
+            _payload: StrategyPayloadData,
             _on_progress: &(dyn Fn(StrategyProgressData) -> bool + Send + Sync),
             _on_echo: &(dyn Fn(String) + Send + Sync),
         ) -> Result<RawSolveOutcome, StrategyError> {
@@ -1204,6 +1407,7 @@ mod tests {
             _model_desc: &ModelDesc,
             _strategy: &StrategyKind,
             _warm_start: Option<Vec<f64>>,
+            _payload: StrategyPayloadData,
             _on_progress: &(dyn Fn(StrategyProgressData) -> bool + Send + Sync),
             _on_echo: &(dyn Fn(String) + Send + Sync),
         ) -> Result<RawSolveOutcome, StrategyError> {
@@ -1297,7 +1501,10 @@ mod tests {
 
         let ctx = StrategyContext::new(backend);
         let strategy = DefaultStrategy::default();
-        let outcome = strategy.run(&ctx, &model).await.unwrap();
+        let outcome = strategy
+            .run(&ctx, &model, DefaultPayload::default())
+            .await
+            .unwrap();
 
         assert_eq!(outcome.status, SolveStatus::Optimal);
         assert_eq!(outcome.objective, Some(42.0));
@@ -1321,7 +1528,10 @@ mod tests {
 
         let ctx = StrategyContext::new(backend);
         let kind = StrategyKind::Default(DefaultStrategy::default());
-        let outcome = ctx.run_strategy(&kind, &model, None).await.unwrap();
+        let outcome = ctx
+            .run_strategy(&kind, &model, None, kind.unit_payload())
+            .await
+            .unwrap();
 
         assert_eq!(outcome.status, SolveStatus::Optimal);
         assert_eq!(
@@ -1359,7 +1569,10 @@ mod tests {
 
             let ctx = StrategyContext::new(backend);
             let kind = StrategyKind::Default(DefaultStrategy::default());
-            let outcome = ctx.spawn_strategy(&kind, &model, None).await.unwrap();
+            let outcome = ctx
+                .spawn_strategy(&kind, &model, None, kind.unit_payload())
+                .await
+                .unwrap();
 
             assert_eq!(outcome.status, SolveStatus::Optimal);
             assert_eq!(outcome.objective, Some(7.0));
@@ -1399,7 +1612,7 @@ mod tests {
 
         let progress_log: Mutex<Vec<NoObjectiveProgressData>> = Mutex::new(Vec::new());
         let outcome = strategy
-            .run_with_callback(&ctx, &model, None, &|p| {
+            .run_with_callback(&ctx, &model, None, NoObjectivePayload::default(), &|p| {
                 progress_log.lock().unwrap().push(p);
                 true
             })
@@ -1437,7 +1650,10 @@ mod tests {
             disable_logging: false,
         };
 
-        let outcome = strategy.run(&ctx, &model).await.unwrap();
+        let outcome = strategy
+            .run(&ctx, &model, NoObjectivePayload::default())
+            .await
+            .unwrap();
         assert_eq!(outcome.status, SolveStatus::Infeasible);
         assert!(outcome.solution.is_none());
     }
@@ -1467,7 +1683,10 @@ mod tests {
             reconstruction_time_limit_seconds: None,
             disable_logging: false,
         });
-        let outcome = ctx.run_strategy(&kind, &model, None).await.unwrap();
+        let outcome = ctx
+            .run_strategy(&kind, &model, None, kind.unit_payload())
+            .await
+            .unwrap();
 
         assert_eq!(outcome.status, SolveStatus::Optimal);
         assert_eq!(outcome.objective, Some(3.0));
@@ -1516,17 +1735,21 @@ mod tests {
 
         let progress_log: Mutex<Vec<String>> = Mutex::new(Vec::new());
         let outcome = strategy
-            .run_with_callback(&ctx, &model, None, &|p: NoObjectiveStarterProgress<
-                InternalVar<usize, ()>,
-            >| {
-                let tag = match &p {
-                    NoObjectiveStarterProgress::Starter(_) => "starter",
-                    NoObjectiveStarterProgress::HintFound { .. } => "hint",
-                    NoObjectiveStarterProgress::Default(_) => "default",
-                };
-                progress_log.lock().unwrap().push(tag.to_owned());
-                true
-            })
+            .run_with_callback(
+                &ctx,
+                &model,
+                None,
+                NoObjectiveStarterPayload::default(),
+                &|p: NoObjectiveStarterProgress<InternalVar<usize, ()>>| {
+                    let tag = match &p {
+                        NoObjectiveStarterProgress::Starter(_) => "starter",
+                        NoObjectiveStarterProgress::HintFound { .. } => "hint",
+                        NoObjectiveStarterProgress::Default(_) => "default",
+                    };
+                    progress_log.lock().unwrap().push(tag.to_owned());
+                    true
+                },
+            )
             .await
             .unwrap();
 
@@ -1561,7 +1784,10 @@ mod tests {
             default: DefaultStrategy::default(),
         };
 
-        let outcome = strategy.run(&ctx, &model).await.unwrap();
+        let outcome = strategy
+            .run(&ctx, &model, NoObjectiveStarterPayload::default())
+            .await
+            .unwrap();
         assert_eq!(outcome.status, SolveStatus::Infeasible);
         assert!(outcome.solution.is_none());
     }
@@ -1603,7 +1829,10 @@ mod tests {
             },
             default: DefaultStrategy::default(),
         });
-        let outcome = ctx.run_strategy(&kind, &model, None).await.unwrap();
+        let outcome = ctx
+            .run_strategy(&kind, &model, None, kind.unit_payload())
+            .await
+            .unwrap();
 
         assert_eq!(outcome.status, SolveStatus::Optimal);
         assert_eq!(outcome.objective, Some(2.0));
