@@ -256,6 +256,178 @@ where
 }
 
 // ---------------------------------------------------------------------------
+// Dependency graph
+// ---------------------------------------------------------------------------
+
+/// Transitive base-variable dependencies of the extras that were
+/// expanded when a [`Model`] was built.
+///
+/// The graph is computed as a by-product of the build-time DFS
+/// expansion (see [`Modeler::build`]), so querying it later is a pure,
+/// reusable `&self` operation. Only extras that were actually expanded
+/// appear — those referenced by a user constraint/objective, or
+/// force-included via [`Modeler::build_forcing`]. Extras cut out at the
+/// DFS stage are absent from the graph.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DependencyGraph<B, E>
+where
+    B: UsableData,
+    E: UsableData,
+{
+    /// extra name -> transitive set of base variables it depends on.
+    per_extra: HashMap<E, HashSet<B>>,
+    /// Empty set handed back for extras with no (or absent) footprint.
+    empty: HashSet<B>,
+}
+
+impl<B, E> DependencyGraph<B, E>
+where
+    B: UsableData,
+    E: UsableData,
+{
+    fn new(per_extra: HashMap<E, HashSet<B>>) -> Self {
+        DependencyGraph {
+            per_extra,
+            empty: HashSet::new(),
+        }
+    }
+
+    /// Build the graph from each extra's *direct* dependencies:
+    /// `(direct base variables, direct extra references)`. The transitive
+    /// base footprint is the closure of these edges. Used both by the
+    /// build-time DFS and when reconstructing a [`Model`] from a
+    /// serialized description.
+    fn from_direct(direct: HashMap<E, (HashSet<B>, HashSet<E>)>) -> Self {
+        let mut memo: HashMap<E, HashSet<B>> = HashMap::new();
+        let mut on_stack: HashSet<E> = HashSet::new();
+        for e in direct.keys() {
+            Self::resolve_footprint(e, &direct, &mut memo, &mut on_stack);
+        }
+        DependencyGraph::new(memo)
+    }
+
+    /// Rebuild the graph from a model's extra-defining constraints. Each
+    /// [`ConstraintSource::DefiningExtra`] constraint contributes its base
+    /// variables and referenced extras as direct edges for its extra. Used
+    /// when reconstructing a [`Model`] from a serialized description, where
+    /// the graph was not persisted.
+    pub(crate) fn from_defining_constraints<C: UsableData>(
+        constraints: &[(Constraint<InternalVar<B, E>>, ConstraintSource<E, C>)],
+    ) -> Self {
+        let mut direct: HashMap<E, (HashSet<B>, HashSet<E>)> = HashMap::new();
+        for (c, src) in constraints {
+            let ConstraintSource::DefiningExtra { extra, .. } = src else {
+                continue;
+            };
+            let entry = direct
+                .entry(extra.clone())
+                .or_insert_with(|| (HashSet::new(), HashSet::new()));
+            for v in c.variable_refs() {
+                match v {
+                    InternalVar::Base(b) => {
+                        entry.0.insert(b.clone());
+                    }
+                    InternalVar::Extra(ex) if ex != extra => {
+                        entry.1.insert(ex.clone());
+                    }
+                    _ => {}
+                }
+            }
+        }
+        Self::from_direct(direct)
+    }
+
+    /// Memoized transitive-closure helper for [`Self::from_direct`]. The
+    /// `on_stack` set defensively breaks cycles (a valid model is acyclic).
+    fn resolve_footprint(
+        e: &E,
+        direct: &HashMap<E, (HashSet<B>, HashSet<E>)>,
+        memo: &mut HashMap<E, HashSet<B>>,
+        on_stack: &mut HashSet<E>,
+    ) -> HashSet<B> {
+        if let Some(f) = memo.get(e) {
+            return f.clone();
+        }
+        if !on_stack.insert(e.clone()) {
+            return HashSet::new();
+        }
+        let mut footprint = HashSet::new();
+        if let Some((bases, edges)) = direct.get(e) {
+            footprint.extend(bases.iter().cloned());
+            for t in edges {
+                let sub = Self::resolve_footprint(t, direct, memo, on_stack);
+                footprint.extend(sub);
+            }
+        }
+        on_stack.remove(e);
+        memo.insert(e.clone(), footprint.clone());
+        footprint
+    }
+
+    /// Transitive base footprint of a single extra. Empty when the extra
+    /// has no base dependencies or was not expanded.
+    pub fn base_footprint(&self, extra: &E) -> &HashSet<B> {
+        self.per_extra.get(extra).unwrap_or(&self.empty)
+    }
+
+    /// Footprint of a single variable. Works for both the user-facing
+    /// [`Var`] (as seen in [`Model::filter`] callbacks) and the flattened
+    /// [`InternalVar`] (as seen in a [`Problem`]): `Base(b)` -> `{b}`,
+    /// `Extra(e)` -> `base_footprint(e)`, `Helper { owner, .. }` ->
+    /// `base_footprint(owner)`.
+    pub fn var_footprint<V: FootprintKey<B, E>>(&self, v: &V) -> HashSet<B> {
+        v.footprint(self)
+    }
+
+    /// Union of [`Self::var_footprint`] over every variable of a
+    /// constraint. Works for `Constraint<Var<B, E>>` and
+    /// `Constraint<InternalVar<B, E>>` alike.
+    pub fn constraint_footprint<V>(&self, c: &Constraint<V>) -> HashSet<B>
+    where
+        V: UsableData + FootprintKey<B, E>,
+    {
+        let mut out = HashSet::new();
+        for v in c.variable_refs() {
+            out.extend(v.footprint(self));
+        }
+        out
+    }
+}
+
+/// Variable types whose base footprint can be looked up in a
+/// [`DependencyGraph`]. Implemented for [`Var`] (the user-facing view,
+/// e.g. inside [`Model::filter`] callbacks) and [`InternalVar`] (the
+/// flattened view used inside a [`Problem`]). Not meant to be implemented
+/// outside this crate.
+pub trait FootprintKey<B, E>
+where
+    B: UsableData,
+    E: UsableData,
+{
+    /// This variable's transitive base footprint in `graph`.
+    fn footprint(&self, graph: &DependencyGraph<B, E>) -> HashSet<B>;
+}
+
+impl<B: UsableData, E: UsableData> FootprintKey<B, E> for Var<B, E> {
+    fn footprint(&self, graph: &DependencyGraph<B, E>) -> HashSet<B> {
+        match self {
+            Var::Base(b) => std::iter::once(b.clone()).collect(),
+            Var::Extra(e) => graph.base_footprint(e).clone(),
+        }
+    }
+}
+
+impl<B: UsableData, E: UsableData> FootprintKey<B, E> for InternalVar<B, E> {
+    fn footprint(&self, graph: &DependencyGraph<B, E>) -> HashSet<B> {
+        match self {
+            InternalVar::Base(b) => std::iter::once(b.clone()).collect(),
+            InternalVar::Extra(e) => graph.base_footprint(e).clone(),
+            InternalVar::Helper { owner, .. } => graph.base_footprint(owner).clone(),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Model
 // ---------------------------------------------------------------------------
 
@@ -292,6 +464,7 @@ where
     reconstruction_objective: Objective<InternalVar<B, E>>,
     checker_reconstruction_objective: Objective<InternalVar<B, E>>,
     base_var_list: HashMap<B, Variable>,
+    dependency_graph: DependencyGraph<B, E>,
 }
 
 impl<B, E, C> Model<B, E, C>
@@ -308,6 +481,56 @@ where
     /// Consume the model and return the assembled problem.
     pub fn into_problem(self) -> Problem<InternalVar<B, E>, ConstraintSource<E, C>> {
         self.problem
+    }
+
+    /// Borrow the dependency graph computed during expansion.
+    ///
+    /// Maps each expanded extra to the transitive set of base variables
+    /// it depends on. Non-destructive and reusable — build it once, query
+    /// it repeatedly (e.g. inside a [`Self::filter`] callback).
+    pub fn dependency_graph(&self) -> &DependencyGraph<B, E> {
+        &self.dependency_graph
+    }
+
+    /// Filter user constraints and objective terms, keeping every
+    /// extra-defining constraint verbatim.
+    ///
+    /// The callbacks work at the user-facing level: `keep_constraint`
+    /// sees each user constraint as a `Constraint<Var<B, E>>` (helpers
+    /// never appear in user constraints), and `keep_obj_var` sees each
+    /// objective variable as a `Var<B, E>`. Every
+    /// [`ConstraintSource::DefiningExtra`] constraint is always kept, so
+    /// all extra/helper variables stay defined; the returned problem is
+    /// pruned of base variables that appeared only in dropped user
+    /// constraints.
+    ///
+    /// Dead extras — those whose only user references were filtered out —
+    /// are *not* shed here. To drop them, round-trip the result through
+    /// [`Modeler::from_model_problem`] followed by [`Modeler::build`],
+    /// whose lazy re-expansion prunes whatever is no longer referenced.
+    pub fn filter<FC, FV>(
+        &self,
+        mut keep_constraint: FC,
+        mut keep_obj_var: FV,
+    ) -> Problem<InternalVar<B, E>, ConstraintSource<E, C>>
+    where
+        FC: FnMut(&Constraint<Var<B, E>>, &C) -> bool,
+        FV: FnMut(&Var<B, E>) -> bool,
+    {
+        self.problem.filter(
+            |c, src| match src {
+                ConstraintSource::DefiningExtra { .. } => true,
+                ConstraintSource::User(desc) => {
+                    let var_c = c.transmute(internal_to_var);
+                    keep_constraint(&var_c, desc)
+                }
+            },
+            |v| match v {
+                // Helpers never appear in the objective; keep defensively.
+                InternalVar::Helper { .. } => true,
+                _ => keep_obj_var(&internal_to_var(v)),
+            },
+        )
     }
 
     /// Build a reconstruction problem: given base variable values,
@@ -1265,6 +1488,10 @@ where
     /// Ordered version of `in_progress`, used to report cycles
     /// with their full chain.
     path: Vec<E>,
+    /// Direct dependencies of each expanded extra, collected during the
+    /// DFS: `(direct base variables, direct extra references)`. Closed
+    /// into a [`DependencyGraph`] once expansion finishes.
+    dep_direct: HashMap<E, (HashSet<B>, HashSet<E>)>,
 }
 
 impl<'m, B, E, C, Env, Err> Modeler<'m, B, E, C, Env, Err>
@@ -1278,16 +1505,53 @@ where
     /// Run the lazy expansion fixpoint and return the assembled
     /// [`Model`]. `env` is passed to every extra-definition
     /// closure and to the fixer chain.
+    ///
+    /// Only extras referenced (transitively) by a user constraint or the
+    /// objective are expanded; declared-but-unreferenced extras are
+    /// dropped. Use [`Self::build_forcing`] or [`Self::build_full`] to
+    /// keep some or all of them.
     pub fn build(self, env: &Env) -> Result<Model<B, E, C>, BuildError<B, E, C, Err>> {
         self.build_with_log(env, &mut |_: &str| {})
+    }
+
+    /// Like [`Self::build`], but additionally force-expands every declared
+    /// extra for which `force(&name)` returns `true`, even if nothing
+    /// references it. The forced extras' definitions end up in the
+    /// resulting [`Model`] (and its [`DependencyGraph`]).
+    ///
+    /// `build(env)` is `build_forcing(env, |_| false)`; a specific set is
+    /// just `build_forcing(env, |e| wanted.contains(e))`.
+    pub fn build_forcing(
+        self,
+        env: &Env,
+        force: impl Fn(&E) -> bool,
+    ) -> Result<Model<B, E, C>, BuildError<B, E, C, Err>> {
+        self.build_with_log_forcing(env, &mut |_: &str| {}, force)
+    }
+
+    /// Like [`Self::build`], but force-expands *every* declared extra,
+    /// so no extra definition is ever dropped.
+    pub fn build_full(self, env: &Env) -> Result<Model<B, E, C>, BuildError<B, E, C, Err>> {
+        self.build_forcing(env, |_: &E| true)
     }
 
     /// Like [`Self::build`], but calls `log` with progress
     /// messages as each step completes.
     pub fn build_with_log(
+        self,
+        env: &Env,
+        log: &mut dyn FnMut(&str),
+    ) -> Result<Model<B, E, C>, BuildError<B, E, C, Err>> {
+        self.build_with_log_forcing(env, log, |_: &E| false)
+    }
+
+    /// Like [`Self::build_with_log`], but additionally force-expands every
+    /// declared extra selected by `force` (see [`Self::build_forcing`]).
+    pub fn build_with_log_forcing(
         mut self,
         env: &Env,
         log: &mut dyn FnMut(&str),
+        force: impl Fn(&E) -> bool,
     ) -> Result<Model<B, E, C>, BuildError<B, E, C, Err>> {
         use std::time::Instant;
         let t_total = Instant::now();
@@ -1465,6 +1729,7 @@ where
                 reconstruction_objective: Objective::default(),
                 checker_reconstruction_objective: Objective::default(),
                 base_var_list: base_vars,
+                dependency_graph: DependencyGraph::new(HashMap::new()),
             });
         }
 
@@ -1500,8 +1765,19 @@ where
             t_step.elapsed()
         ));
 
+        // Step 2c: force-included roots — declared extras selected by
+        // `force`, even if unreferenced. Seeded as objective-style roots
+        // (for_constraints = false) so they never pollute the checker
+        // problem.
+        let mut forced_roots: Vec<E> = Vec::new();
+        for name in extras_kinds.keys() {
+            if force(name) && seen_root.insert(name.clone()) {
+                forced_roots.push(name.clone());
+            }
+        }
+
         // Step 3: DFS expansion — constraint roots first, then
-        // objective-only roots.
+        // objective-only roots, then forced roots.
         let t_step = Instant::now();
         let mut state: BuildState<B, E, C> = BuildState {
             out_vars: HashMap::new(),
@@ -1509,6 +1785,7 @@ where
             expanded: HashSet::new(),
             in_progress: HashSet::new(),
             path: Vec::new(),
+            dep_direct: HashMap::new(),
         };
 
         for root in constraint_roots {
@@ -1537,11 +1814,27 @@ where
                 false,
             )?;
         }
+        for root in forced_roots {
+            expand(
+                &mut state,
+                &mut extras,
+                &base_vars,
+                &extras_kinds,
+                &fixers,
+                env,
+                &fix_cache,
+                root,
+                false,
+            )?;
+        }
 
         log(&format!(
             "[Modeler::build] Step 3: DFS expansion ({:.2?})",
             t_step.elapsed()
         ));
+
+        // Close the collected direct dependency edges into the graph.
+        let dependency_graph = DependencyGraph::from_direct(std::mem::take(&mut state.dep_direct));
 
         // Step 4: partition constraints for reconstruction.
         let t_step = Instant::now();
@@ -1696,6 +1989,7 @@ where
             reconstruction_objective,
             checker_reconstruction_objective,
             base_var_list: base_vars,
+            dependency_graph,
         })
     }
 }
@@ -1787,9 +2081,12 @@ where
         );
     }
 
-    // Transmute constraints and append, collecting deps.
+    // Transmute constraints and append, collecting deps and the extra's
+    // direct dependency edges (base variables + referenced extras).
     let mut deps: Vec<E> = Vec::new();
     let mut seen_dep: HashSet<E> = HashSet::new();
+    let mut direct_bases: HashSet<B> = HashSet::new();
+    let mut edge_targets: HashSet<E> = HashSet::new();
     for (i, c) in constraints.into_iter().enumerate() {
         let owner = e.clone();
         let tc: Constraint<InternalVar<B, E>> = c.transmute(|v| match v {
@@ -1801,12 +2098,17 @@ where
             },
         });
         for v in tc.variable_refs() {
-            if let InternalVar::Extra(ex) = v
-                && *ex != e
-                && !state.expanded.contains(ex)
-                && seen_dep.insert(ex.clone())
-            {
-                deps.push(ex.clone());
+            match v {
+                InternalVar::Base(b) => {
+                    direct_bases.insert(b.clone());
+                }
+                InternalVar::Extra(ex) if *ex != e => {
+                    edge_targets.insert(ex.clone());
+                    if !state.expanded.contains(ex) && seen_dep.insert(ex.clone()) {
+                        deps.push(ex.clone());
+                    }
+                }
+                _ => {}
             }
         }
         state.out_constraints.push((
@@ -1818,6 +2120,11 @@ where
             },
         ));
     }
+
+    // Record this extra's direct dependency edges for the dependency graph.
+    state
+        .dep_direct
+        .insert(e.clone(), (direct_bases, edge_targets));
 
     // Recurse into deps.
     for d in deps {

@@ -1168,6 +1168,56 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Problem<V, C, P> {
 
         output
     }
+
+    /// Produce a new problem keeping only some constraints and objective terms.
+    ///
+    /// A constraint is kept when `keep_constraint(&constraint, &desc)` returns
+    /// `true`. An objective term is kept when `keep_obj_var(&var)` returns
+    /// `true` for its variable; dropped terms are effectively set to zero.
+    ///
+    /// The variable set of the result is pruned to those variables still
+    /// referenced by a kept constraint or by the surviving objective, so no
+    /// dangling declarations remain. This is a pure `&self` operation.
+    pub fn filter<FC, FV>(&self, mut keep_constraint: FC, keep_obj_var: FV) -> Problem<V, C, P>
+    where
+        FC: FnMut(&Constraint<V>, &C) -> bool,
+        FV: FnMut(&V) -> bool,
+    {
+        let kept_constraints: Vec<(Constraint<V>, C)> = self
+            .constraints
+            .iter()
+            .filter(|(c, desc)| keep_constraint(c, desc))
+            .cloned()
+            .collect();
+
+        let objective = self.objective.retained(keep_obj_var);
+
+        // Prune variables to those still referenced by a kept constraint or
+        // the surviving objective.
+        let mut used: HashSet<V> = HashSet::new();
+        for (c, _) in &kept_constraints {
+            for v in c.variable_refs() {
+                used.insert(v.clone());
+            }
+        }
+        for v in objective.get_function().variable_refs() {
+            used.insert(v.clone());
+        }
+        let variables: HashMap<V, Variable> = self
+            .variables
+            .iter()
+            .filter(|(v, _)| used.contains(*v))
+            .map(|(v, kind)| (v.clone(), kind.clone()))
+            .collect();
+
+        let builder: ProblemBuilder<V, C, P> = ProblemBuilder::new()
+            .set_variables(variables)
+            .add_constraints(kept_constraints)
+            .set_objective(objective);
+        builder
+            .build()
+            .expect("filtered problem keeps only referenced (hence declared) variables")
+    }
 }
 
 /// Report on confirmity between configuration data and an ILP problem
