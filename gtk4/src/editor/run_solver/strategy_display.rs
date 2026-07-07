@@ -71,7 +71,7 @@ impl FactoryComponent for StrategyFrame {
     view! {
         #[root]
         gtk::Box {
-            set_margin_all: 5,
+            set_margin_all: 0,
             set_spacing: 5,
             set_hexpand: true,
             set_vexpand: true,

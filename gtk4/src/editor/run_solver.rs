@@ -177,7 +177,7 @@ where
                     gtk::Box {
                         set_hexpand: true,
                         set_vexpand: true,
-                        set_margin_all: 5,
+                        set_margin_all: 0,
                         #[watch]
                         set_visible: !model.initializing && model.displayed_worker.is_none() && !model.show_debug,
                         gtk::Frame {
@@ -372,7 +372,7 @@ where
                     gtk::Box {
                         set_hexpand: true,
                         set_vexpand: true,
-                        set_margin_all: 5,
+                        set_margin_all: 0,
                         #[watch]
                         set_visible: !model.initializing && model.displayed_worker.is_none() && model.show_debug,
                         append: model.global_debug_view.widget(),
@@ -387,8 +387,7 @@ where
                     gtk::Box {
                         set_orientation: gtk::Orientation::Horizontal,
                         set_hexpand: true,
-                        set_margin_all: 10,
-                        set_margin_top: 0,
+                        set_margin_all: 5,
                         set_spacing: 10,
                         #[watch]
                         set_visible: !model.initializing,
