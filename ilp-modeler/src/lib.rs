@@ -492,30 +492,46 @@ where
         &self.dependency_graph
     }
 
-    /// Filter user constraints and objective terms, keeping every
-    /// extra-defining constraint verbatim.
+    /// Filter user constraints, base variables and objective terms, keeping
+    /// every extra-defining constraint (and every extra/helper variable)
+    /// verbatim.
     ///
-    /// The callbacks work at the user-facing level: `keep_constraint`
-    /// sees each user constraint as a `Constraint<Var<B, E>>` (helpers
-    /// never appear in user constraints), and `keep_obj_var` sees each
-    /// objective variable as a `Var<B, E>`. Every
-    /// [`ConstraintSource::DefiningExtra`] constraint is always kept, so
-    /// all extra/helper variables stay defined; the returned problem is
-    /// pruned of base variables that appeared only in dropped user
-    /// constraints.
+    /// The callbacks work at the user-facing level:
+    /// - `keep_constraint` sees each user constraint as a
+    ///   `Constraint<Var<B, E>>` (helpers never appear in user constraints);
+    /// - `keep_base_variable` sees each base variable `&B` — the caller
+    ///   decides which base variables the slice keeps, referenced or not (this
+    ///   mirrors the full `Model`, whose problem declares *every* base
+    ///   variable). Extras and helpers are always kept, since their defining
+    ///   constraints are kept.
+    /// - `keep_obj_term` sees each objective variable as a `Var<B, E>`.
     ///
-    /// Dead extras — those whose only user references were filtered out —
-    /// are *not* shed here. To drop them, round-trip the result through
-    /// [`Modeler::from_model_problem`] followed by [`Modeler::build`],
-    /// whose lazy re-expansion prunes whatever is no longer referenced.
-    pub fn filter<FC, FV>(
+    /// Delegates to the dumb [`Problem::filter`] primitive, so consistency is
+    /// verified rather than repaired: if a kept constraint or objective term
+    /// references a base variable that `keep_base_variable` dropped, the
+    /// underlying build returns an error. In the intended footprint-based
+    /// usage (`keep_constraint` = footprint ⊆ blessed, `keep_base_variable` =
+    /// `b ∈ blessed`, `keep_obj_term` = footprint ⊆ blessed) the result is
+    /// always `Ok`.
+    ///
+    /// Dead extras — those whose only user references were filtered out — are
+    /// *not* shed here. To drop them, round-trip the result through
+    /// [`Modeler::from_model_problem`] followed by [`Modeler::build`], whose
+    /// lazy re-expansion prunes whatever is no longer referenced.
+    pub fn filter<FC, FV, FO>(
         &self,
         mut keep_constraint: FC,
-        mut keep_obj_var: FV,
-    ) -> Problem<InternalVar<B, E>, ConstraintSource<E, C>>
+        mut keep_base_variable: FV,
+        mut keep_obj_term: FO,
+    ) -> collomatique_ilp::BuildResult<
+        Problem<InternalVar<B, E>, ConstraintSource<E, C>>,
+        InternalVar<B, E>,
+        ConstraintSource<E, C>,
+    >
     where
         FC: FnMut(&Constraint<Var<B, E>>, &C) -> bool,
-        FV: FnMut(&Var<B, E>) -> bool,
+        FV: FnMut(&B) -> bool,
+        FO: FnMut(&Var<B, E>) -> bool,
     {
         self.problem.filter(
             |c, src| match src {
@@ -526,9 +542,14 @@ where
                 }
             },
             |v| match v {
+                InternalVar::Base(b) => keep_base_variable(b),
+                // Extras/helpers stay declared: their definitions are kept.
+                InternalVar::Extra(_) | InternalVar::Helper { .. } => true,
+            },
+            |v| match v {
                 // Helpers never appear in the objective; keep defensively.
                 InternalVar::Helper { .. } => true,
-                _ => keep_obj_var(&internal_to_var(v)),
+                _ => keep_obj_term(&internal_to_var(v)),
             },
         )
     }

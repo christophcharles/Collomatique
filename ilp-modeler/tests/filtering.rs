@@ -2,9 +2,9 @@ use std::collections::{HashMap, HashSet};
 
 use collomatique_ilp::linexpr::LinExpr;
 use collomatique_ilp::solvers::{Solver, SolverModel, collo_cbc::ColloCbcSolver};
-use collomatique_ilp::{Objective, ObjectiveSense, Variable};
+use collomatique_ilp::{BuildError as IlpBuildError, Objective, ObjectiveSense, Variable};
 
-use collomatique_ilp_modeler::{ConstraintSource, ExtraVar, InternalVar, Model, Modeler, Var};
+use collomatique_ilp_modeler::{ConstraintSource, ExtraVar, InternalVar, Modeler, Var};
 
 type B = String;
 type E = String;
@@ -145,29 +145,26 @@ fn build_full_retains_unreferenced_extra() {
     );
 }
 
-/// A model set up for the `Model::filter` tests: base b1/b2, extras
-/// s = b1 and t = b2, user constraints over each, and an objective over
-/// all of them.
-fn filter_fixture<'m>() -> Model<B, E, C> {
+/// Intended usage: `Model::filter` filters user constraints/objective terms
+/// by base footprint and drops a base variable that no surviving structure
+/// references. Callbacks work at the `Var` level; every extra-defining
+/// constraint is kept; the result is `Ok`.
+#[test]
+fn model_filter_slices_by_footprint() {
+    // base b1, b2; extra s = b1 — nothing depends on b2.
     let mut m = modeler_with_bases(&["b1", "b2"]);
     declare_sum(&mut m, "s", &[ebase("b1")]);
-    declare_sum(&mut m, "t", &[ebase("b2")]);
-
     m.add_constraint(
         LinExpr::var(base("b1")).leq(&LinExpr::constant(1.0)),
-        "u1".into(),
+        "u_local".into(),
     );
     m.add_constraint(
-        LinExpr::var(base("b2")).leq(&LinExpr::constant(1.0)),
-        "u2".into(),
+        (LinExpr::var(base("b1")) + LinExpr::var(base("b2"))).leq(&LinExpr::constant(1.0)),
+        "u_cross".into(),
     );
     m.add_constraint(
         LinExpr::var(xtra("s")).leq(&LinExpr::constant(1.0)),
-        "u3".into(),
-    );
-    m.add_constraint(
-        LinExpr::var(xtra("t")).leq(&LinExpr::constant(1.0)),
-        "u4".into(),
+        "u_s".into(),
     );
     m.add_objective(
         1.0,
@@ -176,27 +173,20 @@ fn filter_fixture<'m>() -> Model<B, E, C> {
             ObjectiveSense::Maximize,
         ),
     );
-    m.build(&()).unwrap()
-}
-
-/// `Model::filter` keeps user constraints/objective terms by their base
-/// footprint (callbacks work at the `Var` level), keeps every
-/// extra-defining constraint, and prunes now-unreferenced base variables.
-#[test]
-fn model_filter_by_footprint() {
-    let model = filter_fixture();
+    let model = m.build(&()).unwrap();
     let graph = model.dependency_graph();
     let blessed = bset(["b1"]);
 
-    let filtered = model.filter(
-        // `c` is a Constraint<Var<B, E>> — proven by calling the Var-level
-        // constraint_footprint on it.
-        |c: &_, _desc| graph.constraint_footprint(c).is_subset(&blessed),
-        |v: &Var<B, E>| graph.var_footprint(v).is_subset(&blessed),
-    );
+    let filtered = model
+        .filter(
+            // `c` is a Constraint<Var<B, E>> — proven by the Var-level footprint call.
+            |c: &_, _desc| graph.constraint_footprint(c).is_subset(&blessed),
+            |b: &B| blessed.contains(b),
+            |v: &Var<B, E>| graph.var_footprint(v).is_subset(&blessed),
+        )
+        .expect("intended usage is consistent");
 
-    // User constraints kept: u1 ({b1}) and u3 (s -> {b1}). Dropped: u2
-    // ({b2}) and u4 (t -> {b2}).
+    // Kept user constraints: u_local ({b1}), u_s (s -> {b1}). Dropped: u_cross.
     let kept_user: HashSet<&String> = filtered
         .get_constraints()
         .iter()
@@ -207,11 +197,11 @@ fn model_filter_by_footprint() {
         .collect();
     assert_eq!(
         kept_user,
-        HashSet::from([&"u1".to_string(), &"u3".to_string()])
+        HashSet::from([&"u_local".to_string(), &"u_s".to_string()])
     );
 
-    // Every extra-defining constraint is still there (s and t both).
-    let defining_extras: HashSet<&String> = filtered
+    // The extra-defining constraint of s is kept.
+    let defining: HashSet<&String> = filtered
         .get_constraints()
         .iter()
         .filter_map(|(_, src)| match src {
@@ -219,10 +209,13 @@ fn model_filter_by_footprint() {
             _ => None,
         })
         .collect();
-    assert_eq!(
-        defining_extras,
-        HashSet::from([&"s".to_string(), &"t".to_string()])
-    );
+    assert_eq!(defining, HashSet::from([&"s".to_string()]));
+
+    // b2 dropped as a variable; b1 and s kept.
+    let vars: HashSet<&InternalVar<B, E>> = filtered.get_variables().keys().collect();
+    assert!(!vars.contains(&InternalVar::Base("b2".to_string())));
+    assert!(vars.contains(&InternalVar::Base("b1".to_string())));
+    assert!(vars.contains(&InternalVar::Extra("s".to_string())));
 
     // Objective keeps b1 and s, drops b2.
     let obj_vars: HashSet<&InternalVar<B, E>> = filtered
@@ -235,18 +228,109 @@ fn model_filter_by_footprint() {
     assert!(!obj_vars.contains(&InternalVar::Base("b2".to_string())));
 }
 
-/// Round-trip: filter → from_model_problem → build sheds extras whose only
-/// user references were filtered out, and the minimal sub-problem solves.
+/// Nothing is auto-pruned: a blessed base variable whose only constraint was
+/// dropped stays declared in the filtered problem.
 #[test]
-fn filter_roundtrip_drops_dead_extras() {
-    let model = filter_fixture();
+fn model_filter_keeps_blessed_unreferenced_base_var() {
+    let mut m = modeler_with_bases(&["b1", "b2"]);
+    m.add_constraint(
+        (LinExpr::var(base("b1")) + LinExpr::var(base("b2"))).leq(&LinExpr::constant(1.0)),
+        "u_cross".into(),
+    );
+    let model = m.build(&()).unwrap();
     let graph = model.dependency_graph();
     let blessed = bset(["b1"]);
 
-    let filtered = model.filter(
-        |c: &_, _desc| graph.constraint_footprint(c).is_subset(&blessed),
-        |v: &Var<B, E>| graph.var_footprint(v).is_subset(&blessed),
+    let filtered = model
+        .filter(
+            |c: &_, _desc| graph.constraint_footprint(c).is_subset(&blessed),
+            |b: &B| blessed.contains(b),
+            |_v: &Var<B, E>| true,
+        )
+        .expect("consistent");
+
+    // u_cross ({b1,b2}) dropped, so no user constraints remain.
+    assert!(
+        !filtered
+            .get_constraints()
+            .iter()
+            .any(|(_, src)| matches!(src, ConstraintSource::User(_)))
     );
+    // b1 is blessed and stays declared even though nothing references it now.
+    let vars: HashSet<&InternalVar<B, E>> = filtered.get_variables().keys().collect();
+    assert!(vars.contains(&InternalVar::Base("b1".to_string())));
+    assert!(!vars.contains(&InternalVar::Base("b2".to_string())));
+}
+
+/// Improper usage: dropping a base variable that a kept extra-defining
+/// constraint still references propagates the `Err` from `Problem::filter`.
+#[test]
+fn model_filter_inconsistent_base_var_errors() {
+    // Extra t = b2; its defining constraint is force-kept, so dropping b2 is
+    // inconsistent.
+    let mut m = modeler_with_bases(&["b1", "b2"]);
+    declare_sum(&mut m, "t", &[ebase("b2")]);
+    m.add_constraint(
+        LinExpr::var(xtra("t")).leq(&LinExpr::constant(1.0)),
+        "u_t".into(),
+    );
+    let model = m.build(&()).unwrap();
+    let blessed = bset(["b1"]);
+
+    let err = model
+        .filter(
+            |_c: &_, _desc| true,        // keep all user constraints
+            |b: &B| blessed.contains(b), // ... but drop b2
+            |_v: &Var<B, E>| true,
+        )
+        .unwrap_err();
+    match err {
+        IlpBuildError::UndeclaredVariableInConstraint(v, _, _) => {
+            assert_eq!(v, InternalVar::Base("b2".to_string()));
+        }
+        other => panic!("expected UndeclaredVariableInConstraint, got {other:?}"),
+    }
+}
+
+/// Round-trip: `filter` (keeping the base vars the extras need, so `Ok`) →
+/// `from_model_problem` → `build` sheds extras whose only user references were
+/// filtered out, and the minimal sub-problem solves.
+#[test]
+fn filter_roundtrip_drops_dead_extras() {
+    // base b1, b2; extras s = b1, t = b2.
+    let mut m = modeler_with_bases(&["b1", "b2"]);
+    declare_sum(&mut m, "s", &[ebase("b1")]);
+    declare_sum(&mut m, "t", &[ebase("b2")]);
+    m.add_constraint(
+        LinExpr::var(base("b1")).leq(&LinExpr::constant(1.0)),
+        "u1".into(),
+    );
+    m.add_constraint(
+        LinExpr::var(xtra("s")).leq(&LinExpr::constant(1.0)),
+        "u_s".into(),
+    );
+    m.add_constraint(
+        LinExpr::var(xtra("t")).leq(&LinExpr::constant(1.0)),
+        "u_t".into(),
+    );
+    m.add_objective(
+        1.0,
+        Objective::new(
+            LinExpr::var(base("b1")) + LinExpr::var(xtra("s")),
+            ObjectiveSense::Maximize,
+        ),
+    );
+    let model = m.build(&()).unwrap();
+    let graph = model.dependency_graph();
+    let blessed = bset(["b1"]);
+
+    let filtered = model
+        .filter(
+            |c: &_, _desc| graph.constraint_footprint(c).is_subset(&blessed), // drops u_t
+            |_b: &B| true, // keep all base vars — b2 is needed by t's defining constraint
+            |v: &Var<B, E>| graph.var_footprint(v).is_subset(&blessed),
+        )
+        .expect("consistent (all base vars kept)");
 
     // Re-model from the filtered problem and rebuild. `t` is no longer
     // referenced by any user constraint or the objective, so it is dropped.
