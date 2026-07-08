@@ -2,6 +2,7 @@ mod conductor_panel;
 mod default_panel;
 mod find_closest_panel;
 mod fuzzy_panel;
+mod incremental_panel;
 mod no_objective_panel;
 mod no_objective_starter_panel;
 
@@ -20,6 +21,7 @@ use conductor_panel::{ConductorPanel, ConductorPanelInput};
 use default_panel::{DefaultPanel, DefaultPanelInput};
 use find_closest_panel::{FindClosestPanel, FindClosestPanelInput};
 use fuzzy_panel::{FuzzyPanel, FuzzyPanelInput};
+use incremental_panel::{IncrementalPanel, IncrementalPanelInput};
 use no_objective_panel::{NoObjectivePanel, NoObjectivePanelInput};
 use no_objective_starter_panel::{NoObjectiveStarterPanel, NoObjectiveStarterPanelInput};
 
@@ -56,6 +58,7 @@ pub struct StrategyFrame {
     no_objective_panel: Controller<NoObjectivePanel>,
     find_closest_panel: Controller<FindClosestPanel>,
     fuzzy_panel: Controller<FuzzyPanel>,
+    incremental_panel: Controller<IncrementalPanel>,
     no_objective_starter_panel: Controller<NoObjectiveStarterPanel>,
     conductor_panel: Controller<ConductorPanel>,
 }
@@ -176,6 +179,7 @@ impl FactoryComponent for StrategyFrame {
                         append = self.no_objective_panel.widget(),
                         append = self.find_closest_panel.widget(),
                         append = self.fuzzy_panel.widget(),
+                        append = self.incremental_panel.widget(),
                         append = self.no_objective_starter_panel.widget(),
                         append = self.conductor_panel.widget(),
                         gtk::Box {
@@ -223,6 +227,7 @@ impl FactoryComponent for StrategyFrame {
             no_objective_panel: NoObjectivePanel::builder().launch(()).detach(),
             find_closest_panel: FindClosestPanel::builder().launch(()).detach(),
             fuzzy_panel: FuzzyPanel::builder().launch(()).detach(),
+            incremental_panel: IncrementalPanel::builder().launch(()).detach(),
             no_objective_starter_panel: NoObjectiveStarterPanel::builder().launch(()).detach(),
             conductor_panel: ConductorPanel::builder().launch(()).detach(),
         }
@@ -319,6 +324,9 @@ impl StrategyFrame {
         self.fuzzy_panel.emit(FuzzyPanelInput::Reset {
             visible: matches!(kind, Some(StrategyKind::Fuzzy { .. })),
         });
+        self.incremental_panel.emit(IncrementalPanelInput::Reset {
+            visible: matches!(kind, Some(StrategyKind::Incremental { .. })),
+        });
         self.no_objective_starter_panel
             .emit(NoObjectiveStarterPanelInput::Reset {
                 visible: matches!(kind, Some(StrategyKind::NoObjectiveStarter { .. })),
@@ -348,8 +356,9 @@ impl StrategyFrame {
                 .find_closest_panel
                 .emit(FindClosestPanelInput::Update(p)),
             StrategyProgressData::Fuzzy(p) => self.fuzzy_panel.emit(FuzzyPanelInput::Update(p)),
-            // No dedicated panel yet: incremental progress is surfaced via the echo/log route.
-            StrategyProgressData::Incremental(_) => {}
+            StrategyProgressData::Incremental(p) => self
+                .incremental_panel
+                .emit(IncrementalPanelInput::Update(p)),
             StrategyProgressData::NoObjectiveStarter(p) => self
                 .no_objective_starter_panel
                 .emit(NoObjectiveStarterPanelInput::Update(p)),
