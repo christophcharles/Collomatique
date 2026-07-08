@@ -40,20 +40,18 @@ impl SolveConfig {
     /// future model-refinement fields.
     pub fn sanitize(&mut self, _params: &Parameters) {}
 
-    /// Build the ILP model to be solved from `params`, streaming build log lines through `log`.
-    /// The build is a pure function of the parameters (the colloscope is discarded by the model
-    /// builder), so the current assignments are intentionally left at their default here.
+    /// Build the ILP model to be solved from `params` and the current `colloscope`, streaming build
+    /// log lines through `log`. The caller supplies the real colloscope (rather than an empty one)
+    /// so the build can take the current assignments into account.
     pub async fn build_model(
         &self,
         params: &Parameters,
+        colloscope: &collomatique_state_colloscopes::colloscopes::Colloscope,
         log: &mut (dyn FnMut(&str) + Send),
     ) -> Result<collomatique_constraints_colloscopes::ColloscopeModel, String> {
         let inner_data = collomatique_state_colloscopes::InnerData {
             params: params.clone(),
-            colloscope:
-                collomatique_state_colloscopes::colloscopes::Colloscope::new_empty_from_params(
-                    params,
-                ),
+            colloscope: colloscope.clone(),
             ..Default::default()
         };
         let pool = sqlx::SqlitePool::connect(":memory:")

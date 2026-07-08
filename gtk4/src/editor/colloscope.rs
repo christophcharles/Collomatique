@@ -752,7 +752,11 @@ impl Component for Colloscope {
                 self.solve_config = config.clone();
                 self.loading_dialog
                     .sender()
-                    .send(loading_dialog::DialogInput::Show(config, params))
+                    .send(loading_dialog::DialogInput::Show(
+                        config,
+                        params,
+                        self.colloscope.clone(),
+                    ))
                     .unwrap();
             }
             ColloscopeInput::ModelBuilt(config, model, payload) => {
