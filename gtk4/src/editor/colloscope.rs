@@ -777,22 +777,22 @@ impl Component for Colloscope {
             ColloscopeInput::SolveResult(config_data) => {
                 // Translate the raw ILP config back into a colloscope, using the
                 // current problem (still the dispatched one thanks to modal dialogs).
-                // A real solution should always rebuild; a failure here is dropped
-                // rather than surfaced.
                 if let Some(ilp_problem) = self.get_ilp_problem() {
-                    if let Some(sol) = ilp_problem.problem.solution_from_complete_data(config_data)
+                    // Drop the non-base variables straight from the config the solver returned,
+                    // rather than rebuilding and re-checking a full Solution (~100ms on the UI
+                    // thread) only to throw it away and keep the base values.
+                    let base_config = ilp_problem
+                        .problem
+                        .base_data_from_complete_data(&config_data);
+                    if let Some(colloscope) =
+                        collomatique_constraints_colloscopes::convert::build_colloscope(
+                            &ilp_problem.env,
+                            &base_config,
+                        )
                     {
-                        let base_config = sol.get_data();
-                        if let Some(colloscope) =
-                            collomatique_constraints_colloscopes::convert::build_colloscope(
-                                &ilp_problem.env,
-                                &base_config,
-                            )
-                        {
-                            sender
-                                .output(ColloscopeOutput::NewColloscope(colloscope))
-                                .unwrap();
-                        }
+                        sender
+                            .output(ColloscopeOutput::NewColloscope(colloscope))
+                            .unwrap();
                     }
                 }
             }

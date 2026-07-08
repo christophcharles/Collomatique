@@ -1716,6 +1716,64 @@ impl<V: UsableData> ConfigData<V> {
 
         Some(ConfigData { values: new_values })
     }
+
+    /// Transmutes and filters variables at once
+    ///
+    /// Works like [ConfigData::transmute], but the closure returns an `Option`: a variable
+    /// for which it returns `Some(new_name)` is renamed and kept, and a variable for which
+    /// it returns `None` is dropped. Unlike [ConfigData::try_transmute], a `None` does not
+    /// abort the whole operation — it removes just that one variable.
+    ///
+    /// For instance:
+    /// ```
+    /// # use collomatique_ilp::ConfigData;
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    /// enum V1 {
+    ///     A,
+    ///     B,
+    ///     C,
+    /// }
+    ///
+    /// let config_data = ConfigData::new()
+    ///     .set(V1::A, 1.0)
+    ///     .set(V1::B, 0.0)
+    ///     .set(V1::C, 0.5);
+    ///
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    /// enum V2 {
+    ///     A,
+    ///     B,
+    ///     D,
+    ///     E,
+    ///     F,
+    /// }
+    ///
+    /// // A and B are kept (and renamed), C is dropped
+    /// let config_data_filtered = config_data.filter_transmute(|v| match v {
+    ///     V1::A => Some(V2::A),
+    ///     V1::B => Some(V2::B),
+    ///     V1::C => None,
+    /// });
+    ///
+    /// let expected_result = ConfigData::new()
+    ///     .set(V2::A, 1.0)
+    ///     .set(V2::B, 0.0);
+    /// assert_eq!(config_data_filtered, expected_result);
+    /// ```
+    pub fn filter_transmute<U: UsableData, F: FnMut(&V) -> Option<U>>(
+        &self,
+        mut f: F,
+    ) -> ConfigData<U> {
+        let mut new_values = HashMap::new();
+
+        for (var, value) in &self.values {
+            if let Some(new_var) = f(var) {
+                new_values.insert(new_var, *value);
+            }
+        }
+
+        ConfigData { values: new_values }
+    }
 }
 
 /// A configuration for a [Problem].

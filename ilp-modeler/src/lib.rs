@@ -884,6 +884,19 @@ where
         })
     }
 
+    /// Extract just the base-variable values from a complete config (base + extra +
+    /// helper), without rebuilding or checking a [`Solution`]. Cheap: no matrix
+    /// construction, no feasibility check — it only drops the non-base variables.
+    pub fn base_data_from_complete_data(
+        &self,
+        config_data: &ConfigData<InternalVar<B, E>>,
+    ) -> ConfigData<B> {
+        config_data.filter_transmute(|var| match var {
+            InternalVar::Base(b) => Some(b.clone()),
+            _ => None,
+        })
+    }
+
     fn check_no_missing_variables(&self, config_data: &ConfigData<B>) -> bool {
         if !config_data
             .get_values()
