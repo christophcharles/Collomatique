@@ -17,6 +17,7 @@ pub enum DebugMode {
     SubprocessSolveStrategy,
     NoObjective,
     NoObjectiveStarter,
+    Incremental,
     Conductor,
 }
 
@@ -54,6 +55,9 @@ pub fn print_help() -> Result<(), anyhow::Error> {
     );
     eprintln!(
         "    no-objective-starter   Solve via no-objective starter strategy subprocess (end-to-end test)"
+    );
+    eprintln!(
+        "    incremental            Solve via the incremental (staggered epochs) strategy subprocess"
     );
     eprintln!(
         "    conductor              Solve via the conductor strategy (spawns subprocess workers)"
@@ -112,6 +116,7 @@ pub fn run(mode: DebugMode, file: PathBuf) -> Result<(), anyhow::Error> {
             DebugMode::SubprocessSolveStrategy => subprocess_solve_strategy(&model),
             DebugMode::NoObjective => no_objective_solve(&model),
             DebugMode::NoObjectiveStarter => no_objective_starter_solve(&model),
+            DebugMode::Incremental => incremental_solve(&model),
             DebugMode::Conductor => conductor_solve(&model).await,
         }
 
@@ -797,6 +802,148 @@ fn no_objective_starter_solve(model: &collomatique_constraints_colloscopes::Coll
             eprintln!("  Channel closed without receiving a result");
             if let Some(progress) = handle.last_progress() {
                 eprintln!("  Last progress: {progress}");
+            }
+        }
+    }
+}
+
+fn incremental_solve(model: &collomatique_constraints_colloscopes::ColloscopeModel) {
+    use collomatique_constraints_colloscopes::Var;
+    use collomatique_ilp_modeler::InternalVar;
+    use collomatique_strategies::{
+        IncrementalPayload, IncrementalProgressData, IncrementalStrategy, SolveStatus,
+        StrategyOutcome, StrategyProgressData,
+    };
+    use collomatique_subprocesses::StrategySubprocess;
+    use std::collections::HashMap;
+    use std::sync::mpsc;
+
+    type Outcome = StrategyOutcome<
+        collomatique_ilp_modeler::InternalVar<
+            collomatique_constraints_colloscopes::Var,
+            collomatique_constraints_colloscopes::ExtraVarName,
+        >,
+    >;
+
+    let t = Instant::now();
+    eprintln!("Extracting problem descriptor...");
+    let (model_desc, _) = model.to_desc();
+    eprintln!(
+        "  Descriptor: {} variables, {} constraints ({:.2?})",
+        model_desc.main.problem_desc.variables.len(),
+        model_desc.main.problem_desc.constraints.len(),
+        t.elapsed()
+    );
+
+    // Epoch assignment: every StudentGroup base variable is solved first (epoch 0), then each
+    // GroupInInterrogation variable is solved in the epoch matching its week (week + 1), so the
+    // schedule fills in week by week on top of the fixed group assignment.
+    let mut epochs = HashMap::new();
+    for v in model.problem().get_variables().keys() {
+        if let InternalVar::Base(base) = v {
+            let epoch = match base {
+                Var::StudentGroup { .. } => 0u32,
+                Var::GroupInInterrogation { week, .. } => week.0 as u32 + 1,
+            };
+            epochs.insert(v.clone(), epoch);
+        }
+    }
+    eprintln!(
+        "  Epoch payload: {} base variables across {} epoch(s)",
+        epochs.len(),
+        epochs.values().copied().max().map_or(0, |m| m + 1),
+    );
+    let payload = IncrementalPayload { epochs };
+
+    let strategy = IncrementalStrategy {
+        l1_weight: 1000.0,
+        epoch_time_limit_seconds: None,
+        reconstruction_time_limit_seconds: None,
+        disable_logging: false,
+    };
+
+    let (tx, rx) = mpsc::channel();
+    eprintln!("Spawning incremental strategy subprocess...");
+    let t = Instant::now();
+    let handle = StrategySubprocess::spawn(
+        model,
+        &strategy,
+        None,
+        payload,
+        move |outcome: Outcome| {
+            let _ = tx.send(outcome);
+        },
+        |progress: Result<IncrementalProgressData, String>| match progress {
+            Ok(p) => {
+                eprintln!("  [strategy subprocess progress] {p}");
+            }
+            Err(e) => {
+                eprintln!("  [strategy subprocess progress error] {e}");
+            }
+        },
+        |line| {
+            eprint!("  [strategy subprocess] {}", line);
+        },
+    );
+
+    let handle = match handle {
+        Ok(h) => h,
+        Err(e) => {
+            eprintln!("  Failed to spawn strategy subprocess: {}", e);
+            return;
+        }
+    };
+
+    eprintln!("  Strategy subprocess spawned in {:.2?}", t.elapsed());
+    eprintln!("Waiting for strategy result...");
+
+    let t = Instant::now();
+    let result = rx.recv();
+    match result {
+        Ok(outcome) => {
+            eprintln!("  Result received in {:.2?}", t.elapsed());
+            eprintln!("  Status: {:?}", outcome.status);
+            match outcome.objective {
+                Some(v) => eprintln!("  Objective: {}", v),
+                None => eprintln!("  Objective: N/A"),
+            }
+            match outcome.best_bound {
+                Some(v) => eprintln!("  Best bound: {}", v),
+                None => eprintln!("  Best bound: N/A"),
+            }
+
+            if let Some(ref config_data) = outcome.solution {
+                let problem = model.problem();
+                match problem.build_config(config_data.clone()) {
+                    Ok(config) => {
+                        if config.is_feasible() {
+                            eprintln!("  Solution is FEASIBLE");
+                        } else {
+                            let violated = config.blame().len();
+                            eprintln!("  Solution violates {} constraint(s)", violated);
+                        }
+                    }
+                    Err(check) => {
+                        eprintln!(
+                            "  Config build failed: missing={}, excess={}, non_conforming={}",
+                            check.missing_variables.len(),
+                            check.excess_variables.len(),
+                            check.non_conforming_variables.len(),
+                        );
+                    }
+                }
+            } else {
+                eprintln!("  No solution returned");
+            }
+
+            if outcome.status == SolveStatus::Error {
+                eprintln!("  Strategy reported an error");
+            }
+        }
+        Err(_) => {
+            eprintln!("  Channel closed without receiving a result");
+            if let Some(StrategyProgressData::Incremental(p)) = handle.last_progress() {
+                eprintln!("  Last progress: {p}");
             }
         }
     }
