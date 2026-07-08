@@ -67,9 +67,15 @@ pub enum ExtraVarName {
     },
     BalancingRotationPenalty {
         subject: SubjectId,
+        student: StudentId,
+        teacher: TeacherId,
+        week: GlobalWeek,
     },
     BalancingSlotRotationPenalty {
         subject: SubjectId,
+        student: StudentId,
+        slot: SlotId,
+        week: GlobalWeek,
     },
 }
 
