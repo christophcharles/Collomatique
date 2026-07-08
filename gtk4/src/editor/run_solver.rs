@@ -442,14 +442,20 @@ where
                                 set_label: "Erreur pendant l'exécution",
                             },
                         },
+                        #[name(terminal_toggle)]
                         gtk::ToggleButton {
                             set_icon_name: "utilities-terminal-symbolic",
-                            #[watch]
+                            // Block the `toggled` handler while we set `active` programmatically:
+                            // otherwise the setter re-emits `toggled`, which re-sends `ToggleDebug`,
+                            // which sets `active` again — an infinite loop under rapid clicking.
+                            // `#[track]` keeps the setter (and its update) from running for nothing.
+                            #[track(terminal_toggle.is_active() != model.show_debug)]
+                            #[block_signal(toggled_handler)]
                             set_active: model.show_debug,
                             set_tooltip: "Afficher/Cacher la sortie de débogage",
                             connect_toggled[sender] => move |btn| {
                                 sender.input(DialogInput::ToggleDebug(btn.is_active()));
-                            },
+                            } @toggled_handler,
                         },
                     },
                 }
