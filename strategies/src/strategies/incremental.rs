@@ -479,6 +479,13 @@ impl Strategy for IncrementalStrategy {
         complete_values.extend(recon_solution.get_values());
         let complete_config = ConfigData::from(complete_values);
 
+        // Terminal event carrying the true cost: the reconstruction's own progress reports no
+        // incumbent (the solve is forced), so this is the only reliable carrier of the objective.
+        let _ = on_progress(IncrementalProgressData::Done {
+            total,
+            objective: recon_outcome.objective,
+        });
+
         Ok(StrategyOutcome {
             status: SolveStatus::Optimal,
             objective: recon_outcome.objective,
@@ -511,6 +518,15 @@ pub enum IncrementalProgressData {
         total: usize,
         progress: NoObjectiveSolveProgress,
     },
+    /// The run has finished: reconstruction is done and `objective` is the true cost on the
+    /// original model (`None` only if the solve produced no objective). Emitted once, last.
+    /// The reconstruction solve is essentially forced, so its incumbent (and thus the
+    /// [`Reconstruction`](Self::Reconstruction) progress `best_obj`) is typically never
+    /// reported mid-solve — this terminal event is the only reliable carrier of the cost.
+    Done {
+        total: usize,
+        objective: Option<f64>,
+    },
 }
 
 impl fmt::Display for IncrementalProgressData {
@@ -541,6 +557,17 @@ impl fmt::Display for IncrementalProgressData {
             }
             IncrementalProgressData::Reconstruction { total: _, progress } => {
                 write!(f, "[reconstruction solver progress] {progress}")
+            }
+            IncrementalProgressData::Done {
+                total: _,
+                objective,
+            } => {
+                write!(f, "Done (objective ")?;
+                match objective {
+                    Some(obj) => write!(f, "{obj:.4}")?,
+                    None => write!(f, "—")?,
+                }
+                write!(f, ")")
             }
         }
     }

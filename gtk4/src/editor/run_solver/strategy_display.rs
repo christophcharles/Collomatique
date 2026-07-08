@@ -290,9 +290,11 @@ impl FactoryComponent for StrategyFrame {
             StrategyDisplayInput::ToggleDebug(active) => {
                 self.show_debug = active;
             }
-            // The refresh only needs to re-render the view (elapsed-time label); the model
-            // stays put.
-            StrategyDisplayInput::Refresh => {}
+            // The refresh re-renders this frame's own elapsed-time label; forward it to the
+            // incremental panel too, whose per-step timer / remaining-time estimate tick live.
+            StrategyDisplayInput::Refresh => {
+                self.incremental_panel.emit(IncrementalPanelInput::Refresh);
+            }
         }
     }
 }
