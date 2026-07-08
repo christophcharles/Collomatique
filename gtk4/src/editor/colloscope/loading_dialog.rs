@@ -4,10 +4,7 @@ use relm4::{
     adw, gtk,
 };
 
-use std::collections::HashMap;
-
-use collomatique_constraints_colloscopes::{ColloscopeModel, ProblemInternalVar, Var};
-use collomatique_ilp_modeler::InternalVar;
+use collomatique_constraints_colloscopes::{ColloscopeModel, ProblemInternalVar};
 use collomatique_state_colloscopes::colloscope_params::Parameters;
 use collomatique_strategies::{ConductorPayload, IncrementalPayload};
 
@@ -46,16 +43,7 @@ pub enum DialogOutput {
 /// epoch matching its week (week + 1), so the schedule fills in week by week on top of the fixed
 /// group assignment. Base variables absent from the map fall into the strategy's final epoch.
 fn build_incremental_payload(model: &ColloscopeModel) -> ConductorPayload<ProblemInternalVar> {
-    let mut epochs = HashMap::new();
-    for v in model.problem().get_variables().keys() {
-        if let InternalVar::Base(base) = v {
-            let epoch = match base {
-                Var::StudentGroup { .. } => 0u32,
-                Var::GroupInInterrogation { week, .. } => week.0 as u32 + 1,
-            };
-            epochs.insert(v.clone(), epoch);
-        }
-    }
+    let epochs = collomatique_constraints_colloscopes::build_incremental_epochs(model);
     ConductorPayload {
         incremental: IncrementalPayload { epochs },
     }

@@ -5,6 +5,7 @@ mod extras;
 mod groups;
 mod helpers;
 pub mod ids;
+mod incremental;
 mod misc;
 mod pairings;
 mod periodicity;
@@ -15,6 +16,7 @@ pub mod vars;
 mod weights;
 
 pub use builder::{build_model, build_model_with_log};
+pub use incremental::build_incremental_epochs;
 pub use types::{
     ConstraintDesc, ExtraVarName, InfeasibleConstraint, PreferenceConstraint,
     ProgressiveConstraint, QualityConstraint, SEVERITY_LEVEL_COUNT, SeverityLevel,

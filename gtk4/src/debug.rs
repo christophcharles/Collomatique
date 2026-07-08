@@ -808,14 +808,11 @@ fn no_objective_starter_solve(model: &collomatique_constraints_colloscopes::Coll
 }
 
 fn incremental_solve(model: &collomatique_constraints_colloscopes::ColloscopeModel) {
-    use collomatique_constraints_colloscopes::Var;
-    use collomatique_ilp_modeler::InternalVar;
     use collomatique_strategies::{
         IncrementalPayload, IncrementalProgressData, IncrementalStrategy, SolveStatus,
         StrategyOutcome, StrategyProgressData,
     };
     use collomatique_subprocesses::StrategySubprocess;
-    use std::collections::HashMap;
     use std::sync::mpsc;
 
     type Outcome = StrategyOutcome<
@@ -838,16 +835,7 @@ fn incremental_solve(model: &collomatique_constraints_colloscopes::ColloscopeMod
     // Epoch assignment: every StudentGroup base variable is solved first (epoch 0), then each
     // GroupInInterrogation variable is solved in the epoch matching its week (week + 1), so the
     // schedule fills in week by week on top of the fixed group assignment.
-    let mut epochs = HashMap::new();
-    for v in model.problem().get_variables().keys() {
-        if let InternalVar::Base(base) = v {
-            let epoch = match base {
-                Var::StudentGroup { .. } => 0u32,
-                Var::GroupInInterrogation { week, .. } => week.0 as u32 + 1,
-            };
-            epochs.insert(v.clone(), epoch);
-        }
-    }
+    let epochs = collomatique_constraints_colloscopes::build_incremental_epochs(model);
     eprintln!(
         "  Epoch payload: {} base variables across {} epoch(s)",
         epochs.len(),
