@@ -102,13 +102,13 @@ impl FactoryComponent for StrategyFrame {
                         set_orientation: gtk::Orientation::Horizontal,
                         set_hexpand: true,
                         set_vexpand: true,
-
+                        set_margin_all: 0,
                         gtk::Box {
                             set_orientation: gtk::Orientation::Vertical,
                             set_halign: gtk::Align::Center,
                             set_valign: gtk::Align::Center,
                             set_spacing: 5,
-                            set_size_request: (150,-1),
+                            set_size_request: (350,-1),
                             #[watch]
                             set_visible: !self.idle,
                             adw::Spinner {
@@ -116,7 +116,6 @@ impl FactoryComponent for StrategyFrame {
                             },
                             gtk::Label {
                                 set_margin_top: 15,
-                                set_hexpand: true,
                                 set_justify: gtk::Justification::Center,
                                 #[watch]
                                 set_label: &format!("Tâche {} : {}", self.worker_num+1, self.strategy_kind.as_ref().map(
@@ -142,7 +141,7 @@ impl FactoryComponent for StrategyFrame {
                             set_halign: gtk::Align::Center,
                             set_valign: gtk::Align::Center,
                             set_spacing: 5,
-                            set_size_request: (150,-1),
+                            set_size_request: (350,-1),
                             #[watch]
                             set_visible: self.idle,
                             gtk::Image::from_icon_name("media-playback-pause-symbolic") {
@@ -151,7 +150,6 @@ impl FactoryComponent for StrategyFrame {
                             },
                             gtk::Label {
                                 set_margin_top: 15,
-                                set_hexpand: true,
                                 set_justify: gtk::Justification::Center,
                                 #[watch]
                                 set_label: &format!("Tâche {} : {}", self.worker_num+1, self.strategy_kind.as_ref().map(
@@ -171,9 +169,6 @@ impl FactoryComponent for StrategyFrame {
                                 #[watch]
                                 set_label: &self.elapsed(),
                             },
-                        },
-                        gtk::Box {
-                            set_hexpand: true,
                         },
                         append = self.default_panel.widget(),
                         append = self.no_objective_panel.widget(),

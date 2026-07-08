@@ -31,7 +31,7 @@ impl SimpleComponent for FindClosestPanel {
             set_margin_all: 5,
             set_hexpand: true,
             set_vexpand: true,
-            set_halign: gtk::Align::Center,
+            set_halign: gtk::Align::Start,
             set_valign: gtk::Align::Center,
             set_spacing: 5,
             #[watch]

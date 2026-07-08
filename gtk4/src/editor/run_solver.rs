@@ -203,14 +203,13 @@ where
                                         set_halign: gtk::Align::Center,
                                         set_valign: gtk::Align::Center,
                                         set_spacing: 5,
-                                        set_size_request: (150,-1),
+                                        set_size_request: (350,-1),
                                         #[watch]
                                         set_visible: model.is_running,
                                         adw::Spinner {
                                             set_size_request: (60, 60),
                                         },
                                         gtk::Label {
-                                            set_hexpand: true,
                                             set_justify: gtk::Justification::Center,
                                             set_margin_top: 15,
                                             set_label: "Exécution en cours",
@@ -228,7 +227,7 @@ where
                                         set_halign: gtk::Align::Center,
                                         set_valign: gtk::Align::Center,
                                         set_spacing: 5,
-                                        set_size_request: (150,-1),
+                                        set_size_request: (350,-1),
                                         #[watch]
                                         set_visible: !model.is_running && !model.end_with_error,
                                         gtk::Image::from_icon_name("emblem-ok-symbolic") {
@@ -236,7 +235,6 @@ where
                                             set_pixel_size: 60,
                                         },
                                         gtk::Label {
-                                            set_hexpand: true,
                                             set_justify: gtk::Justification::Center,
                                             set_margin_top: 15,
                                             set_label: "Exécution terminée",
@@ -254,7 +252,7 @@ where
                                         set_halign: gtk::Align::Center,
                                         set_valign: gtk::Align::Center,
                                         set_spacing: 5,
-                                        set_size_request: (150,-1),
+                                        set_size_request: (350,-1),
                                         #[watch]
                                         set_visible: !model.is_running && model.end_with_error,
                                         gtk::Image::from_icon_name("dialog-error-symbolic") {
@@ -262,7 +260,6 @@ where
                                             set_pixel_size: 60,
                                         },
                                         gtk::Label {
-                                            set_hexpand: true,
                                             set_justify: gtk::Justification::Center,
                                             set_margin_top: 15,
                                             set_label: "Erreur pendant l'exécution",
@@ -276,11 +273,8 @@ where
                                         },
                                     },
                                     gtk::Box {
-                                        set_hexpand: true,
-                                    },
-                                    gtk::Box {
                                         set_orientation: gtk::Orientation::Vertical,
-                                        set_halign: gtk::Align::Center,
+                                        set_halign: gtk::Align::Start,
                                         set_valign: gtk::Align::Center,
                                         set_spacing: 5,
                                         gtk::Box {
