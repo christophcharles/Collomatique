@@ -4,8 +4,12 @@ use relm4::{
     adw, gtk,
 };
 
-use collomatique_constraints_colloscopes::ColloscopeModel;
+use std::collections::HashMap;
+
+use collomatique_constraints_colloscopes::{ColloscopeModel, ProblemInternalVar, Var};
+use collomatique_ilp_modeler::InternalVar;
 use collomatique_state_colloscopes::colloscope_params::Parameters;
+use collomatique_strategies::{ConductorPayload, IncrementalPayload};
 
 use super::config_dialog::SolveConfig;
 use crate::widgets::debug_view::{DebugView, DebugViewInput};
@@ -30,7 +34,31 @@ pub enum DialogInput {
 
 #[derive(Debug)]
 pub enum DialogOutput {
-    ModelReady(SolveConfig, ColloscopeModel),
+    ModelReady(
+        SolveConfig,
+        ColloscopeModel,
+        ConductorPayload<ProblemInternalVar>,
+    ),
+}
+
+/// Build the incremental epoch payload from the freshly-built model: every `StudentGroup` base
+/// variable is solved first (epoch 0), then each `GroupInInterrogation` variable is solved in the
+/// epoch matching its week (week + 1), so the schedule fills in week by week on top of the fixed
+/// group assignment. Base variables absent from the map fall into the strategy's final epoch.
+fn build_incremental_payload(model: &ColloscopeModel) -> ConductorPayload<ProblemInternalVar> {
+    let mut epochs = HashMap::new();
+    for v in model.problem().get_variables().keys() {
+        if let InternalVar::Base(base) = v {
+            let epoch = match base {
+                Var::StudentGroup { .. } => 0u32,
+                Var::GroupInInterrogation { week, .. } => week.0 as u32 + 1,
+            };
+            epochs.insert(v.clone(), epoch);
+        }
+    }
+    ConductorPayload {
+        incremental: IncrementalPayload { epochs },
+    }
 }
 
 #[derive(Debug)]
@@ -188,8 +216,9 @@ impl Component for Dialog {
         match result {
             Ok(model) => {
                 self.hidden = true;
+                let payload = build_incremental_payload(&model);
                 sender
-                    .output(DialogOutput::ModelReady(config, model))
+                    .output(DialogOutput::ModelReady(config, model, payload))
                     .unwrap();
             }
             Err(e) => {

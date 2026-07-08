@@ -58,7 +58,11 @@ pub struct Dialog<B: UsableData, E: UsableData, C: UsableData> {
 
 #[derive(Debug)]
 pub enum DialogInput<B: UsableData, E: UsableData, C: UsableData> {
-    Run(ConductorStrategy, Model<B, E, C>),
+    Run(
+        ConductorStrategy,
+        Model<B, E, C>,
+        ConductorPayload<InternalVar<B, E>>,
+    ),
     CancelRequest,
     AcceptRequest,
     Accept,
@@ -539,7 +543,7 @@ where
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match msg {
-            DialogInput::Run(strategy, model) => {
+            DialogInput::Run(strategy, model, payload) => {
                 self.hidden = false;
                 self.is_running = true;
                 self.initializing = true;
@@ -639,7 +643,7 @@ where
                         &model,
                         &strategy,
                         None,
-                        ConductorPayload::default(),
+                        payload,
                         result_cb,
                         progress_cb,
                         log_cb,

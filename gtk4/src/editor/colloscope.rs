@@ -53,6 +53,9 @@ pub enum ColloscopeInput {
     ModelBuilt(
         config_dialog::SolveConfig,
         collomatique_constraints_colloscopes::ColloscopeModel,
+        collomatique_strategies::ConductorPayload<
+            collomatique_constraints_colloscopes::ProblemInternalVar,
+        >,
     ),
     SolveResult(
         collomatique_ilp::ConfigData<collomatique_constraints_colloscopes::ProblemInternalVar>,
@@ -564,8 +567,8 @@ impl Component for Colloscope {
             .transient_for(&root)
             .launch(())
             .forward(sender.input_sender(), |msg| match msg {
-                loading_dialog::DialogOutput::ModelReady(config, model) => {
-                    ColloscopeInput::ModelBuilt(config, model)
+                loading_dialog::DialogOutput::ModelReady(config, model, payload) => {
+                    ColloscopeInput::ModelBuilt(config, model, payload)
                 }
             });
 
@@ -752,11 +755,15 @@ impl Component for Colloscope {
                     .send(loading_dialog::DialogInput::Show(config, params))
                     .unwrap();
             }
-            ColloscopeInput::ModelBuilt(config, model) => {
-                // The model has been built: launch the solver as before.
+            ColloscopeInput::ModelBuilt(config, model, payload) => {
+                // The model has been built: launch the solver with the incremental epoch payload.
                 self.run_solver_dialog
                     .sender()
-                    .send(run_solver::DialogInput::Run(config.strategy, model))
+                    .send(run_solver::DialogInput::Run(
+                        config.strategy,
+                        model,
+                        payload,
+                    ))
                     .unwrap();
             }
             ColloscopeInput::ConductorConfigCancelled => {
