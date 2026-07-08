@@ -427,9 +427,10 @@ impl Strategy for IncrementalStrategy {
 
         // After the final epoch, `prev_values` covers every base variable. Reconstruct the
         // extras and the true objective on the original model.
-        let base_values = prev_values.ok_or_else(|| {
-            StrategyError::SolveError("no epoch was solved (empty problem)".into())
-        })?;
+        // No epoch ran (the problem has no base variables). Fall through to the reconstruction
+        // path with an empty base assignment — an empty problem is trivially solved, matching how
+        // DefaultStrategy delegates an empty model straight to the solver.
+        let base_values = prev_values.unwrap_or_default();
 
         let recon_problem = model.reconstruction_problem(&base_values).map_err(|e| {
             StrategyError::SolveError(format!("failed to build reconstruction problem: {e}"))
