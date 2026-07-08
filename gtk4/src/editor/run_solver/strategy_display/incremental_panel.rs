@@ -245,7 +245,13 @@ impl IncrementalPanel {
             }
             _ => match self.last_epoch {
                 Some((epoch, total, _)) => {
-                    format!("{}/{} (époque {})", epoch + 1, total + 1, epoch + 1)
+                    format!(
+                        "{}/{} (époque {}/{})",
+                        epoch + 1,
+                        total + 1,
+                        epoch + 1,
+                        total
+                    )
                 }
                 None => "-".to_owned(),
             },
