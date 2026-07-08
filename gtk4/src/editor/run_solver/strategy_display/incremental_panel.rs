@@ -5,9 +5,9 @@ use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent, gtk
 
 use collomatique_strategies::{IncrementalProgressData, NoObjectiveSolveProgress};
 
-/// How many of the most recent epoch durations feed the remaining-time estimate. The estimate
-/// stays `-` until at least this many epochs have completed.
-const REMAINING_ESTIMATE_WINDOW: usize = 5;
+/// How many of the most recent epoch durations are averaged into the "Durée typique" (typical
+/// epoch time). A trailing window, so the figure tightens as later epochs replace earlier ones.
+const TYPICAL_DURATION_WINDOW: usize = 5;
 
 #[derive(Debug)]
 pub enum IncrementalPanelInput {
@@ -84,7 +84,8 @@ impl SimpleComponent for IncrementalPanel {
             gtk::Box {
                 set_orientation: gtk::Orientation::Horizontal,
                 gtk::Label {
-                    set_label: "Variables ajoutées : ",
+                    #[watch]
+                    set_label: model.var_count_label(),
                     set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
                 },
                 gtk::Label {
@@ -139,12 +140,12 @@ impl SimpleComponent for IncrementalPanel {
             gtk::Box {
                 set_orientation: gtk::Orientation::Horizontal,
                 gtk::Label {
-                    set_label: "Temps restant estimé : ",
+                    set_label: "Durée typique : ",
                     set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
                 },
                 gtk::Label {
                     #[watch]
-                    set_label: &model.remaining_estimate(),
+                    set_label: &model.typical_duration(),
                 },
             },
         }
@@ -206,6 +207,7 @@ impl SimpleComponent for IncrementalPanel {
                         }
                         Step::Epoch(*epoch)
                     }
+                    IncrementalProgressData::ReconstructionStarted { .. } => Step::Reconstruction,
                     IncrementalProgressData::Reconstruction { progress, .. } => {
                         self.last_progress = Some(progress.clone());
                         Step::Reconstruction
@@ -236,7 +238,8 @@ impl SimpleComponent for IncrementalPanel {
 impl IncrementalPanel {
     fn step(&self) -> String {
         match &self.last {
-            Some(IncrementalProgressData::Reconstruction { total, .. })
+            Some(IncrementalProgressData::ReconstructionStarted { total })
+            | Some(IncrementalProgressData::Reconstruction { total, .. })
             | Some(IncrementalProgressData::Done { total, .. }) => {
                 format!("{}/{} (calcul du coût)", total + 1, total + 1)
             }
@@ -249,7 +252,26 @@ impl IncrementalPanel {
         }
     }
 
+    /// Whether the cost-computation (reconstruction) phase is under way. During it the variable row
+    /// shows the grand total rather than this epoch's additions.
+    fn in_cost_phase(&self) -> bool {
+        self.current_step == Some(Step::Reconstruction)
+    }
+
+    fn var_count_label(&self) -> &'static str {
+        if self.in_cost_phase() {
+            "Variables : "
+        } else {
+            "Variables ajoutées : "
+        }
+    }
+
     fn var_count(&self) -> String {
+        if self.in_cost_phase() {
+            // All base variables are now in play; show the grand total, no per-epoch delta.
+            let total: usize = self.epoch_var_counts.iter().sum();
+            return format!("{total}");
+        }
         match self.last_epoch {
             Some((epoch, _, var_count)) => {
                 let total: usize = self.epoch_var_counts.iter().take(epoch + 1).sum();
@@ -287,34 +309,15 @@ impl IncrementalPanel {
         }
     }
 
-    fn remaining_estimate(&self) -> String {
-        match self.current_step {
-            Some(Step::Reconstruction) => "presque fini...".to_owned(),
-            Some(Step::Epoch(seq)) => {
-                if self.epoch_durations.len() < REMAINING_ESTIMATE_WINDOW {
-                    return "-".to_owned();
-                }
-                let total = match self.last_epoch {
-                    Some((_, total, _)) => total,
-                    None => return "-".to_owned(),
-                };
-                let window =
-                    &self.epoch_durations[self.epoch_durations.len() - REMAINING_ESTIMATE_WINDOW..];
-                let mean =
-                    window.iter().copied().sum::<Duration>() / REMAINING_ESTIMATE_WINDOW as u32;
-                // `total - seq` counts the current epoch as still-remaining; subtracting its
-                // elapsed time removes the double-count.
-                let remaining_epochs = total.saturating_sub(seq) as u32;
-                let elapsed = self
-                    .step_start
-                    .map(|s| s.elapsed())
-                    .unwrap_or(Duration::ZERO);
-                let est = mean
-                    .saturating_mul(remaining_epochs)
-                    .saturating_sub(elapsed);
-                super::super::format_elapsed(est)
-            }
-            None => "-".to_owned(),
+    /// Mean wall-clock of the last `TYPICAL_DURATION_WINDOW` completed epochs: `-` until the first
+    /// epoch finishes, then a trailing average that sharpens toward the end of the run.
+    fn typical_duration(&self) -> String {
+        if self.epoch_durations.is_empty() {
+            return "-".to_owned();
         }
+        let n = self.epoch_durations.len().min(TYPICAL_DURATION_WINDOW);
+        let window = &self.epoch_durations[self.epoch_durations.len() - n..];
+        let mean = window.iter().copied().sum::<Duration>() / n as u32;
+        super::super::format_elapsed(mean)
     }
 }

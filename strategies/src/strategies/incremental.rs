@@ -435,6 +435,10 @@ impl Strategy for IncrementalStrategy {
             StrategyError::SolveError(format!("failed to build reconstruction problem: {e}"))
         })?;
 
+        // Announce the cost-computation phase before solving: the reconstruction is forced and may
+        // report no progress until it finishes, so this is what flips the UI to "calcul du coût".
+        let _ = on_progress(IncrementalProgressData::ReconstructionStarted { total });
+
         let recon_outcome = ctx
             .solve_problem_with_echo(
                 &recon_problem,
@@ -513,6 +517,10 @@ pub enum IncrementalProgressData {
         var_count: usize,
         progress: NoObjectiveSolveProgress,
     },
+    /// The final reconstruction (extras + true cost) is about to start. Emitted once, before the
+    /// reconstruction solve, so the UI can show the cost-computation step even when that solve is
+    /// forced and reports no progress until it finishes.
+    ReconstructionStarted { total: usize },
     /// Progress from the final reconstruction (extras + true objective).
     Reconstruction {
         total: usize,
@@ -554,6 +562,9 @@ impl fmt::Display for IncrementalProgressData {
                     epoch + 1,
                     total
                 )
+            }
+            IncrementalProgressData::ReconstructionStarted { total: _ } => {
+                write!(f, "Reconstruction starting (computing cost)...")
             }
             IncrementalProgressData::Reconstruction { total: _, progress } => {
                 write!(f, "[reconstruction solver progress] {progress}")
