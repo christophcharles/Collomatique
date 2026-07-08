@@ -11,7 +11,7 @@ pub fn build_incremental_epochs(model: &ColloscopeModel) -> HashMap<ProblemInter
         if let InternalVar::Base(base) = v {
             let epoch = match base {
                 Var::StudentGroup { .. } => 0u32,
-                Var::GroupInInterrogation { week, .. } => week.0 as u32 + 1,
+                Var::GroupInInterrogation { week, .. } => week.0 as u32,
             };
             epochs.insert(v.clone(), epoch);
         }
