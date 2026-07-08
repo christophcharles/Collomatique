@@ -676,6 +676,7 @@ where
         StrategyProgress::NoObjective(_)
         | StrategyProgress::FindClosest(_)
         | StrategyProgress::Fuzzy(_)
+        | StrategyProgress::Incremental(_)
         | StrategyProgress::NoObjectiveStarter(NoObjectiveStarterProgress::Starter(_))
         | StrategyProgress::Conductor(
             ConductorProgress::WorkerProgress { .. }
@@ -729,8 +730,13 @@ fn resolve_worker_outcome<V: UsableData + Send>(
         // NoObjective and FindClosest solve the complete feasibility problem, so
         // infeasibility is globally definitive; but their feasible result optimizes a
         // surrogate (nothing / closeness to a warm start), not the real objective, so it
-        // is only an update.
-        StrategyKind::NoObjective(_) | StrategyKind::FindClosest(_) | StrategyKind::Fuzzy(_) => {
+        // is only an update. Incremental likewise yields a complete feasible solution — with
+        // a real objective value, but staggered and unproven — so it too folds as an update
+        // while its infeasibility (a sub-problem of the whole) stays definitive.
+        StrategyKind::NoObjective(_)
+        | StrategyKind::FindClosest(_)
+        | StrategyKind::Fuzzy(_)
+        | StrategyKind::Incremental(_) => {
             if outcome.status == SolveStatus::Infeasible {
                 return WorkerResolution::Definitive(outcome);
             }

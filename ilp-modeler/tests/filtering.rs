@@ -182,6 +182,7 @@ fn model_filter_slices_by_footprint() {
             // `c` is a Constraint<Var<B, E>> — proven by the Var-level footprint call.
             |c: &_, _desc| graph.constraint_footprint(c).is_subset(&blessed),
             |b: &B| blessed.contains(b),
+            |_e: &E| true,
             |v: &Var<B, E>| graph.var_footprint(v).is_subset(&blessed),
         )
         .expect("intended usage is consistent");
@@ -245,6 +246,7 @@ fn model_filter_keeps_blessed_unreferenced_base_var() {
         .filter(
             |c: &_, _desc| graph.constraint_footprint(c).is_subset(&blessed),
             |b: &B| blessed.contains(b),
+            |_e: &E| true,
             |_v: &Var<B, E>| true,
         )
         .expect("consistent");
@@ -281,6 +283,7 @@ fn model_filter_inconsistent_base_var_errors() {
         .filter(
             |_c: &_, _desc| true,        // keep all user constraints
             |b: &B| blessed.contains(b), // ... but drop b2
+            |_e: &E| true,               // ... while keeping extra t (which needs b2)
             |_v: &Var<B, E>| true,
         )
         .unwrap_err();
@@ -328,6 +331,7 @@ fn filter_roundtrip_drops_dead_extras() {
         .filter(
             |c: &_, _desc| graph.constraint_footprint(c).is_subset(&blessed), // drops u_t
             |_b: &B| true, // keep all base vars — b2 is needed by t's defining constraint
+            |_e: &E| true, // keep all extras — t is shed later by the round-trip, not here
             |v: &Var<B, E>| graph.var_footprint(v).is_subset(&blessed),
         )
         .expect("consistent (all base vars kept)");
@@ -359,4 +363,68 @@ fn filter_roundtrip_drops_dead_extras() {
             .unwrap(),
         1.0
     );
+}
+
+/// The `keep_extra_variable` predicate lets a single `filter` call drop a
+/// "wide" extra (whose footprint reaches an out-of-scope base variable)
+/// together with the base variable it depends on, in one consistent pass —
+/// the core filter shape the incremental strategy relies on. Without it, the
+/// extra's force-kept defining constraint would reference the dropped base
+/// variable and `Problem::filter` would error (see
+/// `model_filter_inconsistent_base_var_errors`).
+#[test]
+fn model_filter_drops_wide_extra_with_base_var() {
+    // base b1, b2; extra w = b2 (wide: footprint reaches b2). A user
+    // constraint references w, another references only b1.
+    let mut m = modeler_with_bases(&["b1", "b2"]);
+    declare_sum(&mut m, "w", &[ebase("b2")]);
+    m.add_constraint(
+        LinExpr::var(base("b1")).leq(&LinExpr::constant(1.0)),
+        "u_local".into(),
+    );
+    m.add_constraint(
+        LinExpr::var(xtra("w")).leq(&LinExpr::constant(1.0)),
+        "u_w".into(),
+    );
+    let model = m.build(&()).unwrap();
+    let graph = model.dependency_graph();
+    let blessed = bset(["b1"]);
+
+    // Footprint-based predicates for all four dimensions: everything is keyed
+    // on `⊆ blessed`, so the extra `w` ({b2}), its defining constraint, its
+    // helpers, the base `b2`, and the user constraint `u_w` all drop together.
+    let filtered = model
+        .filter(
+            |c: &_, _desc| graph.constraint_footprint(c).is_subset(&blessed),
+            |b: &B| blessed.contains(b),
+            |e: &E| graph.base_footprint(e).is_subset(&blessed),
+            |v: &Var<B, E>| graph.var_footprint(v).is_subset(&blessed),
+        )
+        .expect("all four footprint predicates are mutually consistent");
+
+    // Only u_local survives among user constraints; u_w dropped with w.
+    let kept_user: HashSet<&String> = filtered
+        .get_constraints()
+        .iter()
+        .filter_map(|(_, src)| match src {
+            ConstraintSource::User(desc) => Some(desc),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(kept_user, HashSet::from([&"u_local".to_string()]));
+
+    // No defining-extra constraints remain: w's definition dropped as a unit.
+    assert!(
+        !filtered
+            .get_constraints()
+            .iter()
+            .any(|(_, src)| matches!(src, ConstraintSource::DefiningExtra { .. })),
+        "w's defining constraint should be dropped along with the extra"
+    );
+
+    // Variables: b1 kept; b2 and w (and any helpers of w) gone.
+    let vars: HashSet<&InternalVar<B, E>> = filtered.get_variables().keys().collect();
+    assert!(vars.contains(&InternalVar::Base("b1".to_string())));
+    assert!(!vars.contains(&InternalVar::Base("b2".to_string())));
+    assert!(!vars.contains(&InternalVar::Extra("w".to_string())));
 }

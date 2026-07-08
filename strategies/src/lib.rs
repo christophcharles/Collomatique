@@ -10,6 +10,9 @@ pub use strategies::find_closest::{
     FindClosestPayload, FindClosestPayloadData, FindClosestProgressData, FindClosestStrategy,
 };
 pub use strategies::fuzzy::{FuzzyPayload, FuzzyPayloadData, FuzzyProgressData, FuzzyStrategy};
+pub use strategies::incremental::{
+    IncrementalPayload, IncrementalPayloadData, IncrementalProgressData, IncrementalStrategy,
+};
 pub use strategies::no_objective::{
     NoObjectivePayload, NoObjectiveProgressData, NoObjectiveSolveProgress, NoObjectiveStrategy,
 };
@@ -428,6 +431,7 @@ pub enum StrategyKind {
     NoObjectiveStarter(NoObjectiveStarterStrategy),
     FindClosest(FindClosestStrategy),
     Fuzzy(FuzzyStrategy),
+    Incremental(IncrementalStrategy),
     Conductor(ConductorStrategy),
 }
 
@@ -465,6 +469,7 @@ pub enum StrategyProgress<V: UsableData + Send> {
     NoObjectiveStarter(NoObjectiveStarterProgress<V>),
     FindClosest(FindClosestProgressData),
     Fuzzy(FuzzyProgressData),
+    Incremental(IncrementalProgressData),
     Conductor(ConductorProgress<V>),
 }
 
@@ -476,6 +481,7 @@ impl<V: UsableData + Send> fmt::Display for StrategyProgress<V> {
             StrategyProgress::NoObjectiveStarter(p) => write!(f, "{p}"),
             StrategyProgress::FindClosest(p) => write!(f, "{p}"),
             StrategyProgress::Fuzzy(p) => write!(f, "{p}"),
+            StrategyProgress::Incremental(p) => write!(f, "{p}"),
             StrategyProgress::Conductor(p) => write!(f, "{p}"),
         }
     }
@@ -513,6 +519,12 @@ impl<V: UsableData + Send> From<FuzzyProgressData> for StrategyProgress<V> {
     }
 }
 
+impl<V: UsableData + Send> From<IncrementalProgressData> for StrategyProgress<V> {
+    fn from(p: IncrementalProgressData) -> Self {
+        StrategyProgress::Incremental(p)
+    }
+}
+
 impl<V: UsableData + Send> From<ConductorProgress<V>> for StrategyProgress<V> {
     fn from(p: ConductorProgress<V>) -> Self {
         StrategyProgress::Conductor(p)
@@ -529,6 +541,7 @@ pub enum StrategyProgressData {
     NoObjectiveStarter(NoObjectiveStarterProgressData),
     FindClosest(FindClosestProgressData),
     Fuzzy(FuzzyProgressData),
+    Incremental(IncrementalProgressData),
     Conductor(ConductorProgressData),
 }
 
@@ -540,6 +553,7 @@ impl fmt::Display for StrategyProgressData {
             StrategyProgressData::NoObjectiveStarter(p) => write!(f, "{p}"),
             StrategyProgressData::FindClosest(p) => write!(f, "{p}"),
             StrategyProgressData::Fuzzy(p) => write!(f, "{p}"),
+            StrategyProgressData::Incremental(p) => write!(f, "{p}"),
             StrategyProgressData::Conductor(p) => write!(f, "{p}"),
         }
     }
@@ -571,6 +585,7 @@ pub enum StrategyPayload<V: UsableData + Send> {
     NoObjectiveStarter(NoObjectiveStarterPayload),
     FindClosest(FindClosestPayload<V>),
     Fuzzy(FuzzyPayload<V>),
+    Incremental(IncrementalPayload<V>),
     Conductor(ConductorPayload),
 }
 
@@ -585,6 +600,7 @@ pub enum StrategyPayloadData {
     NoObjectiveStarter(NoObjectiveStarterPayload),
     FindClosest(FindClosestPayloadData),
     Fuzzy(FuzzyPayloadData),
+    Incremental(IncrementalPayloadData),
     Conductor(ConductorPayload),
 }
 
@@ -627,6 +643,11 @@ impl<V: UsableData + Send> From<FuzzyPayload<V>> for StrategyPayload<V> {
         StrategyPayload::Fuzzy(p)
     }
 }
+impl<V: UsableData + Send> From<IncrementalPayload<V>> for StrategyPayload<V> {
+    fn from(p: IncrementalPayload<V>) -> Self {
+        StrategyPayload::Incremental(p)
+    }
+}
 impl<V: UsableData + Send> From<ConductorPayload> for StrategyPayload<V> {
     fn from(p: ConductorPayload) -> Self {
         StrategyPayload::Conductor(p)
@@ -653,6 +674,9 @@ impl<V: UsableData + Send> VarOrderSerializable<V> for StrategyPayload<V> {
             StrategyPayload::Fuzzy(p) => {
                 StrategyPayloadData::Fuzzy(VarOrderSerializable::into_data(p, var_order)?)
             }
+            StrategyPayload::Incremental(p) => {
+                StrategyPayloadData::Incremental(VarOrderSerializable::into_data(p, var_order)?)
+            }
             StrategyPayload::Conductor(p) => {
                 StrategyPayloadData::Conductor(VarOrderSerializable::into_data(p, var_order)?)
             }
@@ -675,6 +699,9 @@ impl<V: UsableData + Send> VarOrderSerializable<V> for StrategyPayload<V> {
             StrategyPayloadData::Fuzzy(d) => StrategyPayload::Fuzzy(
                 <FuzzyPayload<V> as VarOrderSerializable<V>>::from_data(d, var_order)?,
             ),
+            StrategyPayloadData::Incremental(d) => StrategyPayload::Incremental(
+                <IncrementalPayload<V> as VarOrderSerializable<V>>::from_data(d, var_order)?,
+            ),
             StrategyPayloadData::Conductor(d) => StrategyPayload::Conductor(
                 <ConductorPayload as VarOrderSerializable<V>>::from_data(d, var_order)?,
             ),
@@ -684,8 +711,9 @@ impl<V: UsableData + Send> VarOrderSerializable<V> for StrategyPayload<V> {
 
 impl StrategyKind {
     /// The empty payload for strategies that need none (`Default`, `NoObjective`,
-    /// `NoObjectiveStarter`, `Conductor`). Returns `None` for `Fuzzy`/`FindClosest`, which
-    /// require a target config and must have their payload built explicitly.
+    /// `NoObjectiveStarter`, `Conductor`). Returns `None` for `Fuzzy`/`FindClosest`/`Incremental`,
+    /// which require a target config or an epoch assignment and must have their payload built
+    /// explicitly.
     pub fn empty_payload<V: UsableData + Send>(&self) -> Option<StrategyPayload<V>> {
         match self {
             StrategyKind::Default(_) => Some(StrategyPayload::Default(DefaultPayload)),
@@ -694,7 +722,9 @@ impl StrategyKind {
                 NoObjectiveStarterPayload,
             )),
             StrategyKind::Conductor(_) => Some(StrategyPayload::Conductor(ConductorPayload)),
-            StrategyKind::FindClosest(_) | StrategyKind::Fuzzy(_) => None,
+            StrategyKind::FindClosest(_)
+            | StrategyKind::Fuzzy(_)
+            | StrategyKind::Incremental(_) => None,
         }
     }
 }
@@ -743,6 +773,17 @@ impl<V: UsableData + Send> VarOrderSerializable<V> for FuzzyProgressData {
     }
 }
 
+impl<V: UsableData + Send> VarOrderSerializable<V> for IncrementalProgressData {
+    type Data = IncrementalProgressData;
+    type Error = Infallible;
+    fn into_data(&self, _var_order: &[V]) -> Result<IncrementalProgressData, Infallible> {
+        Ok(self.clone())
+    }
+    fn from_data(data: &IncrementalProgressData, _var_order: &[V]) -> Result<Self, Infallible> {
+        Ok(data.clone())
+    }
+}
+
 impl<V: UsableData + Send> VarOrderSerializable<V> for StrategyProgress<V> {
     type Data = StrategyProgressData;
     type Error = Infallible;
@@ -762,6 +803,9 @@ impl<V: UsableData + Send> VarOrderSerializable<V> for StrategyProgress<V> {
             }
             StrategyProgress::Fuzzy(p) => {
                 StrategyProgressData::Fuzzy(VarOrderSerializable::into_data(p, var_order)?)
+            }
+            StrategyProgress::Incremental(p) => {
+                StrategyProgressData::Incremental(VarOrderSerializable::into_data(p, var_order)?)
             }
             StrategyProgress::Conductor(p) => {
                 StrategyProgressData::Conductor(VarOrderSerializable::into_data(p, var_order)?)
@@ -791,6 +835,11 @@ impl<V: UsableData + Send> VarOrderSerializable<V> for StrategyProgress<V> {
             StrategyProgressData::Fuzzy(d) => StrategyProgress::Fuzzy(
                 <FuzzyProgressData as VarOrderSerializable<V>>::from_data(d, var_order)?,
             ),
+            StrategyProgressData::Incremental(d) => {
+                StrategyProgress::Incremental(<IncrementalProgressData as VarOrderSerializable<
+                    V,
+                >>::from_data(d, var_order)?)
+            }
             StrategyProgressData::Conductor(d) => StrategyProgress::Conductor(
                 <ConductorProgress<V> as VarOrderSerializable<V>>::from_data(d, var_order)?,
             ),
@@ -849,6 +898,15 @@ impl<V: UsableData + Send> StrategyProgressVariant<V> for FuzzyProgressData {
     }
 }
 
+impl<V: UsableData + Send> StrategyProgressVariant<V> for IncrementalProgressData {
+    fn from_strategy_progress(progress: StrategyProgress<V>) -> Result<Self, StrategyProgress<V>> {
+        match progress {
+            StrategyProgress::Incremental(p) => Ok(p),
+            other => Err(other),
+        }
+    }
+}
+
 impl<V: UsableData + Send> StrategyProgressVariant<V> for ConductorProgress<V> {
     fn from_strategy_progress(progress: StrategyProgress<V>) -> Result<Self, StrategyProgress<V>> {
         match progress {
@@ -885,6 +943,12 @@ impl From<FindClosestStrategy> for StrategyKind {
 impl From<FuzzyStrategy> for StrategyKind {
     fn from(s: FuzzyStrategy) -> Self {
         StrategyKind::Fuzzy(s)
+    }
+}
+
+impl From<IncrementalStrategy> for StrategyKind {
+    fn from(s: IncrementalStrategy) -> Self {
+        StrategyKind::Incremental(s)
     }
 }
 
@@ -957,6 +1021,7 @@ impl Strategy for StrategyKind {
             StrategyKind::NoObjectiveStarter(s) => s.name(),
             StrategyKind::FindClosest(s) => s.name(),
             StrategyKind::Fuzzy(s) => s.name(),
+            StrategyKind::Incremental(s) => s.name(),
             StrategyKind::Conductor(s) => s.name(),
         }
     }
@@ -968,6 +1033,7 @@ impl Strategy for StrategyKind {
             StrategyKind::NoObjectiveStarter(s) => s.ui_name(),
             StrategyKind::FindClosest(s) => s.ui_name(),
             StrategyKind::Fuzzy(s) => s.ui_name(),
+            StrategyKind::Incremental(s) => s.ui_name(),
             StrategyKind::Conductor(s) => s.ui_name(),
         }
     }
@@ -1036,6 +1102,15 @@ impl Strategy for StrategyKind {
                 };
                 s.run_with_callback(ctx, model, warm_start, payload, &|p| {
                     on_progress(StrategyProgress::Fuzzy(p))
+                })
+                .await
+            }
+            StrategyKind::Incremental(s) => {
+                let StrategyPayload::Incremental(payload) = payload else {
+                    return Err(mismatch());
+                };
+                s.run_with_callback(ctx, model, warm_start, payload, &|p| {
+                    on_progress(StrategyProgress::Incremental(p))
                 })
                 .await
             }
@@ -1340,6 +1415,45 @@ mod tests {
             collomatique_ilp::config_data_to_hint(&target, &var_order),
             raw
         );
+    }
+
+    #[test]
+    fn incremental_kind_and_payload_survive_json_round_trip() {
+        // The whole IPC hop for the incremental strategy: the StrategyKind (with its f64
+        // weight) and the erased payload must serialize to JSON and back unchanged.
+        let kind = StrategyKind::Incremental(IncrementalStrategy {
+            l1_weight: 1e6,
+            epoch_time_limit_seconds: Some(30),
+            reconstruction_time_limit_seconds: None,
+            disable_logging: false,
+        });
+        let json = serde_json::to_string(&kind).unwrap();
+        assert_eq!(serde_json::from_str::<StrategyKind>(&json).unwrap(), kind);
+
+        // An epoch payload erases against var_order to a Vec<Option<u32>> and reconstructs.
+        let var_order: Vec<usize> = vec![0, 1, 2];
+        let payload: StrategyPayload<usize> = StrategyPayload::Incremental(IncrementalPayload {
+            epochs: HashMap::from([(0usize, 0u32), (2usize, 1u32)]),
+        });
+        let data = VarOrderSerializable::into_data(&payload, &var_order).unwrap();
+        assert_eq!(
+            data,
+            StrategyPayloadData::Incremental(IncrementalPayloadData {
+                epochs: vec![Some(0), None, Some(1)]
+            })
+        );
+
+        let json = serde_json::to_string(&data).unwrap();
+        let back: StrategyPayloadData = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, data);
+
+        let restored =
+            <StrategyPayload<usize> as VarOrderSerializable<usize>>::from_data(&back, &var_order)
+                .unwrap();
+        let StrategyPayload::Incremental(IncrementalPayload { epochs }) = restored else {
+            panic!("expected an Incremental payload");
+        };
+        assert_eq!(epochs, HashMap::from([(0usize, 0u32), (2usize, 1u32)]));
     }
 
     struct MockBackend {

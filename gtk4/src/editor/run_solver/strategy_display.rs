@@ -348,6 +348,8 @@ impl StrategyFrame {
                 .find_closest_panel
                 .emit(FindClosestPanelInput::Update(p)),
             StrategyProgressData::Fuzzy(p) => self.fuzzy_panel.emit(FuzzyPanelInput::Update(p)),
+            // No dedicated panel yet: incremental progress is surfaced via the echo/log route.
+            StrategyProgressData::Incremental(_) => {}
             StrategyProgressData::NoObjectiveStarter(p) => self
                 .no_objective_starter_panel
                 .emit(NoObjectiveStarterPanelInput::Update(p)),

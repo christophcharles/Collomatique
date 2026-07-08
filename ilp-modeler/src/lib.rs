@@ -492,9 +492,8 @@ where
         &self.dependency_graph
     }
 
-    /// Filter user constraints, base variables and objective terms, keeping
-    /// every extra-defining constraint (and every extra/helper variable)
-    /// verbatim.
+    /// Filter user constraints, base variables, extra variables and
+    /// objective terms.
     ///
     /// The callbacks work at the user-facing level:
     /// - `keep_constraint` sees each user constraint as a
@@ -502,26 +501,33 @@ where
     /// - `keep_base_variable` sees each base variable `&B` — the caller
     ///   decides which base variables the slice keeps, referenced or not (this
     ///   mirrors the full `Model`, whose problem declares *every* base
-    ///   variable). Extras and helpers are always kept, since their defining
-    ///   constraints are kept.
+    ///   variable).
+    /// - `keep_extra_variable` sees each extra `&E`. It governs the extra as a
+    ///   unit: its variable declaration, its defining constraints, and its
+    ///   helpers are all kept or dropped together. This lets a caller drop an
+    ///   out-of-scope extra in the *same* consistent pass that drops the base
+    ///   variables it depends on.
     /// - `keep_obj_term` sees each objective variable as a `Var<B, E>`.
     ///
     /// Delegates to the dumb [`Problem::filter`] primitive, so consistency is
     /// verified rather than repaired: if a kept constraint or objective term
-    /// references a base variable that `keep_base_variable` dropped, the
-    /// underlying build returns an error. In the intended footprint-based
-    /// usage (`keep_constraint` = footprint ⊆ blessed, `keep_base_variable` =
-    /// `b ∈ blessed`, `keep_obj_term` = footprint ⊆ blessed) the result is
-    /// always `Ok`.
+    /// references a base or extra variable that was dropped, the underlying
+    /// build returns an error. The consistency contract is that a kept user
+    /// constraint / objective term must not reference a dropped base variable
+    /// or a dropped extra. In the intended footprint-based usage
+    /// (`keep_constraint` = footprint ⊆ blessed, `keep_base_variable` =
+    /// `b ∈ blessed`, `keep_extra_variable` = footprint ⊆ blessed,
+    /// `keep_obj_term` = footprint ⊆ blessed) the result is always `Ok`.
     ///
     /// Dead extras — those whose only user references were filtered out — are
     /// *not* shed here. To drop them, round-trip the result through
     /// [`Modeler::from_model_problem`] followed by [`Modeler::build`], whose
     /// lazy re-expansion prunes whatever is no longer referenced.
-    pub fn filter<FC, FV, FO>(
+    pub fn filter<FC, FV, FE, FO>(
         &self,
         mut keep_constraint: FC,
         mut keep_base_variable: FV,
+        keep_extra_variable: FE,
         mut keep_obj_term: FO,
     ) -> collomatique_ilp::BuildResult<
         Problem<InternalVar<B, E>, ConstraintSource<E, C>>,
@@ -531,11 +537,20 @@ where
     where
         FC: FnMut(&Constraint<Var<B, E>>, &C) -> bool,
         FV: FnMut(&B) -> bool,
+        FE: FnMut(&E) -> bool,
         FO: FnMut(&Var<B, E>) -> bool,
     {
+        // `keep_extra_variable` is consulted from two of the delegate closures
+        // (the constraint predicate and the variable predicate), so share it
+        // through a `RefCell` rather than borrowing it mutably twice. Both
+        // closures capture a `Copy` shared reference (`ke`), so neither takes
+        // unique access to the cell.
+        let keep_extra_variable = std::cell::RefCell::new(keep_extra_variable);
+        let ke = &keep_extra_variable;
         self.problem.filter(
             |c, src| match src {
-                ConstraintSource::DefiningExtra { .. } => true,
+                // An extra's defining constraints live and die with the extra.
+                ConstraintSource::DefiningExtra { extra, .. } => (ke.borrow_mut())(extra),
                 ConstraintSource::User(desc) => {
                     let var_c = c.transmute(internal_to_var);
                     keep_constraint(&var_c, desc)
@@ -543,8 +558,9 @@ where
             },
             |v| match v {
                 InternalVar::Base(b) => keep_base_variable(b),
-                // Extras/helpers stay declared: their definitions are kept.
-                InternalVar::Extra(_) | InternalVar::Helper { .. } => true,
+                // An extra and its helpers are kept iff the extra is kept.
+                InternalVar::Extra(e) => (ke.borrow_mut())(e),
+                InternalVar::Helper { owner, .. } => (ke.borrow_mut())(owner),
             },
             |v| match v {
                 // Helpers never appear in the objective; keep defensively.
