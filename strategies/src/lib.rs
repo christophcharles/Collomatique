@@ -3,7 +3,8 @@ mod strategies;
 pub use strategies::conductor::{
     ConductorPayload, ConductorPayloadData, ConductorProgress, ConductorProgressData,
     ConductorStatus, ConductorStatusData, ConductorStrategy, ConductorWarning, FuzzyConfig,
-    OPTIMALITY_GAP_EPS, Solution, SolutionData, update_best_bound, update_best_solution,
+    IncrementalConfig, OPTIMALITY_GAP_EPS, Solution, SolutionData, update_best_bound,
+    update_best_solution,
 };
 pub use strategies::default::{DefaultPayload, DefaultStrategy};
 pub use strategies::find_closest::{

@@ -7,7 +7,9 @@ use relm4::{adw, gtk};
 
 use std::num::NonZeroU32;
 
-use collomatique_strategies::{ConductorStrategy, ConductorWarning, FuzzyConfig};
+use collomatique_strategies::{
+    ConductorStrategy, ConductorWarning, FuzzyConfig, IncrementalConfig,
+};
 
 pub struct Dialog {
     hidden: bool,
@@ -15,8 +17,11 @@ pub struct Dialog {
 
     worker_count: u32,
     enable_warm_start: bool,
-    enable_incremental: bool,
     enable_default: bool,
+
+    enable_incremental: bool,
+    incremental_l1_weight: f64,
+    incremental_tolerance: f64,
 
     enable_fuzzy: bool,
     fuzzy_sigma: f64,
@@ -37,6 +42,7 @@ pub enum DialogInput {
     UpdateWorkerCount(u32),
     UpdateWarmStart(bool),
     UpdateIncremental(bool),
+    UpdateIncrementalTolerance(f64),
     UpdateDefault(bool),
     UpdateFuzzyEnabled(bool),
     UpdateFuzzySigma(f64),
@@ -139,7 +145,23 @@ impl SimpleComponent for Dialog {
                                 adw::SwitchRow {
                                     set_hexpand: true,
                                     set_use_markup: false,
-                                    set_title: "Résolution incrémentale",
+                                    set_title: "Stratégie par défaut",
+                                    #[track(self.should_redraw)]
+                                    set_active: model.enable_default,
+                                    connect_active_notify[sender] => move |widget| {
+                                        let value = widget.is_active();
+                                        sender.input(DialogInput::UpdateDefault(value));
+                                    },
+                                },
+                            },
+                            adw::PreferencesGroup {
+                                set_title: "Résolution incrémentale",
+                                set_margin_all: 5,
+                                set_hexpand: true,
+                                adw::SwitchRow {
+                                    set_hexpand: true,
+                                    set_use_markup: false,
+                                    set_title: "Activer la résolution incrémentale",
                                     #[track(self.should_redraw)]
                                     set_active: model.enable_incremental,
                                     connect_active_notify[sender] => move |widget| {
@@ -147,15 +169,26 @@ impl SimpleComponent for Dialog {
                                         sender.input(DialogInput::UpdateIncremental(value));
                                     },
                                 },
-                                adw::SwitchRow {
+                                adw::SpinRow {
                                     set_hexpand: true,
-                                    set_use_markup: false,
-                                    set_title: "Stratégie par défaut",
+                                    set_title: "Tolérance de recherche",
+                                    #[wrap(Some)]
+                                    set_adjustment = &gtk::Adjustment {
+                                        set_lower: 0.,
+                                        set_upper: f64::MAX,
+                                        set_step_increment: 1.,
+                                        set_page_increment: 5.,
+                                    },
+                                    set_digits: 1,
+                                    set_wrap: false,
+                                    set_numeric: true,
+                                    #[watch]
+                                    set_visible: model.enable_incremental,
                                     #[track(self.should_redraw)]
-                                    set_active: model.enable_default,
-                                    connect_active_notify[sender] => move |widget| {
-                                        let value = widget.is_active();
-                                        sender.input(DialogInput::UpdateDefault(value));
+                                    set_value: model.incremental_tolerance,
+                                    connect_value_notify[sender] => move |widget| {
+                                        let value = widget.value();
+                                        sender.input(DialogInput::UpdateIncrementalTolerance(value));
                                     },
                                 },
                             },
@@ -258,13 +291,16 @@ impl SimpleComponent for Dialog {
     ) -> ComponentParts<Self> {
         let strategy = ConductorStrategy::default();
         let fuzzy_defaults = FuzzyConfig::default();
+        let incremental_defaults = IncrementalConfig::default();
         let model = Dialog {
             hidden: true,
             should_redraw: false,
             worker_count: strategy.worker_count.get(),
             enable_warm_start: strategy.enable_warm_start,
-            enable_incremental: strategy.enable_incremental,
             enable_default: strategy.enable_default,
+            enable_incremental: strategy.incremental_config.is_some(),
+            incremental_l1_weight: incremental_defaults.l1_weight,
+            incremental_tolerance: incremental_defaults.distance_tolerance,
             enable_fuzzy: strategy.fuzzy_config.is_some(),
             fuzzy_sigma: fuzzy_defaults.fuzzy_sigma,
             find_closest_tolerance: fuzzy_defaults.find_closest_tolerance,
@@ -317,6 +353,12 @@ impl SimpleComponent for Dialog {
                 }
                 self.enable_incremental = value;
             }
+            DialogInput::UpdateIncrementalTolerance(value) => {
+                if self.incremental_tolerance == value {
+                    return;
+                }
+                self.incremental_tolerance = value;
+            }
             DialogInput::UpdateDefault(value) => {
                 if self.enable_default == value {
                     return;
@@ -359,7 +401,17 @@ impl Dialog {
         self.worker_count = strategy.worker_count.get();
         self.enable_default = strategy.enable_default;
         self.enable_warm_start = strategy.enable_warm_start;
-        self.enable_incremental = strategy.enable_incremental;
+        match strategy.incremental_config {
+            Some(cfg) => {
+                self.enable_incremental = true;
+                self.incremental_l1_weight = cfg.l1_weight;
+                self.incremental_tolerance = cfg.distance_tolerance;
+            }
+            // Keep the last weight/tolerance so re-enabling incremental shows the previous values.
+            None => {
+                self.enable_incremental = false;
+            }
+        }
         match strategy.fuzzy_config {
             Some(cfg) => {
                 self.enable_fuzzy = true;
@@ -378,7 +430,10 @@ impl Dialog {
             worker_count: NonZeroU32::new(self.worker_count).unwrap_or(NonZeroU32::MIN),
             enable_default: self.enable_default,
             enable_warm_start: self.enable_warm_start,
-            enable_incremental: self.enable_incremental,
+            incremental_config: self.enable_incremental.then(|| IncrementalConfig {
+                l1_weight: self.incremental_l1_weight,
+                distance_tolerance: self.incremental_tolerance,
+            }),
             fuzzy_config: self.enable_fuzzy.then(|| FuzzyConfig {
                 fuzzy_sigma: self.fuzzy_sigma,
                 find_closest_tolerance: self.find_closest_tolerance,
