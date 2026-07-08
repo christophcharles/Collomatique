@@ -103,15 +103,13 @@ fn student_at_interrogation_sum(
         .sum()
 }
 
-use crate::helpers::merge_objectified;
+use crate::helpers::merge_objectified_weighted;
 
 pub(super) fn build(env: &VarEnv) -> MyBundle {
     let mut hard_max_per_day = MyBundle::new();
-    let mut soft_max_per_day = MyBundle::new();
     let mut hard_max_per_week = MyBundle::new();
-    let mut soft_max_per_week = MyBundle::new();
     let mut hard_min_per_week = MyBundle::new();
-    let mut soft_min_per_week = MyBundle::new();
+    let mut soft_output = MyBundle::new();
 
     let interrogation_weeks = all_interrogation_weeks(env);
 
@@ -155,7 +153,12 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                     }
                     .into();
                     if sp.soft {
-                        soft_max_per_day = soft_max_per_day.with_constraint(constraint, desc);
+                        soft_output = merge_objectified_weighted(
+                            soft_output,
+                            MyBundle::new().with_constraint(constraint, desc),
+                            ExtraVarName::LimitsMaxPerDayPenalty { student, week, day },
+                            |_| crate::weights::BASE,
+                        );
                     } else {
                         hard_max_per_day = hard_max_per_day.with_constraint(constraint, desc);
                     }
@@ -170,7 +173,12 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                 let desc =
                     PreferenceConstraint::MaxInterrogationsPerWeek { student, week, max }.into();
                 if sp.soft {
-                    soft_max_per_week = soft_max_per_week.with_constraint(constraint, desc);
+                    soft_output = merge_objectified_weighted(
+                        soft_output,
+                        MyBundle::new().with_constraint(constraint, desc),
+                        ExtraVarName::LimitsMaxPerWeekPenalty { student, week },
+                        |_| crate::weights::BASE,
+                    );
                 } else {
                     hard_max_per_week = hard_max_per_week.with_constraint(constraint, desc);
                 }
@@ -184,7 +192,12 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                 let desc =
                     PreferenceConstraint::MinInterrogationsPerWeek { student, week, min }.into();
                 if sp.soft {
-                    soft_min_per_week = soft_min_per_week.with_constraint(constraint, desc);
+                    soft_output = merge_objectified_weighted(
+                        soft_output,
+                        MyBundle::new().with_constraint(constraint, desc),
+                        ExtraVarName::LimitsMinPerWeekPenalty { student, week },
+                        |_| crate::weights::BASE,
+                    );
                 } else {
                     hard_min_per_week = hard_min_per_week.with_constraint(constraint, desc);
                 }
@@ -200,21 +213,9 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         .merge(hard_min_per_week)
         .expect("no duplicate extras from limits");
 
-    bundle = merge_objectified(
-        bundle,
-        soft_max_per_day,
-        ExtraVarName::LimitsMaxPerDayPenalty,
-    );
-    bundle = merge_objectified(
-        bundle,
-        soft_max_per_week,
-        ExtraVarName::LimitsMaxPerWeekPenalty,
-    );
-    bundle = merge_objectified(
-        bundle,
-        soft_min_per_week,
-        ExtraVarName::LimitsMinPerWeekPenalty,
-    );
+    bundle = bundle
+        .merge(soft_output)
+        .expect("no duplicate extras from limits soft penalties");
 
     bundle
 }

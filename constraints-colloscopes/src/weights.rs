@@ -4,8 +4,10 @@
 //! as an L1 cumulative-deviation objective, combined into the global objective via
 //! [`crate::helpers::merge_objectified_weighted`] (a plain weighted sum `Σ wᵢ·λᵢ`,
 //! no `1/n` normalization, no global `L∞` bound). The soft limits/pairings families
-//! use [`crate::helpers::merge_objectified`] and are scaled to [`BASE`] as well.
-//! Concentrating the calibration constant here keeps the families consistent.
+//! use the same helper, weighting each violation by a flat [`BASE`]. Keeping every
+//! family on a plain weighted sum (no whole-year `L∞` term) is what lets the
+//! incremental strategy pick penalties up epoch by epoch; concentrating the
+//! calibration constant here keeps the families consistent.
 
 /// Reference magnitude for a soft balancing penalty.
 ///
