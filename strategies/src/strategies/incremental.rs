@@ -336,7 +336,11 @@ impl Strategy for IncrementalStrategy {
                     },
                 )
                 .map_err(|e| {
-                    StrategyError::SolveError(format!("failed to filter epoch {seq}: {e:?}"))
+                    StrategyError::SolveError(format!(
+                        "failed to filter epoch {}: {:?}",
+                        seq + 1,
+                        e
+                    ))
                 })?;
 
             // 2. Re-model in the surrogate space, keeping the epoch's margin objective, and
@@ -349,7 +353,11 @@ impl Strategy for IncrementalStrategy {
             }
 
             let epoch_model = modeler.build(&()).map_err(|e| {
-                StrategyError::SolveError(format!("failed to build epoch {seq} model: {e:?}"))
+                StrategyError::SolveError(format!(
+                    "failed to build epoch {} model: {:?}",
+                    seq + 1,
+                    e
+                ))
             })?;
 
             // 3. Solve this epoch.
@@ -370,7 +378,7 @@ impl Strategy for IncrementalStrategy {
                             progress: (&p).into(),
                         })
                     },
-                    &|line| Some(format!("[epoch {seq} solver] {line}")),
+                    &|line| Some(format!("[epoch {}/{} solver] {}", seq + 1, total, line)),
                 )
                 .await?;
 
@@ -400,7 +408,8 @@ impl Strategy for IncrementalStrategy {
                 }
                 SolveStatus::Error => {
                     return Err(StrategyError::SolveError(format!(
-                        "epoch {seq} solve returned error"
+                        "epoch {} solve returned error",
+                        seq + 1
                     )));
                 }
             }
