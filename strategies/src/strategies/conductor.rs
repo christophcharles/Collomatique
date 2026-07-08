@@ -329,6 +329,10 @@ pub enum ConductorWarning {
     /// Fuzzy is enabled but no initial-solution provider (warm-start or incremental) is: fuzzy can
     /// only fire once the default worker has already gone far, so the fuzzers are usually wasted.
     ColdFuzzy,
+    /// Both warm-start and incremental are enabled — they play the same seeding role. Incremental
+    /// usually gives a better starting point, so warm-start is redundant here (worth keeping only
+    /// for a quick, lower-quality initial solution).
+    RedundantWarmStart,
     /// More worker slots than available CPU cores.
     OverwhelmedCpu,
 }
@@ -405,7 +409,8 @@ impl ConductorStrategy {
     /// users don't want a solve to bog down the whole machine. Falls back to a single worker
     /// when the available parallelism cannot be determined. Fuzzy exploration is enabled so the
     /// extra worker slots have something to run, and incremental is enabled as a fast initial-solution
-    /// provider to seed the default/fuzzy workers early.
+    /// provider to seed the default/fuzzy workers early. Warm-start is left off: incremental fills the
+    /// same seeding role and usually gives a better starting point, so running both would be redundant.
     pub fn with_parallelism_defaults() -> Self {
         let cores = std::thread::available_parallelism()
             .map(|n| n.get())
@@ -424,6 +429,9 @@ impl ConductorStrategy {
             // Enabled so its incumbent seeds the default/fuzzy workers early (a warm-start-only
             // search leaves them cold until the default worker has gone far).
             enable_incremental: true,
+            // Off on purpose: incremental already provides the initial incumbent, and better, so a
+            // warm-start on top would be redundant work.
+            enable_warm_start: false,
             fuzzy_config: Some(FuzzyConfig::default()),
             ..Self::default()
         }
@@ -459,6 +467,9 @@ impl ConductorStrategy {
         }
         if f && d && !seed {
             warnings.insert(ConductorWarning::ColdFuzzy);
+        }
+        if w && i {
+            warnings.insert(ConductorWarning::RedundantWarmStart);
         }
         let oversubscribed = std::thread::available_parallelism()
             .map(|n| wc as usize > n.get())
@@ -1636,6 +1647,34 @@ mod tests {
         let w = only_incremental.warnings();
         assert!(!w.contains(&ConductorWarning::NoStrategyEnabled));
         assert!(w.contains(&ConductorWarning::NoOptimizing));
+    }
+
+    #[test]
+    fn warnings_flag_redundant_warm_start_with_incremental() {
+        // Warm-start and incremental both provide the initial incumbent, so enabling both is redundant.
+        let both = ConductorStrategy {
+            enable_incremental: true,
+            ..conductor(4, true, true, false)
+        };
+        assert!(
+            both.warnings()
+                .contains(&ConductorWarning::RedundantWarmStart)
+        );
+        // Either seeding provider alone is fine.
+        assert!(
+            !conductor(4, true, true, false)
+                .warnings()
+                .contains(&ConductorWarning::RedundantWarmStart)
+        );
+        let only_incremental = ConductorStrategy {
+            enable_incremental: true,
+            ..conductor(4, true, false, false)
+        };
+        assert!(
+            !only_incremental
+                .warnings()
+                .contains(&ConductorWarning::RedundantWarmStart)
+        );
     }
 
     #[test]

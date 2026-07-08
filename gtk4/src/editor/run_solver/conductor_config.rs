@@ -427,6 +427,11 @@ fn warning_message(warning: ConductorWarning) -> &'static str {
              résolution incrémentale) : elle ne se déclenchera qu'une fois la stratégie par défaut \
              bien avancée et sera donc souvent inutile."
         }
+        ConductorWarning::RedundantWarmStart => {
+            "Le démarrage à chaud et la résolution incrémentale sont tous deux activés : la \
+             résolution incrémentale fournit généralement un meilleur point de départ ; le \
+             démarrage à chaud n'est utile que pour obtenir rapidement une solution."
+        }
         ConductorWarning::OverwhelmedCpu => {
             "Le nombre de tâches en parallèle dépasse le nombre de cœurs du processeur."
         }
