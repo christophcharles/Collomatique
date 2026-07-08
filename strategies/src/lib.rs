@@ -1,9 +1,9 @@
 mod strategies;
 
 pub use strategies::conductor::{
-    ConductorPayload, ConductorProgress, ConductorProgressData, ConductorStatus,
-    ConductorStatusData, ConductorStrategy, ConductorWarning, FuzzyConfig, OPTIMALITY_GAP_EPS,
-    Solution, SolutionData, update_best_bound, update_best_solution,
+    ConductorPayload, ConductorPayloadData, ConductorProgress, ConductorProgressData,
+    ConductorStatus, ConductorStatusData, ConductorStrategy, ConductorWarning, FuzzyConfig,
+    OPTIMALITY_GAP_EPS, Solution, SolutionData, update_best_bound, update_best_solution,
 };
 pub use strategies::default::{DefaultPayload, DefaultStrategy};
 pub use strategies::find_closest::{
@@ -586,7 +586,7 @@ pub enum StrategyPayload<V: UsableData + Send> {
     FindClosest(FindClosestPayload<V>),
     Fuzzy(FuzzyPayload<V>),
     Incremental(IncrementalPayload<V>),
-    Conductor(ConductorPayload),
+    Conductor(ConductorPayload<V>),
 }
 
 /// Serializable, type-erased union of every strategy's per-run payload — the only payload form
@@ -601,7 +601,7 @@ pub enum StrategyPayloadData {
     FindClosest(FindClosestPayloadData),
     Fuzzy(FuzzyPayloadData),
     Incremental(IncrementalPayloadData),
-    Conductor(ConductorPayload),
+    Conductor(ConductorPayloadData),
 }
 
 impl StrategyPayloadData {
@@ -648,8 +648,8 @@ impl<V: UsableData + Send> From<IncrementalPayload<V>> for StrategyPayload<V> {
         StrategyPayload::Incremental(p)
     }
 }
-impl<V: UsableData + Send> From<ConductorPayload> for StrategyPayload<V> {
-    fn from(p: ConductorPayload) -> Self {
+impl<V: UsableData + Send> From<ConductorPayload<V>> for StrategyPayload<V> {
+    fn from(p: ConductorPayload<V>) -> Self {
         StrategyPayload::Conductor(p)
     }
 }
@@ -703,7 +703,7 @@ impl<V: UsableData + Send> VarOrderSerializable<V> for StrategyPayload<V> {
                 <IncrementalPayload<V> as VarOrderSerializable<V>>::from_data(d, var_order)?,
             ),
             StrategyPayloadData::Conductor(d) => StrategyPayload::Conductor(
-                <ConductorPayload as VarOrderSerializable<V>>::from_data(d, var_order)?,
+                <ConductorPayload<V> as VarOrderSerializable<V>>::from_data(d, var_order)?,
             ),
         })
     }
@@ -721,7 +721,9 @@ impl StrategyKind {
             StrategyKind::NoObjectiveStarter(_) => Some(StrategyPayload::NoObjectiveStarter(
                 NoObjectiveStarterPayload,
             )),
-            StrategyKind::Conductor(_) => Some(StrategyPayload::Conductor(ConductorPayload)),
+            StrategyKind::Conductor(_) => {
+                Some(StrategyPayload::Conductor(ConductorPayload::default()))
+            }
             StrategyKind::FindClosest(_)
             | StrategyKind::Fuzzy(_)
             | StrategyKind::Incremental(_) => None,

@@ -17,9 +17,10 @@ use collomatique_ilp_modeler::{InternalVar, Model};
 #[cfg(test)]
 use crate::SolveProgress;
 use crate::{
-    DefaultStrategy, FindClosestStrategy, FuzzyPayload, FuzzyStrategy, NoObjectiveStarterProgress,
-    NoObjectiveStrategy, SolveStatus, Strategy, StrategyContext, StrategyError, StrategyKind,
-    StrategyOutcome, StrategyPayload, StrategyProgress, StrategyProgressData, VarOrderSerializable,
+    DefaultStrategy, FindClosestStrategy, FuzzyPayload, FuzzyStrategy, IncrementalPayload,
+    IncrementalPayloadData, IncrementalStrategy, NoObjectiveStarterProgress, NoObjectiveStrategy,
+    SolveStatus, Strategy, StrategyContext, StrategyError, StrategyKind, StrategyOutcome,
+    StrategyPayload, StrategyProgress, StrategyProgressData, VarOrderSerializable,
 };
 
 #[derive(Debug, Clone)]
@@ -313,20 +314,20 @@ impl Default for FuzzyConfig {
 pub enum ConductorWarning {
     /// No substrategy is enabled at all: nothing would run.
     NoStrategyEnabled,
-    /// A feasible search runs (warm-start) but neither the default branch-and-bound nor fuzzy is
-    /// enabled: solutions are found but never optimised.
+    /// A feasible search runs (warm-start or incremental) but neither the default branch-and-bound
+    /// nor fuzzy is enabled: solutions are found but never optimised.
     NoOptimizing,
-    /// Fuzzy is enabled but neither default nor warm-start is, so no incumbent is ever produced
-    /// to seed it: fuzzy never fires and the conductor exits immediately.
+    /// Fuzzy is enabled but nothing produces an initial incumbent (no default, warm-start, or
+    /// incremental) to seed it: fuzzy never fires and the conductor exits immediately.
     NoSeed,
     /// Fuzzy is enabled alongside the default worker but there is only one slot, which the default
     /// worker occupies: fuzzy never gets an idle slot to fill.
     StarvedFuzzy,
-    /// Default is disabled while fuzzy runs off a warm-start incumbent: with no default there is
-    /// never a bound to prove optimality, so fuzzy refills the workers indefinitely.
+    /// Default is disabled while fuzzy runs off a warm-start / incremental incumbent: with no
+    /// default there is never a bound to prove optimality, so fuzzy refills the workers indefinitely.
     WontFinish,
-    /// Fuzzy is enabled but warm-start is not: fuzzy can only fire once the default worker has
-    /// already gone far, so the fuzzers are usually wasted.
+    /// Fuzzy is enabled but no initial-solution provider (warm-start or incremental) is: fuzzy can
+    /// only fire once the default worker has already gone far, so the fuzzers are usually wasted.
     ColdFuzzy,
     /// More worker slots than available CPU cores.
     OverwhelmedCpu,
@@ -339,6 +340,10 @@ pub struct ConductorStrategy {
     pub enable_default: bool,
     /// Queue a `NoObjectiveStrategy` first, to produce a feasible warm-start incumbent.
     pub enable_warm_start: bool,
+    /// Queue an `IncrementalStrategy` after the warm-start (before default) as a fast initial-solution
+    /// provider, using the per-run payload's epoch assignment (an empty assignment still yields a
+    /// single-epoch priming solve).
+    pub enable_incremental: bool,
     /// Fill otherwise-idle workers with `FuzzyStrategy` exploration around the incumbent, tuned by
     /// the carried config. `None` disables fuzzy exploration entirely.
     pub fuzzy_config: Option<FuzzyConfig>,
@@ -350,23 +355,46 @@ impl Default for ConductorStrategy {
             worker_count: NonZeroU32::new(1).expect("1 is non-zero"),
             enable_default: false,
             enable_warm_start: true,
+            enable_incremental: false,
             fuzzy_config: None,
         }
     }
 }
 
-/// Per-run payload for [`ConductorStrategy`]. Empty for now.
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
-pub struct ConductorPayload;
+/// Per-run payload for [`ConductorStrategy`]: the epoch assignment forwarded to the queued
+/// `IncrementalStrategy` when [`ConductorStrategy::enable_incremental`] is set. Always present (an
+/// empty assignment is a single-epoch priming solve); ignored when incremental is disabled.
+#[derive(Debug, Clone)]
+pub struct ConductorPayload<V: UsableData> {
+    pub incremental: IncrementalPayload<V>,
+}
 
-impl<V: UsableData + Send> VarOrderSerializable<V> for ConductorPayload {
-    type Data = ConductorPayload;
-    type Error = Infallible;
-    fn into_data(&self, _var_order: &[V]) -> Result<ConductorPayload, Infallible> {
-        Ok(self.clone())
+impl<V: UsableData> Default for ConductorPayload<V> {
+    fn default() -> Self {
+        ConductorPayload {
+            incremental: IncrementalPayload::default(),
+        }
     }
-    fn from_data(data: &ConductorPayload, _var_order: &[V]) -> Result<Self, Infallible> {
-        Ok(data.clone())
+}
+
+/// Serializable counterpart of [`ConductorPayload<V>`] (crosses the IPC barrier).
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct ConductorPayloadData {
+    pub incremental: IncrementalPayloadData,
+}
+
+impl<V: UsableData + Send> VarOrderSerializable<V> for ConductorPayload<V> {
+    type Data = ConductorPayloadData;
+    type Error = Infallible;
+    fn into_data(&self, var_order: &[V]) -> Result<ConductorPayloadData, Infallible> {
+        Ok(ConductorPayloadData {
+            incremental: self.incremental.into_data(var_order)?,
+        })
+    }
+    fn from_data(data: &ConductorPayloadData, var_order: &[V]) -> Result<Self, Infallible> {
+        Ok(ConductorPayload {
+            incremental: IncrementalPayload::from_data(&data.incremental, var_order)?,
+        })
     }
 }
 
@@ -376,7 +404,8 @@ impl ConductorStrategy {
     /// conductor gains little from more than a Default worker plus a few fuzzers, and most
     /// users don't want a solve to bog down the whole machine. Falls back to a single worker
     /// when the available parallelism cannot be determined. Fuzzy exploration is enabled so the
-    /// extra worker slots have something to run.
+    /// extra worker slots have something to run, and incremental is enabled as a fast initial-solution
+    /// provider to seed the default/fuzzy workers early.
     pub fn with_parallelism_defaults() -> Self {
         let cores = std::thread::available_parallelism()
             .map(|n| n.get())
@@ -392,6 +421,9 @@ impl ConductorStrategy {
             // solve prove optimality (close the gap) rather than only hill-climb via fuzzy. Set
             // explicitly so it does not track `Default`, where it is off (a warm-start-only search).
             enable_default: true,
+            // Enabled so its incumbent seeds the default/fuzzy workers early (a warm-start-only
+            // search leaves them cold until the default worker has gone far).
+            enable_incremental: true,
             fuzzy_config: Some(FuzzyConfig::default()),
             ..Self::default()
         }
@@ -404,25 +436,28 @@ impl ConductorStrategy {
         let d = self.enable_default;
         let w = self.enable_warm_start;
         let f = self.fuzzy_config.is_some();
+        let i = self.enable_incremental;
+        // Both warm-start and incremental produce an initial incumbent for the optimisers to lean on.
+        let seed = w || i;
         let wc = self.worker_count.get();
 
         let mut warnings = BTreeSet::new();
-        if !d && !w && !f {
+        if !d && !f && !seed {
             warnings.insert(ConductorWarning::NoStrategyEnabled);
         }
-        if !d && !f && w {
+        if !d && !f && seed {
             warnings.insert(ConductorWarning::NoOptimizing);
         }
-        if f && !d && !w {
+        if f && !d && !seed {
             warnings.insert(ConductorWarning::NoSeed);
         }
         if f && d && wc == 1 {
             warnings.insert(ConductorWarning::StarvedFuzzy);
         }
-        if f && w && !d {
+        if f && seed && !d {
             warnings.insert(ConductorWarning::WontFinish);
         }
-        if f && d && !w {
+        if f && d && !seed {
             warnings.insert(ConductorWarning::ColdFuzzy);
         }
         let oversubscribed = std::thread::available_parallelism()
@@ -459,7 +494,7 @@ impl ConductorStrategy {
     /// Build the initial worker queue from the toggles: warm-start first (so it produces an
     /// incumbent everything else can lean on), default last (so it does not monopolize the
     /// only slot when cores are scarce).
-    fn seed_queue(&self) -> VecDeque<StrategyKind> {
+    fn seed_queue(&self, run_incremental: bool) -> VecDeque<StrategyKind> {
         let mut queue = VecDeque::new();
         if self.enable_warm_start {
             queue.push_back(StrategyKind::NoObjective(NoObjectiveStrategy {
@@ -467,6 +502,9 @@ impl ConductorStrategy {
                 reconstruction_time_limit_seconds: None,
                 disable_logging: false,
             }));
+        }
+        if run_incremental {
+            queue.push_back(StrategyKind::Incremental(IncrementalStrategy::default()));
         }
         if self.enable_default {
             queue.push_back(StrategyKind::Default(DefaultStrategy::default()));
@@ -902,7 +940,7 @@ where
 #[async_trait]
 impl Strategy for ConductorStrategy {
     type Progress<V: UsableData + Send> = ConductorProgress<V>;
-    type Payload<V: UsableData + Send> = ConductorPayload;
+    type Payload<V: UsableData + Send> = ConductorPayload<V>;
 
     fn name(&self) -> &'static str {
         "conductor"
@@ -917,7 +955,7 @@ impl Strategy for ConductorStrategy {
         ctx: &StrategyContext,
         model: &Model<B, E, C>,
         warm_start: Option<ConfigData<InternalVar<B, E>>>,
-        _payload: ConductorPayload,
+        conductor_payload: ConductorPayload<InternalVar<B, E>>,
         on_progress: &(dyn Fn(Self::Progress<InternalVar<B, E>>) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
@@ -938,7 +976,7 @@ impl Strategy for ConductorStrategy {
         // are later topped up with fuzzy exploration once an incumbent exists.
         let worker_count = self.worker_count.get() as usize;
         let mut slots = WorkerSlots::new(worker_count, on_progress);
-        let mut queue: VecDeque<StrategyKind> = self.seed_queue();
+        let mut queue: VecDeque<StrategyKind> = self.seed_queue(self.enable_incremental);
 
         // Trace of the single Default worker so it can be superseded: its slot, a `oneshot`
         // sender that cancels (kills) its future, and its own best incumbent objective — shared
@@ -994,6 +1032,11 @@ impl Strategy for ConductorStrategy {
                             .expect("fuzzy is queued only once an incumbent exists");
                         (None, StrategyPayload::Fuzzy(FuzzyPayload { target }))
                     }
+                    // Incremental ignores warm_start; its start comes from the payload's epochs.
+                    StrategyKind::Incremental(_) => (
+                        None,
+                        StrategyPayload::Incremental(conductor_payload.incremental.clone()),
+                    ),
                     other => (
                         worker_warm_start.clone(),
                         other
@@ -1487,6 +1530,7 @@ mod tests {
             .map(|k| match k {
                 StrategyKind::NoObjective(_) => "no_objective",
                 StrategyKind::Default(_) => "default",
+                StrategyKind::Incremental(_) => "incremental",
                 StrategyKind::Fuzzy(_) => "fuzzy",
                 _ => "other",
             })
@@ -1498,6 +1542,7 @@ mod tests {
             worker_count: NonZeroU32::new(worker_count).expect("non-zero worker count"),
             enable_default: d,
             enable_warm_start: w,
+            enable_incremental: false,
             fuzzy_config: f.then(FuzzyConfig::default),
         }
     }
@@ -1571,6 +1616,29 @@ mod tests {
     }
 
     #[test]
+    fn warnings_treat_incremental_as_a_seed_like_warm_start() {
+        // Incremental provides the initial incumbent, so fuzzy + default with incremental (no warm
+        // start) is not "cold" — the same config without incremental would flag ColdFuzzy.
+        let with_incremental = ConductorStrategy {
+            enable_incremental: true,
+            ..conductor(4, true, false, true)
+        };
+        assert!(
+            !with_incremental
+                .warnings()
+                .contains(&ConductorWarning::ColdFuzzy)
+        );
+        // Incremental-only: something runs (so not NoStrategyEnabled) but nothing optimises it.
+        let only_incremental = ConductorStrategy {
+            enable_incremental: true,
+            ..conductor(1, false, false, false)
+        };
+        let w = only_incremental.warnings();
+        assert!(!w.contains(&ConductorWarning::NoStrategyEnabled));
+        assert!(w.contains(&ConductorWarning::NoOptimizing));
+    }
+
+    #[test]
     fn warnings_are_clean_for_healthy_configs() {
         // Default only, or default + warm start, on a single worker: nothing to flag (barring an
         // impossibly small reported core count, which `OverwhelmedCpu` guards against separately).
@@ -1610,17 +1678,43 @@ mod tests {
         };
 
         assert_eq!(
-            kinds(&conductor(true, true).seed_queue()),
+            kinds(&conductor(true, true).seed_queue(false)),
             vec!["no_objective", "default"]
         );
-        assert_eq!(kinds(&conductor(false, true).seed_queue()), vec!["default"]);
         assert_eq!(
-            kinds(&conductor(true, false).seed_queue()),
+            kinds(&conductor(false, true).seed_queue(false)),
+            vec!["default"]
+        );
+        assert_eq!(
+            kinds(&conductor(true, false).seed_queue(false)),
             vec!["no_objective"]
         );
-        assert!(conductor(false, false).seed_queue().is_empty());
+        assert!(conductor(false, false).seed_queue(false).is_empty());
         // Fuzzy is never seeded up front; it is only added dynamically once an incumbent exists.
-        assert!(!kinds(&conductor(true, true).seed_queue()).contains(&"fuzzy"));
+        assert!(!kinds(&conductor(true, true).seed_queue(false)).contains(&"fuzzy"));
+    }
+
+    #[test]
+    fn seed_queue_inserts_incremental_between_warm_start_and_default() {
+        let conductor = ConductorStrategy {
+            enable_warm_start: true,
+            enable_default: true,
+            ..ConductorStrategy::default()
+        };
+        assert_eq!(
+            kinds(&conductor.seed_queue(true)),
+            vec!["no_objective", "incremental", "default"]
+        );
+        // Incremental slots in even without a warm-start, still ahead of default.
+        let no_warm = ConductorStrategy {
+            enable_warm_start: false,
+            enable_default: true,
+            ..ConductorStrategy::default()
+        };
+        assert_eq!(
+            kinds(&no_warm.seed_queue(true)),
+            vec!["incremental", "default"]
+        );
     }
 
     #[test]

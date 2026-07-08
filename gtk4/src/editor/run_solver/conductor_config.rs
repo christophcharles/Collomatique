@@ -15,6 +15,7 @@ pub struct Dialog {
 
     worker_count: u32,
     enable_warm_start: bool,
+    enable_incremental: bool,
     enable_default: bool,
 
     enable_fuzzy: bool,
@@ -35,6 +36,7 @@ pub enum DialogInput {
 
     UpdateWorkerCount(u32),
     UpdateWarmStart(bool),
+    UpdateIncremental(bool),
     UpdateDefault(bool),
     UpdateFuzzyEnabled(bool),
     UpdateFuzzySigma(f64),
@@ -132,6 +134,17 @@ impl SimpleComponent for Dialog {
                                     connect_active_notify[sender] => move |widget| {
                                         let value = widget.is_active();
                                         sender.input(DialogInput::UpdateWarmStart(value));
+                                    },
+                                },
+                                adw::SwitchRow {
+                                    set_hexpand: true,
+                                    set_use_markup: false,
+                                    set_title: "Résolution incrémentale",
+                                    #[track(self.should_redraw)]
+                                    set_active: model.enable_incremental,
+                                    connect_active_notify[sender] => move |widget| {
+                                        let value = widget.is_active();
+                                        sender.input(DialogInput::UpdateIncremental(value));
                                     },
                                 },
                                 adw::SwitchRow {
@@ -250,6 +263,7 @@ impl SimpleComponent for Dialog {
             should_redraw: false,
             worker_count: strategy.worker_count.get(),
             enable_warm_start: strategy.enable_warm_start,
+            enable_incremental: strategy.enable_incremental,
             enable_default: strategy.enable_default,
             enable_fuzzy: strategy.fuzzy_config.is_some(),
             fuzzy_sigma: fuzzy_defaults.fuzzy_sigma,
@@ -297,6 +311,12 @@ impl SimpleComponent for Dialog {
                 }
                 self.enable_warm_start = value;
             }
+            DialogInput::UpdateIncremental(value) => {
+                if self.enable_incremental == value {
+                    return;
+                }
+                self.enable_incremental = value;
+            }
             DialogInput::UpdateDefault(value) => {
                 if self.enable_default == value {
                     return;
@@ -339,6 +359,7 @@ impl Dialog {
         self.worker_count = strategy.worker_count.get();
         self.enable_default = strategy.enable_default;
         self.enable_warm_start = strategy.enable_warm_start;
+        self.enable_incremental = strategy.enable_incremental;
         match strategy.fuzzy_config {
             Some(cfg) => {
                 self.enable_fuzzy = true;
@@ -357,6 +378,7 @@ impl Dialog {
             worker_count: NonZeroU32::new(self.worker_count).unwrap_or(NonZeroU32::MIN),
             enable_default: self.enable_default,
             enable_warm_start: self.enable_warm_start,
+            enable_incremental: self.enable_incremental,
             fuzzy_config: self.enable_fuzzy.then(|| FuzzyConfig {
                 fuzzy_sigma: self.fuzzy_sigma,
                 find_closest_tolerance: self.find_closest_tolerance,
@@ -388,7 +410,8 @@ fn warning_message(warning: ConductorWarning) -> &'static str {
         }
         ConductorWarning::NoSeed => {
             "L'exploration aléatoire est activée mais aucune stratégie ne produit de solution \
-             initiale : elle ne démarrera jamais et le solveur s'arrêtera immédiatement."
+             initiale (démarrage à chaud ou résolution incrémentale) : elle ne démarrera jamais et \
+             le solveur s'arrêtera immédiatement."
         }
         ConductorWarning::StarvedFuzzy => {
             "L'exploration aléatoire est activée mais l'unique tâche est occupée par la stratégie \
@@ -400,8 +423,9 @@ fn warning_message(warning: ConductorWarning) -> &'static str {
              l'optimalité et le solveur tournera indéfiniment."
         }
         ConductorWarning::ColdFuzzy => {
-            "L'exploration aléatoire est activée sans démarrage à chaud : elle ne se déclenchera \
-             qu'une fois la stratégie par défaut bien avancée et sera donc souvent inutile."
+            "L'exploration aléatoire est activée sans solution initiale (démarrage à chaud ou \
+             résolution incrémentale) : elle ne se déclenchera qu'une fois la stratégie par défaut \
+             bien avancée et sera donc souvent inutile."
         }
         ConductorWarning::OverwhelmedCpu => {
             "Le nombre de tâches en parallèle dépasse le nombre de cœurs du processeur."

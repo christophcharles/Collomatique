@@ -24,10 +24,20 @@ pub struct IncrementalPayload<V: UsableData> {
     pub epochs: HashMap<V, u32>,
 }
 
+// Manual (not derived): `#[derive(Default)]` would wrongly require `V: Default`. An empty epoch map
+// puts every base variable in the final epoch, i.e. a single priming solve.
+impl<V: UsableData> Default for IncrementalPayload<V> {
+    fn default() -> Self {
+        IncrementalPayload {
+            epochs: HashMap::new(),
+        }
+    }
+}
+
 /// Serializable counterpart of [`IncrementalPayload<V>`]: the epoch of each variable is
 /// erased to a column-indexed `Vec<Option<u32>>` against the model's `var_order`
 /// (`Some(e)` = epoch `e`; `None` = unlisted → final epoch), so it can cross the IPC barrier.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct IncrementalPayloadData {
     pub epochs: Vec<Option<u32>>,
 }
