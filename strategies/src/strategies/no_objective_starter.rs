@@ -7,11 +7,11 @@ use serde::{Deserialize, Serialize};
 use collomatique_ilp::{ConfigData, UsableData};
 use collomatique_ilp_modeler::{InternalVar, Model};
 
-use crate::strategies::default::DefaultStrategy;
-use crate::strategies::no_objective::NoObjectiveStrategy;
+use crate::strategies::default::{DefaultPayload, DefaultStrategy};
+use crate::strategies::no_objective::{NoObjectivePayload, NoObjectiveStrategy};
 use crate::{
-    NoObjectiveProgressData, SerializableProgress, SolveProgress, SolveProgressData, SolveStatus,
-    Strategy, StrategyContext, StrategyError, StrategyOutcome,
+    NoObjectiveProgressData, SolveProgress, SolveProgressData, SolveStatus, Strategy,
+    StrategyContext, StrategyError, StrategyOutcome, VarOrderSerializable,
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -20,9 +20,25 @@ pub struct NoObjectiveStarterStrategy {
     pub default: DefaultStrategy,
 }
 
+/// Per-run payload for [`NoObjectiveStarterStrategy`]. Empty for now.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct NoObjectiveStarterPayload;
+
+impl<V: UsableData + Send> VarOrderSerializable<V> for NoObjectiveStarterPayload {
+    type Data = NoObjectiveStarterPayload;
+    type Error = Infallible;
+    fn into_data(&self, _var_order: &[V]) -> Result<NoObjectiveStarterPayload, Infallible> {
+        Ok(self.clone())
+    }
+    fn from_data(data: &NoObjectiveStarterPayload, _var_order: &[V]) -> Result<Self, Infallible> {
+        Ok(data.clone())
+    }
+}
+
 #[async_trait]
 impl Strategy for NoObjectiveStarterStrategy {
     type Progress<V: UsableData + Send> = NoObjectiveStarterProgress<V>;
+    type Payload<V: UsableData + Send> = NoObjectiveStarterPayload;
 
     fn name(&self) -> &'static str {
         "no-obj-starter"
@@ -37,6 +53,7 @@ impl Strategy for NoObjectiveStarterStrategy {
         ctx: &StrategyContext,
         model: &Model<B, E, C>,
         warm_start: Option<ConfigData<InternalVar<B, E>>>,
+        _payload: NoObjectiveStarterPayload,
         on_progress: &(dyn Fn(Self::Progress<InternalVar<B, E>>) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
@@ -46,9 +63,13 @@ impl Strategy for NoObjectiveStarterStrategy {
     {
         let no_obj_outcome = self
             .no_objective
-            .run_with_callback(ctx, model, warm_start, &|p| {
-                on_progress(NoObjectiveStarterProgress::Starter(p))
-            })
+            .run_with_callback(
+                ctx,
+                model,
+                warm_start,
+                NoObjectivePayload::default(),
+                &|p| on_progress(NoObjectiveStarterProgress::Starter(p)),
+            )
             .await?;
 
         match no_obj_outcome.status {
@@ -97,7 +118,7 @@ impl Strategy for NoObjectiveStarterStrategy {
         }
 
         self.default
-            .run_with_callback(ctx, model, Some(hint), &|p| {
+            .run_with_callback(ctx, model, Some(hint), DefaultPayload::default(), &|p| {
                 on_progress(NoObjectiveStarterProgress::Default(p))
             })
             .await
@@ -195,7 +216,7 @@ impl NoObjectiveStarterProgressData {
     }
 }
 
-impl<V: UsableData + Send> SerializableProgress<V> for NoObjectiveStarterProgress<V> {
+impl<V: UsableData + Send> VarOrderSerializable<V> for NoObjectiveStarterProgress<V> {
     type Data = NoObjectiveStarterProgressData;
     type Error = Infallible;
     fn into_data(&self, var_order: &[V]) -> Result<NoObjectiveStarterProgressData, Infallible> {

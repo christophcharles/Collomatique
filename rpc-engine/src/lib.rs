@@ -209,7 +209,8 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
     use collomatique_ilp_modeler::InternalVar;
     use collomatique_rpc::{SerializedStrategyProgress, StrategyProgressRaw};
     use collomatique_strategies::{
-        SerializableProgress, Strategy, StrategyContext, StrategyProgress, StrategyRequest,
+        Strategy, StrategyContext, StrategyPayload, StrategyProgress, StrategyRequest,
+        VarOrderSerializable,
     };
     use collomatique_subprocesses::SubprocessSolveBackend;
     use ordered_float::OrderedFloat;
@@ -227,6 +228,13 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
         .as_ref()
         .map(|raw| collomatique_ilp::solution_to_config_data(raw, &var_order));
 
+    // Reconstruct the typed payload from its erased form against this subprocess's var_order,
+    // mirroring how progress is erased on the way back out.
+    let payload = <StrategyPayload<InternalVar<usize, usize>> as VarOrderSerializable<
+        InternalVar<usize, usize>,
+    >>::from_data(&request.payload, &var_order)
+    .unwrap_or_else(|e| match e {});
+
     let backend = Arc::new(SubprocessSolveBackend::new());
     let strategy_name = request.strategy.name();
     let on_echo: Arc<dyn Fn(String) + Send + Sync> = Arc::new(move |line: String| {
@@ -237,7 +245,7 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
     let progress_callback = |progress: StrategyProgress<InternalVar<usize, usize>>| -> bool {
         // Erase the typed progress to its serializable form for the IPC barrier.
         let data =
-            SerializableProgress::into_data(&progress, &var_order).unwrap_or_else(|e| match e {});
+            VarOrderSerializable::into_data(&progress, &var_order).unwrap_or_else(|e| match e {});
         eprintln!("[{strategy_name} strategy progress] {data}");
         let serialized_progress = data.serialize();
         let progress_raw = StrategyProgressRaw {
@@ -253,11 +261,13 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
     let rt = tokio::runtime::Runtime::new().unwrap();
     eprintln!("Running strategy...");
     let outcome = rt
-        .block_on(
-            request
-                .strategy
-                .run_with_callback(&ctx, &model, warm_start, &progress_callback),
-        )
+        .block_on(request.strategy.run_with_callback(
+            &ctx,
+            &model,
+            warm_start,
+            payload,
+            &progress_callback,
+        ))
         .map_err(|e| anyhow!("Strategy failed: {e}"))?;
 
     let status = match outcome.status {

@@ -1168,6 +1168,57 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Problem<V, C, P> {
 
         output
     }
+
+    /// Produce a new problem keeping only some constraints, variables and
+    /// objective terms.
+    ///
+    /// Each of the problem's three parts is filtered by its own predicate,
+    /// independently and literally — **nothing is auto-pruned**:
+    /// - a constraint is kept when `keep_constraint(&constraint, &desc)` is `true`;
+    /// - a variable is kept when `keep_variable(&var)` is `true`;
+    /// - an objective term is kept when `keep_obj_term(&var)` is `true` (dropped
+    ///   terms are effectively set to zero).
+    ///
+    /// The result is reassembled with [`ProblemBuilder::build`], whose existing
+    /// consistency check is the only guard: if a kept constraint or a kept
+    /// objective term references a variable that was *not* kept, this returns
+    /// [`BuildError::UndeclaredVariableInConstraint`] /
+    /// [`BuildError::UndeclaredVariableInObjFunc`]. In other words, the caller
+    /// is free to remove whatever they like as long as the result is
+    /// consistent, and inconsistency is reported rather than silently repaired.
+    pub fn filter<FC, FV, FO>(
+        &self,
+        mut keep_constraint: FC,
+        mut keep_variable: FV,
+        keep_obj_term: FO,
+    ) -> BuildResult<Problem<V, C, P>, V, C>
+    where
+        FC: FnMut(&Constraint<V>, &C) -> bool,
+        FV: FnMut(&V) -> bool,
+        FO: FnMut(&V) -> bool,
+    {
+        let kept_constraints: Vec<(Constraint<V>, C)> = self
+            .constraints
+            .iter()
+            .filter(|(c, desc)| keep_constraint(c, desc))
+            .cloned()
+            .collect();
+
+        let variables: HashMap<V, Variable> = self
+            .variables
+            .iter()
+            .filter(|(v, _)| keep_variable(v))
+            .map(|(v, kind)| (v.clone(), kind.clone()))
+            .collect();
+
+        let objective = self.objective.retained(keep_obj_term);
+
+        let builder: ProblemBuilder<V, C, P> = ProblemBuilder::new()
+            .set_variables(variables)
+            .add_constraints(kept_constraints)
+            .set_objective(objective);
+        builder.build()
+    }
 }
 
 /// Report on confirmity between configuration data and an ILP problem

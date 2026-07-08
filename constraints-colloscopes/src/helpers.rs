@@ -80,34 +80,17 @@ pub(crate) fn last_global_week(env: &VarEnv) -> GlobalWeek {
     GlobalWeek(total.saturating_sub(1))
 }
 
-/// Objectify a soft bundle with the normalized `α·Λ + ((1-α)/n)·Σλᵢ` penalty
-/// (default balance) and merge it in, scaled to [`crate::weights::BASE`].
-///
-/// Used by the non-clustering soft families (limits, pairings), whose penalties
-/// are better left normalized — `BASE` only puts them on the same scale as the
-/// balancing terms so the objective stays well-conditioned. The clustering
-/// families use [`merge_objectified_weighted`] instead.
-pub(crate) fn merge_objectified(
-    bundle: MyBundle,
-    soft_bundle: MyBundle,
-    penalty_var: ExtraVarName,
-) -> MyBundle {
-    match soft_bundle.objectify_with_coef(penalty_var, crate::weights::BASE) {
-        Ok(objectified) => bundle
-            .merge(objectified)
-            .expect("no duplicate extras from objectification"),
-        Err(_) => bundle,
-    }
-}
-
 /// Objectify a soft bundle as a plain weighted sum and merge it in.
 ///
-/// Like [`merge_objectified`], but instead of the normalized
-/// `α·Λ + ((1-α)/n)·Σλᵢ` penalty it emits `Σ wᵢ·λᵢ` where each `wᵢ` is
-/// `weight_fn` applied to that constraint's [`ConstraintDesc`]. This keeps the
-/// per-violation gradient extensive, so the objective distinguishes close from
-/// far clustering. The `Err → bundle unchanged` fallback matches
-/// [`merge_objectified`] (an empty soft bundle contributes nothing).
+/// Emits `Σ wᵢ·λᵢ` where each `λᵢ` bounds one constraint's violation and `wᵢ`
+/// is `weight_fn` applied to that constraint's [`ConstraintDesc`]. There is no
+/// `1/n` normalization and no global `L∞` bound: the penalty's footprint stays
+/// confined to each constraint's own variables, which is what lets the
+/// incremental strategy pick the terms up epoch by epoch (a global `L∞` bound
+/// would span every constraint and only enter at the final epoch). Every soft
+/// family uses this — the balancing terms weight each `λᵢ` by `BASE/n`, the
+/// limits/pairings terms by a flat `BASE` per violation. An empty soft bundle
+/// contributes nothing (`Err → bundle unchanged`).
 pub(crate) fn merge_objectified_weighted(
     bundle: MyBundle,
     soft_bundle: MyBundle,

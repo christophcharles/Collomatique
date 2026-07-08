@@ -1,7 +1,7 @@
 use crate::extras::{MyBundle, subject_interrogation_params};
 use crate::helpers::{
-    enrolled_students_for_subject, last_global_week, merge_objectified_weighted,
-    slot_week_pairs_for_subject,
+    count_interrogations_expr, enrolled_students_for_subject, last_global_week,
+    merge_objectified_weighted, slot_week_pairs_for_subject,
 };
 use crate::ids::GlobalWeek;
 use crate::types::{ExtraVarName, PreferenceConstraint};
@@ -95,39 +95,48 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         let enrolled = enrolled_students_for_subject(env, *subject_id);
         let teachers = teachers_for_subject(env, *subject_id);
 
-        let mut hard_bundle = MyBundle::new();
-        let mut soft_bundle = MyBundle::new();
-
         if is_soft {
-            // Soft path: L1 "spread-evenly" objective. For each (student, teacher)
-            // the cumulative count `Sᵢ` of same-teacher interrogations through
-            // active week `i` should track the ideal linear ramp `(i/n)·T` (where
-            // `T` is the whole-year count). Scaling the equality by `n` keeps
-            // integer coefficients, and objectify turns the soft equality
-            // `n·Sᵢ − i·T == 0` into `λ ≥ |n·Sᵢ − i·T|`; minimizing `Σλ` spreads
-            // each teacher's visits evenly. This is O(n) per (student, teacher),
-            // vs the O(n²) sliding windows it replaces.
+            // Soft path: cumulative availability-proportional balance. For each
+            // (student, teacher) and each prefix boundary week `wᵢ`, the share of
+            // the student's interrogations that go to teacher `t` should match
+            // teacher `t`'s share of the *available* slot-weeks up to `wᵢ`:
+            // `Uₜ/U == Aₜ/A`, cleared of the fraction to `A·Uₜ − Aₜ·U == 0` (with
+            // `A`, `Aₜ` availability constants and `U`, `Uₜ` prefix counts). Only
+            // weeks `0..=i-1` appear, so — objectified on its own into a penalty
+            // keyed by `{subject, student, teacher, wᵢ}` — the penalty's footprint
+            // ends at `wᵢ` and enters the incremental objective at the epoch that
+            // completes that week (see strategies incremental filter). This also
+            // fixes a latent bug: the previous whole-year ramp only linearized the
+            // visits actually seen, never pushing toward the teachers on offer.
             let n = active_weeks.len();
             if n >= 2 {
                 for &teacher in &teachers {
                     let teacher_pairs =
                         slot_week_pairs_for_teacher(&slot_week_pairs, env, *subject_id, teacher);
                     for &student in &enrolled {
-                        let total = count_student_teacher_expr(
-                            &teacher_pairs,
-                            student,
-                            active_weeks[0],
-                            active_weeks[n - 1],
-                        );
-                        for i in 1..n {
+                        for i in 1..=n {
                             let week = active_weeks[i - 1];
-                            let prefix = count_student_teacher_expr(
+                            let a =
+                                slot_weeks_in_range(&slot_week_pairs, active_weeks[0], week) as i64;
+                            let a_t =
+                                slot_weeks_in_range(&teacher_pairs, active_weeks[0], week) as i64;
+                            if a == 0 || a_t == 0 {
+                                // `a_t == 0` ⇒ `Uₜ ≡ 0` ⇒ constraint is trivially `0 == 0`.
+                                continue;
+                            }
+                            let u = count_interrogations_expr(
+                                &slot_week_pairs,
+                                student,
+                                active_weeks[0],
+                                week,
+                            );
+                            let u_t = count_student_teacher_expr(
                                 &teacher_pairs,
                                 student,
                                 active_weeks[0],
                                 week,
                             );
-                            let lhs = (n as i64) * &prefix - (i as i64) * &total;
+                            let lhs = a * &u_t - a_t * &u;
                             let constraint = lhs.eq(&IntLinExpr::constant(0));
                             let desc = PreferenceConstraint::BalancingRotationRegularity {
                                 student,
@@ -136,13 +145,29 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                                 week,
                             }
                             .into();
-                            soft_bundle = soft_bundle.with_constraint(constraint, desc);
+                            // `BASE/(n·A)` cancels the `A` forced into the numerator
+                            // for integer coefficients, so the penalty reads as
+                            // `BASE/n·|Uₜ − (Aₜ/A)·U|` (misplaced-interrogation count),
+                            // year-length independent like the other soft families.
+                            let weight = crate::weights::BASE / (n as f64 * a as f64);
+                            output = merge_objectified_weighted(
+                                output,
+                                MyBundle::new().with_constraint(constraint, desc),
+                                ExtraVarName::BalancingRotationPenalty {
+                                    subject: *subject_id,
+                                    student,
+                                    teacher,
+                                    week,
+                                },
+                                move |_desc| weight,
+                            );
                         }
                     }
                 }
             }
         } else {
             // Hard path: periodicity-based density upper-bound windows (unchanged).
+            let mut hard_bundle = MyBundle::new();
             let windows = generate_windows(&active_weeks, last_week, &params.periodicity);
             for (first_week, last_week, nb_interr) in &windows {
                 let ntot = slot_weeks_in_range(&slot_week_pairs, *first_week, *last_week);
@@ -179,24 +204,10 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                     }
                 }
             }
+            output = output
+                .merge(hard_bundle)
+                .expect("no duplicate extras from balancing rotation (distinct subjects)");
         }
-
-        // Per-subject normalization: `λᵢ ≥ n·|dᵢ|`, so weighting by `BASE/n` makes
-        // the subject contribute `BASE·Σ|dᵢ|`, independent of the year length and
-        // on the same scale as the other soft families. (No effect on the hard
-        // path, whose `soft_bundle` is empty.)
-        let n = active_weeks.len() as f64;
-        let weight = crate::weights::BASE / n.max(1.0);
-        output = output
-            .merge(merge_objectified_weighted(
-                hard_bundle,
-                soft_bundle,
-                ExtraVarName::BalancingRotationPenalty {
-                    subject: *subject_id,
-                },
-                move |_desc| weight,
-            ))
-            .expect("no duplicate extras from balancing rotation (distinct subjects)");
     }
 
     output

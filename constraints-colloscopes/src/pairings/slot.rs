@@ -2,7 +2,7 @@ use crate::extras::{
     MyBundle, V, base_var, extra_var, groups_for_interrogation, subject_interrogation_params,
     weeks_for_slot,
 };
-use crate::helpers::merge_objectified;
+use crate::helpers::merge_objectified_weighted;
 use crate::ids::GlobalWeek;
 use crate::types::{ExtraVarName, ProgressiveConstraint, StructuralConstraint};
 use crate::vars::{Var, VarEnv};
@@ -64,11 +64,12 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
             .collect();
 
         let mut hard_bundle = MyBundle::new();
-        let mut soft_bundle = MyBundle::new();
+        let mut soft_output = MyBundle::new();
 
         for &week in ant_weeks.intersection(&con_weeks) {
+            let mut single = MyBundle::new();
             let target = if rule.soft {
-                &mut soft_bundle
+                &mut single
             } else {
                 &mut hard_bundle
             };
@@ -139,15 +140,26 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                     );
                 }
             }
+
+            if rule.soft {
+                soft_output = merge_objectified_weighted(
+                    soft_output,
+                    single,
+                    ExtraVarName::SlotPairingsPenalty {
+                        rule: rule_id,
+                        week,
+                    },
+                    |_| crate::weights::BASE,
+                );
+            }
         }
 
         output = output
-            .merge(merge_objectified(
-                hard_bundle,
-                soft_bundle,
-                ExtraVarName::SlotPairingsPenalty { rule: rule_id },
-            ))
+            .merge(hard_bundle)
             .expect("no duplicate extras from slot pairings (distinct rules)");
+        output = output
+            .merge(soft_output)
+            .expect("no duplicate extras from slot pairings soft penalties");
     }
 
     output

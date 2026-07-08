@@ -9,9 +9,9 @@ use std::time::{Duration, Instant};
 use collomatique_ilp::{ConfigData, UsableData};
 use collomatique_ilp_modeler::{InternalVar, Model};
 use collomatique_strategies::{
-    ConductorProgress, ConductorStatus, ConductorStrategy, OPTIMALITY_GAP_EPS,
-    SerializableProgress, Solution, SolveStatus, Strategy, StrategyKind, StrategyOutcome,
-    StrategyProgressData,
+    ConductorPayload, ConductorProgress, ConductorStatus, ConductorStrategy, OPTIMALITY_GAP_EPS,
+    Solution, SolveStatus, Strategy, StrategyKind, StrategyOutcome, StrategyProgressData,
+    VarOrderSerializable,
 };
 use collomatique_subprocesses::StrategySubprocess;
 
@@ -58,7 +58,11 @@ pub struct Dialog<B: UsableData, E: UsableData, C: UsableData> {
 
 #[derive(Debug)]
 pub enum DialogInput<B: UsableData, E: UsableData, C: UsableData> {
-    Run(ConductorStrategy, Model<B, E, C>),
+    Run(
+        ConductorStrategy,
+        Model<B, E, C>,
+        ConductorPayload<InternalVar<B, E>>,
+    ),
     CancelRequest,
     AcceptRequest,
     Accept,
@@ -539,7 +543,7 @@ where
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match msg {
-            DialogInput::Run(strategy, model) => {
+            DialogInput::Run(strategy, model, payload) => {
                 self.hidden = false;
                 self.is_running = true;
                 self.initializing = true;
@@ -603,7 +607,7 @@ where
                                     worker_num,
                                     progress,
                                 }) => {
-                                    let data = SerializableProgress::into_data(
+                                    let data = VarOrderSerializable::into_data(
                                         &*progress,
                                         &progress_var_order,
                                     )
@@ -639,6 +643,7 @@ where
                         &model,
                         &strategy,
                         None,
+                        payload,
                         result_cb,
                         progress_cb,
                         log_cb,

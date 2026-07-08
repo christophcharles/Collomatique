@@ -52,13 +52,26 @@ pub enum ExtraVarName {
     },
     PairingsPenalty {
         rule: PairingRuleId,
+        student: StudentId,
+        week: GlobalWeek,
     },
     SlotPairingsPenalty {
         rule: SlotPairingRuleId,
+        week: GlobalWeek,
     },
-    LimitsMaxPerDayPenalty,
-    LimitsMaxPerWeekPenalty,
-    LimitsMinPerWeekPenalty,
+    LimitsMaxPerDayPenalty {
+        student: StudentId,
+        week: GlobalWeek,
+        day: collomatique_time::Weekday,
+    },
+    LimitsMaxPerWeekPenalty {
+        student: StudentId,
+        week: GlobalWeek,
+    },
+    LimitsMinPerWeekPenalty {
+        student: StudentId,
+        week: GlobalWeek,
+    },
     IsLastTeacherSeen {
         subject: SubjectId,
         student: StudentId,
@@ -67,9 +80,15 @@ pub enum ExtraVarName {
     },
     BalancingRotationPenalty {
         subject: SubjectId,
+        student: StudentId,
+        teacher: TeacherId,
+        week: GlobalWeek,
     },
     BalancingSlotRotationPenalty {
         subject: SubjectId,
+        student: StudentId,
+        slot: SlotId,
+        week: GlobalWeek,
     },
 }
 
