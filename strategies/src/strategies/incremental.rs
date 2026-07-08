@@ -92,6 +92,11 @@ pub struct IncrementalStrategy {
     /// solution. Larger values make previous decisions stickier relative to the epoch's own
     /// margin of the true objective.
     pub l1_weight: f64,
+    /// Absolute tolerance on each epoch's objective gap: stop an epoch's solve as soon as a
+    /// feasible incumbent is within this distance of the best bound, instead of proving the
+    /// epoch optimal. Mirrors [`FindClosestStrategy::distance_tolerance`](super::find_closest).
+    /// `0.0` means "solve each epoch to proven optimality".
+    pub distance_tolerance: f64,
     /// Time limit for each epoch's solve.
     pub epoch_time_limit_seconds: Option<u32>,
     /// Time limit for the final reconstruction solve.
@@ -103,6 +108,7 @@ impl Default for IncrementalStrategy {
     fn default() -> Self {
         IncrementalStrategy {
             l1_weight: 1000.0,
+            distance_tolerance: 5.0,
             epoch_time_limit_seconds: None,
             reconstruction_time_limit_seconds: None,
             disable_logging: false,
@@ -180,6 +186,17 @@ where
         .set_objective(objective)
         .build()
         .map_err(|e| StrategyError::SolveError(format!("failed to wrap epoch problem: {e:?}")))
+}
+
+/// Whether an epoch incumbent `best_obj` is within `tolerance` of the best bound. Unlike
+/// [`find_closest`](super::find_closest), whose objective is purely the (minimized) L1 distance,
+/// an epoch objective is `margin + l1_weight·distance` and inherits the original model's sense,
+/// which is not necessarily a minimization. The bound and the incumbent always bracket the
+/// optimum from opposite sides regardless of sense (a lower bound for minimize, an upper bound for
+/// maximize), so the absolute gap `|best_obj - best_bound|` is a sense-agnostic (over-)estimate of
+/// how far the incumbent can be from optimal.
+fn within_distance_tolerance(best_obj: f64, best_bound: f64, tolerance: f64) -> bool {
+    (best_obj - best_bound).abs() <= tolerance
 }
 
 /// Add the L1 anchor to `modeler`, tying the anchored base variables to `prev_values` with
@@ -315,6 +332,7 @@ impl Strategy for IncrementalStrategy {
         let graph = model.dependency_graph();
         let mut blessed: HashSet<B> = HashSet::new(); // S_k, grows each epoch
         let mut prev_values: Option<HashMap<B, f64>> = None; // most recent solve, over S_{k-1}
+        let tolerance = self.distance_tolerance;
 
         for (seq, (_epoch, e_k)) in by_epoch.into_iter().enumerate() {
             // S_k = S_{k-1} ∪ E_k.
@@ -381,12 +399,24 @@ impl Strategy for IncrementalStrategy {
                         disable_logging: self.disable_logging,
                     },
                     &move |p| {
-                        on_progress(IncrementalProgressData::EpochSolve {
+                        let keep_going = on_progress(IncrementalProgressData::EpochSolve {
                             epoch: seq_for_progress,
                             total,
                             var_count: e_k.len(),
                             progress: (&p).into(),
-                        })
+                        });
+                        if !keep_going {
+                            return false;
+                        }
+                        // Stop once a feasible incumbent is within tolerance of the best bound.
+                        // `best_bound.is_finite()` guards the pre-bound phase (best_bound starts
+                        // at ±inf depending on the objective sense).
+                        let good_enough = p.incumbent.is_some()
+                            && p.best_bound.is_finite()
+                            && p.best_obj.is_some_and(|obj| {
+                                within_distance_tolerance(obj, p.best_bound, tolerance)
+                            });
+                        !good_enough
                     },
                     &|line| Some(format!("[epoch {}/{} solver] {}", seq + 1, total, line)),
                 )
@@ -664,6 +694,8 @@ mod tests {
     fn strategy() -> IncrementalStrategy {
         IncrementalStrategy {
             l1_weight: 1000.0,
+            // Solve each epoch to proven optimality so assertions are stable.
+            distance_tolerance: 0.0,
             epoch_time_limit_seconds: None,
             reconstruction_time_limit_seconds: None,
             disable_logging: true,

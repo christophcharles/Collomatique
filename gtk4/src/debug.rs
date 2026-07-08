@@ -845,6 +845,7 @@ fn incremental_solve(model: &collomatique_constraints_colloscopes::ColloscopeMod
 
     let strategy = IncrementalStrategy {
         l1_weight: 1000.0,
+        distance_tolerance: 5.0,
         epoch_time_limit_seconds: None,
         reconstruction_time_limit_seconds: None,
         disable_logging: false,

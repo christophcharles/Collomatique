@@ -1425,6 +1425,7 @@ mod tests {
         // weight) and the erased payload must serialize to JSON and back unchanged.
         let kind = StrategyKind::Incremental(IncrementalStrategy {
             l1_weight: 1e6,
+            distance_tolerance: 5.0,
             epoch_time_limit_seconds: Some(30),
             reconstruction_time_limit_seconds: None,
             disable_logging: false,
