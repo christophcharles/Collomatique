@@ -108,6 +108,20 @@ impl Dialog {
     }
 }
 
+impl Dialog {
+    fn has_periods(&self) -> bool {
+        !self.params.periods.ordered_period_list.is_empty()
+    }
+
+    fn has_automatic_groups(&self) -> bool {
+        self.params
+            .group_lists
+            .group_list_map
+            .iter()
+            .any(|(_, group_list)| !group_list.is_prefilled())
+    }
+}
+
 #[relm4::component(pub)]
 impl SimpleComponent for Dialog {
     type Init = ();
@@ -145,19 +159,47 @@ impl SimpleComponent for Dialog {
                     set_margin_all: 0,
                     set_spacing: 0,
                     set_orientation: gtk::Orientation::Vertical,
-                    gtk::Box {
+                    gtk::Frame {
                         set_hexpand: true,
                         set_vexpand: true,
-                        set_margin_all: 0,
-                        gtk::Frame {
+                        set_margin_all: 5,
+                        gtk::Paned {
                             set_hexpand: true,
                             set_vexpand: true,
-                            set_margin_all: 5,
-                        },
-                        gtk::Frame {
-                            set_hexpand: true,
-                            set_vexpand: true,
-                            set_margin_all: 5,
+                            set_margin_all: 0,
+                            set_orientation: gtk::Orientation::Horizontal,
+                            #[wrap(Some)]
+                            set_start_child = &gtk::Box {
+                                set_hexpand: true,
+                                set_vexpand: true,
+                                set_margin_all: 0,
+                                set_orientation: gtk::Orientation::Horizontal,
+                                gtk::Label {
+                                    set_valign: gtk::Align::Center,
+                                    set_hexpand: true,
+                                    set_justify: gtk::Justification::Center,
+                                    set_label: "<b><big>Aucune période</big></b>",
+                                    set_use_markup: true,
+                                    #[watch]
+                                    set_visible: !model.has_periods(),
+                                },
+                            },
+                            #[wrap(Some)]
+                            set_end_child = &gtk::Box {
+                                set_hexpand: true,
+                                set_vexpand: true,
+                                set_margin_all: 0,
+                                set_orientation: gtk::Orientation::Horizontal,
+                                gtk::Label {
+                                    set_valign: gtk::Align::Center,
+                                    set_hexpand: true,
+                                    set_justify: gtk::Justification::Center,
+                                    set_label: "<b><big>Aucune liste automatique</big></b>",
+                                    set_use_markup: true,
+                                    #[watch]
+                                    set_visible: !model.has_automatic_groups(),
+                                },
+                            },
                         },
                     },
                     gtk::Frame {
