@@ -84,6 +84,10 @@ pub struct Dialog {
     periods_list: FactoryVecDeque<period_group::PeriodGroup>,
     /// One titled [`adw::PreferencesGroup`] per automatic group list, shown in the right panel.
     group_lists_list: FactoryVecDeque<group_list_group::GroupListGroup>,
+    /// Per-period switch state backing `periods_list`, indexed by period position.
+    periods_data: Vec<period_group::Data>,
+    /// Per-automatic-group-list switch state backing `group_lists_list`, indexed by position.
+    group_lists_data: Vec<group_list_group::Data>,
 }
 
 #[derive(Debug)]
@@ -94,6 +98,10 @@ pub enum DialogInput {
     OpenAdvanced,
     UpdateStrategy(ConductorStrategy),
     IgnoreOrRefresh,
+    SetPeriodRecompute(usize, bool),
+    SetPeriodObjective(usize, bool),
+    SetGroupListRecompute(usize, bool),
+    SetGroupListObjective(usize, bool),
 }
 
 #[derive(Debug)]
@@ -127,6 +135,82 @@ impl Dialog {
             .group_list_map
             .iter()
             .any(|(_, group_list)| !group_list.is_prefilled())
+    }
+
+    /// One human-readable title per period, in order.
+    fn period_titles(&self) -> Vec<String> {
+        let global_first_week = self.params.periods.first_week.clone();
+        self.params
+            .periods
+            .ordered_period_list
+            .iter()
+            .enumerate()
+            .scan(0usize, |first_week_num, (index, (_id, weeks))| {
+                let week_count = weeks.len();
+                let title = crate::editor::generate_period_title(
+                    &global_first_week,
+                    index,
+                    *first_week_num,
+                    week_count,
+                );
+                *first_week_num += week_count;
+                Some(title)
+            })
+            .collect()
+    }
+
+    /// The name of each automatic (non-prefilled) group list, in map order.
+    fn group_list_names(&self) -> Vec<String> {
+        self.params
+            .group_lists
+            .group_list_map
+            .values()
+            .filter(|group_list| !group_list.is_prefilled())
+            .map(|group_list| group_list.params.name.clone())
+            .collect()
+    }
+
+    /// Rebuild the per-period and per-group-list switch state from the current parameters,
+    /// resetting everything to the defaults (recompute on, previous values not used as an
+    /// objective). Takes the incoming [`SolveConfig`] as the seam for reading back a previously
+    /// saved configuration; unused for now.
+    fn set_data_from_config(&mut self, _config: &SolveConfig) {
+        self.periods_data = self
+            .period_titles()
+            .into_iter()
+            .map(|title| period_group::Data {
+                title,
+                recompute: true,
+                previous_values_as_objective: false,
+            })
+            .collect();
+        self.group_lists_data = self
+            .group_list_names()
+            .into_iter()
+            .map(|title| group_list_group::Data {
+                title,
+                recompute: true,
+                previous_values_as_objective: false,
+            })
+            .collect();
+    }
+
+    /// Push the current `periods_data` into the left-hand factory list.
+    fn refresh_periods_list(&mut self) {
+        crate::tools::factories::update_vec_deque(
+            &mut self.periods_list,
+            self.periods_data.iter().cloned(),
+            period_group::PeriodGroupInput::UpdateData,
+        );
+    }
+
+    /// Push the current `group_lists_data` into the right-hand factory list.
+    fn refresh_group_lists_list(&mut self) {
+        crate::tools::factories::update_vec_deque(
+            &mut self.group_lists_list,
+            self.group_lists_data.iter().cloned(),
+            group_list_group::GroupListGroupInput::UpdateData,
+        );
     }
 }
 
@@ -176,6 +260,7 @@ impl SimpleComponent for Dialog {
                             set_vexpand: true,
                             set_margin_all: 0,
                             set_orientation: gtk::Orientation::Horizontal,
+                            set_position: 510,
                             #[wrap(Some)]
                             set_start_child = &gtk::Box {
                                 set_hexpand: true,
@@ -350,10 +435,24 @@ impl SimpleComponent for Dialog {
 
         let periods_list = FactoryVecDeque::builder()
             .launch(gtk::Box::default())
-            .detach();
+            .forward(sender.input_sender(), |msg| match msg {
+                period_group::PeriodGroupOutput::RecomputeToggled(index, value) => {
+                    DialogInput::SetPeriodRecompute(index, value)
+                }
+                period_group::PeriodGroupOutput::ObjectiveToggled(index, value) => {
+                    DialogInput::SetPeriodObjective(index, value)
+                }
+            });
         let group_lists_list = FactoryVecDeque::builder()
             .launch(gtk::Box::default())
-            .detach();
+            .forward(sender.input_sender(), |msg| match msg {
+                group_list_group::GroupListGroupOutput::RecomputeToggled(index, value) => {
+                    DialogInput::SetGroupListRecompute(index, value)
+                }
+                group_list_group::GroupListGroupOutput::ObjectiveToggled(index, value) => {
+                    DialogInput::SetGroupListObjective(index, value)
+                }
+            });
 
         let model = Dialog {
             hidden: true,
@@ -362,6 +461,8 @@ impl SimpleComponent for Dialog {
             conductor_config_dialog,
             periods_list,
             group_lists_list,
+            periods_data: Vec::new(),
+            group_lists_data: Vec::new(),
         };
 
         let periods_box = model.periods_list.widget();
@@ -378,46 +479,11 @@ impl SimpleComponent for Dialog {
                 config.sanitize(&params);
                 self.hidden = false;
                 self.params = params;
+                self.set_data_from_config(&config);
                 self.strategy = config.strategy;
 
-                let global_first_week = self.params.periods.first_week.clone();
-                let period_titles: Vec<String> = self
-                    .params
-                    .periods
-                    .ordered_period_list
-                    .iter()
-                    .enumerate()
-                    .scan(0usize, |first_week_num, (index, (_id, weeks))| {
-                        let week_count = weeks.len();
-                        let title = crate::editor::generate_period_title(
-                            &global_first_week,
-                            index,
-                            *first_week_num,
-                            week_count,
-                        );
-                        *first_week_num += week_count;
-                        Some(title)
-                    })
-                    .collect();
-                crate::tools::factories::update_vec_deque(
-                    &mut self.periods_list,
-                    period_titles.into_iter(),
-                    period_group::PeriodGroupInput::UpdateTitle,
-                );
-
-                let group_list_names: Vec<String> = self
-                    .params
-                    .group_lists
-                    .group_list_map
-                    .values()
-                    .filter(|group_list| !group_list.is_prefilled())
-                    .map(|group_list| group_list.params.name.clone())
-                    .collect();
-                crate::tools::factories::update_vec_deque(
-                    &mut self.group_lists_list,
-                    group_list_names.into_iter(),
-                    group_list_group::GroupListGroupInput::UpdateTitle,
-                );
+                self.refresh_periods_list();
+                self.refresh_group_lists_list();
             }
             DialogInput::OpenAdvanced => {
                 self.conductor_config_dialog
@@ -429,6 +495,30 @@ impl SimpleComponent for Dialog {
                 self.strategy = strategy;
             }
             DialogInput::IgnoreOrRefresh => {}
+            DialogInput::SetPeriodRecompute(index, value) => {
+                if let Some(data) = self.periods_data.get_mut(index) {
+                    data.recompute = value;
+                }
+                self.refresh_periods_list();
+            }
+            DialogInput::SetPeriodObjective(index, value) => {
+                if let Some(data) = self.periods_data.get_mut(index) {
+                    data.previous_values_as_objective = value;
+                }
+                self.refresh_periods_list();
+            }
+            DialogInput::SetGroupListRecompute(index, value) => {
+                if let Some(data) = self.group_lists_data.get_mut(index) {
+                    data.recompute = value;
+                }
+                self.refresh_group_lists_list();
+            }
+            DialogInput::SetGroupListObjective(index, value) => {
+                if let Some(data) = self.group_lists_data.get_mut(index) {
+                    data.previous_values_as_objective = value;
+                }
+                self.refresh_group_lists_list();
+            }
             DialogInput::Cancel => {
                 self.hidden = true;
                 sender.output(DialogOutput::Cancelled).unwrap();
