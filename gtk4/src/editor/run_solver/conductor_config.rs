@@ -43,6 +43,7 @@ pub enum DialogInput {
     UpdateWarmStart(bool),
     UpdateIncremental(bool),
     UpdateIncrementalTolerance(f64),
+    UpdateIncrementalL1Weight(f64),
     UpdateDefault(bool),
     UpdateFuzzyEnabled(bool),
     UpdateFuzzySigma(f64),
@@ -189,6 +190,28 @@ impl SimpleComponent for Dialog {
                                     connect_value_notify[sender] => move |widget| {
                                         let value = widget.value();
                                         sender.input(DialogInput::UpdateIncrementalTolerance(value));
+                                    },
+                                },
+                                adw::SpinRow {
+                                    set_hexpand: true,
+                                    set_title: "Poids L1",
+                                    #[wrap(Some)]
+                                    set_adjustment = &gtk::Adjustment {
+                                        set_lower: 0.,
+                                        set_upper: f64::MAX,
+                                        set_step_increment: 100.,
+                                        set_page_increment: 500.,
+                                    },
+                                    set_digits: 1,
+                                    set_wrap: false,
+                                    set_numeric: true,
+                                    #[watch]
+                                    set_visible: model.enable_incremental,
+                                    #[track(self.should_redraw)]
+                                    set_value: model.incremental_l1_weight,
+                                    connect_value_notify[sender] => move |widget| {
+                                        let value = widget.value();
+                                        sender.input(DialogInput::UpdateIncrementalL1Weight(value));
                                     },
                                 },
                             },
@@ -358,6 +381,12 @@ impl SimpleComponent for Dialog {
                     return;
                 }
                 self.incremental_tolerance = value;
+            }
+            DialogInput::UpdateIncrementalL1Weight(value) => {
+                if self.incremental_l1_weight == value {
+                    return;
+                }
+                self.incremental_l1_weight = value;
             }
             DialogInput::UpdateDefault(value) => {
                 if self.enable_default == value {
