@@ -1,4 +1,8 @@
+mod group_list_group;
+mod period_group;
+
 use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, ToggleButtonExt, WidgetExt};
+use relm4::factory::FactoryVecDeque;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
     SimpleComponent,
@@ -76,6 +80,10 @@ pub struct Dialog {
     strategy: ConductorStrategy,
     /// The advanced solver-configuration dialog, opened via "Paramètres avancés du résolveur".
     conductor_config_dialog: Controller<conductor_config::Dialog>,
+    /// One titled [`adw::PreferencesGroup`] per period, shown in the left panel.
+    periods_list: FactoryVecDeque<period_group::PeriodGroup>,
+    /// One titled [`adw::PreferencesGroup`] per automatic group list, shown in the right panel.
+    group_lists_list: FactoryVecDeque<group_list_group::GroupListGroup>,
 }
 
 #[derive(Debug)]
@@ -173,9 +181,33 @@ impl SimpleComponent for Dialog {
                                 set_hexpand: true,
                                 set_vexpand: true,
                                 set_margin_all: 0,
-                                set_orientation: gtk::Orientation::Horizontal,
+                                set_orientation: gtk::Orientation::Vertical,
+                                set_spacing: 5,
+                                gtk::Label {
+                                    set_halign: gtk::Align::Center,
+                                    set_margin_all: 10,
+                                    set_label: "<b><big>Périodes</big></b>",
+                                    set_use_markup: true,
+                                    #[watch]
+                                    set_visible: model.has_periods(),
+                                },
+                                gtk::ScrolledWindow {
+                                    set_hexpand: true,
+                                    set_vexpand: true,
+                                    set_policy: (gtk::PolicyType::Never, gtk::PolicyType::Automatic),
+                                    #[watch]
+                                    set_visible: model.has_periods(),
+                                    #[local_ref]
+                                    periods_box -> gtk::Box {
+                                        set_hexpand: true,
+                                        set_orientation: gtk::Orientation::Vertical,
+                                        set_margin_all: 5,
+                                        set_spacing: 10,
+                                    },
+                                },
                                 gtk::Label {
                                     set_valign: gtk::Align::Center,
+                                    set_vexpand: true,
                                     set_hexpand: true,
                                     set_justify: gtk::Justification::Center,
                                     set_label: "<b><big>Aucune période</big></b>",
@@ -189,9 +221,33 @@ impl SimpleComponent for Dialog {
                                 set_hexpand: true,
                                 set_vexpand: true,
                                 set_margin_all: 0,
-                                set_orientation: gtk::Orientation::Horizontal,
+                                set_orientation: gtk::Orientation::Vertical,
+                                set_spacing: 5,
+                                gtk::Label {
+                                    set_halign: gtk::Align::Center,
+                                    set_margin_all: 10,
+                                    set_label: "<b><big>Listes automatiques</big></b>",
+                                    set_use_markup: true,
+                                    #[watch]
+                                    set_visible: model.has_automatic_groups(),
+                                },
+                                gtk::ScrolledWindow {
+                                    set_hexpand: true,
+                                    set_vexpand: true,
+                                    set_policy: (gtk::PolicyType::Never, gtk::PolicyType::Automatic),
+                                    #[watch]
+                                    set_visible: model.has_automatic_groups(),
+                                    #[local_ref]
+                                    group_lists_box -> gtk::Box {
+                                        set_hexpand: true,
+                                        set_orientation: gtk::Orientation::Vertical,
+                                        set_margin_all: 5,
+                                        set_spacing: 10,
+                                    },
+                                },
                                 gtk::Label {
                                     set_valign: gtk::Align::Center,
+                                    set_vexpand: true,
                                     set_hexpand: true,
                                     set_justify: gtk::Justification::Center,
                                     set_label: "<b><big>Aucune liste automatique</big></b>",
@@ -292,12 +348,24 @@ impl SimpleComponent for Dialog {
                 conductor_config::DialogOutput::Cancelled => DialogInput::IgnoreOrRefresh,
             });
 
+        let periods_list = FactoryVecDeque::builder()
+            .launch(gtk::Box::default())
+            .detach();
+        let group_lists_list = FactoryVecDeque::builder()
+            .launch(gtk::Box::default())
+            .detach();
+
         let model = Dialog {
             hidden: true,
             params: Parameters::default(),
             strategy: ConductorStrategy::with_parallelism_defaults(),
             conductor_config_dialog,
+            periods_list,
+            group_lists_list,
         };
+
+        let periods_box = model.periods_list.widget();
+        let group_lists_box = model.group_lists_list.widget();
 
         let widgets = view_output!();
 
@@ -311,6 +379,45 @@ impl SimpleComponent for Dialog {
                 self.hidden = false;
                 self.params = params;
                 self.strategy = config.strategy;
+
+                let global_first_week = self.params.periods.first_week.clone();
+                let period_titles: Vec<String> = self
+                    .params
+                    .periods
+                    .ordered_period_list
+                    .iter()
+                    .enumerate()
+                    .scan(0usize, |first_week_num, (index, (_id, weeks))| {
+                        let week_count = weeks.len();
+                        let title = crate::editor::generate_period_title(
+                            &global_first_week,
+                            index,
+                            *first_week_num,
+                            week_count,
+                        );
+                        *first_week_num += week_count;
+                        Some(title)
+                    })
+                    .collect();
+                crate::tools::factories::update_vec_deque(
+                    &mut self.periods_list,
+                    period_titles.into_iter(),
+                    period_group::PeriodGroupInput::UpdateTitle,
+                );
+
+                let group_list_names: Vec<String> = self
+                    .params
+                    .group_lists
+                    .group_list_map
+                    .values()
+                    .filter(|group_list| !group_list.is_prefilled())
+                    .map(|group_list| group_list.params.name.clone())
+                    .collect();
+                crate::tools::factories::update_vec_deque(
+                    &mut self.group_lists_list,
+                    group_list_names.into_iter(),
+                    group_list_group::GroupListGroupInput::UpdateTitle,
+                );
             }
             DialogInput::OpenAdvanced => {
                 self.conductor_config_dialog
