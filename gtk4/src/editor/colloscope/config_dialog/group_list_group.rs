@@ -7,7 +7,8 @@ use relm4::{adw, gtk};
 
 /// State of one automatic-group-list entry in the right-hand list of the colloscope config
 /// dialog: its title plus whether it should be recomputed and whether the current list is used
-/// as an objective. Nothing is persisted into a `SolveConfig` yet; this only drives the UI.
+/// as an objective. This state is read back into the parent's `SolveConfig` via its
+/// `config_from_data`.
 #[derive(Debug, Clone)]
 pub struct Data {
     pub title: String,

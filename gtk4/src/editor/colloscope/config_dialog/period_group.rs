@@ -9,8 +9,8 @@ use relm4::{adw, gtk};
 /// plus whether it should be recomputed and whether the current colloscope's values are taken
 /// into account in the resolution. Those are two orthogonal choices: when recomputing, the
 /// current values act as a soft objective (stay close); when fixed, they feed the balancing
-/// constraints across periods. Nothing is persisted into a `SolveConfig` yet; this only drives
-/// the UI.
+/// constraints across periods. This state is read back into the parent's `SolveConfig` via its
+/// `config_from_data`.
 #[derive(Debug, Clone)]
 pub struct Data {
     pub title: String,

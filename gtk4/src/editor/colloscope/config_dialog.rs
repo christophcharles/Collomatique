@@ -1,6 +1,8 @@
 mod group_list_group;
 mod period_group;
 
+use std::collections::BTreeMap;
+
 use adw::prelude::{PreferencesGroupExt, PreferencesRowExt};
 use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, ToggleButtonExt, WidgetExt};
 use relm4::factory::FactoryVecDeque;
@@ -17,16 +19,48 @@ use crate::editor::run_solver::conductor_config;
 
 /// The "how to solve" half of a solve request, handed off when the user validates this dialog.
 /// It is deliberately independent of the problem [`Parameters`] (the "what to solve" half), which
-/// travels alongside it. For now it is just the conductor strategy; model-refinement fields
-/// (problem scoping, ...) will be added here later, which is why it also owns a [`sanitize`] seam
-/// and the `params`-taking [`build_model`].
+/// travels alongside it. It carries the conductor strategy plus the problem-scoping refinements
+/// (which periods and group lists to recompute), reconciled against the current [`Parameters`] by
+/// [`sanitize`] and fed into [`build_model`].
 ///
 /// [`sanitize`]: SolveConfig::sanitize
 /// [`build_model`]: SolveConfig::build_model
 #[derive(Debug, Clone)]
 pub struct SolveConfig {
     pub strategy: ConductorStrategy,
-    // future: problem-scoping / model-refinement fields
+    pub periods: BTreeMap<collomatique_state_colloscopes::PeriodId, PeriodData>,
+    pub group_lists: BTreeMap<collomatique_state_colloscopes::GroupListId, GroupListData>,
+    pub objectify_cross_fixed_period: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct PeriodData {
+    pub recompute: bool,
+    pub use_current_values: bool,
+}
+
+impl Default for PeriodData {
+    fn default() -> Self {
+        PeriodData {
+            recompute: true,
+            use_current_values: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct GroupListData {
+    pub recompute: bool,
+    pub previous_values_as_objective: bool,
+}
+
+impl Default for GroupListData {
+    fn default() -> Self {
+        GroupListData {
+            recompute: true,
+            previous_values_as_objective: false,
+        }
+    }
 }
 
 impl Default for SolveConfig {
@@ -35,15 +69,55 @@ impl Default for SolveConfig {
         // Default, which is the simple-search strategy).
         SolveConfig {
             strategy: ConductorStrategy::with_parallelism_defaults(),
+            periods: BTreeMap::new(),
+            group_lists: BTreeMap::new(),
+            objectify_cross_fixed_period: true,
         }
     }
 }
 
 impl SolveConfig {
     /// Reconcile this config against the parameters it will be solved against, dropping or
-    /// adjusting any refinements that no longer apply. Currently a no-op; kept as the seam for
-    /// future model-refinement fields.
-    pub fn sanitize(&mut self, _params: &Parameters) {}
+    /// adjusting any refinements that no longer apply.
+    pub fn sanitize(self, params: &Parameters) -> Self {
+        let new_periods: BTreeMap<_, _> = params
+            .periods
+            .ordered_period_list
+            .iter()
+            .map(|(id, _)| {
+                (
+                    id.clone(),
+                    match self.periods.get(id) {
+                        Some(data) => data.clone(),
+                        None => PeriodData::default(),
+                    },
+                )
+            })
+            .collect();
+        let new_group_lists: BTreeMap<_, _> = params
+            .group_lists
+            .group_list_map
+            .iter()
+            .filter_map(|(id, group_list)| {
+                if group_list.is_prefilled() {
+                    return None;
+                }
+                Some((
+                    id.clone(),
+                    match self.group_lists.get(id) {
+                        Some(data) => data.clone(),
+                        None => GroupListData::default(),
+                    },
+                ))
+            })
+            .collect();
+        SolveConfig {
+            strategy: self.strategy,
+            periods: new_periods,
+            group_lists: new_group_lists,
+            objectify_cross_fixed_period: self.objectify_cross_fixed_period,
+        }
+    }
 
     /// Build the ILP model to be solved from `params` and the current `colloscope`, streaming build
     /// log lines through `log`. The caller supplies the real colloscope (rather than an empty one)
@@ -182,30 +256,88 @@ impl Dialog {
             .collect()
     }
 
-    /// Rebuild the per-period and per-group-list switch state from the current parameters,
-    /// resetting everything to the defaults (recompute on, previous values not used as an
-    /// objective). Takes the incoming [`SolveConfig`] as the seam for reading back a previously
-    /// saved configuration; unused for now.
-    fn set_data_from_config(&mut self, _config: &SolveConfig) {
+    /// Rebuild the per-period and per-group-list switch state from `config`, reconciled against the
+    /// current parameters. Periods and group lists absent from the incoming [`SolveConfig`] (e.g. on
+    /// a fresh document) fall back to their defaults via [`SolveConfig::sanitize`].
+    fn set_data_from_config(&mut self, config: SolveConfig) {
+        let sanitized_config = config.sanitize(&self.params);
+        // Look up each period/list by id rather than zipping against `.values()`: the titles are
+        // produced in `ordered_period_list` display order, whereas the config maps iterate in
+        // `PeriodId`/`GroupListId` order, which need not match. `sanitize` guarantees an entry for
+        // every current period and non-prefilled group list, so the indexing is total.
         self.periods_data = self
-            .period_titles()
-            .into_iter()
-            .map(|title| period_group::Data {
-                title,
-                recompute: true,
-                use_current_values: false,
+            .params
+            .periods
+            .ordered_period_list
+            .iter()
+            .zip(self.period_titles())
+            .map(|((id, _), title)| {
+                let data = &sanitized_config.periods[id];
+                period_group::Data {
+                    title,
+                    recompute: data.recompute,
+                    use_current_values: data.use_current_values,
+                }
             })
             .collect();
         self.group_lists_data = self
-            .group_list_names()
-            .into_iter()
-            .map(|title| group_list_group::Data {
-                title,
-                recompute: true,
-                previous_values_as_objective: false,
+            .params
+            .group_lists
+            .group_list_map
+            .iter()
+            .filter(|(_id, group_list)| !group_list.is_prefilled())
+            .zip(self.group_list_names())
+            .map(|((id, _), title)| {
+                let data = &sanitized_config.group_lists[id];
+                group_list_group::Data {
+                    title,
+                    recompute: data.recompute,
+                    previous_values_as_objective: data.previous_values_as_objective,
+                }
             })
             .collect();
-        self.objectify_cross_fixed_period = true;
+        self.strategy = sanitized_config.strategy;
+        self.objectify_cross_fixed_period = sanitized_config.objectify_cross_fixed_period;
+    }
+
+    fn config_from_data(&self) -> SolveConfig {
+        SolveConfig {
+            strategy: self.strategy.clone(),
+            periods: self
+                .params
+                .periods
+                .ordered_period_list
+                .iter()
+                .zip(self.periods_data.iter())
+                .map(|((id, _), data)| {
+                    (
+                        id.clone(),
+                        PeriodData {
+                            recompute: data.recompute,
+                            use_current_values: data.use_current_values,
+                        },
+                    )
+                })
+                .collect(),
+            group_lists: self
+                .params
+                .group_lists
+                .group_list_map
+                .iter()
+                .filter(|(_id, group_list)| !group_list.is_prefilled())
+                .zip(self.group_lists_data.iter())
+                .map(|((id, _), data)| {
+                    (
+                        id.clone(),
+                        GroupListData {
+                            recompute: data.recompute,
+                            previous_values_as_objective: data.previous_values_as_objective,
+                        },
+                    )
+                })
+                .collect(),
+            objectify_cross_fixed_period: self.objectify_cross_fixed_period,
+        }
     }
 
     /// Push the current `periods_data` into the left-hand factory list.
@@ -505,12 +637,10 @@ impl SimpleComponent for Dialog {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         match msg {
-            DialogInput::Show(mut config, params) => {
-                config.sanitize(&params);
+            DialogInput::Show(config, params) => {
                 self.hidden = false;
                 self.params = params;
-                self.set_data_from_config(&config);
-                self.strategy = config.strategy;
+                self.set_data_from_config(config);
 
                 self.refresh_periods_list();
                 self.refresh_group_lists_list();
@@ -560,9 +690,7 @@ impl SimpleComponent for Dialog {
                 self.hidden = true;
                 sender
                     .output(DialogOutput::Accepted(
-                        SolveConfig {
-                            strategy: self.strategy.clone(),
-                        },
+                        self.config_from_data(),
                         self.params.clone(),
                     ))
                     .unwrap();
