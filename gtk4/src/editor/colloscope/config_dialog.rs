@@ -228,7 +228,7 @@ impl SimpleComponent for Dialog {
             set_resizable: true,
             #[watch]
             set_visible: !model.hidden,
-            set_title: Some("Configuration du colloscope"),
+            set_title: Some("Configuration de la résolution"),
             set_default_size: (1024, 576),
             adw::ToolbarView {
                 add_top_bar = &adw::HeaderBar {
