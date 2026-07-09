@@ -1,6 +1,7 @@
 mod group_list_group;
 mod period_group;
 
+use adw::prelude::{PreferencesGroupExt, PreferencesRowExt};
 use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, ToggleButtonExt, WidgetExt};
 use relm4::factory::FactoryVecDeque;
 use relm4::{
@@ -88,6 +89,8 @@ pub struct Dialog {
     periods_data: Vec<period_group::Data>,
     /// Per-automatic-group-list switch state backing `group_lists_list`, indexed by position.
     group_lists_data: Vec<group_list_group::Data>,
+    /// Global toggle to automatically objectify across period boundary
+    objectify_cross_fixed_period: bool,
 }
 
 #[derive(Debug)]
@@ -102,6 +105,7 @@ pub enum DialogInput {
     SetPeriodUseCurrent(usize, bool),
     SetGroupListRecompute(usize, bool),
     SetGroupListObjective(usize, bool),
+    SetObjectifyCrossFixedPeriod(bool),
 }
 
 #[derive(Debug)]
@@ -127,6 +131,14 @@ impl Dialog {
 impl Dialog {
     fn has_periods(&self) -> bool {
         !self.params.periods.ordered_period_list.is_empty()
+    }
+
+    fn has_mixed_periods(&self) -> bool {
+        self.periods_data.iter().any(|data| data.recompute)
+            && self
+                .periods_data
+                .iter()
+                .any(|data| !data.recompute && data.use_current_values)
     }
 
     fn has_automatic_groups(&self) -> bool {
@@ -193,6 +205,7 @@ impl Dialog {
                 previous_values_as_objective: false,
             })
             .collect();
+        self.objectify_cross_fixed_period = true;
     }
 
     /// Push the current `periods_data` into the left-hand factory list.
@@ -288,6 +301,22 @@ impl SimpleComponent for Dialog {
                                         set_orientation: gtk::Orientation::Vertical,
                                         set_margin_all: 5,
                                         set_spacing: 10,
+                                    },
+                                },
+                                adw::PreferencesGroup {
+                                    set_title: "Gestion des contraintes inter-périodes",
+                                    set_margin_all: 5,
+                                    #[watch]
+                                    set_visible: model.has_mixed_periods(),
+                                    #[name(objectify_row)]
+                                    adw::SwitchRow {
+                                        set_title: "Assouplir les contraintes qui traversent les périodes figées",
+                                        #[track(objectify_row.is_active() != model.objectify_cross_fixed_period)]
+                                        #[block_signal(objectify_handler)]
+                                        set_active: model.objectify_cross_fixed_period,
+                                        connect_active_notify[sender] => move |widget| {
+                                            sender.input(DialogInput::SetObjectifyCrossFixedPeriod(widget.is_active()));
+                                        } @objectify_handler,
                                     },
                                 },
                                 gtk::Label {
@@ -463,6 +492,7 @@ impl SimpleComponent for Dialog {
             group_lists_list,
             periods_data: Vec::new(),
             group_lists_data: Vec::new(),
+            objectify_cross_fixed_period: true,
         };
 
         let periods_box = model.periods_list.widget();
@@ -518,6 +548,9 @@ impl SimpleComponent for Dialog {
                     data.previous_values_as_objective = value;
                 }
                 self.refresh_group_lists_list();
+            }
+            DialogInput::SetObjectifyCrossFixedPeriod(value) => {
+                self.objectify_cross_fixed_period = value;
             }
             DialogInput::Cancel => {
                 self.hidden = true;
