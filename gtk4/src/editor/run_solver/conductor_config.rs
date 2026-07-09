@@ -103,29 +103,44 @@ impl SimpleComponent for Dialog {
                             set_margin_all: 5,
                             set_spacing: 10,
                             set_orientation: gtk::Orientation::Vertical,
-                            adw::PreferencesGroup {
-                                set_title: "Parallélisme",
-                                set_margin_all: 5,
+                            gtk::Box {
                                 set_hexpand: true,
-                                adw::SpinRow {
+                                set_margin_all: 0,
+                                set_spacing: 0,
+                                set_orientation: gtk::Orientation::Vertical,
+                                adw::PreferencesGroup {
+                                    set_title: "Parallélisme",
+                                    set_margin_all: 5,
                                     set_hexpand: true,
-                                    set_title: "Tâches en parallèle",
-                                    #[wrap(Some)]
-                                    set_adjustment = &gtk::Adjustment {
-                                        set_lower: 1.,
-                                        set_upper: u32::MAX as f64,
-                                        set_step_increment: 1.,
-                                        set_page_increment: 4.,
+                                    adw::SpinRow {
+                                        set_hexpand: true,
+                                        set_title: "Tâches en parallèle",
+                                        #[wrap(Some)]
+                                        set_adjustment = &gtk::Adjustment {
+                                            set_lower: 1.,
+                                            set_upper: u32::MAX as f64,
+                                            set_step_increment: 1.,
+                                            set_page_increment: 4.,
+                                        },
+                                        set_wrap: false,
+                                        set_snap_to_ticks: true,
+                                        set_numeric: true,
+                                        #[track(self.should_redraw)]
+                                        set_value: model.worker_count as f64,
+                                        connect_value_notify[sender] => move |widget| {
+                                            let value = widget.value() as u32;
+                                            sender.input(DialogInput::UpdateWorkerCount(value));
+                                        },
                                     },
-                                    set_wrap: false,
-                                    set_snap_to_ticks: true,
-                                    set_numeric: true,
-                                    #[track(self.should_redraw)]
-                                    set_value: model.worker_count as f64,
-                                    connect_value_notify[sender] => move |widget| {
-                                        let value = widget.value() as u32;
-                                        sender.input(DialogInput::UpdateWorkerCount(value));
-                                    },
+                                },
+                                gtk::Label {
+                                    set_label: &Self::worker_count_recommendation(),
+                                    add_css_class: "dim-label",
+                                    set_wrap: true,
+                                    set_xalign: 0.0,
+                                    set_margin_start: 12,
+                                    set_margin_end: 12,
+                                    set_margin_top: 6,
                                 },
                             },
                             adw::PreferencesGroup {
@@ -480,6 +495,15 @@ impl Dialog {
 
     fn has_warnings(&self) -> bool {
         !self.warnings.is_empty()
+    }
+
+    fn worker_count_recommendation() -> String {
+        format!(
+            "Nombre de tâches recommandé pour cet ordinateur : {}",
+            ConductorStrategy::with_parallelism_defaults()
+                .worker_count
+                .get()
+        )
     }
 }
 
