@@ -99,7 +99,7 @@ pub enum DialogInput {
     UpdateStrategy(ConductorStrategy),
     IgnoreOrRefresh,
     SetPeriodRecompute(usize, bool),
-    SetPeriodObjective(usize, bool),
+    SetPeriodUseCurrent(usize, bool),
     SetGroupListRecompute(usize, bool),
     SetGroupListObjective(usize, bool),
 }
@@ -181,7 +181,7 @@ impl Dialog {
             .map(|title| period_group::Data {
                 title,
                 recompute: true,
-                previous_values_as_objective: false,
+                use_current_values: false,
             })
             .collect();
         self.group_lists_data = self
@@ -439,8 +439,8 @@ impl SimpleComponent for Dialog {
                 period_group::PeriodGroupOutput::RecomputeToggled(index, value) => {
                     DialogInput::SetPeriodRecompute(index, value)
                 }
-                period_group::PeriodGroupOutput::ObjectiveToggled(index, value) => {
-                    DialogInput::SetPeriodObjective(index, value)
+                period_group::PeriodGroupOutput::UseCurrentToggled(index, value) => {
+                    DialogInput::SetPeriodUseCurrent(index, value)
                 }
             });
         let group_lists_list = FactoryVecDeque::builder()
@@ -501,9 +501,9 @@ impl SimpleComponent for Dialog {
                 }
                 self.refresh_periods_list();
             }
-            DialogInput::SetPeriodObjective(index, value) => {
+            DialogInput::SetPeriodUseCurrent(index, value) => {
                 if let Some(data) = self.periods_data.get_mut(index) {
-                    data.previous_values_as_objective = value;
+                    data.use_current_values = value;
                 }
                 self.refresh_periods_list();
             }
