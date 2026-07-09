@@ -1,8 +1,6 @@
 mod group_list_group;
 mod period_group;
 
-use std::collections::BTreeMap;
-
 use adw::prelude::{PreferencesGroupExt, PreferencesRowExt};
 use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, ToggleButtonExt, WidgetExt};
 use relm4::factory::FactoryVecDeque;
@@ -12,139 +10,11 @@ use relm4::{
 };
 use relm4::{adw, gtk};
 
+use collomatique_constraints_colloscopes::{GroupListSolveData, PeriodSolveData, SolveConfig};
 use collomatique_state_colloscopes::colloscope_params::Parameters;
 use collomatique_strategies::ConductorStrategy;
 
 use crate::editor::run_solver::conductor_config;
-
-/// The "how to solve" half of a solve request, handed off when the user validates this dialog.
-/// It is deliberately independent of the problem [`Parameters`] (the "what to solve" half), which
-/// travels alongside it. It carries the conductor strategy plus the problem-scoping refinements
-/// (which periods and group lists to recompute), reconciled against the current [`Parameters`] by
-/// [`sanitize`] and fed into [`build_model`].
-///
-/// [`sanitize`]: SolveConfig::sanitize
-/// [`build_model`]: SolveConfig::build_model
-#[derive(Debug, Clone)]
-pub struct SolveConfig {
-    pub strategy: ConductorStrategy,
-    pub periods: BTreeMap<collomatique_state_colloscopes::PeriodId, PeriodData>,
-    pub group_lists: BTreeMap<collomatique_state_colloscopes::GroupListId, GroupListData>,
-    pub objectify_cross_fixed_period: bool,
-}
-
-#[derive(Debug, Clone)]
-pub struct PeriodData {
-    pub recompute: bool,
-    pub use_current_values: bool,
-}
-
-impl Default for PeriodData {
-    fn default() -> Self {
-        PeriodData {
-            recompute: true,
-            use_current_values: false,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct GroupListData {
-    pub recompute: bool,
-    pub previous_values_as_objective: bool,
-}
-
-impl Default for GroupListData {
-    fn default() -> Self {
-        GroupListData {
-            recompute: true,
-            previous_values_as_objective: false,
-        }
-    }
-}
-
-impl Default for SolveConfig {
-    fn default() -> Self {
-        // Parallel full-optimisation is the default solve strategy (NOT ConductorStrategy's own
-        // Default, which is the simple-search strategy).
-        SolveConfig {
-            strategy: ConductorStrategy::with_parallelism_defaults(),
-            periods: BTreeMap::new(),
-            group_lists: BTreeMap::new(),
-            objectify_cross_fixed_period: true,
-        }
-    }
-}
-
-impl SolveConfig {
-    /// Reconcile this config against the parameters it will be solved against, dropping or
-    /// adjusting any refinements that no longer apply.
-    pub fn sanitize(self, params: &Parameters) -> Self {
-        let new_periods: BTreeMap<_, _> = params
-            .periods
-            .ordered_period_list
-            .iter()
-            .map(|(id, _)| {
-                (
-                    id.clone(),
-                    match self.periods.get(id) {
-                        Some(data) => data.clone(),
-                        None => PeriodData::default(),
-                    },
-                )
-            })
-            .collect();
-        let new_group_lists: BTreeMap<_, _> = params
-            .group_lists
-            .group_list_map
-            .iter()
-            .filter_map(|(id, group_list)| {
-                if group_list.is_prefilled() {
-                    return None;
-                }
-                Some((
-                    id.clone(),
-                    match self.group_lists.get(id) {
-                        Some(data) => data.clone(),
-                        None => GroupListData::default(),
-                    },
-                ))
-            })
-            .collect();
-        SolveConfig {
-            strategy: self.strategy,
-            periods: new_periods,
-            group_lists: new_group_lists,
-            objectify_cross_fixed_period: self.objectify_cross_fixed_period,
-        }
-    }
-
-    /// Build the ILP model to be solved from `params` and the current `colloscope`, streaming build
-    /// log lines through `log`. The caller supplies the real colloscope (rather than an empty one)
-    /// so the build can take the current assignments into account.
-    pub async fn build_model(
-        &self,
-        params: &Parameters,
-        colloscope: &collomatique_state_colloscopes::colloscopes::Colloscope,
-        log: &mut (dyn FnMut(&str) + Send),
-    ) -> Result<collomatique_constraints_colloscopes::ColloscopeModel, String> {
-        let inner_data = collomatique_state_colloscopes::InnerData {
-            params: params.clone(),
-            colloscope: colloscope.clone(),
-            ..Default::default()
-        };
-        let pool = sqlx::SqlitePool::connect(":memory:")
-            .await
-            .map_err(|e| e.to_string())?;
-        collomatique_sqlite_state::create_schema(&pool)
-            .await
-            .map_err(|e| e.to_string())?;
-        collomatique_sqlite_state::inner_data_to_sqlite(&pool, &inner_data)
-            .await
-            .map_err(|e| e.to_string())?;
-        Ok(collomatique_constraints_colloscopes::build_model_with_log(&pool, log).await)
-    }
-}
 
 pub struct Dialog {
     hidden: bool,
@@ -169,7 +39,7 @@ pub struct Dialog {
 
 #[derive(Debug)]
 pub enum DialogInput {
-    Show(SolveConfig, Parameters),
+    Show(SolveConfig, ConductorStrategy, Parameters),
     Cancel,
     Accept,
     OpenAdvanced,
@@ -185,7 +55,7 @@ pub enum DialogInput {
 #[derive(Debug)]
 pub enum DialogOutput {
     Cancelled,
-    Accepted(SolveConfig, Parameters),
+    Accepted(SolveConfig, ConductorStrategy, Parameters),
 }
 
 impl Dialog {
@@ -296,13 +166,11 @@ impl Dialog {
                 }
             })
             .collect();
-        self.strategy = sanitized_config.strategy;
         self.objectify_cross_fixed_period = sanitized_config.objectify_cross_fixed_period;
     }
 
     fn config_from_data(&self) -> SolveConfig {
         SolveConfig {
-            strategy: self.strategy.clone(),
             periods: self
                 .params
                 .periods
@@ -312,7 +180,7 @@ impl Dialog {
                 .map(|((id, _), data)| {
                     (
                         id.clone(),
-                        PeriodData {
+                        PeriodSolveData {
                             recompute: data.recompute,
                             use_current_values: data.use_current_values,
                         },
@@ -329,7 +197,7 @@ impl Dialog {
                 .map(|((id, _), data)| {
                     (
                         id.clone(),
-                        GroupListData {
+                        GroupListSolveData {
                             recompute: data.recompute,
                             previous_values_as_objective: data.previous_values_as_objective,
                         },
@@ -637,9 +505,10 @@ impl SimpleComponent for Dialog {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         match msg {
-            DialogInput::Show(config, params) => {
+            DialogInput::Show(config, strategy, params) => {
                 self.hidden = false;
                 self.params = params;
+                self.strategy = strategy;
                 self.set_data_from_config(config);
 
                 self.refresh_periods_list();
@@ -691,6 +560,7 @@ impl SimpleComponent for Dialog {
                 sender
                     .output(DialogOutput::Accepted(
                         self.config_from_data(),
+                        self.strategy.clone(),
                         self.params.clone(),
                     ))
                     .unwrap();

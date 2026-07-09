@@ -46,12 +46,12 @@ pub enum ColloscopeInput {
     SolveColloscopeClicked,
     ResetSolveConfig,
     ConductorConfigAccepted(
-        config_dialog::SolveConfig,
+        collomatique_constraints_colloscopes::SolveConfig,
+        collomatique_strategies::ConductorStrategy,
         collomatique_state_colloscopes::colloscope_params::Parameters,
     ),
     ConductorConfigCancelled,
     ModelBuilt(
-        config_dialog::SolveConfig,
         collomatique_constraints_colloscopes::ColloscopeModel,
         collomatique_strategies::ConductorPayload<
             collomatique_constraints_colloscopes::ProblemInternalVar,
@@ -157,8 +157,11 @@ pub struct Colloscope {
     config_dialog: Controller<config_dialog::Dialog>,
     loading_dialog: Controller<loading_dialog::Dialog>,
     /// The last-validated solve configuration, kept so the config dialog reopens pre-primed
-    /// instead of resetting every time. Defaults to the parallel strategy.
-    solve_config: config_dialog::SolveConfig,
+    /// instead of resetting every time.
+    solve_config: collomatique_constraints_colloscopes::SolveConfig,
+    /// The last-validated conductor strategy, bolted onto the solve request by this UI (the
+    /// modelization-only [`SolveConfig`] does not carry it). Defaults to the parallel strategy.
+    strategy: collomatique_strategies::ConductorStrategy,
 
     edited_group_list: Option<collomatique_state_colloscopes::GroupListId>,
     edited_interrogation: Option<(
@@ -557,8 +560,8 @@ impl Component for Colloscope {
             .transient_for(&root)
             .launch(())
             .forward(sender.input_sender(), |msg| match msg {
-                config_dialog::DialogOutput::Accepted(config, params) => {
-                    ColloscopeInput::ConductorConfigAccepted(config, params)
+                config_dialog::DialogOutput::Accepted(config, strategy, params) => {
+                    ColloscopeInput::ConductorConfigAccepted(config, strategy, params)
                 }
                 config_dialog::DialogOutput::Cancelled => ColloscopeInput::ConductorConfigCancelled,
             });
@@ -567,8 +570,8 @@ impl Component for Colloscope {
             .transient_for(&root)
             .launch(())
             .forward(sender.input_sender(), |msg| match msg {
-                loading_dialog::DialogOutput::ModelReady(config, model, payload) => {
-                    ColloscopeInput::ModelBuilt(config, model, payload)
+                loading_dialog::DialogOutput::ModelReady(model, payload) => {
+                    ColloscopeInput::ModelBuilt(model, payload)
                 }
             });
 
@@ -585,7 +588,8 @@ impl Component for Colloscope {
             run_solver_dialog,
             config_dialog,
             loading_dialog,
-            solve_config: config_dialog::SolveConfig::default(),
+            solve_config: collomatique_constraints_colloscopes::SolveConfig::default(),
+            strategy: collomatique_strategies::ConductorStrategy::with_parallelism_defaults(),
             last_update: None,
             computation_artifact: None,
             inflight_cmd: InflightCommand {
@@ -741,15 +745,17 @@ impl Component for Colloscope {
                     .sender()
                     .send(config_dialog::DialogInput::Show(
                         self.solve_config.clone(),
+                        self.strategy.clone(),
                         self.params.clone(),
                     ))
                     .unwrap();
             }
-            ColloscopeInput::ConductorConfigAccepted(config, params) => {
-                // Configuration confirmed: persist it so the next solve reopens pre-primed, then
-                // build the (possibly refined) model for this solve in the loading dialog, which
-                // streams the build log and hands back the model.
+            ColloscopeInput::ConductorConfigAccepted(config, strategy, params) => {
+                // Configuration confirmed: persist the config and strategy so the next solve
+                // reopens pre-primed, then build the (possibly refined) model for this solve in
+                // the loading dialog, which streams the build log and hands back the model.
                 self.solve_config = config.clone();
+                self.strategy = strategy;
                 self.loading_dialog
                     .sender()
                     .send(loading_dialog::DialogInput::Show(
@@ -759,12 +765,13 @@ impl Component for Colloscope {
                     ))
                     .unwrap();
             }
-            ColloscopeInput::ModelBuilt(config, model, payload) => {
-                // The model has been built: launch the solver with the incremental epoch payload.
+            ColloscopeInput::ModelBuilt(model, payload) => {
+                // The model has been built: launch the solver with the stored strategy and the
+                // incremental epoch payload.
                 self.run_solver_dialog
                     .sender()
                     .send(run_solver::DialogInput::Run(
-                        config.strategy,
+                        self.strategy.clone(),
                         model,
                         payload,
                     ))
@@ -774,9 +781,11 @@ impl Component for Colloscope {
                 // The solve was abandoned before it started; nothing to undo.
             }
             ColloscopeInput::ResetSolveConfig => {
-                // A new document was loaded; drop the previous file's stored strategy back to
-                // the default so the config dialog reopens on the parallel default.
-                self.solve_config = config_dialog::SolveConfig::default();
+                // A new document was loaded; drop the previous file's stored config and strategy
+                // back to the defaults so the config dialog reopens on the parallel default.
+                self.solve_config = collomatique_constraints_colloscopes::SolveConfig::default();
+                self.strategy =
+                    collomatique_strategies::ConductorStrategy::with_parallelism_defaults();
             }
             ColloscopeInput::SolveResult(config_data) => {
                 // Translate the raw ILP config back into a colloscope, using the

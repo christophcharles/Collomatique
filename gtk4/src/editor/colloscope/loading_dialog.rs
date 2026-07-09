@@ -4,12 +4,11 @@ use relm4::{
     adw, gtk,
 };
 
-use collomatique_constraints_colloscopes::{ColloscopeModel, ProblemInternalVar};
+use collomatique_constraints_colloscopes::{ColloscopeModel, ProblemInternalVar, SolveConfig};
 use collomatique_state_colloscopes::colloscope_params::Parameters;
 use collomatique_state_colloscopes::colloscopes::Colloscope;
 use collomatique_strategies::{ConductorPayload, IncrementalPayload};
 
-use super::config_dialog::SolveConfig;
 use crate::widgets::debug_view::{DebugView, DebugViewInput};
 
 /// Modal, button-less dialog shown while the ILP model is (re)built off-thread from a
@@ -32,11 +31,7 @@ pub enum DialogInput {
 
 #[derive(Debug)]
 pub enum DialogOutput {
-    ModelReady(
-        SolveConfig,
-        ColloscopeModel,
-        ConductorPayload<ProblemInternalVar>,
-    ),
+    ModelReady(ColloscopeModel, ConductorPayload<ProblemInternalVar>),
 }
 
 /// Build the incremental epoch payload from the freshly-built model: every `StudentGroup` base
@@ -52,7 +47,7 @@ fn build_incremental_payload(model: &ColloscopeModel) -> ConductorPayload<Proble
 
 #[derive(Debug)]
 pub enum DialogCommandOutput {
-    Built(SolveConfig, Result<ColloscopeModel, String>),
+    Built(Result<ColloscopeModel, String>),
 }
 
 #[relm4::component(pub)]
@@ -172,15 +167,15 @@ impl Component for Dialog {
 
                 // Building the model is heavy, async (in-memory sqlite) work. Run it off the UI
                 // thread; each log line is emitted back as `Echo` and streams live into the
-                // DebugView while the build runs. `params` and `colloscope` are consumed by the
-                // build; `config` rides through and is handed back with the built model.
+                // DebugView while the build runs. `config`, `params` and `colloscope` are all
+                // consumed by the build; only the built model is handed back.
                 let input = sender.input_sender().clone();
                 sender.oneshot_command(async move {
                     let mut log = move |line: &str| {
                         input.emit(DialogInput::Echo(format!("{}\n", line)));
                     };
                     let result = config.build_model(&params, &colloscope, &mut log).await;
-                    DialogCommandOutput::Built(config, result)
+                    DialogCommandOutput::Built(result)
                 });
             }
             DialogInput::Echo(line) => {
@@ -201,13 +196,13 @@ impl Component for Dialog {
         sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
-        let DialogCommandOutput::Built(config, result) = msg;
+        let DialogCommandOutput::Built(result) = msg;
         match result {
             Ok(model) => {
                 self.hidden = true;
                 let payload = build_incremental_payload(&model);
                 sender
-                    .output(DialogOutput::ModelReady(config, model, payload))
+                    .output(DialogOutput::ModelReady(model, payload))
                     .unwrap();
             }
             Err(e) => {

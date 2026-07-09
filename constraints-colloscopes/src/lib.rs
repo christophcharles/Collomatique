@@ -1,5 +1,6 @@
 mod balancing;
 mod builder;
+pub mod config;
 pub mod convert;
 mod extras;
 mod groups;
@@ -16,6 +17,7 @@ pub mod vars;
 mod weights;
 
 pub use builder::{build_model, build_model_with_log};
+pub use config::{GroupListSolveData, PeriodSolveData, SolveConfig};
 pub use incremental::build_incremental_epochs;
 pub use types::{
     ConstraintDesc, ExtraVarName, InfeasibleConstraint, PreferenceConstraint,
