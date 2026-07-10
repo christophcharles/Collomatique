@@ -39,7 +39,6 @@ pub enum ExportPanelInput {
         BTreeSet<String>,
     ),
     ExportClicked,
-    ExportSqliteClicked,
     ExportMpsClicked,
 
     UpdateIlpProblem(Option<IlpInnerProblem>),
@@ -76,7 +75,6 @@ pub enum ExportPanelInput {
 pub enum ExportPanelOutput {
     UpdateExportConfig(collomatique_ops::ExportConfigUpdateOp),
     ExportColloscopeAs(PathBuf, collomatique_xlsx::Config),
-    ExportSqliteAs(PathBuf),
     ExportMpsAs(PathBuf, IlpInnerProblem),
 }
 
@@ -84,8 +82,6 @@ pub enum ExportPanelOutput {
 pub enum ExportPanelCommandOutput {
     FileChosen(PathBuf),
     FileNotChosen,
-    SqliteFileChosen(PathBuf),
-    SqliteFileNotChosen,
     MpsFileChosen(PathBuf),
     MpsFileNotChosen,
 }
@@ -543,18 +539,6 @@ impl Component for ExportPanel {
                         set_hexpand: true,
                         set_margin_start: 10,
                         set_margin_end: 10,
-                        adw::ButtonContent {
-                            set_icon_name: "document-export-symbolic",
-                            set_label: "Exporter la base de donnée SQL",
-                        },
-                        connect_clicked => ExportPanelInput::ExportSqliteClicked,
-                    },
-                    gtk::Button {
-                        add_css_class: "frame",
-                        add_css_class: "warning",
-                        set_hexpand: true,
-                        set_margin_start: 10,
-                        set_margin_end: 10,
                         #[watch]
                         set_sensitive: model.ilp_problem.is_some(),
                         adw::ButtonContent {
@@ -682,24 +666,6 @@ impl Component for ExportPanel {
                     match tools::open_save::save_xlsx_dialog(default).await {
                         Some(path) => ExportPanelCommandOutput::FileChosen(path),
                         None => ExportPanelCommandOutput::FileNotChosen,
-                    }
-                });
-            }
-            ExportPanelInput::ExportSqliteClicked => {
-                let default = match &self.file_name {
-                    Some(path) => {
-                        let mut sqlite_path = path.clone();
-                        sqlite_path.set_extension("sqlite");
-                        tools::open_save::DefaultSaveFile::ExistingFile(sqlite_path)
-                    }
-                    None => tools::open_save::DefaultSaveFile::SuggestedName(
-                        format!("{}.sqlite", super::DEFAULT_FILE_STEM).into(),
-                    ),
-                };
-                sender.oneshot_command(async move {
-                    match tools::open_save::save_sqlite_dialog(default).await {
-                        Some(path) => ExportPanelCommandOutput::SqliteFileChosen(path),
-                        None => ExportPanelCommandOutput::SqliteFileNotChosen,
                     }
                 });
             }
@@ -932,17 +898,11 @@ impl Component for ExportPanel {
     ) {
         match message {
             ExportPanelCommandOutput::FileNotChosen
-            | ExportPanelCommandOutput::SqliteFileNotChosen
             | ExportPanelCommandOutput::MpsFileNotChosen => {}
             ExportPanelCommandOutput::FileChosen(path) => {
                 let xlsx_config = super::export::to_xlsx_config(&self.export_config);
                 sender
                     .output(ExportPanelOutput::ExportColloscopeAs(path, xlsx_config))
-                    .unwrap();
-            }
-            ExportPanelCommandOutput::SqliteFileChosen(path) => {
-                sender
-                    .output(ExportPanelOutput::ExportSqliteAs(path))
                     .unwrap();
             }
             ExportPanelCommandOutput::MpsFileChosen(path) => {

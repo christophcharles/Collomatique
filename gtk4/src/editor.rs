@@ -68,7 +68,6 @@ pub enum EditorInput {
     NewStateFromSecondInstance(AppState<Data, Desc>),
     UpdateFullColloscope(collomatique_state_colloscopes::colloscopes::Colloscope),
     ExportColloscopeAs(PathBuf, collomatique_xlsx::Config),
-    ExportSqliteAs(PathBuf),
     ExportMpsAs(PathBuf, export_panel::IlpInnerProblem),
     UpdateIlpProblem(Option<export_panel::IlpInnerProblem>),
 }
@@ -95,8 +94,6 @@ pub enum EditorCommandOutput {
     ScriptLoadingFailed(PathBuf, String),
     ExportXlsxSuccessful(PathBuf),
     ExportXlsxFailed(PathBuf, String),
-    ExportSqliteSuccessful(PathBuf),
-    ExportSqliteFailed(PathBuf, String),
     ExportMpsSuccessful(PathBuf),
     ExportMpsFailed(PathBuf, String),
 }
@@ -824,9 +821,6 @@ impl Component for EditorPanel {
                     export_panel::ExportPanelOutput::ExportColloscopeAs(path, config) => {
                         EditorInput::ExportColloscopeAs(path, config)
                     }
-                    export_panel::ExportPanelOutput::ExportSqliteAs(path) => {
-                        EditorInput::ExportSqliteAs(path)
-                    }
                     export_panel::ExportPanelOutput::ExportMpsAs(path, problem) => {
                         EditorInput::ExportMpsAs(path, problem)
                     }
@@ -1116,19 +1110,6 @@ impl Component for EditorPanel {
                     }
                 });
             }
-            EditorInput::ExportSqliteAs(path) => {
-                self.toast_info = Some(ToastInfo::Toast {
-                    text: format!("Export en cours de {}...", path.to_string_lossy()),
-                    timeout: None,
-                });
-                let inner_data = self.data.get_data().get_inner_data().clone();
-                sender.oneshot_command(async move {
-                    match diagnostics::export_to_sqlite(&inner_data, &path).await {
-                        Ok(()) => EditorCommandOutput::ExportSqliteSuccessful(path),
-                        Err(e) => EditorCommandOutput::ExportSqliteFailed(path, e.to_string()),
-                    }
-                });
-            }
             EditorInput::ExportMpsAs(path, problem) => {
                 self.toast_info = Some(ToastInfo::Toast {
                     text: format!("Export MPS en cours de {}...", path.to_string_lossy()),
@@ -1207,18 +1188,6 @@ impl Component for EditorPanel {
                 });
             }
             EditorCommandOutput::ExportXlsxFailed(path, error) => {
-                self.toast_info = Some(ToastInfo::Dismiss);
-                sender
-                    .output(EditorOutput::ExportError(path, error))
-                    .unwrap();
-            }
-            EditorCommandOutput::ExportSqliteSuccessful(path) => {
-                self.toast_info = Some(ToastInfo::Toast {
-                    text: format!("{} exporté", path.to_string_lossy()),
-                    timeout: DEFAULT_TOAST_TIMEOUT,
-                });
-            }
-            EditorCommandOutput::ExportSqliteFailed(path, error) => {
                 self.toast_info = Some(ToastInfo::Dismiss);
                 sender
                     .output(EditorOutput::ExportError(path, error))

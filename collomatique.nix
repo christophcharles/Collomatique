@@ -29,7 +29,7 @@ rustPlatform.buildRustPackage rec {
             !(baseName == "target" && type == "directory");
     };
 
-    cargoHash = "sha256-9/YflM4ypuywzXaT3OJ2BnJklMwIL2C/FRZCZsymgoo=";
+    cargoHash = "sha256-q4FdyQqiP9322nTz4oQ/SubpiIONrK70LU7jkBd2azY=";
 
     nativeBuildInputs = [
         rustPlatform.bindgenHook

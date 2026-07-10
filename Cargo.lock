@@ -404,7 +404,6 @@ dependencies = [
  "collomatique-ops",
  "collomatique-rpc",
  "collomatique-rpc-engine",
- "collomatique-sqlite-state",
  "collomatique-state",
  "collomatique-state-colloscopes",
  "collomatique-storage",
@@ -420,7 +419,6 @@ dependencies = [
  "relm4",
  "rfd",
  "rustix",
- "sqlx",
  "tokio",
 ]
 
