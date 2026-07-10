@@ -1,7 +1,7 @@
+mod advanced_dialog;
 mod group_list_group;
 mod period_group;
 
-use adw::prelude::{PreferencesGroupExt, PreferencesRowExt};
 use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, ToggleButtonExt, WidgetExt};
 use relm4::factory::FactoryVecDeque;
 use relm4::{
@@ -27,6 +27,9 @@ pub struct Dialog {
     strategy: ConductorStrategy,
     /// The advanced solver-configuration dialog, opened via "Paramètres avancés du résolveur".
     conductor_config_dialog: Controller<conductor_config::Dialog>,
+    /// The advanced model-parameter dialog (cross-period softening and L1 anchor weight), opened
+    /// via the "Paramètres avancés" button.
+    advanced_dialog: Controller<advanced_dialog::Dialog>,
     /// One titled [`adw::PreferencesGroup`] per period, shown in the left panel.
     periods_list: FactoryVecDeque<period_group::PeriodGroup>,
     /// One titled [`adw::PreferencesGroup`] per automatic group list, shown in the right panel.
@@ -35,10 +38,10 @@ pub struct Dialog {
     periods_data: Vec<period_group::Data>,
     /// Per-automatic-group-list switch state backing `group_lists_list`, indexed by position.
     group_lists_data: Vec<group_list_group::Data>,
-    /// Global toggle to automatically objectify across period boundary
-    objectify_cross_fixed_period: bool,
-    /// L1 anchor penalty weight, carried through unchanged (no widget) so the round-tripped
-    /// [`SolveConfig`] preserves the incoming value.
+    /// Softening of the cross-fixed-period constraints: `Some(weight)` objectifies them, `None`
+    /// keeps them hard. Configured through the "Paramètres avancés" dialog.
+    objectify_cross_fixed_period: Option<f64>,
+    /// L1 anchor penalty weight, configured through the "Paramètres avancés" dialog.
     l1_anchor_weight: f64,
 }
 
@@ -48,13 +51,14 @@ pub enum DialogInput {
     Cancel,
     Accept,
     OpenAdvanced,
+    OpenAdvancedParams,
     UpdateStrategy(ConductorStrategy),
+    UpdateAdvancedParams(Option<f64>, f64),
     IgnoreOrRefresh,
     SetPeriodRecompute(usize, bool),
     SetPeriodUseCurrent(usize, bool),
     SetGroupListRecompute(usize, bool),
     SetGroupListObjective(usize, bool),
-    SetObjectifyCrossFixedPeriod(bool),
 }
 
 #[derive(Debug)]
@@ -80,14 +84,6 @@ impl Dialog {
 impl Dialog {
     fn has_periods(&self) -> bool {
         !self.params.periods.ordered_period_list.is_empty()
-    }
-
-    fn has_mixed_periods(&self) -> bool {
-        self.periods_data.iter().any(|data| data.recompute)
-            && self
-                .periods_data
-                .iter()
-                .any(|data| !data.recompute && data.use_current_values)
     }
 
     fn has_automatic_groups(&self) -> bool {
@@ -174,7 +170,7 @@ impl Dialog {
                 }
             })
             .collect();
-        self.objectify_cross_fixed_period = sanitized_config.objectify_cross_fixed_period.is_some();
+        self.objectify_cross_fixed_period = sanitized_config.objectify_cross_fixed_period;
         self.l1_anchor_weight = sanitized_config.l1_anchor_weight;
     }
 
@@ -214,11 +210,7 @@ impl Dialog {
                     )
                 })
                 .collect(),
-            objectify_cross_fixed_period: if self.objectify_cross_fixed_period {
-                SolveConfig::default().objectify_cross_fixed_period
-            } else {
-                None
-            },
+            objectify_cross_fixed_period: self.objectify_cross_fixed_period,
             l1_anchor_weight: self.l1_anchor_weight,
         }
     }
@@ -318,22 +310,6 @@ impl SimpleComponent for Dialog {
                                         set_spacing: 10,
                                     },
                                 },
-                                adw::PreferencesGroup {
-                                    set_title: "Gestion des contraintes inter-périodes",
-                                    set_margin_all: 5,
-                                    #[watch]
-                                    set_visible: model.has_mixed_periods(),
-                                    #[name(objectify_row)]
-                                    adw::SwitchRow {
-                                        set_title: "Assouplir les contraintes qui traversent les périodes figées",
-                                        #[track(objectify_row.is_active() != model.objectify_cross_fixed_period)]
-                                        #[block_signal(objectify_handler)]
-                                        set_active: model.objectify_cross_fixed_period,
-                                        connect_active_notify[sender] => move |widget| {
-                                            sender.input(DialogInput::SetObjectifyCrossFixedPeriod(widget.is_active()));
-                                        } @objectify_handler,
-                                    },
-                                },
                                 gtk::Label {
                                     set_valign: gtk::Align::Center,
                                     set_vexpand: true,
@@ -387,74 +363,85 @@ impl SimpleComponent for Dialog {
                             },
                         },
                     },
-                    gtk::Frame {
+                    gtk::Box {
+                        set_margin_all: 0,
+                        set_orientation: gtk::Orientation::Horizontal,
                         set_hexpand: true,
-                        set_margin_all: 5,
-                        gtk::Box {
-                            set_orientation: gtk::Orientation::Horizontal,
-                            set_spacing: 5,
-                            gtk::Label {
-                                set_margin_start: 10,
-                                set_margin_all: 5,
-                                set_label: "<b>Configuration du résolveur :</b>",
-                                set_use_markup: true,
-                            },
+                        gtk::Frame {
+                            set_hexpand: true,
+                            set_margin_all: 5,
                             gtk::Box {
-                                set_spacing: 0,
-                                add_css_class: "linked",
-                                #[name(opt_toggle_btn)]
-                                gtk::ToggleButton {
-                                    set_margin_top: 5,
-                                    set_margin_bottom: 5,
-                                    set_label: "Optimisation complète",
-                                    #[track(opt_toggle_btn.is_active() != model.is_opt_strategy())]
-                                    set_active: model.is_opt_strategy(),
-                                    connect_toggled[sender] => move |widget| {
-                                        let new_state = widget.is_active();
-                                        sender.input(if new_state {
-                                            DialogInput::UpdateStrategy(ConductorStrategy::with_parallelism_defaults())
-                                        } else {
-                                            DialogInput::IgnoreOrRefresh
-                                        });
-                                    }
+                                set_orientation: gtk::Orientation::Horizontal,
+                                set_spacing: 5,
+                                gtk::Label {
+                                    set_margin_start: 10,
+                                    set_margin_all: 5,
+                                    set_label: "<b>Configuration du résolveur :</b>",
+                                    set_use_markup: true,
                                 },
-                                #[name(search_toggle_btn)]
-                                gtk::ToggleButton {
-                                    set_margin_top: 5,
-                                    set_margin_bottom: 5,
-                                    set_label: "Recherche simple",
-                                    #[track(search_toggle_btn.is_active() != model.is_search_strategy())]
-                                    set_active: model.is_search_strategy(),
-                                    connect_toggled[sender] => move |widget| {
-                                        let new_state = widget.is_active();
-                                        sender.input(if new_state {
-                                            DialogInput::UpdateStrategy(ConductorStrategy::default())
-                                        } else {
-                                            DialogInput::IgnoreOrRefresh
-                                        });
-                                    }
+                                gtk::Box {
+                                    set_spacing: 0,
+                                    add_css_class: "linked",
+                                    #[name(opt_toggle_btn)]
+                                    gtk::ToggleButton {
+                                        set_margin_top: 5,
+                                        set_margin_bottom: 5,
+                                        set_label: "Optimisation complète",
+                                        #[track(opt_toggle_btn.is_active() != model.is_opt_strategy())]
+                                        set_active: model.is_opt_strategy(),
+                                        connect_toggled[sender] => move |widget| {
+                                            let new_state = widget.is_active();
+                                            sender.input(if new_state {
+                                                DialogInput::UpdateStrategy(ConductorStrategy::with_parallelism_defaults())
+                                            } else {
+                                                DialogInput::IgnoreOrRefresh
+                                            });
+                                        }
+                                    },
+                                    #[name(search_toggle_btn)]
+                                    gtk::ToggleButton {
+                                        set_margin_top: 5,
+                                        set_margin_bottom: 5,
+                                        set_label: "Recherche simple",
+                                        #[track(search_toggle_btn.is_active() != model.is_search_strategy())]
+                                        set_active: model.is_search_strategy(),
+                                        connect_toggled[sender] => move |widget| {
+                                            let new_state = widget.is_active();
+                                            sender.input(if new_state {
+                                                DialogInput::UpdateStrategy(ConductorStrategy::default())
+                                            } else {
+                                                DialogInput::IgnoreOrRefresh
+                                            });
+                                        }
+                                    },
+                                },
+                                gtk::Label {
+                                    set_margin_all: 5,
+                                    set_label: "<i><small>Personnalisée</small></i>",
+                                    set_use_markup: true,
+                                    #[watch]
+                                    set_visible: model.is_other_strategy(),
+                                },
+                                gtk::Box {
+                                    set_hexpand: true,
+                                },
+                                gtk::Button {
+                                    add_css_class: "frame",
+                                    set_margin_all: 5,
+                                    set_label: "Personnalisée",
+                                    connect_clicked => DialogInput::OpenAdvanced,
                                 },
                             },
-                            gtk::Label {
-                                set_margin_all: 5,
-                                set_label: "<i><small>Personnalisée</small></i>",
-                                set_use_markup: true,
-                                #[watch]
-                                set_visible: model.is_other_strategy(),
+                        },
+                        gtk::Button {
+                            add_css_class: "frame",
+                            add_css_class: "warning",
+                            set_margin_all: 5,
+                            adw::ButtonContent {
+                                set_icon_name: "configure-symbolic",
+                                set_label: "Paramètres avancés",
                             },
-                            gtk::Box {
-                                set_hexpand: true,
-                            },
-                            gtk::Button {
-                                add_css_class: "frame",
-                                add_css_class: "warning",
-                                set_margin_all: 5,
-                                adw::ButtonContent {
-                                    set_icon_name: "configure-symbolic",
-                                    set_label: "Paramètres avancés",
-                                },
-                                connect_clicked => DialogInput::OpenAdvanced,
-                            },
+                            connect_clicked => DialogInput::OpenAdvancedParams,
                         },
                     },
                 },
@@ -475,6 +462,16 @@ impl SimpleComponent for Dialog {
                     DialogInput::UpdateStrategy(strategy)
                 }
                 conductor_config::DialogOutput::Cancelled => DialogInput::IgnoreOrRefresh,
+            });
+
+        let advanced_dialog = advanced_dialog::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                advanced_dialog::DialogOutput::Accepted(objectify, l1_anchor_weight) => {
+                    DialogInput::UpdateAdvancedParams(objectify, l1_anchor_weight)
+                }
+                advanced_dialog::DialogOutput::Cancelled => DialogInput::IgnoreOrRefresh,
             });
 
         let periods_list = FactoryVecDeque::builder()
@@ -503,11 +500,12 @@ impl SimpleComponent for Dialog {
             params: Parameters::default(),
             strategy: ConductorStrategy::with_parallelism_defaults(),
             conductor_config_dialog,
+            advanced_dialog,
             periods_list,
             group_lists_list,
             periods_data: Vec::new(),
             group_lists_data: Vec::new(),
-            objectify_cross_fixed_period: true,
+            objectify_cross_fixed_period: SolveConfig::default().objectify_cross_fixed_period,
             l1_anchor_weight: SolveConfig::default().l1_anchor_weight,
         };
 
@@ -564,8 +562,18 @@ impl SimpleComponent for Dialog {
                 }
                 self.refresh_group_lists_list();
             }
-            DialogInput::SetObjectifyCrossFixedPeriod(value) => {
-                self.objectify_cross_fixed_period = value;
+            DialogInput::OpenAdvancedParams => {
+                self.advanced_dialog
+                    .sender()
+                    .send(advanced_dialog::DialogInput::Show(
+                        self.objectify_cross_fixed_period,
+                        self.l1_anchor_weight,
+                    ))
+                    .unwrap();
+            }
+            DialogInput::UpdateAdvancedParams(objectify, l1_anchor_weight) => {
+                self.objectify_cross_fixed_period = objectify;
+                self.l1_anchor_weight = l1_anchor_weight;
             }
             DialogInput::Cancel => {
                 self.hidden = true;
