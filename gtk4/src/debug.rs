@@ -17,6 +17,7 @@ pub enum DebugMode {
     SubprocessSolveStrategy,
     NoObjective,
     NoObjectiveStarter,
+    Incremental,
     Conductor,
 }
 
@@ -54,6 +55,9 @@ pub fn print_help() -> Result<(), anyhow::Error> {
     );
     eprintln!(
         "    no-objective-starter   Solve via no-objective starter strategy subprocess (end-to-end test)"
+    );
+    eprintln!(
+        "    incremental            Solve via the incremental (staggered epochs) strategy subprocess"
     );
     eprintln!(
         "    conductor              Solve via the conductor strategy (spawns subprocess workers)"
@@ -112,6 +116,7 @@ pub fn run(mode: DebugMode, file: PathBuf) -> Result<(), anyhow::Error> {
             DebugMode::SubprocessSolveStrategy => subprocess_solve_strategy(&model),
             DebugMode::NoObjective => no_objective_solve(&model),
             DebugMode::NoObjectiveStarter => no_objective_starter_solve(&model),
+            DebugMode::Incremental => incremental_solve(&model),
             DebugMode::Conductor => conductor_solve(&model).await,
         }
 
@@ -332,7 +337,7 @@ fn subprocess_solve(model: &collomatique_constraints_colloscopes::ColloscopeMode
     let config = IlpSolverConfig {
         problem_desc: desc,
         warm_start: None,
-        time_limit_seconds: None,
+        time_limit: collomatique_time::TimeLimit::none(),
         disable_logging: false,
     };
 
@@ -437,7 +442,8 @@ fn subprocess_solve(model: &collomatique_constraints_colloscopes::ColloscopeMode
 
 fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::ColloscopeModel) {
     use collomatique_strategies::{
-        DefaultStrategy, SolveProgress, SolveStatus, StrategyOutcome, StrategyProgressData,
+        DefaultPayload, DefaultStrategy, SolveProgress, SolveStatus, StrategyOutcome,
+        StrategyProgressData,
     };
     use collomatique_subprocesses::StrategySubprocess;
     use std::sync::mpsc;
@@ -460,7 +466,7 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
     );
 
     let strategy = DefaultStrategy {
-        time_limit_seconds: None,
+        time_limit: collomatique_time::TimeLimit::none(),
         disable_logging: false,
     };
 
@@ -471,6 +477,7 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
         model,
         &strategy,
         None,
+        DefaultPayload::default(),
         move |outcome: Outcome| {
             let _ = tx.send(outcome);
         },
@@ -552,8 +559,8 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
 
 fn no_objective_solve(model: &collomatique_constraints_colloscopes::ColloscopeModel) {
     use collomatique_strategies::{
-        NoObjectiveProgressData, NoObjectiveStrategy, SolveStatus, StrategyOutcome,
-        StrategyProgressData,
+        NoObjectivePayload, NoObjectiveProgressData, NoObjectiveStrategy, SolveStatus,
+        StrategyOutcome, StrategyProgressData,
     };
     use collomatique_subprocesses::StrategySubprocess;
     use std::sync::mpsc;
@@ -576,8 +583,8 @@ fn no_objective_solve(model: &collomatique_constraints_colloscopes::ColloscopeMo
     );
 
     let strategy = NoObjectiveStrategy {
-        checker_time_limit_seconds: None,
-        reconstruction_time_limit_seconds: None,
+        checker_time_limit: collomatique_time::TimeLimit::none(),
+        reconstruction_time_limit: collomatique_time::TimeLimit::none(),
         disable_logging: false,
     };
 
@@ -588,6 +595,7 @@ fn no_objective_solve(model: &collomatique_constraints_colloscopes::ColloscopeMo
         model,
         &strategy,
         None,
+        NoObjectivePayload::default(),
         move |outcome: Outcome| {
             let _ = tx.send(outcome);
         },
@@ -669,8 +677,8 @@ fn no_objective_solve(model: &collomatique_constraints_colloscopes::ColloscopeMo
 
 fn no_objective_starter_solve(model: &collomatique_constraints_colloscopes::ColloscopeModel) {
     use collomatique_strategies::{
-        DefaultStrategy, NoObjectiveStarterProgress, NoObjectiveStarterStrategy,
-        NoObjectiveStrategy, SolveStatus, StrategyOutcome,
+        DefaultStrategy, NoObjectiveStarterPayload, NoObjectiveStarterProgress,
+        NoObjectiveStarterStrategy, NoObjectiveStrategy, SolveStatus, StrategyOutcome,
     };
     use collomatique_subprocesses::StrategySubprocess;
     use std::sync::mpsc;
@@ -699,12 +707,12 @@ fn no_objective_starter_solve(model: &collomatique_constraints_colloscopes::Coll
 
     let strategy = NoObjectiveStarterStrategy {
         no_objective: NoObjectiveStrategy {
-            checker_time_limit_seconds: None,
-            reconstruction_time_limit_seconds: None,
+            checker_time_limit: collomatique_time::TimeLimit::none(),
+            reconstruction_time_limit: collomatique_time::TimeLimit::none(),
             disable_logging: false,
         },
         default: DefaultStrategy {
-            time_limit_seconds: None,
+            time_limit: collomatique_time::TimeLimit::none(),
             disable_logging: false,
         },
     };
@@ -716,6 +724,7 @@ fn no_objective_starter_solve(model: &collomatique_constraints_colloscopes::Coll
         model,
         &strategy,
         None,
+        NoObjectiveStarterPayload::default(),
         move |outcome: Outcome| {
             let _ = tx.send(outcome);
         },
@@ -798,9 +807,141 @@ fn no_objective_starter_solve(model: &collomatique_constraints_colloscopes::Coll
     }
 }
 
+fn incremental_solve(model: &collomatique_constraints_colloscopes::ColloscopeModel) {
+    use collomatique_strategies::{
+        IncrementalPayload, IncrementalProgressData, IncrementalStrategy, SolveStatus,
+        StrategyOutcome, StrategyProgressData,
+    };
+    use collomatique_subprocesses::StrategySubprocess;
+    use std::sync::mpsc;
+
+    type Outcome = StrategyOutcome<
+        collomatique_ilp_modeler::InternalVar<
+            collomatique_constraints_colloscopes::Var,
+            collomatique_constraints_colloscopes::ExtraVarName,
+        >,
+    >;
+
+    let t = Instant::now();
+    eprintln!("Extracting problem descriptor...");
+    let (model_desc, _) = model.to_desc();
+    eprintln!(
+        "  Descriptor: {} variables, {} constraints ({:.2?})",
+        model_desc.main.problem_desc.variables.len(),
+        model_desc.main.problem_desc.constraints.len(),
+        t.elapsed()
+    );
+
+    // Epoch assignment: every StudentGroup base variable is solved first (epoch 0), then each
+    // GroupInInterrogation variable is solved in the epoch matching its week (week + 1), so the
+    // schedule fills in week by week on top of the fixed group assignment.
+    let epochs = collomatique_constraints_colloscopes::build_incremental_epochs(model);
+    eprintln!(
+        "  Epoch payload: {} base variables across {} epoch(s)",
+        epochs.len(),
+        epochs.values().copied().max().map_or(0, |m| m + 1),
+    );
+    let payload = IncrementalPayload { epochs };
+
+    let strategy = IncrementalStrategy {
+        l1_weight: 1000.0,
+        distance_tolerance: 5.0,
+        epoch_time_limit: collomatique_time::TimeLimit::none(),
+        reconstruction_time_limit: collomatique_time::TimeLimit::none(),
+        disable_logging: false,
+    };
+
+    let (tx, rx) = mpsc::channel();
+    eprintln!("Spawning incremental strategy subprocess...");
+    let t = Instant::now();
+    let handle = StrategySubprocess::spawn(
+        model,
+        &strategy,
+        None,
+        payload,
+        move |outcome: Outcome| {
+            let _ = tx.send(outcome);
+        },
+        |progress: Result<IncrementalProgressData, String>| match progress {
+            Ok(p) => {
+                eprintln!("  [strategy subprocess progress] {p}");
+            }
+            Err(e) => {
+                eprintln!("  [strategy subprocess progress error] {e}");
+            }
+        },
+        |line| {
+            eprint!("  [strategy subprocess] {}", line);
+        },
+    );
+
+    let handle = match handle {
+        Ok(h) => h,
+        Err(e) => {
+            eprintln!("  Failed to spawn strategy subprocess: {}", e);
+            return;
+        }
+    };
+
+    eprintln!("  Strategy subprocess spawned in {:.2?}", t.elapsed());
+    eprintln!("Waiting for strategy result...");
+
+    let t = Instant::now();
+    let result = rx.recv();
+    match result {
+        Ok(outcome) => {
+            eprintln!("  Result received in {:.2?}", t.elapsed());
+            eprintln!("  Status: {:?}", outcome.status);
+            match outcome.objective {
+                Some(v) => eprintln!("  Objective: {}", v),
+                None => eprintln!("  Objective: N/A"),
+            }
+            match outcome.best_bound {
+                Some(v) => eprintln!("  Best bound: {}", v),
+                None => eprintln!("  Best bound: N/A"),
+            }
+
+            if let Some(ref config_data) = outcome.solution {
+                let problem = model.problem();
+                match problem.build_config(config_data.clone()) {
+                    Ok(config) => {
+                        if config.is_feasible() {
+                            eprintln!("  Solution is FEASIBLE");
+                        } else {
+                            let violated = config.blame().len();
+                            eprintln!("  Solution violates {} constraint(s)", violated);
+                        }
+                    }
+                    Err(check) => {
+                        eprintln!(
+                            "  Config build failed: missing={}, excess={}, non_conforming={}",
+                            check.missing_variables.len(),
+                            check.excess_variables.len(),
+                            check.non_conforming_variables.len(),
+                        );
+                    }
+                }
+            } else {
+                eprintln!("  No solution returned");
+            }
+
+            if outcome.status == SolveStatus::Error {
+                eprintln!("  Strategy reported an error");
+            }
+        }
+        Err(_) => {
+            eprintln!("  Channel closed without receiving a result");
+            if let Some(StrategyProgressData::Incremental(p)) = handle.last_progress() {
+                eprintln!("  Last progress: {p}");
+            }
+        }
+    }
+}
+
 async fn conductor_solve(model: &collomatique_constraints_colloscopes::ColloscopeModel) {
     use collomatique_strategies::{
-        ConductorProgress, ConductorStrategy, SolveStatus, Strategy, StrategyContext,
+        ConductorPayload, ConductorProgress, ConductorStrategy, SolveStatus, Strategy,
+        StrategyContext,
     };
     use collomatique_subprocesses::SubprocessSolveBackend;
     use std::sync::Arc;
@@ -831,41 +972,47 @@ async fn conductor_solve(model: &collomatique_constraints_colloscopes::Colloscop
     eprintln!("Running conductor strategy...");
     let t = Instant::now();
     let result = conductor
-        .run_with_callback(&ctx, model, None, &|progress: ConductorProgress<V>| {
-            match &progress {
-                ConductorProgress::Conductor(status) => {
-                    let obj_str = status
-                        .best_solution
-                        .as_ref()
-                        .map(|s| format!("{:.4}", s.objective))
-                        .unwrap_or_else(|| "N/A".to_string());
-                    let bound_str = status
-                        .best_bound
-                        .map(|b| format!("{:.4}", b))
-                        .unwrap_or_else(|| "N/A".to_string());
-                    eprintln!("  [conductor] obj={} bound={}", obj_str, bound_str,);
-                }
-                ConductorProgress::WorkerAssigned {
-                    worker_num,
-                    strategy,
-                } => match strategy {
-                    Some(s) => {
-                        eprintln!("  [conductor] worker {worker_num} assigned: {}", s.name())
+        .run_with_callback(
+            &ctx,
+            model,
+            None,
+            ConductorPayload::default(),
+            &|progress: ConductorProgress<V>| {
+                match &progress {
+                    ConductorProgress::Conductor(status) => {
+                        let obj_str = status
+                            .best_solution
+                            .as_ref()
+                            .map(|s| format!("{:.4}", s.objective))
+                            .unwrap_or_else(|| "N/A".to_string());
+                        let bound_str = status
+                            .best_bound
+                            .map(|b| format!("{:.4}", b))
+                            .unwrap_or_else(|| "N/A".to_string());
+                        eprintln!("  [conductor] obj={} bound={}", obj_str, bound_str,);
                     }
-                    None => eprintln!("  [conductor] worker {worker_num} idle"),
-                },
-                ConductorProgress::WorkerProgress {
-                    worker_num,
-                    progress,
-                } => {
-                    eprintln!("  [conductor] worker {worker_num}: {progress}");
+                    ConductorProgress::WorkerAssigned {
+                        worker_num,
+                        strategy,
+                    } => match strategy {
+                        Some(s) => {
+                            eprintln!("  [conductor] worker {worker_num} assigned: {}", s.name())
+                        }
+                        None => eprintln!("  [conductor] worker {worker_num} idle"),
+                    },
+                    ConductorProgress::WorkerProgress {
+                        worker_num,
+                        progress,
+                    } => {
+                        eprintln!("  [conductor] worker {worker_num}: {progress}");
+                    }
+                    ConductorProgress::WorkerEcho { worker_num, echo } => {
+                        eprint!("  [conductor] [worker {worker_num}] {}", echo);
+                    }
                 }
-                ConductorProgress::WorkerEcho { worker_num, echo } => {
-                    eprint!("  [conductor] [worker {worker_num}] {}", echo);
-                }
-            }
-            true
-        })
+                true
+            },
+        )
         .await;
 
     match result {

@@ -12,3 +12,4 @@ anyhow.workspace = true
 thiserror.workspace = true
 collomatique-state-colloscopes = { path = "../state-colloscopes" }
 collomatique-ilp = { path = "../ilp", features = ["serde"] }
+collomatique-time = { path = "../time" }

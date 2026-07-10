@@ -2,6 +2,7 @@ mod conductor_panel;
 mod default_panel;
 mod find_closest_panel;
 mod fuzzy_panel;
+mod incremental_panel;
 mod no_objective_panel;
 mod no_objective_starter_panel;
 
@@ -20,6 +21,7 @@ use conductor_panel::{ConductorPanel, ConductorPanelInput};
 use default_panel::{DefaultPanel, DefaultPanelInput};
 use find_closest_panel::{FindClosestPanel, FindClosestPanelInput};
 use fuzzy_panel::{FuzzyPanel, FuzzyPanelInput};
+use incremental_panel::{IncrementalPanel, IncrementalPanelInput};
 use no_objective_panel::{NoObjectivePanel, NoObjectivePanelInput};
 use no_objective_starter_panel::{NoObjectiveStarterPanel, NoObjectiveStarterPanelInput};
 
@@ -56,6 +58,7 @@ pub struct StrategyFrame {
     no_objective_panel: Controller<NoObjectivePanel>,
     find_closest_panel: Controller<FindClosestPanel>,
     fuzzy_panel: Controller<FuzzyPanel>,
+    incremental_panel: Controller<IncrementalPanel>,
     no_objective_starter_panel: Controller<NoObjectiveStarterPanel>,
     conductor_panel: Controller<ConductorPanel>,
 }
@@ -71,7 +74,7 @@ impl FactoryComponent for StrategyFrame {
     view! {
         #[root]
         gtk::Box {
-            set_margin_all: 5,
+            set_margin_all: 0,
             set_spacing: 5,
             set_hexpand: true,
             set_vexpand: true,
@@ -99,13 +102,13 @@ impl FactoryComponent for StrategyFrame {
                         set_orientation: gtk::Orientation::Horizontal,
                         set_hexpand: true,
                         set_vexpand: true,
-
+                        set_margin_all: 0,
                         gtk::Box {
                             set_orientation: gtk::Orientation::Vertical,
                             set_halign: gtk::Align::Center,
                             set_valign: gtk::Align::Center,
                             set_spacing: 5,
-                            set_size_request: (150,-1),
+                            set_size_request: (350,-1),
                             #[watch]
                             set_visible: !self.idle,
                             adw::Spinner {
@@ -113,7 +116,6 @@ impl FactoryComponent for StrategyFrame {
                             },
                             gtk::Label {
                                 set_margin_top: 15,
-                                set_hexpand: true,
                                 set_justify: gtk::Justification::Center,
                                 #[watch]
                                 set_label: &format!("Tâche {} : {}", self.worker_num+1, self.strategy_kind.as_ref().map(
@@ -139,7 +141,7 @@ impl FactoryComponent for StrategyFrame {
                             set_halign: gtk::Align::Center,
                             set_valign: gtk::Align::Center,
                             set_spacing: 5,
-                            set_size_request: (150,-1),
+                            set_size_request: (350,-1),
                             #[watch]
                             set_visible: self.idle,
                             gtk::Image::from_icon_name("media-playback-pause-symbolic") {
@@ -148,7 +150,6 @@ impl FactoryComponent for StrategyFrame {
                             },
                             gtk::Label {
                                 set_margin_top: 15,
-                                set_hexpand: true,
                                 set_justify: gtk::Justification::Center,
                                 #[watch]
                                 set_label: &format!("Tâche {} : {}", self.worker_num+1, self.strategy_kind.as_ref().map(
@@ -169,13 +170,11 @@ impl FactoryComponent for StrategyFrame {
                                 set_label: &self.elapsed(),
                             },
                         },
-                        gtk::Box {
-                            set_hexpand: true,
-                        },
                         append = self.default_panel.widget(),
                         append = self.no_objective_panel.widget(),
                         append = self.find_closest_panel.widget(),
                         append = self.fuzzy_panel.widget(),
+                        append = self.incremental_panel.widget(),
                         append = self.no_objective_starter_panel.widget(),
                         append = self.conductor_panel.widget(),
                         gtk::Box {
@@ -223,6 +222,7 @@ impl FactoryComponent for StrategyFrame {
             no_objective_panel: NoObjectivePanel::builder().launch(()).detach(),
             find_closest_panel: FindClosestPanel::builder().launch(()).detach(),
             fuzzy_panel: FuzzyPanel::builder().launch(()).detach(),
+            incremental_panel: IncrementalPanel::builder().launch(()).detach(),
             no_objective_starter_panel: NoObjectiveStarterPanel::builder().launch(()).detach(),
             conductor_panel: ConductorPanel::builder().launch(()).detach(),
         }
@@ -285,9 +285,11 @@ impl FactoryComponent for StrategyFrame {
             StrategyDisplayInput::ToggleDebug(active) => {
                 self.show_debug = active;
             }
-            // The refresh only needs to re-render the view (elapsed-time label); the model
-            // stays put.
-            StrategyDisplayInput::Refresh => {}
+            // The refresh re-renders this frame's own elapsed-time label; forward it to the
+            // incremental panel too, whose per-step timer / remaining-time estimate tick live.
+            StrategyDisplayInput::Refresh => {
+                self.incremental_panel.emit(IncrementalPanelInput::Refresh);
+            }
         }
     }
 }
@@ -319,6 +321,9 @@ impl StrategyFrame {
         self.fuzzy_panel.emit(FuzzyPanelInput::Reset {
             visible: matches!(kind, Some(StrategyKind::Fuzzy { .. })),
         });
+        self.incremental_panel.emit(IncrementalPanelInput::Reset {
+            visible: matches!(kind, Some(StrategyKind::Incremental { .. })),
+        });
         self.no_objective_starter_panel
             .emit(NoObjectiveStarterPanelInput::Reset {
                 visible: matches!(kind, Some(StrategyKind::NoObjectiveStarter { .. })),
@@ -348,6 +353,9 @@ impl StrategyFrame {
                 .find_closest_panel
                 .emit(FindClosestPanelInput::Update(p)),
             StrategyProgressData::Fuzzy(p) => self.fuzzy_panel.emit(FuzzyPanelInput::Update(p)),
+            StrategyProgressData::Incremental(p) => self
+                .incremental_panel
+                .emit(IncrementalPanelInput::Update(p)),
             StrategyProgressData::NoObjectiveStarter(p) => self
                 .no_objective_starter_panel
                 .emit(NoObjectiveStarterPanelInput::Update(p)),

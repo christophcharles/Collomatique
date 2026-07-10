@@ -18,7 +18,7 @@ pub struct SerializedIlpProblem {
 pub struct IlpSolveRequest {
     pub problem_desc: collomatique_ilp::ProblemDesc,
     pub warm_start: Option<Vec<f64>>,
-    pub time_limit_seconds: Option<u32>,
+    pub time_limit: collomatique_time::TimeLimit,
     pub disable_logging: bool,
 }
 

@@ -120,13 +120,13 @@ enum PanelNumbers {
     WeekPatterns = 3,
     Slots = 4,
     SlotPairings = 5,
-    Incompats = 6,
-    Students = 7,
-    Assignments = 8,
-    GroupLists = 9,
-    Pairings = 10,
-    Balancing = 11,
-    ExtraSettings = 12,
+    Pairings = 6,
+    Incompats = 7,
+    Students = 8,
+    Assignments = 9,
+    GroupLists = 10,
+    ExtraSettings = 11,
+    Balancing = 12,
     Colloscope = 13,
     Export = 14,
 }
@@ -140,13 +140,13 @@ impl PanelNumbers {
             PanelNumbers::WeekPatterns,
             PanelNumbers::Slots,
             PanelNumbers::SlotPairings,
+            PanelNumbers::Pairings,
             PanelNumbers::Incompats,
             PanelNumbers::Students,
             PanelNumbers::Assignments,
             PanelNumbers::GroupLists,
-            PanelNumbers::Pairings,
-            PanelNumbers::Balancing,
             PanelNumbers::ExtraSettings,
+            PanelNumbers::Balancing,
             PanelNumbers::Colloscope,
             PanelNumbers::Export,
         ]
@@ -186,8 +186,8 @@ impl PanelNumbers {
             PanelNumbers::Incompats => "Incompatibilités horaires",
             PanelNumbers::GroupLists => "Groupes de colles",
             PanelNumbers::Pairings => "Appariements des matières",
-            PanelNumbers::Balancing => "Équilibrage",
-            PanelNumbers::ExtraSettings => "Paramètres supplémentaires",
+            PanelNumbers::Balancing => "Équilibrage des colles",
+            PanelNumbers::ExtraSettings => "Paramètres par élève",
             PanelNumbers::Colloscope => "Colloscope",
             PanelNumbers::Export => "Exporter",
         }
@@ -940,6 +940,10 @@ impl Component for EditorPanel {
                 self.dirty = dirty;
                 self.show_particular_panel = Some(PanelNumbers::GeneralPlanning);
                 self.update_data(DataUpdate::Replace(AppState::new(data)));
+                self.colloscope
+                    .sender()
+                    .send(colloscope::ColloscopeInput::ResetSolveConfig)
+                    .unwrap();
                 self.send_msg_for_interface_update(sender);
             }
             EditorInput::SaveClicked => match &self.file_name {

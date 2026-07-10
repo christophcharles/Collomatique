@@ -1168,6 +1168,104 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Problem<V, C, P> {
 
         output
     }
+
+    /// Produce a new problem keeping only some constraints, variables and
+    /// objective terms.
+    ///
+    /// Each of the problem's three parts is filtered by its own predicate,
+    /// independently and literally — **nothing is auto-pruned**:
+    /// - a constraint is kept when `keep_constraint(&constraint, &desc)` is `true`;
+    /// - a variable is kept when `keep_variable(&var)` is `true`;
+    /// - an objective term is kept when `keep_obj_term(&var)` is `true` (dropped
+    ///   terms are effectively set to zero).
+    ///
+    /// The result is reassembled with [`ProblemBuilder::build`], whose existing
+    /// consistency check is the only guard: if a kept constraint or a kept
+    /// objective term references a variable that was *not* kept, this returns
+    /// [`BuildError::UndeclaredVariableInConstraint`] /
+    /// [`BuildError::UndeclaredVariableInObjFunc`]. In other words, the caller
+    /// is free to remove whatever they like as long as the result is
+    /// consistent, and inconsistency is reported rather than silently repaired.
+    pub fn filter<FC, FV, FO>(
+        &self,
+        mut keep_constraint: FC,
+        mut keep_variable: FV,
+        keep_obj_term: FO,
+    ) -> BuildResult<Problem<V, C, P>, V, C>
+    where
+        FC: FnMut(&Constraint<V>, &C) -> bool,
+        FV: FnMut(&V) -> bool,
+        FO: FnMut(&V) -> bool,
+    {
+        let kept_constraints: Vec<(Constraint<V>, C)> = self
+            .constraints
+            .iter()
+            .filter(|(c, desc)| keep_constraint(c, desc))
+            .cloned()
+            .collect();
+
+        let variables: HashMap<V, Variable> = self
+            .variables
+            .iter()
+            .filter(|(v, _)| keep_variable(v))
+            .map(|(v, kind)| (v.clone(), kind.clone()))
+            .collect();
+
+        let objective = self.objective.retained(keep_obj_term);
+
+        let builder: ProblemBuilder<V, C, P> = ProblemBuilder::new()
+            .set_variables(variables)
+            .add_constraints(kept_constraints)
+            .set_objective(objective);
+        builder.build()
+    }
+
+    /// Produce a new problem mapping *both* its variables and its constraint
+    /// descriptions through user-provided functions, keeping the same shape.
+    ///
+    /// This is the constraint-desc-aware counterpart to [`Constraint::transmute`]
+    /// / [`Objective::transmute`]: `var_fn` renames every variable (in the
+    /// variable set, the constraints and the objective) and `desc_fn` rewrites
+    /// every constraint description. It is the shared primitive behind the
+    /// "rebuild a problem in a wrapped variable/description space" pattern used
+    /// by the incremental and closest-solution strategies.
+    ///
+    /// The result is reassembled with [`ProblemBuilder::build`]; because
+    /// `var_fn` need not be injective, colliding renames are reported as a
+    /// [`BuildError`] rather than silently merged (same contract as [`filter`]).
+    ///
+    /// [`filter`]: Problem::filter
+    pub fn transmute<V2, C2, FV, FC>(
+        &self,
+        mut var_fn: FV,
+        mut desc_fn: FC,
+    ) -> BuildResult<Problem<V2, C2>, V2, C2>
+    where
+        V2: UsableData,
+        C2: UsableData,
+        FV: FnMut(&V) -> V2,
+        FC: FnMut(&C) -> C2,
+    {
+        let variables: HashMap<V2, Variable> = self
+            .variables
+            .iter()
+            .map(|(v, kind)| (var_fn(v), kind.clone()))
+            .collect();
+
+        let constraints: Vec<(Constraint<V2>, C2)> = self
+            .constraints
+            .iter()
+            .map(|(c, desc)| (c.transmute(&mut var_fn), desc_fn(desc)))
+            .collect();
+
+        let objective = self.objective.transmute(&mut var_fn);
+
+        ProblemBuilder::new()
+            .set_variables(variables)
+            .add_constraints(constraints)
+            .set_objective(objective)
+            .build()
+    }
 }
 
 /// Report on confirmity between configuration data and an ILP problem
@@ -1664,6 +1762,64 @@ impl<V: UsableData> ConfigData<V> {
         }
 
         Some(ConfigData { values: new_values })
+    }
+
+    /// Transmutes and filters variables at once
+    ///
+    /// Works like [ConfigData::transmute], but the closure returns an `Option`: a variable
+    /// for which it returns `Some(new_name)` is renamed and kept, and a variable for which
+    /// it returns `None` is dropped. Unlike [ConfigData::try_transmute], a `None` does not
+    /// abort the whole operation — it removes just that one variable.
+    ///
+    /// For instance:
+    /// ```
+    /// # use collomatique_ilp::ConfigData;
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    /// enum V1 {
+    ///     A,
+    ///     B,
+    ///     C,
+    /// }
+    ///
+    /// let config_data = ConfigData::new()
+    ///     .set(V1::A, 1.0)
+    ///     .set(V1::B, 0.0)
+    ///     .set(V1::C, 0.5);
+    ///
+    /// #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+    /// enum V2 {
+    ///     A,
+    ///     B,
+    ///     D,
+    ///     E,
+    ///     F,
+    /// }
+    ///
+    /// // A and B are kept (and renamed), C is dropped
+    /// let config_data_filtered = config_data.filter_transmute(|v| match v {
+    ///     V1::A => Some(V2::A),
+    ///     V1::B => Some(V2::B),
+    ///     V1::C => None,
+    /// });
+    ///
+    /// let expected_result = ConfigData::new()
+    ///     .set(V2::A, 1.0)
+    ///     .set(V2::B, 0.0);
+    /// assert_eq!(config_data_filtered, expected_result);
+    /// ```
+    pub fn filter_transmute<U: UsableData, F: FnMut(&V) -> Option<U>>(
+        &self,
+        mut f: F,
+    ) -> ConfigData<U> {
+        let mut new_values = HashMap::new();
+
+        for (var, value) in &self.values {
+            if let Some(new_var) = f(var) {
+                new_values.insert(new_var, *value);
+            }
+        }
+
+        ConfigData { values: new_values }
     }
 }
 

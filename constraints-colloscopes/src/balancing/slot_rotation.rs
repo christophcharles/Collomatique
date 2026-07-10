@@ -1,6 +1,7 @@
 use crate::extras::{MyBundle, subject_interrogation_params};
 use crate::helpers::{
-    enrolled_students_for_subject, last_global_week, merge_objectified, slot_week_pairs_for_subject,
+    count_interrogations_expr, enrolled_students_for_subject, last_global_week,
+    merge_objectified_weighted, slot_week_pairs_for_subject,
 };
 use crate::ids::GlobalWeek;
 use crate::types::{ExtraVarName, PreferenceConstraint};
@@ -47,63 +48,114 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
             continue;
         }
 
-        let windows = generate_windows(&active_weeks, last_week, &params.periodicity);
-        if windows.is_empty() {
-            continue;
-        }
-
         let enrolled = enrolled_students_for_subject(env, *subject_id);
         let Some(subject_slots) = env.slots.subject_map.get(subject_id) else {
             continue;
         };
 
-        let mut hard_bundle = MyBundle::new();
-        let mut soft_bundle = MyBundle::new();
-
-        for (first_week, last_week, nb_interr) in &windows {
-            let ntot = slot_weeks_in_range(&slot_week_pairs, *first_week, *last_week);
-            if ntot == 0 {
-                continue;
-            }
-
-            for (slot_id, _slot_data) in &subject_slots.ordered_slots {
-                let slot_pairs = slot_week_pairs_for_slot(&slot_week_pairs, *slot_id);
-                let ns = slot_weeks_in_range(&slot_pairs, *first_week, *last_week);
-                let max_count =
-                    ((ns as u64) * (*nb_interr as u64) + (ntot as u64) - 1) / (ntot as u64);
-                let max_count = max_count as u32;
-
-                for &student in &enrolled {
-                    let count =
-                        count_student_teacher_expr(&slot_pairs, student, *first_week, *last_week);
-                    let constraint = count.leq(&IntLinExpr::constant(i64::from(max_count)));
-                    let desc = PreferenceConstraint::BalancingSlotRotation {
-                        student,
-                        subject: *subject_id,
-                        slot: *slot_id,
-                        first_week: *first_week,
-                        last_week: *last_week,
-                        max_count,
+        if is_soft {
+            // Soft path: cumulative availability-proportional balance, per
+            // (student, slot). For each prefix boundary week `wᵢ`, the share of the
+            // student's interrogations that go to this slot should match the slot's
+            // share of the *available* slot-weeks up to `wᵢ`: `Uₛ/U == Aₛ/A`, cleared
+            // to `A·Uₛ − Aₛ·U == 0`. Only weeks `0..=i-1` appear, so — objectified on
+            // its own into a penalty keyed by `{subject, student, slot, wᵢ}` — the
+            // footprint ends at `wᵢ` and enters the incremental objective when that
+            // week's epoch completes. See rotation.rs for the full rationale.
+            let n = active_weeks.len();
+            if n >= 2 {
+                for (slot_id, _slot_data) in &subject_slots.ordered_slots {
+                    let slot_pairs = slot_week_pairs_for_slot(&slot_week_pairs, *slot_id);
+                    for &student in &enrolled {
+                        for i in 1..=n {
+                            let week = active_weeks[i - 1];
+                            let a =
+                                slot_weeks_in_range(&slot_week_pairs, active_weeks[0], week) as i64;
+                            let a_s =
+                                slot_weeks_in_range(&slot_pairs, active_weeks[0], week) as i64;
+                            if a == 0 || a_s == 0 {
+                                // `a_s == 0` ⇒ `Uₛ ≡ 0` ⇒ constraint is trivially `0 == 0`.
+                                continue;
+                            }
+                            let u = count_interrogations_expr(
+                                &slot_week_pairs,
+                                student,
+                                active_weeks[0],
+                                week,
+                            );
+                            let u_s = count_student_teacher_expr(
+                                &slot_pairs,
+                                student,
+                                active_weeks[0],
+                                week,
+                            );
+                            let lhs = a * &u_s - a_s * &u;
+                            let constraint = lhs.eq(&IntLinExpr::constant(0));
+                            let desc = PreferenceConstraint::BalancingSlotRotationRegularity {
+                                student,
+                                subject: *subject_id,
+                                slot: *slot_id,
+                                week,
+                            }
+                            .into();
+                            let weight = crate::weights::BASE / (n as f64 * a as f64);
+                            output = merge_objectified_weighted(
+                                output,
+                                MyBundle::new().with_constraint(constraint, desc),
+                                ExtraVarName::BalancingSlotRotationPenalty {
+                                    subject: *subject_id,
+                                    student,
+                                    slot: *slot_id,
+                                    week,
+                                },
+                                move |_desc| weight,
+                            );
+                        }
                     }
-                    .into();
-                    if is_soft {
-                        soft_bundle = soft_bundle.with_constraint(constraint, desc);
-                    } else {
+                }
+            }
+        } else {
+            // Hard path: periodicity-based density upper-bound windows (unchanged).
+            let mut hard_bundle = MyBundle::new();
+            let windows = generate_windows(&active_weeks, last_week, &params.periodicity);
+            for (first_week, last_week, nb_interr) in &windows {
+                let ntot = slot_weeks_in_range(&slot_week_pairs, *first_week, *last_week);
+                if ntot == 0 {
+                    continue;
+                }
+
+                for (slot_id, _slot_data) in &subject_slots.ordered_slots {
+                    let slot_pairs = slot_week_pairs_for_slot(&slot_week_pairs, *slot_id);
+                    let ns = slot_weeks_in_range(&slot_pairs, *first_week, *last_week);
+                    let max_count =
+                        ((ns as u64) * (*nb_interr as u64) + (ntot as u64) - 1) / (ntot as u64);
+                    let max_count = max_count as u32;
+
+                    for &student in &enrolled {
+                        let count = count_student_teacher_expr(
+                            &slot_pairs,
+                            student,
+                            *first_week,
+                            *last_week,
+                        );
+                        let constraint = count.leq(&IntLinExpr::constant(i64::from(max_count)));
+                        let desc = PreferenceConstraint::BalancingSlotRotation {
+                            student,
+                            subject: *subject_id,
+                            slot: *slot_id,
+                            first_week: *first_week,
+                            last_week: *last_week,
+                            max_count,
+                        }
+                        .into();
                         hard_bundle = hard_bundle.with_constraint(constraint, desc);
                     }
                 }
             }
+            output = output
+                .merge(hard_bundle)
+                .expect("no duplicate extras from balancing slot rotation (distinct subjects)");
         }
-
-        output = output
-            .merge(merge_objectified(
-                hard_bundle,
-                soft_bundle,
-                ExtraVarName::BalancingSlotRotationPenalty {
-                    subject: *subject_id,
-                },
-            ))
-            .expect("no duplicate extras from balancing slot rotation (distinct subjects)");
     }
 
     output

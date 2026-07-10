@@ -16,6 +16,7 @@ collomatique-ilp-modeler = { path = "../ilp-modeler", features = ["serde"] }
 collomatique-sqlite-state = { path = "../sqlite-state" }
 collomatique-strategies = { path = "../strategies" }
 collomatique-subprocesses = { path = "../subprocesses" }
+collomatique-time = { path = "../time" }
 ordered-float.workspace = true
 anyhow.workspace = true
 tokio = { workspace = true, features = ["rt", "rt-multi-thread"] }

@@ -52,33 +52,43 @@ pub enum ExtraVarName {
     },
     PairingsPenalty {
         rule: PairingRuleId,
+        student: StudentId,
+        week: GlobalWeek,
     },
     SlotPairingsPenalty {
         rule: SlotPairingRuleId,
+        week: GlobalWeek,
     },
-    LimitsMaxPerDayPenalty,
-    LimitsMaxPerWeekPenalty,
-    LimitsMinPerWeekPenalty,
+    LimitsMaxPerDayPenalty {
+        student: StudentId,
+        week: GlobalWeek,
+        day: collomatique_time::Weekday,
+    },
+    LimitsMaxPerWeekPenalty {
+        student: StudentId,
+        week: GlobalWeek,
+    },
+    LimitsMinPerWeekPenalty {
+        student: StudentId,
+        week: GlobalWeek,
+    },
     IsLastTeacherSeen {
         subject: SubjectId,
         student: StudentId,
         teacher: TeacherId,
         week: GlobalWeek,
     },
-    BalancingAvoidTwiceInARowPenalty {
-        subject: SubjectId,
-    },
-    BalancingYearRotationPenalty {
-        subject: SubjectId,
-    },
     BalancingRotationPenalty {
         subject: SubjectId,
+        student: StudentId,
+        teacher: TeacherId,
+        week: GlobalWeek,
     },
     BalancingSlotRotationPenalty {
         subject: SubjectId,
-    },
-    BalancingPeriodRotationPenalty {
-        subject: SubjectId,
+        student: StudentId,
+        slot: SlotId,
+        week: GlobalWeek,
     },
 }
 
@@ -291,6 +301,15 @@ pub enum PreferenceConstraint {
         last_week: GlobalWeek,
         max_count: u32,
     },
+    /// Soft L1-regularity term: the student's cumulative count of interrogations
+    /// with `teacher` through `week` should track the ideal linear ramp. One per
+    /// (student, subject, teacher, prefix-boundary week).
+    BalancingRotationRegularity {
+        student: StudentId,
+        subject: SubjectId,
+        teacher: TeacherId,
+        week: GlobalWeek,
+    },
     BalancingSlotRotation {
         student: StudentId,
         subject: SubjectId,
@@ -298,6 +317,15 @@ pub enum PreferenceConstraint {
         first_week: GlobalWeek,
         last_week: GlobalWeek,
         max_count: u32,
+    },
+    /// Soft L1-regularity term for slot rotation: the student's cumulative count
+    /// of interrogations in `slot` through `week` should track the ideal linear
+    /// ramp. One per (student, subject, slot, prefix-boundary week).
+    BalancingSlotRotationRegularity {
+        student: StudentId,
+        subject: SubjectId,
+        slot: SlotId,
+        week: GlobalWeek,
     },
     BalancingPeriodRotation {
         student: StudentId,

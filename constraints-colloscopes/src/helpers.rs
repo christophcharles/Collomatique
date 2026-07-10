@@ -1,6 +1,6 @@
 use crate::extras::{MyBundle, V, extra_var, weeks_for_slot};
 use crate::ids::GlobalWeek;
-use crate::types::ExtraVarName;
+use crate::types::{ConstraintDesc, ExtraVarName};
 use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::ids::{PeriodId, SlotId, StudentId, SubjectId};
@@ -80,12 +80,24 @@ pub(crate) fn last_global_week(env: &VarEnv) -> GlobalWeek {
     GlobalWeek(total.saturating_sub(1))
 }
 
-pub(crate) fn merge_objectified(
+/// Objectify a soft bundle as a plain weighted sum and merge it in.
+///
+/// Emits `Σ wᵢ·λᵢ` where each `λᵢ` bounds one constraint's violation and `wᵢ`
+/// is `weight_fn` applied to that constraint's [`ConstraintDesc`]. There is no
+/// `1/n` normalization and no global `L∞` bound: the penalty's footprint stays
+/// confined to each constraint's own variables, which is what lets the
+/// incremental strategy pick the terms up epoch by epoch (a global `L∞` bound
+/// would span every constraint and only enter at the final epoch). Every soft
+/// family uses this — the balancing terms weight each `λᵢ` by `BASE/n`, the
+/// limits/pairings terms by a flat `BASE` per violation. An empty soft bundle
+/// contributes nothing (`Err → bundle unchanged`).
+pub(crate) fn merge_objectified_weighted(
     bundle: MyBundle,
     soft_bundle: MyBundle,
     penalty_var: ExtraVarName,
+    weight_fn: impl Fn(&ConstraintDesc) -> f64,
 ) -> MyBundle {
-    match soft_bundle.objectify_with_coef(penalty_var, 1.0) {
+    match soft_bundle.objectify_weighted_sum(penalty_var, weight_fn) {
         Ok(objectified) => bundle
             .merge(objectified)
             .expect("no duplicate extras from objectification"),

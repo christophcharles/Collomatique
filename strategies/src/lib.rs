@@ -1,18 +1,25 @@
 mod strategies;
 
 pub use strategies::conductor::{
-    ConductorProgress, ConductorProgressData, ConductorStatus, ConductorStatusData,
-    ConductorStrategy, ConductorWarning, FuzzyConfig, Solution, SolutionData, update_best_bound,
-    update_best_solution,
+    ConductorPayload, ConductorPayloadData, ConductorProgress, ConductorProgressData,
+    ConductorStatus, ConductorStatusData, ConductorStrategy, ConductorWarning, DefaultConfig,
+    FuzzyConfig, IncrementalConfig, OPTIMALITY_GAP_EPS, Solution, SolutionData, WarmStartConfig,
+    update_best_bound, update_best_solution,
 };
-pub use strategies::default::DefaultStrategy;
-pub use strategies::find_closest::{FindClosestProgressData, FindClosestStrategy};
-pub use strategies::fuzzy::{FuzzyProgressData, FuzzyStrategy};
+pub use strategies::default::{DefaultPayload, DefaultStrategy};
+pub use strategies::find_closest::{
+    FindClosestPayload, FindClosestPayloadData, FindClosestProgressData, FindClosestStrategy,
+};
+pub use strategies::fuzzy::{FuzzyPayload, FuzzyPayloadData, FuzzyProgressData, FuzzyStrategy};
+pub use strategies::incremental::{
+    IncrementalPayload, IncrementalPayloadData, IncrementalProgressData, IncrementalStrategy,
+};
 pub use strategies::no_objective::{
-    NoObjectiveProgressData, NoObjectiveSolveProgress, NoObjectiveStrategy,
+    NoObjectivePayload, NoObjectiveProgressData, NoObjectiveSolveProgress, NoObjectiveStrategy,
 };
 pub use strategies::no_objective_starter::{
-    NoObjectiveStarterProgress, NoObjectiveStarterProgressData, NoObjectiveStarterStrategy,
+    NoObjectiveStarterPayload, NoObjectiveStarterProgress, NoObjectiveStarterProgressData,
+    NoObjectiveStarterStrategy,
 };
 
 use std::convert::Infallible;
@@ -37,13 +44,13 @@ pub enum SolveStatus {
 
 pub struct SolveConfig {
     pub warm_start: Option<Vec<f64>>,
-    pub time_limit_seconds: Option<u32>,
+    pub time_limit: collomatique_time::TimeLimit,
     pub disable_logging: bool,
 }
 
 pub struct SolveProblemOpts<V: UsableData> {
     pub warm_start: Option<ConfigData<V>>,
-    pub time_limit_seconds: Option<u32>,
+    pub time_limit: collomatique_time::TimeLimit,
     pub disable_logging: bool,
 }
 
@@ -217,6 +224,7 @@ pub trait SolveBackend: Send + Sync {
         model_desc: &ModelDesc,
         strategy: &StrategyKind,
         warm_start: Option<Vec<f64>>,
+        payload: StrategyPayloadData,
         on_progress: &(dyn Fn(StrategyProgressData) -> bool + Send + Sync),
         on_echo: &(dyn Fn(String) + Send + Sync),
     ) -> Result<RawSolveOutcome, StrategyError>;
@@ -326,7 +334,7 @@ impl StrategyContext {
 
         let solve_config = SolveConfig {
             warm_start,
-            time_limit_seconds: opts.time_limit_seconds,
+            time_limit: opts.time_limit,
             disable_logging: opts.disable_logging,
         };
 
@@ -361,7 +369,7 @@ impl StrategyContext {
 
         let solve_config = SolveConfig {
             warm_start,
-            time_limit_seconds: opts.time_limit_seconds,
+            time_limit: opts.time_limit,
             disable_logging: opts.disable_logging,
         };
 
@@ -379,6 +387,9 @@ impl StrategyContext {
 #[async_trait]
 pub trait Strategy: Send + Sync {
     type Progress<V: UsableData + Send>: Send + Sync + Clone;
+    /// Per-run payload carrying data specific to *this* problem instance (as opposed to the
+    /// strategy's own configuration). Empty (`*Payload`) for strategies that need none.
+    type Payload<V: UsableData + Send>: Send + Sync + Clone;
 
     fn name(&self) -> &'static str;
 
@@ -390,6 +401,7 @@ pub trait Strategy: Send + Sync {
         ctx: &StrategyContext,
         model: &Model<B, E, C>,
         warm_start: Option<ConfigData<InternalVar<B, E>>>,
+        payload: Self::Payload<InternalVar<B, E>>,
         on_progress: &(dyn Fn(Self::Progress<InternalVar<B, E>>) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
@@ -401,13 +413,15 @@ pub trait Strategy: Send + Sync {
         &self,
         ctx: &StrategyContext,
         model: &Model<B, E, C>,
+        payload: Self::Payload<InternalVar<B, E>>,
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
         B: UsableData + Send,
         E: UsableData + Send,
         C: UsableData + Send,
     {
-        self.run_with_callback(ctx, model, None, &|_| true).await
+        self.run_with_callback(ctx, model, None, payload, &|_| true)
+            .await
     }
 }
 
@@ -418,6 +432,7 @@ pub enum StrategyKind {
     NoObjectiveStarter(NoObjectiveStarterStrategy),
     FindClosest(FindClosestStrategy),
     Fuzzy(FuzzyStrategy),
+    Incremental(IncrementalStrategy),
     Conductor(ConductorStrategy),
 }
 
@@ -425,7 +440,7 @@ pub enum StrategyKind {
 /// parameterized by the model's `var_order` (used to encode/decode incumbents as
 /// column-indexed `Vec<f64>`). Implemented by every progress type; [`StrategyProgress<V>`]
 /// implements it by delegating to its sub-progress types.
-pub trait SerializableProgress<V: UsableData + Send>: Sized {
+pub trait VarOrderSerializable<V: UsableData + Send>: Sized {
     type Data: serde::Serialize + serde::de::DeserializeOwned;
     type Error;
 
@@ -447,7 +462,7 @@ pub trait StrategyProgressVariant<V: UsableData + Send>: Sized {
 ///
 /// Not serializable by design (mirrors the per-strategy typed/erased split). The
 /// serializable counterpart is [`StrategyProgressData`]; convert via the
-/// [`SerializableProgress`] impl.
+/// [`VarOrderSerializable`] impl.
 #[derive(Debug, Clone)]
 pub enum StrategyProgress<V: UsableData + Send> {
     Default(SolveProgress<V>),
@@ -455,6 +470,7 @@ pub enum StrategyProgress<V: UsableData + Send> {
     NoObjectiveStarter(NoObjectiveStarterProgress<V>),
     FindClosest(FindClosestProgressData),
     Fuzzy(FuzzyProgressData),
+    Incremental(IncrementalProgressData),
     Conductor(ConductorProgress<V>),
 }
 
@@ -466,6 +482,7 @@ impl<V: UsableData + Send> fmt::Display for StrategyProgress<V> {
             StrategyProgress::NoObjectiveStarter(p) => write!(f, "{p}"),
             StrategyProgress::FindClosest(p) => write!(f, "{p}"),
             StrategyProgress::Fuzzy(p) => write!(f, "{p}"),
+            StrategyProgress::Incremental(p) => write!(f, "{p}"),
             StrategyProgress::Conductor(p) => write!(f, "{p}"),
         }
     }
@@ -503,6 +520,12 @@ impl<V: UsableData + Send> From<FuzzyProgressData> for StrategyProgress<V> {
     }
 }
 
+impl<V: UsableData + Send> From<IncrementalProgressData> for StrategyProgress<V> {
+    fn from(p: IncrementalProgressData) -> Self {
+        StrategyProgress::Incremental(p)
+    }
+}
+
 impl<V: UsableData + Send> From<ConductorProgress<V>> for StrategyProgress<V> {
     fn from(p: ConductorProgress<V>) -> Self {
         StrategyProgress::Conductor(p)
@@ -511,7 +534,7 @@ impl<V: UsableData + Send> From<ConductorProgress<V>> for StrategyProgress<V> {
 
 /// Serializable, type-erased union of every strategy's progress. This is the only progress
 /// form that crosses the IPC barrier; reconstruct the typed [`StrategyProgress<V>`] with
-/// [`SerializableProgress::from_data`] once a `var_order` is available.
+/// [`VarOrderSerializable::from_data`] once a `var_order` is available.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum StrategyProgressData {
     Default(SolveProgressData),
@@ -519,6 +542,7 @@ pub enum StrategyProgressData {
     NoObjectiveStarter(NoObjectiveStarterProgressData),
     FindClosest(FindClosestProgressData),
     Fuzzy(FuzzyProgressData),
+    Incremental(IncrementalProgressData),
     Conductor(ConductorProgressData),
 }
 
@@ -530,6 +554,7 @@ impl fmt::Display for StrategyProgressData {
             StrategyProgressData::NoObjectiveStarter(p) => write!(f, "{p}"),
             StrategyProgressData::FindClosest(p) => write!(f, "{p}"),
             StrategyProgressData::Fuzzy(p) => write!(f, "{p}"),
+            StrategyProgressData::Incremental(p) => write!(f, "{p}"),
             StrategyProgressData::Conductor(p) => write!(f, "{p}"),
         }
     }
@@ -548,7 +573,166 @@ impl StrategyProgressData {
     }
 }
 
-impl<V: UsableData + Send> SerializableProgress<V> for SolveProgress<V> {
+/// Typed union of every strategy's per-run payload, carrying real target configs as
+/// `ConfigData<V>`.
+///
+/// Mirrors [`StrategyProgress<V>`] but flows parent → subprocess. Not serializable by design
+/// (the target configs are only serializable when `V` is); the serializable counterpart is
+/// [`StrategyPayloadData`], reached via the [`VarOrderSerializable`] impl.
+#[derive(Debug, Clone)]
+pub enum StrategyPayload<V: UsableData + Send> {
+    Default(DefaultPayload),
+    NoObjective(NoObjectivePayload),
+    NoObjectiveStarter(NoObjectiveStarterPayload),
+    FindClosest(FindClosestPayload<V>),
+    Fuzzy(FuzzyPayload<V>),
+    Incremental(IncrementalPayload<V>),
+    Conductor(ConductorPayload<V>),
+}
+
+/// Serializable, type-erased union of every strategy's per-run payload — the only payload form
+/// that crosses the IPC barrier. Target configs are erased to column-indexed `Vec<f64>`;
+/// reconstruct the typed [`StrategyPayload<V>`] with [`VarOrderSerializable::from_data`] once a
+/// `var_order` is available.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum StrategyPayloadData {
+    Default(DefaultPayload),
+    NoObjective(NoObjectivePayload),
+    NoObjectiveStarter(NoObjectiveStarterPayload),
+    FindClosest(FindClosestPayloadData),
+    Fuzzy(FuzzyPayloadData),
+    Incremental(IncrementalPayloadData),
+    Conductor(ConductorPayloadData),
+}
+
+impl StrategyPayloadData {
+    pub fn serialize(&self) -> String {
+        serde_json::to_string(self).expect("Serialization of StrategyPayloadData should never fail")
+    }
+
+    pub fn deserialize(s: &str) -> Result<Self, StrategyError> {
+        serde_json::from_str(s).map_err(|e| {
+            StrategyError::Other(format!("failed to deserialize StrategyPayloadData: {e}"))
+        })
+    }
+}
+
+// Lift each strategy's own payload into the typed union, so the spawnable-strategy machinery can
+// erase any strategy's payload via `Into<StrategyPayload>` (mirrors the progress `From` impls).
+impl<V: UsableData + Send> From<DefaultPayload> for StrategyPayload<V> {
+    fn from(p: DefaultPayload) -> Self {
+        StrategyPayload::Default(p)
+    }
+}
+impl<V: UsableData + Send> From<NoObjectivePayload> for StrategyPayload<V> {
+    fn from(p: NoObjectivePayload) -> Self {
+        StrategyPayload::NoObjective(p)
+    }
+}
+impl<V: UsableData + Send> From<NoObjectiveStarterPayload> for StrategyPayload<V> {
+    fn from(p: NoObjectiveStarterPayload) -> Self {
+        StrategyPayload::NoObjectiveStarter(p)
+    }
+}
+impl<V: UsableData + Send> From<FindClosestPayload<V>> for StrategyPayload<V> {
+    fn from(p: FindClosestPayload<V>) -> Self {
+        StrategyPayload::FindClosest(p)
+    }
+}
+impl<V: UsableData + Send> From<FuzzyPayload<V>> for StrategyPayload<V> {
+    fn from(p: FuzzyPayload<V>) -> Self {
+        StrategyPayload::Fuzzy(p)
+    }
+}
+impl<V: UsableData + Send> From<IncrementalPayload<V>> for StrategyPayload<V> {
+    fn from(p: IncrementalPayload<V>) -> Self {
+        StrategyPayload::Incremental(p)
+    }
+}
+impl<V: UsableData + Send> From<ConductorPayload<V>> for StrategyPayload<V> {
+    fn from(p: ConductorPayload<V>) -> Self {
+        StrategyPayload::Conductor(p)
+    }
+}
+
+impl<V: UsableData + Send> VarOrderSerializable<V> for StrategyPayload<V> {
+    type Data = StrategyPayloadData;
+    type Error = Infallible;
+    fn into_data(&self, var_order: &[V]) -> Result<StrategyPayloadData, Infallible> {
+        Ok(match self {
+            StrategyPayload::Default(p) => {
+                StrategyPayloadData::Default(VarOrderSerializable::into_data(p, var_order)?)
+            }
+            StrategyPayload::NoObjective(p) => {
+                StrategyPayloadData::NoObjective(VarOrderSerializable::into_data(p, var_order)?)
+            }
+            StrategyPayload::NoObjectiveStarter(p) => StrategyPayloadData::NoObjectiveStarter(
+                VarOrderSerializable::into_data(p, var_order)?,
+            ),
+            StrategyPayload::FindClosest(p) => {
+                StrategyPayloadData::FindClosest(VarOrderSerializable::into_data(p, var_order)?)
+            }
+            StrategyPayload::Fuzzy(p) => {
+                StrategyPayloadData::Fuzzy(VarOrderSerializable::into_data(p, var_order)?)
+            }
+            StrategyPayload::Incremental(p) => {
+                StrategyPayloadData::Incremental(VarOrderSerializable::into_data(p, var_order)?)
+            }
+            StrategyPayload::Conductor(p) => {
+                StrategyPayloadData::Conductor(VarOrderSerializable::into_data(p, var_order)?)
+            }
+        })
+    }
+    fn from_data(data: &StrategyPayloadData, var_order: &[V]) -> Result<Self, Infallible> {
+        Ok(match data {
+            StrategyPayloadData::Default(d) => StrategyPayload::Default(
+                <DefaultPayload as VarOrderSerializable<V>>::from_data(d, var_order)?,
+            ),
+            StrategyPayloadData::NoObjective(d) => StrategyPayload::NoObjective(
+                <NoObjectivePayload as VarOrderSerializable<V>>::from_data(d, var_order)?,
+            ),
+            StrategyPayloadData::NoObjectiveStarter(d) => StrategyPayload::NoObjectiveStarter(
+                <NoObjectiveStarterPayload as VarOrderSerializable<V>>::from_data(d, var_order)?,
+            ),
+            StrategyPayloadData::FindClosest(d) => StrategyPayload::FindClosest(
+                <FindClosestPayload<V> as VarOrderSerializable<V>>::from_data(d, var_order)?,
+            ),
+            StrategyPayloadData::Fuzzy(d) => StrategyPayload::Fuzzy(
+                <FuzzyPayload<V> as VarOrderSerializable<V>>::from_data(d, var_order)?,
+            ),
+            StrategyPayloadData::Incremental(d) => StrategyPayload::Incremental(
+                <IncrementalPayload<V> as VarOrderSerializable<V>>::from_data(d, var_order)?,
+            ),
+            StrategyPayloadData::Conductor(d) => StrategyPayload::Conductor(
+                <ConductorPayload<V> as VarOrderSerializable<V>>::from_data(d, var_order)?,
+            ),
+        })
+    }
+}
+
+impl StrategyKind {
+    /// The empty payload for strategies that need none (`Default`, `NoObjective`,
+    /// `NoObjectiveStarter`, `Conductor`). Returns `None` for `Fuzzy`/`FindClosest`/`Incremental`,
+    /// which require a target config or an epoch assignment and must have their payload built
+    /// explicitly.
+    pub fn empty_payload<V: UsableData + Send>(&self) -> Option<StrategyPayload<V>> {
+        match self {
+            StrategyKind::Default(_) => Some(StrategyPayload::Default(DefaultPayload)),
+            StrategyKind::NoObjective(_) => Some(StrategyPayload::NoObjective(NoObjectivePayload)),
+            StrategyKind::NoObjectiveStarter(_) => Some(StrategyPayload::NoObjectiveStarter(
+                NoObjectiveStarterPayload,
+            )),
+            StrategyKind::Conductor(_) => {
+                Some(StrategyPayload::Conductor(ConductorPayload::default()))
+            }
+            StrategyKind::FindClosest(_)
+            | StrategyKind::Fuzzy(_)
+            | StrategyKind::Incremental(_) => None,
+        }
+    }
+}
+
+impl<V: UsableData + Send> VarOrderSerializable<V> for SolveProgress<V> {
     type Data = SolveProgressData;
     type Error = Infallible;
     fn into_data(&self, var_order: &[V]) -> Result<SolveProgressData, Infallible> {
@@ -559,7 +743,7 @@ impl<V: UsableData + Send> SerializableProgress<V> for SolveProgress<V> {
     }
 }
 
-impl<V: UsableData + Send> SerializableProgress<V> for NoObjectiveProgressData {
+impl<V: UsableData + Send> VarOrderSerializable<V> for NoObjectiveProgressData {
     type Data = NoObjectiveProgressData;
     type Error = Infallible;
     fn into_data(&self, _var_order: &[V]) -> Result<NoObjectiveProgressData, Infallible> {
@@ -570,7 +754,7 @@ impl<V: UsableData + Send> SerializableProgress<V> for NoObjectiveProgressData {
     }
 }
 
-impl<V: UsableData + Send> SerializableProgress<V> for FindClosestProgressData {
+impl<V: UsableData + Send> VarOrderSerializable<V> for FindClosestProgressData {
     type Data = FindClosestProgressData;
     type Error = Infallible;
     fn into_data(&self, _var_order: &[V]) -> Result<FindClosestProgressData, Infallible> {
@@ -581,7 +765,7 @@ impl<V: UsableData + Send> SerializableProgress<V> for FindClosestProgressData {
     }
 }
 
-impl<V: UsableData + Send> SerializableProgress<V> for FuzzyProgressData {
+impl<V: UsableData + Send> VarOrderSerializable<V> for FuzzyProgressData {
     type Data = FuzzyProgressData;
     type Error = Infallible;
     fn into_data(&self, _var_order: &[V]) -> Result<FuzzyProgressData, Infallible> {
@@ -592,56 +776,75 @@ impl<V: UsableData + Send> SerializableProgress<V> for FuzzyProgressData {
     }
 }
 
-impl<V: UsableData + Send> SerializableProgress<V> for StrategyProgress<V> {
+impl<V: UsableData + Send> VarOrderSerializable<V> for IncrementalProgressData {
+    type Data = IncrementalProgressData;
+    type Error = Infallible;
+    fn into_data(&self, _var_order: &[V]) -> Result<IncrementalProgressData, Infallible> {
+        Ok(self.clone())
+    }
+    fn from_data(data: &IncrementalProgressData, _var_order: &[V]) -> Result<Self, Infallible> {
+        Ok(data.clone())
+    }
+}
+
+impl<V: UsableData + Send> VarOrderSerializable<V> for StrategyProgress<V> {
     type Data = StrategyProgressData;
     type Error = Infallible;
     fn into_data(&self, var_order: &[V]) -> Result<StrategyProgressData, Infallible> {
         Ok(match self {
             StrategyProgress::Default(p) => {
-                StrategyProgressData::Default(SerializableProgress::into_data(p, var_order)?)
+                StrategyProgressData::Default(VarOrderSerializable::into_data(p, var_order)?)
             }
             StrategyProgress::NoObjective(p) => {
-                StrategyProgressData::NoObjective(SerializableProgress::into_data(p, var_order)?)
+                StrategyProgressData::NoObjective(VarOrderSerializable::into_data(p, var_order)?)
             }
             StrategyProgress::NoObjectiveStarter(p) => StrategyProgressData::NoObjectiveStarter(
-                SerializableProgress::into_data(p, var_order)?,
+                VarOrderSerializable::into_data(p, var_order)?,
             ),
             StrategyProgress::FindClosest(p) => {
-                StrategyProgressData::FindClosest(SerializableProgress::into_data(p, var_order)?)
+                StrategyProgressData::FindClosest(VarOrderSerializable::into_data(p, var_order)?)
             }
             StrategyProgress::Fuzzy(p) => {
-                StrategyProgressData::Fuzzy(SerializableProgress::into_data(p, var_order)?)
+                StrategyProgressData::Fuzzy(VarOrderSerializable::into_data(p, var_order)?)
+            }
+            StrategyProgress::Incremental(p) => {
+                StrategyProgressData::Incremental(VarOrderSerializable::into_data(p, var_order)?)
             }
             StrategyProgress::Conductor(p) => {
-                StrategyProgressData::Conductor(SerializableProgress::into_data(p, var_order)?)
+                StrategyProgressData::Conductor(VarOrderSerializable::into_data(p, var_order)?)
             }
         })
     }
     fn from_data(data: &StrategyProgressData, var_order: &[V]) -> Result<Self, Infallible> {
         Ok(match data {
             StrategyProgressData::Default(d) => StrategyProgress::Default(
-                <SolveProgress<V> as SerializableProgress<V>>::from_data(d, var_order)?,
+                <SolveProgress<V> as VarOrderSerializable<V>>::from_data(d, var_order)?,
             ),
             StrategyProgressData::NoObjective(d) => {
-                StrategyProgress::NoObjective(<NoObjectiveProgressData as SerializableProgress<
+                StrategyProgress::NoObjective(<NoObjectiveProgressData as VarOrderSerializable<
                     V,
                 >>::from_data(d, var_order)?)
             }
             StrategyProgressData::NoObjectiveStarter(d) => StrategyProgress::NoObjectiveStarter(
-                <NoObjectiveStarterProgress<V> as SerializableProgress<V>>::from_data(
+                <NoObjectiveStarterProgress<V> as VarOrderSerializable<V>>::from_data(
                     d, var_order,
                 )?,
             ),
             StrategyProgressData::FindClosest(d) => {
-                StrategyProgress::FindClosest(<FindClosestProgressData as SerializableProgress<
+                StrategyProgress::FindClosest(<FindClosestProgressData as VarOrderSerializable<
                     V,
                 >>::from_data(d, var_order)?)
             }
             StrategyProgressData::Fuzzy(d) => StrategyProgress::Fuzzy(
-                <FuzzyProgressData as SerializableProgress<V>>::from_data(d, var_order)?,
+                <FuzzyProgressData as VarOrderSerializable<V>>::from_data(d, var_order)?,
             ),
+            StrategyProgressData::Incremental(d) => {
+                StrategyProgress::Incremental(<IncrementalProgressData as VarOrderSerializable<
+                    V,
+                >>::from_data(d, var_order)?)
+            }
             StrategyProgressData::Conductor(d) => StrategyProgress::Conductor(
-                <ConductorProgress<V> as SerializableProgress<V>>::from_data(d, var_order)?,
+                <ConductorProgress<V> as VarOrderSerializable<V>>::from_data(d, var_order)?,
             ),
         })
     }
@@ -698,6 +901,15 @@ impl<V: UsableData + Send> StrategyProgressVariant<V> for FuzzyProgressData {
     }
 }
 
+impl<V: UsableData + Send> StrategyProgressVariant<V> for IncrementalProgressData {
+    fn from_strategy_progress(progress: StrategyProgress<V>) -> Result<Self, StrategyProgress<V>> {
+        match progress {
+            StrategyProgress::Incremental(p) => Ok(p),
+            other => Err(other),
+        }
+    }
+}
+
 impl<V: UsableData + Send> StrategyProgressVariant<V> for ConductorProgress<V> {
     fn from_strategy_progress(progress: StrategyProgress<V>) -> Result<Self, StrategyProgress<V>> {
         match progress {
@@ -737,6 +949,12 @@ impl From<FuzzyStrategy> for StrategyKind {
     }
 }
 
+impl From<IncrementalStrategy> for StrategyKind {
+    fn from(s: IncrementalStrategy) -> Self {
+        StrategyKind::Incremental(s)
+    }
+}
+
 impl From<ConductorStrategy> for StrategyKind {
     fn from(s: ConductorStrategy) -> Self {
         StrategyKind::Conductor(s)
@@ -750,6 +968,7 @@ impl From<ConductorStrategy> for StrategyKind {
 /// `where` clause — a GAT would require an (inexpressible) `for<V>` bound.
 pub trait SpawnableStrategy<V: UsableData + Send> {
     type Progress: Send;
+    type Payload: Send;
     fn to_strategy_kind(&self) -> StrategyKind;
     /// Reconstruct the typed progress from the erased form received over IPC, returning
     /// the typed union unchanged if it carries a variant this strategy never emits.
@@ -757,18 +976,24 @@ pub trait SpawnableStrategy<V: UsableData + Send> {
         data: StrategyProgressData,
         var_order: &[V],
     ) -> Result<Self::Progress, StrategyProgress<V>>;
+    /// Erase this strategy's typed payload into the serializable form sent over IPC, encoding
+    /// any variable-keyed data against `var_order` (the inverse of [`Self::convert_progress`]).
+    fn payload_into_data(payload: Self::Payload, var_order: &[V]) -> StrategyPayloadData;
 }
 
-/// Every `Strategy` that can be turned into a `StrategyKind` and whose progress is a
-/// variant of the typed union is spawnable: deserialize-then-project.
+/// Every `Strategy` that can be turned into a `StrategyKind`, whose progress is a variant of
+/// the typed union and whose payload lifts into [`StrategyPayload`], is spawnable:
+/// deserialize-then-project for progress, lift-then-erase for the payload.
 impl<V, S> SpawnableStrategy<V> for S
 where
     V: UsableData + Send,
     S: Strategy + Clone,
     StrategyKind: From<S>,
     <S as Strategy>::Progress<V>: StrategyProgressVariant<V>,
+    StrategyPayload<V>: From<<S as Strategy>::Payload<V>>,
 {
     type Progress = <S as Strategy>::Progress<V>;
+    type Payload = <S as Strategy>::Payload<V>;
     fn to_strategy_kind(&self) -> StrategyKind {
         StrategyKind::from(self.clone())
     }
@@ -776,15 +1001,21 @@ where
         data: StrategyProgressData,
         var_order: &[V],
     ) -> Result<Self::Progress, StrategyProgress<V>> {
-        let typed = <StrategyProgress<V> as SerializableProgress<V>>::from_data(&data, var_order)
+        let typed = <StrategyProgress<V> as VarOrderSerializable<V>>::from_data(&data, var_order)
             .unwrap_or_else(|e| match e {});
         <Self::Progress as StrategyProgressVariant<V>>::from_strategy_progress(typed)
+    }
+    fn payload_into_data(payload: Self::Payload, var_order: &[V]) -> StrategyPayloadData {
+        let union: StrategyPayload<V> = StrategyPayload::from(payload);
+        <StrategyPayload<V> as VarOrderSerializable<V>>::into_data(&union, var_order)
+            .unwrap_or_else(|e| match e {})
     }
 }
 
 #[async_trait]
 impl Strategy for StrategyKind {
     type Progress<V: UsableData + Send> = StrategyProgress<V>;
+    type Payload<V: UsableData + Send> = StrategyPayload<V>;
 
     fn name(&self) -> &'static str {
         match self {
@@ -793,6 +1024,7 @@ impl Strategy for StrategyKind {
             StrategyKind::NoObjectiveStarter(s) => s.name(),
             StrategyKind::FindClosest(s) => s.name(),
             StrategyKind::Fuzzy(s) => s.name(),
+            StrategyKind::Incremental(s) => s.name(),
             StrategyKind::Conductor(s) => s.name(),
         }
     }
@@ -804,6 +1036,7 @@ impl Strategy for StrategyKind {
             StrategyKind::NoObjectiveStarter(s) => s.ui_name(),
             StrategyKind::FindClosest(s) => s.ui_name(),
             StrategyKind::Fuzzy(s) => s.ui_name(),
+            StrategyKind::Incremental(s) => s.ui_name(),
             StrategyKind::Conductor(s) => s.ui_name(),
         }
     }
@@ -813,6 +1046,7 @@ impl Strategy for StrategyKind {
         ctx: &StrategyContext,
         model: &Model<B, E, C>,
         warm_start: Option<ConfigData<InternalVar<B, E>>>,
+        payload: StrategyPayload<InternalVar<B, E>>,
         on_progress: &(dyn Fn(StrategyProgress<InternalVar<B, E>>) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
@@ -820,39 +1054,74 @@ impl Strategy for StrategyKind {
         E: UsableData + Send,
         C: UsableData + Send,
     {
+        // Project the payload union down to the variant this strategy expects. A mismatch means
+        // the caller built a payload for a different `StrategyKind` and is a programming error.
+        let mismatch = || {
+            StrategyError::Other(format!(
+                "payload variant does not match strategy `{}`",
+                self.name()
+            ))
+        };
         match self {
             StrategyKind::Default(s) => {
-                s.run_with_callback(ctx, model, warm_start, &|p| {
+                let StrategyPayload::Default(payload) = payload else {
+                    return Err(mismatch());
+                };
+                s.run_with_callback(ctx, model, warm_start, payload, &|p| {
                     on_progress(StrategyProgress::Default(p))
                 })
                 .await
             }
             StrategyKind::NoObjective(s) => {
-                s.run_with_callback(ctx, model, warm_start, &|p| {
+                let StrategyPayload::NoObjective(payload) = payload else {
+                    return Err(mismatch());
+                };
+                s.run_with_callback(ctx, model, warm_start, payload, &|p| {
                     on_progress(StrategyProgress::NoObjective(p))
                 })
                 .await
             }
             StrategyKind::NoObjectiveStarter(s) => {
-                s.run_with_callback(ctx, model, warm_start, &|p| {
+                let StrategyPayload::NoObjectiveStarter(payload) = payload else {
+                    return Err(mismatch());
+                };
+                s.run_with_callback(ctx, model, warm_start, payload, &|p| {
                     on_progress(StrategyProgress::NoObjectiveStarter(p))
                 })
                 .await
             }
             StrategyKind::FindClosest(s) => {
-                s.run_with_callback(ctx, model, warm_start, &|p| {
+                let StrategyPayload::FindClosest(payload) = payload else {
+                    return Err(mismatch());
+                };
+                s.run_with_callback(ctx, model, warm_start, payload, &|p| {
                     on_progress(StrategyProgress::FindClosest(p))
                 })
                 .await
             }
             StrategyKind::Fuzzy(s) => {
-                s.run_with_callback(ctx, model, warm_start, &|p| {
+                let StrategyPayload::Fuzzy(payload) = payload else {
+                    return Err(mismatch());
+                };
+                s.run_with_callback(ctx, model, warm_start, payload, &|p| {
                     on_progress(StrategyProgress::Fuzzy(p))
                 })
                 .await
             }
+            StrategyKind::Incremental(s) => {
+                let StrategyPayload::Incremental(payload) = payload else {
+                    return Err(mismatch());
+                };
+                s.run_with_callback(ctx, model, warm_start, payload, &|p| {
+                    on_progress(StrategyProgress::Incremental(p))
+                })
+                .await
+            }
             StrategyKind::Conductor(s) => {
-                s.run_with_callback(ctx, model, warm_start, &|p| {
+                let StrategyPayload::Conductor(payload) = payload else {
+                    return Err(mismatch());
+                };
+                s.run_with_callback(ctx, model, warm_start, payload, &|p| {
                     on_progress(StrategyProgress::Conductor(p))
                 })
                 .await
@@ -911,6 +1180,7 @@ impl StrategyContext {
         strategy: &StrategyKind,
         model: &Model<B, E, C>,
         warm_start: Option<ConfigData<InternalVar<B, E>>>,
+        payload: StrategyPayload<InternalVar<B, E>>,
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
         B: UsableData + Send,
@@ -918,7 +1188,7 @@ impl StrategyContext {
         C: UsableData + Send,
     {
         strategy
-            .run_with_callback(self, model, warm_start, &|_| true)
+            .run_with_callback(self, model, warm_start, payload, &|_| true)
             .await
     }
 
@@ -927,6 +1197,7 @@ impl StrategyContext {
         strategy: &StrategyKind,
         model: &Model<B, E, C>,
         warm_start: Option<ConfigData<InternalVar<B, E>>>,
+        payload: StrategyPayload<InternalVar<B, E>>,
         on_progress: &(dyn Fn(StrategyProgress<InternalVar<B, E>>) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
@@ -935,7 +1206,7 @@ impl StrategyContext {
         C: UsableData + Send,
     {
         strategy
-            .run_with_callback(self, model, warm_start, on_progress)
+            .run_with_callback(self, model, warm_start, payload, on_progress)
             .await
     }
 
@@ -944,6 +1215,7 @@ impl StrategyContext {
         strategy: &S,
         model: &Model<B, E, C>,
         warm_start: Option<ConfigData<InternalVar<B, E>>>,
+        payload: S::Payload,
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
         B: UsableData,
@@ -951,7 +1223,7 @@ impl StrategyContext {
         C: UsableData,
         S: SpawnableStrategy<InternalVar<B, E>>,
     {
-        self.spawn_strategy_with_callback(strategy, model, warm_start, &|_| true)
+        self.spawn_strategy_with_callback(strategy, model, warm_start, payload, &|_| true)
             .await
     }
 
@@ -960,6 +1232,7 @@ impl StrategyContext {
         strategy: &S,
         model: &Model<B, E, C>,
         warm_start: Option<ConfigData<InternalVar<B, E>>>,
+        payload: S::Payload,
         on_progress: &(dyn Fn(S::Progress) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
@@ -974,6 +1247,7 @@ impl StrategyContext {
         let raw_warm_start = warm_start
             .as_ref()
             .map(|hint| collomatique_ilp::config_data_to_hint(hint, &var_order));
+        let payload_data = S::payload_into_data(payload, &var_order);
 
         let noop_echo = |_: String| {};
         let echo_fn: &(dyn Fn(String) + Send + Sync) = match &self.on_echo {
@@ -997,6 +1271,7 @@ impl StrategyContext {
                 &model_desc,
                 &strategy_kind,
                 raw_warm_start,
+                payload_data,
                 &raw_on_progress,
                 echo_fn,
             )
@@ -1010,6 +1285,7 @@ impl StrategyContext {
         strategy: &S,
         model: &Model<B, E, C>,
         warm_start: Option<ConfigData<InternalVar<B, E>>>,
+        payload: S::Payload,
         on_progress: &(dyn Fn(S::Progress) -> bool + Send + Sync),
         handle_echo: &(dyn Fn(String) -> Option<String> + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
@@ -1025,6 +1301,7 @@ impl StrategyContext {
         let raw_warm_start = warm_start
             .as_ref()
             .map(|hint| collomatique_ilp::config_data_to_hint(hint, &var_order));
+        let payload_data = S::payload_into_data(payload, &var_order);
 
         let echo_impl: Box<dyn Fn(String) + Send + Sync + '_> = match &self.on_echo {
             Some(ctx_echo) => Box::new(move |line| {
@@ -1054,6 +1331,7 @@ impl StrategyContext {
                 &model_desc,
                 &strategy_kind,
                 raw_warm_start,
+                payload_data,
                 &raw_on_progress,
                 &*echo_impl,
             )
@@ -1067,8 +1345,10 @@ impl StrategyContext {
 pub struct StrategyRequest {
     pub model_desc: ModelDesc,
     pub strategy: StrategyKind,
-    #[serde(default)]
     pub warm_start: Option<Vec<f64>>,
+    /// Erased per-run payload, reconstructed to the typed [`StrategyPayload`] in the subprocess
+    /// against the model's `var_order`.
+    pub payload: StrategyPayloadData,
 }
 
 impl StrategyRequest {
@@ -1088,6 +1368,7 @@ mod tests {
     use super::*;
     use collomatique_ilp::Variable;
     use collomatique_ilp_modeler::Modeler;
+    use futures::channel::oneshot;
     use std::collections::{HashMap, VecDeque};
     use std::sync::Mutex;
 
@@ -1107,6 +1388,78 @@ mod tests {
             ..base
         };
         assert!(format!("{with_incumbent}").ends_with("incumbent=yes"));
+    }
+
+    #[test]
+    fn strategy_payload_fuzzy_target_survives_erase_and_reconstruct() {
+        // A Fuzzy payload's target lives in the model's variable space. Erasing it to a
+        // StrategyPayloadData (Vec<f64>) and reconstructing against the same var_order must
+        // recover the exact config, mirroring how an incumbent crosses the subprocess barrier.
+        let var_order: Vec<usize> = vec![0, 1, 2];
+        let raw = vec![1.0, 0.0, 1.0];
+        let target = collomatique_ilp::solution_to_config_data(&raw, &var_order);
+
+        let payload: StrategyPayload<usize> = StrategyPayload::Fuzzy(FuzzyPayload { target });
+        let data = VarOrderSerializable::into_data(&payload, &var_order).unwrap();
+        assert_eq!(
+            data,
+            StrategyPayloadData::Fuzzy(FuzzyPayloadData {
+                target: raw.clone()
+            })
+        );
+
+        let restored =
+            <StrategyPayload<usize> as VarOrderSerializable<usize>>::from_data(&data, &var_order)
+                .unwrap();
+        let StrategyPayload::Fuzzy(FuzzyPayload { target }) = restored else {
+            panic!("expected a Fuzzy payload");
+        };
+        assert_eq!(
+            collomatique_ilp::config_data_to_hint(&target, &var_order),
+            raw
+        );
+    }
+
+    #[test]
+    fn incremental_kind_and_payload_survive_json_round_trip() {
+        // The whole IPC hop for the incremental strategy: the StrategyKind (with its f64
+        // weight) and the erased payload must serialize to JSON and back unchanged.
+        let kind = StrategyKind::Incremental(IncrementalStrategy {
+            l1_weight: 1e6,
+            distance_tolerance: 5.0,
+            epoch_time_limit: collomatique_time::TimeLimit::seconds(
+                std::num::NonZeroU32::new(30).unwrap(),
+            ),
+            reconstruction_time_limit: collomatique_time::TimeLimit::none(),
+            disable_logging: false,
+        });
+        let json = serde_json::to_string(&kind).unwrap();
+        assert_eq!(serde_json::from_str::<StrategyKind>(&json).unwrap(), kind);
+
+        // An epoch payload erases against var_order to a Vec<Option<u32>> and reconstructs.
+        let var_order: Vec<usize> = vec![0, 1, 2];
+        let payload: StrategyPayload<usize> = StrategyPayload::Incremental(IncrementalPayload {
+            epochs: HashMap::from([(0usize, 0u32), (2usize, 1u32)]),
+        });
+        let data = VarOrderSerializable::into_data(&payload, &var_order).unwrap();
+        assert_eq!(
+            data,
+            StrategyPayloadData::Incremental(IncrementalPayloadData {
+                epochs: vec![Some(0), None, Some(1)]
+            })
+        );
+
+        let json = serde_json::to_string(&data).unwrap();
+        let back: StrategyPayloadData = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, data);
+
+        let restored =
+            <StrategyPayload<usize> as VarOrderSerializable<usize>>::from_data(&back, &var_order)
+                .unwrap();
+        let StrategyPayload::Incremental(IncrementalPayload { epochs }) = restored else {
+            panic!("expected an Incremental payload");
+        };
+        assert_eq!(epochs, HashMap::from([(0usize, 0u32), (2usize, 1u32)]));
     }
 
     struct MockBackend {
@@ -1130,6 +1483,7 @@ mod tests {
             _model_desc: &ModelDesc,
             _strategy: &StrategyKind,
             _warm_start: Option<Vec<f64>>,
+            _payload: StrategyPayloadData,
             _on_progress: &(dyn Fn(StrategyProgressData) -> bool + Send + Sync),
             _on_echo: &(dyn Fn(String) + Send + Sync),
         ) -> Result<RawSolveOutcome, StrategyError> {
@@ -1172,6 +1526,7 @@ mod tests {
             _model_desc: &ModelDesc,
             _strategy: &StrategyKind,
             _warm_start: Option<Vec<f64>>,
+            _payload: StrategyPayloadData,
             _on_progress: &(dyn Fn(StrategyProgressData) -> bool + Send + Sync),
             _on_echo: &(dyn Fn(String) + Send + Sync),
         ) -> Result<RawSolveOutcome, StrategyError> {
@@ -1204,6 +1559,7 @@ mod tests {
             _model_desc: &ModelDesc,
             _strategy: &StrategyKind,
             _warm_start: Option<Vec<f64>>,
+            _payload: StrategyPayloadData,
             _on_progress: &(dyn Fn(StrategyProgressData) -> bool + Send + Sync),
             _on_echo: &(dyn Fn(String) + Send + Sync),
         ) -> Result<RawSolveOutcome, StrategyError> {
@@ -1261,7 +1617,7 @@ mod tests {
                 &model,
                 SolveProblemOpts {
                     warm_start: None,
-                    time_limit_seconds: None,
+                    time_limit: collomatique_time::TimeLimit::none(),
                     disable_logging: false,
                 },
                 &|p: SolveProgress<InternalVar<usize, ()>>| {
@@ -1297,7 +1653,10 @@ mod tests {
 
         let ctx = StrategyContext::new(backend);
         let strategy = DefaultStrategy::default();
-        let outcome = strategy.run(&ctx, &model).await.unwrap();
+        let outcome = strategy
+            .run(&ctx, &model, DefaultPayload::default())
+            .await
+            .unwrap();
 
         assert_eq!(outcome.status, SolveStatus::Optimal);
         assert_eq!(outcome.objective, Some(42.0));
@@ -1321,7 +1680,10 @@ mod tests {
 
         let ctx = StrategyContext::new(backend);
         let kind = StrategyKind::Default(DefaultStrategy::default());
-        let outcome = ctx.run_strategy(&kind, &model, None).await.unwrap();
+        let outcome = ctx
+            .run_strategy(&kind, &model, None, kind.empty_payload().unwrap())
+            .await
+            .unwrap();
 
         assert_eq!(outcome.status, SolveStatus::Optimal);
         assert_eq!(
@@ -1359,7 +1721,10 @@ mod tests {
 
             let ctx = StrategyContext::new(backend);
             let kind = StrategyKind::Default(DefaultStrategy::default());
-            let outcome = ctx.spawn_strategy(&kind, &model, None).await.unwrap();
+            let outcome = ctx
+                .spawn_strategy(&kind, &model, None, kind.empty_payload().unwrap())
+                .await
+                .unwrap();
 
             assert_eq!(outcome.status, SolveStatus::Optimal);
             assert_eq!(outcome.objective, Some(7.0));
@@ -1392,14 +1757,14 @@ mod tests {
 
         let ctx = StrategyContext::new(backend);
         let strategy = NoObjectiveStrategy {
-            checker_time_limit_seconds: None,
-            reconstruction_time_limit_seconds: None,
+            checker_time_limit: collomatique_time::TimeLimit::none(),
+            reconstruction_time_limit: collomatique_time::TimeLimit::none(),
             disable_logging: false,
         };
 
         let progress_log: Mutex<Vec<NoObjectiveProgressData>> = Mutex::new(Vec::new());
         let outcome = strategy
-            .run_with_callback(&ctx, &model, None, &|p| {
+            .run_with_callback(&ctx, &model, None, NoObjectivePayload::default(), &|p| {
                 progress_log.lock().unwrap().push(p);
                 true
             })
@@ -1432,12 +1797,15 @@ mod tests {
 
         let ctx = StrategyContext::new(backend);
         let strategy = NoObjectiveStrategy {
-            checker_time_limit_seconds: None,
-            reconstruction_time_limit_seconds: None,
+            checker_time_limit: collomatique_time::TimeLimit::none(),
+            reconstruction_time_limit: collomatique_time::TimeLimit::none(),
             disable_logging: false,
         };
 
-        let outcome = strategy.run(&ctx, &model).await.unwrap();
+        let outcome = strategy
+            .run(&ctx, &model, NoObjectivePayload::default())
+            .await
+            .unwrap();
         assert_eq!(outcome.status, SolveStatus::Infeasible);
         assert!(outcome.solution.is_none());
     }
@@ -1463,11 +1831,14 @@ mod tests {
 
         let ctx = StrategyContext::new(backend);
         let kind = StrategyKind::NoObjective(NoObjectiveStrategy {
-            checker_time_limit_seconds: None,
-            reconstruction_time_limit_seconds: None,
+            checker_time_limit: collomatique_time::TimeLimit::none(),
+            reconstruction_time_limit: collomatique_time::TimeLimit::none(),
             disable_logging: false,
         });
-        let outcome = ctx.run_strategy(&kind, &model, None).await.unwrap();
+        let outcome = ctx
+            .run_strategy(&kind, &model, None, kind.empty_payload().unwrap())
+            .await
+            .unwrap();
 
         assert_eq!(outcome.status, SolveStatus::Optimal);
         assert_eq!(outcome.objective, Some(3.0));
@@ -1504,29 +1875,33 @@ mod tests {
         let ctx = StrategyContext::new(backend);
         let strategy = NoObjectiveStarterStrategy {
             no_objective: NoObjectiveStrategy {
-                checker_time_limit_seconds: None,
-                reconstruction_time_limit_seconds: None,
+                checker_time_limit: collomatique_time::TimeLimit::none(),
+                reconstruction_time_limit: collomatique_time::TimeLimit::none(),
                 disable_logging: false,
             },
             default: DefaultStrategy {
-                time_limit_seconds: None,
+                time_limit: collomatique_time::TimeLimit::none(),
                 disable_logging: false,
             },
         };
 
         let progress_log: Mutex<Vec<String>> = Mutex::new(Vec::new());
         let outcome = strategy
-            .run_with_callback(&ctx, &model, None, &|p: NoObjectiveStarterProgress<
-                InternalVar<usize, ()>,
-            >| {
-                let tag = match &p {
-                    NoObjectiveStarterProgress::Starter(_) => "starter",
-                    NoObjectiveStarterProgress::HintFound { .. } => "hint",
-                    NoObjectiveStarterProgress::Default(_) => "default",
-                };
-                progress_log.lock().unwrap().push(tag.to_owned());
-                true
-            })
+            .run_with_callback(
+                &ctx,
+                &model,
+                None,
+                NoObjectiveStarterPayload::default(),
+                &|p: NoObjectiveStarterProgress<InternalVar<usize, ()>>| {
+                    let tag = match &p {
+                        NoObjectiveStarterProgress::Starter(_) => "starter",
+                        NoObjectiveStarterProgress::HintFound { .. } => "hint",
+                        NoObjectiveStarterProgress::Default(_) => "default",
+                    };
+                    progress_log.lock().unwrap().push(tag.to_owned());
+                    true
+                },
+            )
             .await
             .unwrap();
 
@@ -1554,14 +1929,17 @@ mod tests {
         let ctx = StrategyContext::new(backend);
         let strategy = NoObjectiveStarterStrategy {
             no_objective: NoObjectiveStrategy {
-                checker_time_limit_seconds: None,
-                reconstruction_time_limit_seconds: None,
+                checker_time_limit: collomatique_time::TimeLimit::none(),
+                reconstruction_time_limit: collomatique_time::TimeLimit::none(),
                 disable_logging: false,
             },
             default: DefaultStrategy::default(),
         };
 
-        let outcome = strategy.run(&ctx, &model).await.unwrap();
+        let outcome = strategy
+            .run(&ctx, &model, NoObjectiveStarterPayload::default())
+            .await
+            .unwrap();
         assert_eq!(outcome.status, SolveStatus::Infeasible);
         assert!(outcome.solution.is_none());
     }
@@ -1597,15 +1975,173 @@ mod tests {
         let ctx = StrategyContext::new(backend);
         let kind = StrategyKind::NoObjectiveStarter(NoObjectiveStarterStrategy {
             no_objective: NoObjectiveStrategy {
-                checker_time_limit_seconds: None,
-                reconstruction_time_limit_seconds: None,
+                checker_time_limit: collomatique_time::TimeLimit::none(),
+                reconstruction_time_limit: collomatique_time::TimeLimit::none(),
                 disable_logging: false,
             },
             default: DefaultStrategy::default(),
         });
-        let outcome = ctx.run_strategy(&kind, &model, None).await.unwrap();
+        let outcome = ctx
+            .run_strategy(&kind, &model, None, kind.empty_payload().unwrap())
+            .await
+            .unwrap();
 
         assert_eq!(outcome.status, SolveStatus::Optimal);
         assert_eq!(outcome.objective, Some(2.0));
+    }
+
+    /// Backend for the conductor mid-run-wake regression test. The `Default` worker announces a
+    /// feasible-but-unproven incumbent and then *keeps running* (blocks until released); the first
+    /// `Fuzzy` worker releases it. So the whole run can only finish if that mid-run incumbent woke
+    /// the scheduler and topped up the still-idle slot with a fuzzy worker — otherwise `Default`
+    /// blocks forever and the test's watchdog timeout fires. Reproduces the bug where the loop only
+    /// re-scheduled when a worker *ended*, so fuzzy never launched while `Default` ground on.
+    struct MidRunIncumbentBackend {
+        incumbent: Vec<f64>,
+        // `Default` takes the receiver and awaits it; the first `Fuzzy` takes the sender and fires.
+        release_rx: Mutex<Option<oneshot::Receiver<()>>>,
+        release_tx: Mutex<Option<oneshot::Sender<()>>>,
+    }
+
+    #[async_trait]
+    impl SolveBackend for MidRunIncumbentBackend {
+        async fn solve_with_progress(
+            &self,
+            _desc: &ProblemDesc,
+            _opts: SolveConfig,
+            _on_progress: &(dyn Fn(SolveProgressData) -> bool + Send + Sync),
+            _on_echo: &(dyn Fn(String) + Send + Sync),
+        ) -> Result<RawSolveOutcome, StrategyError> {
+            unreachable!()
+        }
+
+        async fn run_strategy_subprocess(
+            &self,
+            _model_desc: &ModelDesc,
+            strategy: &StrategyKind,
+            _warm_start: Option<Vec<f64>>,
+            _payload: StrategyPayloadData,
+            on_progress: &(dyn Fn(StrategyProgressData) -> bool + Send + Sync),
+            _on_echo: &(dyn Fn(String) + Send + Sync),
+        ) -> Result<RawSolveOutcome, StrategyError> {
+            match strategy {
+                StrategyKind::Default(_) => {
+                    // Announce a feasible incumbent whose bound is strictly worse than its
+                    // objective, so the optimality gap stays open and fuzzy remains eligible.
+                    on_progress(StrategyProgressData::Default(SolveProgressData {
+                        best_obj: Some(5.0),
+                        best_bound: 1.0,
+                        node_count: 1,
+                        solutions_found: 1,
+                        incumbent: Some(self.incumbent.clone()),
+                    }));
+                    // Keep grinding until a fuzzy worker releases us. Take the receiver out of the
+                    // mutex in its own statement so the guard is not held across the await (which
+                    // would make this future non-Send).
+                    let rx = self.release_rx.lock().unwrap().take();
+                    if let Some(rx) = rx {
+                        let _ = rx.await;
+                    }
+                    Ok(RawSolveOutcome {
+                        status: SolveStatus::Optimal,
+                        objective: Some(5.0),
+                        best_bound: Some(5.0),
+                        solution: Some(self.incumbent.clone()),
+                    })
+                }
+                StrategyKind::Fuzzy(_) => {
+                    // Reaching here proves the mid-run incumbent woke the scheduler and the idle
+                    // slot was topped up with fuzzy. Release the still-running Default worker.
+                    let tx = self.release_tx.lock().unwrap().take();
+                    if let Some(tx) = tx {
+                        let _ = tx.send(());
+                    }
+                    // Yield so the now-ready Default worker gets polled instead of spinning on
+                    // repeated fuzzy relaunches into the freed slot.
+                    tokio::task::yield_now().await;
+                    Ok(RawSolveOutcome {
+                        status: SolveStatus::Stopped,
+                        objective: None,
+                        best_bound: None,
+                        solution: None,
+                    })
+                }
+                _ => unreachable!("only Default and Fuzzy are enabled in this test"),
+            }
+        }
+    }
+
+    #[test]
+    fn conductor_launches_fuzzy_on_midrun_incumbent() {
+        use std::num::NonZeroU32;
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        // Run the conductor on a dedicated current-thread runtime and watchdog it from here with a
+        // real timeout (tokio's `time` feature is not enabled). Without the mid-run wake fix the
+        // Default worker would block forever, so `recv_timeout` is what turns a regression into a
+        // clean failure instead of a hang.
+        let (done_tx, done_rx) = mpsc::channel();
+        let handle = std::thread::spawn(move || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .build()
+                .expect("current-thread runtime");
+            let result = rt.block_on(async {
+                let model = make_model(vec![(0, Variable::binary()), (1, Variable::binary())]);
+                let (release_tx, release_rx) = oneshot::channel::<()>();
+                let backend = Arc::new(MidRunIncumbentBackend {
+                    incumbent: vec![1.0, 1.0],
+                    release_rx: Mutex::new(Some(release_rx)),
+                    release_tx: Mutex::new(Some(release_tx)),
+                });
+                let ctx = StrategyContext::new(backend);
+                let strategy = ConductorStrategy {
+                    worker_count: NonZeroU32::new(2).unwrap(),
+                    default_config: Some(DefaultConfig::default()),
+                    warm_start_config: None,
+                    incremental_config: None,
+                    fuzzy_config: Some(FuzzyConfig::default()),
+                };
+
+                let saw_fuzzy = Arc::new(Mutex::new(false));
+                let saw_fuzzy_cb = saw_fuzzy.clone();
+                let on_progress = move |p: ConductorProgress<InternalVar<usize, ()>>| {
+                    if let ConductorProgress::WorkerAssigned {
+                        strategy: Some(kind),
+                        ..
+                    } = &p
+                    {
+                        if matches!(**kind, StrategyKind::Fuzzy(_)) {
+                            *saw_fuzzy_cb.lock().unwrap() = true;
+                        }
+                    }
+                    true
+                };
+
+                let outcome = strategy
+                    .run_with_callback(
+                        &ctx,
+                        &model,
+                        None,
+                        ConductorPayload::default(),
+                        &on_progress,
+                    )
+                    .await
+                    .unwrap();
+                (outcome.status, *saw_fuzzy.lock().unwrap())
+            });
+            let _ = done_tx.send(result);
+        });
+
+        let (status, saw_fuzzy) = done_rx.recv_timeout(Duration::from_secs(5)).expect(
+            "conductor did not finish in time — the mid-run incumbent never launched fuzzy",
+        );
+        handle.join().unwrap();
+
+        assert!(
+            saw_fuzzy,
+            "a fuzzy worker should have been assigned to the idle slot after the mid-run incumbent"
+        );
+        assert_eq!(status, SolveStatus::Optimal);
     }
 }

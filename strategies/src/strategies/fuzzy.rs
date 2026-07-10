@@ -1,3 +1,4 @@
+use std::convert::Infallible;
 use std::fmt;
 
 use async_trait::async_trait;
@@ -10,8 +11,40 @@ use serde::{Deserialize, Serialize};
 use collomatique_ilp::{ConfigData, UsableData, Variable};
 use collomatique_ilp_modeler::{InternalVar, Model};
 
-use crate::strategies::find_closest::{FindClosestProgressData, FindClosestStrategy};
-use crate::{SolveStatus, Strategy, StrategyContext, StrategyError, StrategyOutcome};
+use crate::strategies::find_closest::{
+    FindClosestPayload, FindClosestProgressData, FindClosestStrategy,
+};
+use crate::{
+    SolveStatus, Strategy, StrategyContext, StrategyError, StrategyOutcome, VarOrderSerializable,
+};
+
+/// Per-run payload for [`FuzzyStrategy`]: the `target` configuration to perturb.
+#[derive(Debug, Clone)]
+pub struct FuzzyPayload<V: UsableData> {
+    pub target: ConfigData<V>,
+}
+
+/// Serializable counterpart of [`FuzzyPayload<V>`]: the target is erased to a column-indexed
+/// `Vec<f64>` against the model's `var_order`, so it can cross the IPC barrier.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FuzzyPayloadData {
+    pub target: Vec<f64>,
+}
+
+impl<V: UsableData + Send> VarOrderSerializable<V> for FuzzyPayload<V> {
+    type Data = FuzzyPayloadData;
+    type Error = Infallible;
+    fn into_data(&self, var_order: &[V]) -> Result<FuzzyPayloadData, Infallible> {
+        Ok(FuzzyPayloadData {
+            target: collomatique_ilp::config_data_to_hint(&self.target, var_order),
+        })
+    }
+    fn from_data(data: &FuzzyPayloadData, var_order: &[V]) -> Result<Self, Infallible> {
+        Ok(FuzzyPayload {
+            target: collomatique_ilp::solution_to_config_data(&data.target, var_order),
+        })
+    }
+}
 
 /// A diversification move: perturb every base variable of a warm start
 /// around its current value (typical displacement `sigma`), then hand
@@ -20,8 +53,8 @@ use crate::{SolveStatus, Strategy, StrategyContext, StrategyError, StrategyOutco
 ///
 /// Repeatedly seeding later strategies from such fuzzed-then-repaired
 /// points lets a conductor escape a single basin and explore diverse
-/// feasible neighborhoods. A warm start is required (there is nothing to
-/// perturb otherwise).
+/// feasible neighborhoods. The point to perturb is supplied as the payload
+/// target (there is nothing to perturb otherwise).
 ///
 /// A single knob, `sigma`, drives everything: every base variable is
 /// perturbed, and `sigma` is the typical per-variable distance from the
@@ -100,6 +133,7 @@ fn perturb_value(current: f64, kind: &Variable, sigma: f64, rng: &mut StdRng) ->
 #[async_trait]
 impl Strategy for FuzzyStrategy {
     type Progress<V: UsableData + Send> = FuzzyProgressData;
+    type Payload<V: UsableData + Send> = FuzzyPayload<V>;
 
     fn name(&self) -> &'static str {
         "fuzzy"
@@ -113,7 +147,8 @@ impl Strategy for FuzzyStrategy {
         &self,
         ctx: &StrategyContext,
         model: &Model<B, E, C>,
-        warm_start: Option<ConfigData<InternalVar<B, E>>>,
+        _warm_start: Option<ConfigData<InternalVar<B, E>>>,
+        payload: FuzzyPayload<InternalVar<B, E>>,
         on_progress: &(dyn Fn(Self::Progress<InternalVar<B, E>>) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
@@ -121,10 +156,9 @@ impl Strategy for FuzzyStrategy {
         E: UsableData + Send,
         C: UsableData + Send,
     {
-        // A warm start is mandatory: without a current point there is
-        // nothing to perturb.
-        let warm_start = warm_start
-            .ok_or_else(|| StrategyError::SolveError("fuzzy requires a warm start".into()))?;
+        // The point to perturb comes from the payload (specific to this run); `warm_start`
+        // is a genuine, currently-unused optional hint.
+        let target = payload.target;
 
         // `Normal::new` rejects a negative or non-finite std dev; catch it
         // up front so `perturb_value`'s `expect` never fires.
@@ -135,7 +169,7 @@ impl Strategy for FuzzyStrategy {
             )));
         }
 
-        let warm_values = warm_start.get_values();
+        let warm_values = target.get_values();
         let var_kinds = model.checker_problem().get_variables();
 
         // Collect the base variables present in the warm start together
@@ -185,11 +219,16 @@ impl Strategy for FuzzyStrategy {
             });
         }
 
-        // Repair: find the feasible point closest to the perturbed proposal.
+        // Repair: find the feasible point closest to the perturbed proposal. The proposal
+        // is the repair's target, carried in its payload.
         self.find_closest
-            .run_with_callback(ctx, model, Some(proposal), &|p| {
-                on_progress(FuzzyProgressData::FindClosest(p))
-            })
+            .run_with_callback(
+                ctx,
+                model,
+                None,
+                FindClosestPayload { target: proposal },
+                &|p| on_progress(FuzzyProgressData::FindClosest(p)),
+            )
             .await
     }
 }
@@ -237,7 +276,7 @@ mod tests {
 
     use crate::{
         RawSolveOutcome, SolveBackend, SolveConfig, SolveProgressData, StrategyKind,
-        StrategyProgressData,
+        StrategyPayloadData, StrategyProgressData,
     };
 
     // ----- pure-helper unit tests -----
@@ -373,6 +412,7 @@ mod tests {
             _model_desc: &ModelDesc,
             _strategy: &StrategyKind,
             _warm_start: Option<Vec<f64>>,
+            _payload: StrategyPayloadData,
             _on_progress: &(dyn Fn(StrategyProgressData) -> bool + Send + Sync),
             _on_echo: &(dyn Fn(String) + Send + Sync),
         ) -> Result<RawSolveOutcome, StrategyError> {
@@ -382,8 +422,8 @@ mod tests {
 
     fn find_closest() -> FindClosestStrategy {
         FindClosestStrategy {
-            closeness_time_limit_seconds: None,
-            reconstruction_time_limit_seconds: None,
+            closeness_time_limit: collomatique_time::TimeLimit::none(),
+            reconstruction_time_limit: collomatique_time::TimeLimit::none(),
             disable_logging: true,
             // Solve to the exact closest point so the end-to-end assertions are stable.
             distance_tolerance: 0.0,
@@ -421,17 +461,25 @@ mod tests {
         let ctx = StrategyContext::new(Arc::new(RealBackend));
         let captured: Mutex<Option<(usize, f64)>> = Mutex::new(None);
         strategy(sigma, Some(seed))
-            .run_with_callback(&ctx, &model, Some(all_zero_warm_start(n)), &|p| {
-                if let FuzzyProgressData::Perturbed {
-                    perturbed,
-                    l1_distance,
-                    ..
-                } = p
-                {
-                    *captured.lock().unwrap() = Some((perturbed, l1_distance));
-                }
-                true
-            })
+            .run_with_callback(
+                &ctx,
+                &model,
+                None,
+                FuzzyPayload {
+                    target: all_zero_warm_start(n),
+                },
+                &|p| {
+                    if let FuzzyProgressData::Perturbed {
+                        perturbed,
+                        l1_distance,
+                        ..
+                    } = p
+                    {
+                        *captured.lock().unwrap() = Some((perturbed, l1_distance));
+                    }
+                    true
+                },
+            )
             .await
             .unwrap();
         captured.into_inner().unwrap().unwrap()
@@ -444,7 +492,15 @@ mod tests {
         let model = free_binary_model(n);
         let ctx = StrategyContext::new(Arc::new(RealBackend));
         let outcome = strategy(sigma, Some(seed))
-            .run_with_callback(&ctx, &model, Some(all_zero_warm_start(n)), &|_| true)
+            .run_with_callback(
+                &ctx,
+                &model,
+                None,
+                FuzzyPayload {
+                    target: all_zero_warm_start(n),
+                },
+                &|_| true,
+            )
             .await
             .unwrap();
         let sol = outcome.solution.unwrap();
@@ -502,7 +558,7 @@ mod tests {
         let ctx = StrategyContext::new(Arc::new(RealBackend));
         let events: Mutex<Vec<FuzzyProgressData>> = Mutex::new(Vec::new());
         let outcome = strategy(3.0, Some(1))
-            .run_with_callback(&ctx, &model, Some(warm), &|p| {
+            .run_with_callback(&ctx, &model, None, FuzzyPayload { target: warm }, &|p| {
                 events.lock().unwrap().push(p);
                 true
             })
@@ -528,20 +584,5 @@ mod tests {
             perturbed_idx < find_closest_idx,
             "perturbation precedes the repair"
         );
-    }
-
-    /// Without a warm start there is nothing to perturb, so the strategy errors.
-    #[tokio::test]
-    async fn missing_warm_start_errors() {
-        let model = free_binary_model(1);
-        let ctx = StrategyContext::new(Arc::new(RealBackend));
-        let err = strategy(1.0, Some(0))
-            .run_with_callback(&ctx, &model, None, &|_| true)
-            .await
-            .unwrap_err();
-        match err {
-            StrategyError::SolveError(msg) => assert!(msg.contains("warm start")),
-            other => panic!("expected SolveError, got {other:?}"),
-        }
     }
 }

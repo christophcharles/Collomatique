@@ -377,6 +377,7 @@ dependencies = [
  "collomatique-sqlite-state",
  "collomatique-state-colloscopes",
  "collomatique-time",
+ "ordered-float",
  "sqlx",
 ]
 
@@ -431,6 +432,7 @@ version = "0.1.0"
 dependencies = [
  "coin_cbc",
  "collo-cbc",
+ "collomatique-time",
  "gag",
  "good_lp",
  "ndarray 0.15.6",
@@ -529,6 +531,7 @@ dependencies = [
  "anyhow",
  "collomatique-ilp",
  "collomatique-state-colloscopes",
+ "collomatique-time",
  "ordered-float",
  "serde",
  "serde_json",
@@ -551,6 +554,7 @@ dependencies = [
  "collomatique-state-colloscopes",
  "collomatique-strategies",
  "collomatique-subprocesses",
+ "collomatique-time",
  "libc",
  "ordered-float",
  "sqlx",
@@ -612,6 +616,7 @@ dependencies = [
  "async-trait",
  "collomatique-ilp",
  "collomatique-ilp-modeler",
+ "collomatique-time",
  "futures",
  "rand 0.9.2",
  "rand_distr",
@@ -630,6 +635,7 @@ dependencies = [
  "collomatique-ilp-modeler",
  "collomatique-rpc",
  "collomatique-strategies",
+ "collomatique-time",
  "futures",
  "libc",
  "ordered-float",
@@ -644,6 +650,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "serde",
+ "serde_json",
  "thiserror 1.0.69",
 ]
 

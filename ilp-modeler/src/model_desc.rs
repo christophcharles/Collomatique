@@ -6,7 +6,7 @@ use collomatique_ilp::{
     Variable,
 };
 
-use crate::{ConstraintSource, HelperId, InternalVar, Model};
+use crate::{ConstraintSource, DependencyGraph, HelperId, InternalVar, Model};
 
 // ---------------------------------------------------------------------------
 // Desc types
@@ -419,6 +419,13 @@ impl ModelDesc {
         let base_var_list: HashMap<usize, Variable> =
             self.base_var_list.into_iter().enumerate().collect();
 
+        // Recompute the dependency graph from the (full) extra-defining
+        // constraints — the serialized description does not carry it. This
+        // yields base footprints identical to the ones built during the
+        // original DFS expansion.
+        let dependency_graph =
+            DependencyGraph::from_defining_constraints(&reconstruction_constraints);
+
         let model = Model {
             problem,
             reconstruction_constraints,
@@ -431,6 +438,7 @@ impl ModelDesc {
             reconstruction_objective,
             checker_reconstruction_objective,
             base_var_list,
+            dependency_graph,
         };
         (model, var_order)
     }

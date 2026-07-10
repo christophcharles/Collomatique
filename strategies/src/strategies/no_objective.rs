@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::convert::Infallible;
 use std::fmt;
 
 use async_trait::async_trait;
@@ -9,19 +10,35 @@ use collomatique_ilp_modeler::{InternalVar, Model};
 
 use crate::{
     SolveProblemOpts, SolveProgress, SolveStatus, Strategy, StrategyContext, StrategyError,
-    StrategyOutcome,
+    StrategyOutcome, VarOrderSerializable,
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NoObjectiveStrategy {
-    pub checker_time_limit_seconds: Option<u32>,
-    pub reconstruction_time_limit_seconds: Option<u32>,
+    pub checker_time_limit: collomatique_time::TimeLimit,
+    pub reconstruction_time_limit: collomatique_time::TimeLimit,
     pub disable_logging: bool,
+}
+
+/// Per-run payload for [`NoObjectiveStrategy`]. Empty for now.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct NoObjectivePayload;
+
+impl<V: UsableData + Send> VarOrderSerializable<V> for NoObjectivePayload {
+    type Data = NoObjectivePayload;
+    type Error = Infallible;
+    fn into_data(&self, _var_order: &[V]) -> Result<NoObjectivePayload, Infallible> {
+        Ok(self.clone())
+    }
+    fn from_data(data: &NoObjectivePayload, _var_order: &[V]) -> Result<Self, Infallible> {
+        Ok(data.clone())
+    }
 }
 
 #[async_trait]
 impl Strategy for NoObjectiveStrategy {
     type Progress<V: UsableData + Send> = NoObjectiveProgressData;
+    type Payload<V: UsableData + Send> = NoObjectivePayload;
 
     fn name(&self) -> &'static str {
         "no-obj"
@@ -36,6 +53,7 @@ impl Strategy for NoObjectiveStrategy {
         ctx: &StrategyContext,
         model: &Model<B, E, C>,
         warm_start: Option<ConfigData<InternalVar<B, E>>>,
+        _payload: NoObjectivePayload,
         on_progress: &(dyn Fn(Self::Progress<InternalVar<B, E>>) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
@@ -49,7 +67,7 @@ impl Strategy for NoObjectiveStrategy {
                 model.checker_problem(),
                 SolveProblemOpts {
                     warm_start,
-                    time_limit_seconds: self.checker_time_limit_seconds,
+                    time_limit: self.checker_time_limit,
                     disable_logging: self.disable_logging,
                 },
                 &|p| on_progress(NoObjectiveProgressData::CheckerSolve((&p).into())),
@@ -115,7 +133,7 @@ impl Strategy for NoObjectiveStrategy {
                 &recon_problem,
                 SolveProblemOpts {
                     warm_start: None,
-                    time_limit_seconds: self.reconstruction_time_limit_seconds,
+                    time_limit: self.reconstruction_time_limit,
                     disable_logging: self.disable_logging,
                 },
                 &move |p| {

@@ -76,7 +76,7 @@ impl Component for LoadingPanel {
                 adw::Spinner {
                     set_halign: gtk::Align::Center,
                     set_valign: gtk::Align::Center,
-                    set_size_request: (200, 200),
+                    set_size_request: (64, 64),
                 },
                 gtk::Label {
                     #[watch]

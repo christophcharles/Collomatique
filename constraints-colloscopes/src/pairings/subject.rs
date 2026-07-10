@@ -2,7 +2,7 @@ use crate::extras::{
     MyBundle, V, active_slots_for_subject_week, extra_var, is_at_most_once_per_week,
     student_has_interrogation_in_expr,
 };
-use crate::helpers::merge_objectified;
+use crate::helpers::merge_objectified_weighted;
 use crate::ids::GlobalWeek;
 use crate::types::{ExtraVarName, PreferenceConstraint};
 use crate::vars::VarEnv;
@@ -24,7 +24,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         };
 
         let mut hard_bundle = MyBundle::new();
-        let mut soft_bundle = MyBundle::new();
+        let mut soft_output = MyBundle::new();
 
         let mut global_week_offset = 0usize;
         for (period_id, period_desc) in &env.periods.ordered_period_list {
@@ -60,22 +60,42 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                 let week = GlobalWeek(global_week_offset + local_idx);
 
                 for &student in &both_students {
-                    let target = if rule.soft {
-                        &mut soft_bundle
+                    if rule.soft {
+                        let mut single = MyBundle::new();
+                        emit_pairing_constraint(
+                            env,
+                            &mut single,
+                            rule_id,
+                            student,
+                            ant_subject,
+                            con_subject,
+                            rule.antecedent.should_have,
+                            rule.consequent.should_have,
+                            week,
+                        );
+                        soft_output = merge_objectified_weighted(
+                            soft_output,
+                            single,
+                            ExtraVarName::PairingsPenalty {
+                                rule: rule_id,
+                                student,
+                                week,
+                            },
+                            |_| crate::weights::BASE,
+                        );
                     } else {
-                        &mut hard_bundle
-                    };
-                    emit_pairing_constraint(
-                        env,
-                        target,
-                        rule_id,
-                        student,
-                        ant_subject,
-                        con_subject,
-                        rule.antecedent.should_have,
-                        rule.consequent.should_have,
-                        week,
-                    );
+                        emit_pairing_constraint(
+                            env,
+                            &mut hard_bundle,
+                            rule_id,
+                            student,
+                            ant_subject,
+                            con_subject,
+                            rule.antecedent.should_have,
+                            rule.consequent.should_have,
+                            week,
+                        );
+                    }
                 }
             }
 
@@ -83,12 +103,11 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         }
 
         output = output
-            .merge(merge_objectified(
-                hard_bundle,
-                soft_bundle,
-                ExtraVarName::PairingsPenalty { rule: rule_id },
-            ))
+            .merge(hard_bundle)
             .expect("no duplicate extras from pairings (distinct rules)");
+        output = output
+            .merge(soft_output)
+            .expect("no duplicate extras from pairings soft penalties");
     }
 
     output

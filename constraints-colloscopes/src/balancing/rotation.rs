@@ -1,6 +1,7 @@
 use crate::extras::{MyBundle, subject_interrogation_params};
 use crate::helpers::{
-    enrolled_students_for_subject, last_global_week, merge_objectified, slot_week_pairs_for_subject,
+    count_interrogations_expr, enrolled_students_for_subject, last_global_week,
+    merge_objectified_weighted, slot_week_pairs_for_subject,
 };
 use crate::ids::GlobalWeek;
 use crate::types::{ExtraVarName, PreferenceConstraint};
@@ -91,66 +92,122 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
             continue;
         }
 
-        let windows = generate_windows(&active_weeks, last_week, &params.periodicity);
-        if windows.is_empty() {
-            continue;
-        }
-
         let enrolled = enrolled_students_for_subject(env, *subject_id);
         let teachers = teachers_for_subject(env, *subject_id);
 
-        let mut hard_bundle = MyBundle::new();
-        let mut soft_bundle = MyBundle::new();
-
-        for (first_week, last_week, nb_interr) in &windows {
-            let ntot = slot_weeks_in_range(&slot_week_pairs, *first_week, *last_week);
-            if ntot == 0 {
-                continue;
-            }
-
-            for &teacher in &teachers {
-                let teacher_pairs =
-                    slot_week_pairs_for_teacher(&slot_week_pairs, env, *subject_id, teacher);
-                let nt = slot_weeks_in_range(&teacher_pairs, *first_week, *last_week);
-                let max_count =
-                    ((nt as u64) * (*nb_interr as u64) + (ntot as u64) - 1) / (ntot as u64);
-                let max_count = max_count as u32;
-
-                for &student in &enrolled {
-                    let count = count_student_teacher_expr(
-                        &teacher_pairs,
-                        student,
-                        *first_week,
-                        *last_week,
-                    );
-                    let constraint = count.leq(&IntLinExpr::constant(i64::from(max_count)));
-                    let desc = PreferenceConstraint::BalancingRotation {
-                        student,
-                        subject: *subject_id,
-                        teacher,
-                        first_week: *first_week,
-                        last_week: *last_week,
-                        max_count,
+        if is_soft {
+            // Soft path: cumulative availability-proportional balance. For each
+            // (student, teacher) and each prefix boundary week `wᵢ`, the share of
+            // the student's interrogations that go to teacher `t` should match
+            // teacher `t`'s share of the *available* slot-weeks up to `wᵢ`:
+            // `Uₜ/U == Aₜ/A`, cleared of the fraction to `A·Uₜ − Aₜ·U == 0` (with
+            // `A`, `Aₜ` availability constants and `U`, `Uₜ` prefix counts). Only
+            // weeks `0..=i-1` appear, so — objectified on its own into a penalty
+            // keyed by `{subject, student, teacher, wᵢ}` — the penalty's footprint
+            // ends at `wᵢ` and enters the incremental objective at the epoch that
+            // completes that week (see strategies incremental filter). This also
+            // fixes a latent bug: the previous whole-year ramp only linearized the
+            // visits actually seen, never pushing toward the teachers on offer.
+            let n = active_weeks.len();
+            if n >= 2 {
+                for &teacher in &teachers {
+                    let teacher_pairs =
+                        slot_week_pairs_for_teacher(&slot_week_pairs, env, *subject_id, teacher);
+                    for &student in &enrolled {
+                        for i in 1..=n {
+                            let week = active_weeks[i - 1];
+                            let a =
+                                slot_weeks_in_range(&slot_week_pairs, active_weeks[0], week) as i64;
+                            let a_t =
+                                slot_weeks_in_range(&teacher_pairs, active_weeks[0], week) as i64;
+                            if a == 0 || a_t == 0 {
+                                // `a_t == 0` ⇒ `Uₜ ≡ 0` ⇒ constraint is trivially `0 == 0`.
+                                continue;
+                            }
+                            let u = count_interrogations_expr(
+                                &slot_week_pairs,
+                                student,
+                                active_weeks[0],
+                                week,
+                            );
+                            let u_t = count_student_teacher_expr(
+                                &teacher_pairs,
+                                student,
+                                active_weeks[0],
+                                week,
+                            );
+                            let lhs = a * &u_t - a_t * &u;
+                            let constraint = lhs.eq(&IntLinExpr::constant(0));
+                            let desc = PreferenceConstraint::BalancingRotationRegularity {
+                                student,
+                                subject: *subject_id,
+                                teacher,
+                                week,
+                            }
+                            .into();
+                            // `BASE/(n·A)` cancels the `A` forced into the numerator
+                            // for integer coefficients, so the penalty reads as
+                            // `BASE/n·|Uₜ − (Aₜ/A)·U|` (misplaced-interrogation count),
+                            // year-length independent like the other soft families.
+                            let weight = crate::weights::BASE / (n as f64 * a as f64);
+                            output = merge_objectified_weighted(
+                                output,
+                                MyBundle::new().with_constraint(constraint, desc),
+                                ExtraVarName::BalancingRotationPenalty {
+                                    subject: *subject_id,
+                                    student,
+                                    teacher,
+                                    week,
+                                },
+                                move |_desc| weight,
+                            );
+                        }
                     }
-                    .into();
-                    if is_soft {
-                        soft_bundle = soft_bundle.with_constraint(constraint, desc);
-                    } else {
+                }
+            }
+        } else {
+            // Hard path: periodicity-based density upper-bound windows (unchanged).
+            let mut hard_bundle = MyBundle::new();
+            let windows = generate_windows(&active_weeks, last_week, &params.periodicity);
+            for (first_week, last_week, nb_interr) in &windows {
+                let ntot = slot_weeks_in_range(&slot_week_pairs, *first_week, *last_week);
+                if ntot == 0 {
+                    continue;
+                }
+
+                for &teacher in &teachers {
+                    let teacher_pairs =
+                        slot_week_pairs_for_teacher(&slot_week_pairs, env, *subject_id, teacher);
+                    let nt = slot_weeks_in_range(&teacher_pairs, *first_week, *last_week);
+                    let max_count =
+                        ((nt as u64) * (*nb_interr as u64) + (ntot as u64) - 1) / (ntot as u64);
+                    let max_count = max_count as u32;
+
+                    for &student in &enrolled {
+                        let count = count_student_teacher_expr(
+                            &teacher_pairs,
+                            student,
+                            *first_week,
+                            *last_week,
+                        );
+                        let constraint = count.leq(&IntLinExpr::constant(i64::from(max_count)));
+                        let desc = PreferenceConstraint::BalancingRotation {
+                            student,
+                            subject: *subject_id,
+                            teacher,
+                            first_week: *first_week,
+                            last_week: *last_week,
+                            max_count,
+                        }
+                        .into();
                         hard_bundle = hard_bundle.with_constraint(constraint, desc);
                     }
                 }
             }
+            output = output
+                .merge(hard_bundle)
+                .expect("no duplicate extras from balancing rotation (distinct subjects)");
         }
-
-        output = output
-            .merge(merge_objectified(
-                hard_bundle,
-                soft_bundle,
-                ExtraVarName::BalancingRotationPenalty {
-                    subject: *subject_id,
-                },
-            ))
-            .expect("no duplicate extras from balancing rotation (distinct subjects)");
     }
 
     output

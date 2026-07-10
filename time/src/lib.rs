@@ -159,6 +159,69 @@ impl std::fmt::Display for NonZeroMinutes {
     }
 }
 
+/// A solver time limit in whole seconds. The internal `None` means "no limit".
+///
+/// A zero limit is unrepresentable, removing the `Some(0)` = "stop immediately"
+/// footgun of a raw `Option<u32>`: `0` now uniformly means "no limit".
+///
+/// The [`seconds`](TimeLimit::seconds) and [`minutes`](TimeLimit::minutes)
+/// constructors take a [`NonZeroU32`] and are total. Callers holding a raw `u32`
+/// (CLI/UI/config) opt into the "0 = unlimited" convention explicitly:
+///
+/// ```
+/// use collomatique_time::TimeLimit;
+/// use std::num::NonZeroU32;
+///
+/// let raw: u32 = 0;
+/// let limit = NonZeroU32::new(raw).map(TimeLimit::seconds).unwrap_or_default();
+/// assert!(limit.is_none());
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub struct TimeLimit(Option<NonZeroU32>); // inner unit = seconds
+
+impl TimeLimit {
+    /// No time limit (the default).
+    pub fn none() -> Self {
+        TimeLimit(None)
+    }
+
+    /// A limit of `value` seconds.
+    pub fn seconds(value: NonZeroU32) -> Self {
+        TimeLimit(Some(value))
+    }
+
+    /// A limit of `value` minutes. Saturates at `u32::MAX` seconds.
+    pub fn minutes(value: NonZeroU32) -> Self {
+        const SECONDS_PER_MINUTE: u64 = 60;
+        let secs = u64::from(value.get()) * SECONDS_PER_MINUTE;
+        let secs = u32::try_from(secs).unwrap_or(u32::MAX);
+        // `secs` is a product of a non-zero value with 60, so it is non-zero.
+        TimeLimit(Some(NonZeroU32::new(secs).unwrap()))
+    }
+
+    /// Returns `true` if there is no limit.
+    pub fn is_none(self) -> bool {
+        self.0.is_none()
+    }
+
+    /// Returns `true` if there is a finite limit.
+    pub fn is_some(self) -> bool {
+        self.0.is_some()
+    }
+
+    /// The limit in seconds, or `None` if unlimited.
+    pub fn get_seconds(self) -> Option<NonZeroU32> {
+        self.0
+    }
+
+    /// Convenience for callback-based solvers: the limit as a [`std::time::Duration`],
+    /// or `None` if unlimited.
+    pub fn duration(self) -> Option<std::time::Duration> {
+        self.0
+            .map(|s| std::time::Duration::from_secs(u64::from(s.get())))
+    }
+}
+
 /// Encapsulates a [chrono::Weekday] with a canonical ordering where Monday is the
 /// first day of the week and Sunday is the last.
 ///

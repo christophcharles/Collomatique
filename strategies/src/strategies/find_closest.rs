@@ -5,15 +5,44 @@ use std::fmt;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-use collomatique_ilp::{ConfigData, LinExpr, Problem, ProblemBuilder, UsableData, Variable};
+use collomatique_ilp::{ConfigData, LinExpr, Problem, UsableData, Variable};
 use collomatique_ilp_modeler::{
     ConstraintBundle, ConstraintSource, InternalVar, Model, Modeler, Var,
 };
 
 use crate::{
     NoObjectiveSolveProgress, SolveProblemOpts, SolveStatus, Strategy, StrategyContext,
-    StrategyError, StrategyOutcome,
+    StrategyError, StrategyOutcome, VarOrderSerializable,
 };
+
+/// Per-run payload for [`FindClosestStrategy`]: the `target` configuration whose feasible
+/// L1-nearest point the strategy searches for.
+#[derive(Debug, Clone)]
+pub struct FindClosestPayload<V: UsableData> {
+    pub target: ConfigData<V>,
+}
+
+/// Serializable counterpart of [`FindClosestPayload<V>`]: the target is erased to a
+/// column-indexed `Vec<f64>` against the model's `var_order`, so it can cross the IPC barrier.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FindClosestPayloadData {
+    pub target: Vec<f64>,
+}
+
+impl<V: UsableData + Send> VarOrderSerializable<V> for FindClosestPayload<V> {
+    type Data = FindClosestPayloadData;
+    type Error = Infallible;
+    fn into_data(&self, var_order: &[V]) -> Result<FindClosestPayloadData, Infallible> {
+        Ok(FindClosestPayloadData {
+            target: collomatique_ilp::config_data_to_hint(&self.target, var_order),
+        })
+    }
+    fn from_data(data: &FindClosestPayloadData, var_order: &[V]) -> Result<Self, Infallible> {
+        Ok(FindClosestPayload {
+            target: collomatique_ilp::solution_to_config_data(&data.target, var_order),
+        })
+    }
+}
 
 /// Extra-variable name for the surrogate "closeness" model. The
 /// original extras are wrapped as [`ClosestExtra::Inner`]; the L1
@@ -30,19 +59,19 @@ enum ClosestExtra<E> {
 }
 
 /// Find a feasible assignment of the base variables that is as close
-/// as possible (L1 distance) to a warm start, then reconstruct the
+/// as possible (L1 distance) to a target config, then reconstruct the
 /// extra variables against the original model.
 ///
 /// Mirrors [`NoObjectiveStrategy`](crate::NoObjectiveStrategy): it
 /// strips the real objective and solves a cheap surrogate, but here
-/// the surrogate *minimizes distance to the warm start* instead of
+/// the surrogate *minimizes distance to the payload target* instead of
 /// merely checking feasibility. Binary base variables contribute a
 /// direct linear term; non-binary ones are objectified into an L1
-/// penalty. A warm start is required.
+/// penalty. The target is supplied as the payload.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FindClosestStrategy {
-    pub closeness_time_limit_seconds: Option<u32>,
-    pub reconstruction_time_limit_seconds: Option<u32>,
+    pub closeness_time_limit: collomatique_time::TimeLimit,
+    pub reconstruction_time_limit: collomatique_time::TimeLimit,
     pub disable_logging: bool,
     /// Absolute tolerance on the L1 closeness distance (Phase 2): accept the first feasible
     /// point found within this distance of the closest possible one, instead of solving the
@@ -108,29 +137,15 @@ where
     E: UsableData,
     C: UsableData,
 {
-    let vars: HashMap<InternalVar<B, ClosestExtra<E>>, Variable> = checker
-        .get_variables()
-        .iter()
-        .map(|(v, kind)| (wrap_var(v), kind.clone()))
-        .collect();
-    let constraints: Vec<_> = checker
-        .get_constraints()
-        .iter()
-        .map(|(c, src)| (c.transmute(wrap_var), wrap_source(src)))
-        .collect();
-    let objective = checker.get_objective().transmute(wrap_var);
-
-    ProblemBuilder::new()
-        .set_variables(vars)
-        .add_constraints(constraints)
-        .set_objective(objective)
-        .build()
+    checker
+        .transmute(wrap_var, wrap_source)
         .map_err(|e| StrategyError::SolveError(format!("failed to wrap checker problem: {e:?}")))
 }
 
 #[async_trait]
 impl Strategy for FindClosestStrategy {
     type Progress<V: UsableData + Send> = FindClosestProgressData;
+    type Payload<V: UsableData + Send> = FindClosestPayload<V>;
 
     fn name(&self) -> &'static str {
         "find-closest"
@@ -144,7 +159,8 @@ impl Strategy for FindClosestStrategy {
         &self,
         ctx: &StrategyContext,
         model: &Model<B, E, C>,
-        warm_start: Option<ConfigData<InternalVar<B, E>>>,
+        _warm_start: Option<ConfigData<InternalVar<B, E>>>,
+        payload: FindClosestPayload<InternalVar<B, E>>,
         on_progress: &(dyn Fn(Self::Progress<InternalVar<B, E>>) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
@@ -152,12 +168,10 @@ impl Strategy for FindClosestStrategy {
         E: UsableData + Send,
         C: UsableData + Send,
     {
-        // A warm start is mandatory: without a target there is
-        // nothing to be close to.
-        let warm_start = warm_start.ok_or_else(|| {
-            StrategyError::SolveError("find closest requires a warm start".into())
-        })?;
-        let target_base_values: HashMap<B, f64> = warm_start
+        // The target comes from the payload (specific to this run); `warm_start` is a
+        // genuine, currently-unused optional hint.
+        let target_base_values: HashMap<B, f64> = payload
+            .target
             .get_values()
             .into_iter()
             .filter_map(|(v, val)| match v {
@@ -247,7 +261,7 @@ impl Strategy for FindClosestStrategy {
                 closest_model.problem(),
                 SolveProblemOpts {
                     warm_start: None,
-                    time_limit_seconds: self.closeness_time_limit_seconds,
+                    time_limit: self.closeness_time_limit,
                     disable_logging: self.disable_logging,
                 },
                 &|p| {
@@ -341,7 +355,7 @@ impl Strategy for FindClosestStrategy {
                 &recon_problem,
                 SolveProblemOpts {
                     warm_start: None,
-                    time_limit_seconds: self.reconstruction_time_limit_seconds,
+                    time_limit: self.reconstruction_time_limit,
                     disable_logging: self.disable_logging,
                 },
                 &move |p| {
@@ -435,7 +449,7 @@ mod tests {
 
     use crate::{
         RawSolveOutcome, SolveBackend, SolveConfig, SolveProgressData, StrategyContext,
-        StrategyKind, StrategyProgressData,
+        StrategyKind, StrategyPayloadData, StrategyProgressData,
     };
 
     /// A backend that actually solves each problem it is handed with CBC, so the
@@ -490,6 +504,7 @@ mod tests {
             _model_desc: &ModelDesc,
             _strategy: &StrategyKind,
             _warm_start: Option<Vec<f64>>,
+            _payload: StrategyPayloadData,
             _on_progress: &(dyn Fn(StrategyProgressData) -> bool + Send + Sync),
             _on_echo: &(dyn Fn(String) + Send + Sync),
         ) -> Result<RawSolveOutcome, StrategyError> {
@@ -499,8 +514,8 @@ mod tests {
 
     fn strategy() -> FindClosestStrategy {
         FindClosestStrategy {
-            closeness_time_limit_seconds: None,
-            reconstruction_time_limit_seconds: None,
+            closeness_time_limit: collomatique_time::TimeLimit::none(),
+            reconstruction_time_limit: collomatique_time::TimeLimit::none(),
             disable_logging: true,
             // Solve to the exact closest point so distance-based assertions are stable.
             distance_tolerance: 0.0,
@@ -539,10 +554,16 @@ mod tests {
         let ctx = StrategyContext::new(Arc::new(RealBackend));
         let events: Mutex<Vec<FindClosestProgressData>> = Mutex::new(Vec::new());
         let outcome = strategy()
-            .run_with_callback(&ctx, &model, Some(warm), &|p| {
-                events.lock().unwrap().push(p);
-                true
-            })
+            .run_with_callback(
+                &ctx,
+                &model,
+                None,
+                FindClosestPayload { target: warm },
+                &|p| {
+                    events.lock().unwrap().push(p);
+                    true
+                },
+            )
             .await
             .unwrap();
 
@@ -585,30 +606,18 @@ mod tests {
 
         let ctx = StrategyContext::new(Arc::new(RealBackend));
         let outcome = strategy()
-            .run_with_callback(&ctx, &model, Some(warm), &|_| true)
+            .run_with_callback(
+                &ctx,
+                &model,
+                None,
+                FindClosestPayload { target: warm },
+                &|_| true,
+            )
             .await
             .unwrap();
 
         assert_eq!(outcome.status, SolveStatus::Optimal);
         let sol = outcome.solution.unwrap();
         assert_eq!(sol.get(InternalVar::Base(0usize)).unwrap(), 3.0);
-    }
-
-    /// Without a warm start there is no target, so the strategy errors out.
-    #[tokio::test]
-    async fn missing_warm_start_errors() {
-        let vars: HashMap<usize, Variable> = [(0, Variable::binary())].into();
-        let modeler: Modeler<usize, (), (), (), ()> = Modeler::new(vars);
-        let model = modeler.build(&()).unwrap();
-
-        let ctx = StrategyContext::new(Arc::new(RealBackend));
-        let err = strategy()
-            .run_with_callback(&ctx, &model, None, &|_| true)
-            .await
-            .unwrap_err();
-        match err {
-            StrategyError::SolveError(msg) => assert!(msg.contains("warm start")),
-            other => panic!("expected SolveError, got {other:?}"),
-        }
     }
 }
