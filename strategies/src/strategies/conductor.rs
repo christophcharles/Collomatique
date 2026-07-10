@@ -7,7 +7,8 @@ use std::pin::Pin;
 use std::sync::Mutex;
 
 use async_trait::async_trait;
-use futures::channel::oneshot;
+use futures::channel::{mpsc, oneshot};
+use futures::select;
 use futures::stream::{FuturesUnordered, StreamExt};
 use serde::{Deserialize, Serialize};
 
@@ -926,6 +927,7 @@ async fn run_one_worker<'a, B, E, C>(
     warm_start: Option<ConfigData<InternalVar<B, E>>>,
     payload: StrategyPayload<InternalVar<B, E>>,
     cancel: Option<oneshot::Receiver<()>>,
+    wake_tx: &'a mpsc::UnboundedSender<()>,
 ) -> WorkerEnd<InternalVar<B, E>>
 where
     B: UsableData + Send,
@@ -941,7 +943,29 @@ where
                 *d = Some(merge_default_obj(*d, objective, sense));
             }
         }
-        report_worker_progress(worker_num, p, status, sense, on_progress)
+        // Snapshot the incumbent objective around the fold: if this update installs a new
+        // (better) incumbent, wake the scheduler so idle slots get topped up with fuzzy
+        // exploration immediately, without waiting for a worker to finish. `update_best_solution`
+        // only accepts non-dominated solutions, so a changed objective (including None -> Some)
+        // reliably means a fresh incumbent. `report_worker_progress` never holds the status lock
+        // across its return, so these two short-lived locks cannot deadlock.
+        let before = status
+            .lock()
+            .expect("conductor status mutex")
+            .best_solution
+            .as_ref()
+            .map(|s| s.objective);
+        let cont = report_worker_progress(worker_num, p, status, sense, on_progress);
+        let after = status
+            .lock()
+            .expect("conductor status mutex")
+            .best_solution
+            .as_ref()
+            .map(|s| s.objective);
+        if after != before {
+            let _ = wake_tx.unbounded_send(());
+        }
+        cont
     };
     let echo = |line| {
         // Route the worker's console output as first-class progress so it can be attributed
@@ -1026,6 +1050,12 @@ impl Strategy for ConductorStrategy {
         let default_obj: Mutex<Option<f64>> = Mutex::new(None);
         let mut default_slot: Option<usize> = None;
         let mut default_cancel: Option<oneshot::Sender<()>> = None;
+
+        // Wake channel: a worker that installs a new incumbent mid-run signals here so the loop
+        // re-runs its top (fuzzy top-up + fill) without waiting for a worker to finish. Without
+        // this, an idle slot would only ever be topped up when some *other* worker ends. Declared
+        // before `workers` so that the worker futures (which borrow `&wake_tx`) drop first.
+        let (wake_tx, mut wake_rx) = mpsc::unbounded::<()>();
 
         let mut workers: FuturesUnordered<
             Pin<Box<dyn Future<Output = WorkerEnd<InternalVar<B, E>>> + Send + '_>>,
@@ -1114,12 +1144,29 @@ impl Strategy for ConductorStrategy {
                     spawn_warm_start,
                     payload,
                     cancel,
+                    &wake_tx,
                 )));
             }
 
-            // Wait for the next worker to finish; if none are running we're done.
-            let Some(end) = workers.next().await else {
+            // Nothing left running -> nothing more to schedule; we're done. (Checked before the
+            // `select!` below because an empty `FuturesUnordered` reports itself terminated, so
+            // `select!` would disable that arm and wait on the wake channel forever instead of
+            // yielding `None`.)
+            if workers.is_empty() {
                 break;
+            }
+            // Wait for the next worker to finish OR a mid-run incumbent to wake the scheduler.
+            let end = select! {
+                end = workers.next() => end,
+                _ = wake_rx.next() => None,
+            };
+            let Some(end) = end else {
+                // Woken by a new incumbent (never a drained pool: the `is_empty` guard above and
+                // the single-threaded await point guarantee `workers.next()` yields `Some` here).
+                // Drain any coalesced wakes and re-run the loop top, which tops up idle slots with
+                // fuzzy exploration around the fresh incumbent.
+                while let Ok(Some(())) = wake_rx.try_next() {}
+                continue;
             };
             let worker_result = match end {
                 // A superseded Default was killed; its replacement is already queued at the front,
@@ -1337,6 +1384,104 @@ mod tests {
         let st = status.lock().unwrap();
         assert_eq!(st.best_bound, Some(1.0));
         assert_eq!(st.best_solution.as_ref().unwrap().objective, 3.0);
+    }
+
+    /// Mirror the wake decision the `run_one_worker` progress closure makes: fold an update and
+    /// signal `wake_tx` iff it installed a new/better incumbent. Returns whether a wake was sent.
+    fn fold_and_maybe_wake<P>(
+        status: &Mutex<ConductorStatus<usize>>,
+        wake_tx: &mpsc::UnboundedSender<()>,
+        progress: P,
+    ) -> bool
+    where
+        P: Into<StrategyProgress<usize>>,
+    {
+        let noop = |_p: ConductorProgress<usize>| true;
+        let before = status
+            .lock()
+            .unwrap()
+            .best_solution
+            .as_ref()
+            .map(|s| s.objective);
+        report_worker_progress(0, progress, status, ObjectiveSense::Minimize, &noop);
+        let after = status
+            .lock()
+            .unwrap()
+            .best_solution
+            .as_ref()
+            .map(|s| s.objective);
+        if after != before {
+            let _ = wake_tx.unbounded_send(());
+            true
+        } else {
+            false
+        }
+    }
+
+    #[test]
+    fn wake_fires_on_incumbent_improvement_only() {
+        let status = empty_status();
+        let (wake_tx, mut wake_rx) = mpsc::unbounded::<()>();
+
+        // First incumbent (None -> Some): wakes.
+        let improved = fold_and_maybe_wake(
+            &status,
+            &wake_tx,
+            SolveProgress {
+                best_obj: Some(5.0),
+                best_bound: 1.0,
+                node_count: 1,
+                solutions_found: 1,
+                incumbent: Some(config(&[(0, 1.0)])),
+            },
+        );
+        assert!(improved);
+        assert!(matches!(wake_rx.try_next(), Ok(Some(()))));
+
+        // A dominated update (worse objective) does not improve the incumbent: no wake.
+        let improved = fold_and_maybe_wake(
+            &status,
+            &wake_tx,
+            SolveProgress {
+                best_obj: Some(9.0),
+                best_bound: 2.0,
+                node_count: 2,
+                solutions_found: 2,
+                incumbent: Some(config(&[(0, 0.0)])),
+            },
+        );
+        assert!(!improved);
+        // Empty channel -> `try_next` reports the disconnected-but-empty `Err` case.
+        assert!(wake_rx.try_next().is_err());
+
+        // A better incumbent wakes again.
+        let improved = fold_and_maybe_wake(
+            &status,
+            &wake_tx,
+            SolveProgress {
+                best_obj: Some(3.0),
+                best_bound: 2.0,
+                node_count: 3,
+                solutions_found: 3,
+                incumbent: Some(config(&[(0, 1.0)])),
+            },
+        );
+        assert!(improved);
+        assert!(matches!(wake_rx.try_next(), Ok(Some(()))));
+    }
+
+    #[test]
+    fn drain_empties_coalesced_wakes() {
+        let (wake_tx, mut wake_rx) = mpsc::unbounded::<()>();
+        for _ in 0..3 {
+            wake_tx.unbounded_send(()).unwrap();
+        }
+        let mut drained = 0;
+        while let Ok(Some(())) = wake_rx.try_next() {
+            drained += 1;
+        }
+        assert_eq!(drained, 3);
+        assert!(wake_rx.try_next().is_err());
     }
 
     #[test]

@@ -1369,6 +1369,7 @@ mod tests {
     use super::*;
     use collomatique_ilp::Variable;
     use collomatique_ilp_modeler::Modeler;
+    use futures::channel::oneshot;
     use std::collections::{HashMap, VecDeque};
     use std::sync::Mutex;
 
@@ -1986,5 +1987,160 @@ mod tests {
 
         assert_eq!(outcome.status, SolveStatus::Optimal);
         assert_eq!(outcome.objective, Some(2.0));
+    }
+
+    /// Backend for the conductor mid-run-wake regression test. The `Default` worker announces a
+    /// feasible-but-unproven incumbent and then *keeps running* (blocks until released); the first
+    /// `Fuzzy` worker releases it. So the whole run can only finish if that mid-run incumbent woke
+    /// the scheduler and topped up the still-idle slot with a fuzzy worker — otherwise `Default`
+    /// blocks forever and the test's watchdog timeout fires. Reproduces the bug where the loop only
+    /// re-scheduled when a worker *ended*, so fuzzy never launched while `Default` ground on.
+    struct MidRunIncumbentBackend {
+        incumbent: Vec<f64>,
+        // `Default` takes the receiver and awaits it; the first `Fuzzy` takes the sender and fires.
+        release_rx: Mutex<Option<oneshot::Receiver<()>>>,
+        release_tx: Mutex<Option<oneshot::Sender<()>>>,
+    }
+
+    #[async_trait]
+    impl SolveBackend for MidRunIncumbentBackend {
+        async fn solve_with_progress(
+            &self,
+            _desc: &ProblemDesc,
+            _opts: SolveConfig,
+            _on_progress: &(dyn Fn(SolveProgressData) -> bool + Send + Sync),
+            _on_echo: &(dyn Fn(String) + Send + Sync),
+        ) -> Result<RawSolveOutcome, StrategyError> {
+            unreachable!()
+        }
+
+        async fn run_strategy_subprocess(
+            &self,
+            _model_desc: &ModelDesc,
+            strategy: &StrategyKind,
+            _warm_start: Option<Vec<f64>>,
+            _payload: StrategyPayloadData,
+            on_progress: &(dyn Fn(StrategyProgressData) -> bool + Send + Sync),
+            _on_echo: &(dyn Fn(String) + Send + Sync),
+        ) -> Result<RawSolveOutcome, StrategyError> {
+            match strategy {
+                StrategyKind::Default(_) => {
+                    // Announce a feasible incumbent whose bound is strictly worse than its
+                    // objective, so the optimality gap stays open and fuzzy remains eligible.
+                    on_progress(StrategyProgressData::Default(SolveProgressData {
+                        best_obj: Some(5.0),
+                        best_bound: 1.0,
+                        node_count: 1,
+                        solutions_found: 1,
+                        incumbent: Some(self.incumbent.clone()),
+                    }));
+                    // Keep grinding until a fuzzy worker releases us. Take the receiver out of the
+                    // mutex in its own statement so the guard is not held across the await (which
+                    // would make this future non-Send).
+                    let rx = self.release_rx.lock().unwrap().take();
+                    if let Some(rx) = rx {
+                        let _ = rx.await;
+                    }
+                    Ok(RawSolveOutcome {
+                        status: SolveStatus::Optimal,
+                        objective: Some(5.0),
+                        best_bound: Some(5.0),
+                        solution: Some(self.incumbent.clone()),
+                    })
+                }
+                StrategyKind::Fuzzy(_) => {
+                    // Reaching here proves the mid-run incumbent woke the scheduler and the idle
+                    // slot was topped up with fuzzy. Release the still-running Default worker.
+                    let tx = self.release_tx.lock().unwrap().take();
+                    if let Some(tx) = tx {
+                        let _ = tx.send(());
+                    }
+                    // Yield so the now-ready Default worker gets polled instead of spinning on
+                    // repeated fuzzy relaunches into the freed slot.
+                    tokio::task::yield_now().await;
+                    Ok(RawSolveOutcome {
+                        status: SolveStatus::Stopped,
+                        objective: None,
+                        best_bound: None,
+                        solution: None,
+                    })
+                }
+                _ => unreachable!("only Default and Fuzzy are enabled in this test"),
+            }
+        }
+    }
+
+    #[test]
+    fn conductor_launches_fuzzy_on_midrun_incumbent() {
+        use std::num::NonZeroU32;
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        // Run the conductor on a dedicated current-thread runtime and watchdog it from here with a
+        // real timeout (tokio's `time` feature is not enabled). Without the mid-run wake fix the
+        // Default worker would block forever, so `recv_timeout` is what turns a regression into a
+        // clean failure instead of a hang.
+        let (done_tx, done_rx) = mpsc::channel();
+        let handle = std::thread::spawn(move || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .build()
+                .expect("current-thread runtime");
+            let result = rt.block_on(async {
+                let model = make_model(vec![(0, Variable::binary()), (1, Variable::binary())]);
+                let (release_tx, release_rx) = oneshot::channel::<()>();
+                let backend = Arc::new(MidRunIncumbentBackend {
+                    incumbent: vec![1.0, 1.0],
+                    release_rx: Mutex::new(Some(release_rx)),
+                    release_tx: Mutex::new(Some(release_tx)),
+                });
+                let ctx = StrategyContext::new(backend);
+                let strategy = ConductorStrategy {
+                    worker_count: NonZeroU32::new(2).unwrap(),
+                    enable_default: true,
+                    enable_warm_start: false,
+                    incremental_config: None,
+                    fuzzy_config: Some(FuzzyConfig::default()),
+                };
+
+                let saw_fuzzy = Arc::new(Mutex::new(false));
+                let saw_fuzzy_cb = saw_fuzzy.clone();
+                let on_progress = move |p: ConductorProgress<InternalVar<usize, ()>>| {
+                    if let ConductorProgress::WorkerAssigned {
+                        strategy: Some(kind),
+                        ..
+                    } = &p
+                    {
+                        if matches!(**kind, StrategyKind::Fuzzy(_)) {
+                            *saw_fuzzy_cb.lock().unwrap() = true;
+                        }
+                    }
+                    true
+                };
+
+                let outcome = strategy
+                    .run_with_callback(
+                        &ctx,
+                        &model,
+                        None,
+                        ConductorPayload::default(),
+                        &on_progress,
+                    )
+                    .await
+                    .unwrap();
+                (outcome.status, *saw_fuzzy.lock().unwrap())
+            });
+            let _ = done_tx.send(result);
+        });
+
+        let (status, saw_fuzzy) = done_rx.recv_timeout(Duration::from_secs(5)).expect(
+            "conductor did not finish in time — the mid-run incumbent never launched fuzzy",
+        );
+        handle.join().unwrap();
+
+        assert!(
+            saw_fuzzy,
+            "a fuzzy worker should have been assigned to the idle slot after the mid-run incumbent"
+        );
+        assert_eq!(status, SolveStatus::Optimal);
     }
 }
