@@ -1109,8 +1109,8 @@ impl Component for EditorPanel {
                     timeout: None,
                 });
                 let inner_data = self.data.get_data().get_inner_data().clone();
-                sender.oneshot_command(async move {
-                    match export::export_to_xlsx(&inner_data, &path, &xlsx_config).await {
+                sender.spawn_oneshot_command(move || {
+                    match export::export_to_xlsx(&inner_data, &path, &xlsx_config) {
                         Ok(()) => EditorCommandOutput::ExportXlsxSuccessful(path),
                         Err(e) => EditorCommandOutput::ExportXlsxFailed(path, e.to_string()),
                     }

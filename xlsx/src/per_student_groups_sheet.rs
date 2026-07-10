@@ -1,120 +1,108 @@
 use std::collections::HashMap;
 
 use rust_xlsxwriter::{Url, Worksheet};
-use sqlx::{Row, SqlitePool};
+
+use collomatique_state_colloscopes::InnerData;
+use collomatique_state_colloscopes::group_lists::GroupListFilling;
+use collomatique_state_colloscopes::ids::{GroupListId, StudentId};
 
 use crate::Error;
 use crate::formats;
 use crate::get_group_name;
 
-async fn query_all(
-    pool: &SqlitePool,
-) -> Result<(Vec<(i64, String)>, HashMap<(i64, i64), i64>), Error> {
-    let group_lists_rows = sqlx::query(
-        "SELECT DISTINCT gl.id, gl.name \
-         FROM group_lists gl \
-         WHERE EXISTS (SELECT 1 FROM colloscope_group_list_students WHERE group_list_id = gl.id) \
-            OR EXISTS (SELECT 1 FROM prefilled_group_students WHERE group_list_id = gl.id) \
-         ORDER BY gl.name",
-    )
-    .fetch_all(pool)
-    .await?;
+type GroupListsAndMembers = (
+    Vec<(GroupListId, String)>,
+    HashMap<(GroupListId, StudentId), i64>,
+);
 
-    let group_lists: Vec<(i64, String)> = group_lists_rows
-        .iter()
-        .map(|r| (r.get(0), r.get(1)))
-        .collect();
-
-    let student_groups_rows = sqlx::query(
-        "SELECT group_list_id, student_id, group_number AS group_idx \
-         FROM colloscope_group_list_students \
-         UNION ALL \
-         SELECT group_list_id, student_id, group_index AS group_idx \
-         FROM prefilled_group_students",
-    )
-    .fetch_all(pool)
-    .await?;
-
-    let mut student_groups: HashMap<(i64, i64), i64> = HashMap::new();
-    for row in student_groups_rows {
-        student_groups.insert((row.get(0), row.get(1)), row.get(2));
+/// Membership of the solver-assigned ("automatic") groups, from the colloscope.
+fn automatic_student_groups(
+    data: &InnerData,
+    student_groups: &mut HashMap<(GroupListId, StudentId), i64>,
+) {
+    for (gl_id, group_list) in &data.colloscope.group_lists {
+        for (student_id, group_number) in &group_list.groups_for_students {
+            student_groups.insert((*gl_id, *student_id), *group_number as i64);
+        }
     }
-
-    Ok((group_lists, student_groups))
 }
 
-async fn query_automatic(
-    pool: &SqlitePool,
-) -> Result<(Vec<(i64, String)>, HashMap<(i64, i64), i64>), Error> {
-    let group_lists_rows = sqlx::query(
-        "SELECT DISTINCT cgls.group_list_id, gl.name \
-         FROM colloscope_group_list_students cgls \
-         JOIN group_lists gl ON gl.id = cgls.group_list_id \
-         ORDER BY gl.name",
-    )
-    .fetch_all(pool)
-    .await?;
-
-    let group_lists: Vec<(i64, String)> = group_lists_rows
-        .iter()
-        .map(|r| (r.get(0), r.get(1)))
-        .collect();
-
-    let student_groups_rows = sqlx::query(
-        "SELECT group_list_id, student_id, group_number \
-         FROM colloscope_group_list_students",
-    )
-    .fetch_all(pool)
-    .await?;
-
-    let mut student_groups: HashMap<(i64, i64), i64> = HashMap::new();
-    for row in student_groups_rows {
-        student_groups.insert((row.get(0), row.get(1)), row.get(2));
+/// Membership of the prefilled groups, from the parameters (group index = position in the list).
+fn prefilled_student_groups(
+    data: &InnerData,
+    student_groups: &mut HashMap<(GroupListId, StudentId), i64>,
+) {
+    for (gl_id, group_list) in &data.params.group_lists.group_list_map {
+        if let GroupListFilling::Prefilled { groups } = &group_list.filling {
+            for (group_index, group) in groups.iter().enumerate() {
+                for student_id in &group.students {
+                    student_groups.insert((*gl_id, *student_id), group_index as i64);
+                }
+            }
+        }
     }
-
-    Ok((group_lists, student_groups))
 }
 
-async fn query_prefilled(
-    pool: &SqlitePool,
-) -> Result<(Vec<(i64, String)>, HashMap<(i64, i64), i64>), Error> {
-    let group_lists_rows = sqlx::query(
-        "SELECT DISTINCT pgs.group_list_id, gl.name \
-         FROM prefilled_group_students pgs \
-         JOIN group_lists gl ON gl.id = pgs.group_list_id \
-         ORDER BY gl.name",
-    )
-    .fetch_all(pool)
-    .await?;
+fn query_all(data: &InnerData) -> GroupListsAndMembers {
+    let group_lists = crate::non_empty_group_lists_by_name(data);
 
-    let group_lists: Vec<(i64, String)> = group_lists_rows
-        .iter()
-        .map(|r| (r.get(0), r.get(1)))
-        .collect();
+    let mut student_groups = HashMap::new();
+    automatic_student_groups(data, &mut student_groups);
+    prefilled_student_groups(data, &mut student_groups);
 
-    let student_groups_rows = sqlx::query(
-        "SELECT group_list_id, student_id, group_index \
-         FROM prefilled_group_students",
-    )
-    .fetch_all(pool)
-    .await?;
-
-    let mut student_groups: HashMap<(i64, i64), i64> = HashMap::new();
-    for row in student_groups_rows {
-        student_groups.insert((row.get(0), row.get(1)), row.get(2));
-    }
-
-    Ok((group_lists, student_groups))
+    (group_lists, student_groups)
 }
 
-async fn build_internal(
+fn query_automatic(data: &InnerData) -> GroupListsAndMembers {
+    let mut group_lists: Vec<(GroupListId, String)> = data
+        .colloscope
+        .group_lists
+        .iter()
+        .filter(|(_gl_id, group_list)| !group_list.groups_for_students.is_empty())
+        .map(|(gl_id, _group_list)| {
+            let name = data
+                .params
+                .group_lists
+                .group_list_map
+                .get(gl_id)
+                .map(|gl| gl.params.name.clone())
+                .unwrap_or_default();
+            (*gl_id, name)
+        })
+        .collect();
+    group_lists.sort_by(|a, b| a.1.cmp(&b.1));
+
+    let mut student_groups = HashMap::new();
+    automatic_student_groups(data, &mut student_groups);
+
+    (group_lists, student_groups)
+}
+
+fn query_prefilled(data: &InnerData) -> GroupListsAndMembers {
+    let mut group_lists: Vec<(GroupListId, String)> = data
+        .params
+        .group_lists
+        .group_list_map
+        .iter()
+        .filter(|(_gl_id, gl)| gl.filling.iter_students().next().is_some())
+        .map(|(gl_id, gl)| (*gl_id, gl.params.name.clone()))
+        .collect();
+    group_lists.sort_by(|a, b| a.1.cmp(&b.1));
+
+    let mut student_groups = HashMap::new();
+    prefilled_student_groups(data, &mut student_groups);
+
+    (group_lists, student_groups)
+}
+
+fn build_internal(
     worksheet: &mut Worksheet,
-    pool: &SqlitePool,
+    data: &InnerData,
     global: &crate::GlobalConfig,
     show_emails: bool,
     show_tel: bool,
-    group_lists: &[(i64, String)],
-    student_groups: &HashMap<(i64, i64), i64>,
+    group_lists: &[(GroupListId, String)],
+    student_groups: &HashMap<(GroupListId, StudentId), i64>,
 ) -> Result<usize, Error> {
     let bg = global.background_color.to_xlsx();
     let stripe = global
@@ -143,7 +131,7 @@ async fn build_internal(
     }
     let gl_start_col = c;
 
-    let gl_ids: Vec<i64> = group_lists.iter().map(|(id, _)| *id).collect();
+    let gl_ids: Vec<GroupListId> = group_lists.iter().map(|(id, _)| *id).collect();
 
     for (i, (_, gl_name)) in group_lists.iter().enumerate() {
         let (left_b, right_b) = gl_border(i, gl_count);
@@ -152,43 +140,34 @@ async fn build_internal(
     }
 
     // Students sorted by name
-    let students = sqlx::query(
-        "SELECT id, surname, firstname, email, tel \
-         FROM students \
-         ORDER BY surname, firstname",
-    )
-    .fetch_all(pool)
-    .await?;
+    let mut students: Vec<_> = data
+        .params
+        .students
+        .student_map
+        .iter()
+        .map(|(student_id, student)| (*student_id, &student.desc))
+        .collect();
+    students.sort_by(|a, b| (&a.1.surname, &a.1.firstname).cmp(&(&b.1.surname, &b.1.firstname)));
 
     // Group names: group_list_id -> Vec<String>
-    let group_name_rows = sqlx::query(
-        "SELECT group_list_id, group_index, name \
-         FROM group_list_group_names \
-         ORDER BY group_list_id, group_index",
-    )
-    .fetch_all(pool)
-    .await?;
-
-    let mut group_names_map: HashMap<i64, Vec<String>> = HashMap::new();
-    for row in group_name_rows {
-        let gl_id: i64 = row.get(0);
-        let group_index: i64 = row.get(1);
-        let name: String = row.get(2);
-        let names = group_names_map.entry(gl_id).or_default();
-        let idx = group_index as usize;
-        if names.len() <= idx {
-            names.resize(idx + 1, String::new());
-        }
-        names[idx] = name;
-    }
+    let group_names_map: HashMap<GroupListId, Vec<String>> = data
+        .params
+        .group_lists
+        .group_list_map
+        .iter()
+        .map(|(gl_id, gl)| (*gl_id, crate::group_names_vec(gl)))
+        .collect();
 
     let student_count = students.len();
-    for (row_idx, student_row) in students.iter().enumerate() {
-        let student_id: i64 = student_row.get(0);
-        let surname: String = student_row.get(1);
-        let firstname: String = student_row.get(2);
-        let email: String = student_row.get(3);
-        let tel: String = student_row.get(4);
+    for (row_idx, (student_id, desc)) in students.iter().enumerate() {
+        let surname = &desc.surname;
+        let firstname = &desc.firstname;
+        let email = desc
+            .email
+            .as_ref()
+            .map(|e| e.to_string())
+            .unwrap_or_default();
+        let tel = desc.tel.as_ref().map(|t| t.to_string()).unwrap_or_default();
 
         let row = (row_idx + 1) as u32;
         let (top_b, bot_b) = vertical_borders(row_idx, student_count);
@@ -196,8 +175,8 @@ async fn build_internal(
 
         let nom_fmt = formats::data_cell(top_b, bot_b, 2, 1, row_bg);
         let prenom_fmt = formats::data_cell(top_b, bot_b, 1, 2, row_bg);
-        worksheet.write_with_format(row, 0, &surname, &nom_fmt)?;
-        worksheet.write_with_format(row, 1, &firstname, &prenom_fmt)?;
+        worksheet.write_with_format(row, 0, surname, &nom_fmt)?;
+        worksheet.write_with_format(row, 1, firstname, &prenom_fmt)?;
         let mut c = 2u16;
         if show_emails {
             let data_fmt = formats::data_cell(top_b, bot_b, 2, 2, row_bg);
@@ -222,7 +201,7 @@ async fn build_internal(
             let cell_fmt = formats::data_cell(top_b, bot_b, left_b, right_b, row_bg);
 
             let cell_text = student_groups
-                .get(&(*gl_id, student_id))
+                .get(&(*gl_id, *student_id))
                 .map(|&group_idx| {
                     group_names_map
                         .get(gl_id)
@@ -254,64 +233,61 @@ async fn build_internal(
     Ok(gl_count)
 }
 
-pub async fn build_all(
+pub fn build_all(
     worksheet: &mut Worksheet,
-    pool: &SqlitePool,
+    data: &InnerData,
     global: &crate::GlobalConfig,
     show_emails: bool,
     show_tel: bool,
 ) -> Result<usize, Error> {
-    let (group_lists, student_groups) = query_all(pool).await?;
+    let (group_lists, student_groups) = query_all(data);
     build_internal(
         worksheet,
-        pool,
+        data,
         global,
         show_emails,
         show_tel,
         &group_lists,
         &student_groups,
     )
-    .await
 }
 
-pub async fn build_automatic(
+pub fn build_automatic(
     worksheet: &mut Worksheet,
-    pool: &SqlitePool,
+    data: &InnerData,
     global: &crate::GlobalConfig,
     show_emails: bool,
     show_tel: bool,
 ) -> Result<usize, Error> {
-    let (group_lists, student_groups) = query_automatic(pool).await?;
+    let (group_lists, student_groups) = query_automatic(data);
     build_internal(
         worksheet,
-        pool,
+        data,
         global,
         show_emails,
         show_tel,
         &group_lists,
         &student_groups,
     )
-    .await
 }
 
-pub async fn build_prefilled(
+pub fn build_prefilled(
     worksheet: &mut Worksheet,
-    pool: &SqlitePool,
+    data: &InnerData,
     global: &crate::GlobalConfig,
     show_emails: bool,
     show_tel: bool,
 ) -> Result<usize, Error> {
-    let (group_lists, student_groups) = query_prefilled(pool).await?;
+    let (group_lists, student_groups) = query_prefilled(data);
     build_internal(
         worksheet,
-        pool,
+        data,
         global,
         show_emails,
         show_tel,
         &group_lists,
         &student_groups,
     )
-    .await
 }
 
 fn vertical_borders(row_idx: usize, count: usize) -> (u8, u8) {

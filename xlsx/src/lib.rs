@@ -6,8 +6,9 @@ mod per_student_groups_sheet;
 use std::collections::BTreeMap;
 use std::path::Path;
 
+use collomatique_state_colloscopes::InnerData;
+use collomatique_state_colloscopes::group_lists::GroupList;
 use rust_xlsxwriter::{Workbook, XlsxError};
-use sqlx::{Row, SqlitePool};
 
 /// rust_xlsxwriter paper-size index for A4 (210 × 297 mm)
 const PAPER_SIZE_A4: u8 = 9;
@@ -43,14 +44,12 @@ impl Color {
 #[derive(Debug)]
 pub enum Error {
     Xlsx(XlsxError),
-    Sql(sqlx::Error),
 }
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Error::Xlsx(e) => write!(f, "XLSX error: {e}"),
-            Error::Sql(e) => write!(f, "SQL error: {e}"),
         }
     }
 }
@@ -58,12 +57,6 @@ impl std::fmt::Display for Error {
 impl From<XlsxError> for Error {
     fn from(e: XlsxError) -> Self {
         Error::Xlsx(e)
-    }
-}
-
-impl From<sqlx::Error> for Error {
-    fn from(e: sqlx::Error) -> Self {
-        Error::Sql(e)
     }
 }
 
@@ -135,7 +128,7 @@ fn apply_orientation(ws: &mut rust_xlsxwriter::Worksheet, orientation: &PageOrie
     };
 }
 
-pub async fn write_xlsx(pool: &SqlitePool, path: &Path, config: &Config) -> Result<(), Error> {
+pub fn write_xlsx(data: &InnerData, path: &Path, config: &Config) -> Result<(), Error> {
     let mut workbook = Workbook::new();
 
     if let Some(colloscope_config) = &config.colloscope {
@@ -143,7 +136,7 @@ pub async fn write_xlsx(pool: &SqlitePool, path: &Path, config: &Config) -> Resu
         if let Some(safe_name) = sanitize_sheet_name(&colloscope_config.sheet_name) {
             colloscope_ws.set_name(&safe_name)?;
         }
-        colloscope_sheet::build(colloscope_ws, pool, &config.global, colloscope_config).await?;
+        colloscope_sheet::build(colloscope_ws, data, &config.global, colloscope_config)?;
         colloscope_ws.set_paper_size(PAPER_SIZE_A4);
         colloscope_ws.set_print_center_horizontally(true);
         colloscope_ws.set_print_center_vertically(true);
@@ -158,12 +151,11 @@ pub async fn write_xlsx(pool: &SqlitePool, path: &Path, config: &Config) -> Resu
         }
         let gl_count = per_student_groups_sheet::build_all(
             all_groups_ws,
-            pool,
+            data,
             &config.global,
             all_groups_config.show_emails,
             all_groups_config.show_tel,
-        )
-        .await?;
+        )?;
         all_groups_ws.set_paper_size(PAPER_SIZE_A4);
         all_groups_ws.set_print_center_horizontally(true);
         all_groups_ws.set_print_center_vertically(true);
@@ -179,12 +171,12 @@ pub async fn write_xlsx(pool: &SqlitePool, path: &Path, config: &Config) -> Resu
     }
 
     if let Some(automatic_groups_config) = &config.automatic_groups {
-        let has_automatic_groups: bool = sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM group_lists WHERE filling_type = 'automatic'",
-        )
-        .fetch_one(pool)
-        .await?
-            > 0;
+        let has_automatic_groups = data
+            .params
+            .group_lists
+            .group_list_map
+            .values()
+            .any(|gl| !gl.filling.is_prefilled());
 
         if has_automatic_groups {
             let groups_ws = workbook.add_worksheet();
@@ -193,12 +185,11 @@ pub async fn write_xlsx(pool: &SqlitePool, path: &Path, config: &Config) -> Resu
             }
             let gl_count = per_student_groups_sheet::build_automatic(
                 groups_ws,
-                pool,
+                data,
                 &config.global,
                 automatic_groups_config.show_emails,
                 automatic_groups_config.show_tel,
-            )
-            .await?;
+            )?;
             groups_ws.set_paper_size(PAPER_SIZE_A4);
             groups_ws.set_print_center_horizontally(true);
             groups_ws.set_print_center_vertically(true);
@@ -215,12 +206,12 @@ pub async fn write_xlsx(pool: &SqlitePool, path: &Path, config: &Config) -> Resu
     }
 
     if let Some(prefilled_groups_config) = &config.prefilled_groups {
-        let has_prefilled_groups: bool = sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM group_lists WHERE filling_type = 'prefilled'",
-        )
-        .fetch_one(pool)
-        .await?
-            > 0;
+        let has_prefilled_groups = data
+            .params
+            .group_lists
+            .group_list_map
+            .values()
+            .any(|gl| gl.filling.is_prefilled());
 
         if has_prefilled_groups {
             let prefilled_ws = workbook.add_worksheet();
@@ -229,12 +220,11 @@ pub async fn write_xlsx(pool: &SqlitePool, path: &Path, config: &Config) -> Resu
             }
             let gl_count = per_student_groups_sheet::build_prefilled(
                 prefilled_ws,
-                pool,
+                data,
                 &config.global,
                 prefilled_groups_config.show_emails,
                 prefilled_groups_config.show_tel,
-            )
-            .await?;
+            )?;
             prefilled_ws.set_paper_size(PAPER_SIZE_A4);
             prefilled_ws.set_print_center_horizontally(true);
             prefilled_ws.set_print_center_vertically(true);
@@ -251,34 +241,22 @@ pub async fn write_xlsx(pool: &SqlitePool, path: &Path, config: &Config) -> Resu
     }
 
     if let Some(per_group_list_config) = &config.per_group_list {
-        let group_lists = sqlx::query(
-            "SELECT DISTINCT gl.id, gl.name \
-             FROM group_lists gl \
-             WHERE EXISTS (SELECT 1 FROM colloscope_group_list_students WHERE group_list_id = gl.id) \
-                OR EXISTS (SELECT 1 FROM prefilled_group_students WHERE group_list_id = gl.id) \
-             ORDER BY gl.name",
-        )
-        .fetch_all(pool)
-        .await?;
+        let group_lists = non_empty_group_lists_by_name(data);
 
-        for gl_row in &group_lists {
-            let gl_id: i64 = gl_row.get(0);
-            let gl_name: String = gl_row.get(1);
-
+        for (gl_id, gl_name) in &group_lists {
             let ws = workbook.add_worksheet();
-            if let Some(safe_name) = sanitize_sheet_name(&gl_name) {
+            if let Some(safe_name) = sanitize_sheet_name(gl_name) {
                 ws.set_name(&safe_name)?;
             }
             per_group_list_sheet::build(
                 ws,
-                pool,
+                data,
                 &config.global,
-                gl_id,
-                &gl_name,
+                *gl_id,
+                gl_name,
                 per_group_list_config.show_emails,
                 per_group_list_config.show_tel,
-            )
-            .await?;
+            )?;
             ws.set_paper_size(PAPER_SIZE_A4);
             ws.set_print_center_horizontally(true);
             ws.set_print_center_vertically(per_group_list_config.center_vertically);
@@ -291,9 +269,46 @@ pub async fn write_xlsx(pool: &SqlitePool, path: &Path, config: &Config) -> Resu
     Ok(())
 }
 
-pub(crate) fn generate_week_dates_title(first_week_str: &str, week_num: usize) -> Option<String> {
-    let global_monday = chrono::NaiveDate::parse_from_str(first_week_str, "%Y-%m-%d").ok()?;
-    let start = global_monday.checked_add_days(chrono::Days::new(7 * week_num as u64))?;
+/// Group lists that have at least one student, either assigned by the solver
+/// (`colloscope.group_lists`) or prefilled in the parameters, sorted by name.
+pub(crate) fn non_empty_group_lists_by_name(
+    data: &InnerData,
+) -> Vec<(collomatique_state_colloscopes::ids::GroupListId, String)> {
+    let mut group_lists: Vec<_> = data
+        .params
+        .group_lists
+        .group_list_map
+        .iter()
+        .filter(|(gl_id, gl)| {
+            let has_automatic_students = data
+                .colloscope
+                .group_lists
+                .get(gl_id)
+                .is_some_and(|cgl| !cgl.groups_for_students.is_empty());
+            let has_prefilled_students = gl.filling.iter_students().next().is_some();
+            has_automatic_students || has_prefilled_students
+        })
+        .map(|(gl_id, gl)| (*gl_id, gl.params.name.clone()))
+        .collect();
+    group_lists.sort_by(|a, b| a.1.cmp(&b.1));
+    group_lists
+}
+
+/// Group names of a group list as plain strings, unnamed groups becoming `""`.
+pub(crate) fn group_names_vec(group_list: &GroupList) -> Vec<String> {
+    group_list
+        .params
+        .group_names
+        .iter()
+        .map(|name| name.as_ref().map(|n| n.to_string()).unwrap_or_default())
+        .collect()
+}
+
+pub(crate) fn generate_week_dates_title(
+    first_week: &chrono::NaiveDate,
+    week_num: usize,
+) -> Option<String> {
+    let start = first_week.checked_add_days(chrono::Days::new(7 * week_num as u64))?;
     let end = start.checked_add_days(chrono::Days::new(6))?;
     Some(format!(
         "  Du {} au {}  ",
@@ -303,7 +318,7 @@ pub(crate) fn generate_week_dates_title(first_week_str: &str, week_num: usize) -
 }
 
 pub(crate) fn generate_period_title(
-    first_week_str: &Option<String>,
+    first_week: &Option<chrono::NaiveDate>,
     period_index: usize,
     first_week_num: usize,
     week_count: usize,
@@ -312,11 +327,8 @@ pub(crate) fn generate_period_title(
         return format!("Période {} (vide)", period_index + 1);
     }
 
-    match first_week_str {
-        Some(date_str) => {
-            let Ok(global_monday) = chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d") else {
-                return format!("Période {}", period_index + 1);
-            };
+    match first_week {
+        Some(global_monday) => {
             let start = global_monday
                 .checked_add_days(chrono::Days::new(7 * first_week_num as u64))
                 .expect("Valid start date");

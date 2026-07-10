@@ -655,8 +655,8 @@ name = "collomatique-xlsx"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "collomatique-state-colloscopes",
  "rust_xlsxwriter",
- "sqlx",
 ]
 
 [[package]]
