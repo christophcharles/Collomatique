@@ -247,7 +247,7 @@ impl SolveConfig {
         pool: &sqlx::SqlitePool,
         log: &mut (dyn FnMut(&str) + Send),
     ) -> Result<ConfiguredColloscopeModel, String> {
-        log("--- Building initial model ---");
+        log("--- Building initial model (1/3) ---");
         log("");
 
         let base = crate::build_model_with_log(pool, log).await;
@@ -260,7 +260,7 @@ impl SolveConfig {
         let complete = crate::convert::build_complete_config(&params, &colloscope);
 
         log("");
-        log("--- Configuring reduced model ---");
+        log("--- Configuring reduced model (2/3) ---");
         log("");
 
         // 1. Filter the base model down to the recomputed part, stashing the cross-fixed-period
@@ -415,7 +415,7 @@ impl SolveConfig {
         ));
 
         log("");
-        log("--- Building final model ---");
+        log("--- Building final model (3/3) ---");
         log("");
 
         modeler
