@@ -477,6 +477,7 @@ impl Dialog {
             incremental_config: self.enable_incremental.then(|| IncrementalConfig {
                 l1_weight: self.incremental_l1_weight,
                 distance_tolerance: self.incremental_tolerance,
+                epoch_time_limit_seconds: None,
             }),
             fuzzy_config: self.enable_fuzzy.then(|| FuzzyConfig {
                 fuzzy_sigma: self.fuzzy_sigma,

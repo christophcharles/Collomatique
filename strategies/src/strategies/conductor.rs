@@ -319,6 +319,10 @@ pub struct IncrementalConfig {
     /// Absolute epoch-gap tolerance handed to the queued `IncrementalStrategy` (see
     /// [`IncrementalStrategy::distance_tolerance`](crate::IncrementalStrategy)).
     pub distance_tolerance: f64,
+    /// Per-epoch solve time limit handed to the queued `IncrementalStrategy` (see
+    /// [`IncrementalStrategy::epoch_time_limit_seconds`](crate::IncrementalStrategy)).
+    /// `None` leaves each epoch unbounded. Does not affect the final reconstruction solve.
+    pub epoch_time_limit_seconds: Option<u32>,
 }
 
 impl Default for IncrementalConfig {
@@ -327,6 +331,7 @@ impl Default for IncrementalConfig {
         Self {
             l1_weight: 1000.0,
             distance_tolerance: 5.0,
+            epoch_time_limit_seconds: None,
         }
     }
 }
@@ -515,6 +520,7 @@ impl ConductorStrategy {
         IncrementalStrategy {
             l1_weight: cfg.l1_weight,
             distance_tolerance: cfg.distance_tolerance,
+            epoch_time_limit_seconds: cfg.epoch_time_limit_seconds,
             ..IncrementalStrategy::default()
         }
     }
