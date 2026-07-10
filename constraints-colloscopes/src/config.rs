@@ -15,11 +15,12 @@ use crate::ids::GlobalWeek;
 use crate::types::{ConstraintDesc, ExtraVarName};
 use crate::vars::Var;
 
-/// Weight of the soft L1 "keep the current value" anchor objectives. Configurable weights
-/// are a future refinement; for now both weights are fixed module-level constants.
+/// Default weight of the soft L1 "keep the current value" anchor objectives, used when a
+/// [`SolveConfig`] does not override it (see [`SolveConfig::l1_anchor_weight`]).
 const L1_ANCHOR_WEIGHT: f64 = 1000.0;
-/// Weight of the objectified cross-fixed-period constraints (soft, one independent penalty
-/// per objectified constraint).
+/// Default weight of the objectified cross-fixed-period constraints (soft, one independent
+/// penalty per objectified constraint), used when a [`SolveConfig`] does not override it (see
+/// [`SolveConfig::objectify_cross_fixed_period`]).
 const CROSS_PERIOD_WEIGHT: f64 = 1000.0;
 
 /// Extra-variable name space of a [`ConfiguredColloscopeModel`]: the base model's
@@ -66,7 +67,13 @@ pub enum ConfiguredConstraintDesc {
 pub struct SolveConfig {
     pub periods: BTreeMap<collomatique_state_colloscopes::PeriodId, PeriodSolveData>,
     pub group_lists: BTreeMap<collomatique_state_colloscopes::GroupListId, GroupListSolveData>,
-    pub objectify_cross_fixed_period: bool,
+    /// Soften the cross-fixed-period constraints rather than dropping them: `Some(weight)`
+    /// objectifies each such constraint with that penalty weight; `None` keeps the hard
+    /// behavior (the constraint stays in the model when it can, dropped otherwise).
+    pub objectify_cross_fixed_period: Option<f64>,
+    /// Penalty weight applied to each softly-anchored "keep the current value" variable (see
+    /// [`apply_anchor`](SolveConfig::apply_anchor)).
+    pub l1_anchor_weight: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -86,15 +93,26 @@ impl Default for PeriodSolveData {
 
 #[derive(Debug, Clone)]
 pub struct GroupListSolveData {
-    pub recompute: bool,
+    /// `Some` recomputes this group list's `StudentGroup` variables (freely, or softly anchored
+    /// per [`GroupListRecompute`]); `None` pins them to their current values.
+    pub recompute: Option<GroupListRecompute>,
+}
+
+/// How a recomputed group list treats its current values. Only meaningful when the group list
+/// is recomputed, hence carried inside [`GroupListSolveData::recompute`].
+#[derive(Debug, Clone)]
+pub struct GroupListRecompute {
+    /// Softly anchor the recomputed variables to their current values (an L1 objective) instead
+    /// of leaving them entirely free.
     pub previous_values_as_objective: bool,
 }
 
 impl Default for GroupListSolveData {
     fn default() -> Self {
         GroupListSolveData {
-            recompute: true,
-            previous_values_as_objective: false,
+            recompute: Some(GroupListRecompute {
+                previous_values_as_objective: false,
+            }),
         }
     }
 }
@@ -104,7 +122,8 @@ impl Default for SolveConfig {
         SolveConfig {
             periods: BTreeMap::new(),
             group_lists: BTreeMap::new(),
-            objectify_cross_fixed_period: true,
+            objectify_cross_fixed_period: Some(CROSS_PERIOD_WEIGHT),
+            l1_anchor_weight: L1_ANCHOR_WEIGHT,
         }
     }
 }
@@ -148,6 +167,7 @@ impl SolveConfig {
             periods: new_periods,
             group_lists: new_group_lists,
             objectify_cross_fixed_period: self.objectify_cross_fixed_period,
+            l1_anchor_weight: self.l1_anchor_weight,
         }
     }
 
@@ -176,7 +196,9 @@ impl SolveConfig {
     /// anchored).
     fn var_is_recompute(&self, params: &Parameters, v: &Var) -> bool {
         match v {
-            Var::StudentGroup { group_list, .. } => self.group_list_data(group_list).recompute,
+            Var::StudentGroup { group_list, .. } => {
+                self.group_list_data(group_list).recompute.is_some()
+            }
             Var::GroupInInterrogation { week, .. } => {
                 self.period_data_for_week(params, week.0).recompute
             }
@@ -214,7 +236,7 @@ impl SolveConfig {
                 ConstraintClass::Keep
             } else if has_x {
                 ConstraintClass::Drop
-            } else if self.objectify_cross_fixed_period {
+            } else if self.objectify_cross_fixed_period.is_some() {
                 ConstraintClass::Store
             } else {
                 ConstraintClass::Keep
@@ -223,7 +245,9 @@ impl SolveConfig {
             // Pure `StudentGroup` (or empty) constraint: drop it as soon as any of its group
             // lists is fixed, otherwise keep it.
             let drop = footprint.iter().any(|v| match v {
-                Var::StudentGroup { group_list, .. } => !self.group_list_data(group_list).recompute,
+                Var::StudentGroup { group_list, .. } => {
+                    self.group_list_data(group_list).recompute.is_none()
+                }
                 _ => false,
             });
             if drop {
@@ -355,7 +379,11 @@ impl SolveConfig {
                 }
                 Var::StudentGroup { group_list, .. } => {
                     let data = self.group_list_data(group_list);
-                    if data.recompute && data.previous_values_as_objective {
+                    if data
+                        .recompute
+                        .as_ref()
+                        .is_some_and(|r| r.previous_values_as_objective)
+                    {
                         anchor_group_lists
                             .entry(*group_list)
                             .or_default()
@@ -382,6 +410,10 @@ impl SolveConfig {
         ));
 
         // 5. Objectify the stored cross-fixed-period constraints, one independent penalty each.
+        // `stored` is only ever non-empty when objectify is enabled, so the fallback is unused.
+        let cross_period_weight = self
+            .objectify_cross_fixed_period
+            .unwrap_or(CROSS_PERIOD_WEIGHT);
         let stored_count = stored.len();
         for (index, (constraint, desc)) in stored.into_iter().enumerate() {
             let mapped = constraint.transmute(|v| match v {
@@ -402,7 +434,7 @@ impl SolveConfig {
                 .objectify_with_balance_and_coef(
                     ConfiguredExtra::CrossPeriod(index),
                     0.0,
-                    CROSS_PERIOD_WEIGHT,
+                    cross_period_weight,
                 )
                 .map_err(|e| format!("failed to objectify cross-period constraint: {e:?}"))?
                 .into_general();
@@ -424,7 +456,7 @@ impl SolveConfig {
     }
 
     /// Objectify a subset of `var == current_value` anchors into a single L1 penalty variable
-    /// `penalty`, weighted so each anchored variable carries [`L1_ANCHOR_WEIGHT`].
+    /// `penalty`, weighted so each anchored variable carries [`l1_anchor_weight`](Self::l1_anchor_weight).
     fn apply_anchor(
         &self,
         modeler: &mut Modeler<Var, ConfiguredExtra, ConfiguredConstraintDesc, (), Infallible>,
@@ -435,7 +467,7 @@ impl SolveConfig {
             return Ok(());
         }
         // `objectify` with `alpha = 0` averages the per-constraint slacks (penalty = mean), so
-        // scale the coefficient by the count to recover a unit-weight sum of `L1_ANCHOR_WEIGHT`
+        // scale the coefficient by the count to recover a unit-weight sum of `l1_anchor_weight`
         // per anchored variable.
         let count = subset.len() as f64;
         let bundle: ConstraintBundle<
@@ -451,7 +483,7 @@ impl SolveConfig {
             }
         });
         let objectified = bundle
-            .objectify_with_balance_and_coef(penalty, 0.0, L1_ANCHOR_WEIGHT * count)
+            .objectify_with_balance_and_coef(penalty, 0.0, self.l1_anchor_weight * count)
             .map_err(|e| format!("failed to objectify anchor bundle: {e:?}"))?
             .into_general();
         modeler

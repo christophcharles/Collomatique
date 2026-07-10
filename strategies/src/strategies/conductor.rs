@@ -298,6 +298,11 @@ pub struct FuzzyConfig {
     /// builds: the closeness repair stops at the first feasible point within this distance
     /// of the closest possible one.
     pub find_closest_tolerance: f64,
+    /// Closeness-solve time limit handed to every `FindClosestStrategy` the conductor builds
+    /// (see [`FindClosestStrategy::closeness_time_limit`](crate::FindClosestStrategy)).
+    /// [`TimeLimit::none()`](collomatique_time::TimeLimit::none) (the default) leaves it
+    /// unbounded; the reconstruction solve stays unbounded regardless.
+    pub time_limit: collomatique_time::TimeLimit,
 }
 
 impl Default for FuzzyConfig {
@@ -305,6 +310,7 @@ impl Default for FuzzyConfig {
         Self {
             fuzzy_sigma: 0.2, // gives ~1.2% of variables flipped if they're all binary
             find_closest_tolerance: 10.0,
+            time_limit: collomatique_time::TimeLimit::none(),
         }
     }
 }
@@ -335,6 +341,29 @@ impl Default for IncrementalConfig {
             epoch_time_limit: collomatique_time::TimeLimit::none(),
         }
     }
+}
+
+/// Tuning knobs for the conductor's warm-start (`NoObjectiveStrategy`) priming solve. Only
+/// meaningful when warm-start is enabled, hence carried as
+/// `ConductorStrategy::warm_start_config: Option<WarmStartConfig>`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct WarmStartConfig {
+    /// Checker-solve time limit handed to the queued `NoObjectiveStrategy` (see
+    /// [`NoObjectiveStrategy::checker_time_limit`](crate::NoObjectiveStrategy)).
+    /// [`TimeLimit::none()`](collomatique_time::TimeLimit::none) (the default) leaves it
+    /// unbounded; the reconstruction solve stays unbounded regardless.
+    pub time_limit: collomatique_time::TimeLimit,
+}
+
+/// Tuning knobs for the conductor's full branch-and-bound (`DefaultStrategy`) solve. Only
+/// meaningful when the default solve is enabled, hence carried as
+/// `ConductorStrategy::default_config: Option<DefaultConfig>`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct DefaultConfig {
+    /// Solve time limit handed to the queued `DefaultStrategy` (see
+    /// [`DefaultStrategy::time_limit`](crate::DefaultStrategy)).
+    /// [`TimeLimit::none()`](collomatique_time::TimeLimit::none) (the default) leaves it unbounded.
+    pub time_limit: collomatique_time::TimeLimit,
 }
 
 /// A misconfiguration the conductor can detect before running. Surfaced via
@@ -369,10 +398,12 @@ pub enum ConductorWarning {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ConductorStrategy {
     pub worker_count: NonZeroU32,
-    /// Queue a `DefaultStrategy` (the full branch-and-bound solve). Queued last.
-    pub enable_default: bool,
-    /// Queue a `NoObjectiveStrategy` first, to produce a feasible warm-start incumbent.
-    pub enable_warm_start: bool,
+    /// Queue a `DefaultStrategy` (the full branch-and-bound solve), tuned by the carried config.
+    /// Queued last. `None` disables the default solve.
+    pub default_config: Option<DefaultConfig>,
+    /// Queue a `NoObjectiveStrategy` first, to produce a feasible warm-start incumbent, tuned by
+    /// the carried config. `None` disables the warm-start.
+    pub warm_start_config: Option<WarmStartConfig>,
     /// Queue an `IncrementalStrategy` after the warm-start (before default) as a fast initial-solution
     /// provider, tuned by the carried config and using the per-run payload's epoch assignment (an
     /// empty assignment still yields a single-epoch priming solve). `None` disables incremental.
@@ -386,8 +417,8 @@ impl Default for ConductorStrategy {
     fn default() -> Self {
         Self {
             worker_count: NonZeroU32::new(1).expect("1 is non-zero"),
-            enable_default: false,
-            enable_warm_start: true,
+            default_config: None,
+            warm_start_config: Some(WarmStartConfig::default()),
             incremental_config: None,
             fuzzy_config: None,
         }
@@ -454,13 +485,13 @@ impl ConductorStrategy {
             // The full branch-and-bound is what makes this a "complete" optimisation: it lets the
             // solve prove optimality (close the gap) rather than only hill-climb via fuzzy. Set
             // explicitly so it does not track `Default`, where it is off (a warm-start-only search).
-            enable_default: true,
+            default_config: Some(DefaultConfig::default()),
             // Enabled so its incumbent seeds the default/fuzzy workers early (a warm-start-only
             // search leaves them cold until the default worker has gone far).
             incremental_config: Some(IncrementalConfig::default()),
             // Off on purpose: incremental already provides the initial incumbent, and better, so a
             // warm-start on top would be redundant work.
-            enable_warm_start: false,
+            warm_start_config: None,
             fuzzy_config: Some(FuzzyConfig::default()),
             ..Self::default()
         }
@@ -470,8 +501,8 @@ impl ConductorStrategy {
     /// (ordered by the variants' declaration order) so a UI can flag any combination that would
     /// waste work or never terminate.
     pub fn warnings(&self) -> BTreeSet<ConductorWarning> {
-        let d = self.enable_default;
-        let w = self.enable_warm_start;
+        let d = self.default_config.is_some();
+        let w = self.warm_start_config.is_some();
         let f = self.fuzzy_config.is_some();
         let i = self.incremental_config.is_some();
         // Both warm-start and incremental produce an initial incumbent for the optimisers to lean on.
@@ -526,6 +557,14 @@ impl ConductorStrategy {
         }
     }
 
+    /// Build the full branch-and-bound substrategy tuned by the given `DefaultConfig`.
+    fn default_substrategy(&self, cfg: &DefaultConfig) -> DefaultStrategy {
+        DefaultStrategy {
+            time_limit: cfg.time_limit,
+            disable_logging: false,
+        }
+    }
+
     /// Build a fuzzy exploration substrategy tuned by the given `FuzzyConfig`.
     fn fuzzy_substrategy(&self, cfg: &FuzzyConfig) -> FuzzyStrategy {
         FuzzyStrategy {
@@ -533,7 +572,7 @@ impl ConductorStrategy {
             // Entropy-seeded: each spawned fuzzy worker perturbs the incumbent differently.
             seed: None,
             find_closest: FindClosestStrategy {
-                closeness_time_limit: collomatique_time::TimeLimit::none(),
+                closeness_time_limit: cfg.time_limit,
                 reconstruction_time_limit: collomatique_time::TimeLimit::none(),
                 disable_logging: false,
                 distance_tolerance: cfg.find_closest_tolerance,
@@ -546,9 +585,9 @@ impl ConductorStrategy {
     /// only slot when cores are scarce).
     fn seed_queue(&self, incremental: Option<&IncrementalConfig>) -> VecDeque<StrategyKind> {
         let mut queue = VecDeque::new();
-        if self.enable_warm_start {
+        if let Some(cfg) = &self.warm_start_config {
             queue.push_back(StrategyKind::NoObjective(NoObjectiveStrategy {
-                checker_time_limit: collomatique_time::TimeLimit::none(),
+                checker_time_limit: cfg.time_limit,
                 reconstruction_time_limit: collomatique_time::TimeLimit::none(),
                 disable_logging: false,
             }));
@@ -556,8 +595,8 @@ impl ConductorStrategy {
         if let Some(cfg) = incremental {
             queue.push_back(StrategyKind::Incremental(self.incremental_substrategy(cfg)));
         }
-        if self.enable_default {
-            queue.push_back(StrategyKind::Default(DefaultStrategy::default()));
+        if let Some(cfg) = &self.default_config {
+            queue.push_back(StrategyKind::Default(self.default_substrategy(cfg)));
         }
         queue
     }
@@ -1222,7 +1261,11 @@ impl Strategy for ConductorStrategy {
                 let d = *default_obj.lock().expect("default obj mutex");
                 let b = status.lock().expect("conductor status mutex").best_bound;
                 if should_restart_default(new_obj, d, b, sense) {
-                    queue.push_front(StrategyKind::Default(DefaultStrategy::default()));
+                    let cfg = self
+                        .default_config
+                        .as_ref()
+                        .expect("a Default worker runs only when default_config is set");
+                    queue.push_front(StrategyKind::Default(self.default_substrategy(cfg)));
                     default_slot = None;
                     if let Some(tx) = default_cancel.take() {
                         // Wake the old Default's cancel branch → drops its future → kills its
@@ -1734,8 +1777,8 @@ mod tests {
     fn conductor(worker_count: u32, d: bool, w: bool, f: bool) -> ConductorStrategy {
         ConductorStrategy {
             worker_count: NonZeroU32::new(worker_count).expect("non-zero worker count"),
-            enable_default: d,
-            enable_warm_start: w,
+            default_config: d.then(DefaultConfig::default),
+            warm_start_config: w.then(WarmStartConfig::default),
             incremental_config: None,
             fuzzy_config: f.then(FuzzyConfig::default),
         }
@@ -1893,9 +1936,9 @@ mod tests {
 
     #[test]
     fn seed_queue_orders_warm_start_before_default() {
-        let conductor = |warm, default| ConductorStrategy {
-            enable_warm_start: warm,
-            enable_default: default,
+        let conductor = |warm: bool, default: bool| ConductorStrategy {
+            warm_start_config: warm.then(WarmStartConfig::default),
+            default_config: default.then(DefaultConfig::default),
             ..ConductorStrategy::default()
         };
 
@@ -1919,8 +1962,8 @@ mod tests {
     #[test]
     fn seed_queue_inserts_incremental_between_warm_start_and_default() {
         let conductor = ConductorStrategy {
-            enable_warm_start: true,
-            enable_default: true,
+            warm_start_config: Some(WarmStartConfig::default()),
+            default_config: Some(DefaultConfig::default()),
             ..ConductorStrategy::default()
         };
         assert_eq!(
@@ -1929,8 +1972,8 @@ mod tests {
         );
         // Incremental slots in even without a warm-start, still ahead of default.
         let no_warm = ConductorStrategy {
-            enable_warm_start: false,
-            enable_default: true,
+            warm_start_config: None,
+            default_config: Some(DefaultConfig::default()),
             ..ConductorStrategy::default()
         };
         assert_eq!(

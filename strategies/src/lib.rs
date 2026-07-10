@@ -2,9 +2,9 @@ mod strategies;
 
 pub use strategies::conductor::{
     ConductorPayload, ConductorPayloadData, ConductorProgress, ConductorProgressData,
-    ConductorStatus, ConductorStatusData, ConductorStrategy, ConductorWarning, FuzzyConfig,
-    IncrementalConfig, OPTIMALITY_GAP_EPS, Solution, SolutionData, update_best_bound,
-    update_best_solution,
+    ConductorStatus, ConductorStatusData, ConductorStrategy, ConductorWarning, DefaultConfig,
+    FuzzyConfig, IncrementalConfig, OPTIMALITY_GAP_EPS, Solution, SolutionData, WarmStartConfig,
+    update_best_bound, update_best_solution,
 };
 pub use strategies::default::{DefaultPayload, DefaultStrategy};
 pub use strategies::find_closest::{
@@ -2097,8 +2097,8 @@ mod tests {
                 let ctx = StrategyContext::new(backend);
                 let strategy = ConductorStrategy {
                     worker_count: NonZeroU32::new(2).unwrap(),
-                    enable_default: true,
-                    enable_warm_start: false,
+                    default_config: Some(DefaultConfig::default()),
+                    warm_start_config: None,
                     incremental_config: None,
                     fuzzy_config: Some(FuzzyConfig::default()),
                 };

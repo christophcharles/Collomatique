@@ -8,7 +8,8 @@ use relm4::{adw, gtk};
 use std::num::NonZeroU32;
 
 use collomatique_strategies::{
-    ConductorStrategy, ConductorWarning, FuzzyConfig, IncrementalConfig,
+    ConductorStrategy, ConductorWarning, DefaultConfig, FuzzyConfig, IncrementalConfig,
+    WarmStartConfig,
 };
 
 pub struct Dialog {
@@ -334,8 +335,8 @@ impl SimpleComponent for Dialog {
             hidden: true,
             should_redraw: false,
             worker_count: strategy.worker_count.get(),
-            enable_warm_start: strategy.enable_warm_start,
-            enable_default: strategy.enable_default,
+            enable_warm_start: strategy.warm_start_config.is_some(),
+            enable_default: strategy.default_config.is_some(),
             enable_incremental: strategy.incremental_config.is_some(),
             incremental_l1_weight: incremental_defaults.l1_weight,
             incremental_tolerance: incremental_defaults.distance_tolerance,
@@ -443,8 +444,8 @@ impl SimpleComponent for Dialog {
 impl Dialog {
     fn update_state_from_strategy(&mut self, strategy: ConductorStrategy) {
         self.worker_count = strategy.worker_count.get();
-        self.enable_default = strategy.enable_default;
-        self.enable_warm_start = strategy.enable_warm_start;
+        self.enable_default = strategy.default_config.is_some();
+        self.enable_warm_start = strategy.warm_start_config.is_some();
         match strategy.incremental_config {
             Some(cfg) => {
                 self.enable_incremental = true;
@@ -472,8 +473,8 @@ impl Dialog {
     fn build_strategy(&self) -> ConductorStrategy {
         ConductorStrategy {
             worker_count: NonZeroU32::new(self.worker_count).unwrap_or(NonZeroU32::MIN),
-            enable_default: self.enable_default,
-            enable_warm_start: self.enable_warm_start,
+            default_config: self.enable_default.then(DefaultConfig::default),
+            warm_start_config: self.enable_warm_start.then(WarmStartConfig::default),
             incremental_config: self.enable_incremental.then(|| IncrementalConfig {
                 l1_weight: self.incremental_l1_weight,
                 distance_tolerance: self.incremental_tolerance,
@@ -482,6 +483,7 @@ impl Dialog {
             fuzzy_config: self.enable_fuzzy.then(|| FuzzyConfig {
                 fuzzy_sigma: self.fuzzy_sigma,
                 find_closest_tolerance: self.find_closest_tolerance,
+                time_limit: collomatique_time::TimeLimit::none(),
             }),
         }
     }

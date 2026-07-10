@@ -18,7 +18,8 @@ mod weights;
 
 pub use builder::{build_model, build_model_with_log};
 pub use config::{
-    ConfiguredConstraintDesc, ConfiguredExtra, GroupListSolveData, PeriodSolveData, SolveConfig,
+    ConfiguredConstraintDesc, ConfiguredExtra, GroupListRecompute, GroupListSolveData,
+    PeriodSolveData, SolveConfig,
 };
 pub use incremental::build_incremental_epochs;
 pub use types::{

@@ -10,7 +10,9 @@ use relm4::{
 };
 use relm4::{adw, gtk};
 
-use collomatique_constraints_colloscopes::{GroupListSolveData, PeriodSolveData, SolveConfig};
+use collomatique_constraints_colloscopes::{
+    GroupListRecompute, GroupListSolveData, PeriodSolveData, SolveConfig,
+};
 use collomatique_state_colloscopes::colloscope_params::Parameters;
 use collomatique_strategies::ConductorStrategy;
 
@@ -35,6 +37,9 @@ pub struct Dialog {
     group_lists_data: Vec<group_list_group::Data>,
     /// Global toggle to automatically objectify across period boundary
     objectify_cross_fixed_period: bool,
+    /// L1 anchor penalty weight, carried through unchanged (no widget) so the round-tripped
+    /// [`SolveConfig`] preserves the incoming value.
+    l1_anchor_weight: f64,
 }
 
 #[derive(Debug)]
@@ -161,12 +166,16 @@ impl Dialog {
                 let data = &sanitized_config.group_lists[id];
                 group_list_group::Data {
                     title,
-                    recompute: data.recompute,
-                    previous_values_as_objective: data.previous_values_as_objective,
+                    recompute: data.recompute.is_some(),
+                    previous_values_as_objective: data
+                        .recompute
+                        .as_ref()
+                        .is_some_and(|r| r.previous_values_as_objective),
                 }
             })
             .collect();
-        self.objectify_cross_fixed_period = sanitized_config.objectify_cross_fixed_period;
+        self.objectify_cross_fixed_period = sanitized_config.objectify_cross_fixed_period.is_some();
+        self.l1_anchor_weight = sanitized_config.l1_anchor_weight;
     }
 
     fn config_from_data(&self) -> SolveConfig {
@@ -198,13 +207,19 @@ impl Dialog {
                     (
                         id.clone(),
                         GroupListSolveData {
-                            recompute: data.recompute,
-                            previous_values_as_objective: data.previous_values_as_objective,
+                            recompute: data.recompute.then(|| GroupListRecompute {
+                                previous_values_as_objective: data.previous_values_as_objective,
+                            }),
                         },
                     )
                 })
                 .collect(),
-            objectify_cross_fixed_period: self.objectify_cross_fixed_period,
+            objectify_cross_fixed_period: if self.objectify_cross_fixed_period {
+                SolveConfig::default().objectify_cross_fixed_period
+            } else {
+                None
+            },
+            l1_anchor_weight: self.l1_anchor_weight,
         }
     }
 
@@ -493,6 +508,7 @@ impl SimpleComponent for Dialog {
             periods_data: Vec::new(),
             group_lists_data: Vec::new(),
             objectify_cross_fixed_period: true,
+            l1_anchor_weight: SolveConfig::default().l1_anchor_weight,
         };
 
         let periods_box = model.periods_list.widget();
