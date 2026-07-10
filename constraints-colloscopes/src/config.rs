@@ -248,6 +248,8 @@ impl SolveConfig {
         log: &mut (dyn FnMut(&str) + Send),
     ) -> Result<ConfiguredColloscopeModel, String> {
         log("--- Building initial model ---");
+        log("");
+
         let base = crate::build_model_with_log(pool, log).await;
 
         let inner = collomatique_sqlite_state::sqlite_to_inner_data(pool)
@@ -257,7 +259,9 @@ impl SolveConfig {
         let colloscope = inner.colloscope;
         let complete = crate::convert::build_complete_config(&params, &colloscope);
 
+        log("");
         log("--- Configuring reduced model ---");
+        log("");
 
         // 1. Filter the base model down to the recomputed part, stashing the cross-fixed-period
         //    constraints to be objectified (in modeler-facing `Var<Var, ExtraVarName>` form).
@@ -410,7 +414,10 @@ impl SolveConfig {
             "  Objectified {stored_count} cross-fixed-period constraint(s)"
         ));
 
+        log("");
         log("--- Building final model ---");
+        log("");
+
         modeler
             .build_with_log(&(), log)
             .map_err(|e| format!("failed to build configured model: {e:?}"))
