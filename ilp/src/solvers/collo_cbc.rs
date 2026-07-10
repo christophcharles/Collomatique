@@ -9,6 +9,7 @@ use super::{
     TimeLimitSolution, TimeLimitSolverModel, WarmSolver,
 };
 use crate::{ConfigData, FeasibleConfig, ObjectiveSense, Problem, UsableData, linexpr::EqSymbol};
+use collomatique_time::TimeLimit;
 
 pub struct ColloCbcSolver {
     disable_logging: bool,
@@ -267,23 +268,27 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> SolverModel<'a, V, C, 
     for ColloCbcBuiltModel<'a, V, C, P>
 {
     fn solve(self) -> Option<FeasibleConfig<'a, V, C, P>> {
-        self.solve_with_callback(|_| true).config
+        self.solve_with_time_limit(TimeLimit::none()).config
     }
 }
 
 impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> TimeLimitSolverModel<'a, V, C, P>
     for ColloCbcBuiltModel<'a, V, C, P>
 {
-    fn solve_with_time_limit(
-        self,
-        time_limit_in_seconds: std::num::NonZeroU32,
-    ) -> TimeLimitSolution<'a, V, C, P> {
-        let start = std::time::Instant::now();
-        let duration = std::time::Duration::from_secs(u64::from(time_limit_in_seconds.get()));
-        let result = self.solve_with_callback(|_| start.elapsed() < duration);
-        TimeLimitSolution {
-            config: result.config,
-            time_limit_reached: result.stopped_by_callback,
+    fn solve_with_time_limit(self, time_limit: TimeLimit) -> TimeLimitSolution<'a, V, C, P> {
+        match time_limit.duration() {
+            Some(duration) => {
+                let start = std::time::Instant::now();
+                let result = self.solve_with_callback(|_| start.elapsed() < duration);
+                TimeLimitSolution {
+                    config: result.config,
+                    time_limit_reached: result.stopped_by_callback,
+                }
+            }
+            None => TimeLimitSolution {
+                config: self.solve_with_callback(|_| true).config,
+                time_limit_reached: false,
+            },
         }
     }
 }

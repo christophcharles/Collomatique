@@ -432,6 +432,7 @@ version = "0.1.0"
 dependencies = [
  "coin_cbc",
  "collo-cbc",
+ "collomatique-time",
  "gag",
  "good_lp",
  "ndarray 0.15.6",

@@ -12,6 +12,7 @@ use super::{
     ProblemRepr, Solver, SolverModel, TimeLimitSolution, TimeLimitSolverModel, WarmSolver,
 };
 use crate::{ConfigData, FeasibleConfig, ObjectiveSense, Problem, UsableData, linexpr::EqSymbol};
+use collomatique_time::TimeLimit;
 
 /// Coin-cbc solver
 ///
@@ -143,18 +144,15 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> SolverModel<'a, V, C, 
     for CbcBuiltModel<'a, V, C, P>
 {
     fn solve(self) -> Option<FeasibleConfig<'a, V, C, P>> {
-        self.solve_internal(None).config
+        self.solve_internal(TimeLimit::none()).config
     }
 }
 
 impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> TimeLimitSolverModel<'a, V, C, P>
     for CbcBuiltModel<'a, V, C, P>
 {
-    fn solve_with_time_limit(
-        self,
-        time_limit_in_seconds: std::num::NonZeroU32,
-    ) -> TimeLimitSolution<'a, V, C, P> {
-        self.solve_internal(Some(time_limit_in_seconds.get()))
+    fn solve_with_time_limit(self, time_limit: TimeLimit) -> TimeLimitSolution<'a, V, C, P> {
+        self.solve_internal(time_limit)
     }
 }
 
@@ -189,10 +187,7 @@ impl CbcSolver {
 }
 
 impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> CbcBuiltModel<'a, V, C, P> {
-    fn solve_internal(
-        mut self,
-        time_limit_in_seconds: Option<u32>,
-    ) -> TimeLimitSolution<'a, V, C, P> {
+    fn solve_internal(mut self, time_limit: TimeLimit) -> TimeLimitSolution<'a, V, C, P> {
         // cbc does not seem to shut up even if logging is disabled
         // we block output directly
         let stdout_gag = gag::Gag::stdout();
@@ -203,9 +198,10 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> CbcBuiltModel<'a, V, C
             drop(gag);
         }
 
-        if let Some(time_limit) = time_limit_in_seconds {
+        if let Some(seconds) = time_limit.get_seconds() {
             self.model.set_parameter("timeMode", "elapsed");
-            self.model.set_parameter("seconds", &time_limit.to_string());
+            self.model
+                .set_parameter("seconds", &seconds.get().to_string());
         }
 
         let sol = self.model.solve();

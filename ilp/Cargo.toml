@@ -5,6 +5,7 @@ edition.workspace = true
 authors.workspace = true
 
 [dependencies]
+collomatique-time = { path = "../time" }
 ordered-float.workspace = true
 thiserror.workspace = true
 serde = { workspace = true, features = ["derive"], optional = true }

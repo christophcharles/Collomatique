@@ -78,15 +78,21 @@ pub struct TimeLimitSolution<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>
 pub trait TimeLimitSolverModel<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>>:
     SolverModel<'a, V, C, P>
 {
-    /// Solve the model with a time limit.
+    /// Solve the model, optionally bounded by `time_limit`.
     ///
     /// If the time limit is reached, the best solution found
     /// so far is returned (which may be `None`).
     ///
-    /// You can check this by inspecting [TimeLimitSolution::time_limit_reached].
+    /// A [TimeLimit::none](collomatique_time::TimeLimit::none) solves without
+    /// any bound — equivalent to [SolverModel::solve], but returning a
+    /// [TimeLimitSolution] (whose [time_limit_reached](TimeLimitSolution::time_limit_reached)
+    /// is then always `false`).
+    ///
+    /// You can check whether the limit was reached by inspecting
+    /// [TimeLimitSolution::time_limit_reached].
     fn solve_with_time_limit(
         self,
-        time_limit_in_seconds: std::num::NonZeroU32,
+        time_limit: collomatique_time::TimeLimit,
     ) -> TimeLimitSolution<'a, V, C, P>;
 }
 
