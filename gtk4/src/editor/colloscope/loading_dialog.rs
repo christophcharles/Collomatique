@@ -60,10 +60,10 @@ pub enum DialogCommandOutput {
     Built(Result<ConfiguredColloscopeModel, String>),
 }
 
-/// Reconstruct the in-memory database from the current `params` and `colloscope`, then build the
-/// configured model from it. `build_model` needs a live database (it both builds the base model
-/// and reads the current assignments back), so the pool is materialized here in the caller.
-async fn build_configured_model(
+/// Build the configured model from the current `params` and `colloscope`. `build_model` both
+/// builds the base model and reads the current assignments back, so the full `InnerData` is
+/// assembled here in the caller.
+fn build_configured_model(
     config: &SolveConfig,
     params: Parameters,
     colloscope: Colloscope,
@@ -74,16 +74,7 @@ async fn build_configured_model(
         colloscope,
         ..Default::default()
     };
-    let pool = sqlx::SqlitePool::connect(":memory:")
-        .await
-        .map_err(|e| e.to_string())?;
-    collomatique_sqlite_state::create_schema(&pool)
-        .await
-        .map_err(|e| e.to_string())?;
-    collomatique_sqlite_state::inner_data_to_sqlite(&pool, &inner_data)
-        .await
-        .map_err(|e| e.to_string())?;
-    config.build_model(&pool, log).await
+    config.build_model(&inner_data, log)
 }
 
 #[relm4::component(pub)]
@@ -201,19 +192,16 @@ impl Component for Dialog {
                 self.error = None;
                 self.debug_view.emit(DebugViewInput::Clear);
 
-                // Building the model is heavy, async (in-memory sqlite) work. Run it off the UI
-                // thread; each log line is emitted back as `Echo` and streams live into the
-                // DebugView while the build runs. `config`, `params` and `colloscope` are all
-                // consumed by the build; only the built model is handed back. The in-memory
-                // database that `build_model` reads from is reconstructed here from the current
-                // parameters and colloscope.
+                // Building the model is heavy work. Run it off the UI thread; each log line is
+                // emitted back as `Echo` and streams live into the DebugView while the build
+                // runs. `config`, `params` and `colloscope` are all consumed by the build; only
+                // the built model is handed back.
                 let input = sender.input_sender().clone();
-                sender.oneshot_command(async move {
+                sender.spawn_oneshot_command(move || {
                     let mut log = move |line: &str| {
                         input.emit(DialogInput::Echo(format!("{}\n", line)));
                     };
-                    let result =
-                        build_configured_model(&config, params, colloscope, &mut log).await;
+                    let result = build_configured_model(&config, params, colloscope, &mut log);
                     DialogCommandOutput::Built(result)
                 });
             }

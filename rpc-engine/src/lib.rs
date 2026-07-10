@@ -19,7 +19,7 @@ pub fn send_exit() {
     encoded_msg.send();
 }
 
-async fn try_solve() -> Result<(), anyhow::Error> {
+fn try_solve() -> Result<(), anyhow::Error> {
     use anyhow::anyhow;
     use std::time::Instant;
 
@@ -33,22 +33,11 @@ async fn try_solve() -> Result<(), anyhow::Error> {
     let t_build = Instant::now();
     eprintln!("Building ILP problem...");
 
-    let pool = sqlx::SqlitePool::connect(":memory:")
-        .await
-        .map_err(|e| anyhow!("Error connecting to in-memory DB: {}", e))?;
-    collomatique_sqlite_state::create_schema(&pool)
-        .await
-        .map_err(|e| anyhow!("Error creating schema: {}", e))?;
-    collomatique_sqlite_state::inner_data_to_sqlite(&pool, &inner_data)
-        .await
-        .map_err(|e| anyhow!("Error populating DB: {}", e))?;
-
     let export_config = inner_data.export_config;
     let env = inner_data.params;
-    let problem = collomatique_constraints_colloscopes::build_model_with_log(&pool, &mut |msg| {
+    let problem = collomatique_constraints_colloscopes::build_model_with_log(&env, &mut |msg| {
         eprintln!("  {msg}")
-    })
-    .await;
+    });
     eprintln!("ILP problem built in {:.2?}", t_build.elapsed());
     let stats = problem.stats();
     eprintln!("  Model statistics:");
@@ -351,8 +340,7 @@ pub fn run_rpc_engine() -> Result<(), anyhow::Error> {
             }
         }
         InitMsg::SolveColloscope => {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(try_solve())?;
+            try_solve()?;
         }
         InitMsg::SolveIlp(serialized) => {
             solve_ilp(serialized)?;

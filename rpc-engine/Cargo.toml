@@ -13,14 +13,12 @@ collomatique-ops = { path = "../ops" }
 collomatique-constraints-colloscopes = { path = "../constraints-colloscopes" }
 collomatique-ilp = { path = "../ilp", features = ["serde", "collo_cbc"] }
 collomatique-ilp-modeler = { path = "../ilp-modeler", features = ["serde"] }
-collomatique-sqlite-state = { path = "../sqlite-state" }
 collomatique-strategies = { path = "../strategies" }
 collomatique-subprocesses = { path = "../subprocesses" }
 collomatique-time = { path = "../time" }
 ordered-float.workspace = true
 anyhow.workspace = true
 tokio = { workspace = true, features = ["rt", "rt-multi-thread"] }
-sqlx = { workspace = true, features = ["runtime-tokio", "sqlite"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

@@ -374,11 +374,9 @@ version = "0.1.0"
 dependencies = [
  "collomatique-ilp",
  "collomatique-ilp-modeler",
- "collomatique-sqlite-state",
  "collomatique-state-colloscopes",
  "collomatique-time",
  "ordered-float",
- "sqlx",
 ]
 
 [[package]]
@@ -549,7 +547,6 @@ dependencies = [
  "collomatique-ops",
  "collomatique-python",
  "collomatique-rpc",
- "collomatique-sqlite-state",
  "collomatique-state",
  "collomatique-state-colloscopes",
  "collomatique-strategies",
@@ -557,7 +554,6 @@ dependencies = [
  "collomatique-time",
  "libc",
  "ordered-float",
- "sqlx",
  "tokio",
 ]
 

@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::convert::Infallible;
 
+use collomatique_state_colloscopes::InnerData;
 use collomatique_state_colloscopes::colloscope_params::Parameters;
 use collomatique_state_colloscopes::ids::GroupListId;
 use ordered_float::OrderedFloat;
@@ -258,7 +259,7 @@ impl SolveConfig {
         }
     }
 
-    /// Build the ILP model to be solved from the current database `pool`, streaming build log
+    /// Build the ILP model to be solved from the current `data`, streaming build log
     /// lines through `log`.
     ///
     /// The base ("initial") model is built in full, then filtered down to the constraints and
@@ -266,22 +267,19 @@ impl SolveConfig {
     /// variables are pinned to their current colloscope values, recomputed opt-in variables are
     /// softly anchored to those values, and cross-fixed-period constraints are optionally
     /// objectified rather than dropped.
-    pub async fn build_model(
+    pub fn build_model(
         &self,
-        pool: &sqlx::SqlitePool,
+        data: &InnerData,
         log: &mut (dyn FnMut(&str) + Send),
     ) -> Result<ConfiguredColloscopeModel, String> {
         log("--- Building initial model (1/3) ---");
         log("");
 
-        let base = crate::build_model_with_log(pool, log).await;
+        let base = crate::build_model_with_log(&data.params, log);
 
-        let inner = collomatique_sqlite_state::sqlite_to_inner_data(pool)
-            .await
-            .map_err(|e| e.to_string())?;
-        let params = inner.params;
-        let colloscope = inner.colloscope;
-        let complete = crate::convert::build_complete_config(&params, &colloscope);
+        let params = &data.params;
+        let colloscope = &data.colloscope;
+        let complete = crate::convert::build_complete_config(params, colloscope);
 
         log("");
         log("--- Configuring reduced model (2/3) ---");
@@ -298,7 +296,7 @@ impl SolveConfig {
             .filter(
                 |c, desc| {
                     let footprint = graph.constraint_footprint(c);
-                    match self.classify_constraint(&params, &footprint) {
+                    match self.classify_constraint(params, &footprint) {
                         ConstraintClass::Keep => {
                             kept += 1;
                             true
@@ -322,7 +320,7 @@ impl SolveConfig {
                     graph
                         .var_footprint(v)
                         .iter()
-                        .any(|b| self.var_is_recompute(&params, b))
+                        .any(|b| self.var_is_recompute(params, b))
                 },
             )
             .map_err(|e| format!("failed to filter configured model: {e:?}"))?;
@@ -343,7 +341,7 @@ impl SolveConfig {
         let pins: HashMap<Var, f64> = complete
             .get_values()
             .into_iter()
-            .filter(|(v, _)| !self.var_is_recompute(&params, v))
+            .filter(|(v, _)| !self.var_is_recompute(params, v))
             .collect();
         let pin_count = pins.len();
         if !pins.is_empty() {
@@ -372,7 +370,7 @@ impl SolveConfig {
         for (v, value) in complete.get_values() {
             match &v {
                 Var::GroupInInterrogation { week, .. } => {
-                    let data = self.period_data_for_week(&params, week.0);
+                    let data = self.period_data_for_week(params, week.0);
                     if data.recompute && data.use_current_values {
                         anchor_weeks.entry(*week).or_default().insert(v, value);
                     }

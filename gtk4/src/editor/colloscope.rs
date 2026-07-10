@@ -898,32 +898,15 @@ impl Colloscope {
         self.inflight_cmd.computation = InflightComputation::IlpProblem;
 
         let params = self.params.clone();
-        let colloscope = self.colloscope.clone();
 
-        sender.oneshot_command(async move {
-            let inner_data = collomatique_state_colloscopes::InnerData {
-                params,
-                colloscope,
-                ..Default::default()
-            };
-            let env = inner_data.params.clone();
-
+        sender.spawn_oneshot_command(move || {
             let result: Result<collomatique_constraints_colloscopes::ColloscopeModel, String> =
-                async {
-                    let pool = sqlx::SqlitePool::connect(":memory:")
-                        .await
-                        .map_err(|e| format!("{}", e))?;
-                    collomatique_sqlite_state::create_schema(&pool)
-                        .await
-                        .map_err(|e| format!("{}", e))?;
-                    collomatique_sqlite_state::inner_data_to_sqlite(&pool, &inner_data)
-                        .await
-                        .map_err(|e| format!("{}", e))?;
-                    Ok(collomatique_constraints_colloscopes::build_model(&pool).await)
-                }
-                .await;
+                Ok(collomatique_constraints_colloscopes::build_model(&params));
 
-            ColloscopeCommandOutput::IlpProblemComputed { env, result }
+            ColloscopeCommandOutput::IlpProblemComputed {
+                env: params,
+                result,
+            }
         });
     }
 

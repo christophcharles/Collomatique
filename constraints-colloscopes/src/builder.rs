@@ -6,27 +6,22 @@ use crate::types::{ConstraintDesc, ExtraVarName};
 use crate::vars::{Var, VarEnv};
 use collomatique_ilp_modeler::Modeler;
 use collomatique_ilp_modeler::bundle::ReifyError;
+use collomatique_state_colloscopes::colloscope_params::Parameters;
 
 pub(crate) type MyModeler<'m> =
     Modeler<'m, Var, ExtraVarName, ConstraintDesc, VarEnv, ReifyError<Var, ExtraVarName>>;
 
-pub async fn build_model(db: &sqlx::SqlitePool) -> ColloscopeModel {
-    build_model_with_log(db, &mut |_: &str| {}).await
+pub fn build_model(params: &Parameters) -> ColloscopeModel {
+    build_model_with_log(params, &mut |_: &str| {})
 }
 
-pub async fn build_model_with_log(
-    db: &sqlx::SqlitePool,
+pub fn build_model_with_log(
+    params: &Parameters,
     log: &mut (dyn FnMut(&str) + Send),
 ) -> ColloscopeModel {
     let t_total = Instant::now();
 
-    let t = Instant::now();
-    log("[build_model] Loading environment...");
-    let env = VarEnv::load(db).await;
-    log(&format!(
-        "[build_model] Environment loaded ({:.2?})",
-        t.elapsed()
-    ));
+    let env = VarEnv::new(params.clone());
 
     let mut modeler: MyModeler<'_> = Modeler::from_described(&env);
 

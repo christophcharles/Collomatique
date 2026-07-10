@@ -14,11 +14,8 @@ impl std::ops::Deref for VarEnv {
 }
 
 impl VarEnv {
-    pub async fn load(pool: &sqlx::SqlitePool) -> VarEnv {
-        let inner_data = collomatique_sqlite_state::sqlite_to_inner_data(pool)
-            .await
-            .expect("Failed to load data from database");
-        VarEnv(inner_data.params)
+    pub fn new(params: Parameters) -> VarEnv {
+        VarEnv(params)
     }
 }
 
