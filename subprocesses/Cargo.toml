@@ -9,6 +9,7 @@ collomatique-rpc = { path = "../rpc" }
 collomatique-ilp = { path = "../ilp", features = ["serde"] }
 collomatique-ilp-modeler = { path = "../ilp-modeler", features = ["serde"] }
 collomatique-strategies = { path = "../strategies" }
+collomatique-time = { path = "../time" }
 ordered-float.workspace = true
 async-trait.workspace = true
 futures.workspace = true

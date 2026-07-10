@@ -48,7 +48,7 @@ impl SolveBackend for SubprocessSolveBackend {
         let config = IlpSolverConfig {
             problem_desc: desc.clone(),
             warm_start: opts.warm_start,
-            time_limit_seconds: opts.time_limit_seconds,
+            time_limit: opts.time_limit,
             disable_logging: opts.disable_logging,
         };
 

@@ -320,9 +320,10 @@ pub struct IncrementalConfig {
     /// [`IncrementalStrategy::distance_tolerance`](crate::IncrementalStrategy)).
     pub distance_tolerance: f64,
     /// Per-epoch solve time limit handed to the queued `IncrementalStrategy` (see
-    /// [`IncrementalStrategy::epoch_time_limit_seconds`](crate::IncrementalStrategy)).
-    /// `None` leaves each epoch unbounded. Does not affect the final reconstruction solve.
-    pub epoch_time_limit_seconds: Option<u32>,
+    /// [`IncrementalStrategy::epoch_time_limit`](crate::IncrementalStrategy)).
+    /// [`TimeLimit::none()`](collomatique_time::TimeLimit::none) leaves each epoch unbounded.
+    /// Does not affect the final reconstruction solve.
+    pub epoch_time_limit: collomatique_time::TimeLimit,
 }
 
 impl Default for IncrementalConfig {
@@ -331,7 +332,7 @@ impl Default for IncrementalConfig {
         Self {
             l1_weight: 1000.0,
             distance_tolerance: 5.0,
-            epoch_time_limit_seconds: None,
+            epoch_time_limit: collomatique_time::TimeLimit::none(),
         }
     }
 }
@@ -520,7 +521,7 @@ impl ConductorStrategy {
         IncrementalStrategy {
             l1_weight: cfg.l1_weight,
             distance_tolerance: cfg.distance_tolerance,
-            epoch_time_limit_seconds: cfg.epoch_time_limit_seconds,
+            epoch_time_limit: cfg.epoch_time_limit,
             ..IncrementalStrategy::default()
         }
     }
@@ -532,8 +533,8 @@ impl ConductorStrategy {
             // Entropy-seeded: each spawned fuzzy worker perturbs the incumbent differently.
             seed: None,
             find_closest: FindClosestStrategy {
-                closeness_time_limit_seconds: None,
-                reconstruction_time_limit_seconds: None,
+                closeness_time_limit: collomatique_time::TimeLimit::none(),
+                reconstruction_time_limit: collomatique_time::TimeLimit::none(),
                 disable_logging: false,
                 distance_tolerance: cfg.find_closest_tolerance,
             },
@@ -547,8 +548,8 @@ impl ConductorStrategy {
         let mut queue = VecDeque::new();
         if self.enable_warm_start {
             queue.push_back(StrategyKind::NoObjective(NoObjectiveStrategy {
-                checker_time_limit_seconds: None,
-                reconstruction_time_limit_seconds: None,
+                checker_time_limit: collomatique_time::TimeLimit::none(),
+                reconstruction_time_limit: collomatique_time::TimeLimit::none(),
                 disable_logging: false,
             }));
         }
@@ -1582,8 +1583,8 @@ mod tests {
 
     fn no_objective_strategy() -> NoObjectiveStrategy {
         NoObjectiveStrategy {
-            checker_time_limit_seconds: None,
-            reconstruction_time_limit_seconds: None,
+            checker_time_limit: collomatique_time::TimeLimit::none(),
+            reconstruction_time_limit: collomatique_time::TimeLimit::none(),
             disable_logging: true,
         }
     }

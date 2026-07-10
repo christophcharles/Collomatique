@@ -98,9 +98,9 @@ pub struct IncrementalStrategy {
     /// `0.0` means "solve each epoch to proven optimality".
     pub distance_tolerance: f64,
     /// Time limit for each epoch's solve.
-    pub epoch_time_limit_seconds: Option<u32>,
+    pub epoch_time_limit: collomatique_time::TimeLimit,
     /// Time limit for the final reconstruction solve.
-    pub reconstruction_time_limit_seconds: Option<u32>,
+    pub reconstruction_time_limit: collomatique_time::TimeLimit,
     pub disable_logging: bool,
 }
 
@@ -109,8 +109,8 @@ impl Default for IncrementalStrategy {
         IncrementalStrategy {
             l1_weight: 1000.0,
             distance_tolerance: 5.0,
-            epoch_time_limit_seconds: None,
-            reconstruction_time_limit_seconds: None,
+            epoch_time_limit: collomatique_time::TimeLimit::none(),
+            reconstruction_time_limit: collomatique_time::TimeLimit::none(),
             disable_logging: false,
         }
     }
@@ -380,7 +380,7 @@ impl Strategy for IncrementalStrategy {
                     epoch_model.problem(),
                     SolveProblemOpts {
                         warm_start: None,
-                        time_limit_seconds: self.epoch_time_limit_seconds,
+                        time_limit: self.epoch_time_limit,
                         disable_logging: self.disable_logging,
                     },
                     &move |p| {
@@ -460,7 +460,7 @@ impl Strategy for IncrementalStrategy {
                 &recon_problem,
                 SolveProblemOpts {
                     warm_start: None,
-                    time_limit_seconds: self.reconstruction_time_limit_seconds,
+                    time_limit: self.reconstruction_time_limit,
                     disable_logging: self.disable_logging,
                 },
                 &move |p| {
@@ -681,8 +681,8 @@ mod tests {
             l1_weight: 1000.0,
             // Solve each epoch to proven optimality so assertions are stable.
             distance_tolerance: 0.0,
-            epoch_time_limit_seconds: None,
-            reconstruction_time_limit_seconds: None,
+            epoch_time_limit: collomatique_time::TimeLimit::none(),
+            reconstruction_time_limit: collomatique_time::TimeLimit::none(),
             disable_logging: true,
         }
     }

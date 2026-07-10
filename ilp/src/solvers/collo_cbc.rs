@@ -274,9 +274,12 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> SolverModel<'a, V, C, 
 impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> TimeLimitSolverModel<'a, V, C, P>
     for ColloCbcBuiltModel<'a, V, C, P>
 {
-    fn solve_with_time_limit(self, time_limit_in_seconds: u32) -> TimeLimitSolution<'a, V, C, P> {
+    fn solve_with_time_limit(
+        self,
+        time_limit_in_seconds: std::num::NonZeroU32,
+    ) -> TimeLimitSolution<'a, V, C, P> {
         let start = std::time::Instant::now();
-        let duration = std::time::Duration::from_secs(time_limit_in_seconds as u64);
+        let duration = std::time::Duration::from_secs(u64::from(time_limit_in_seconds.get()));
         let result = self.solve_with_callback(|_| start.elapsed() < duration);
         TimeLimitSolution {
             config: result.config,

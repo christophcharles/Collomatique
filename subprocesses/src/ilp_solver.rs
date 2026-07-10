@@ -13,7 +13,7 @@ use crate::worker::{Worker, WorkerEvent, WorkerSpawnError};
 pub struct IlpSolverConfig {
     pub problem_desc: collomatique_ilp::ProblemDesc,
     pub warm_start: Option<Vec<f64>>,
-    pub time_limit_seconds: Option<u32>,
+    pub time_limit: collomatique_time::TimeLimit,
     pub disable_logging: bool,
 }
 
@@ -104,7 +104,7 @@ impl SolverSubprocess {
         let request = IlpSolveRequest {
             problem_desc: config.problem_desc,
             warm_start: config.warm_start,
-            time_limit_seconds: config.time_limit_seconds,
+            time_limit: config.time_limit,
             disable_logging: config.disable_logging,
         };
         let serialized = SerializedIlpProblem::from(request);

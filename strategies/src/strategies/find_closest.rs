@@ -70,8 +70,8 @@ enum ClosestExtra<E> {
 /// penalty. The target is supplied as the payload.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FindClosestStrategy {
-    pub closeness_time_limit_seconds: Option<u32>,
-    pub reconstruction_time_limit_seconds: Option<u32>,
+    pub closeness_time_limit: collomatique_time::TimeLimit,
+    pub reconstruction_time_limit: collomatique_time::TimeLimit,
     pub disable_logging: bool,
     /// Absolute tolerance on the L1 closeness distance (Phase 2): accept the first feasible
     /// point found within this distance of the closest possible one, instead of solving the
@@ -261,7 +261,7 @@ impl Strategy for FindClosestStrategy {
                 closest_model.problem(),
                 SolveProblemOpts {
                     warm_start: None,
-                    time_limit_seconds: self.closeness_time_limit_seconds,
+                    time_limit: self.closeness_time_limit,
                     disable_logging: self.disable_logging,
                 },
                 &|p| {
@@ -355,7 +355,7 @@ impl Strategy for FindClosestStrategy {
                 &recon_problem,
                 SolveProblemOpts {
                     warm_start: None,
-                    time_limit_seconds: self.reconstruction_time_limit_seconds,
+                    time_limit: self.reconstruction_time_limit,
                     disable_logging: self.disable_logging,
                 },
                 &move |p| {
@@ -514,8 +514,8 @@ mod tests {
 
     fn strategy() -> FindClosestStrategy {
         FindClosestStrategy {
-            closeness_time_limit_seconds: None,
-            reconstruction_time_limit_seconds: None,
+            closeness_time_limit: collomatique_time::TimeLimit::none(),
+            reconstruction_time_limit: collomatique_time::TimeLimit::none(),
             disable_logging: true,
             // Solve to the exact closest point so distance-based assertions are stable.
             distance_tolerance: 0.0,

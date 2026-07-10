@@ -422,8 +422,8 @@ mod tests {
 
     fn find_closest() -> FindClosestStrategy {
         FindClosestStrategy {
-            closeness_time_limit_seconds: None,
-            reconstruction_time_limit_seconds: None,
+            closeness_time_limit: collomatique_time::TimeLimit::none(),
+            reconstruction_time_limit: collomatique_time::TimeLimit::none(),
             disable_logging: true,
             // Solve to the exact closest point so the end-to-end assertions are stable.
             distance_tolerance: 0.0,

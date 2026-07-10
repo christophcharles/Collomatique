@@ -150,8 +150,11 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> SolverModel<'a, V, C, 
 impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> TimeLimitSolverModel<'a, V, C, P>
     for CbcBuiltModel<'a, V, C, P>
 {
-    fn solve_with_time_limit(self, time_limit_in_seconds: u32) -> TimeLimitSolution<'a, V, C, P> {
-        self.solve_internal(Some(time_limit_in_seconds))
+    fn solve_with_time_limit(
+        self,
+        time_limit_in_seconds: std::num::NonZeroU32,
+    ) -> TimeLimitSolution<'a, V, C, P> {
+        self.solve_internal(Some(time_limit_in_seconds.get()))
     }
 }
 

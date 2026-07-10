@@ -13,7 +13,7 @@ use crate::{
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct DefaultStrategy {
-    pub time_limit_seconds: Option<u32>,
+    pub time_limit: collomatique_time::TimeLimit,
     pub disable_logging: bool,
 }
 
@@ -63,7 +63,7 @@ impl Strategy for DefaultStrategy {
             model,
             SolveProblemOpts {
                 warm_start,
-                time_limit_seconds: self.time_limit_seconds,
+                time_limit: self.time_limit,
                 disable_logging: self.disable_logging,
             },
             on_progress,

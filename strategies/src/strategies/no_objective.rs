@@ -15,8 +15,8 @@ use crate::{
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NoObjectiveStrategy {
-    pub checker_time_limit_seconds: Option<u32>,
-    pub reconstruction_time_limit_seconds: Option<u32>,
+    pub checker_time_limit: collomatique_time::TimeLimit,
+    pub reconstruction_time_limit: collomatique_time::TimeLimit,
     pub disable_logging: bool,
 }
 
@@ -67,7 +67,7 @@ impl Strategy for NoObjectiveStrategy {
                 model.checker_problem(),
                 SolveProblemOpts {
                     warm_start,
-                    time_limit_seconds: self.checker_time_limit_seconds,
+                    time_limit: self.checker_time_limit,
                     disable_logging: self.disable_logging,
                 },
                 &|p| on_progress(NoObjectiveProgressData::CheckerSolve((&p).into())),
@@ -133,7 +133,7 @@ impl Strategy for NoObjectiveStrategy {
                 &recon_problem,
                 SolveProblemOpts {
                     warm_start: None,
-                    time_limit_seconds: self.reconstruction_time_limit_seconds,
+                    time_limit: self.reconstruction_time_limit,
                     disable_logging: self.disable_logging,
                 },
                 &move |p| {

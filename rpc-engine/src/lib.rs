@@ -121,9 +121,7 @@ fn solve_ilp(serialized: SerializedIlpProblem) -> Result<(), anyhow::Error> {
     };
 
     let start = Instant::now();
-    let time_limit = request
-        .time_limit_seconds
-        .map(|s| std::time::Duration::from_secs(s as u64));
+    let time_limit = request.time_limit.duration();
 
     let mut last_best_bound = 0.0f64;
     let mut last_node_count = 0u64;

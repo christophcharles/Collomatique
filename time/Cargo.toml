@@ -8,3 +8,6 @@ authors.workspace = true
 serde = { workspace = true, features = ["derive"] }
 chrono = { workspace = true, features = [ "clock", "serde" ] }
 thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

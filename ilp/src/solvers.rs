@@ -84,7 +84,10 @@ pub trait TimeLimitSolverModel<'a, V: UsableData, C: UsableData, P: ProblemRepr<
     /// so far is returned (which may be `None`).
     ///
     /// You can check this by inspecting [TimeLimitSolution::time_limit_reached].
-    fn solve_with_time_limit(self, time_limit_in_seconds: u32) -> TimeLimitSolution<'a, V, C, P>;
+    fn solve_with_time_limit(
+        self,
+        time_limit_in_seconds: std::num::NonZeroU32,
+    ) -> TimeLimitSolution<'a, V, C, P>;
 }
 
 /// A solver that supports warm starting from an initial solution hint.

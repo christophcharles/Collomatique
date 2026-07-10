@@ -337,7 +337,7 @@ fn subprocess_solve(model: &collomatique_constraints_colloscopes::ColloscopeMode
     let config = IlpSolverConfig {
         problem_desc: desc,
         warm_start: None,
-        time_limit_seconds: None,
+        time_limit: collomatique_time::TimeLimit::none(),
         disable_logging: false,
     };
 
@@ -466,7 +466,7 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
     );
 
     let strategy = DefaultStrategy {
-        time_limit_seconds: None,
+        time_limit: collomatique_time::TimeLimit::none(),
         disable_logging: false,
     };
 
@@ -583,8 +583,8 @@ fn no_objective_solve(model: &collomatique_constraints_colloscopes::ColloscopeMo
     );
 
     let strategy = NoObjectiveStrategy {
-        checker_time_limit_seconds: None,
-        reconstruction_time_limit_seconds: None,
+        checker_time_limit: collomatique_time::TimeLimit::none(),
+        reconstruction_time_limit: collomatique_time::TimeLimit::none(),
         disable_logging: false,
     };
 
@@ -707,12 +707,12 @@ fn no_objective_starter_solve(model: &collomatique_constraints_colloscopes::Coll
 
     let strategy = NoObjectiveStarterStrategy {
         no_objective: NoObjectiveStrategy {
-            checker_time_limit_seconds: None,
-            reconstruction_time_limit_seconds: None,
+            checker_time_limit: collomatique_time::TimeLimit::none(),
+            reconstruction_time_limit: collomatique_time::TimeLimit::none(),
             disable_logging: false,
         },
         default: DefaultStrategy {
-            time_limit_seconds: None,
+            time_limit: collomatique_time::TimeLimit::none(),
             disable_logging: false,
         },
     };
@@ -846,8 +846,8 @@ fn incremental_solve(model: &collomatique_constraints_colloscopes::ColloscopeMod
     let strategy = IncrementalStrategy {
         l1_weight: 1000.0,
         distance_tolerance: 5.0,
-        epoch_time_limit_seconds: None,
-        reconstruction_time_limit_seconds: None,
+        epoch_time_limit: collomatique_time::TimeLimit::none(),
+        reconstruction_time_limit: collomatique_time::TimeLimit::none(),
         disable_logging: false,
     };
 

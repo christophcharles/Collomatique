@@ -416,7 +416,11 @@ fn solve_and_output(
             } else {
                 solver.build_model(pb)
             };
-            let result = built.solve_with_time_limit(timeout_minutes * 60);
+            // The `timeout_minutes == 0` case is handled by the other branch above, so
+            // `timeout_minutes * 60` is guaranteed non-zero here.
+            let time_limit =
+                std::num::NonZeroU32::new(timeout_minutes * 60).expect("guarded non-zero above");
+            let result = built.solve_with_time_limit(time_limit);
             if result.time_limit_reached {
                 eprintln!("Warning: solver time limit ({timeout_minutes} min) reached.");
             }

@@ -44,13 +44,13 @@ pub enum SolveStatus {
 
 pub struct SolveConfig {
     pub warm_start: Option<Vec<f64>>,
-    pub time_limit_seconds: Option<u32>,
+    pub time_limit: collomatique_time::TimeLimit,
     pub disable_logging: bool,
 }
 
 pub struct SolveProblemOpts<V: UsableData> {
     pub warm_start: Option<ConfigData<V>>,
-    pub time_limit_seconds: Option<u32>,
+    pub time_limit: collomatique_time::TimeLimit,
     pub disable_logging: bool,
 }
 
@@ -334,7 +334,7 @@ impl StrategyContext {
 
         let solve_config = SolveConfig {
             warm_start,
-            time_limit_seconds: opts.time_limit_seconds,
+            time_limit: opts.time_limit,
             disable_logging: opts.disable_logging,
         };
 
@@ -369,7 +369,7 @@ impl StrategyContext {
 
         let solve_config = SolveConfig {
             warm_start,
-            time_limit_seconds: opts.time_limit_seconds,
+            time_limit: opts.time_limit,
             disable_logging: opts.disable_logging,
         };
 
@@ -1428,8 +1428,10 @@ mod tests {
         let kind = StrategyKind::Incremental(IncrementalStrategy {
             l1_weight: 1e6,
             distance_tolerance: 5.0,
-            epoch_time_limit_seconds: Some(30),
-            reconstruction_time_limit_seconds: None,
+            epoch_time_limit: collomatique_time::TimeLimit::seconds(
+                std::num::NonZeroU32::new(30).unwrap(),
+            ),
+            reconstruction_time_limit: collomatique_time::TimeLimit::none(),
             disable_logging: false,
         });
         let json = serde_json::to_string(&kind).unwrap();
@@ -1616,7 +1618,7 @@ mod tests {
                 &model,
                 SolveProblemOpts {
                     warm_start: None,
-                    time_limit_seconds: None,
+                    time_limit: collomatique_time::TimeLimit::none(),
                     disable_logging: false,
                 },
                 &|p: SolveProgress<InternalVar<usize, ()>>| {
@@ -1756,8 +1758,8 @@ mod tests {
 
         let ctx = StrategyContext::new(backend);
         let strategy = NoObjectiveStrategy {
-            checker_time_limit_seconds: None,
-            reconstruction_time_limit_seconds: None,
+            checker_time_limit: collomatique_time::TimeLimit::none(),
+            reconstruction_time_limit: collomatique_time::TimeLimit::none(),
             disable_logging: false,
         };
 
@@ -1796,8 +1798,8 @@ mod tests {
 
         let ctx = StrategyContext::new(backend);
         let strategy = NoObjectiveStrategy {
-            checker_time_limit_seconds: None,
-            reconstruction_time_limit_seconds: None,
+            checker_time_limit: collomatique_time::TimeLimit::none(),
+            reconstruction_time_limit: collomatique_time::TimeLimit::none(),
             disable_logging: false,
         };
 
@@ -1830,8 +1832,8 @@ mod tests {
 
         let ctx = StrategyContext::new(backend);
         let kind = StrategyKind::NoObjective(NoObjectiveStrategy {
-            checker_time_limit_seconds: None,
-            reconstruction_time_limit_seconds: None,
+            checker_time_limit: collomatique_time::TimeLimit::none(),
+            reconstruction_time_limit: collomatique_time::TimeLimit::none(),
             disable_logging: false,
         });
         let outcome = ctx
@@ -1874,12 +1876,12 @@ mod tests {
         let ctx = StrategyContext::new(backend);
         let strategy = NoObjectiveStarterStrategy {
             no_objective: NoObjectiveStrategy {
-                checker_time_limit_seconds: None,
-                reconstruction_time_limit_seconds: None,
+                checker_time_limit: collomatique_time::TimeLimit::none(),
+                reconstruction_time_limit: collomatique_time::TimeLimit::none(),
                 disable_logging: false,
             },
             default: DefaultStrategy {
-                time_limit_seconds: None,
+                time_limit: collomatique_time::TimeLimit::none(),
                 disable_logging: false,
             },
         };
@@ -1928,8 +1930,8 @@ mod tests {
         let ctx = StrategyContext::new(backend);
         let strategy = NoObjectiveStarterStrategy {
             no_objective: NoObjectiveStrategy {
-                checker_time_limit_seconds: None,
-                reconstruction_time_limit_seconds: None,
+                checker_time_limit: collomatique_time::TimeLimit::none(),
+                reconstruction_time_limit: collomatique_time::TimeLimit::none(),
                 disable_logging: false,
             },
             default: DefaultStrategy::default(),
@@ -1974,8 +1976,8 @@ mod tests {
         let ctx = StrategyContext::new(backend);
         let kind = StrategyKind::NoObjectiveStarter(NoObjectiveStarterStrategy {
             no_objective: NoObjectiveStrategy {
-                checker_time_limit_seconds: None,
-                reconstruction_time_limit_seconds: None,
+                checker_time_limit: collomatique_time::TimeLimit::none(),
+                reconstruction_time_limit: collomatique_time::TimeLimit::none(),
                 disable_logging: false,
             },
             default: DefaultStrategy::default(),
