@@ -1219,6 +1219,53 @@ impl<V: UsableData, C: UsableData, P: ProblemRepr<V>> Problem<V, C, P> {
             .set_objective(objective);
         builder.build()
     }
+
+    /// Produce a new problem mapping *both* its variables and its constraint
+    /// descriptions through user-provided functions, keeping the same shape.
+    ///
+    /// This is the constraint-desc-aware counterpart to [`Constraint::transmute`]
+    /// / [`Objective::transmute`]: `var_fn` renames every variable (in the
+    /// variable set, the constraints and the objective) and `desc_fn` rewrites
+    /// every constraint description. It is the shared primitive behind the
+    /// "rebuild a problem in a wrapped variable/description space" pattern used
+    /// by the incremental and closest-solution strategies.
+    ///
+    /// The result is reassembled with [`ProblemBuilder::build`]; because
+    /// `var_fn` need not be injective, colliding renames are reported as a
+    /// [`BuildError`] rather than silently merged (same contract as [`filter`]).
+    ///
+    /// [`filter`]: Problem::filter
+    pub fn transmute<V2, C2, FV, FC>(
+        &self,
+        mut var_fn: FV,
+        mut desc_fn: FC,
+    ) -> BuildResult<Problem<V2, C2>, V2, C2>
+    where
+        V2: UsableData,
+        C2: UsableData,
+        FV: FnMut(&V) -> V2,
+        FC: FnMut(&C) -> C2,
+    {
+        let variables: HashMap<V2, Variable> = self
+            .variables
+            .iter()
+            .map(|(v, kind)| (var_fn(v), kind.clone()))
+            .collect();
+
+        let constraints: Vec<(Constraint<V2>, C2)> = self
+            .constraints
+            .iter()
+            .map(|(c, desc)| (c.transmute(&mut var_fn), desc_fn(desc)))
+            .collect();
+
+        let objective = self.objective.transmute(&mut var_fn);
+
+        ProblemBuilder::new()
+            .set_variables(variables)
+            .add_constraints(constraints)
+            .set_objective(objective)
+            .build()
+    }
 }
 
 /// Report on confirmity between configuration data and an ILP problem

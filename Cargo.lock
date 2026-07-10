@@ -377,6 +377,7 @@ dependencies = [
  "collomatique-sqlite-state",
  "collomatique-state-colloscopes",
  "collomatique-time",
+ "ordered-float",
  "sqlx",
 ]
 

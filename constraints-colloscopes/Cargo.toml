@@ -11,3 +11,4 @@ collomatique-ilp = { path = "../ilp" }
 collomatique-time = { path = "../time" }
 collomatique-ilp-modeler = { path = "../ilp-modeler" }
 sqlx = { workspace = true, features = ["runtime-tokio", "sqlite"] }
+ordered-float.workspace = true

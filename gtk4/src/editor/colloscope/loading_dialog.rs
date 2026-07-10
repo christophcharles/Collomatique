@@ -4,10 +4,15 @@ use relm4::{
     adw, gtk,
 };
 
-use collomatique_constraints_colloscopes::{ColloscopeModel, ProblemInternalVar, SolveConfig};
+use collomatique_constraints_colloscopes::{
+    ConfiguredColloscopeModel, ConfiguredExtra, InternalVar, SolveConfig, Var,
+};
 use collomatique_state_colloscopes::colloscope_params::Parameters;
 use collomatique_state_colloscopes::colloscopes::Colloscope;
 use collomatique_strategies::{ConductorPayload, IncrementalPayload};
+
+/// Flattened variable of a [`ConfiguredColloscopeModel`], as carried by the conductor payload.
+type ConfiguredInternalVar = InternalVar<Var, ConfiguredExtra>;
 
 use crate::widgets::debug_view::{DebugView, DebugViewInput};
 
@@ -31,14 +36,19 @@ pub enum DialogInput {
 
 #[derive(Debug)]
 pub enum DialogOutput {
-    ModelReady(ColloscopeModel, ConductorPayload<ProblemInternalVar>),
+    ModelReady(
+        ConfiguredColloscopeModel,
+        ConductorPayload<ConfiguredInternalVar>,
+    ),
 }
 
 /// Build the incremental epoch payload from the freshly-built model: every `StudentGroup` base
 /// variable is solved first (epoch 0), then each `GroupInInterrogation` variable is solved in the
 /// epoch matching its week (week + 1), so the schedule fills in week by week on top of the fixed
 /// group assignment. Base variables absent from the map fall into the strategy's final epoch.
-fn build_incremental_payload(model: &ColloscopeModel) -> ConductorPayload<ProblemInternalVar> {
+fn build_incremental_payload(
+    model: &ConfiguredColloscopeModel,
+) -> ConductorPayload<ConfiguredInternalVar> {
     let epochs = collomatique_constraints_colloscopes::build_incremental_epochs(model);
     ConductorPayload {
         incremental: IncrementalPayload { epochs },
@@ -47,7 +57,33 @@ fn build_incremental_payload(model: &ColloscopeModel) -> ConductorPayload<Proble
 
 #[derive(Debug)]
 pub enum DialogCommandOutput {
-    Built(Result<ColloscopeModel, String>),
+    Built(Result<ConfiguredColloscopeModel, String>),
+}
+
+/// Reconstruct the in-memory database from the current `params` and `colloscope`, then build the
+/// configured model from it. `build_model` needs a live database (it both builds the base model
+/// and reads the current assignments back), so the pool is materialized here in the caller.
+async fn build_configured_model(
+    config: &SolveConfig,
+    params: Parameters,
+    colloscope: Colloscope,
+    log: &mut (dyn FnMut(&str) + Send),
+) -> Result<ConfiguredColloscopeModel, String> {
+    let inner_data = collomatique_state_colloscopes::InnerData {
+        params,
+        colloscope,
+        ..Default::default()
+    };
+    let pool = sqlx::SqlitePool::connect(":memory:")
+        .await
+        .map_err(|e| e.to_string())?;
+    collomatique_sqlite_state::create_schema(&pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    collomatique_sqlite_state::inner_data_to_sqlite(&pool, &inner_data)
+        .await
+        .map_err(|e| e.to_string())?;
+    config.build_model(&pool, log).await
 }
 
 #[relm4::component(pub)]
@@ -168,13 +204,16 @@ impl Component for Dialog {
                 // Building the model is heavy, async (in-memory sqlite) work. Run it off the UI
                 // thread; each log line is emitted back as `Echo` and streams live into the
                 // DebugView while the build runs. `config`, `params` and `colloscope` are all
-                // consumed by the build; only the built model is handed back.
+                // consumed by the build; only the built model is handed back. The in-memory
+                // database that `build_model` reads from is reconstructed here from the current
+                // parameters and colloscope.
                 let input = sender.input_sender().clone();
                 sender.oneshot_command(async move {
                     let mut log = move |line: &str| {
                         input.emit(DialogInput::Echo(format!("{}\n", line)));
                     };
-                    let result = config.build_model(&params, &colloscope, &mut log).await;
+                    let result =
+                        build_configured_model(&config, params, colloscope, &mut log).await;
                     DialogCommandOutput::Built(result)
                 });
             }

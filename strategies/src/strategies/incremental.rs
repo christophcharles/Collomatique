@@ -5,7 +5,7 @@ use std::fmt;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-use collomatique_ilp::{ConfigData, LinExpr, Problem, ProblemBuilder, UsableData, Variable};
+use collomatique_ilp::{ConfigData, LinExpr, Problem, UsableData, Variable};
 use collomatique_ilp_modeler::{
     ConstraintBundle, ConstraintSource, InternalVar, Model, Modeler, Var,
 };
@@ -168,23 +168,8 @@ where
     E: UsableData,
     C: UsableData,
 {
-    let vars: HashMap<InternalVar<B, IncrementalExtra<E>>, Variable> = problem
-        .get_variables()
-        .iter()
-        .map(|(v, kind)| (wrap_var(v), kind.clone()))
-        .collect();
-    let constraints: Vec<_> = problem
-        .get_constraints()
-        .iter()
-        .map(|(c, src)| (c.transmute(wrap_var), wrap_source(src)))
-        .collect();
-    let objective = problem.get_objective().transmute(wrap_var);
-
-    ProblemBuilder::new()
-        .set_variables(vars)
-        .add_constraints(constraints)
-        .set_objective(objective)
-        .build()
+    problem
+        .transmute(wrap_var, wrap_source)
         .map_err(|e| StrategyError::SolveError(format!("failed to wrap epoch problem: {e:?}")))
 }
 

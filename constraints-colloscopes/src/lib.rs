@@ -17,7 +17,9 @@ pub mod vars;
 mod weights;
 
 pub use builder::{build_model, build_model_with_log};
-pub use config::{GroupListSolveData, PeriodSolveData, SolveConfig};
+pub use config::{
+    ConfiguredConstraintDesc, ConfiguredExtra, GroupListSolveData, PeriodSolveData, SolveConfig,
+};
 pub use incremental::build_incremental_epochs;
 pub use types::{
     ConstraintDesc, ExtraVarName, InfeasibleConstraint, PreferenceConstraint,
@@ -32,6 +34,13 @@ pub use collomatique_ilp_modeler::{
 pub use vars::Var;
 
 pub type ColloscopeModel = Model<Var, ExtraVarName, ConstraintDesc>;
+/// The model produced by [`SolveConfig::build_model`]: the base [`ColloscopeModel`]'s
+/// variable/constraint spaces extended with the configuration wrappers
+/// ([`ConfiguredExtra`] penalty variables and [`ConfiguredConstraintDesc`] pin/anchor
+/// descriptions).
+///
+/// [`SolveConfig::build_model`]: config::SolveConfig::build_model
+pub type ConfiguredColloscopeModel = Model<Var, ConfiguredExtra, ConfiguredConstraintDesc>;
 pub type ProblemConstraintSource = ConstraintSource<ExtraVarName, ConstraintDesc>;
 pub type ProblemInternalVar = InternalVar<Var, ExtraVarName>;
 pub type IlpInnerProblem = collomatique_ilp::Problem<ProblemInternalVar, ProblemConstraintSource>;

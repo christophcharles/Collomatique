@@ -9,11 +9,23 @@ use collomatique_ops::ColloscopeUpdateOp;
 
 use crate::editor::run_solver;
 
-/// The solver dialog instantiated for the colloscope ILP model.
+/// The solver dialog instantiated for the configured colloscope ILP model. The solve path runs
+/// on the configured model (with pins/anchors/objectified cross-period constraints), so it is
+/// parameterized by [`ConfiguredExtra`]/[`ConfiguredConstraintDesc`] rather than the base model's
+/// spaces.
+///
+/// [`ConfiguredExtra`]: collomatique_constraints_colloscopes::ConfiguredExtra
+/// [`ConfiguredConstraintDesc`]: collomatique_constraints_colloscopes::ConfiguredConstraintDesc
 type SolverDialog = run_solver::Dialog<
     collomatique_constraints_colloscopes::Var,
-    collomatique_constraints_colloscopes::ExtraVarName,
-    collomatique_constraints_colloscopes::ConstraintDesc,
+    collomatique_constraints_colloscopes::ConfiguredExtra,
+    collomatique_constraints_colloscopes::ConfiguredConstraintDesc,
+>;
+
+/// Flattened variable of the configured colloscope model (the solve path's ILP variable).
+type ConfiguredInternalVar = collomatique_constraints_colloscopes::InternalVar<
+    collomatique_constraints_colloscopes::Var,
+    collomatique_constraints_colloscopes::ConfiguredExtra,
 >;
 
 const DEBOUNCE_DURATION: std::time::Duration = std::time::Duration::from_millis(500);
@@ -52,14 +64,10 @@ pub enum ColloscopeInput {
     ),
     ConductorConfigCancelled,
     ModelBuilt(
-        collomatique_constraints_colloscopes::ColloscopeModel,
-        collomatique_strategies::ConductorPayload<
-            collomatique_constraints_colloscopes::ProblemInternalVar,
-        >,
+        collomatique_constraints_colloscopes::ConfiguredColloscopeModel,
+        collomatique_strategies::ConductorPayload<ConfiguredInternalVar>,
     ),
-    SolveResult(
-        collomatique_ilp::ConfigData<collomatique_constraints_colloscopes::ProblemInternalVar>,
-    ),
+    SolveResult(collomatique_ilp::ConfigData<ConfiguredInternalVar>),
     EraseColloscopeClicked,
     EraseGroupListsClicked,
 
@@ -793,10 +801,15 @@ impl Component for Colloscope {
                 if let Some(ilp_problem) = self.get_ilp_problem() {
                     // Drop the non-base variables straight from the config the solver returned,
                     // rather than rebuilding and re-checking a full Solution (~100ms on the UI
-                    // thread) only to throw it away and keep the base values.
-                    let base_config = ilp_problem
-                        .problem
-                        .base_data_from_complete_data(&config_data);
+                    // thread) only to throw it away and keep the base values. The solved config
+                    // is over the *configured* model's variables, so strip to base variables
+                    // directly (the base export model's extra space no longer matches).
+                    let base_config = config_data.filter_transmute(|var| match var {
+                        collomatique_constraints_colloscopes::InternalVar::Base(b) => {
+                            Some(b.clone())
+                        }
+                        _ => None,
+                    });
                     if let Some(colloscope) =
                         collomatique_constraints_colloscopes::convert::build_colloscope(
                             &ilp_problem.env,
