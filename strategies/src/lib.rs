@@ -1345,7 +1345,6 @@ impl StrategyContext {
 pub struct StrategyRequest {
     pub model_desc: ModelDesc,
     pub strategy: StrategyKind,
-    #[serde(default)]
     pub warm_start: Option<Vec<f64>>,
     /// Erased per-run payload, reconstructed to the typed [`StrategyPayload`] in the subprocess
     /// against the model's `var_order`.
