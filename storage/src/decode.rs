@@ -67,7 +67,10 @@ pub enum Caveat {
     UnknownEntries,
 }
 
-fn check_header(header: &Header, caveats: &mut BTreeSet<Caveat>) -> Result<(), DecodeError> {
+pub(crate) fn check_header(
+    header: &Header,
+    caveats: &mut BTreeSet<Caveat>,
+) -> Result<(), DecodeError> {
     if let FileContent::UnknownFileContent(_value) = &header.file_content {
         return Err(DecodeError::UnknownFileType(
             header.produced_with_version.clone(),

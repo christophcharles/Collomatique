@@ -15,6 +15,29 @@ pub struct JsonData {
     pub entries: Vec<Entry>,
 }
 
+/// Raw envelope used for spec-version dispatch
+///
+/// The entry payloads are kept unparsed (as [serde_json::value::RawValue]) so
+/// that a file can be routed to the right decoding pipeline — legacy (spec 1)
+/// or spec 2 — based only on the declared `minimum_spec_version` values,
+/// before any payload interpretation happens.
+#[derive(Debug, Deserialize)]
+pub struct RawJsonData {
+    pub header: Header,
+    pub entries: Vec<RawEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RawEntry {
+    pub minimum_spec_version: u32,
+    // These two fields are only deserialized (never read) until the spec-2
+    // read path consumes them.
+    #[allow(dead_code)]
+    pub needed_entry: bool,
+    #[allow(dead_code)]
+    pub content: Box<serde_json::value::RawValue>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Header {
     pub file_type: FileType,

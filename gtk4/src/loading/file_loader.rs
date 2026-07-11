@@ -103,6 +103,10 @@ impl FileLoader {
                 DeserializationError::Decode(decode_error) => {
                     Self::generate_decode_error_message(decode_error)
                 }
+                DeserializationError::UnsupportedSpecVersions { versions } => format!(
+                    "Le fichier est mal formé et est probablement corrompu.\n(Combinaison de versions de spécification non prise en charge dans les entrées : {:?})",
+                    versions
+                ),
             },
         }
     }

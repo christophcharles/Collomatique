@@ -19,7 +19,7 @@ use collomatique_storage::{deserialize_data, serialize_data};
 fn round_trip_identity() {
     let data = builder::build_rich_data();
 
-    let serialized = serialize_data(&data);
+    let serialized = serialize_data(&data, true);
     let (decoded, caveats) =
         deserialize_data(&serialized).expect("Serialized data should deserialize");
 
@@ -31,18 +31,18 @@ fn round_trip_identity() {
 fn reserialize_is_stable() {
     let data = builder::build_rich_data();
 
-    let serialized = serialize_data(&data);
+    let serialized = serialize_data(&data, true);
     let (decoded, _caveats) =
         deserialize_data(&serialized).expect("Serialized data should deserialize");
 
-    assert_eq!(serialize_data(&decoded), serialized);
+    assert_eq!(serialize_data(&decoded, true), serialized);
 }
 
 #[test]
 fn deserialized_data_is_still_editable() {
     let data = builder::build_rich_data();
 
-    let serialized = serialize_data(&data);
+    let serialized = serialize_data(&data, true);
     let (decoded, _caveats) =
         deserialize_data(&serialized).expect("Serialized data should deserialize");
 
