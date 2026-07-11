@@ -2805,6 +2805,28 @@ impl Data {
                         *group_list_id,
                         colloscopes::ColloscopeGroupList::new_empty(),
                     );
+                } else if !was_prefilled && !will_be_prefilled {
+                    // Staying automatic: the colloscope entry persists, so the
+                    // new exclusions must be compatible with the placed students
+                    let collo_group_list = self
+                        .inner_data
+                        .colloscope
+                        .group_lists
+                        .get(group_list_id)
+                        .expect("Non-prefilled group list should have colloscope entry");
+                    if collo_group_list
+                        .validate_against_params(
+                            *group_list_id,
+                            &old_group_list.params,
+                            filling,
+                            &self.inner_data.params.students,
+                        )
+                        .is_err()
+                    {
+                        return Err(GroupListError::NotCompatibleGroupListInColloscope(
+                            *group_list_id,
+                        ));
+                    }
                 }
 
                 let new_group_list = group_lists::GroupList {

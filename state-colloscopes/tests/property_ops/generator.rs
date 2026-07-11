@@ -740,28 +740,7 @@ fn gen_group_list(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invali
             let filling = if rng.random_bool(0.5) {
                 synth::prefilled_filling(rng, group_names_len, &pools.student_ids)
             } else {
-                // TODO(phase0-bug): `GroupListOp::SetFilling` validates the
-                // prefilled<->automatic transitions against the colloscope, but
-                // an automatic->automatic change never checks the new
-                // `excluded_students` against students already placed in the
-                // colloscope group list, leaving a dangling
-                // ExcludedStudentInGroupList violation that panics the internal
-                // invariant check (reproduced by seed 0). Until the production
-                // bug is fixed, the generator never excludes a student that
-                // already has a group in the colloscope entry of this list.
-                let placed_students: BTreeSet<StudentId> = inner
-                    .colloscope
-                    .group_lists
-                    .get(&group_list_id)
-                    .map(|collo| collo.groups_for_students.keys().copied().collect())
-                    .unwrap_or_default();
-                let excludable: Vec<StudentId> = pools
-                    .student_ids
-                    .iter()
-                    .copied()
-                    .filter(|id| !placed_students.contains(id))
-                    .collect();
-                synth::automatic_filling(rng, &excludable)
+                synth::automatic_filling(rng, &pools.student_ids)
             };
             GroupListOp::SetFilling(group_list_id, filling)
         }

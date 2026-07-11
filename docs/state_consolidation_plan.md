@@ -146,9 +146,10 @@ still exist*:
   1. **FIXED** — `StudentOp::Remove` did not check `settings.students` → dangling
      per-student settings entry (invariant panic `InvalidStudentIdInSettings`). Removal
      is now rejected with `StudentError::StudentStillHasSettings`.
-  2. `GroupListOp::SetFilling` automatic→automatic does not check the new
+  2. **FIXED** — `GroupListOp::SetFilling` automatic→automatic did not check the new
      `excluded_students` against students already placed in the colloscope group list
-     (`ExcludedStudentInGroupList`); the prefilled↔automatic transitions are checked.
+     (`ExcludedStudentInGroupList`); the prefilled↔automatic transitions were checked.
+     Now validated like `Update`, rejected with `NotCompatibleGroupListInColloscope`.
   3. `GroupListOp::Update` does not check interrogations' `assigned_groups` when
      shrinking `group_names` (`InvalidGroupNumInInterrogation`); `AssignToSubject`
      performs this exact check correctly.
