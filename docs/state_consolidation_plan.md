@@ -161,9 +161,10 @@ still exist*:
      now carries the filling (default when annotating a plain `Add`) and the apply
      path only registers a colloscope entry for non-prefilled fillings.
 
-  Latent (spotted by review, not triggered): `GroupListOp::AssignToSubject` with a
-  dangling group-list id panics on an `.expect` (`lib.rs`, "Group list ID should be
-  valid") before reaching its `InvalidGroupListId` check.
+  Latent (spotted by review, not triggered), **FIXED**: `GroupListOp::AssignToSubject`
+  with a dangling group-list id panicked on an `.expect` (`lib.rs`, "Group list ID
+  should be valid") before reaching its (dead) `InvalidGroupListId` check. It now
+  returns `InvalidGroupListId` and the generator covers this invalid case.
 - **Item 2 — TODO**: populated storage round-trip tests (`storage/tests/`).
 
 ---

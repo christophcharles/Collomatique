@@ -647,7 +647,7 @@ fn gen_incompat(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
 
 fn gen_group_list(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invalid: bool) -> Op {
     if invalid {
-        let op = match rng.random_range(0..3) {
+        let op = match rng.random_range(0..4) {
             0 if !pools.group_list_ids.is_empty() => {
                 // Prefilled groups whose count does not match group_names
                 let group_list_id = pick(rng, &pools.group_list_ids);
@@ -668,6 +668,16 @@ fn gen_group_list(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invali
                     pick(rng, &pools.period_ids),
                     pick(rng, &pools.non_interrogation_subject_ids),
                     None,
+                )
+            }
+            2 if !pools.period_ids.is_empty()
+                && !pools.interrogation_subject_ids.is_empty() =>
+            {
+                // Associating a dangling group list id
+                GroupListOp::AssignToSubject(
+                    pick(rng, &pools.period_ids),
+                    pick(rng, &pools.interrogation_subject_ids),
+                    Some(unsafe { GroupListId::new(dangling(rng)) }),
                 )
             }
             _ => GroupListOp::Remove(unsafe { GroupListId::new(dangling(rng)) }),

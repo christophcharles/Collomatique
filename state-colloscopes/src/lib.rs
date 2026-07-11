@@ -2931,19 +2931,15 @@ impl Data {
                     return Err(GroupListError::InvalidPeriodId(*period_id));
                 }
 
-                let new_group_list = match group_list_id {
-                    Some(id) => Some(
-                        self.inner_data
-                            .params
-                            .group_lists
-                            .group_list_map
-                            .get(id)
-                            .expect("Group list ID should be valid"),
-                    ),
-                    None => None,
-                };
-                let first_forbidden_group_number = match new_group_list {
-                    Some(group_list) => group_list.params.group_names.len() as u32,
+                let first_forbidden_group_number = match group_list_id {
+                    Some(id) => {
+                        let Some(group_list) =
+                            self.inner_data.params.group_lists.group_list_map.get(id)
+                        else {
+                            return Err(GroupListError::InvalidGroupListId(*id));
+                        };
+                        group_list.params.group_names.len() as u32
+                    }
                     None => 0,
                 };
 
@@ -2963,15 +2959,6 @@ impl Data {
 
                 match group_list_id {
                     Some(id) => {
-                        if !self
-                            .inner_data
-                            .params
-                            .group_lists
-                            .group_list_map
-                            .contains_key(id)
-                        {
-                            return Err(GroupListError::InvalidGroupListId(*id));
-                        };
                         subject_map.insert(*subject_id, *id);
                     }
                     None => {
