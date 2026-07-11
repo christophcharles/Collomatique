@@ -12,7 +12,7 @@ use collomatique_state_colloscopes::{
     SlotOp, StudentOp, Subject, SubjectInterrogationParameters, SubjectOp, SubjectParameters,
     SubjectPeriodicity, TeacherOp,
     colloscopes::{ColloscopeGroupList, ColloscopeInterrogation},
-    group_lists::{GroupListFilling, GroupListParameters},
+    group_lists::{GroupListFilling, GroupListParameters, PrefilledGroup},
     periods::WeekDesc,
     settings::{Limits, Settings},
     slots::Slot,
@@ -298,4 +298,54 @@ fn update_shrinking_group_names_below_assigned_group_is_rejected() {
     ) else {
         panic!("Shrinking above the assigned group number should succeed");
     };
+}
+
+/// The reverse of a `GroupListOp::Remove` must restore the group list
+/// exactly, including its filling kind. Before the fix, the reverse was
+/// rebuilt as a plain `Add(id, params)` with the default (automatic,
+/// empty) filling: undoing the removal of a prefilled (empty) group
+/// list flipped it to automatic and re-registered a colloscope entry.
+#[test]
+fn remove_prefilled_group_list_round_trips_on_reverse() {
+    use collomatique_state::InMemoryData;
+
+    let mut app_state = AppState::<_, String>::new(Data::new());
+
+    let Ok(Some(NewId::GroupListId(group_list_id))) = app_state.apply(
+        Op::GroupList(GroupListOp::Add(GroupListParameters::default())),
+        "Add group list".into(),
+    ) else {
+        panic!("Unexpected result after adding the group list");
+    };
+    let group_count = 16; // GroupListParameters::default() has 16 groups
+    let Ok(None) = app_state.apply(
+        Op::GroupList(GroupListOp::SetFilling(
+            group_list_id,
+            GroupListFilling::Prefilled {
+                groups: vec![PrefilledGroup::default(); group_count],
+            },
+        )),
+        "Make the group list prefilled".into(),
+    ) else {
+        panic!("Unexpected result after setting the prefilled filling");
+    };
+
+    // Same annotate → build_rev → apply order as Manager::apply
+    let mut data: Data = app_state.get_data().clone();
+    let before = data.clone();
+
+    let (annotated, _new_id) = data.annotate(Op::GroupList(GroupListOp::Remove(group_list_id)));
+    let rev = data
+        .build_rev_with_current_state(&annotated)
+        .expect("the reverse of a valid remove should build");
+    data.apply(&annotated)
+        .expect("removing an empty prefilled group list should succeed");
+    data.apply(&rev)
+        .expect("the reverse of a successfully applied op must apply");
+
+    assert!(
+        data == before,
+        "undoing the removal must restore the prefilled filling \
+         and must not register a colloscope entry",
+    );
 }
