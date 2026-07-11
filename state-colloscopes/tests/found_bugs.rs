@@ -349,3 +349,77 @@ fn remove_prefilled_group_list_round_trips_on_reverse() {
          and must not register a colloscope entry",
     );
 }
+
+/// `GroupListOp::AssignToSubject` with a dangling group-list id must
+/// return `InvalidGroupListId`. Before the fix, it panicked on an
+/// `.expect("Group list ID should be valid")` placed before the actual
+/// id check (which was therefore dead code).
+#[test]
+fn assign_to_subject_with_dangling_group_list_id_errors() {
+    let mut app_state = AppState::<_, String>::new(Data::new());
+
+    let Ok(Some(NewId::PeriodId(period_id))) = app_state.apply(
+        Op::Period(PeriodOp::AddFront(vec![
+            WeekDesc::new(true),
+            WeekDesc::new(true),
+        ])),
+        "Add period".into(),
+    ) else {
+        panic!("Unexpected result after adding the period");
+    };
+
+    let Ok(Some(NewId::SubjectId(subject_id))) = app_state.apply(
+        Op::Subject(SubjectOp::AddAfter(
+            None,
+            Subject {
+                parameters: SubjectParameters {
+                    name: "Math".into(),
+                    interrogation_parameters: Some(SubjectInterrogationParameters {
+                        students_per_group: NonZeroU32::new(2).unwrap()
+                            ..=NonZeroU32::new(3).unwrap(),
+                        groups_per_interrogation: NonZeroU32::new(1).unwrap()
+                            ..=NonZeroU32::new(1).unwrap(),
+                        duration: collomatique_time::NonZeroMinutes::new(60).unwrap(),
+                        take_duration_into_account: true,
+                        periodicity: SubjectPeriodicity::ExactlyPeriodic {
+                            periodicity_in_weeks: NonZeroU32::new(2).unwrap(),
+                        },
+                    }),
+                },
+                excluded_periods: BTreeSet::new(),
+            },
+        )),
+        "Add subject".into(),
+    ) else {
+        panic!("Unexpected result after adding the subject");
+    };
+
+    // A removed group list leaves a dangling id
+    let Ok(Some(NewId::GroupListId(group_list_id))) = app_state.apply(
+        Op::GroupList(GroupListOp::Add(GroupListParameters::default())),
+        "Add group list".into(),
+    ) else {
+        panic!("Unexpected result after adding the group list");
+    };
+    let Ok(None) = app_state.apply(
+        Op::GroupList(GroupListOp::Remove(group_list_id)),
+        "Remove group list".into(),
+    ) else {
+        panic!("Unexpected result after removing the group list");
+    };
+
+    let result = app_state.apply(
+        Op::GroupList(GroupListOp::AssignToSubject(
+            period_id,
+            subject_id,
+            Some(group_list_id),
+        )),
+        "Assign dangling group list".into(),
+    );
+    assert_eq!(
+        result,
+        Err(Error::GroupList(GroupListError::InvalidGroupListId(
+            group_list_id
+        ))),
+    );
+}
