@@ -670,9 +670,7 @@ fn gen_group_list(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invali
                     None,
                 )
             }
-            2 if !pools.period_ids.is_empty()
-                && !pools.interrogation_subject_ids.is_empty() =>
-            {
+            2 if !pools.period_ids.is_empty() && !pools.interrogation_subject_ids.is_empty() => {
                 // Associating a dangling group list id
                 GroupListOp::AssignToSubject(
                     pick(rng, &pools.period_ids),
