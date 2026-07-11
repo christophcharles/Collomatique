@@ -165,7 +165,14 @@ still exist*:
   with a dangling group-list id panicked on an `.expect` (`lib.rs`, "Group list ID
   should be valid") before reaching its (dead) `InvalidGroupListId` check. It now
   returns `InvalidGroupListId` and the generator covers this invalid case.
-- **Item 2 — TODO**: populated storage round-trip tests (`storage/tests/`).
+- **Item 2 — DONE**: `storage/tests/populated_round_trip.rs` +
+  `populated_round_trip/builder.rs`. A deterministic op script (no RNG) builds a
+  document where every serialized section is non-trivially populated (asserted at
+  the end of the builder, so silent degradation fails loudly). Three tests:
+  encode→decode identity with no caveats, re-serialization byte-stability (the
+  format-determinism canary for the phase-1 golden fixtures), and
+  editability-after-reload (the rebuilt `IdIssuer` issues non-colliding ids).
+  No new dependencies.
 
 ---
 
