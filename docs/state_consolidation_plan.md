@@ -121,6 +121,43 @@ still exist*:
 3. A few unit tests for `state/` history pointer math and the mid-aggregate rollback in
    `update_internal_state_with_aggregated`.
 
+### Status (July 2026)
+
+- **Item 3 — DONE** (commit `7628f303`): in-crate `#[cfg(test)]` tests for `state/` —
+  history pointer math and truncation, `Manager::apply` failure paths, mid-aggregate
+  rollback (success, rollback-on-failure, panic-on-failed-rollback), session
+  commit/cancel atomicity incl. nested sessions, `IdIssuerHelper`. A minimal
+  `FakeData`/`FakeOp` implementation lives in `state/src/test_utils.rs`. Pinned as-is:
+  a zero-op session commit stores an empty history slot; `max_history_size = Some(0)`
+  stores nothing.
+- **Item 1 — DONE** (commit `62951deb`): `state-colloscopes/tests/property_ops.rs` +
+  `property_ops/{harness,generator,synth}.rs`. Five properties, each over 500
+  deterministic seeds (`ChaCha8Rng`) × 1000 generated ops covering all 16 op categories
+  (~15% deliberately invalid); on failure the seed + full op log replay exactly. Also
+  covers error atomicity and random undo/redo/apply walks against a snapshot model.
+  Costs ~3.5 min wall clock per `cargo test` (debug); shrink the constants in
+  `harness::CONFIG` only if that becomes painful.
+
+  The harness found **four real bugs**, each quarantined in the generator with a
+  `TODO(phase0-bug)` marker (fix the bug ⇒ delete the quarantine so the path is
+  covered again):
+  1. `StudentOp::Remove` does not check `settings.students` → dangling per-student
+     settings entry (invariant panic `InvalidStudentIdInSettings`).
+  2. `GroupListOp::SetFilling` automatic→automatic does not check the new
+     `excluded_students` against students already placed in the colloscope group list
+     (`ExcludedStudentInGroupList`); the prefilled↔automatic transitions are checked.
+  3. `GroupListOp::Update` does not check interrogations' `assigned_groups` when
+     shrinking `group_names` (`InvalidGroupNumInInterrogation`); `AssignToSubject`
+     performs this exact check correctly.
+  4. `build_rev_group_list(Remove)` rebuilds only `Add(id, params)`, losing the filling
+     kind: undoing the removal of a prefilled (empty) group list restores it as
+     automatic and re-registers a colloscope entry.
+
+  Latent (spotted by review, not triggered): `GroupListOp::AssignToSubject` with a
+  dangling group-list id panics on an `.expect` (`lib.rs`, "Group list ID should be
+  valid") before reaching its `InvalidGroupListId` check.
+- **Item 2 — TODO**: populated storage round-trip tests (`storage/tests/`).
+
 ---
 
 ## 4. Phase 1 — the real file format (spec 2)
