@@ -269,7 +269,7 @@ pub fn gen_op(
     let category = eligible[weighted(rng, &weights)].0;
 
     let op = match category {
-        "student" => gen_student(rng, inner, &pools, invalid),
+        "student" => gen_student(rng, &pools, invalid),
         "period" => gen_period(rng, &pools, invalid),
         "subject" => gen_subject(rng, inner, &pools, invalid),
         "teacher" => gen_teacher(rng, &pools, invalid),
@@ -291,7 +291,7 @@ pub fn gen_op(
     (category, op)
 }
 
-fn gen_student(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invalid: bool) -> Op {
+fn gen_student(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
     if invalid {
         let op = if rng.random_bool(0.5) {
             StudentOp::Remove(unsafe { StudentId::new(dangling(rng)) })
@@ -303,29 +303,17 @@ fn gen_student(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invalid: 
         };
         return Op::Student(op);
     }
-    // TODO(phase0-bug): `StudentOp::Remove` does not check `settings.students`
-    // (unlike group lists, colloscope group lists and assignments), so removing
-    // a student that has per-student settings leaves a dangling reference and
-    // the internal invariant check panics with InvalidStudentIdInSettings
-    // (reproduced by seed 0). Until the production bug is fixed, the generator
-    // never removes such a student.
-    let removable_students: Vec<StudentId> = pools
-        .student_ids
-        .iter()
-        .copied()
-        .filter(|id| !inner.params.settings.students.contains_key(id))
-        .collect();
     let n = pools.student_ids.len();
     let add_w = if n < 10 { 6 } else { 2 };
     let update_w = if n > 0 { 3 } else { 0 };
-    let remove_w = if !removable_students.is_empty() { 2 } else { 0 };
+    let remove_w = if n > 0 { 2 } else { 0 };
     let op = match weighted(rng, &[add_w, update_w, remove_w]) {
         0 => StudentOp::Add(synth::student(rng, &pools.period_ids)),
         1 => StudentOp::Update(
             pick(rng, &pools.student_ids),
             synth::student(rng, &pools.period_ids),
         ),
-        _ => StudentOp::Remove(pick(rng, &removable_students)),
+        _ => StudentOp::Remove(pick(rng, &pools.student_ids)),
     };
     Op::Student(op)
 }

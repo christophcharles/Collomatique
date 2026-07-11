@@ -226,6 +226,10 @@ pub enum StudentError {
     /// Student is referenced in a colloscope group list
     #[error("student id {0:?} is referenced in a colloscope group list ({1:?})")]
     StudentIsReferencedInColloscopeGroupList(StudentId, GroupListId),
+
+    /// Student still has per-student settings
+    #[error("student id {0:?} still has per-student settings")]
+    StudentStillHasSettings(StudentId),
 }
 
 /// Errors for periods operations
@@ -1153,6 +1157,10 @@ impl Data {
                             ));
                         }
                     }
+                }
+
+                if self.inner_data.params.settings.students.contains_key(id) {
+                    return Err(StudentError::StudentStillHasSettings(*id));
                 }
 
                 self.inner_data.params.students.student_map.remove(id);

@@ -131,18 +131,21 @@ still exist*:
   a zero-op session commit stores an empty history slot; `max_history_size = Some(0)`
   stores nothing.
 - **Item 1 — DONE** (commit `62951deb`): `state-colloscopes/tests/property_ops.rs` +
-  `property_ops/{harness,generator,synth}.rs`. Five properties, each over 500
+  `property_ops/{harness,generator,synth}.rs`. Five properties, each over 100
   deterministic seeds (`ChaCha8Rng`) × 1000 generated ops covering all 16 op categories
   (~15% deliberately invalid); on failure the seed + full op log replay exactly. Also
   covers error atomicity and random undo/redo/apply walks against a snapshot model.
-  Costs ~3.5 min wall clock per `cargo test` (debug); shrink the constants in
-  `harness::CONFIG` only if that becomes painful.
+  Costs ~40 s wall clock per `cargo test` (debug). The original 500-seed configuration
+  (~3.5 min) stays as the slow reference for occasional milestone checks; 100 seeds
+  was verified to still catch each of the four bugs below.
 
   The harness found **four real bugs**, each quarantined in the generator with a
   `TODO(phase0-bug)` marker (fix the bug ⇒ delete the quarantine so the path is
-  covered again):
-  1. `StudentOp::Remove` does not check `settings.students` → dangling per-student
-     settings entry (invariant panic `InvalidStudentIdInSettings`).
+  covered again). Each fix is preceded by its own regression test in
+  `state-colloscopes/tests/found_bugs.rs`, committed failing right before the fix:
+  1. **FIXED** — `StudentOp::Remove` did not check `settings.students` → dangling
+     per-student settings entry (invariant panic `InvalidStudentIdInSettings`). Removal
+     is now rejected with `StudentError::StudentStillHasSettings`.
   2. `GroupListOp::SetFilling` automatic→automatic does not check the new
      `excluded_students` against students already placed in the colloscope group list
      (`ExcludedStudentInGroupList`); the prefilled↔automatic transitions are checked.
