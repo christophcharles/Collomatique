@@ -2628,7 +2628,7 @@ impl Data {
         group_list_op: &AnnotatedGroupListOp,
     ) -> std::result::Result<(), GroupListError> {
         match group_list_op {
-            AnnotatedGroupListOp::Add(new_id, params) => {
+            AnnotatedGroupListOp::Add(new_id, params, filling) => {
                 if self
                     .inner_data
                     .params
@@ -2640,7 +2640,7 @@ impl Data {
                 };
                 let new_group_list = group_lists::GroupList {
                     params: params.clone(),
-                    filling: group_lists::GroupListFilling::default(),
+                    filling: filling.clone(),
                 };
 
                 self.inner_data
@@ -2653,10 +2653,14 @@ impl Data {
                     .group_list_map
                     .insert(*new_id, new_group_list);
 
-                self.inner_data
-                    .colloscope
-                    .group_lists
-                    .insert(*new_id, colloscopes::ColloscopeGroupList::new_empty());
+                // Only non-prefilled group lists have a colloscope entry
+                // (mirrors the Remove logic)
+                if !filling.is_prefilled() {
+                    self.inner_data
+                        .colloscope
+                        .group_lists
+                        .insert(*new_id, colloscopes::ColloscopeGroupList::new_empty());
+                }
 
                 Ok(())
             }
@@ -3728,7 +3732,9 @@ impl Data {
         group_list_op: &AnnotatedGroupListOp,
     ) -> std::result::Result<AnnotatedGroupListOp, GroupListError> {
         match group_list_op {
-            AnnotatedGroupListOp::Add(new_id, _params) => Ok(AnnotatedGroupListOp::Remove(*new_id)),
+            AnnotatedGroupListOp::Add(new_id, _params, _filling) => {
+                Ok(AnnotatedGroupListOp::Remove(*new_id))
+            }
             AnnotatedGroupListOp::Remove(group_list_id) => {
                 let Some(old_group_list) = self
                     .inner_data
@@ -3756,6 +3762,7 @@ impl Data {
                 Ok(AnnotatedGroupListOp::Add(
                     *group_list_id,
                     old_group_list.params.clone(),
+                    old_group_list.filling.clone(),
                 ))
             }
             AnnotatedGroupListOp::Update(group_list_id, _new_params) => {

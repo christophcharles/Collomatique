@@ -564,7 +564,16 @@ pub enum AnnotatedIncompatOp {
 pub enum AnnotatedGroupListOp {
     /// Add a group list
     /// First parameter is the group list id for the new group list
-    Add(GroupListId, group_lists::GroupListParameters),
+    ///
+    /// The filling is always default (automatic, no exclusion) when
+    /// annotating a [GroupListOp::Add]; it only carries information when
+    /// the op is the reverse of a [AnnotatedGroupListOp::Remove], so that
+    /// undoing a removal restores the original filling
+    Add(
+        GroupListId,
+        group_lists::GroupListParameters,
+        group_lists::GroupListFilling,
+    ),
     /// Remove an existing group list
     Remove(GroupListId),
     /// Update a group list
@@ -951,7 +960,14 @@ impl AnnotatedGroupListOp {
         match group_list_op {
             GroupListOp::Add(params) => {
                 let new_id = id_issuer.get_group_list_id();
-                (AnnotatedGroupListOp::Add(new_id, params), Some(new_id))
+                (
+                    AnnotatedGroupListOp::Add(
+                        new_id,
+                        params,
+                        group_lists::GroupListFilling::default(),
+                    ),
+                    Some(new_id),
+                )
             }
             GroupListOp::Remove(group_list_id) => {
                 (AnnotatedGroupListOp::Remove(group_list_id), None)

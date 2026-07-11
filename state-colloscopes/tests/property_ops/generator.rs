@@ -674,19 +674,6 @@ fn gen_group_list(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invali
         };
         return Op::GroupList(op);
     }
-    // TODO(phase0-bug): the reverse of `GroupListOp::Remove` is rebuilt as a
-    // plain `Add(id, params)`, which recreates the list with the DEFAULT
-    // (automatic, empty) filling. Removing a prefilled list with all-empty
-    // groups therefore does not round-trip on undo: the filling kind flips to
-    // automatic and a colloscope entry appears (reproduced by seed 129).
-    // Until the production bug is fixed, the generator only removes
-    // non-prefilled group lists.
-    let removable_lists: Vec<GroupListId> = pools
-        .group_list_ids
-        .iter()
-        .copied()
-        .filter(|id| !inner.params.group_lists.group_list_map[id].is_prefilled())
-        .collect();
     let n = pools.group_list_ids.len();
     let add_w = if n < 4 { 5 } else { 2 };
     let update_w = if n > 0 { 2 } else { 0 };
@@ -697,7 +684,7 @@ fn gen_group_list(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invali
         } else {
             0
         };
-    let remove_w = if !removable_lists.is_empty() { 2 } else { 0 };
+    let remove_w = if n > 0 { 2 } else { 0 };
     let op = match weighted(rng, &[add_w, update_w, filling_w, assign_w, remove_w]) {
         0 => {
             let group_count = rng.random_range(2..=5);
@@ -756,7 +743,7 @@ fn gen_group_list(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invali
             };
             GroupListOp::AssignToSubject(period_id, subject_id, group_list_id)
         }
-        _ => GroupListOp::Remove(pick(rng, &removable_lists)),
+        _ => GroupListOp::Remove(pick(rng, &pools.group_list_ids)),
     };
     Op::GroupList(op)
 }

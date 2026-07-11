@@ -155,9 +155,11 @@ still exist*:
      `AssignToSubject` is factored into `check_interrogations_group_bound` and applied
      to every subject associated with the list, rejecting with
      `InvalidGroupInSubjectSlotInColloscope`.
-  4. `build_rev_group_list(Remove)` rebuilds only `Add(id, params)`, losing the filling
-     kind: undoing the removal of a prefilled (empty) group list restores it as
-     automatic and re-registers a colloscope entry.
+  4. **FIXED** — `build_rev_group_list(Remove)` rebuilt only `Add(id, params)`, losing
+     the filling kind: undoing the removal of a prefilled (empty) group list restored
+     it as automatic and re-registered a colloscope entry. `AnnotatedGroupListOp::Add`
+     now carries the filling (default when annotating a plain `Add`) and the apply
+     path only registers a colloscope entry for non-prefilled fillings.
 
   Latent (spotted by review, not triggered): `GroupListOp::AssignToSubject` with a
   dangling group-list id panics on an `.expect` (`lib.rs`, "Group list ID should be
