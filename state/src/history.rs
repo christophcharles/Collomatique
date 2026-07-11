@@ -422,3 +422,209 @@ impl<T: Operation, D: Description> ModificationHistory<T, D> {
         self.history_pointer = 0;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::{FakeOp, rev_set};
+
+    fn agg(ops: Vec<ReversibleOp<FakeOp>>) -> AggregatedOp<FakeOp> {
+        AggregatedOp::new(ops)
+    }
+
+    fn new_history() -> ModificationHistory<FakeOp, &'static str> {
+        ModificationHistory::new()
+    }
+
+    #[test]
+    fn new_history_is_empty() {
+        let history = new_history();
+
+        assert!(!history.can_undo());
+        assert!(!history.can_redo());
+        assert_eq!(history.get_undo_name(), None);
+        assert_eq!(history.get_redo_name(), None);
+        assert_eq!(history.get_last_op(), None);
+        assert_eq!(history.get_max_history_size(), None);
+    }
+
+    #[test]
+    fn undo_redo_on_empty_history_return_none() {
+        let mut history = new_history();
+
+        assert_eq!(history.undo(), None);
+        assert_eq!(history.redo(), None);
+    }
+
+    #[test]
+    fn store_advances_pointer_and_flags() {
+        let mut history = new_history();
+
+        history.store(agg(vec![rev_set(0, 1)]), "op a");
+
+        assert!(history.can_undo());
+        assert!(!history.can_redo());
+        assert_eq!(history.get_undo_name(), Some(&"op a"));
+        assert_eq!(history.get_redo_name(), None);
+    }
+
+    #[test]
+    fn undo_returns_reversed_op_and_redo_returns_original() {
+        let mut history = new_history();
+        let op = agg(vec![rev_set(0, 1)]);
+
+        history.store(op.clone(), "op a");
+
+        let undone = history.undo().expect("one op to undo");
+        assert_eq!(undone, op.rev());
+        assert_eq!(undone.inner()[0], rev_set(1, 0));
+        assert!(!history.can_undo());
+        assert!(history.can_redo());
+        assert_eq!(history.get_undo_name(), None);
+        assert_eq!(history.get_redo_name(), Some(&"op a"));
+
+        let redone = history.redo().expect("one op to redo");
+        assert_eq!(redone, op);
+        assert!(history.can_undo());
+        assert!(!history.can_redo());
+    }
+
+    #[test]
+    fn aggregated_rev_reverses_op_order() {
+        let op = agg(vec![rev_set(0, 1), rev_set(1, 2)]);
+
+        let reversed = op.rev();
+
+        assert_eq!(reversed.inner()[0], rev_set(2, 1));
+        assert_eq!(reversed.inner()[1], rev_set(1, 0));
+    }
+
+    #[test]
+    fn store_after_undo_truncates_redo_branch() {
+        let mut history = new_history();
+
+        history.store(agg(vec![rev_set(0, 1)]), "op a");
+        history.store(agg(vec![rev_set(1, 2)]), "op b");
+        history.undo().expect("op b to undo");
+
+        history.store(agg(vec![rev_set(1, 3)]), "op c");
+
+        assert!(!history.can_redo());
+        assert_eq!(history.get_undo_name(), Some(&"op c"));
+        history.undo().expect("op c to undo");
+        assert_eq!(history.get_undo_name(), Some(&"op a"));
+    }
+
+    #[test]
+    fn max_history_size_drops_oldest_ops() {
+        let mut history =
+            ModificationHistory::<FakeOp, &'static str>::with_max_history_size(Some(2));
+        assert_eq!(history.get_max_history_size(), Some(2));
+
+        history.store(agg(vec![rev_set(0, 1)]), "op a");
+        history.store(agg(vec![rev_set(1, 2)]), "op b");
+        history.store(agg(vec![rev_set(2, 3)]), "op c");
+
+        // "op a" is forgotten: only two undos left
+        assert!(history.undo().is_some());
+        assert!(history.undo().is_some());
+        assert_eq!(history.get_undo_name(), None);
+        assert_eq!(history.undo(), None);
+        assert_eq!(history.get_redo_name(), Some(&"op b"));
+    }
+
+    #[test]
+    fn shrinking_max_history_size_truncates_redo_tail_first() {
+        let mut history = new_history();
+
+        history.store(agg(vec![rev_set(0, 1)]), "op a");
+        history.store(agg(vec![rev_set(1, 2)]), "op b");
+        history.store(agg(vec![rev_set(2, 3)]), "op c");
+        history.undo().expect("op c to undo");
+        history.undo().expect("op b to undo");
+
+        // Undo history has priority: "op a" survives, redo tail is cut to fit
+        history.set_max_history_size(Some(2));
+
+        assert_eq!(history.get_undo_name(), Some(&"op a"));
+        assert_eq!(history.get_redo_name(), Some(&"op b"));
+        history.redo().expect("op b to redo");
+        assert!(!history.can_redo()); // "op c" was truncated
+    }
+
+    #[test]
+    fn shrinking_max_history_size_drops_oldest_undo_ops_if_needed() {
+        let mut history = new_history();
+
+        history.store(agg(vec![rev_set(0, 1)]), "op a");
+        history.store(agg(vec![rev_set(1, 2)]), "op b");
+        history.store(agg(vec![rev_set(2, 3)]), "op c");
+
+        history.set_max_history_size(Some(2));
+
+        assert_eq!(history.get_undo_name(), Some(&"op c"));
+        history.undo().expect("op c to undo");
+        assert_eq!(history.get_undo_name(), Some(&"op b"));
+        history.undo().expect("op b to undo");
+        assert_eq!(history.undo(), None); // "op a" was dropped
+    }
+
+    #[test]
+    fn zero_max_history_size_stores_nothing() {
+        // Pins current behavior: a max size of 0 makes store a no-op
+        let mut history =
+            ModificationHistory::<FakeOp, &'static str>::with_max_history_size(Some(0));
+
+        history.store(agg(vec![rev_set(0, 1)]), "op a");
+
+        assert!(!history.can_undo());
+        assert!(!history.can_redo());
+        assert_eq!(history.undo(), None);
+    }
+
+    #[test]
+    fn build_aggregated_op_flattens_past_and_excludes_redo_tail() {
+        let mut history = new_history();
+
+        history.store(agg(vec![rev_set(0, 1), rev_set(1, 2)]), "op a");
+        history.store(agg(vec![rev_set(2, 3)]), "op b");
+        history.store(agg(vec![rev_set(3, 4)]), "op c");
+        history.undo().expect("op c to undo");
+
+        let aggregated = history.build_aggregated_op();
+
+        assert_eq!(
+            aggregated.inner(),
+            &vec![rev_set(0, 1), rev_set(1, 2), rev_set(2, 3)]
+        );
+    }
+
+    #[test]
+    fn clear_past_history_keeps_redo_tail() {
+        let mut history = new_history();
+
+        history.store(agg(vec![rev_set(0, 1)]), "op a");
+        history.store(agg(vec![rev_set(1, 2)]), "op b");
+        history.undo().expect("op b to undo");
+
+        history.clear_past_history();
+
+        assert!(!history.can_undo());
+        assert!(history.can_redo());
+        let redone = history.redo().expect("op b to redo");
+        assert_eq!(redone, agg(vec![rev_set(1, 2)]));
+    }
+
+    #[test]
+    fn get_last_op_does_not_move_pointer() {
+        let mut history = new_history();
+        let op = agg(vec![rev_set(0, 1)]);
+
+        history.store(op.clone(), "op a");
+
+        assert_eq!(history.get_last_op(), Some(op.clone()));
+        assert_eq!(history.get_last_op(), Some(op));
+        assert!(history.can_undo());
+        assert_eq!(history.get_undo_name(), Some(&"op a"));
+    }
+}

@@ -7,6 +7,8 @@
 
 pub mod history;
 pub mod state;
+#[cfg(test)]
+mod test_utils;
 pub mod tools;
 pub mod traits;
 

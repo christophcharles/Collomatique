@@ -315,3 +315,158 @@ pub(crate) mod private {
         >;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::private::ManagerInternal;
+    use super::*;
+    use crate::history::{AggregatedOp, ReversibleOp};
+    use crate::state::AppState;
+    use crate::test_utils::{FakeData, FakeError, FakeOp, rev_set};
+
+    fn new_state(value: i64) -> AppState<FakeData, &'static str> {
+        AppState::new(FakeData::new(value))
+    }
+
+    #[test]
+    fn update_with_aggregated_applies_all_ops_in_order() {
+        let mut state = new_state(0);
+        let aggregated = AggregatedOp::new(vec![rev_set(0, 1), rev_set(1, 5)]);
+
+        let result = private::update_internal_state_with_aggregated(&mut state, &aggregated);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(state.get_data().value, 5);
+    }
+
+    #[test]
+    fn update_with_aggregated_rolls_back_applied_prefix_on_failure() {
+        let mut state = new_state(0);
+        // Second op expects value 5 but will find 1: it fails mid-aggregate
+        let aggregated = AggregatedOp::new(vec![rev_set(0, 1), rev_set(5, 9)]);
+
+        let result = private::update_internal_state_with_aggregated(&mut state, &aggregated);
+
+        assert_eq!(
+            result,
+            Err(FakeError::ValueMismatch {
+                expected: 5,
+                found: 1
+            })
+        );
+        assert_eq!(state.get_data().value, 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "Failed to reverse")]
+    fn update_with_aggregated_panics_if_rollback_fails() {
+        let mut state = new_state(0);
+        let broken_backward = ReversibleOp {
+            forward: FakeOp::Set { old: 0, new: 1 },
+            // Wrong backward op: expects 42 but will find 1 during rollback
+            backward: FakeOp::Set { old: 42, new: 0 },
+        };
+        let aggregated = AggregatedOp::new(vec![broken_backward, rev_set(5, 9)]);
+
+        let _ = private::update_internal_state_with_aggregated(&mut state, &aggregated);
+    }
+
+    #[test]
+    fn apply_changes_data_and_stores_history() {
+        let mut state = new_state(0);
+
+        let result = state.apply(FakeOp::Set { old: 0, new: 1 }, "set to 1");
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(state.get_data().value, 1);
+        assert!(state.can_undo());
+        assert!(!state.can_redo());
+        assert_eq!(state.get_undo_name(), Some(&"set to 1"));
+    }
+
+    #[test]
+    fn apply_failing_on_build_rev_leaves_state_untouched() {
+        let mut state = new_state(0);
+
+        let result = state.apply(FakeOp::FailOnRev, "never happens");
+
+        assert_eq!(result, Err(FakeError::RevFailed));
+        assert_eq!(state.get_data().value, 0);
+        assert!(!state.can_undo());
+        assert_eq!(state.get_last_op(), None);
+    }
+
+    #[test]
+    fn apply_failing_on_apply_leaves_state_untouched() {
+        let mut state = new_state(0);
+
+        let result = state.apply(FakeOp::FailOnApply, "never happens");
+
+        assert_eq!(result, Err(FakeError::ApplyFailed));
+        assert_eq!(state.get_data().value, 0);
+        assert!(!state.can_undo());
+        assert_eq!(state.get_last_op(), None);
+    }
+
+    #[test]
+    fn undo_and_redo_on_empty_history_fail_with_history_depleted() {
+        let mut state = new_state(0);
+
+        assert_eq!(state.undo(), Err(HistoryError::HistoryDepleted));
+        assert_eq!(state.redo(), Err(HistoryError::HistoryDepleted));
+    }
+
+    #[test]
+    fn undo_restores_previous_state_and_redo_reapplies() {
+        let mut state = new_state(0);
+        state
+            .apply(FakeOp::Set { old: 0, new: 1 }, "set to 1")
+            .expect("valid op");
+        state
+            .apply(FakeOp::Set { old: 1, new: 2 }, "set to 2")
+            .expect("valid op");
+
+        state.undo().expect("one op to undo");
+        assert_eq!(state.get_data().value, 1);
+        state.undo().expect("one op to undo");
+        assert_eq!(state.get_data().value, 0);
+
+        state.redo().expect("one op to redo");
+        assert_eq!(state.get_data().value, 1);
+        state.redo().expect("one op to redo");
+        assert_eq!(state.get_data().value, 2);
+    }
+
+    #[test]
+    #[should_panic(expected = "Data should be consistent")]
+    fn undo_panics_if_data_was_corrupted_behind_historys_back() {
+        let mut state = new_state(0);
+        state
+            .apply(FakeOp::Set { old: 0, new: 1 }, "set to 1")
+            .expect("valid op");
+
+        // Corrupt the data without going through the history
+        state.get_in_memory_data_mut().value = 999;
+
+        let _ = state.undo();
+    }
+
+    #[test]
+    fn get_aggregated_history_flattens_applied_ops() {
+        let mut state = new_state(0);
+        state
+            .apply(FakeOp::Set { old: 0, new: 1 }, "set to 1")
+            .expect("valid op");
+        state
+            .apply(FakeOp::Set { old: 1, new: 2 }, "set to 2")
+            .expect("valid op");
+        state
+            .apply(FakeOp::Set { old: 2, new: 3 }, "set to 3")
+            .expect("valid op");
+        state.undo().expect("one op to undo");
+
+        let aggregated = state.get_aggregated_history();
+
+        assert_eq!(aggregated.inner(), &vec![rev_set(0, 1), rev_set(1, 2)]);
+    }
+}
