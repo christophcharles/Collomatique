@@ -1,44 +1,37 @@
-# The Collomatique file format (spec 2)
+# The Collomatique file format
 
-This document is the reference specification of the Collomatique colloscope file.
-It describes the file **entirely**, field by field. The phase-1 implementation of
-`docs/state_consolidation_plan.md` is checked against this document; when the two
-disagree, one of them has a bug and the discrepancy must be resolved explicitly.
+This document specifies the Collomatique colloscope file format, **spec version 2**.
+It is self-contained: it describes the format in the abstract, so that anyone can
+write an independent loader, exporter or tool from this document alone.
 
 ## 1. Overview
 
-A Collomatique file is a single UTF-8 JSON document. It is a **snapshot**: it stores
-the complete state of one colloscope project (parameters, the colloscope itself, and
-the export configuration) and nothing else — no undo history, no oplog, no caches.
+A Collomatique file is a single JSON document encoded in UTF-8. It is a
+**snapshot**: it stores the complete state of one colloscope project — planning
+parameters, the colloscope itself, and the export configuration — and nothing else.
+There is no undo history and no derived data; anything fully determined by other
+stored data is reconstructed by readers rather than stored.
 
-The file stores **free semantic state only**. Anything that is fully determined by
-other stored data (derived week activity, id counters, positional skeletons) is *not*
-written; readers reconstruct it. This is the format's guiding principle: the file is a
-*document* describing the user's choices, not a dump of in-memory representation.
+The document has a small **envelope** (§2) wrapping a list of independent
+**blocks** (§4). Each block describes one aspect of the project and carries its own
+versioning information, which is what makes the format evolvable (§5).
 
-### Versioning model
+### Versioning
 
-Two version mechanisms coexist:
+Two version numbers coexist, with different roles:
 
-- `produced_with_version` in the header is the **application** semver that wrote the
-  file. It is informational: a file produced by a newer application version can still
-  be opened (with a caveat reported to the user) as long as its entries are readable.
-- Each entry carries a `minimum_spec_version`, an integer identifying the **format
-  spec** needed to understand that entry, together with a `needed_entry` flag saying
-  whether the file makes sense without it. This is what actually gates readability
-  (see §2).
+- `produced_with_version`, in the header, is the version of the application that
+  wrote the file. It is **informational only**: it never decides whether a file can
+  be read.
+- `minimum_spec_version`, on each block, is the format spec revision needed to
+  understand that block, together with a `needed_entry` flag saying whether the
+  document is meaningful without it. These two fields are what actually gate
+  readability (§2, §5).
 
-The current spec version is **2**.
-
-### Spec 1 is dead
-
-Spec 1 had a single entry, `InnerDataDump`, whose payload was a raw serde dump of the
-in-memory `InnerData` type. It only ever existed during pre-alpha development. All
-spec-1 files are bulk-converted to spec 2 once, after which the spec-1 decoder is
-deleted. A spec-2 reader recognises the `InnerDataDump` entry name **only as a
-tombstone**: encountering it produces the dedicated error "unsupported pre-alpha
-development format" (rather than a generic parse failure). Spec 2 is *not* renumbered
-as 1; the number 1 stays burned.
+The spec version described by this document is **2**. The value **1 is permanently
+retired**: it belonged to a pre-release format, and no valid file contains a block
+declaring `minimum_spec_version: 1`. Spec numbering for this format effectively
+starts at 2.
 
 ## 2. Envelope
 
@@ -55,7 +48,7 @@ The top-level document is:
     {
       "minimum_spec_version": 2,
       "needed_entry": true,
-      "content": { "<SectionName>": <section payload> }
+      "content": { "<BlockName>": <block payload> }
     }
   ]
 }
@@ -65,150 +58,159 @@ The top-level document is:
 
 | Field | Type | Meaning |
 |---|---|---|
-| `file_type` | string | Always `"Collomatique"`. Anything else fails JSON-structure parsing. |
-| `produced_with_version` | object `{major, minor, patch}` (u32 each) | Application version that wrote the file. Informational. |
-| `file_content` | string | Kind of document. Currently only `"Colloscope"`. An unrecognised value is a decode error (`UnknownFileType`) carrying `produced_with_version`, so the user learns a newer application is needed. |
+| `file_type` | string | Always `"Collomatique"`. |
+| `produced_with_version` | record `{major, minor, patch}` (non-negative integers) | Version of the writing application. Informational. |
+| `file_content` | string | Kind of document. This document specifies the `"Colloscope"` kind. A reader that does not recognise the value must refuse the file. |
 
-If `produced_with_version` is greater than the running application's version, the file
-is still decoded but the caveat `CreatedWithNewerVersion` is reported.
+A reader may open a file whose `produced_with_version` is newer than itself, and
+should let the user know it was produced by a newer application.
 
-### Entries
+### Blocks
 
-Each entry is `{minimum_spec_version, needed_entry, content}`. `content` is an object
-with exactly one key — the entry name (**externally tagged**) — whose value is the
-entry's payload.
+Each element of `entries` is `{minimum_spec_version, needed_entry, content}`, where
+`content` is an object with **exactly one key** — the block name — whose value is
+the block's payload.
 
-Decoding rules, applied per entry:
+Spec 2 defines sixteen block names (§4):
 
-1. **Recognised entry name.** The declared `minimum_spec_version` and `needed_entry`
-   must equal the canonical values for that entry name (for every spec-2 section:
-   `2` and `true`). A mismatch is the decode error `MismatchedSpecRequirementInEntry`.
-   If the payload then fails to parse, the decode error **must surface the underlying
-   serde error** (field name, expected type, position). Spec 1 swallowed these into
-   "unknown entry" and misreported them; spec 2 makes good diagnostics part of the
-   format contract.
-2. **Unrecognised entry name, `minimum_spec_version > 2`.** The entry comes from a
-   future spec. If `needed_entry` is `true`, decoding fails (`UnknownNeededEntry`,
-   carrying the producing version). If `false`, the entry is skipped and the caveat
-   `UnknownEntries` is reported.
-3. **Unrecognised entry name, `minimum_spec_version <= 2`.** The entry claims to be
-   understandable by this reader but isn't: the file is ill-formed. Decoding fails,
-   again surfacing the underlying parse diagnostics.
+`GeneralPlanning`, `Subjects`, `Teachers`, `Students`, `Assignments`,
+`WeekPatterns`, `Slots`, `Incompatibilities`, `GroupLists`,
+`GroupListAssociations`, `Pairings`, `SlotPairings`, `Settings`, `Balancing`,
+`Colloscope`, `ExportConfig`.
 
-**Skipped entries are not preserved.** Saving a file that was loaded with skipped
-unknown entries writes them out of existence. Opening a newer file with an older
-application and re-saving is lossy by design; the `UnknownEntries` caveat is the
-user's warning.
+For each of them the canonical envelope values are `minimum_spec_version: 2` and
+`needed_entry: true`; a spec-2 block declaring different values is invalid.
 
-### Section entries: mandatory, exactly once
+Rules for the block list:
 
-A spec-2 file contains **exactly these 15 entries**, each with
-`minimum_spec_version: 2` and `needed_entry: true`:
-
-`GeneralPlanning`, `Subjects`, `Teachers`, `Students`, `Assignments`, `WeekPatterns`,
-`Slots`, `Incompatibilities`, `GroupLists`, `Pairings`, `SlotPairings`, `Settings`,
-`Balancing`, `Colloscope`, `ExportConfig`.
-
-A missing section is a decode error. A duplicated section is a decode error. There
-are **no defaults**: an empty section is written explicitly (e.g. the `Teachers`
-payload is `[]`). Defaults may later appear inside decoders for *older* specs (to
-fill in data a newer spec added), never silently within a spec.
-
-Entry order in `entries` is the canonical order listed above; readers accept any
-order (each section is identified by name, and exactly-once is enforced regardless).
+- **A block name appears at most once.** A duplicated block name is invalid.
+- **A block may be absent.** An absent block means the block's **default state**,
+  which is specified explicitly for every block in §4. Consequently,
+  `"entries": []` is a valid document: a blank project, with every block in its
+  default state.
+- **Block order is not significant.** Readers identify blocks by name. (The
+  canonical order is the list above; see §3, *Canonical form*.)
+- **Unrecognised blocks** are handled by the forward-compatibility rules of §5.
 
 ## 3. Conventions
 
 ### Identifiers
 
-All persistent objects (periods, subjects, teachers, students, week patterns, slots,
-incompatibilities, group lists, pairing rules, slot pairing rules) draw their ids from
-a **single global id space**: a bare JSON number holding a `u64`. An id value appears
-at most once across the *whole file*, regardless of object kind — a subject and a
-teacher can never share id `3`. Duplicate ids anywhere are a load error.
+Persistent objects — periods, subjects, teachers, students, week patterns, slots,
+incompatibilities, group lists, pairing rules, slot pairing rules — are identified
+by a bare JSON number holding a non-negative integer **at most 2⁶³ − 1**; larger
+values make the file invalid. Ids are drawn from a **single
+global id space**: an id value appears at most once across the whole file,
+regardless of object kind. A subject and a teacher can never share id `3`.
+Duplicate ids anywhere make the file invalid.
 
-No id counter is stored. Readers rebuild the issuer from the maximum id in use; a
-file whose ids exhaust the usable space fails to load (`EndOfTheUniverse`).
+Nothing else is significant about id values: they need not be dense, ordered, or
+small. No id counter is stored. Writers should nevertheless strive to keep ids
+within the 32-bit range: small ids are easier on human readers, and we avoid
+potential bugs if the IDs exceed 2^63 while the application is running.
 
 ### Scalar encodings
 
-| In-memory type | JSON encoding | Constraints |
+| Value | JSON encoding | Constraints |
 |---|---|---|
-| id newtypes | number (u64) | globally unique, see above |
-| `WeekStart` | string `"YYYY-MM-DD"` | must be a Monday; anything else is a decode error |
-| `WholeMinuteTime` | string `"HH:MM"` | 24-hour, zero-padded, minute precision; `"9:00"`, `"09:00:00"`, seconds — all decode errors |
-| `Weekday` | string | lowercase English: `"monday"` … `"sunday"` |
-| durations (`NonZeroMinutes`) | number | integer minutes, ≥ 1 |
-| `RangeInclusive<T>` | object `{"min": n, "max": n}` | `min <= max` (a decode error otherwise) |
-| `NonZeroU32` | number | ≥ 1 |
-| `NonEmptyString` | string | empty string is a decode error |
-| plain `String` | string | may be empty (e.g. `extra_info`, names, surnames) |
-| `Color` | object `{"red": n, "green": n, "blue": n}` | each 0–255 |
+| id | number | non-negative integer ≤ 2⁶³ − 1, globally unique (see above) |
+| week start | string `"YYYY-MM-DD"` | an ISO date that must be a Monday; anything else is invalid |
+| time of day | string `"HH:MM"` | 24-hour, zero-padded, minute precision; `"9:00"` or `"09:00:00"` are invalid |
+| weekday | string | lowercase English: `"monday"` … `"sunday"` |
+| duration | number | integer minutes, ≥ 1 |
+| integer range | record `{"min": n, "max": n}` | `min <= max` |
+| color | record `{"red": n, "green": n, "blue": n}` | each 0–255 |
+| non-empty string | string | the empty string is invalid where "non-empty" is stated |
+| string | string | may be empty unless stated otherwise |
 
-### Optionality
+### Records and keyed collections
 
-Optional values are encoded as `null`, **never omitted**. Every field of every
-structure is mandatory in the file; a missing field is a decode error, and an unknown
-field is a decode error. (This is the no-defaults policy applied at field level: the
-byte sequence for a given state is unique, and typos in hand-edited files fail loudly
-instead of silently becoming defaults.)
+The format distinguishes two composite shapes, with opposite strictness rules:
+
+- A **record** is an object with a fixed set of fields (an assignment row, a slot,
+  a limits object…). **Every field is always present.** A record with a missing
+  field or an unknown field is invalid. Optional values are written as `null`,
+  never omitted.
+- A **keyed collection** is an array of items identified by a key — an id, or a
+  combination like `(period_id, subject_id)`. Keyed collections are **sparse**: any
+  subset of keys may be present, and an absent key means the neutral state for that
+  key (stated per block in §4). A duplicated key is invalid. The block list itself
+  (§2) is the outermost keyed collection, with block names as keys and the blocks'
+  default states as neutral states.
+
+Some keyed collections have a **derived key set**: the set of meaningful keys is
+fully determined by other data (for instance, assignments have exactly one
+meaningful key per period × subject pair). Keys outside that set are invalid. In
+such collections, presence of a key carries no information by itself, so an entry
+whose content equals the neutral state (an assignment row with no students, a slot
+row with no slots…) encodes exactly the same state as its absence: it is **valid
+but redundant**, and the canonical form omits it. §4 marks these collections
+explicitly. In all other keyed collections the key set is free — an entry existing
+*is* information — and entries are written exactly as they exist, whatever their
+content.
 
 ### Enums
 
-Enums use serde's default **externally tagged** representation:
+Values that are one of several named variants are encoded as:
 
-- data-carrying variants: `{"ExactlyPeriodic": {"periodicity_in_weeks": 2}}`
-- unit variants: bare string, e.g. `"Portrait"`, `"Landscape"`
+- a bare string when the variant carries no data: `"Portrait"`, `"Landscape"`;
+- an object with exactly one key — the variant name — otherwise:
+  `{"ExactlyPeriodic": {"periodicity_in_weeks": 2}}`.
 
-Soft parameters (`SoftParam<T>`) are objects `{"soft": bool, "value": T}`. When the
-parameter carries no value (`SoftParam<()>`), the `value` field is dropped and the
-encoding is `{"soft": bool}`. An *optional* soft parameter is therefore
-`null | {"soft": ..., "value": ...}` or `null | {"soft": ...}`.
+Soft parameters — values that can be enforced strictly or used as an optimisation
+goal — are records `{"soft": bool, "value": ...}`; when the parameter carries no
+value, the `value` field is dropped and the record is `{"soft": bool}`. An optional
+soft parameter is `null` or that record.
 
-### Rows, not maps
-
-Keyed collections are **arrays of objects with an explicit `"id"` (or key) field** —
-the flat-row shape of a relational schema — never JSON objects keyed by stringified
-ids. Association data (assignments, group-list associations, colloscope rows) is
-likewise flat rows carrying their full key.
-
-### Ordering and determinism
+### Ordering
 
 Two kinds of arrays:
 
-- **Order-significant arrays** (user-visible order is state): `periods`, `subjects`,
-  the per-subject `slots` array, `group_names`, prefilled `groups`, incompatibility
-  `slots`, periodicity `blocks`, and all `weeks` arrays (positional). Readers preserve
-  their order; reordering them changes the document's meaning.
-- **Sorted arrays** (order carries no meaning): everything else. Writers **must** emit
-  them sorted — by id for object rows; by full key ascending for association rows
-  (e.g. `(period_id, subject_id)`, `(slot_id, week)`); ascending for id sets and
-  group-number sets; lexicographically (by Unicode code point) for `extra_colors`
-  names. Readers accept any order but reject duplicate keys as decode errors.
+- **Order-significant arrays**, whose order is part of the state: `periods`,
+  `Subjects`, the per-subject `slots` arrays, `group_names`, prefilled `groups`,
+  incompatibility `slots`, and periodicity `blocks`, as well as all positional
+  `weeks` arrays. Reordering them changes the document's meaning.
+- **Unordered collections** (every keyed collection): readers must accept any
+  order; only key uniqueness matters.
 
-Serialization uses pretty-printed JSON (`serde_json::to_string_pretty`, 2-space
-indent). **Byte stability is a format guarantee**: encoding the same state always
-produces the same bytes, pinned by a golden-fixture test
-(`storage/tests/populated_round_trip.rs::reserialize_is_stable`). Together with
-canonical ordering and the null-not-omitted rule, one state has exactly one canonical
-byte sequence.
+### Canonical form
+
+Many equivalent serialisations of the same state are valid: blocks in default state
+may be written or omitted, unordered collections may appear in any order, and JSON
+whitespace is free. The **canonical form** of a document — recommended for writers,
+and what the Collomatique application produces — is:
+
+- blocks in default state are **omitted**; a document only contains the features
+  actually used (this also maximises how far back the file remains readable, §5);
+- in collections with a derived key set, entries in neutral state are **omitted**;
+- present blocks appear in the canonical name order of §2;
+- unordered collections are sorted: object rows by `id`, association rows by their
+  full key ascending (e.g. `(period_id, subject_id)`, `(slot_id, week)`), id sets
+  and group-number sets ascending, named entries (`extra_colors`) by name
+  (by Unicode code point);
+- the JSON is pretty-printed with 2-space indentation.
+
+In canonical form, one state has exactly one byte sequence.
 
 ### Week coordinates
 
 The schedule is a concatenation of periods; each period is a list of weeks. The
-**global week index** is the 0-based position of a week in that concatenation (period
-order is significant, so global week numbering is well defined). Wherever the format
-stores a per-week value outside `GeneralPlanning` — week-pattern `weeks` arrays,
-colloscope `week` fields — it uses global week indices.
+**global week index** is the 0-based position of a week in that concatenation
+(period order is significant, so global week numbering is well defined). Wherever
+the format stores a per-week value outside `GeneralPlanning` — week-pattern `weeks`
+arrays, colloscope `week` fields — it uses global week indices.
 
-## 4. Section entries
+## 4. Blocks
 
-Each subsection below gives the payload shape, the fields, and the constraints
-checked at load. §5 explains *where* each kind of constraint is enforced.
+For each block: its purpose, its **default state** (the meaning of the block's
+absence), its payload shape, and its validity constraints. A file violating any
+constraint is invalid.
 
 ### 4.1 `GeneralPlanning`
 
-The period structure and start date. Payload: object.
+The period structure and start date. Payload: record.
+
+**Default:** `{"first_week": null, "periods": []}` — no start date, no periods.
 
 ```json
 {
@@ -227,19 +229,20 @@ The period structure and start date. Payload: object.
 
 | Field | Type | Meaning |
 |---|---|---|
-| `first_week` | date string or `null` | Monday of global week 0. `null` if not set (hinders pretty output only). |
+| `first_week` | week start or `null` | Monday of global week 0. `null` if not set. |
 | `periods` | array, **order-significant** | The periods in user order. Their concatenated `weeks` arrays define global week numbering. |
 | `periods[].id` | id | Period id. |
-| `periods[].weeks` | array, positional | One element per week of the period. |
+| `periods[].weeks` | array, positional | One record per week of the period. |
 | `weeks[].interrogations` | bool | `false` marks a week with no interrogations at all (holidays, exams). |
 | `weeks[].annotation` | non-empty string or `null` | Free label displayed on exports. |
 
-Constraints: `first_week` must be a Monday. A period may have zero weeks. The file
-may have zero periods.
+Constraints: a period may have zero weeks.
 
 ### 4.2 `Subjects`
 
 Payload: array, **order-significant** (user order).
+
+**Default:** `[]` — no subjects.
 
 ```json
 [
@@ -268,8 +271,8 @@ Payload: array, **order-significant** (user order).
 |---|---|---|
 | `id` | id | Subject id. |
 | `name` | string | Descriptive name (may be empty). |
-| `interrogation_parameters` | object or `null` | `null` means the subject has **no interrogations** (it still exists for assignments). |
-| `excluded_periods` | sorted array of period ids | Periods the subject does not run on. By default a subject runs on every period. |
+| `interrogation_parameters` | record or `null` | `null` means the subject has **no interrogations** (it still exists for assignments). |
+| `excluded_periods` | array of period ids | Periods the subject does not run on. By default a subject runs on every period. |
 
 `interrogation_parameters` fields:
 
@@ -277,11 +280,11 @@ Payload: array, **order-significant** (user order).
 |---|---|---|
 | `students_per_group` | range of integers ≥ 1 | Students per group for this subject (can differ from the group list's own range). |
 | `groups_per_interrogation` | range of integers ≥ 1 | How many groups can share one interrogation slot. |
-| `duration_minutes` | integer ≥ 1 | Duration of one interrogation. |
+| `duration_minutes` | duration | Duration of one interrogation. |
 | `take_duration_into_account` | bool | Whether this duration counts toward per-week/day time limits. |
-| `periodicity` | tagged enum | See below. |
+| `periodicity` | enum | See below. |
 
-`periodicity` variants (externally tagged):
+`periodicity` variants:
 
 - `{"OnceForEveryBlockOfWeeks": {"weeks_per_block": ≥1, "minimum_week_separation": ≥1}}`
   — one interrogation per fixed-size block; blocks tile the schedule from week 0.
@@ -299,12 +302,14 @@ Payload: array, **order-significant** (user order).
   week 0 for the first). Zero blocks is representable (and means no interrogations
   can be scheduled). Blocks may extend past the end of the schedule.
 
-Referential constraints: every id in `excluded_periods` is an existing period; all
-ranges satisfy `min <= max`.
+Constraints: every id in `excluded_periods` is an existing period; all ranges
+satisfy `min <= max`.
 
 ### 4.3 `Teachers`
 
-Payload: array, sorted by `id`.
+Payload: keyed collection (by `id`).
+
+**Default:** `[]` — no teachers.
 
 ```json
 [
@@ -324,14 +329,16 @@ Payload: array, sorted by `id`.
 | `id` | id | Teacher id. |
 | `surname`, `firstname` | string | May be empty. |
 | `tel`, `email` | non-empty string or `null` | Contact info, used only for exports. |
-| `subjects` | sorted array of subject ids | Subjects the teacher can interrogate in. |
+| `subjects` | array of subject ids | Subjects the teacher can interrogate in. |
 
-Referential constraints: every id in `subjects` is an existing subject **and** that
-subject has interrogations (`interrogation_parameters` is not `null`).
+Constraints: every id in `subjects` is an existing subject **and** that subject has
+interrogations (`interrogation_parameters` is not `null`).
 
 ### 4.4 `Students`
 
-Payload: array, sorted by `id`.
+Payload: keyed collection (by `id`).
+
+**Default:** `[]` — no students.
 
 ```json
 [
@@ -346,36 +353,40 @@ Payload: array, sorted by `id`.
 ]
 ```
 
-Same person fields as teachers. `excluded_periods` (sorted array of period ids) lists
+Same person fields as teachers. `excluded_periods` (array of period ids) lists
 periods the student does not attend at all.
 
-Referential constraints: every id in `excluded_periods` is an existing period.
+Constraints: every id in `excluded_periods` is an existing period.
 
 ### 4.5 `Assignments`
 
-Which students take which subject on which period. Payload: array of association
-rows, sorted by `(period_id, subject_id)`.
+Which students take which subject on which period. Payload: keyed collection of
+association rows, keyed by `(period_id, subject_id)`, with a **derived key set**:
+the meaningful keys are exactly the (period × subject not excluded from that
+period) pairs — including subjects without interrogations.
+
+**Default:** `[]` — no student is assigned to anything.
 
 ```json
 [
-  { "period_id": 1, "subject_id": 2, "students": [5, 6] },
-  { "period_id": 1, "subject_id": 3, "students": [] }
+  { "period_id": 1, "subject_id": 2, "students": [5, 6] }
 ]
 ```
 
-**Row-set is exact**: there is exactly one row for every (period × subject not
-excluded from that period) pair — including subjects without interrogations — even
-when no student is assigned (`"students": []`). A missing row, an extra row (unknown
-ids, subject excluded from the period), or a duplicated `(period_id, subject_id)` key
-is a load error. This explicit presence is deliberate: the row-set mirrors the
-model's shape, so absence never has to be interpreted.
+An absent row means no students are assigned for that pair. A row whose `students`
+array is empty encodes the same thing — it is valid but redundant, and omitted in
+canonical form.
 
-`students` is a sorted array of student ids. Referential constraints: each student
-exists and is not excluded from the row's period.
+Constraints: `period_id` is an existing period; `subject_id` is an existing subject
+not excluded from that period; each student in `students` exists and is not
+excluded from the period.
 
 ### 4.6 `WeekPatterns`
 
-Named week masks used by slots and incompatibilities. Payload: array, sorted by `id`.
+Named week masks used by slots and incompatibilities. Payload: keyed collection
+(by `id`).
+
+**Default:** `[]` — no week patterns.
 
 ```json
 [
@@ -389,13 +400,17 @@ Named week masks used by slots and incompatibilities. Payload: array, sorted by 
 | `name` | string | Display name. |
 | `weeks` | array of bool, positional | `weeks[w]` = pattern active on **global week** `w`. |
 
-Referential constraints: `weeks.length` must equal the **total week count** (the sum
-of all period lengths in `GeneralPlanning`) — no shorter, no longer.
+Constraints: `weeks` has exactly one element per week of the schedule (the sum of
+all period lengths in `GeneralPlanning`) — no shorter, no longer.
 
 ### 4.7 `Slots`
 
-Interrogation slots, grouped by subject. Payload: array of per-subject rows, sorted
-by `subject_id`; each inner `slots` array is **order-significant** (user order).
+Interrogation slots, grouped by subject. Payload: keyed collection of per-subject
+rows, keyed by `subject_id`, with a **derived key set**: the meaningful keys are
+exactly the subjects with interrogations. Each row's inner `slots` array is
+**order-significant** (user order).
+
+**Default:** `[]` — no subject has any slots.
 
 ```json
 [
@@ -415,9 +430,8 @@ by `subject_id`; each inner `slots` array is **order-significant** (user order).
 ]
 ```
 
-**Row-set is exact**: there is exactly one per-subject row for every subject **with
-interrogations**, even when it has no slots (`"slots": []`); no row for subjects
-without interrogations. Duplicated `subject_id` is a load error.
+An absent row means the subject has no slots. A row whose `slots` array is empty
+encodes the same thing — valid but redundant, omitted in canonical form.
 
 Slot fields:
 
@@ -425,19 +439,21 @@ Slot fields:
 |---|---|---|
 | `id` | id | Slot id. |
 | `teacher_id` | id | The interrogating teacher. |
-| `start` | `{"day", "time"}` | Weekday + start time. The duration comes from the subject's `duration_minutes`. |
+| `start` | record `{"day", "time"}` | Weekday + start time. The duration comes from the subject's `duration_minutes`. |
 | `extra_info` | string | Free info for exports (room number…). May be empty. |
 | `week_pattern_id` | id or `null` | `null` = the slot exists every week. |
-| `cost` | integer (i32) | Solver preference: positive avoids the slot, negative favours it, 0 neutral. |
+| `cost` | integer | Solver preference: positive avoids the slot, negative favours it, 0 neutral. |
 
-Referential constraints: `teacher_id` exists and that teacher's `subjects` contains
-this subject; `week_pattern_id` (when non-null) exists; `start` plus the subject's
-duration must not cross midnight.
+Constraints: `subject_id` is an existing subject with interrogations; `teacher_id`
+exists and that teacher's `subjects` contains this subject; `week_pattern_id` (when
+non-null) exists; `start` plus the subject's duration must not cross midnight.
 
 ### 4.8 `Incompatibilities`
 
 Recurring external commitments (e.g. an optional course) that make students
-unavailable. Payload: array, sorted by `id`.
+unavailable. Payload: keyed collection (by `id`).
+
+**Default:** `[]` — no incompatibilities.
 
 ```json
 [
@@ -460,49 +476,45 @@ unavailable. Payload: array, sorted by `id`.
 | `id` | id | Incompatibility id. |
 | `subject_id` | id | The subject this incompatibility is linked to. |
 | `name` | string | Display name. |
-| `slots` | array, **order-significant** | Time slots when students may be unavailable; each `{"day", "time", "duration_minutes"}`. |
+| `slots` | array, **order-significant** | Time slots when students may be unavailable; each a record `{"day", "time", "duration_minutes"}`. |
 | `minimum_free_slots` | integer ≥ 1 | How many of `slots` must be kept free. |
 | `week_pattern_id` | id or `null` | `null` = applies every week. |
 
-Referential constraints: `subject_id` exists; `week_pattern_id` (when non-null)
-exists; each slot must not cross midnight.
+Constraints: `subject_id` exists; `week_pattern_id` (when non-null) exists; each
+slot must not cross midnight.
 
 ### 4.9 `GroupLists`
 
-Group lists and their per-(period, subject) associations. Payload: object.
+The group lists themselves (their association to subjects is the separate
+`GroupListAssociations` block). Payload: keyed collection (by `id`).
+
+**Default:** `[]` — no group lists.
 
 ```json
-{
-  "group_lists": [
-    {
-      "id": 10,
-      "name": "Groupes de maths",
-      "students_per_group": { "min": 2, "max": 3 },
-      "group_names": ["Gryffondor", null],
-      "filling": {
-        "Prefilled": {
-          "groups": [
-            { "students": [5, 6] },
-            { "students": [] }
-          ]
-        }
+[
+  {
+    "id": 10,
+    "name": "Groupes de maths",
+    "students_per_group": { "min": 2, "max": 3 },
+    "group_names": ["Gryffondor", null],
+    "filling": {
+      "Prefilled": {
+        "groups": [
+          { "students": [5, 6] },
+          { "students": [] }
+        ]
       }
-    },
-    {
-      "id": 11,
-      "name": "Groupes de physique",
-      "students_per_group": { "min": 1, "max": 2 },
-      "group_names": [null, null, null],
-      "filling": { "Automatic": { "excluded_students": [6] } }
     }
-  ],
-  "associations": [
-    { "period_id": 1, "subject_id": 2, "group_list_id": 10 }
-  ]
-}
+  },
+  {
+    "id": 11,
+    "name": "Groupes de physique",
+    "students_per_group": { "min": 1, "max": 2 },
+    "group_names": [null, null, null],
+    "filling": { "Automatic": { "excluded_students": [6] } }
+  }
+]
 ```
-
-`group_lists` is sorted by `id`. Group list fields:
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -510,24 +522,47 @@ Group lists and their per-(period, subject) associations. Payload: object.
 | `name` | string | Display name. |
 | `students_per_group` | range of integers ≥ 1 | Allowed group size. |
 | `group_names` | array of (non-empty string or `null`), **order-significant** | One element per group; its length **is** the group count. `null` = unnamed group. Group numbers used elsewhere are 0-based indices into this array. |
-| `filling` | tagged enum | `{"Prefilled": {"groups": [...]}}` — groups are fixed by hand; `groups` is order-significant, aligned with `group_names`, each element `{"students": [sorted student ids]}`. Or `{"Automatic": {"excluded_students": [sorted student ids]}}` — the solver fills groups, skipping the excluded students. |
+| `filling` | enum | See below. |
 
-`associations` is a flat array of rows, sorted by `(period_id, subject_id)`. A row
-means "on this period, this subject uses this group list". **Absence means no
-association** — this is one of the places where absence carries the actual semantics,
-so there is no exact row-set requirement. Duplicated `(period_id, subject_id)` is a
-load error (a subject has at most one group list per period).
+`filling` variants:
 
-Referential constraints: for prefilled lists, `groups.length == group_names.length`,
-no student appears in two groups, and all students exist; for automatic lists, all
-excluded students exist. For associations: all three ids exist; the subject has
-interrogations; the subject runs on that period (is not excluded from it).
+- `{"Prefilled": {"groups": [...]}}` — groups are fixed by hand. `groups` is
+  order-significant and aligned with `group_names` (same length); each element is a
+  record `{"students": [student ids]}`, possibly empty.
+- `{"Automatic": {"excluded_students": [student ids]}}` — the solver fills the
+  groups, skipping the excluded students.
 
-### 4.10 `Pairings`
+Constraints: for prefilled lists, `groups` has the same length as `group_names`, no
+student appears in two groups, and all students exist; for automatic lists, all
+excluded students exist.
+
+### 4.10 `GroupListAssociations`
+
+Which group list a subject uses on a period. Payload: keyed collection of
+association rows, keyed by `(period_id, subject_id)`.
+
+**Default:** `[]` — no associations.
+
+```json
+[
+  { "period_id": 1, "subject_id": 2, "group_list_id": 10 }
+]
+```
+
+An absent row means the subject has no group list on that period. The key set is
+free: every present row carries real state (`group_list_id`), so there is no
+neutral-content rule here.
+
+Constraints: all three ids exist; the subject has interrogations; the subject runs
+on that period (is not excluded from it).
+
+### 4.11 `Pairings`
 
 Implication rules between subjects: "if a student has an interrogation in the
-antecedent subject on some week, then the consequent condition must hold that week."
-Payload: array, sorted by `id`.
+antecedent subject on some week, then the consequent condition must hold that
+week." Payload: keyed collection (by `id`).
+
+**Default:** `[]` — no pairing rules.
 
 ```json
 [
@@ -544,19 +579,21 @@ Payload: array, sorted by `id`.
 | Field | Type | Meaning |
 |---|---|---|
 | `id` | id | Pairing rule id. |
-| `antecedent`, `consequent` | `{"subject_id", "should_have"}` | `should_have`: `true` = "has an interrogation that week", `false` = "has none". |
-| `excluded_periods` | sorted array of period ids | Periods where the rule does not apply. |
-| `soft` | bool | `true` = best-effort (optimized), `false` = hard constraint. |
+| `antecedent`, `consequent` | record `{"subject_id", "should_have"}` | `should_have`: `true` = "has an interrogation that week", `false` = "has none". |
+| `excluded_periods` | array of period ids | Periods where the rule does not apply. |
+| `soft` | bool | `true` = best-effort (optimised), `false` = hard constraint. |
 
-Referential constraints: both subjects exist; antecedent and consequent subjects
-differ; excluded periods exist. Rules apply only to students enrolled in both
-subjects (a solver semantic, not a file constraint).
+Constraints: both subjects exist; antecedent and consequent subjects differ;
+excluded periods exist. (Rules apply only to students enrolled in both subjects —
+a solver semantic, not a file constraint.)
 
-### 4.11 `SlotPairings`
+### 4.12 `SlotPairings`
 
 The same implication shape between two **slots of the same subject**: "if the
-antecedent slot is used on some week, the consequent condition must hold that week."
-Payload: array, sorted by `id`.
+antecedent slot is used on some week, the consequent condition must hold that
+week." Payload: keyed collection (by `id`).
+
+**Default:** `[]` — no slot pairing rules.
 
 ```json
 [
@@ -572,12 +609,27 @@ Payload: array, sorted by `id`.
 
 Fields as in `Pairings` with `slot_id` in the rule parts.
 
-Referential constraints: both slots exist; they differ; they belong to the **same
-subject**; excluded periods exist.
+Constraints: both slots exist; they differ; they belong to the same subject;
+excluded periods exist.
 
-### 4.12 `Settings`
+### 4.13 `Settings`
 
-Global and per-student interrogation-load limits. Payload: object.
+Global and per-student interrogation-load limits. Payload: record.
+
+**Default:** no limits at all —
+
+```json
+{
+  "global": {
+    "interrogations_per_week_min": null,
+    "interrogations_per_week_max": null,
+    "max_interrogations_per_day": null
+  },
+  "students": []
+}
+```
+
+Populated example:
 
 ```json
 {
@@ -599,19 +651,21 @@ Global and per-student interrogation-load limits. Payload: object.
 }
 ```
 
-A `Limits` object has exactly the three fields shown; each is `null` (no limit) or a
+A limits record has exactly the three fields shown; each is `null` (no limit) or a
 soft parameter `{"soft": bool, "value": n}`. `value` is an integer ≥ 0 for the
 per-week limits and ≥ 1 for `max_interrogations_per_day`.
 
-`students` is sorted by `student_id`; each row **overrides** the global limits for
-that student. **Absence means no override** — no exact row-set requirement.
-Duplicated `student_id` is a load error.
+`students` is a keyed collection (by `student_id`); each row **overrides** the
+global limits for that student. The key set is free: a row existing is itself state
+(an override exists), whatever its values.
 
-Referential constraints: every `student_id` exists.
+Constraints: every `student_id` exists.
 
-### 4.13 `Balancing`
+### 4.14 `Balancing`
 
-Global and per-subject balancing options for the solver. Payload: object.
+Global and per-subject balancing options for the solver. Payload: record.
+
+**Default:** soft teacher rotation, avoid-twice-in-a-row, nothing else —
 
 ```json
 {
@@ -620,24 +674,13 @@ Global and per-subject balancing options for the solver. Payload: object.
     "slot_rotation": null,
     "avoid_twice_in_a_row": true,
     "year_teacher_rotation": false,
-    "period_teacher_rotation": true
+    "period_teacher_rotation": false
   },
-  "subjects": [
-    {
-      "subject_id": 2,
-      "options": {
-        "teacher_rotation": null,
-        "slot_rotation": { "soft": false },
-        "avoid_twice_in_a_row": false,
-        "year_teacher_rotation": true,
-        "period_teacher_rotation": false
-      }
-    }
-  ]
+  "subjects": []
 }
 ```
 
-A `BalancingOptions` object has exactly the five fields shown:
+A balancing-options record has exactly these five fields:
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -647,15 +690,18 @@ A `BalancingOptions` object has exactly the five fields shown:
 | `year_teacher_rotation` | bool | Fair teacher distribution over the whole year. |
 | `period_teacher_rotation` | bool | Fair teacher distribution within each period. |
 
-`subjects` is sorted by `subject_id`; each row overrides the global options for that
-subject. Absence means no override. Duplicated `subject_id` is a load error.
+`subjects` is a keyed collection (by `subject_id`) of records
+`{"subject_id", "options"}`; each row overrides the global options for that
+subject. The key set is free: a row is an override, whatever its values.
 
-Referential constraints: every `subject_id` exists **and** has interrogations.
+Constraints: every `subject_id` exists **and** has interrogations.
 
-### 4.14 `Colloscope`
+### 4.15 `Colloscope`
 
-The colloscope itself: which groups sit which interrogation, and how automatic group
-lists were filled. Payload: object.
+The colloscope itself: which groups sit which interrogation, and how automatic
+group lists were filled. Payload: record.
+
+**Default:** `{"interrogations": [], "group_lists": []}` — an unsolved colloscope.
 
 ```json
 {
@@ -675,55 +721,54 @@ lists were filled. Payload: object.
 }
 ```
 
-#### `interrogations` — sparse, global-week keyed
+#### `interrogations`
 
-One row `{"slot_id", "week", "assigned_groups"}` for each interrogation that has at
-least one group assigned. `week` is a **global week index** (§3); there is no
-`period_id` in the row — the week determines the period. `assigned_groups` is a
-sorted array of 0-based group numbers. Rows are sorted by `(slot_id, week)`.
+A keyed collection of rows `{"slot_id", "week", "assigned_groups"}`, keyed by
+`(slot_id, week)`. `week` is a global week index (§3); the week determines the
+period, so no period appears in the row. `assigned_groups` is an array of 0-based
+group numbers.
 
-The file stores free state only. In memory, every slot carries a full per-week
-skeleton distinguishing "no interrogation possible this week" from "interrogation
-possible but no group assigned"; that skeleton has **zero degrees of freedom** — it
-is entirely determined by the parameters (the merged pattern: the period's per-week
-`interrogations` flags AND the slot's week pattern, with the slot's subject running
-on the period). Readers rebuild it from `GeneralPlanning`, `WeekPatterns`, `Subjects`
-and `Slots`; writers never store it.
+The key set is derived: the (slot, week) cells that can host an interrogation are
+fully determined by the other blocks. A cell exists exactly when
 
-Hard decode errors:
+1. the slot's subject runs on the period containing that week (the period is not in
+   the subject's `excluded_periods`), and
+2. the week's `interrogations` flag (§4.1) is `true`, and
+3. the slot's week pattern (when it has one) is `true` on that week.
 
-- a row whose `slot_id` is unknown;
-- a row whose `week` is out of range (≥ total week count);
-- a row on a week where the merged pattern is inactive, or where the slot's subject
-  does not run (its period is excluded, so the slot has no cell there);
-- a row with **empty** `assigned_groups` — canonicity: an unsolved interrogation is
-  encoded by the row's absence, so writers never emit empty rows and readers reject
-  them (one state, one byte sequence);
-- a duplicated `(slot_id, week)` key.
+A row on a non-existent cell — unknown slot, week out of range, or conditions 1–3
+not met — is invalid, whatever its content. An absent row means no groups are
+assigned to that cell; a row with an empty `assigned_groups` encodes the same
+thing — valid but redundant, omitted in canonical form.
 
-An entirely unsolved colloscope is `"interrogations": []`.
+Constraints (in addition to cell existence): every group number in
+`assigned_groups` is `<` the group count (`group_names` length) of the group list
+associated to the slot's subject on the row's period; if no group list is
+associated there, no group number is valid.
 
-Referential constraints: every group number in `assigned_groups` is `<` the group
-count (`group_names.length`) of the group list associated to the slot's subject on
-the row's period; if no group list is associated there, no group number is valid.
+#### `group_lists`
 
-#### `group_lists` — exact row-set
+How each **automatic** group list was filled: a keyed collection of rows
+`{"group_list_id", "students"}`, keyed by `group_list_id`, with a **derived key
+set**: the meaningful keys are exactly the automatic (non-prefilled) group lists.
+(Prefilled lists carry their composition in `GroupLists` and never appear here.)
 
-One row per **non-prefilled** (automatic) group list — exactly those, even when
-empty (`"students": []`). A row for a prefilled group list, a missing automatic one,
-or a duplicated `group_list_id` is a load error. (Prefilled lists carry their
-composition in `GroupLists`; repeating it here would be stored representation.)
+An absent row means the list is unfilled. A row whose `students` array is empty
+encodes the same thing — valid but redundant, omitted in canonical form.
 
-`students` is sorted by `student_id`; each element assigns the student a 0-based
-`group` number.
+`students` is a keyed collection (by `student_id`) of records
+`{"student_id", "group"}` assigning the student a 0-based group number.
 
-Referential constraints: every student exists, is not in the group list's
-`excluded_students`, and `group` is `<` the list's group count.
+Constraints: `group_list_id` is an existing automatic group list; every student
+exists and is not in the list's `excluded_students`; `group` is `<` the list's
+group count.
 
-### 4.15 `ExportConfig`
+### 4.16 `ExportConfig`
 
-Presentation settings for spreadsheet export. Payload: object, a faithful flat
-mirror of the in-memory configuration. No field references ids; everything is local.
+Presentation settings for spreadsheet export. Payload: record. No field references
+ids; everything is local.
+
+**Default:**
 
 ```json
 {
@@ -751,9 +796,7 @@ mirror of the in-memory configuration. No field references ids; everything is lo
     "no_interrogation_color": { "red": 140, "green": 140, "blue": 140 },
     "annotation_color_enabled": true,
     "annotation_color": { "red": 255, "green": 255, "blue": 0 },
-    "extra_colors": [
-      { "name": "Vacances", "color": { "red": 0, "green": 128, "blue": 0 } }
-    ]
+    "extra_colors": []
   },
   "all_groups_config": {
     "sheet_name": "Tous les groupes",
@@ -777,71 +820,61 @@ mirror of the in-memory configuration. No field references ids; everything is lo
     "orientation": "Portrait",
     "show_emails": true,
     "show_tel": false,
-    "center_vertically": true
+    "center_vertically": false
   }
 }
 ```
 
-Notes:
+The shape is exactly the default above; notes:
 
 - `orientation` is `"Portrait"` or `"Landscape"`; in the three per-student-groups
   configs it may be `null`, meaning auto-detect from the group count.
-- `extra_colors` maps annotation names to colors: an array of `{"name", "color"}`
-  rows sorted by `name` (duplicated names are a load error).
-- All strings are plain strings and may be empty. Every `..._enabled` flag is a bool.
+- `extra_colors` maps annotation names to colors: a keyed collection of records
+  `{"name", "color"}` keyed by `name`.
+- All strings are plain strings and may be empty. Every `..._enabled` field is a
+  bool.
 
-## 5. Validation at load
+## 5. Forward compatibility
 
-Loading has three layers with a clear trust boundary:
+The format evolves by these rules, which a robust reader or writer can rely on:
 
-1. **JSON structure** (serde): the envelope shape, the exactly-once section rule,
-   every field's presence and type, and all *local* scalar constraints — time and
-   date syntax, Monday-ness, non-empty strings, `min <= max`, integers ≥ 1 where
-   specified, unknown fields, duplicated keys in row arrays, empty
-   `assigned_groups` rows. Failures here report the underlying serde diagnostics
-   (§2 rule 1).
-2. **Reconstruction** (format → in-memory `InnerData`): the decoder rebuilds derived
-   structure the file deliberately omits — per-period maps, the colloscope
-   interrogation skeleton (§4.14), the id issuer. Sparse-row placement errors
-   (unknown slot, out-of-range or inactive week) surface here.
-3. **Invariants** (`Data::from_inner_data`, in `state-colloscopes`): global id
-   uniqueness and every cross-entry referential constraint listed in §4 — dangling
-   ids, exact row-sets (assignments, slots, colloscope group lists), week-pattern
-   lengths, teacher/subject compatibility, group-number bounds. This layer is the
-   single trust boundary: it validates *any* `InnerData` regardless of provenance,
-   so the decoder does not need to be trusted for semantic integrity, and
-   constraints listed in §4 as "referential" are enforced here even when the
-   decoder also happens to catch them earlier.
+- **Block names are permanent.** The meaning and shape of a block name never
+  changes once published. When a block's shape must change, a **new block name** is
+  introduced with a higher `minimum_spec_version`. Likewise, a block's **default
+  state is frozen forever**: changing a default also requires a new block name.
+- **New aspects of the state get new blocks**, with `minimum_spec_version` set to
+  the spec revision that introduces them.
 
-Nothing in the file is trusted without being checked; a file that decodes
-successfully is fully valid state.
+How future spec revisions use this mechanism — which names they introduce, whether
+they keep emitting superseded names alongside new ones for the benefit of older
+readers, which blocks are needed — is decided by those revisions; this document
+only fixes the mechanism itself.
 
-## 6. Evolution rules
+A conforming reader therefore behaves as follows:
 
-- **Adding optional data** (new feature whose absence is tolerable): a **new entry
-  name** with `needed_entry: false` and `minimum_spec_version` = the spec that
-  introduces it. Older applications skip it with the `UnknownEntries` caveat (and
-  drop it on re-save); newer ones read it. The existing 15 sections are untouched.
-- **Changing the shape of a section** (or adding data the file must not be read
-  without): a **new entry name** — by convention the section name with a version
-  suffix, e.g. `SubjectsV3` — with `needed_entry: true` and the new spec number,
-  plus a spec bump of `CURRENT_SPEC_VERSION`. Writers emit only the new entry.
-  Older applications fail cleanly with `UnknownNeededEntry` ("this file needs a
-  newer version"). The decoder for the old entry name is **frozen forever**: newer
-  applications keep reading old files by decoding the old entry into the current
-  in-memory model (this is where defaults are allowed — filling in what the old
-  spec could not express).
-- **Never** change the meaning or shape of an existing entry name in place, and
-  never delete a frozen decoder (the spec-1 tombstone is the unique, deliberate
-  exception from the pre-alpha era).
-- Recent applications must always open every file produced since spec 2.
+- A block whose name it recognises is read per its spec; the block must declare
+  that name's canonical `minimum_spec_version` and `needed_entry` values.
+- The **absence** of any block it recognises means that block's default state.
+  This is what keeps older files readable by newer applications: they simply lack
+  the newer blocks.
+- A block whose name it does **not** recognise: if `needed_entry` is `true`, the
+  reader must refuse the file (it cannot faithfully represent the document); if
+  `false`, the reader may skip the block and proceed, and should inform the user —
+  in particular, rewriting the file will drop the skipped block.
 
-## 7. Complete minimal example
+Writers get the mirror-image benefit from the canonical form's omit-defaults rule
+(§3): a document only carries blocks for the features actually used, so a file
+demands the spec level of its *content*, not of the application that wrote it. A
+newer application that never uses a newer feature keeps producing files that older
+readers open cleanly.
 
-A small but fully populated, internally consistent spec-2 file: one period of two
-weeks, one subject, one teacher, two students, one week pattern, one slot, one
-automatic group list, and a partially filled colloscope. (Application version and
-non-essential `ExportConfig` values are illustrative.)
+## 6. Complete example
+
+A small, internally consistent document in canonical form: one period of two weeks,
+one subject, one teacher, two students, one week pattern, one slot, one automatic
+group list, and a partially filled colloscope. `Incompatibilities`, `Pairings`,
+`SlotPairings`, `Balancing` and `ExportConfig` are in their default state and
+therefore omitted.
 
 ```json
 {
@@ -971,37 +1004,26 @@ non-essential `ExportConfig` values are illustrative.)
     {
       "minimum_spec_version": 2,
       "needed_entry": true,
-      "content": { "Incompatibilities": [] }
-    },
-    {
-      "minimum_spec_version": 2,
-      "needed_entry": true,
       "content": {
-        "GroupLists": {
-          "group_lists": [
-            {
-              "id": 8,
-              "name": "Groupes de maths",
-              "students_per_group": { "min": 1, "max": 2 },
-              "group_names": ["Groupe 1", null],
-              "filling": { "Automatic": { "excluded_students": [] } }
-            }
-          ],
-          "associations": [
-            { "period_id": 1, "subject_id": 2, "group_list_id": 8 }
-          ]
-        }
+        "GroupLists": [
+          {
+            "id": 8,
+            "name": "Groupes de maths",
+            "students_per_group": { "min": 1, "max": 2 },
+            "group_names": ["Groupe 1", null],
+            "filling": { "Automatic": { "excluded_students": [] } }
+          }
+        ]
       }
     },
     {
       "minimum_spec_version": 2,
       "needed_entry": true,
-      "content": { "Pairings": [] }
-    },
-    {
-      "minimum_spec_version": 2,
-      "needed_entry": true,
-      "content": { "SlotPairings": [] }
+      "content": {
+        "GroupListAssociations": [
+          { "period_id": 1, "subject_id": 2, "group_list_id": 8 }
+        ]
+      }
     },
     {
       "minimum_spec_version": 2,
@@ -1014,22 +1036,6 @@ non-essential `ExportConfig` values are illustrative.)
             "max_interrogations_per_day": null
           },
           "students": []
-        }
-      }
-    },
-    {
-      "minimum_spec_version": 2,
-      "needed_entry": true,
-      "content": {
-        "Balancing": {
-          "global": {
-            "teacher_rotation": { "soft": true },
-            "slot_rotation": null,
-            "avoid_twice_in_a_row": true,
-            "year_teacher_rotation": false,
-            "period_teacher_rotation": false
-          },
-          "subjects": []
         }
       }
     },
@@ -1052,68 +1058,7 @@ non-essential `ExportConfig` values are illustrative.)
           ]
         }
       }
-    },
-    {
-      "minimum_spec_version": 2,
-      "needed_entry": true,
-      "content": {
-        "ExportConfig": {
-          "global": {
-            "background_color": { "red": 255, "green": 255, "blue": 255 },
-            "stripes_color_enabled": true,
-            "stripes_color": { "red": 220, "green": 220, "blue": 230 }
-          },
-          "colloscope_enabled": true,
-          "all_groups_enabled": true,
-          "automatic_groups_enabled": false,
-          "prefilled_groups_enabled": false,
-          "per_group_list_enabled": true,
-          "colloscope_config": {
-            "sheet_name": "Colloscope",
-            "extra_info_column_enabled": true,
-            "extra_info_column_name": "Info",
-            "teacher_email_enabled": true,
-            "teacher_email": "Contact",
-            "teacher_tel_enabled": false,
-            "teacher_tel": "",
-            "orientation": "Landscape",
-            "display_week_dates": true,
-            "display_annotations": true,
-            "no_interrogation_color": { "red": 140, "green": 140, "blue": 140 },
-            "annotation_color_enabled": true,
-            "annotation_color": { "red": 255, "green": 255, "blue": 0 },
-            "extra_colors": []
-          },
-          "all_groups_config": {
-            "sheet_name": "Tous les groupes",
-            "orientation": null,
-            "show_emails": true,
-            "show_tel": false
-          },
-          "automatic_groups_config": {
-            "sheet_name": "Groupes automatiques",
-            "orientation": null,
-            "show_emails": true,
-            "show_tel": false
-          },
-          "prefilled_groups_config": {
-            "sheet_name": "Groupes préremplis",
-            "orientation": null,
-            "show_emails": true,
-            "show_tel": false
-          },
-          "per_group_list_config": {
-            "orientation": "Portrait",
-            "show_emails": true,
-            "show_tel": false,
-            "center_vertically": false
-          }
-        }
-      }
     }
   ]
 }
 ```
-
-A corpus of larger example files is planned as part of phase 1.5 of
-`docs/state_consolidation_plan.md` (golden fixtures under `examples/`).
