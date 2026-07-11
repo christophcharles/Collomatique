@@ -8,13 +8,19 @@
 
 use collomatique_state::{AppState, traits::Manager};
 use collomatique_state_colloscopes::{
-    ColloscopeOp, Data, Error, GroupListError, GroupListOp, NewId, Op, SettingsOp, StudentOp,
-    colloscopes::ColloscopeGroupList,
+    ColloscopeOp, Data, Error, GroupListError, GroupListOp, NewId, Op, PeriodOp, SettingsOp,
+    SlotOp, StudentOp, Subject, SubjectInterrogationParameters, SubjectOp, SubjectParameters,
+    SubjectPeriodicity, TeacherOp,
+    colloscopes::{ColloscopeGroupList, ColloscopeInterrogation},
     group_lists::{GroupListFilling, GroupListParameters},
+    periods::WeekDesc,
     settings::{Limits, Settings},
+    slots::Slot,
     students::Student,
+    teachers::Teacher,
 };
 use std::collections::{BTreeMap, BTreeSet};
+use std::num::NonZeroU32;
 
 /// `StudentOp::Remove` must refuse to remove a student that still has
 /// per-student settings, exactly like the existing guards for group
@@ -141,5 +147,155 @@ fn set_filling_excluding_placed_student_is_rejected() {
         "Exclude non-placed student".into(),
     ) else {
         panic!("Excluding a non-placed student should succeed");
+    };
+}
+
+/// `GroupListOp::Update` must check the interrogations' `assigned_groups`
+/// of every subject associated with the list when shrinking
+/// `group_names`, exactly like `AssignToSubject` does. Before the fix,
+/// shrinking below an assigned group number succeeded and panicked the
+/// internal invariant check (`InvalidGroupNumInInterrogation`).
+#[test]
+fn update_shrinking_group_names_below_assigned_group_is_rejected() {
+    let mut app_state = AppState::<_, String>::new(Data::new());
+
+    let Ok(Some(NewId::PeriodId(period_id))) = app_state.apply(
+        Op::Period(PeriodOp::AddFront(vec![
+            WeekDesc::new(true),
+            WeekDesc::new(true),
+        ])),
+        "Add period".into(),
+    ) else {
+        panic!("Unexpected result after adding the period");
+    };
+
+    let Ok(Some(NewId::SubjectId(subject_id))) = app_state.apply(
+        Op::Subject(SubjectOp::AddAfter(
+            None,
+            Subject {
+                parameters: SubjectParameters {
+                    name: "Math".into(),
+                    interrogation_parameters: Some(SubjectInterrogationParameters {
+                        students_per_group: NonZeroU32::new(2).unwrap()
+                            ..=NonZeroU32::new(3).unwrap(),
+                        groups_per_interrogation: NonZeroU32::new(1).unwrap()
+                            ..=NonZeroU32::new(1).unwrap(),
+                        duration: collomatique_time::NonZeroMinutes::new(60).unwrap(),
+                        take_duration_into_account: true,
+                        periodicity: SubjectPeriodicity::ExactlyPeriodic {
+                            periodicity_in_weeks: NonZeroU32::new(2).unwrap(),
+                        },
+                    }),
+                },
+                excluded_periods: BTreeSet::new(),
+            },
+        )),
+        "Add subject".into(),
+    ) else {
+        panic!("Unexpected result after adding the subject");
+    };
+
+    let Ok(Some(NewId::TeacherId(teacher_id))) = app_state.apply(
+        Op::Teacher(TeacherOp::Add(Teacher {
+            desc: Default::default(),
+            subjects: BTreeSet::from([subject_id]),
+        })),
+        "Add teacher".into(),
+    ) else {
+        panic!("Unexpected result after adding the teacher");
+    };
+
+    let Ok(Some(NewId::SlotId(slot_id))) = app_state.apply(
+        Op::Slot(SlotOp::AddAfter(
+            subject_id,
+            None,
+            Slot {
+                teacher_id,
+                start_time: collomatique_time::SlotStart {
+                    weekday: collomatique_time::Weekday(chrono::Weekday::Mon),
+                    start_time: collomatique_time::WholeMinuteTime::new(
+                        chrono::NaiveTime::from_hms_opt(8, 0, 0).unwrap(),
+                    )
+                    .unwrap(),
+                },
+                extra_info: String::new(),
+                week_pattern: None,
+                cost: 0,
+            },
+        )),
+        "Add slot".into(),
+    ) else {
+        panic!("Unexpected result after adding the slot");
+    };
+
+    // Group list with 4 groups, associated with the subject
+    let Ok(Some(NewId::GroupListId(group_list_id))) = app_state.apply(
+        Op::GroupList(GroupListOp::Add(GroupListParameters {
+            name: "Liste".into(),
+            students_per_group: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+            group_names: vec![None; 4],
+        })),
+        "Add group list".into(),
+    ) else {
+        panic!("Unexpected result after adding the group list");
+    };
+    let Ok(None) = app_state.apply(
+        Op::GroupList(GroupListOp::AssignToSubject(
+            period_id,
+            subject_id,
+            Some(group_list_id),
+        )),
+        "Assign group list to subject".into(),
+    ) else {
+        panic!("Unexpected result after assigning the group list");
+    };
+
+    // Assign group number 2 in an interrogation of the slot
+    let Ok(None) = app_state.apply(
+        Op::Colloscope(ColloscopeOp::UpdateInterrogation(
+            period_id,
+            slot_id,
+            0,
+            ColloscopeInterrogation {
+                assigned_groups: BTreeSet::from([2]),
+            },
+        )),
+        "Assign group 2 in interrogation".into(),
+    ) else {
+        panic!("Unexpected result after updating the interrogation");
+    };
+
+    // Shrinking group_names to 2 groups (max valid group number 1) must fail
+    let result = app_state.apply(
+        Op::GroupList(GroupListOp::Update(
+            group_list_id,
+            GroupListParameters {
+                name: "Liste".into(),
+                students_per_group: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+                group_names: vec![None; 2],
+            },
+        )),
+        "Shrink group list below assigned group".into(),
+    );
+    assert_eq!(
+        result,
+        Err(Error::GroupList(
+            GroupListError::InvalidGroupInSubjectSlotInColloscope(subject_id, period_id, slot_id)
+        )),
+    );
+
+    // Shrinking to 3 groups keeps group number 2 valid and succeeds
+    let Ok(None) = app_state.apply(
+        Op::GroupList(GroupListOp::Update(
+            group_list_id,
+            GroupListParameters {
+                name: "Liste".into(),
+                students_per_group: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+                group_names: vec![None; 3],
+            },
+        )),
+        "Shrink group list above assigned group".into(),
+    ) else {
+        panic!("Shrinking above the assigned group number should succeed");
     };
 }
