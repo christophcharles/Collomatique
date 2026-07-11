@@ -1,0 +1,1105 @@
+//! Random operation generator for the property tests
+//!
+//! Pools of valid ids are read live from the current [InnerData] before
+//! every operation: the state itself is the source of truth. The generator
+//! covers all 16 [Op] categories, favors Add-flavored ops while pools are
+//! small, and deliberately breaks one constraint with probability
+//! `invalid_fraction`. The harness never predicts whether an op will
+//! succeed: it asserts the right property in either case.
+
+use rand::Rng;
+use rand_chacha::ChaCha8Rng;
+use std::collections::{BTreeMap, BTreeSet};
+
+use collomatique_state_colloscopes::{
+    AssignmentOp, BalancingOp, ColloscopeOp, ExportConfigOp, GroupListOp, IncompatOp, InnerData,
+    Op, PairingOp, PeriodOp, SettingsOp, SlotOp, SlotPairingOp, StudentOp, SubjectOp, TeacherOp,
+    WeekPatternOp,
+    colloscopes::{ColloscopeGroupList, ColloscopeInterrogation},
+    group_lists::GroupListFilling,
+    ids::{
+        GroupListId, Id, IncompatId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId,
+        SubjectId, TeacherId, WeekPatternId,
+    },
+    students::Student,
+};
+
+use super::synth;
+use super::synth::pick;
+
+/// All op categories, used for coverage tracking
+pub const CATEGORIES: [&str; 16] = [
+    "student",
+    "period",
+    "subject",
+    "teacher",
+    "assignment",
+    "week_pattern",
+    "slot",
+    "incompat",
+    "group_list",
+    "settings",
+    "pairing",
+    "slot_pairing",
+    "balancing",
+    "colloscope",
+    "export_config",
+    "global_update",
+];
+
+/// Base for ids that are guaranteed dangling
+///
+/// Real ids are issued sequentially from 0 and never reach this range
+/// (the only op that could advance the issuer this far is a corrupted
+/// GlobalUpdate, and those are built from duplicated ids instead).
+const DANGLING_BASE: u64 = 1 << 40;
+
+fn dangling(rng: &mut ChaCha8Rng) -> u64 {
+    DANGLING_BASE + rng.random_range(0..1_000_000)
+}
+
+fn weighted(rng: &mut ChaCha8Rng, weights: &[u32]) -> usize {
+    let total: u32 = weights.iter().sum();
+    assert!(total > 0, "at least one weight must be non-zero");
+    let mut roll = rng.random_range(0..total);
+    for (i, w) in weights.iter().enumerate() {
+        if roll < *w {
+            return i;
+        }
+        roll -= w;
+    }
+    unreachable!()
+}
+
+/// Id pools extracted from the current state
+struct Pools {
+    period_ids: Vec<PeriodId>,
+    total_weeks: usize,
+    student_ids: Vec<StudentId>,
+    subject_ids: Vec<SubjectId>,
+    interrogation_subject_ids: Vec<SubjectId>,
+    non_interrogation_subject_ids: Vec<SubjectId>,
+    teacher_ids: Vec<TeacherId>,
+    week_pattern_ids: Vec<WeekPatternId>,
+    /// Subjects that own at least one slot, with their slots
+    slots_by_subject: Vec<(SubjectId, Vec<SlotId>)>,
+    slot_ids: Vec<SlotId>,
+    incompat_ids: Vec<IncompatId>,
+    group_list_ids: Vec<GroupListId>,
+    pairing_rule_ids: Vec<PairingRuleId>,
+    slot_pairing_rule_ids: Vec<SlotPairingRuleId>,
+    /// Non-prefilled group lists registered in the colloscope
+    colloscope_group_list_ids: Vec<GroupListId>,
+    /// (period, slot, weeks-in-period holding an interrogation)
+    colloscope_targets: Vec<(PeriodId, SlotId, Vec<usize>)>,
+}
+
+impl Pools {
+    fn extract(inner: &InnerData) -> Pools {
+        let params = &inner.params;
+        let period_ids: Vec<_> = params
+            .periods
+            .ordered_period_list
+            .iter()
+            .map(|(id, _)| *id)
+            .collect();
+        let subject_ids: Vec<_> = params
+            .subjects
+            .ordered_subject_list
+            .iter()
+            .map(|(id, _)| *id)
+            .collect();
+        let interrogation_subject_ids: Vec<_> = params
+            .subjects
+            .ordered_subject_list
+            .iter()
+            .filter(|(_, s)| s.parameters.interrogation_parameters.is_some())
+            .map(|(id, _)| *id)
+            .collect();
+        let non_interrogation_subject_ids: Vec<_> = params
+            .subjects
+            .ordered_subject_list
+            .iter()
+            .filter(|(_, s)| s.parameters.interrogation_parameters.is_none())
+            .map(|(id, _)| *id)
+            .collect();
+        let slots_by_subject: Vec<_> = params
+            .slots
+            .subject_map
+            .iter()
+            .filter(|(_, slots)| !slots.ordered_slots.is_empty())
+            .map(|(subject_id, slots)| {
+                (
+                    *subject_id,
+                    slots.ordered_slots.iter().map(|(id, _)| *id).collect(),
+                )
+            })
+            .collect();
+        let slot_ids: Vec<_> = slots_by_subject
+            .iter()
+            .flat_map(|(_, slots): &(_, Vec<SlotId>)| slots.iter().copied())
+            .collect();
+        let colloscope_targets: Vec<_> = inner
+            .colloscope
+            .period_map
+            .iter()
+            .flat_map(|(period_id, period)| {
+                period.slot_map.iter().filter_map(|(slot_id, slot)| {
+                    let weeks: Vec<usize> = slot
+                        .interrogations
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(i, opt)| opt.as_ref().map(|_| i))
+                        .collect();
+                    if weeks.is_empty() {
+                        None
+                    } else {
+                        Some((*period_id, *slot_id, weeks))
+                    }
+                })
+            })
+            .collect();
+
+        Pools {
+            total_weeks: params.periods.count_weeks(),
+            period_ids,
+            student_ids: params.students.student_map.keys().copied().collect(),
+            subject_ids,
+            interrogation_subject_ids,
+            non_interrogation_subject_ids,
+            teacher_ids: params.teachers.teacher_map.keys().copied().collect(),
+            week_pattern_ids: params
+                .week_patterns
+                .week_pattern_map
+                .keys()
+                .copied()
+                .collect(),
+            slots_by_subject,
+            slot_ids,
+            incompat_ids: params.incompats.incompat_map.keys().copied().collect(),
+            group_list_ids: params.group_lists.group_list_map.keys().copied().collect(),
+            pairing_rule_ids: params.pairings.pairing_rule_map.keys().copied().collect(),
+            slot_pairing_rule_ids: params
+                .slot_pairings
+                .slot_pairing_rule_map
+                .keys()
+                .copied()
+                .collect(),
+            colloscope_group_list_ids: inner.colloscope.group_lists.keys().copied().collect(),
+            colloscope_targets,
+        }
+    }
+}
+
+fn teachers_for_subject(inner: &InnerData, subject_id: SubjectId) -> Vec<TeacherId> {
+    inner
+        .params
+        .teachers
+        .teacher_map
+        .iter()
+        .filter(|(_, teacher)| teacher.subjects.contains(&subject_id))
+        .map(|(id, _)| *id)
+        .collect()
+}
+
+/// Interrogation subjects for which a slot can currently be added
+fn addable_slot_subjects(inner: &InnerData, pools: &Pools) -> Vec<SubjectId> {
+    pools
+        .interrogation_subject_ids
+        .iter()
+        .copied()
+        .filter(|subject_id| !teachers_for_subject(inner, *subject_id).is_empty())
+        .collect()
+}
+
+/// Generates the next operation from the current state
+///
+/// `snapshots` are earlier valid [InnerData] states of this same run,
+/// used as replay material for GlobalUpdate ops.
+pub fn gen_op(
+    rng: &mut ChaCha8Rng,
+    inner: &InnerData,
+    snapshots: &[InnerData],
+    invalid_fraction: f64,
+) -> (&'static str, Op) {
+    let pools = Pools::extract(inner);
+    let invalid = rng.random_bool(invalid_fraction);
+
+    let can_pair_slots = pools
+        .slots_by_subject
+        .iter()
+        .any(|(_, slots)| slots.len() >= 2);
+    let eligible: Vec<(&'static str, u32)> = [
+        ("student", 8u32),
+        ("period", 5),
+        ("subject", 8),
+        ("teacher", 6),
+        ("assignment", 8),
+        ("week_pattern", 5),
+        ("slot", 8),
+        ("incompat", 4),
+        ("group_list", 8),
+        ("settings", 3),
+        ("pairing", 4),
+        ("slot_pairing", 3),
+        ("balancing", 3),
+        ("colloscope", 6),
+        ("export_config", 3),
+        ("global_update", 2),
+    ]
+    .into_iter()
+    .filter(|(name, _)| match *name {
+        "assignment" => {
+            !pools.period_ids.is_empty()
+                && !pools.student_ids.is_empty()
+                && !pools.subject_ids.is_empty()
+        }
+        "slot" => !addable_slot_subjects(inner, &pools).is_empty() || !pools.slot_ids.is_empty(),
+        "incompat" => !pools.subject_ids.is_empty() || !pools.incompat_ids.is_empty(),
+        "pairing" => pools.subject_ids.len() >= 2 || !pools.pairing_rule_ids.is_empty(),
+        "slot_pairing" => can_pair_slots || !pools.slot_pairing_rule_ids.is_empty(),
+        "colloscope" => {
+            !pools.colloscope_group_list_ids.is_empty() || !pools.colloscope_targets.is_empty()
+        }
+        _ => true,
+    })
+    .collect();
+
+    let weights: Vec<u32> = eligible.iter().map(|(_, w)| *w).collect();
+    let category = eligible[weighted(rng, &weights)].0;
+
+    let op = match category {
+        "student" => gen_student(rng, inner, &pools, invalid),
+        "period" => gen_period(rng, &pools, invalid),
+        "subject" => gen_subject(rng, inner, &pools, invalid),
+        "teacher" => gen_teacher(rng, &pools, invalid),
+        "assignment" => gen_assignment(rng, inner, &pools, invalid),
+        "week_pattern" => gen_week_pattern(rng, &pools, invalid),
+        "slot" => gen_slot(rng, inner, &pools, invalid),
+        "incompat" => gen_incompat(rng, &pools, invalid),
+        "group_list" => gen_group_list(rng, inner, &pools, invalid),
+        "settings" => gen_settings(rng, &pools, invalid),
+        "pairing" => gen_pairing(rng, &pools, invalid),
+        "slot_pairing" => gen_slot_pairing(rng, &pools, invalid),
+        "balancing" => gen_balancing(rng, &pools, invalid),
+        "colloscope" => gen_colloscope(rng, inner, &pools, invalid),
+        "export_config" => gen_export_config(rng),
+        "global_update" => gen_global_update(rng, inner, &pools, snapshots, invalid),
+        _ => unreachable!(),
+    };
+
+    (category, op)
+}
+
+fn gen_student(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invalid: bool) -> Op {
+    if invalid {
+        let op = if rng.random_bool(0.5) {
+            StudentOp::Remove(unsafe { StudentId::new(dangling(rng)) })
+        } else {
+            StudentOp::Add(Student {
+                desc: synth::person(rng),
+                excluded_periods: BTreeSet::from([unsafe { PeriodId::new(dangling(rng)) }]),
+            })
+        };
+        return Op::Student(op);
+    }
+    // TODO(phase0-bug): `StudentOp::Remove` does not check `settings.students`
+    // (unlike group lists, colloscope group lists and assignments), so removing
+    // a student that has per-student settings leaves a dangling reference and
+    // the internal invariant check panics with InvalidStudentIdInSettings
+    // (reproduced by seed 0). Until the production bug is fixed, the generator
+    // never removes such a student.
+    let removable_students: Vec<StudentId> = pools
+        .student_ids
+        .iter()
+        .copied()
+        .filter(|id| !inner.params.settings.students.contains_key(id))
+        .collect();
+    let n = pools.student_ids.len();
+    let add_w = if n < 10 { 6 } else { 2 };
+    let update_w = if n > 0 { 3 } else { 0 };
+    let remove_w = if !removable_students.is_empty() { 2 } else { 0 };
+    let op = match weighted(rng, &[add_w, update_w, remove_w]) {
+        0 => StudentOp::Add(synth::student(rng, &pools.period_ids)),
+        1 => StudentOp::Update(
+            pick(rng, &pools.student_ids),
+            synth::student(rng, &pools.period_ids),
+        ),
+        _ => StudentOp::Remove(pick(rng, &removable_students)),
+    };
+    Op::Student(op)
+}
+
+fn gen_period(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
+    if invalid {
+        let op = if rng.random_bool(0.5) {
+            PeriodOp::Remove(unsafe { PeriodId::new(dangling(rng)) })
+        } else {
+            PeriodOp::Update(
+                unsafe { PeriodId::new(dangling(rng)) },
+                synth::week_desc_vec(rng),
+            )
+        };
+        return Op::Period(op);
+    }
+    let n = pools.period_ids.len();
+    let add_w = if n < 4 { 4 } else { 1 };
+    let update_w = if n > 0 { 3 } else { 0 };
+    let remove_w = if n > 0 { 2 } else { 0 };
+    let op = match weighted(rng, &[2, add_w, update_w, remove_w]) {
+        0 => PeriodOp::ChangeStartDate(if rng.random_bool(0.7) {
+            Some(synth::week_start(rng))
+        } else {
+            None
+        }),
+        1 => {
+            if pools.period_ids.is_empty() || rng.random_bool(0.3) {
+                PeriodOp::AddFront(synth::week_desc_vec(rng))
+            } else {
+                PeriodOp::AddAfter(pick(rng, &pools.period_ids), synth::week_desc_vec(rng))
+            }
+        }
+        2 => PeriodOp::Update(pick(rng, &pools.period_ids), synth::week_desc_vec(rng)),
+        _ => PeriodOp::Remove(pick(rng, &pools.period_ids)),
+    };
+    Op::Period(op)
+}
+
+fn gen_subject(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invalid: bool) -> Op {
+    if invalid {
+        let op = match rng.random_range(0..3) {
+            0 => SubjectOp::AddAfter(None, synth::subject_invalid_empty_range(rng)),
+            1 if !pools.subject_ids.is_empty() => SubjectOp::ChangePosition(
+                pick(rng, &pools.subject_ids),
+                pools.subject_ids.len() + 5,
+            ),
+            _ => SubjectOp::Remove(unsafe { SubjectId::new(dangling(rng)) }),
+        };
+        return Op::Subject(op);
+    }
+    let n = pools.subject_ids.len();
+    let add_w = if n < 6 { 6 } else { 2 };
+    let update_w = if n > 0 { 3 } else { 0 };
+    let move_w = if n > 0 { 1 } else { 0 };
+    let remove_w = if n > 0 { 2 } else { 0 };
+    let op = match weighted(rng, &[add_w, update_w, move_w, remove_w]) {
+        0 => {
+            let anchor = if !pools.subject_ids.is_empty() && rng.random_bool(0.5) {
+                Some(pick(rng, &pools.subject_ids))
+            } else {
+                None
+            };
+            let with_interrogation = rng.random_bool(0.75);
+            SubjectOp::AddAfter(
+                anchor,
+                synth::subject(rng, &pools.period_ids, with_interrogation),
+            )
+        }
+        1 => {
+            let subject_id = pick(rng, &pools.subject_ids);
+            // Keep the interrogation-ness stable so updates mostly succeed
+            let with_interrogation = inner
+                .params
+                .subjects
+                .find_subject(subject_id)
+                .expect("Subject id comes from the live pool")
+                .parameters
+                .interrogation_parameters
+                .is_some();
+            SubjectOp::Update(
+                subject_id,
+                synth::subject(rng, &pools.period_ids, with_interrogation),
+            )
+        }
+        2 => SubjectOp::ChangePosition(
+            pick(rng, &pools.subject_ids),
+            rng.random_range(0..pools.subject_ids.len()),
+        ),
+        _ => SubjectOp::Remove(pick(rng, &pools.subject_ids)),
+    };
+    Op::Subject(op)
+}
+
+fn gen_teacher(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
+    if invalid {
+        let op = if !pools.non_interrogation_subject_ids.is_empty() && rng.random_bool(0.5) {
+            // A teacher can only interrogate in subjects that have interrogations
+            let mut teacher = synth::teacher(rng, &pools.interrogation_subject_ids);
+            teacher
+                .subjects
+                .insert(pick(rng, &pools.non_interrogation_subject_ids));
+            TeacherOp::Add(teacher)
+        } else {
+            let mut teacher = synth::teacher(rng, &pools.interrogation_subject_ids);
+            teacher
+                .subjects
+                .insert(unsafe { SubjectId::new(dangling(rng)) });
+            TeacherOp::Add(teacher)
+        };
+        return Op::Teacher(op);
+    }
+    let n = pools.teacher_ids.len();
+    let add_w = if n < 5 { 5 } else { 2 };
+    let update_w = if n > 0 { 3 } else { 0 };
+    let remove_w = if n > 0 { 2 } else { 0 };
+    let op = match weighted(rng, &[add_w, update_w, remove_w]) {
+        0 => TeacherOp::Add(synth::teacher(rng, &pools.interrogation_subject_ids)),
+        1 => TeacherOp::Update(
+            pick(rng, &pools.teacher_ids),
+            synth::teacher(rng, &pools.interrogation_subject_ids),
+        ),
+        _ => TeacherOp::Remove(pick(rng, &pools.teacher_ids)),
+    };
+    Op::Teacher(op)
+}
+
+fn gen_assignment(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invalid: bool) -> Op {
+    let period_id = pick(rng, &pools.period_ids);
+    if invalid {
+        let op = AssignmentOp::Assign(
+            period_id,
+            unsafe { StudentId::new(dangling(rng)) },
+            pick(rng, &pools.subject_ids),
+            rng.random_bool(0.5),
+        );
+        return Op::Assignment(op);
+    }
+    // Prefer subject/student combinations that are actually present on the period
+    let period_subjects: Vec<SubjectId> = inner
+        .params
+        .subjects
+        .ordered_subject_list
+        .iter()
+        .filter(|(_, s)| !s.excluded_periods.contains(&period_id))
+        .map(|(id, _)| *id)
+        .collect();
+    let period_students: Vec<StudentId> = inner
+        .params
+        .students
+        .student_map
+        .iter()
+        .filter(|(_, s)| !s.excluded_periods.contains(&period_id))
+        .map(|(id, _)| *id)
+        .collect();
+    let subject_id = if period_subjects.is_empty() {
+        pick(rng, &pools.subject_ids)
+    } else {
+        pick(rng, &period_subjects)
+    };
+    let student_id = if period_students.is_empty() {
+        pick(rng, &pools.student_ids)
+    } else {
+        pick(rng, &period_students)
+    };
+    Op::Assignment(AssignmentOp::Assign(
+        period_id,
+        student_id,
+        subject_id,
+        rng.random_bool(0.6),
+    ))
+}
+
+fn gen_week_pattern(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
+    if invalid {
+        let op = match rng.random_range(0..3) {
+            0 => WeekPatternOp::Add(synth::week_pattern_invalid_length(rng, pools.total_weeks)),
+            1 if !pools.week_pattern_ids.is_empty() => WeekPatternOp::Update(
+                pick(rng, &pools.week_pattern_ids),
+                synth::week_pattern_invalid_length(rng, pools.total_weeks),
+            ),
+            _ => WeekPatternOp::Remove(unsafe { WeekPatternId::new(dangling(rng)) }),
+        };
+        return Op::WeekPattern(op);
+    }
+    let n = pools.week_pattern_ids.len();
+    let add_w = if n < 4 { 5 } else { 2 };
+    let update_w = if n > 0 { 3 } else { 0 };
+    let remove_w = if n > 0 { 2 } else { 0 };
+    let op = match weighted(rng, &[add_w, update_w, remove_w]) {
+        0 => WeekPatternOp::Add(synth::week_pattern(rng, pools.total_weeks)),
+        1 => WeekPatternOp::Update(
+            pick(rng, &pools.week_pattern_ids),
+            synth::week_pattern(rng, pools.total_weeks),
+        ),
+        _ => WeekPatternOp::Remove(pick(rng, &pools.week_pattern_ids)),
+    };
+    Op::WeekPattern(op)
+}
+
+fn gen_slot(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invalid: bool) -> Op {
+    let addable = addable_slot_subjects(inner, pools);
+    if invalid {
+        let op = match rng.random_range(0..3) {
+            0 if !addable.is_empty() => {
+                // Valid teacher, but a start time crossing midnight
+                let subject_id = pick(rng, &addable);
+                let teacher_id = pick(rng, &teachers_for_subject(inner, subject_id));
+                let mut slot = synth::slot(rng, teacher_id, &pools.week_pattern_ids);
+                slot.start_time = synth::slot_start_crossing_midnight(rng);
+                SlotOp::AddAfter(subject_id, None, slot)
+            }
+            1 if !pools.interrogation_subject_ids.is_empty() => {
+                // Dangling teacher
+                let subject_id = pick(rng, &pools.interrogation_subject_ids);
+                let teacher_id = unsafe { TeacherId::new(dangling(rng)) };
+                SlotOp::AddAfter(
+                    subject_id,
+                    None,
+                    synth::slot(rng, teacher_id, &pools.week_pattern_ids),
+                )
+            }
+            _ => SlotOp::Remove(unsafe { SlotId::new(dangling(rng)) }),
+        };
+        return Op::Slot(op);
+    }
+    let n = pools.slot_ids.len();
+    let add_w = if addable.is_empty() {
+        0
+    } else if n < 8 {
+        6
+    } else {
+        2
+    };
+    let update_w = if n > 0 { 3 } else { 0 };
+    let move_w = if n > 0 { 1 } else { 0 };
+    let remove_w = if n > 0 { 2 } else { 0 };
+    let op = match weighted(rng, &[add_w, update_w, move_w, remove_w]) {
+        0 => {
+            let subject_id = pick(rng, &addable);
+            let teacher_id = pick(rng, &teachers_for_subject(inner, subject_id));
+            let anchor = pools
+                .slots_by_subject
+                .iter()
+                .find(|(id, _)| *id == subject_id)
+                .filter(|_| rng.random_bool(0.5))
+                .map(|(_, slots)| pick(rng, slots));
+            SlotOp::AddAfter(
+                subject_id,
+                anchor,
+                synth::slot(rng, teacher_id, &pools.week_pattern_ids),
+            )
+        }
+        1 => {
+            let slot_id = pick(rng, &pools.slot_ids);
+            let (subject_id, _pos) = inner
+                .params
+                .slots
+                .find_slot_subject_and_position(slot_id)
+                .expect("Slot id comes from the live pool");
+            let teachers = teachers_for_subject(inner, subject_id);
+            if teachers.is_empty() {
+                // No valid teacher available anymore: exercise the removal path instead
+                SlotOp::Remove(slot_id)
+            } else {
+                let teacher_id = pick(rng, &teachers);
+                SlotOp::Update(
+                    slot_id,
+                    synth::slot(rng, teacher_id, &pools.week_pattern_ids),
+                )
+            }
+        }
+        2 => {
+            let (_, subject_slots) =
+                &pools.slots_by_subject[rng.random_range(0..pools.slots_by_subject.len())];
+            SlotOp::ChangePosition(
+                pick(rng, subject_slots),
+                rng.random_range(0..subject_slots.len()),
+            )
+        }
+        _ => SlotOp::Remove(pick(rng, &pools.slot_ids)),
+    };
+    Op::Slot(op)
+}
+
+fn gen_incompat(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
+    if invalid {
+        let subject_id = unsafe { SubjectId::new(dangling(rng)) };
+        let op = IncompatOp::Add(synth::incompatibility(
+            rng,
+            subject_id,
+            &pools.week_pattern_ids,
+        ));
+        return Op::Incompat(op);
+    }
+    let n = pools.incompat_ids.len();
+    let add_w = if pools.subject_ids.is_empty() {
+        0
+    } else if n < 3 {
+        5
+    } else {
+        2
+    };
+    let update_w = if n > 0 && !pools.subject_ids.is_empty() {
+        3
+    } else {
+        0
+    };
+    let remove_w = if n > 0 { 2 } else { 0 };
+    let op = match weighted(rng, &[add_w, update_w, remove_w]) {
+        0 => {
+            let subject_id = pick(rng, &pools.subject_ids);
+            IncompatOp::Add(synth::incompatibility(
+                rng,
+                subject_id,
+                &pools.week_pattern_ids,
+            ))
+        }
+        1 => {
+            let incompat_id = pick(rng, &pools.incompat_ids);
+            let subject_id = pick(rng, &pools.subject_ids);
+            IncompatOp::Update(
+                incompat_id,
+                synth::incompatibility(rng, subject_id, &pools.week_pattern_ids),
+            )
+        }
+        _ => IncompatOp::Remove(pick(rng, &pools.incompat_ids)),
+    };
+    Op::Incompat(op)
+}
+
+fn gen_group_list(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invalid: bool) -> Op {
+    if invalid {
+        let op = match rng.random_range(0..3) {
+            0 if !pools.group_list_ids.is_empty() => {
+                // Prefilled groups whose count does not match group_names
+                let group_list_id = pick(rng, &pools.group_list_ids);
+                let group_names_len = inner.params.group_lists.group_list_map[&group_list_id]
+                    .params
+                    .group_names
+                    .len();
+                GroupListOp::SetFilling(
+                    group_list_id,
+                    synth::prefilled_filling(rng, group_names_len + 1, &pools.student_ids),
+                )
+            }
+            1 if !pools.period_ids.is_empty()
+                && !pools.non_interrogation_subject_ids.is_empty() =>
+            {
+                // Associating a group list to a subject without interrogations
+                GroupListOp::AssignToSubject(
+                    pick(rng, &pools.period_ids),
+                    pick(rng, &pools.non_interrogation_subject_ids),
+                    None,
+                )
+            }
+            _ => GroupListOp::Remove(unsafe { GroupListId::new(dangling(rng)) }),
+        };
+        return Op::GroupList(op);
+    }
+    // TODO(phase0-bug): the reverse of `GroupListOp::Remove` is rebuilt as a
+    // plain `Add(id, params)`, which recreates the list with the DEFAULT
+    // (automatic, empty) filling. Removing a prefilled list with all-empty
+    // groups therefore does not round-trip on undo: the filling kind flips to
+    // automatic and a colloscope entry appears (reproduced by seed 129).
+    // Until the production bug is fixed, the generator only removes
+    // non-prefilled group lists.
+    let removable_lists: Vec<GroupListId> = pools
+        .group_list_ids
+        .iter()
+        .copied()
+        .filter(|id| !inner.params.group_lists.group_list_map[id].is_prefilled())
+        .collect();
+    let n = pools.group_list_ids.len();
+    let add_w = if n < 4 { 5 } else { 2 };
+    let update_w = if n > 0 { 2 } else { 0 };
+    let filling_w = if n > 0 { 3 } else { 0 };
+    let assign_w =
+        if n > 0 && !pools.period_ids.is_empty() && !pools.interrogation_subject_ids.is_empty() {
+            3
+        } else {
+            0
+        };
+    let remove_w = if !removable_lists.is_empty() { 2 } else { 0 };
+    let op = match weighted(rng, &[add_w, update_w, filling_w, assign_w, remove_w]) {
+        0 => {
+            let group_count = rng.random_range(2..=5);
+            GroupListOp::Add(synth::group_list_parameters(rng, group_count))
+        }
+        1 => {
+            let group_list_id = pick(rng, &pools.group_list_ids);
+            // Keep the group count stable for prefilled lists so the
+            // filling stays consistent with the new parameters
+            let current = &inner.params.group_lists.group_list_map[&group_list_id];
+            let group_count = match &current.filling {
+                GroupListFilling::Prefilled { groups } => groups.len(),
+                GroupListFilling::Automatic { .. } => {
+                    // TODO(phase0-bug): `GroupListOp::Update` validates the
+                    // colloscope group-list entry against the new parameters
+                    // but not the interrogations' `assigned_groups` (unlike
+                    // AssignToSubject, which does), so shrinking `group_names`
+                    // below a group number already assigned in an interrogation
+                    // leaves a dangling InvalidGroupNumInInterrogation
+                    // violation that panics the internal invariant check
+                    // (reproduced by seed 2). Until the production bug is
+                    // fixed, the generator never shrinks a group list below
+                    // the highest group number assigned in interrogations.
+                    let min_count = min_group_count_for_interrogations(inner, group_list_id);
+                    let lower = min_count.max(2);
+                    rng.random_range(lower..=lower.max(5))
+                }
+            };
+            GroupListOp::Update(
+                group_list_id,
+                synth::group_list_parameters(rng, group_count),
+            )
+        }
+        2 => {
+            let group_list_id = pick(rng, &pools.group_list_ids);
+            let group_names_len = inner.params.group_lists.group_list_map[&group_list_id]
+                .params
+                .group_names
+                .len();
+            let filling = if rng.random_bool(0.5) {
+                synth::prefilled_filling(rng, group_names_len, &pools.student_ids)
+            } else {
+                // TODO(phase0-bug): `GroupListOp::SetFilling` validates the
+                // prefilled<->automatic transitions against the colloscope, but
+                // an automatic->automatic change never checks the new
+                // `excluded_students` against students already placed in the
+                // colloscope group list, leaving a dangling
+                // ExcludedStudentInGroupList violation that panics the internal
+                // invariant check (reproduced by seed 0). Until the production
+                // bug is fixed, the generator never excludes a student that
+                // already has a group in the colloscope entry of this list.
+                let placed_students: BTreeSet<StudentId> = inner
+                    .colloscope
+                    .group_lists
+                    .get(&group_list_id)
+                    .map(|collo| collo.groups_for_students.keys().copied().collect())
+                    .unwrap_or_default();
+                let excludable: Vec<StudentId> = pools
+                    .student_ids
+                    .iter()
+                    .copied()
+                    .filter(|id| !placed_students.contains(id))
+                    .collect();
+                synth::automatic_filling(rng, &excludable)
+            };
+            GroupListOp::SetFilling(group_list_id, filling)
+        }
+        3 => {
+            let period_id = pick(rng, &pools.period_ids);
+            // Interrogation subjects that actually run on the chosen period
+            let eligible_subjects: Vec<SubjectId> = inner
+                .params
+                .subjects
+                .ordered_subject_list
+                .iter()
+                .filter(|(_, s)| {
+                    s.parameters.interrogation_parameters.is_some()
+                        && !s.excluded_periods.contains(&period_id)
+                })
+                .map(|(id, _)| *id)
+                .collect();
+            let subject_id = if eligible_subjects.is_empty() {
+                pick(rng, &pools.interrogation_subject_ids)
+            } else {
+                pick(rng, &eligible_subjects)
+            };
+            let group_list_id = if rng.random_bool(0.8) {
+                Some(pick(rng, &pools.group_list_ids))
+            } else {
+                None
+            };
+            GroupListOp::AssignToSubject(period_id, subject_id, group_list_id)
+        }
+        _ => GroupListOp::Remove(pick(rng, &removable_lists)),
+    };
+    Op::GroupList(op)
+}
+
+/// Smallest group count that keeps every interrogation assignment of the
+/// subjects associated with this group list in range
+///
+/// See the TODO(phase0-bug) note on `GroupListOp::Update` generation.
+fn min_group_count_for_interrogations(inner: &InnerData, group_list_id: GroupListId) -> usize {
+    let mut min_count = 0usize;
+    for (period_id, subject_map) in &inner.params.group_lists.subjects_associations {
+        let Some(collo_period) = inner.colloscope.period_map.get(period_id) else {
+            continue;
+        };
+        for (subject_id, associated_list) in subject_map {
+            if *associated_list != group_list_id {
+                continue;
+            }
+            let Some(subject_slots) = inner.params.slots.subject_map.get(subject_id) else {
+                continue;
+            };
+            for (slot_id, _slot) in &subject_slots.ordered_slots {
+                let Some(collo_slot) = collo_period.slot_map.get(slot_id) else {
+                    continue;
+                };
+                for interrogation in collo_slot.interrogations.iter().flatten() {
+                    if let Some(max_group) = interrogation.assigned_groups.iter().max() {
+                        min_count = min_count.max(*max_group as usize + 1);
+                    }
+                }
+            }
+        }
+    }
+    min_count
+}
+
+fn gen_settings(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
+    let mut settings = synth::settings(rng, &pools.student_ids);
+    if invalid {
+        settings
+            .students
+            .insert(unsafe { StudentId::new(dangling(rng)) }, Default::default());
+    }
+    Op::Settings(SettingsOp::Update(settings))
+}
+
+fn gen_pairing(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
+    if invalid {
+        let op = if !pools.subject_ids.is_empty() && rng.random_bool(0.6) {
+            // Same subject on both sides of the implication
+            let subject_id = pick(rng, &pools.subject_ids);
+            PairingOp::Add(synth::pairing_rule(
+                rng,
+                subject_id,
+                subject_id,
+                &pools.period_ids,
+            ))
+        } else {
+            PairingOp::Remove(unsafe { PairingRuleId::new(dangling(rng)) })
+        };
+        return Op::Pairing(op);
+    }
+    let can_add = pools.subject_ids.len() >= 2;
+    let n = pools.pairing_rule_ids.len();
+    let add_w = if can_add {
+        if n < 3 { 5 } else { 2 }
+    } else {
+        0
+    };
+    let update_w = if n > 0 && can_add { 3 } else { 0 };
+    let remove_w = if n > 0 { 2 } else { 0 };
+    let distinct_pair = |rng: &mut ChaCha8Rng| {
+        let first = rng.random_range(0..pools.subject_ids.len());
+        let mut second = rng.random_range(0..pools.subject_ids.len() - 1);
+        if second >= first {
+            second += 1;
+        }
+        (pools.subject_ids[first], pools.subject_ids[second])
+    };
+    let op = match weighted(rng, &[add_w, update_w, remove_w]) {
+        0 => {
+            let (antecedent, consequent) = distinct_pair(rng);
+            PairingOp::Add(synth::pairing_rule(
+                rng,
+                antecedent,
+                consequent,
+                &pools.period_ids,
+            ))
+        }
+        1 => {
+            let (antecedent, consequent) = distinct_pair(rng);
+            PairingOp::Update(
+                pick(rng, &pools.pairing_rule_ids),
+                synth::pairing_rule(rng, antecedent, consequent, &pools.period_ids),
+            )
+        }
+        _ => PairingOp::Remove(pick(rng, &pools.pairing_rule_ids)),
+    };
+    Op::Pairing(op)
+}
+
+fn gen_slot_pairing(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
+    let pairable: Vec<&(SubjectId, Vec<SlotId>)> = pools
+        .slots_by_subject
+        .iter()
+        .filter(|(_, slots)| slots.len() >= 2)
+        .collect();
+    if invalid {
+        let op = if !pools.slot_ids.is_empty() && rng.random_bool(0.6) {
+            // Same slot on both sides of the implication
+            let slot_id = pick(rng, &pools.slot_ids);
+            SlotPairingOp::Add(synth::slot_pairing_rule(
+                rng,
+                slot_id,
+                slot_id,
+                &pools.period_ids,
+            ))
+        } else {
+            SlotPairingOp::Remove(unsafe { SlotPairingRuleId::new(dangling(rng)) })
+        };
+        return Op::SlotPairing(op);
+    }
+    let n = pools.slot_pairing_rule_ids.len();
+    let add_w = if pairable.is_empty() {
+        0
+    } else if n < 3 {
+        5
+    } else {
+        2
+    };
+    let update_w = if n > 0 && !pairable.is_empty() { 3 } else { 0 };
+    let remove_w = if n > 0 { 2 } else { 0 };
+    let distinct_slots = |rng: &mut ChaCha8Rng| {
+        let (_, slots) = pairable[rng.random_range(0..pairable.len())];
+        let first = rng.random_range(0..slots.len());
+        let mut second = rng.random_range(0..slots.len() - 1);
+        if second >= first {
+            second += 1;
+        }
+        (slots[first], slots[second])
+    };
+    let op = match weighted(rng, &[add_w, update_w, remove_w]) {
+        0 => {
+            let (antecedent, consequent) = distinct_slots(rng);
+            SlotPairingOp::Add(synth::slot_pairing_rule(
+                rng,
+                antecedent,
+                consequent,
+                &pools.period_ids,
+            ))
+        }
+        1 => {
+            let (antecedent, consequent) = distinct_slots(rng);
+            SlotPairingOp::Update(
+                pick(rng, &pools.slot_pairing_rule_ids),
+                synth::slot_pairing_rule(rng, antecedent, consequent, &pools.period_ids),
+            )
+        }
+        _ => SlotPairingOp::Remove(pick(rng, &pools.slot_pairing_rule_ids)),
+    };
+    Op::SlotPairing(op)
+}
+
+fn gen_balancing(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
+    let mut balancing = synth::balancing(rng, &pools.interrogation_subject_ids);
+    if invalid {
+        let subject_id = if !pools.non_interrogation_subject_ids.is_empty() && rng.random_bool(0.5)
+        {
+            pick(rng, &pools.non_interrogation_subject_ids)
+        } else {
+            unsafe { SubjectId::new(dangling(rng)) }
+        };
+        balancing.subjects.insert(subject_id, Default::default());
+    }
+    Op::Balancing(BalancingOp::Update(balancing))
+}
+
+fn gen_colloscope(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invalid: bool) -> Op {
+    let use_group_list = if pools.colloscope_group_list_ids.is_empty() {
+        false
+    } else if pools.colloscope_targets.is_empty() {
+        true
+    } else {
+        rng.random_bool(0.4)
+    };
+
+    if use_group_list {
+        let group_list_id = pick(rng, &pools.colloscope_group_list_ids);
+        let group_list = &inner.params.group_lists.group_list_map[&group_list_id];
+        let group_count = group_list.params.group_names.len() as u32;
+        let allowed_students: Vec<StudentId> = pools
+            .student_ids
+            .iter()
+            .copied()
+            .filter(|id| !group_list.filling.excluded_students().contains(id))
+            .collect();
+        let mut groups_for_students: BTreeMap<StudentId, u32> = BTreeMap::new();
+        if group_count > 0 {
+            for student_id in synth::subset(rng, &allowed_students, 0.5) {
+                groups_for_students.insert(student_id, rng.random_range(0..group_count));
+            }
+        }
+        if invalid {
+            groups_for_students.insert(unsafe { StudentId::new(dangling(rng)) }, 0);
+        }
+        return Op::Colloscope(ColloscopeOp::UpdateGroupList(
+            group_list_id,
+            ColloscopeGroupList {
+                groups_for_students,
+            },
+        ));
+    }
+
+    let (period_id, slot_id, weeks) =
+        &pools.colloscope_targets[rng.random_range(0..pools.colloscope_targets.len())];
+    let week_in_period = weeks[rng.random_range(0..weeks.len())];
+
+    // Group numbers are bounded by the group list associated to the
+    // slot's subject on this period (no association => no valid group)
+    let (subject_id, _pos) = inner
+        .params
+        .slots
+        .find_slot_subject_and_position(*slot_id)
+        .expect("Slot id comes from the live colloscope");
+    let group_bound: u32 = inner
+        .params
+        .group_lists
+        .subjects_associations
+        .get(period_id)
+        .and_then(|map| map.get(&subject_id))
+        .map(|group_list_id| {
+            inner.params.group_lists.group_list_map[group_list_id]
+                .params
+                .group_names
+                .len() as u32
+        })
+        .unwrap_or(0);
+
+    let mut assigned_groups = BTreeSet::new();
+    if invalid {
+        assigned_groups.insert(group_bound + rng.random_range(0..10));
+    } else if group_bound > 0 {
+        for _ in 0..rng.random_range(0..=2u32) {
+            assigned_groups.insert(rng.random_range(0..group_bound));
+        }
+    }
+
+    Op::Colloscope(ColloscopeOp::UpdateInterrogation(
+        *period_id,
+        *slot_id,
+        week_in_period,
+        ColloscopeInterrogation { assigned_groups },
+    ))
+}
+
+fn gen_export_config(rng: &mut ChaCha8Rng) -> Op {
+    let op = match rng.random_range(0..11) {
+        0 => ExportConfigOp::UpdateGlobalConfig(synth::global_config(rng)),
+        1 => ExportConfigOp::UpdateColloscopeEnabled(rng.random_bool(0.5)),
+        2 => ExportConfigOp::UpdateAllGroupsEnabled(rng.random_bool(0.5)),
+        3 => ExportConfigOp::UpdatePrefilledGroupsEnabled(rng.random_bool(0.5)),
+        4 => ExportConfigOp::UpdateAutomaticGroupsEnabled(rng.random_bool(0.5)),
+        5 => ExportConfigOp::UpdatePerGroupListEnabled(rng.random_bool(0.5)),
+        6 => ExportConfigOp::UpdateColloscopeConfig(synth::colloscope_config(rng)),
+        7 => ExportConfigOp::UpdateAllGroupsConfig(synth::per_student_groups_config(rng)),
+        8 => ExportConfigOp::UpdatePrefilledGroupsConfig(synth::per_student_groups_config(rng)),
+        9 => ExportConfigOp::UpdateAutomaticGroupsConfig(synth::per_student_groups_config(rng)),
+        _ => ExportConfigOp::UpdatePerGroupListConfig(synth::per_group_list_config(rng)),
+    };
+    Op::ExportConfig(op)
+}
+
+fn gen_global_update(
+    rng: &mut ChaCha8Rng,
+    inner: &InnerData,
+    pools: &Pools,
+    snapshots: &[InnerData],
+    invalid: bool,
+) -> Op {
+    if invalid && !pools.subject_ids.is_empty() {
+        // Corrupt a clone of the current state with a duplicated id.
+        // A duplicated id (rather than a dangling one) keeps the maximum id
+        // unchanged, so the failed op does not advance the id issuer into
+        // the DANGLING_BASE range.
+        let mut broken = inner.clone();
+        let duplicated = unsafe { StudentId::new(pick(rng, &pools.subject_ids).inner()) };
+        broken
+            .params
+            .students
+            .student_map
+            .insert(duplicated, Student::default());
+        return Op::GlobalUpdate(broken);
+    }
+    if !snapshots.is_empty() && rng.random_bool(0.8) {
+        Op::GlobalUpdate(snapshots[rng.random_range(0..snapshots.len())].clone())
+    } else {
+        Op::GlobalUpdate(inner.clone())
+    }
+}

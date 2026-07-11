@@ -11,3 +11,7 @@ thiserror.workspace = true
 non-empty-string = { workspace = true, features = ["serde"] }
 chrono = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+
+[dev-dependencies]
+rand = "0.9"
+rand_chacha = "0.9"
