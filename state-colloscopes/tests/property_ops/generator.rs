@@ -710,21 +710,7 @@ fn gen_group_list(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invali
             let current = &inner.params.group_lists.group_list_map[&group_list_id];
             let group_count = match &current.filling {
                 GroupListFilling::Prefilled { groups } => groups.len(),
-                GroupListFilling::Automatic { .. } => {
-                    // TODO(phase0-bug): `GroupListOp::Update` validates the
-                    // colloscope group-list entry against the new parameters
-                    // but not the interrogations' `assigned_groups` (unlike
-                    // AssignToSubject, which does), so shrinking `group_names`
-                    // below a group number already assigned in an interrogation
-                    // leaves a dangling InvalidGroupNumInInterrogation
-                    // violation that panics the internal invariant check
-                    // (reproduced by seed 2). Until the production bug is
-                    // fixed, the generator never shrinks a group list below
-                    // the highest group number assigned in interrogations.
-                    let min_count = min_group_count_for_interrogations(inner, group_list_id);
-                    let lower = min_count.max(2);
-                    rng.random_range(lower..=lower.max(5))
-                }
+                GroupListFilling::Automatic { .. } => rng.random_range(2..=5),
             };
             GroupListOp::Update(
                 group_list_id,
@@ -773,38 +759,6 @@ fn gen_group_list(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invali
         _ => GroupListOp::Remove(pick(rng, &removable_lists)),
     };
     Op::GroupList(op)
-}
-
-/// Smallest group count that keeps every interrogation assignment of the
-/// subjects associated with this group list in range
-///
-/// See the TODO(phase0-bug) note on `GroupListOp::Update` generation.
-fn min_group_count_for_interrogations(inner: &InnerData, group_list_id: GroupListId) -> usize {
-    let mut min_count = 0usize;
-    for (period_id, subject_map) in &inner.params.group_lists.subjects_associations {
-        let Some(collo_period) = inner.colloscope.period_map.get(period_id) else {
-            continue;
-        };
-        for (subject_id, associated_list) in subject_map {
-            if *associated_list != group_list_id {
-                continue;
-            }
-            let Some(subject_slots) = inner.params.slots.subject_map.get(subject_id) else {
-                continue;
-            };
-            for (slot_id, _slot) in &subject_slots.ordered_slots {
-                let Some(collo_slot) = collo_period.slot_map.get(slot_id) else {
-                    continue;
-                };
-                for interrogation in collo_slot.interrogations.iter().flatten() {
-                    if let Some(max_group) = interrogation.assigned_groups.iter().max() {
-                        min_count = min_count.max(*max_group as usize + 1);
-                    }
-                }
-            }
-        }
-    }
-    min_count
 }
 
 fn gen_settings(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {

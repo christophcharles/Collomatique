@@ -2582,6 +2582,46 @@ impl Data {
 
     /// Used internally
     ///
+    /// Checks that every group number assigned in the interrogations of
+    /// the given subject on the given period is strictly below
+    /// `first_forbidden_group_number`
+    fn check_interrogations_group_bound(
+        &self,
+        period_id: PeriodId,
+        subject_id: SubjectId,
+        first_forbidden_group_number: u32,
+    ) -> std::result::Result<(), GroupListError> {
+        let collo_period = self
+            .inner_data
+            .colloscope
+            .period_map
+            .get(&period_id)
+            .expect("Period ID should be valid at this point");
+        let Some(subject_slots) = self.inner_data.params.slots.subject_map.get(&subject_id) else {
+            // No slots: no interrogation can reference a group number
+            return Ok(());
+        };
+        for (slot_id, _slot) in &subject_slots.ordered_slots {
+            let collo_slot = collo_period
+                .slot_map
+                .get(slot_id)
+                .expect("Subject should run on given period");
+
+            for interrogation in collo_slot.interrogations.iter().flatten() {
+                for group in &interrogation.assigned_groups {
+                    if *group >= first_forbidden_group_number {
+                        return Err(GroupListError::InvalidGroupInSubjectSlotInColloscope(
+                            subject_id, period_id, *slot_id,
+                        ));
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Used internally
+    ///
     /// Apply group list operations
     fn apply_group_list(
         &mut self,
@@ -2703,6 +2743,23 @@ impl Data {
                         return Err(GroupListError::NotCompatibleGroupListInColloscope(
                             *group_list_id,
                         ));
+                    }
+                }
+
+                // The interrogations of every subject associated with this
+                // list must stay within the new group count
+                let first_forbidden_group_number = new_params.group_names.len() as u32;
+                for (period_id, subject_map) in
+                    &self.inner_data.params.group_lists.subjects_associations
+                {
+                    for (subject_id, associated_list) in subject_map {
+                        if associated_list == group_list_id {
+                            self.check_interrogations_group_bound(
+                                *period_id,
+                                *subject_id,
+                                first_forbidden_group_number,
+                            )?;
+                        }
                     }
                 }
 
@@ -2860,15 +2917,15 @@ impl Data {
                         *period_id,
                     ));
                 }
-                let Some(subject_map) = self
+                if !self
                     .inner_data
                     .params
                     .group_lists
                     .subjects_associations
-                    .get_mut(period_id)
-                else {
+                    .contains_key(period_id)
+                {
                     return Err(GroupListError::InvalidPeriodId(*period_id));
-                };
+                }
 
                 let new_group_list = match group_list_id {
                     Some(id) => Some(
@@ -2886,42 +2943,19 @@ impl Data {
                     None => 0,
                 };
 
-                let collo_period = self
-                    .inner_data
-                    .colloscope
-                    .period_map
-                    .get(period_id)
-                    .expect("Period ID should be valid at this point");
-                let subject_slots = self
+                self.check_interrogations_group_bound(
+                    *period_id,
+                    *subject_id,
+                    first_forbidden_group_number,
+                )?;
+
+                let subject_map = self
                     .inner_data
                     .params
-                    .slots
-                    .subject_map
-                    .get(subject_id)
-                    .expect("Subject should have slots at this point");
-                for (slot_id, _slot) in &subject_slots.ordered_slots {
-                    let collo_slot = collo_period
-                        .slot_map
-                        .get(slot_id)
-                        .expect("Subject should run on given period");
-
-                    for week in 0..collo_slot.interrogations.len() {
-                        let interrogation_opt = &collo_slot.interrogations[week];
-                        let Some(interrogation) = interrogation_opt else {
-                            continue;
-                        };
-                        for group in &interrogation.assigned_groups {
-                            if *group < first_forbidden_group_number {
-                                continue;
-                            }
-                            return Err(GroupListError::InvalidGroupInSubjectSlotInColloscope(
-                                *subject_id,
-                                *period_id,
-                                *slot_id,
-                            ));
-                        }
-                    }
-                }
+                    .group_lists
+                    .subjects_associations
+                    .get_mut(period_id)
+                    .expect("Period ID was just checked");
 
                 match group_list_id {
                     Some(id) => {

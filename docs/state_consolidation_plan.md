@@ -150,9 +150,11 @@ still exist*:
      `excluded_students` against students already placed in the colloscope group list
      (`ExcludedStudentInGroupList`); the prefilled↔automatic transitions were checked.
      Now validated like `Update`, rejected with `NotCompatibleGroupListInColloscope`.
-  3. `GroupListOp::Update` does not check interrogations' `assigned_groups` when
-     shrinking `group_names` (`InvalidGroupNumInInterrogation`); `AssignToSubject`
-     performs this exact check correctly.
+  3. **FIXED** — `GroupListOp::Update` did not check interrogations' `assigned_groups`
+     when shrinking `group_names` (`InvalidGroupNumInInterrogation`). The walk from
+     `AssignToSubject` is factored into `check_interrogations_group_bound` and applied
+     to every subject associated with the list, rejecting with
+     `InvalidGroupInSubjectSlotInColloscope`.
   4. `build_rev_group_list(Remove)` rebuilds only `Add(id, params)`, losing the filling
      kind: undoing the removal of a prefilled (empty) group list restores it as
      automatic and re-registers a colloscope entry.
