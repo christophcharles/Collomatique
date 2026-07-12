@@ -10,3 +10,6 @@ collomatique-ilp = { path = "../ilp" }
 collomatique-time = { path = "../time" }
 collomatique-ilp-modeler = { path = "../ilp-modeler" }
 ordered-float.workspace = true
+
+[dev-dependencies]
+collomatique-storage = { path = "../storage" }
