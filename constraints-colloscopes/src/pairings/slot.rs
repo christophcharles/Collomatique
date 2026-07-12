@@ -67,6 +67,14 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         let mut soft_output = MyBundle::new();
 
         for &week in ant_weeks.intersection(&con_weeks) {
+            // Only weeks with a group list associated for this (period, subject) declare the
+            // InterrogationHasGroups extra and give the group-count sums any variables (see
+            // extras.rs); without an association the subject is not interrogated that week, so
+            // the pairing has nothing to constrain. Mirrors interrogation_cost.rs /
+            // group_count_per_interrogation.rs.
+            if groups_for_interrogation(env, subject_id, week).is_empty() {
+                continue;
+            }
             let mut single = MyBundle::new();
             let target = if rule.soft {
                 &mut single
