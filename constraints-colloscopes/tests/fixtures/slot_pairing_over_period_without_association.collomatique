@@ -1,0 +1,2154 @@
+{
+  "header": {
+    "file_type": "Collomatique",
+    "produced_with_version": {
+      "major": 0,
+      "minor": 1,
+      "patch": 0
+    },
+    "file_content": "Colloscope"
+  },
+  "entries": [
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "GeneralPlanning": {
+          "first_week": "1995-09-04",
+          "periods": [
+            {
+              "id": 124,
+              "weeks": [
+                {
+                  "interrogations": false,
+                  "annotation": "Rentrée"
+                },
+                {
+                  "interrogations": false,
+                  "annotation": "Semaine d'intégration"
+                },
+                {
+                  "interrogations": true,
+                  "annotation": "Début des colles"
+                },
+                {
+                  "interrogations": true,
+                  "annotation": null
+                }
+              ]
+            },
+            {
+              "id": 172,
+              "weeks": [
+                {
+                  "interrogations": true,
+                  "annotation": null
+                },
+                {
+                  "interrogations": true,
+                  "annotation": null
+                },
+                {
+                  "interrogations": true,
+                  "annotation": null
+                },
+                {
+                  "interrogations": false,
+                  "annotation": "Vacances de Toussaint"
+                },
+                {
+                  "interrogations": false,
+                  "annotation": "Halloween - un troll dans les cachots !"
+                },
+                {
+                  "interrogations": false,
+                  "annotation": "Préparation aux BUSE (concours blancs)"
+                },
+                {
+                  "interrogations": true,
+                  "annotation": null
+                },
+                {
+                  "interrogations": true,
+                  "annotation": null
+                },
+                {
+                  "interrogations": true,
+                  "annotation": null
+                },
+                {
+                  "interrogations": true,
+                  "annotation": null
+                },
+                {
+                  "interrogations": true,
+                  "annotation": null
+                },
+                {
+                  "interrogations": false,
+                  "annotation": "Pause des colles avant les vacances"
+                },
+                {
+                  "interrogations": false,
+                  "annotation": "Vacances de Noël"
+                },
+                {
+                  "interrogations": false,
+                  "annotation": "Vacances de Noël"
+                }
+              ]
+            },
+            {
+              "id": 173,
+              "weeks": [
+                {
+                  "interrogations": true,
+                  "annotation": null
+                },
+                {
+                  "interrogations": true,
+                  "annotation": null
+                },
+                {
+                  "interrogations": true,
+                  "annotation": null
+                },
+                {
+                  "interrogations": true,
+                  "annotation": null
+                },
+                {
+                  "interrogations": true,
+                  "annotation": null
+                },
+                {
+                  "interrogations": true,
+                  "annotation": null
+                },
+                {
+                  "interrogations": false,
+                  "annotation": "Pause des colles avant les vacances"
+                },
+                {
+                  "interrogations": false,
+                  "annotation": "Vacances d'Hiver"
+                },
+                {
+                  "interrogations": false,
+                  "annotation": "Vacances d'Hiver"
+                },
+                {
+                  "interrogations": false,
+                  "annotation": "Préparation aux BUSE (concours blancs)"
+                },
+                {
+                  "interrogations": true,
+                  "annotation": null
+                },
+                {
+                  "interrogations": true,
+                  "annotation": null
+                },
+                {
+                  "interrogations": true,
+                  "annotation": null
+                },
+                {
+                  "interrogations": true,
+                  "annotation": null
+                },
+                {
+                  "interrogations": false,
+                  "annotation": "Vacances de Pâques"
+                },
+                {
+                  "interrogations": false,
+                  "annotation": "Vacances de Pâques"
+                },
+                {
+                  "interrogations": true,
+                  "annotation": null
+                },
+                {
+                  "interrogations": true,
+                  "annotation": null
+                },
+                {
+                  "interrogations": false,
+                  "annotation": "Semaines banalisées"
+                },
+                {
+                  "interrogations": false,
+                  "annotation": "Semaines banalisées"
+                },
+                {
+                  "interrogations": false,
+                  "annotation": "BUSE (concours)"
+                },
+                {
+                  "interrogations": false,
+                  "annotation": "BUSE (concours)"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "Subjects": [
+          {
+            "id": 1,
+            "name": "Potions",
+            "interrogation_parameters": {
+              "students_per_group": {
+                "min": 2,
+                "max": 3
+              },
+              "groups_per_interrogation": {
+                "min": 1,
+                "max": 1
+              },
+              "duration_minutes": 60,
+              "take_duration_into_account": true,
+              "periodicity": {
+                "ExactlyPeriodic": {
+                  "periodicity_in_weeks": 2
+                }
+              }
+            },
+            "excluded_periods": []
+          },
+          {
+            "id": 2,
+            "name": "Défense contre les forces du Mal",
+            "interrogation_parameters": {
+              "students_per_group": {
+                "min": 2,
+                "max": 3
+              },
+              "groups_per_interrogation": {
+                "min": 1,
+                "max": 1
+              },
+              "duration_minutes": 60,
+              "take_duration_into_account": true,
+              "periodicity": {
+                "OnceForEveryBlockOfWeeks": {
+                  "weeks_per_block": 2,
+                  "minimum_week_separation": 1
+                }
+              }
+            },
+            "excluded_periods": []
+          },
+          {
+            "id": 3,
+            "name": "Métamorphose",
+            "interrogation_parameters": {
+              "students_per_group": {
+                "min": 2,
+                "max": 3
+              },
+              "groups_per_interrogation": {
+                "min": 1,
+                "max": 1
+              },
+              "duration_minutes": 60,
+              "take_duration_into_account": true,
+              "periodicity": {
+                "ExactlyPeriodic": {
+                  "periodicity_in_weeks": 2
+                }
+              }
+            },
+            "excluded_periods": []
+          },
+          {
+            "id": 4,
+            "name": "Arithmancie",
+            "interrogation_parameters": {
+              "students_per_group": {
+                "min": 2,
+                "max": 3
+              },
+              "groups_per_interrogation": {
+                "min": 1,
+                "max": 1
+              },
+              "duration_minutes": 60,
+              "take_duration_into_account": true,
+              "periodicity": {
+                "ExactlyPeriodic": {
+                  "periodicity_in_weeks": 2
+                }
+              }
+            },
+            "excluded_periods": []
+          },
+          {
+            "id": 5,
+            "name": "Divination",
+            "interrogation_parameters": {
+              "students_per_group": {
+                "min": 2,
+                "max": 3
+              },
+              "groups_per_interrogation": {
+                "min": 1,
+                "max": 1
+              },
+              "duration_minutes": 60,
+              "take_duration_into_account": true,
+              "periodicity": {
+                "OnceForEveryBlockOfWeeks": {
+                  "weeks_per_block": 2,
+                  "minimum_week_separation": 1
+                }
+              }
+            },
+            "excluded_periods": []
+          },
+          {
+            "id": 127,
+            "name": "Potions - TP",
+            "interrogation_parameters": {
+              "students_per_group": {
+                "min": 2,
+                "max": 3
+              },
+              "groups_per_interrogation": {
+                "min": 4,
+                "max": 4
+              },
+              "duration_minutes": 120,
+              "take_duration_into_account": false,
+              "periodicity": {
+                "ExactlyPeriodic": {
+                  "periodicity_in_weeks": 1
+                }
+              }
+            },
+            "excluded_periods": []
+          },
+          {
+            "id": 164,
+            "name": "Entrainement de Quidditch",
+            "interrogation_parameters": null,
+            "excluded_periods": []
+          },
+          {
+            "id": 128,
+            "name": "Déjeuner à la Grande Salle",
+            "interrogation_parameters": null,
+            "excluded_periods": []
+          }
+        ]
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "Teachers": [
+          {
+            "id": 10,
+            "surname": "Rogue",
+            "firstname": "Severus",
+            "tel": "0700000010",
+            "email": "rogue@poudlard.fr",
+            "subjects": [
+              1,
+              127
+            ]
+          },
+          {
+            "id": 11,
+            "surname": "Lupin",
+            "firstname": "Remus",
+            "tel": null,
+            "email": "lupin@poudlard.fr",
+            "subjects": [
+              2
+            ]
+          },
+          {
+            "id": 12,
+            "surname": "McGonagall",
+            "firstname": "Minerva",
+            "tel": "0700000012",
+            "email": "mcgonagall@poudlard.fr",
+            "subjects": [
+              3
+            ]
+          },
+          {
+            "id": 13,
+            "surname": "Flitwick",
+            "firstname": "Filius",
+            "tel": null,
+            "email": "flitwick@poudlard.fr",
+            "subjects": [
+              3
+            ]
+          },
+          {
+            "id": 14,
+            "surname": "Chourave",
+            "firstname": "Pomona",
+            "tel": null,
+            "email": "chourave@poudlard.fr",
+            "subjects": [
+              3
+            ]
+          },
+          {
+            "id": 15,
+            "surname": "Bibine",
+            "firstname": "Rolanda",
+            "tel": null,
+            "email": "bibine@poudlard.fr",
+            "subjects": [
+              3
+            ]
+          },
+          {
+            "id": 16,
+            "surname": "Vector",
+            "firstname": "Septima",
+            "tel": null,
+            "email": "vector@poudlard.fr",
+            "subjects": [
+              4
+            ]
+          },
+          {
+            "id": 17,
+            "surname": "Binns",
+            "firstname": "Cuthbert",
+            "tel": null,
+            "email": "binns@poudlard.fr",
+            "subjects": [
+              4
+            ]
+          },
+          {
+            "id": 18,
+            "surname": "Trelawney",
+            "firstname": "Sybille",
+            "tel": null,
+            "email": "trelawney@poudlard.fr",
+            "subjects": [
+              5
+            ]
+          },
+          {
+            "id": 19,
+            "surname": "Firenze",
+            "firstname": "",
+            "tel": null,
+            "email": "firenze@poudlard.fr",
+            "subjects": [
+              5
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "Students": [
+          {
+            "id": 100,
+            "surname": "Potter",
+            "firstname": "Harry",
+            "tel": "0601020304",
+            "email": null,
+            "excluded_periods": []
+          },
+          {
+            "id": 101,
+            "surname": "Granger",
+            "firstname": "Hermione",
+            "tel": "0605060708",
+            "email": "hermione.granger@poudlard.fr",
+            "excluded_periods": []
+          },
+          {
+            "id": 102,
+            "surname": "Weasley",
+            "firstname": "Ron",
+            "tel": null,
+            "email": "ron.weasley@poudlard.fr",
+            "excluded_periods": []
+          },
+          {
+            "id": 103,
+            "surname": "Londubat",
+            "firstname": "Neville",
+            "tel": null,
+            "email": "neville.londubat@poudlard.fr",
+            "excluded_periods": []
+          },
+          {
+            "id": 104,
+            "surname": "Thomas",
+            "firstname": "Dean",
+            "tel": null,
+            "email": "dean.thomas@poudlard.fr",
+            "excluded_periods": []
+          },
+          {
+            "id": 105,
+            "surname": "Finnigan",
+            "firstname": "Seamus",
+            "tel": null,
+            "email": "seamus.finnigan@poudlard.fr",
+            "excluded_periods": []
+          },
+          {
+            "id": 106,
+            "surname": "Brown",
+            "firstname": "Lavande",
+            "tel": null,
+            "email": "lavande.brown@poudlard.fr",
+            "excluded_periods": []
+          },
+          {
+            "id": 107,
+            "surname": "Patil",
+            "firstname": "Parvati",
+            "tel": null,
+            "email": "parvati.patil@poudlard.fr",
+            "excluded_periods": []
+          },
+          {
+            "id": 108,
+            "surname": "Weasley",
+            "firstname": "Ginny",
+            "tel": null,
+            "email": "ginny.weasley@poudlard.fr",
+            "excluded_periods": []
+          },
+          {
+            "id": 109,
+            "surname": "Malefoy",
+            "firstname": "Drago",
+            "tel": null,
+            "email": "drago.malefoy@poudlard.fr",
+            "excluded_periods": []
+          },
+          {
+            "id": 110,
+            "surname": "Zabini",
+            "firstname": "Blaise",
+            "tel": null,
+            "email": "blaise.zabini@poudlard.fr",
+            "excluded_periods": []
+          },
+          {
+            "id": 111,
+            "surname": "Parkinson",
+            "firstname": "Pansy",
+            "tel": null,
+            "email": "pansy.parkinson@poudlard.fr",
+            "excluded_periods": []
+          },
+          {
+            "id": 112,
+            "surname": "Crabbe",
+            "firstname": "Vincent",
+            "tel": null,
+            "email": "vincent.crabbe@poudlard.fr",
+            "excluded_periods": []
+          },
+          {
+            "id": 113,
+            "surname": "Goyle",
+            "firstname": "Gregory",
+            "tel": null,
+            "email": "gregory.goyle@poudlard.fr",
+            "excluded_periods": []
+          },
+          {
+            "id": 114,
+            "surname": "Greengrass",
+            "firstname": "Daphné",
+            "tel": null,
+            "email": "daphne.greengrass@poudlard.fr",
+            "excluded_periods": []
+          },
+          {
+            "id": 115,
+            "surname": "Lovegood",
+            "firstname": "Luna",
+            "tel": null,
+            "email": "luna.lovegood@poudlard.fr",
+            "excluded_periods": []
+          },
+          {
+            "id": 116,
+            "surname": "Chang",
+            "firstname": "Cho",
+            "tel": null,
+            "email": "cho.chang@poudlard.fr",
+            "excluded_periods": []
+          },
+          {
+            "id": 117,
+            "surname": "Corner",
+            "firstname": "Michael",
+            "tel": null,
+            "email": "michael.corner@poudlard.fr",
+            "excluded_periods": []
+          },
+          {
+            "id": 118,
+            "surname": "Goldstein",
+            "firstname": "Anthony",
+            "tel": null,
+            "email": "anthony.goldstein@poudlard.fr",
+            "excluded_periods": []
+          },
+          {
+            "id": 119,
+            "surname": "Patil",
+            "firstname": "Padma",
+            "tel": null,
+            "email": "padma.patil@poudlard.fr",
+            "excluded_periods": []
+          },
+          {
+            "id": 120,
+            "surname": "Diggory",
+            "firstname": "Cedric",
+            "tel": null,
+            "email": "cedric.diggory@poudlard.fr",
+            "excluded_periods": []
+          },
+          {
+            "id": 121,
+            "surname": "Abbott",
+            "firstname": "Hannah",
+            "tel": null,
+            "email": "hannah.abbott@poudlard.fr",
+            "excluded_periods": []
+          },
+          {
+            "id": 122,
+            "surname": "Finch-Fletchley",
+            "firstname": "Justin",
+            "tel": null,
+            "email": "justin.finch-fletchley@poudlard.fr",
+            "excluded_periods": []
+          },
+          {
+            "id": 123,
+            "surname": "Macmillan",
+            "firstname": "Ernie",
+            "tel": null,
+            "email": "ernie.macmillan@poudlard.fr",
+            "excluded_periods": []
+          }
+        ]
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "Assignments": [
+          {
+            "period_id": 124,
+            "subject_id": 1,
+            "students": [
+              100,
+              101,
+              102,
+              103,
+              104,
+              105,
+              106,
+              107,
+              108,
+              109,
+              110,
+              111,
+              112,
+              113,
+              114,
+              115,
+              116,
+              117,
+              118,
+              119,
+              120,
+              121,
+              122,
+              123
+            ]
+          },
+          {
+            "period_id": 124,
+            "subject_id": 2,
+            "students": [
+              100,
+              101,
+              102,
+              103,
+              104,
+              105,
+              106,
+              107,
+              108,
+              109,
+              110,
+              111,
+              112,
+              113,
+              114,
+              115,
+              116,
+              117,
+              118,
+              119,
+              120,
+              121,
+              122,
+              123
+            ]
+          },
+          {
+            "period_id": 124,
+            "subject_id": 3,
+            "students": [
+              100,
+              101,
+              102,
+              103,
+              104,
+              105,
+              106,
+              107,
+              108,
+              109,
+              110,
+              111,
+              112,
+              113,
+              114,
+              115,
+              116,
+              117,
+              118,
+              119,
+              120,
+              121,
+              122,
+              123
+            ]
+          },
+          {
+            "period_id": 124,
+            "subject_id": 4,
+            "students": [
+              101,
+              103,
+              109,
+              110,
+              111,
+              114,
+              117,
+              118,
+              119,
+              120,
+              122,
+              123
+            ]
+          },
+          {
+            "period_id": 124,
+            "subject_id": 5,
+            "students": [
+              100,
+              101,
+              102,
+              104,
+              105,
+              106,
+              107,
+              108,
+              112,
+              113,
+              115,
+              116,
+              121
+            ]
+          },
+          {
+            "period_id": 124,
+            "subject_id": 127,
+            "students": [
+              100,
+              101,
+              102,
+              103,
+              104,
+              105,
+              106,
+              107,
+              108,
+              109,
+              110,
+              111,
+              112,
+              113,
+              114,
+              115,
+              116,
+              117,
+              118,
+              119,
+              120,
+              121,
+              122,
+              123
+            ]
+          },
+          {
+            "period_id": 124,
+            "subject_id": 128,
+            "students": [
+              100,
+              101,
+              102,
+              103,
+              104,
+              105,
+              106,
+              107,
+              108,
+              109,
+              110,
+              111,
+              112,
+              113,
+              114,
+              115,
+              116,
+              117,
+              118,
+              119,
+              120,
+              121,
+              122,
+              123
+            ]
+          },
+          {
+            "period_id": 124,
+            "subject_id": 164,
+            "students": [
+              100,
+              102,
+              108,
+              109,
+              116,
+              120
+            ]
+          },
+          {
+            "period_id": 172,
+            "subject_id": 1,
+            "students": [
+              100,
+              101,
+              102,
+              103,
+              104,
+              105,
+              106,
+              107,
+              108,
+              109,
+              110,
+              111,
+              112,
+              113,
+              114,
+              115,
+              116,
+              117,
+              118,
+              119,
+              120,
+              121,
+              122,
+              123
+            ]
+          },
+          {
+            "period_id": 172,
+            "subject_id": 2,
+            "students": [
+              100,
+              101,
+              102,
+              103,
+              104,
+              105,
+              106,
+              107,
+              108,
+              109,
+              110,
+              111,
+              112,
+              113,
+              114,
+              115,
+              116,
+              117,
+              118,
+              119,
+              120,
+              121,
+              122,
+              123
+            ]
+          },
+          {
+            "period_id": 172,
+            "subject_id": 3,
+            "students": [
+              100,
+              101,
+              102,
+              103,
+              104,
+              105,
+              106,
+              107,
+              108,
+              109,
+              110,
+              111,
+              112,
+              113,
+              114,
+              115,
+              116,
+              117,
+              118,
+              119,
+              120,
+              121,
+              122,
+              123
+            ]
+          },
+          {
+            "period_id": 172,
+            "subject_id": 4,
+            "students": [
+              101,
+              103,
+              109,
+              110,
+              111,
+              114,
+              117,
+              118,
+              119,
+              120,
+              122,
+              123
+            ]
+          },
+          {
+            "period_id": 172,
+            "subject_id": 5,
+            "students": [
+              100,
+              101,
+              102,
+              104,
+              105,
+              106,
+              107,
+              108,
+              112,
+              113,
+              115,
+              116,
+              121
+            ]
+          },
+          {
+            "period_id": 172,
+            "subject_id": 127,
+            "students": [
+              100,
+              101,
+              102,
+              103,
+              104,
+              105,
+              106,
+              107,
+              108,
+              109,
+              110,
+              111,
+              112,
+              113,
+              114,
+              115,
+              116,
+              117,
+              118,
+              119,
+              120,
+              121,
+              122,
+              123
+            ]
+          },
+          {
+            "period_id": 172,
+            "subject_id": 128,
+            "students": [
+              100,
+              101,
+              102,
+              103,
+              104,
+              105,
+              106,
+              107,
+              108,
+              109,
+              110,
+              111,
+              112,
+              113,
+              114,
+              115,
+              116,
+              117,
+              118,
+              119,
+              120,
+              121,
+              122,
+              123
+            ]
+          },
+          {
+            "period_id": 172,
+            "subject_id": 164,
+            "students": [
+              100,
+              102,
+              108,
+              109,
+              116,
+              120
+            ]
+          },
+          {
+            "period_id": 173,
+            "subject_id": 1,
+            "students": [
+              100,
+              101,
+              102,
+              103,
+              104,
+              105,
+              106,
+              107,
+              108,
+              109,
+              110,
+              111,
+              112,
+              113,
+              114,
+              115,
+              116,
+              117,
+              118,
+              119,
+              120,
+              121,
+              122,
+              123
+            ]
+          },
+          {
+            "period_id": 173,
+            "subject_id": 2,
+            "students": [
+              100,
+              101,
+              102,
+              103,
+              104,
+              105,
+              106,
+              107,
+              108,
+              109,
+              110,
+              111,
+              112,
+              113,
+              114,
+              115,
+              116,
+              117,
+              118,
+              119,
+              120,
+              121,
+              122,
+              123
+            ]
+          },
+          {
+            "period_id": 173,
+            "subject_id": 3,
+            "students": [
+              100,
+              101,
+              102,
+              103,
+              104,
+              105,
+              106,
+              107,
+              108,
+              109,
+              110,
+              111,
+              112,
+              113,
+              114,
+              115,
+              116,
+              117,
+              118,
+              119,
+              120,
+              121,
+              122,
+              123
+            ]
+          },
+          {
+            "period_id": 173,
+            "subject_id": 4,
+            "students": [
+              101,
+              103,
+              109,
+              110,
+              111,
+              114,
+              117,
+              118,
+              119,
+              120,
+              122,
+              123
+            ]
+          },
+          {
+            "period_id": 173,
+            "subject_id": 5,
+            "students": [
+              100,
+              101,
+              102,
+              104,
+              105,
+              106,
+              107,
+              108,
+              112,
+              113,
+              115,
+              116,
+              121
+            ]
+          },
+          {
+            "period_id": 173,
+            "subject_id": 127,
+            "students": [
+              100,
+              101,
+              102,
+              103,
+              104,
+              105,
+              106,
+              107,
+              108,
+              109,
+              110,
+              111,
+              112,
+              113,
+              114,
+              115,
+              116,
+              117,
+              118,
+              119,
+              120,
+              121,
+              122,
+              123
+            ]
+          },
+          {
+            "period_id": 173,
+            "subject_id": 128,
+            "students": [
+              100,
+              101,
+              102,
+              103,
+              104,
+              105,
+              106,
+              107,
+              108,
+              109,
+              110,
+              111,
+              112,
+              113,
+              114,
+              115,
+              116,
+              117,
+              118,
+              119,
+              120,
+              121,
+              122,
+              123
+            ]
+          },
+          {
+            "period_id": 173,
+            "subject_id": 164,
+            "students": [
+              100,
+              102,
+              108,
+              109,
+              116,
+              120
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "WeekPatterns": [
+          {
+            "id": 130,
+            "name": "Semaines paires",
+            "weeks": [
+              true,
+              false,
+              true,
+              false,
+              true,
+              false,
+              true,
+              false,
+              true,
+              false,
+              true,
+              false,
+              true,
+              false,
+              true,
+              false,
+              true,
+              false,
+              true,
+              false,
+              true,
+              false,
+              true,
+              false,
+              true,
+              false,
+              true,
+              false,
+              true,
+              false,
+              true,
+              false,
+              true,
+              false,
+              true,
+              false,
+              true,
+              false,
+              true,
+              false
+            ]
+          },
+          {
+            "id": 131,
+            "name": "Semaines impaires",
+            "weeks": [
+              false,
+              true,
+              false,
+              true,
+              false,
+              true,
+              false,
+              true,
+              false,
+              true,
+              false,
+              true,
+              false,
+              true,
+              false,
+              true,
+              false,
+              true,
+              false,
+              true,
+              false,
+              true,
+              false,
+              true,
+              false,
+              true,
+              false,
+              true,
+              false,
+              true,
+              false,
+              true,
+              false,
+              true,
+              false,
+              true,
+              false,
+              true,
+              false,
+              true
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "Slots": [
+          {
+            "subject_id": 1,
+            "slots": [
+              {
+                "id": 148,
+                "teacher_id": 10,
+                "start": {
+                  "day": "thursday",
+                  "time": "13:00"
+                },
+                "extra_info": "",
+                "week_pattern_id": null,
+                "cost": 0
+              },
+              {
+                "id": 145,
+                "teacher_id": 10,
+                "start": {
+                  "day": "thursday",
+                  "time": "18:00"
+                },
+                "extra_info": "",
+                "week_pattern_id": null,
+                "cost": 0
+              },
+              {
+                "id": 146,
+                "teacher_id": 10,
+                "start": {
+                  "day": "thursday",
+                  "time": "19:00"
+                },
+                "extra_info": "",
+                "week_pattern_id": null,
+                "cost": 0
+              },
+              {
+                "id": 147,
+                "teacher_id": 10,
+                "start": {
+                  "day": "friday",
+                  "time": "18:00"
+                },
+                "extra_info": "",
+                "week_pattern_id": null,
+                "cost": 0
+              }
+            ]
+          },
+          {
+            "subject_id": 2,
+            "slots": [
+              {
+                "id": 137,
+                "teacher_id": 11,
+                "start": {
+                  "day": "monday",
+                  "time": "18:00"
+                },
+                "extra_info": "",
+                "week_pattern_id": null,
+                "cost": 0
+              },
+              {
+                "id": 138,
+                "teacher_id": 11,
+                "start": {
+                  "day": "monday",
+                  "time": "19:00"
+                },
+                "extra_info": "",
+                "week_pattern_id": null,
+                "cost": 0
+              },
+              {
+                "id": 139,
+                "teacher_id": 11,
+                "start": {
+                  "day": "tuesday",
+                  "time": "17:00"
+                },
+                "extra_info": "",
+                "week_pattern_id": 130,
+                "cost": 0
+              },
+              {
+                "id": 140,
+                "teacher_id": 11,
+                "start": {
+                  "day": "tuesday",
+                  "time": "18:00"
+                },
+                "extra_info": "",
+                "week_pattern_id": null,
+                "cost": 0
+              },
+              {
+                "id": 141,
+                "teacher_id": 11,
+                "start": {
+                  "day": "tuesday",
+                  "time": "19:00"
+                },
+                "extra_info": "",
+                "week_pattern_id": 131,
+                "cost": 0
+              }
+            ]
+          },
+          {
+            "subject_id": 3,
+            "slots": [
+              {
+                "id": 142,
+                "teacher_id": 12,
+                "start": {
+                  "day": "wednesday",
+                  "time": "14:00"
+                },
+                "extra_info": "",
+                "week_pattern_id": null,
+                "cost": 0
+              },
+              {
+                "id": 143,
+                "teacher_id": 15,
+                "start": {
+                  "day": "thursday",
+                  "time": "12:00"
+                },
+                "extra_info": "",
+                "week_pattern_id": null,
+                "cost": 0
+              },
+              {
+                "id": 144,
+                "teacher_id": 15,
+                "start": {
+                  "day": "friday",
+                  "time": "18:00"
+                },
+                "extra_info": "",
+                "week_pattern_id": null,
+                "cost": 0
+              },
+              {
+                "id": 149,
+                "teacher_id": 14,
+                "start": {
+                  "day": "thursday",
+                  "time": "17:00"
+                },
+                "extra_info": "",
+                "week_pattern_id": null,
+                "cost": 0
+              },
+              {
+                "id": 150,
+                "teacher_id": 13,
+                "start": {
+                  "day": "thursday",
+                  "time": "17:00"
+                },
+                "extra_info": "",
+                "week_pattern_id": null,
+                "cost": 0
+              }
+            ]
+          },
+          {
+            "subject_id": 4,
+            "slots": [
+              {
+                "id": 151,
+                "teacher_id": 16,
+                "start": {
+                  "day": "tuesday",
+                  "time": "18:00"
+                },
+                "extra_info": "",
+                "week_pattern_id": null,
+                "cost": 0
+              },
+              {
+                "id": 152,
+                "teacher_id": 17,
+                "start": {
+                  "day": "wednesday",
+                  "time": "14:00"
+                },
+                "extra_info": "",
+                "week_pattern_id": null,
+                "cost": 0
+              },
+              {
+                "id": 153,
+                "teacher_id": 17,
+                "start": {
+                  "day": "wednesday",
+                  "time": "15:00"
+                },
+                "extra_info": "",
+                "week_pattern_id": null,
+                "cost": 0
+              }
+            ]
+          },
+          {
+            "subject_id": 5,
+            "slots": [
+              {
+                "id": 154,
+                "teacher_id": 18,
+                "start": {
+                  "day": "tuesday",
+                  "time": "18:00"
+                },
+                "extra_info": "",
+                "week_pattern_id": null,
+                "cost": 0
+              },
+              {
+                "id": 169,
+                "teacher_id": 18,
+                "start": {
+                  "day": "tuesday",
+                  "time": "19:00"
+                },
+                "extra_info": "",
+                "week_pattern_id": null,
+                "cost": 50
+              },
+              {
+                "id": 155,
+                "teacher_id": 19,
+                "start": {
+                  "day": "wednesday",
+                  "time": "14:00"
+                },
+                "extra_info": "",
+                "week_pattern_id": null,
+                "cost": 0
+              }
+            ]
+          },
+          {
+            "subject_id": 127,
+            "slots": [
+              {
+                "id": 156,
+                "teacher_id": 10,
+                "start": {
+                  "day": "thursday",
+                  "time": "14:00"
+                },
+                "extra_info": "",
+                "week_pattern_id": null,
+                "cost": 0
+              },
+              {
+                "id": 157,
+                "teacher_id": 10,
+                "start": {
+                  "day": "thursday",
+                  "time": "16:00"
+                },
+                "extra_info": "",
+                "week_pattern_id": null,
+                "cost": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "Incompatibilities": [
+          {
+            "id": 132,
+            "subject_id": 128,
+            "name": "Lundi Midi",
+            "slots": [
+              {
+                "day": "monday",
+                "time": "12:00",
+                "duration_minutes": 60
+              },
+              {
+                "day": "monday",
+                "time": "13:00",
+                "duration_minutes": 60
+              }
+            ],
+            "minimum_free_slots": 1,
+            "week_pattern_id": null
+          },
+          {
+            "id": 133,
+            "subject_id": 128,
+            "name": "Mardi Midi",
+            "slots": [
+              {
+                "day": "tuesday",
+                "time": "12:00",
+                "duration_minutes": 60
+              },
+              {
+                "day": "tuesday",
+                "time": "13:00",
+                "duration_minutes": 60
+              }
+            ],
+            "minimum_free_slots": 1,
+            "week_pattern_id": null
+          },
+          {
+            "id": 134,
+            "subject_id": 128,
+            "name": "Mercredi Midi",
+            "slots": [
+              {
+                "day": "wednesday",
+                "time": "12:00",
+                "duration_minutes": 60
+              },
+              {
+                "day": "wednesday",
+                "time": "13:00",
+                "duration_minutes": 60
+              }
+            ],
+            "minimum_free_slots": 1,
+            "week_pattern_id": null
+          },
+          {
+            "id": 135,
+            "subject_id": 128,
+            "name": "Jeudi Midi",
+            "slots": [
+              {
+                "day": "thursday",
+                "time": "12:00",
+                "duration_minutes": 60
+              },
+              {
+                "day": "thursday",
+                "time": "13:00",
+                "duration_minutes": 60
+              }
+            ],
+            "minimum_free_slots": 1,
+            "week_pattern_id": null
+          },
+          {
+            "id": 136,
+            "subject_id": 128,
+            "name": "Vendredi Midi",
+            "slots": [
+              {
+                "day": "friday",
+                "time": "12:00",
+                "duration_minutes": 60
+              },
+              {
+                "day": "friday",
+                "time": "13:00",
+                "duration_minutes": 60
+              }
+            ],
+            "minimum_free_slots": 1,
+            "week_pattern_id": null
+          },
+          {
+            "id": 165,
+            "subject_id": 164,
+            "name": "Entrainement",
+            "slots": [
+              {
+                "day": "friday",
+                "time": "17:00",
+                "duration_minutes": 120
+              }
+            ],
+            "minimum_free_slots": 1,
+            "week_pattern_id": null
+          }
+        ]
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "GroupLists": [
+          {
+            "id": 166,
+            "name": "Liste principale",
+            "students_per_group": {
+              "min": 2,
+              "max": 3
+            },
+            "group_names": [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            "filling": {
+              "Prefilled": {
+                "groups": [
+                  {
+                    "students": [
+                      109,
+                      110,
+                      111
+                    ]
+                  },
+                  {
+                    "students": [
+                      117,
+                      118,
+                      119
+                    ]
+                  },
+                  {
+                    "students": [
+                      120,
+                      122,
+                      123
+                    ]
+                  },
+                  {
+                    "students": [
+                      101,
+                      103,
+                      114
+                    ]
+                  },
+                  {
+                    "students": [
+                      100,
+                      102,
+                      104
+                    ]
+                  },
+                  {
+                    "students": [
+                      105,
+                      112,
+                      113
+                    ]
+                  },
+                  {
+                    "students": [
+                      106,
+                      107,
+                      108
+                    ]
+                  },
+                  {
+                    "students": [
+                      115,
+                      116,
+                      121
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "id": 168,
+            "name": "Divination",
+            "students_per_group": {
+              "min": 2,
+              "max": 3
+            },
+            "group_names": [
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            "filling": {
+              "Prefilled": {
+                "groups": [
+                  {
+                    "students": [
+                      100,
+                      102
+                    ]
+                  },
+                  {
+                    "students": [
+                      105,
+                      112,
+                      113
+                    ]
+                  },
+                  {
+                    "students": [
+                      106,
+                      107,
+                      108
+                    ]
+                  },
+                  {
+                    "students": [
+                      115,
+                      116,
+                      121
+                    ]
+                  },
+                  {
+                    "students": [
+                      101,
+                      104
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "GroupListAssociations": [
+          {
+            "period_id": 124,
+            "subject_id": 1,
+            "group_list_id": 166
+          },
+          {
+            "period_id": 124,
+            "subject_id": 2,
+            "group_list_id": 166
+          },
+          {
+            "period_id": 124,
+            "subject_id": 3,
+            "group_list_id": 166
+          },
+          {
+            "period_id": 124,
+            "subject_id": 4,
+            "group_list_id": 166
+          },
+          {
+            "period_id": 124,
+            "subject_id": 5,
+            "group_list_id": 168
+          },
+          {
+            "period_id": 172,
+            "subject_id": 1,
+            "group_list_id": 166
+          },
+          {
+            "period_id": 172,
+            "subject_id": 2,
+            "group_list_id": 166
+          },
+          {
+            "period_id": 172,
+            "subject_id": 3,
+            "group_list_id": 166
+          },
+          {
+            "period_id": 172,
+            "subject_id": 4,
+            "group_list_id": 166
+          },
+          {
+            "period_id": 172,
+            "subject_id": 5,
+            "group_list_id": 168
+          },
+          {
+            "period_id": 172,
+            "subject_id": 127,
+            "group_list_id": 166
+          },
+          {
+            "period_id": 173,
+            "subject_id": 1,
+            "group_list_id": 166
+          },
+          {
+            "period_id": 173,
+            "subject_id": 2,
+            "group_list_id": 166
+          },
+          {
+            "period_id": 173,
+            "subject_id": 3,
+            "group_list_id": 166
+          },
+          {
+            "period_id": 173,
+            "subject_id": 4,
+            "group_list_id": 166
+          },
+          {
+            "period_id": 173,
+            "subject_id": 5,
+            "group_list_id": 168
+          },
+          {
+            "period_id": 173,
+            "subject_id": 127,
+            "group_list_id": 166
+          }
+        ]
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "SlotPairings": [
+          {
+            "id": 170,
+            "antecedent": {
+              "slot_id": 143,
+              "should_have": true
+            },
+            "consequent": {
+              "slot_id": 144,
+              "should_have": false
+            },
+            "excluded_periods": [],
+            "soft": false
+          },
+          {
+            "id": 171,
+            "antecedent": {
+              "slot_id": 152,
+              "should_have": true
+            },
+            "consequent": {
+              "slot_id": 153,
+              "should_have": false
+            },
+            "excluded_periods": [],
+            "soft": false
+          },
+          {
+            "id": 200,
+            "antecedent": {
+              "slot_id": 156,
+              "should_have": true
+            },
+            "consequent": {
+              "slot_id": 157,
+              "should_have": false
+            },
+            "excluded_periods": [],
+            "soft": false
+          }
+        ]
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "Settings": {
+          "global": {
+            "interrogations_per_week_min": {
+              "soft": false,
+              "value": 2
+            },
+            "interrogations_per_week_max": {
+              "soft": false,
+              "value": 2
+            },
+            "max_interrogations_per_day": {
+              "soft": false,
+              "value": 1
+            }
+          },
+          "students": [
+            {
+              "student_id": 101,
+              "limits": {
+                "interrogations_per_week_min": {
+                  "soft": false,
+                  "value": 2
+                },
+                "interrogations_per_week_max": {
+                  "soft": false,
+                  "value": 3
+                },
+                "max_interrogations_per_day": {
+                  "soft": false,
+                  "value": 2
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "Balancing": {
+          "global": {
+            "teacher_rotation": {
+              "soft": true
+            },
+            "slot_rotation": null,
+            "avoid_twice_in_a_row": false,
+            "year_teacher_rotation": false,
+            "period_teacher_rotation": false
+          },
+          "subjects": [
+            {
+              "subject_id": 1,
+              "options": {
+                "teacher_rotation": null,
+                "slot_rotation": {
+                  "soft": true
+                },
+                "avoid_twice_in_a_row": false,
+                "year_teacher_rotation": false,
+                "period_teacher_rotation": false
+              }
+            },
+            {
+              "subject_id": 2,
+              "options": {
+                "teacher_rotation": null,
+                "slot_rotation": {
+                  "soft": true
+                },
+                "avoid_twice_in_a_row": false,
+                "year_teacher_rotation": false,
+                "period_teacher_rotation": false
+              }
+            },
+            {
+              "subject_id": 3,
+              "options": {
+                "teacher_rotation": {
+                  "soft": true
+                },
+                "slot_rotation": null,
+                "avoid_twice_in_a_row": true,
+                "year_teacher_rotation": true,
+                "period_teacher_rotation": false
+              }
+            },
+            {
+              "subject_id": 127,
+              "options": {
+                "teacher_rotation": null,
+                "slot_rotation": {
+                  "soft": false
+                },
+                "avoid_twice_in_a_row": false,
+                "year_teacher_rotation": false,
+                "period_teacher_rotation": false
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
