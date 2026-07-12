@@ -13,7 +13,8 @@ use populated_round_trip::builder;
 
 use collomatique_state::{AppState, traits::Manager};
 use collomatique_state_colloscopes::{NewId, Op, StudentOp, students::Student};
-use collomatique_storage::{deserialize_data, serialize_data};
+use collomatique_storage::{Caveat, deserialize_data, serialize_data};
+use std::collections::BTreeSet;
 
 #[test]
 fn round_trip_identity() {
@@ -24,7 +25,8 @@ fn round_trip_identity() {
         deserialize_data(&serialized).expect("Serialized data should deserialize");
 
     assert_eq!(decoded, data);
-    assert!(caveats.is_empty());
+    // A legacy document decodes with the deprecated-format caveat.
+    assert_eq!(caveats, BTreeSet::from([Caveat::DeprecatedFormat]));
 }
 
 #[test]

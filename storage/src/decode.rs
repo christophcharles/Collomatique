@@ -83,6 +83,13 @@ pub enum Caveat {
     /// might be missing and it is preferable to use a newer version
     /// of Collomatique.
     UnknownEntries,
+    /// The file uses the deprecated legacy (spec 1) format
+    ///
+    /// The file was decoded through the legacy pipeline (a raw dump
+    /// of the in-memory data). This format is deprecated and kept only
+    /// during the transition to spec 2. It can still be read, but the
+    /// file should be re-saved in the current format.
+    DeprecatedFormat,
 }
 
 pub(crate) fn check_header(

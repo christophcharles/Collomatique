@@ -88,5 +88,20 @@ fn all_spec_1_document_still_uses_legacy_path() {
     let (decoded, caveats) =
         deserialize_data(&content).expect("Legacy document should still decode");
     assert_eq!(decoded, data);
-    assert!(caveats.is_empty());
+    // Decoding through the legacy pipeline must flag the deprecated format.
+    assert!(caveats.contains(&Caveat::DeprecatedFormat));
+}
+
+#[test]
+fn spec_2_document_has_no_deprecated_format_caveat() {
+    let data = collomatique_state_colloscopes::Data::new();
+
+    // The spec-2 writer must not emit any InnerDataDump entry, and its
+    // documents must decode without the deprecated-format caveat.
+    let content = serialize_data(&data, false);
+    assert!(!content.contains("InnerDataDump"));
+
+    let (decoded, caveats) = deserialize_data(&content).expect("Spec-2 document should decode");
+    assert_eq!(decoded, data);
+    assert!(!caveats.contains(&Caveat::DeprecatedFormat));
 }

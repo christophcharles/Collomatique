@@ -19,6 +19,36 @@ use crate::tools;
 
 pub const DEFAULT_FILE_STEM: &str = "FichierSansNom";
 
+/// The save target associated with the currently open document.
+///
+/// This distinguishes three situations that must drive display and save
+/// behavior differently:
+/// - [FileName::OkFile]: a clean file we can overwrite silently.
+/// - [FileName::CaveatFile]: a file that was loaded with caveats (most
+///   likely produced by a different version of Collomatique). We keep its
+///   full path but must not overwrite it silently — "Enregistrer" behaves
+///   like "Enregistrer sous".
+/// - [FileName::NewFile]: a brand-new document that was never saved.
+#[derive(Debug)]
+pub enum FileName {
+    OkFile(PathBuf),
+    CaveatFile(PathBuf),
+    NewFile,
+}
+
+impl FileName {
+    /// The path backing this document, if any.
+    ///
+    /// Returns `Some` for both [FileName::OkFile] and [FileName::CaveatFile],
+    /// and `None` for [FileName::NewFile].
+    pub fn path(&self) -> Option<&PathBuf> {
+        match self {
+            FileName::OkFile(path) | FileName::CaveatFile(path) => Some(path),
+            FileName::NewFile => None,
+        }
+    }
+}
+
 mod error_dialog;
 
 mod assignments;
@@ -48,9 +78,8 @@ mod warning_op;
 pub enum EditorInput {
     Ignore,
     NewFile {
-        file_name: Option<PathBuf>,
+        file_name: FileName,
         data: collomatique_state_colloscopes::Data,
-        dirty: bool,
     },
     SaveCurrentFileAs(PathBuf),
     SaveAsClicked,
@@ -192,7 +221,7 @@ impl PanelNumbers {
 }
 
 pub struct EditorPanel {
-    file_name: Option<PathBuf>,
+    file_name: FileName,
     data: AppState<Data, Desc>,
     dirty: bool,
     toast_info: Option<ToastInfo>,
@@ -231,6 +260,16 @@ impl EditorPanel {
         self.dirty
     }
 
+    /// Whether a "save" is meaningful right now.
+    ///
+    /// True either because there are unsaved edits (`dirty`) or because there
+    /// is no clean overwrite target yet (a new or caveat-loaded file). This
+    /// drives the asterisk, the Save button sensitivity and the Save action —
+    /// as opposed to [Self::is_dirty], which drives only the close guard.
+    pub fn can_save(&self) -> bool {
+        self.dirty || !matches!(self.file_name, FileName::OkFile(_))
+    }
+
     pub fn can_undo(&self) -> bool {
         self.data.can_undo()
     }
@@ -243,14 +282,14 @@ impl EditorPanel {
 impl EditorPanel {
     fn generate_subtitle(&self) -> String {
         let default_name = "Fichier sans nom".into();
-        let name = match &self.file_name {
+        let name = match self.file_name.path() {
             Some(path) => match path.file_name() {
                 Some(file_name) => file_name.to_string_lossy().to_string(),
                 None => default_name,
             },
             None => default_name,
         };
-        if self.dirty {
+        if self.can_save() {
             String::from("*") + &name
         } else {
             name
@@ -258,9 +297,23 @@ impl EditorPanel {
     }
 
     fn generate_tooltip_text(&self) -> String {
-        match &self.file_name {
+        match self.file_name.path() {
             Some(x) => x.to_string_lossy().into(),
             None => "(Fichier non enregistré)".into(),
+        }
+    }
+
+    /// Tooltip for the "Enregistrer" button.
+    ///
+    /// Only caveat-loaded files get an explanation: saving them will ask for a
+    /// new location rather than overwriting the suspect original in place.
+    fn save_button_tooltip(&self) -> Option<String> {
+        match self.file_name {
+            FileName::CaveatFile(_) => Some(
+                "Fichier chargé dans un ancien format : « Enregistrer » demandera un nouvel emplacement."
+                    .into(),
+            ),
+            FileName::OkFile(_) | FileName::NewFile => None,
         }
     }
 
@@ -519,7 +572,7 @@ impl EditorPanel {
             .sender()
             .send(export_panel::ExportPanelInput::Update(
                 self.data.get_data().get_inner_data().export_config.clone(),
-                self.file_name.clone(),
+                self.file_name.path().cloned(),
                 annotations,
             ))
             .unwrap();
@@ -658,7 +711,9 @@ impl Component for EditorPanel {
                             add_css_class: "linked",
                             gtk::Button::with_label("Enregistrer") {
                                 #[watch]
-                                set_sensitive: model.dirty,
+                                set_sensitive: model.can_save(),
+                                #[watch]
+                                set_tooltip_text: model.save_button_tooltip().as_deref(),
                                 connect_clicked => EditorInput::SaveClicked,
                             },
                             gtk::Button {
@@ -865,7 +920,7 @@ impl Component for EditorPanel {
             BTreeMap::from_iter(PanelNumbers::iter().map(|x| (x.panel_name(), x.panel_title())));
 
         let model = EditorPanel {
-            file_name: None,
+            file_name: FileName::NewFile,
             data: AppState::new(Data::new()),
             dirty: false,
             toast_info: None,
@@ -925,13 +980,9 @@ impl Component for EditorPanel {
         self.show_particular_panel = None;
         match message {
             EditorInput::Ignore => {}
-            EditorInput::NewFile {
-                file_name,
-                data,
-                dirty,
-            } => {
+            EditorInput::NewFile { file_name, data } => {
                 self.file_name = file_name;
-                self.dirty = dirty;
+                self.dirty = false;
                 self.show_particular_panel = Some(PanelNumbers::GeneralPlanning);
                 self.update_data(DataUpdate::Replace(AppState::new(data)));
                 self.colloscope
@@ -941,19 +992,21 @@ impl Component for EditorPanel {
                 self.send_msg_for_interface_update(sender);
             }
             EditorInput::SaveClicked => match &self.file_name {
-                Some(path) => {
+                // Only a clean file overwrites in place; new and caveat files
+                // go through the Save-As dialog so nothing is silently clobbered.
+                FileName::OkFile(path) => {
                     sender.input(EditorInput::SaveCurrentFileAs(path.clone()));
                 }
-                None => {
+                FileName::CaveatFile(_) | FileName::NewFile => {
                     sender.input(EditorInput::SaveAsClicked);
                 }
             },
             EditorInput::SaveAsClicked => {
-                let file_name = self.file_name.clone();
+                let default_path = self.file_name.path().cloned();
                 sender.output(EditorOutput::StartOpenSaveDialog).unwrap();
                 sender.oneshot_command(async move {
-                    match tools::open_save::save_collomatique_dialog(match &file_name {
-                        Some(path) => tools::open_save::DefaultSaveFile::ExistingFile(path.clone()),
+                    match tools::open_save::save_collomatique_dialog(match default_path {
+                        Some(path) => tools::open_save::DefaultSaveFile::ExistingFile(path),
                         None => tools::open_save::DefaultSaveFile::SuggestedName(
                             format!("{DEFAULT_FILE_STEM}.collomatique").into(),
                         ),
@@ -968,7 +1021,8 @@ impl Component for EditorPanel {
             EditorInput::SaveCurrentFileAs(path) => {
                 let data_copy = self.data.get_data().clone();
                 self.dirty = false;
-                self.file_name = Some(path.clone());
+                // A successful save graduates any state to a clean file.
+                self.file_name = FileName::OkFile(path.clone());
                 self.send_msg_for_interface_update(sender.clone());
 
                 self.toast_info = Some(ToastInfo::Toast {
@@ -1150,7 +1204,7 @@ impl Component for EditorPanel {
                 });
             }
             EditorCommandOutput::SaveFailed(path, error) => {
-                if Some(&path) != self.file_name.as_ref() {
+                if self.file_name.path() != Some(&path) {
                     return;
                 }
                 self.toast_info = Some(ToastInfo::Dismiss);

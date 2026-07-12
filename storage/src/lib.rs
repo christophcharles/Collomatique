@@ -105,6 +105,9 @@ pub fn deserialize_data(
             let json_data = serde_json::from_str::<json::JsonData>(file_content)?;
             let (data, mut legacy_caveats) = decode::decode(json_data)?;
             legacy_caveats.append(&mut caveats);
+            // The legacy pipeline is the single place we know a file used the
+            // deprecated spec-1 format, so we flag it here.
+            legacy_caveats.insert(Caveat::DeprecatedFormat);
             Ok((data, legacy_caveats))
         }
         SpecFamily::Spec2 => {

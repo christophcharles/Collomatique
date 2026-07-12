@@ -18,9 +18,7 @@ pub enum DialogInput {
 
 impl Dialog {
     fn generate_secondary_text(&self) -> String {
-        let mut list = vec![
-            "Il est préférable d'utiliser une version plus récente de Collomatique.\n".to_string(),
-        ];
+        let mut list = vec!["Certains points nécessitent votre attention.\n".to_string()];
 
         use collomatique_storage::Caveat;
         list.extend(self.caveats.iter().map(|caveat| match caveat {
@@ -28,9 +26,12 @@ impl Dialog {
                 "- Certaines entrées (non-indispensables) n'ont pas pu être décodées".to_string()
             }
             Caveat::CreatedWithNewerVersion(version) => format!(
-                "- Fichier généré avec la version {} de Collomatique",
+                "- Fichier généré avec la version {} de Collomatique\n  Il est préférable d'utiliser une version plus récente de Collomatique.",
                 version
             ),
+            Caveat::DeprecatedFormat => {
+                "- Ce fichier utilise un ancien format de fichier (déprécié).".to_string()
+            }
         }));
 
         list.join("\n")

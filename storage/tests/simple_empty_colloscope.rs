@@ -33,7 +33,9 @@ fn encode_and_decode_empty_data() {
     let (decoded_data, caveats) =
         deserialize_data(&content).expect("Produced file should be valid");
 
-    let expected_caveats = BTreeSet::new();
+    // The legacy writer produces a spec-1 document, which decodes with
+    // the deprecated-format caveat.
+    let expected_caveats = BTreeSet::from([Caveat::DeprecatedFormat]);
     assert_eq!(decoded_data, data);
     assert_eq!(caveats, expected_caveats);
 }
