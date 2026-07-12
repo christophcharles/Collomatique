@@ -1,4 +1,4 @@
-use crate::extras::{MyBundle, extra_var, weeks_for_slot};
+use crate::extras::{MyBundle, extra_var, groups_for_interrogation, weeks_for_slot};
 use crate::types::ExtraVarName;
 use crate::vars::VarEnv;
 use collomatique_ilp::linexpr::LinExpr;
@@ -18,6 +18,13 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
             }
 
             for week in weeks_for_slot(env, slot_data, &subject.excluded_periods) {
+                // Only weeks with a group list associated for this (period, subject) declare
+                // the InterrogationHasGroups extra (see extras.rs); reference it only there,
+                // matching group_count_per_interrogation.rs. Without an association the subject
+                // is not interrogated that week, so the slot contributes zero cost.
+                if groups_for_interrogation(env, subject_id, week).is_empty() {
+                    continue;
+                }
                 expr = expr
                     + f64::from(slot_data.cost)
                         * LinExpr::var(extra_var(ExtraVarName::InterrogationHasGroups {
