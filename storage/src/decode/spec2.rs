@@ -184,14 +184,15 @@ fn weekday(day: format::scalars::Weekday) -> collomatique_time::Weekday {
 
 fn time_of_day(time: format::scalars::TimeOfDay) -> collomatique_time::WholeMinuteTime {
     collomatique_time::WholeMinuteTime::new(
-        chrono::NaiveTime::from_hms_opt(time.hour.into(), time.minute.into(), 0)
+        chrono::NaiveTime::from_hms_opt(time.hour().into(), time.minute().into(), 0)
             .expect("Format time of day is within range"),
     )
     .expect("Format time of day is on a whole minute")
 }
 
-fn range<T: Ord>(range: format::scalars::Range<T>) -> std::ops::RangeInclusive<T> {
-    range.min..=range.max
+fn range<T>(range: format::scalars::Range<T>) -> std::ops::RangeInclusive<T> {
+    let (min, max) = range.into_min_max();
+    min..=max
 }
 
 fn soft_param<T>(param: format::scalars::SoftParam<T>) -> mem::soft_param::SoftParam<T> {
@@ -262,7 +263,8 @@ fn reconstruct(blocks: Blocks) -> Result<InnerData, DecodeError> {
 fn reconstruct_periods(block: format::general_planning::GeneralPlanning) -> mem::periods::Periods {
     mem::periods::Periods {
         first_week: block.first_week.map(|date| {
-            collomatique_time::WeekStart::new(date.0).expect("Format week start date is a Monday")
+            collomatique_time::WeekStart::new(date.date())
+                .expect("Format week start date is a Monday")
         }),
         ordered_period_list: block
             .periods
@@ -312,7 +314,7 @@ fn interrogation_parameters(
     mem::subjects::SubjectInterrogationParameters {
         students_per_group: range(params.students_per_group),
         groups_per_interrogation: range(params.groups_per_interrogation),
-        duration: params.duration_minutes.0.into(),
+        duration: params.duration_minutes.get().into(),
         take_duration_into_account: params.take_duration_into_account,
         periodicity: periodicity(params.periodicity),
     }
@@ -527,7 +529,7 @@ fn reconstruct_incompats(
             // The only semantic check the decoder must do itself: the
             // in-memory type cannot represent a slot crossing midnight
             let Some(slot) =
-                collomatique_time::SlotWithDuration::new(start, slot.duration_minutes.0.into())
+                collomatique_time::SlotWithDuration::new(start, slot.duration_minutes.get().into())
             else {
                 return Err(DecodeError::SlotCrossesMidnight);
             };

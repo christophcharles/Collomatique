@@ -25,13 +25,40 @@ where
     Option::deserialize(deserializer)
 }
 
+/// Error when building a [WeekStartDate] out of a non-Monday date
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NotAMonday(pub chrono::NaiveDate);
+
+impl std::fmt::Display for NotAMonday {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "week start date {} is not a Monday", self.0)
+    }
+}
+
+impl std::error::Error for NotAMonday {}
+
 /// A "week start" date: an ISO `"YYYY-MM-DD"` date that must be a Monday
 ///
 /// The encoding is strict: the date must be zero-padded (`"2026-8-31"` is
 /// invalid even though chrono would accept it).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
-pub struct WeekStartDate(pub chrono::NaiveDate);
+pub struct WeekStartDate(chrono::NaiveDate);
+
+impl WeekStartDate {
+    /// Build a week start date, checking that it is a Monday
+    pub fn new(date: chrono::NaiveDate) -> Result<Self, NotAMonday> {
+        use chrono::Datelike;
+        if date.weekday() != chrono::Weekday::Mon {
+            return Err(NotAMonday(date));
+        }
+        Ok(WeekStartDate(date))
+    }
+
+    pub fn date(&self) -> chrono::NaiveDate {
+        self.0
+    }
+}
 
 impl TryFrom<String> for WeekStartDate {
     type Error = String;
@@ -46,11 +73,7 @@ impl TryFrom<String> for WeekStartDate {
                 "week start date {s:?} is not in strict \"YYYY-MM-DD\" form"
             ));
         }
-        use chrono::Datelike;
-        if date.weekday() != chrono::Weekday::Mon {
-            return Err(format!("week start date {s:?} is not a Monday"));
-        }
-        Ok(WeekStartDate(date))
+        WeekStartDate::new(date).map_err(|e| e.to_string())
     }
 }
 
@@ -60,14 +83,52 @@ impl From<WeekStartDate> for String {
     }
 }
 
+/// Error when building a [TimeOfDay] out of an out-of-range hour or minute
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TimeOutOfRange {
+    pub hour: u8,
+    pub minute: u8,
+}
+
+impl std::fmt::Display for TimeOutOfRange {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "time of day {:02}:{:02} is out of range",
+            self.hour, self.minute
+        )
+    }
+}
+
+impl std::error::Error for TimeOutOfRange {}
+
 /// A time of day: 24-hour `"HH:MM"`, zero-padded, minute precision
 ///
 /// The encoding is strict: `"9:00"` and `"09:00:00"` are invalid.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub struct TimeOfDay {
-    pub hour: u8,
-    pub minute: u8,
+    hour: u8,
+    minute: u8,
+}
+
+impl TimeOfDay {
+    /// Build a time of day, checking that the hour and minute are in
+    /// range
+    pub fn new(hour: u8, minute: u8) -> Result<Self, TimeOutOfRange> {
+        if hour >= 24 || minute >= 60 {
+            return Err(TimeOutOfRange { hour, minute });
+        }
+        Ok(TimeOfDay { hour, minute })
+    }
+
+    pub fn hour(&self) -> u8 {
+        self.hour
+    }
+
+    pub fn minute(&self) -> u8 {
+        self.minute
+    }
 }
 
 impl TryFrom<String> for TimeOfDay {
@@ -85,10 +146,7 @@ impl TryFrom<String> for TimeOfDay {
         }
         let hour = (bytes[0] - b'0') * 10 + (bytes[1] - b'0');
         let minute = (bytes[3] - b'0') * 10 + (bytes[4] - b'0');
-        if hour >= 24 || minute >= 60 {
-            return Err(format!("time of day {s:?} is out of range"));
-        }
-        Ok(TimeOfDay { hour, minute })
+        TimeOfDay::new(hour, minute).map_err(|_| format!("time of day {s:?} is out of range"))
     }
 }
 
@@ -114,7 +172,19 @@ pub enum Weekday {
 /// A duration in integer minutes, at least 1
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct DurationMinutes(pub NonZeroU32);
+pub struct DurationMinutes(NonZeroU32);
+
+impl DurationMinutes {
+    /// Build a duration; `NonZeroU32` already carries the "at least 1"
+    /// invariant, so this cannot fail
+    pub fn new(minutes: NonZeroU32) -> Self {
+        DurationMinutes(minutes)
+    }
+
+    pub fn get(&self) -> NonZeroU32 {
+        self.0
+    }
+}
 
 /// A weekday plus a time of day (the `start` record of a slot)
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -124,15 +194,62 @@ pub struct DayTime {
     pub time: TimeOfDay,
 }
 
+/// Error when building a [Range] with `min` greater than `max`
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct InvalidRange<T> {
+    pub min: T,
+    pub max: T,
+}
+
+impl<T: std::fmt::Debug> std::fmt::Display for InvalidRange<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "invalid range: min {:?} is greater than max {:?}",
+            self.min, self.max
+        )
+    }
+}
+
+impl<T: std::fmt::Debug> std::error::Error for InvalidRange<T> {}
+
 /// An integer range `{"min": n, "max": n}` with `min <= max`
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(
     try_from = "RawRange<T>",
-    bound(deserialize = "T: serde::Deserialize<'de> + Ord")
+    bound(deserialize = "T: serde::Deserialize<'de> + Ord + std::fmt::Debug")
 )]
 pub struct Range<T> {
-    pub min: T,
-    pub max: T,
+    min: T,
+    max: T,
+}
+
+impl<T: Ord> Range<T> {
+    /// Build a range, checking that `min <= max`
+    pub fn new(min: T, max: T) -> Result<Self, InvalidRange<T>> {
+        if min > max {
+            return Err(InvalidRange { min, max });
+        }
+        Ok(Range { min, max })
+    }
+}
+
+impl<T> Range<T> {
+    // Part of the accessor API alongside `into_min_max`; the decoder
+    // consumes ranges whole, so only tests exercise these
+    #[allow(dead_code)]
+    pub fn min(&self) -> &T {
+        &self.min
+    }
+
+    #[allow(dead_code)]
+    pub fn max(&self) -> &T {
+        &self.max
+    }
+
+    pub fn into_min_max(self) -> (T, T) {
+        (self.min, self.max)
+    }
 }
 
 #[derive(Deserialize)]
@@ -143,16 +260,10 @@ struct RawRange<T> {
 }
 
 impl<T: Ord> TryFrom<RawRange<T>> for Range<T> {
-    type Error = String;
+    type Error = InvalidRange<T>;
 
     fn try_from(raw: RawRange<T>) -> Result<Self, Self::Error> {
-        if raw.min > raw.max {
-            return Err("invalid range: min is greater than max".to_string());
-        }
-        Ok(Range {
-            min: raw.min,
-            max: raw.max,
-        })
+        Range::new(raw.min, raw.max)
     }
 }
 
@@ -193,10 +304,20 @@ mod tests {
     fn week_start_date_accepts_a_strict_monday() {
         let date: WeekStartDate = serde_json::from_value(json!("2026-08-31")).unwrap();
         assert_eq!(
-            date.0,
+            date.date(),
             chrono::NaiveDate::from_ymd_opt(2026, 8, 31).unwrap()
         );
         assert_eq!(serde_json::to_value(date).unwrap(), json!("2026-08-31"));
+    }
+
+    #[test]
+    fn week_start_date_new_checks_the_invariant() {
+        let monday = chrono::NaiveDate::from_ymd_opt(2026, 8, 31).unwrap();
+        let date = WeekStartDate::new(monday).unwrap();
+        assert_eq!(date.date(), monday);
+
+        let tuesday = chrono::NaiveDate::from_ymd_opt(2026, 9, 1).unwrap();
+        assert_eq!(WeekStartDate::new(tuesday), Err(NotAMonday(tuesday)));
     }
 
     #[test]
@@ -217,16 +338,31 @@ mod tests {
     #[test]
     fn time_of_day_accepts_strict_form() {
         let time: TimeOfDay = serde_json::from_value(json!("09:05")).unwrap();
-        assert_eq!(time, TimeOfDay { hour: 9, minute: 5 });
+        assert_eq!(time, TimeOfDay::new(9, 5).unwrap());
         assert_eq!(serde_json::to_value(time).unwrap(), json!("09:05"));
 
         let time: TimeOfDay = serde_json::from_value(json!("23:59")).unwrap();
+        assert_eq!(time, TimeOfDay::new(23, 59).unwrap());
+    }
+
+    #[test]
+    fn time_of_day_new_checks_the_invariant() {
+        let time = TimeOfDay::new(9, 5).unwrap();
+        assert_eq!((time.hour(), time.minute()), (9, 5));
+
         assert_eq!(
-            time,
-            TimeOfDay {
-                hour: 23,
-                minute: 59
-            }
+            TimeOfDay::new(24, 0),
+            Err(TimeOutOfRange {
+                hour: 24,
+                minute: 0
+            })
+        );
+        assert_eq!(
+            TimeOfDay::new(9, 60),
+            Err(TimeOutOfRange {
+                hour: 9,
+                minute: 60
+            })
         );
     }
 
@@ -253,8 +389,9 @@ mod tests {
     #[test]
     fn duration_is_a_positive_number_of_minutes() {
         let duration: DurationMinutes = serde_json::from_value(json!(60)).unwrap();
-        assert_eq!(duration.0.get(), 60);
+        assert_eq!(duration.get().get(), 60);
         assert_eq!(serde_json::to_value(duration).unwrap(), json!(60));
+        assert_eq!(duration, DurationMinutes::new(NonZeroU32::new(60).unwrap()));
 
         assert!(serde_json::from_value::<DurationMinutes>(json!(0)).is_err());
         assert!(serde_json::from_value::<DurationMinutes>(json!(-5)).is_err());
@@ -268,6 +405,15 @@ mod tests {
             serde_json::to_value(range).unwrap(),
             json!({ "min": 2, "max": 3 })
         );
+    }
+
+    #[test]
+    fn range_new_checks_the_invariant() {
+        let range = Range::new(2u32, 3).unwrap();
+        assert_eq!((*range.min(), *range.max()), (2, 3));
+        assert_eq!(range.into_min_max(), (2, 3));
+
+        assert_eq!(Range::new(3u32, 2), Err(InvalidRange { min: 3, max: 2 }));
     }
 
     #[test]

@@ -109,10 +109,11 @@ fn weekday(day: collomatique_time::Weekday) -> format::scalars::Weekday {
 
 fn time_of_day(time: collomatique_time::WholeMinuteTime) -> format::scalars::TimeOfDay {
     use chrono::Timelike;
-    format::scalars::TimeOfDay {
-        hour: u8::try_from(time.hour()).expect("Hours fit in u8"),
-        minute: u8::try_from(time.minute()).expect("Minutes fit in u8"),
-    }
+    format::scalars::TimeOfDay::new(
+        u8::try_from(time.hour()).expect("Hours fit in u8"),
+        u8::try_from(time.minute()).expect("Minutes fit in u8"),
+    )
+    .expect("A whole-minute time is a valid time of day")
 }
 
 fn day_time(start: &collomatique_time::SlotStart) -> format::scalars::DayTime {
@@ -122,11 +123,11 @@ fn day_time(start: &collomatique_time::SlotStart) -> format::scalars::DayTime {
     }
 }
 
-fn range<T: Copy>(range: &std::ops::RangeInclusive<T>) -> format::scalars::Range<T> {
-    format::scalars::Range {
-        min: *range.start(),
-        max: *range.end(),
-    }
+fn range<T: Copy + Ord + std::fmt::Debug>(
+    range: &std::ops::RangeInclusive<T>,
+) -> format::scalars::Range<T> {
+    format::scalars::Range::new(*range.start(), *range.end())
+        .expect("In-memory ranges have min <= max")
 }
 
 fn soft_param<T>(param: &mem::soft_param::SoftParam<T>) -> format::scalars::SoftParam<T>
@@ -147,11 +148,10 @@ fn build_general_planning(
     params: &mem::colloscope_params::Parameters,
 ) -> format::general_planning::GeneralPlanning {
     format::general_planning::GeneralPlanning {
-        first_week: params
-            .periods
-            .first_week
-            .as_ref()
-            .map(|week_start| format::scalars::WeekStartDate(*week_start.monday())),
+        first_week: params.periods.first_week.as_ref().map(|week_start| {
+            format::scalars::WeekStartDate::new(*week_start.monday())
+                .expect("A week start is a Monday")
+        }),
         periods: params
             .periods
             .ordered_period_list
@@ -194,7 +194,7 @@ fn interrogation_parameters(
     format::subjects::InterrogationParameters {
         students_per_group: range(&params.students_per_group),
         groups_per_interrogation: range(&params.groups_per_interrogation),
-        duration_minutes: format::scalars::DurationMinutes(params.duration.get()),
+        duration_minutes: format::scalars::DurationMinutes::new(params.duration.get()),
         take_duration_into_account: params.take_duration_into_account,
         periodicity: periodicity(&params.periodicity),
     }
@@ -366,7 +366,7 @@ fn build_incompatibilities(
                         .map(|slot| format::incompatibilities::IncompatibilitySlot {
                             day: weekday(slot.start().weekday),
                             time: time_of_day(slot.start().start_time),
-                            duration_minutes: format::scalars::DurationMinutes(
+                            duration_minutes: format::scalars::DurationMinutes::new(
                                 slot.duration().get(),
                             ),
                         })
