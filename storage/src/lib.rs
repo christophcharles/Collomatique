@@ -107,7 +107,14 @@ pub fn deserialize_data(
             legacy_caveats.append(&mut caveats);
             Ok((data, legacy_caveats))
         }
-        SpecFamily::Spec2 => todo!("spec-2 read path (commit 3)"),
+        SpecFamily::Spec2 => {
+            let data = decode::spec2::decode(
+                &raw_data.entries,
+                &raw_data.header.produced_with_version,
+                &mut caveats,
+            )?;
+            Ok((data, caveats))
+        }
     }
 }
 
@@ -129,7 +136,8 @@ pub fn serialize_data(data: &Data, legacy: bool) -> String {
         let json_data = encode::encode(data);
         serde_json::to_string_pretty(&json_data).expect("Serializing to JSON should not fail")
     } else {
-        todo!("spec-2 write path (commit 3)")
+        let document = encode::spec2::encode(data);
+        serde_json::to_string_pretty(&document).expect("Serializing to JSON should not fail")
     }
 }
 

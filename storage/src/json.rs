@@ -30,12 +30,27 @@ pub struct RawJsonData {
 #[derive(Debug, Deserialize)]
 pub struct RawEntry {
     pub minimum_spec_version: u32,
-    // These two fields are only deserialized (never read) until the spec-2
-    // read path consumes them.
-    #[allow(dead_code)]
     pub needed_entry: bool,
-    #[allow(dead_code)]
     pub content: Box<serde_json::value::RawValue>,
+}
+
+/// Serialize-only envelope for spec-2 documents
+///
+/// Reading goes through [RawJsonData] instead: the tolerance rules for
+/// unknown block names require keeping the entry payloads raw.
+#[derive(Debug, Serialize)]
+pub struct Spec2Document {
+    pub header: Header,
+    pub entries: Vec<Spec2Entry>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct Spec2Entry {
+    pub minimum_spec_version: u32,
+    pub needed_entry: bool,
+    /// External tagging emits the spec encoding: an object with exactly
+    /// one key, the block name
+    pub content: crate::format::Block,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -144,7 +159,7 @@ pub enum ValidEntry {
     InnerDataDump(collomatique_state_colloscopes::InnerData),
 }
 
-pub const CURRENT_SPEC_VERSION: u32 = 1;
+pub const CURRENT_SPEC_VERSION: u32 = 2;
 
 impl ValidEntry {
     pub fn minimum_spec_version(&self) -> u32 {

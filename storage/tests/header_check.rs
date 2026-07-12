@@ -52,7 +52,6 @@ fn decode_invalid_file_content() {
 }
 
 #[test]
-#[ignore = "re-enabled by the spec-2 read path (commit 3)"]
 fn decode_more_recent_file() {
     let current_version = Version::current();
     let new_version = Version {

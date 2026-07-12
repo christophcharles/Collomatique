@@ -126,6 +126,28 @@ impl FileLoader {
                 version
             ),
             DecodeError::InnerDataDumpUsedOnModifiedInnerData => "Fichier mal formé et est probablement corrompu.\n(Entrée InnerDataDump utilisée sur des données déjà remplies)".into(),
+            DecodeError::MalformedEntryContent => "Le fichier est mal formé et est probablement corrompu.\n(Le contenu d'une entrée n'est pas un objet avec exactement une clé)".into(),
+            DecodeError::DuplicatedBlock(block) => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(Le bloc {} apparaît plusieurs fois)",
+                block
+            ),
+            DecodeError::IllformedBlock { block, detail } => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(Le bloc {} est mal formé : {})",
+                block, detail
+            ),
+            DecodeError::SlotCrossesMidnight => "Le fichier est mal formé et est probablement corrompu.\n(Un créneau d'incompatibilité dépasse minuit)".into(),
+            DecodeError::UnknownSlotInColloscope(slot_id) => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(Le colloscope référence un créneau inconnu, id {})",
+                slot_id
+            ),
+            DecodeError::InvalidInterrogationCell { slot_id, week } => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(Le colloscope place une interrogation sur une case inexistante : créneau {}, semaine {})",
+                slot_id, week
+            ),
+            DecodeError::InvalidColloscopeGroupList(group_list_id) => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(Le colloscope remplit une liste de groupes invalide, id {})",
+                group_list_id
+            ),
             DecodeError::InnerDataError(error) => format!(
                 "Fichier mal formé et est probablement corrompu.\n(Les données ne vérifient pas un invariant : {})",
                 error

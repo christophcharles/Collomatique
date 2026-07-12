@@ -1,9 +1,8 @@
 //! Decode submodule
 //!
-//! This module contains the logic that builds
-//! a [Data] from a [json::JsonData].
-//!
-//! The main function for this is [self::decode]
+//! This module contains the logic that builds a [Data] from a file
+//! document: [self::decode] for the legacy (spec 1) pipeline, and
+//! [spec2::decode] for the spec-2 pipeline.
 
 use super::*;
 use crate::json::*;
@@ -21,6 +20,25 @@ pub enum DecodeError {
     MismatchedSpecRequirementInEntry,
     #[error("An entry is probably ill-formed (and thus not recognized)")]
     ProbablyIllformedEntry,
+    #[error("An entry's content should be an object with exactly one key (the block name)")]
+    MalformedEntryContent,
+    #[error("Block {0:?} appears more than once")]
+    DuplicatedBlock(&'static str),
+    #[error("Block {block:?} is ill-formed: {detail}")]
+    IllformedBlock {
+        block: &'static str,
+        /// The rendered serde diagnostics (field name, expected type,
+        /// position relative to the block's entry content)
+        detail: String,
+    },
+    #[error("An incompatibility slot crosses midnight")]
+    SlotCrossesMidnight,
+    #[error("The colloscope references an unknown slot id ({0})")]
+    UnknownSlotInColloscope(u64),
+    #[error("The colloscope interrogation cell (slot id {slot_id}, week {week}) does not exist")]
+    InvalidInterrogationCell { slot_id: u64, week: u32 },
+    #[error("The colloscope fills group list id {0} which is not an automatic group list")]
+    InvalidColloscopeGroupList(u64),
     #[error("generating new IDs is not secure, half the usable IDs have been used already")]
     EndOfTheUniverse,
     #[error("Duplicated ID")]
@@ -133,6 +151,7 @@ struct PreData {
 }
 
 mod inner_data_dump;
+pub(crate) mod spec2;
 
 fn decode_entries(entries: Vec<Entry>) -> Result<Data, DecodeError> {
     let mut pre_data = PreData::default();

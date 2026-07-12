@@ -2,7 +2,6 @@ use collomatique_storage::*;
 use std::collections::BTreeSet;
 
 #[test]
-#[ignore = "re-enabled by the spec-2 read path (commit 3)"]
 fn decode_empty_file_with_correct_header() {
     let content = r#"{
     "header": {

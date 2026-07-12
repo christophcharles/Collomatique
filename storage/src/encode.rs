@@ -1,9 +1,10 @@
 //! Encode submodule
 //!
-//! This module contains the logic that builds
-//! a [json::JsonData] from a [Data].
-//!
-//! The main function for this is [self::encode]
+//! This module contains the logic that builds a file document from a
+//! [Data]: [self::encode] for the legacy (spec 1) format, and
+//! [spec2::encode] for the spec-2 format.
+
+pub(crate) mod spec2;
 
 use super::*;
 use json::*;

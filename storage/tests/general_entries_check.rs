@@ -2,7 +2,6 @@ use collomatique_storage::*;
 use std::collections::BTreeSet;
 
 #[test]
-#[ignore = "re-enabled by the spec-2 read path (commit 3)"]
 fn decode_unknown_unneeded_entry() {
     let content = format!(
         r#"{{
@@ -41,7 +40,6 @@ fn decode_unknown_unneeded_entry() {
 }
 
 #[test]
-#[ignore = "re-enabled by the spec-2 read path (commit 3)"]
 fn decode_fails_with_unknown_needed_entry() {
     let content = format!(
         r#"{{

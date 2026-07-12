@@ -14,7 +14,6 @@
 //! The `Default` impl of every block type encodes the block's default state
 //! (the meaning of the block's absence) as specified in the spec. These
 //! defaults are frozen forever; the in-module tests pin them.
-#![allow(dead_code)] // temporary: removed when the spec-2 read/write paths land
 
 pub mod keyed;
 pub mod scalars;

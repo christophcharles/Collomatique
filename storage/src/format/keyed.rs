@@ -51,6 +51,9 @@ impl<R: KeyedRow> KeyedVec<R> {
 }
 
 impl<R> KeyedVec<R> {
+    // Part of the container API alongside `into_inner`; reads go
+    // through `Deref` in the decoder, so only tests exercise it
+    #[allow(dead_code)]
     pub fn inner(&self) -> &Vec<R> {
         &self.0
     }
@@ -116,6 +119,9 @@ impl<T: Ord + Clone> UniqueVec<T> {
 }
 
 impl<T> UniqueVec<T> {
+    // Part of the container API alongside `into_inner`; reads go
+    // through `Deref` in the decoder, so only tests exercise it
+    #[allow(dead_code)]
     pub fn inner(&self) -> &Vec<T> {
         &self.0
     }
