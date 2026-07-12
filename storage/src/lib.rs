@@ -12,6 +12,7 @@
 
 mod decode;
 mod encode;
+mod format;
 mod json;
 
 pub use decode::{Caveat, DecodeError};
