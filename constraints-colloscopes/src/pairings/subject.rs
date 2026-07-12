@@ -59,6 +59,18 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                 }
                 let week = GlobalWeek(global_week_offset + local_idx);
 
+                // A subject pairing only governs weeks where BOTH subjects have a schedulable
+                // interrogation slot for the student. Otherwise the "student has interrogation in
+                // <subject>" term is structurally zero: the rule would reference the undeclared
+                // StudentHasInterrogationIn extra (declared only for weeks with active slots, see
+                // extras.rs), emit a spurious 0 >= 1, or force an unrelated interrogation on/off.
+                // Mirrors the association guard in pairings/slot.rs.
+                if active_slots_for_subject_week(env, ant_subject, week).is_empty()
+                    || active_slots_for_subject_week(env, con_subject, week).is_empty()
+                {
+                    continue;
+                }
+
                 for &student in &both_students {
                     if rule.soft {
                         let mut single = MyBundle::new();
