@@ -935,88 +935,60 @@ impl InMemoryData for Data {
         AnnotatedOp::annotate(op, &mut guard)
     }
 
-    fn build_rev_with_current_state(
-        &self,
+    fn apply(
+        &mut self,
         op: &Self::AnnotatedOperation,
     ) -> std::result::Result<Self::AnnotatedOperation, Self::Error> {
-        match op {
+        let backward = match op {
             AnnotatedOp::Student(student_op) => {
-                Ok(AnnotatedOp::Student(self.build_rev_student(student_op)?))
+                AnnotatedOp::Student(self.apply_student(student_op)?)
             }
-            AnnotatedOp::Period(period_op) => {
-                Ok(AnnotatedOp::Period(self.build_rev_period(period_op)?))
-            }
+            AnnotatedOp::Period(period_op) => AnnotatedOp::Period(self.apply_period(period_op)?),
             AnnotatedOp::Subject(subject_op) => {
-                Ok(AnnotatedOp::Subject(self.build_rev_subject(subject_op)?))
+                AnnotatedOp::Subject(self.apply_subject(subject_op)?)
             }
             AnnotatedOp::Teacher(teacher_op) => {
-                Ok(AnnotatedOp::Teacher(self.build_rev_teacher(teacher_op)?))
+                AnnotatedOp::Teacher(self.apply_teacher(teacher_op)?)
             }
-            AnnotatedOp::Assignment(assignment_op) => Ok(AnnotatedOp::Assignment(
-                self.build_rev_assignment(assignment_op)?,
-            )),
-            AnnotatedOp::WeekPattern(week_pattern_op) => Ok(AnnotatedOp::WeekPattern(
-                self.build_rev_week_pattern(week_pattern_op)?,
-            )),
-            AnnotatedOp::Slot(slot_op) => Ok(AnnotatedOp::Slot(self.build_rev_slot(slot_op)?)),
+            AnnotatedOp::Assignment(assignment_op) => {
+                AnnotatedOp::Assignment(self.apply_assignment(assignment_op)?)
+            }
+            AnnotatedOp::WeekPattern(week_pattern_op) => {
+                AnnotatedOp::WeekPattern(self.apply_week_pattern(week_pattern_op)?)
+            }
+            AnnotatedOp::Slot(slot_op) => AnnotatedOp::Slot(self.apply_slot(slot_op)?),
             AnnotatedOp::Incompat(incompat_op) => {
-                Ok(AnnotatedOp::Incompat(self.build_rev_incompat(incompat_op)?))
+                AnnotatedOp::Incompat(self.apply_incompat(incompat_op)?)
             }
             AnnotatedOp::Pairing(pairing_op) => {
-                Ok(AnnotatedOp::Pairing(self.build_rev_pairing(pairing_op)?))
+                AnnotatedOp::Pairing(self.apply_pairing(pairing_op)?)
             }
-            AnnotatedOp::SlotPairing(slot_pairing_op) => Ok(AnnotatedOp::SlotPairing(
-                self.build_rev_slot_pairing(slot_pairing_op)?,
-            )),
-            AnnotatedOp::GroupList(group_list_op) => Ok(AnnotatedOp::GroupList(
-                self.build_rev_group_list(group_list_op)?,
-            )),
-            AnnotatedOp::Settings(settings_op) => {
-                Ok(AnnotatedOp::Settings(self.build_rev_settings(settings_op)))
-            }
-            AnnotatedOp::Balancing(balancing_op) => Ok(AnnotatedOp::Balancing(
-                self.build_rev_balancing(balancing_op),
-            )),
-            AnnotatedOp::Colloscope(colloscope_op) => Ok(AnnotatedOp::Colloscope(
-                self.build_rev_colloscope(colloscope_op)?,
-            )),
-            AnnotatedOp::ExportConfig(export_config_op) => Ok(AnnotatedOp::ExportConfig(
-                self.build_rev_export_config(export_config_op),
-            )),
-            AnnotatedOp::GlobalUpdate(_) => Ok(AnnotatedOp::GlobalUpdate(self.inner_data.clone())),
-        }
-    }
-
-    fn apply(&mut self, op: &Self::AnnotatedOperation) -> std::result::Result<(), Self::Error> {
-        match op {
-            AnnotatedOp::Student(student_op) => self.apply_student(student_op)?,
-            AnnotatedOp::Period(period_op) => self.apply_period(period_op)?,
-            AnnotatedOp::Subject(subject_op) => self.apply_subject(subject_op)?,
-            AnnotatedOp::Teacher(teacher_op) => self.apply_teacher(teacher_op)?,
-            AnnotatedOp::Assignment(assignment_op) => self.apply_assignment(assignment_op)?,
-            AnnotatedOp::WeekPattern(week_pattern_op) => {
-                self.apply_week_pattern(week_pattern_op)?
-            }
-            AnnotatedOp::Slot(slot_op) => self.apply_slot(slot_op)?,
-            AnnotatedOp::Incompat(incompat_op) => self.apply_incompat(incompat_op)?,
-            AnnotatedOp::Pairing(pairing_op) => self.apply_pairing(pairing_op)?,
             AnnotatedOp::SlotPairing(slot_pairing_op) => {
-                self.apply_slot_pairing(slot_pairing_op)?
+                AnnotatedOp::SlotPairing(self.apply_slot_pairing(slot_pairing_op)?)
             }
-            AnnotatedOp::GroupList(group_list_op) => self.apply_group_list(group_list_op)?,
-            AnnotatedOp::Settings(settings_op) => self.apply_settings(settings_op)?,
-            AnnotatedOp::Balancing(balancing_op) => self.apply_balancing(balancing_op)?,
-            AnnotatedOp::Colloscope(colloscope_op) => self.apply_colloscope(colloscope_op)?,
+            AnnotatedOp::GroupList(group_list_op) => {
+                AnnotatedOp::GroupList(self.apply_group_list(group_list_op)?)
+            }
+            AnnotatedOp::Settings(settings_op) => {
+                AnnotatedOp::Settings(self.apply_settings(settings_op)?)
+            }
+            AnnotatedOp::Balancing(balancing_op) => {
+                AnnotatedOp::Balancing(self.apply_balancing(balancing_op)?)
+            }
+            AnnotatedOp::Colloscope(colloscope_op) => {
+                AnnotatedOp::Colloscope(self.apply_colloscope(colloscope_op)?)
+            }
             AnnotatedOp::ExportConfig(export_config_op) => {
-                self.apply_export_config(export_config_op)?
+                AnnotatedOp::ExportConfig(self.apply_export_config(export_config_op)?)
             }
             AnnotatedOp::GlobalUpdate(new_inner_data) => {
                 new_inner_data.check_invariants()?;
-                self.inner_data = new_inner_data.clone();
+                let old = std::mem::replace(&mut self.inner_data, new_inner_data.clone());
+                AnnotatedOp::GlobalUpdate(old)
             }
-        }
+        };
         self.check_invariants();
-        Ok(())
+        Ok(backward)
     }
 }
 
@@ -1088,7 +1060,7 @@ impl Data {
     fn apply_student(
         &mut self,
         student_op: &AnnotatedStudentOp,
-    ) -> std::result::Result<(), StudentError> {
+    ) -> std::result::Result<AnnotatedStudentOp, StudentError> {
         match student_op {
             AnnotatedStudentOp::Add(new_id, student) => {
                 if self
@@ -1108,7 +1080,7 @@ impl Data {
                     .student_map
                     .insert(*new_id, student.clone());
 
-                Ok(())
+                Ok(AnnotatedStudentOp::Remove(*new_id))
             }
             AnnotatedStudentOp::Remove(id) => {
                 let Some(current_student) = self.inner_data.params.students.student_map.get(id)
@@ -1163,9 +1135,15 @@ impl Data {
                     return Err(StudentError::StudentStillHasSettings(*id));
                 }
 
-                self.inner_data.params.students.student_map.remove(id);
+                let old_student = self
+                    .inner_data
+                    .params
+                    .students
+                    .student_map
+                    .remove(id)
+                    .expect("Student ID was checked above");
 
-                Ok(())
+                Ok(AnnotatedStudentOp::Add(*id, old_student))
             }
             AnnotatedStudentOp::Update(id, new_student) => {
                 self.inner_data.params.validate_student(new_student)?;
@@ -1193,9 +1171,9 @@ impl Data {
                     }
                 }
 
-                *current_student = new_student.clone();
+                let old_student = std::mem::replace(current_student, new_student.clone());
 
-                Ok(())
+                Ok(AnnotatedStudentOp::Update(*id, old_student))
             }
         }
     }
@@ -1206,11 +1184,14 @@ impl Data {
     fn apply_period(
         &mut self,
         period_op: &AnnotatedPeriodOp,
-    ) -> std::result::Result<(), PeriodError> {
+    ) -> std::result::Result<AnnotatedPeriodOp, PeriodError> {
         match period_op {
             AnnotatedPeriodOp::ChangeStartDate(new_date) => {
-                self.inner_data.params.periods.first_week = new_date.clone();
-                Ok(())
+                let old_date = std::mem::replace(
+                    &mut self.inner_data.params.periods.first_week,
+                    new_date.clone(),
+                );
+                Ok(AnnotatedPeriodOp::ChangeStartDate(old_date))
             }
             AnnotatedPeriodOp::AddFront(period_id, desc) => {
                 if self
@@ -1259,7 +1240,7 @@ impl Data {
                     *period_id,
                     ColloscopePeriod::new_empty_from_params(&self.inner_data.params, *period_id),
                 );
-                Ok(())
+                Ok(AnnotatedPeriodOp::Remove(*period_id))
             }
             AnnotatedPeriodOp::AddAfter(period_id, after_id, desc) => {
                 if self
@@ -1317,7 +1298,7 @@ impl Data {
                     *period_id,
                     ColloscopePeriod::new_empty_from_params(&self.inner_data.params, *period_id),
                 );
-                Ok(())
+                Ok(AnnotatedPeriodOp::Remove(*period_id))
             }
             AnnotatedPeriodOp::Remove(period_id) => {
                 let Some((position, first_week)) = self
@@ -1418,7 +1399,11 @@ impl Data {
                     ));
                 }
 
-                self.inner_data
+                let previous_id = (position > 0)
+                    .then(|| self.inner_data.params.periods.ordered_period_list[position - 1].0);
+
+                let (_, old_desc) = self
+                    .inner_data
                     .params
                     .periods
                     .ordered_period_list
@@ -1444,7 +1429,10 @@ impl Data {
                 }
                 self.inner_data.colloscope.period_map.remove(period_id);
 
-                Ok(())
+                Ok(match previous_id {
+                    None => AnnotatedPeriodOp::AddFront(*period_id, old_desc),
+                    Some(prev) => AnnotatedPeriodOp::AddAfter(*period_id, prev, old_desc),
+                })
             }
             AnnotatedPeriodOp::Update(period_id, desc) => {
                 let Some((position, first_week)) = self
@@ -1496,7 +1484,10 @@ impl Data {
                     }
                 }
 
-                self.inner_data.params.periods.ordered_period_list[position].1 = desc.clone();
+                let old_desc = std::mem::replace(
+                    &mut self.inner_data.params.periods.ordered_period_list[position].1,
+                    desc.clone(),
+                );
                 if desc.len() > old_length {
                     let first_week_to_add = first_week + old_length;
                     for week_pattern in self
@@ -1528,7 +1519,7 @@ impl Data {
                     }
                 }
 
-                Ok(())
+                Ok(AnnotatedPeriodOp::Update(*period_id, old_desc))
             }
         }
     }
@@ -1539,7 +1530,7 @@ impl Data {
     fn apply_subject(
         &mut self,
         subject_op: &AnnotatedSubjectOp,
-    ) -> std::result::Result<(), SubjectError> {
+    ) -> std::result::Result<AnnotatedSubjectOp, SubjectError> {
         match subject_op {
             AnnotatedSubjectOp::AddAfter(new_id, after_id, params) => {
                 if self
@@ -1596,7 +1587,7 @@ impl Data {
                         .insert(*new_id, BTreeSet::new());
                 }
 
-                Ok(())
+                Ok(AnnotatedSubjectOp::Remove(*new_id))
             }
             AnnotatedSubjectOp::ChangePosition(id, new_pos) => {
                 if *new_pos >= self.inner_data.params.subjects.ordered_subject_list.len() {
@@ -1621,7 +1612,7 @@ impl Data {
                     .subjects
                     .ordered_subject_list
                     .insert(*new_pos, data);
-                Ok(())
+                Ok(AnnotatedSubjectOp::ChangePosition(*id, old_pos))
             }
             AnnotatedSubjectOp::Remove(id) => {
                 let Some(position) = self.inner_data.params.subjects.find_subject_position(*id)
@@ -1703,6 +1694,9 @@ impl Data {
                     }
                 }
 
+                let previous_id = (position > 0)
+                    .then(|| self.inner_data.params.subjects.ordered_subject_list[position - 1].0);
+
                 let (_, params) = self
                     .inner_data
                     .params
@@ -1726,7 +1720,7 @@ impl Data {
                     period_assignment.subject_map.remove(id);
                 }
 
-                Ok(())
+                Ok(AnnotatedSubjectOp::AddAfter(*id, previous_id, params))
             }
             AnnotatedSubjectOp::Update(id, new_params) => {
                 self.inner_data.params.validate_subject(new_params)?;
@@ -1941,7 +1935,7 @@ impl Data {
                     }
                 }
 
-                Ok(())
+                Ok(AnnotatedSubjectOp::Update(*id, old_params))
             }
         }
     }
@@ -1952,7 +1946,7 @@ impl Data {
     fn apply_teacher(
         &mut self,
         teacher_op: &AnnotatedTeacherOp,
-    ) -> std::result::Result<(), TeacherError> {
+    ) -> std::result::Result<AnnotatedTeacherOp, TeacherError> {
         match teacher_op {
             AnnotatedTeacherOp::Add(new_id, teacher) => {
                 if self
@@ -1972,7 +1966,7 @@ impl Data {
                     .teacher_map
                     .insert(*new_id, teacher.clone());
 
-                Ok(())
+                Ok(AnnotatedTeacherOp::Remove(*new_id))
             }
             AnnotatedTeacherOp::Remove(id) => {
                 if !self.inner_data.params.teachers.teacher_map.contains_key(id) {
@@ -1989,9 +1983,15 @@ impl Data {
                     }
                 }
 
-                self.inner_data.params.teachers.teacher_map.remove(id);
+                let old_teacher = self
+                    .inner_data
+                    .params
+                    .teachers
+                    .teacher_map
+                    .remove(id)
+                    .expect("Teacher ID was checked above");
 
-                Ok(())
+                Ok(AnnotatedTeacherOp::Add(*id, old_teacher))
             }
             AnnotatedTeacherOp::Update(id, new_teacher) => {
                 self.inner_data.params.validate_teacher(new_teacher)?;
@@ -2014,9 +2014,9 @@ impl Data {
                     }
                 }
 
-                *current_teacher = new_teacher.clone();
+                let old_teacher = std::mem::replace(current_teacher, new_teacher.clone());
 
-                Ok(())
+                Ok(AnnotatedTeacherOp::Update(*id, old_teacher))
             }
         }
     }
@@ -2027,7 +2027,7 @@ impl Data {
     fn apply_assignment(
         &mut self,
         assignment_op: &AnnotatedAssignmentOp,
-    ) -> std::result::Result<(), AssignmentError> {
+    ) -> std::result::Result<AnnotatedAssignmentOp, AssignmentError> {
         match assignment_op {
             AnnotatedAssignmentOp::Assign(period_id, student_id, subject_id, status) => {
                 let Some(period_assignments) = self
@@ -2071,13 +2071,20 @@ impl Data {
                     ));
                 }
 
+                let previous_status = assigned_students.contains(student_id);
+
                 if *status {
                     assigned_students.insert(*student_id);
                 } else {
                     assigned_students.remove(student_id);
                 }
 
-                Ok(())
+                Ok(AnnotatedAssignmentOp::Assign(
+                    *period_id,
+                    *student_id,
+                    *subject_id,
+                    previous_status,
+                ))
             }
         }
     }
@@ -2088,7 +2095,7 @@ impl Data {
     fn apply_week_pattern(
         &mut self,
         week_pattern_op: &AnnotatedWeekPatternOp,
-    ) -> std::result::Result<(), WeekPatternError> {
+    ) -> std::result::Result<AnnotatedWeekPatternOp, WeekPatternError> {
         match week_pattern_op {
             AnnotatedWeekPatternOp::Add(new_id, week_pattern) => {
                 if self
@@ -2109,7 +2116,7 @@ impl Data {
                     .week_pattern_map
                     .insert(*new_id, week_pattern.clone());
 
-                Ok(())
+                Ok(AnnotatedWeekPatternOp::Remove(*new_id))
             }
             AnnotatedWeekPatternOp::Remove(id) => {
                 if !self
@@ -2145,13 +2152,15 @@ impl Data {
                     }
                 }
 
-                self.inner_data
+                let old_week_pattern = self
+                    .inner_data
                     .params
                     .week_patterns
                     .week_pattern_map
-                    .remove(id);
+                    .remove(id)
+                    .expect("Week pattern ID was checked above");
 
-                Ok(())
+                Ok(AnnotatedWeekPatternOp::Add(*id, old_week_pattern))
             }
             AnnotatedWeekPatternOp::Update(id, new_week_pattern) => {
                 self.inner_data
@@ -2188,7 +2197,8 @@ impl Data {
                     }
                 }
 
-                *current_week_pattern = new_week_pattern.clone();
+                let old_week_pattern =
+                    std::mem::replace(current_week_pattern, new_week_pattern.clone());
                 for subject_slots in self.inner_data.params.slots.subject_map.values() {
                     for (slot_id, slot) in &subject_slots.ordered_slots {
                         if slot.week_pattern != Some(*id) {
@@ -2203,7 +2213,7 @@ impl Data {
                     }
                 }
 
-                Ok(())
+                Ok(AnnotatedWeekPatternOp::Update(*id, old_week_pattern))
             }
         }
     }
@@ -2211,7 +2221,10 @@ impl Data {
     /// Used internally
     ///
     /// Apply slot operations
-    fn apply_slot(&mut self, slot_op: &AnnotatedSlotOp) -> std::result::Result<(), SlotError> {
+    fn apply_slot(
+        &mut self,
+        slot_op: &AnnotatedSlotOp,
+    ) -> std::result::Result<AnnotatedSlotOp, SlotError> {
         match slot_op {
             AnnotatedSlotOp::AddAfter(new_id, subject_id, after_id, slot) => {
                 if self
@@ -2278,7 +2291,7 @@ impl Data {
                     );
                 }
 
-                Ok(())
+                Ok(AnnotatedSlotOp::Remove(*new_id))
             }
             AnnotatedSlotOp::ChangePosition(id, new_pos) => {
                 let Some((subject_id, old_pos)) = self
@@ -2308,7 +2321,7 @@ impl Data {
                 let data = subject_slots.ordered_slots.remove(old_pos);
                 subject_slots.ordered_slots.insert(*new_pos, data);
 
-                Ok(())
+                Ok(AnnotatedSlotOp::ChangePosition(*id, old_pos))
             }
             AnnotatedSlotOp::Remove(id) => {
                 let Some((subject_id, old_pos)) = self
@@ -2343,13 +2356,19 @@ impl Data {
                     .subject_map
                     .get_mut(&subject_id)
                     .expect("Subject id should be valid at this point");
-                subject_slots.ordered_slots.remove(old_pos);
+                let previous_id = (old_pos > 0).then(|| subject_slots.ordered_slots[old_pos - 1].0);
+                let (_, old_slot) = subject_slots.ordered_slots.remove(old_pos);
                 for collo_period in self.inner_data.colloscope.period_map.values_mut() {
                     // The slot might not be in period but this won't raise an error
                     collo_period.slot_map.remove(id);
                 }
 
-                Ok(())
+                Ok(AnnotatedSlotOp::AddAfter(
+                    *id,
+                    subject_id,
+                    previous_id,
+                    old_slot,
+                ))
             }
             AnnotatedSlotOp::Update(slot_id, new_slot) => {
                 let Some((subject_id, position)) = self
@@ -2385,14 +2404,17 @@ impl Data {
                     .get_mut(&subject_id)
                     .expect("Subject id should be valid at this point");
 
-                subject_slots.ordered_slots[position].1 = new_slot.clone();
+                let old_slot = std::mem::replace(
+                    &mut subject_slots.ordered_slots[position].1,
+                    new_slot.clone(),
+                );
                 self.inner_data.colloscope.update_slot_for_week_pattern(
                     *slot_id,
                     &self.inner_data.params.periods,
                     &pattern[..],
                 );
 
-                Ok(())
+                Ok(AnnotatedSlotOp::Update(*slot_id, old_slot))
             }
         }
     }
@@ -2403,7 +2425,7 @@ impl Data {
     fn apply_incompat(
         &mut self,
         incompat_op: &AnnotatedIncompatOp,
-    ) -> std::result::Result<(), IncompatError> {
+    ) -> std::result::Result<AnnotatedIncompatOp, IncompatError> {
         match incompat_op {
             AnnotatedIncompatOp::Add(new_id, incompat) => {
                 if self
@@ -2423,22 +2445,15 @@ impl Data {
                     .incompat_map
                     .insert(*new_id, incompat.clone());
 
-                Ok(())
+                Ok(AnnotatedIncompatOp::Remove(*new_id))
             }
             AnnotatedIncompatOp::Remove(id) => {
-                if !self
-                    .inner_data
-                    .params
-                    .incompats
-                    .incompat_map
-                    .contains_key(id)
-                {
+                let Some(old_incompat) = self.inner_data.params.incompats.incompat_map.remove(id)
+                else {
                     return Err(IncompatError::InvalidIncompatId(*id));
-                }
+                };
 
-                self.inner_data.params.incompats.incompat_map.remove(id);
-
-                Ok(())
+                Ok(AnnotatedIncompatOp::Add(*id, old_incompat))
             }
             AnnotatedIncompatOp::Update(incompat_id, new_incompat) => {
                 self.inner_data.params.validate_incompat(new_incompat)?;
@@ -2453,9 +2468,9 @@ impl Data {
                     return Err(IncompatError::InvalidIncompatId(*incompat_id));
                 };
 
-                *incompat = new_incompat.clone();
+                let old_incompat = std::mem::replace(incompat, new_incompat.clone());
 
-                Ok(())
+                Ok(AnnotatedIncompatOp::Update(*incompat_id, old_incompat))
             }
         }
     }
@@ -2466,7 +2481,7 @@ impl Data {
     fn apply_pairing(
         &mut self,
         pairing_op: &AnnotatedPairingOp,
-    ) -> std::result::Result<(), PairingError> {
+    ) -> std::result::Result<AnnotatedPairingOp, PairingError> {
         match pairing_op {
             AnnotatedPairingOp::Add(new_id, rule) => {
                 if self
@@ -2486,22 +2501,15 @@ impl Data {
                     .pairing_rule_map
                     .insert(*new_id, rule.clone());
 
-                Ok(())
+                Ok(AnnotatedPairingOp::Remove(*new_id))
             }
             AnnotatedPairingOp::Remove(id) => {
-                if !self
-                    .inner_data
-                    .params
-                    .pairings
-                    .pairing_rule_map
-                    .contains_key(id)
-                {
+                let Some(old_rule) = self.inner_data.params.pairings.pairing_rule_map.remove(id)
+                else {
                     return Err(PairingError::InvalidPairingRuleId(*id));
-                }
+                };
 
-                self.inner_data.params.pairings.pairing_rule_map.remove(id);
-
-                Ok(())
+                Ok(AnnotatedPairingOp::Add(*id, old_rule))
             }
             AnnotatedPairingOp::Update(id, new_rule) => {
                 self.inner_data.params.validate_pairing_rule(new_rule)?;
@@ -2511,9 +2519,9 @@ impl Data {
                     return Err(PairingError::InvalidPairingRuleId(*id));
                 };
 
-                *rule = new_rule.clone();
+                let old_rule = std::mem::replace(rule, new_rule.clone());
 
-                Ok(())
+                Ok(AnnotatedPairingOp::Update(*id, old_rule))
             }
         }
     }
@@ -2521,8 +2529,8 @@ impl Data {
     fn apply_slot_pairing(
         &mut self,
         slot_pairing_op: &AnnotatedSlotPairingOp,
-    ) -> Result<(), SlotPairingError> {
-        match slot_pairing_op {
+    ) -> Result<AnnotatedSlotPairingOp, SlotPairingError> {
+        let backward = match slot_pairing_op {
             AnnotatedSlotPairingOp::Add(new_id, rule) => {
                 if self
                     .inner_data
@@ -2541,23 +2549,21 @@ impl Data {
                     .slot_pairings
                     .slot_pairing_rule_map
                     .insert(*new_id, rule.clone());
+
+                AnnotatedSlotPairingOp::Remove(*new_id)
             }
             AnnotatedSlotPairingOp::Remove(id) => {
-                if !self
+                let Some(old_rule) = self
                     .inner_data
                     .params
                     .slot_pairings
                     .slot_pairing_rule_map
-                    .contains_key(id)
-                {
+                    .remove(id)
+                else {
                     return Err(SlotPairingError::InvalidSlotPairingRuleId(*id));
-                }
+                };
 
-                self.inner_data
-                    .params
-                    .slot_pairings
-                    .slot_pairing_rule_map
-                    .remove(id);
+                AnnotatedSlotPairingOp::Add(*id, old_rule)
             }
             AnnotatedSlotPairingOp::Update(id, new_rule) => {
                 self.inner_data
@@ -2574,10 +2580,12 @@ impl Data {
                     return Err(SlotPairingError::InvalidSlotPairingRuleId(*id));
                 };
 
-                *rule = new_rule.clone();
+                let old_rule = std::mem::replace(rule, new_rule.clone());
+
+                AnnotatedSlotPairingOp::Update(*id, old_rule)
             }
-        }
-        Ok(())
+        };
+        Ok(backward)
     }
 
     /// Used internally
@@ -2626,7 +2634,7 @@ impl Data {
     fn apply_group_list(
         &mut self,
         group_list_op: &AnnotatedGroupListOp,
-    ) -> std::result::Result<(), GroupListError> {
+    ) -> std::result::Result<AnnotatedGroupListOp, GroupListError> {
         match group_list_op {
             AnnotatedGroupListOp::Add(new_id, params, filling) => {
                 if self
@@ -2662,7 +2670,7 @@ impl Data {
                         .insert(*new_id, colloscopes::ColloscopeGroupList::new_empty());
                 }
 
-                Ok(())
+                Ok(AnnotatedGroupListOp::Remove(*new_id))
             }
             AnnotatedGroupListOp::Remove(id) => {
                 let Some(old_group_list) =
@@ -2709,12 +2717,22 @@ impl Data {
                     }
                 }
 
-                self.inner_data.params.group_lists.group_list_map.remove(id);
+                let old_group_list = self
+                    .inner_data
+                    .params
+                    .group_lists
+                    .group_list_map
+                    .remove(id)
+                    .expect("Group list ID was checked above");
                 if !was_prefilled {
                     self.inner_data.colloscope.group_lists.remove(id);
                 }
 
-                Ok(())
+                Ok(AnnotatedGroupListOp::Add(
+                    *id,
+                    old_group_list.params,
+                    old_group_list.filling,
+                ))
             }
             AnnotatedGroupListOp::Update(group_list_id, new_params) => {
                 let Some(old_group_list) = self
@@ -2814,13 +2832,18 @@ impl Data {
                     .params
                     .validate_group_list(&new_group_list)?;
 
-                self.inner_data
+                let old_group_list = self
+                    .inner_data
                     .params
                     .group_lists
                     .group_list_map
-                    .insert(*group_list_id, new_group_list);
+                    .insert(*group_list_id, new_group_list)
+                    .expect("Group list ID was validated above");
 
-                Ok(())
+                Ok(AnnotatedGroupListOp::Update(
+                    *group_list_id,
+                    old_group_list.params,
+                ))
             }
             AnnotatedGroupListOp::SetFilling(group_list_id, filling) => {
                 let Some(old_group_list) = self
@@ -2899,13 +2922,18 @@ impl Data {
                     .params
                     .validate_group_list(&new_group_list)?;
 
-                self.inner_data
+                let old_group_list = self
+                    .inner_data
                     .params
                     .group_lists
                     .group_list_map
-                    .insert(*group_list_id, new_group_list);
+                    .insert(*group_list_id, new_group_list)
+                    .expect("Group list ID was validated above");
 
-                Ok(())
+                Ok(AnnotatedGroupListOp::SetFilling(
+                    *group_list_id,
+                    old_group_list.filling,
+                ))
             }
             AnnotatedGroupListOp::AssignToSubject(period_id, subject_id, group_list_id) => {
                 let Some(subject) = self.inner_data.params.subjects.find_subject(*subject_id)
@@ -2957,16 +2985,16 @@ impl Data {
                     .get_mut(period_id)
                     .expect("Period ID was just checked");
 
-                match group_list_id {
-                    Some(id) => {
-                        subject_map.insert(*subject_id, *id);
-                    }
-                    None => {
-                        subject_map.remove(subject_id);
-                    }
-                }
+                let old_group_list_id = match group_list_id {
+                    Some(id) => subject_map.insert(*subject_id, *id),
+                    None => subject_map.remove(subject_id),
+                };
 
-                Ok(())
+                Ok(AnnotatedGroupListOp::AssignToSubject(
+                    *period_id,
+                    *subject_id,
+                    old_group_list_id,
+                ))
             }
         }
     }
@@ -2977,12 +3005,13 @@ impl Data {
     fn apply_settings(
         &mut self,
         settings_op: &AnnotatedSettingsOp,
-    ) -> std::result::Result<(), SettingsError> {
+    ) -> std::result::Result<AnnotatedSettingsOp, SettingsError> {
         match settings_op {
             AnnotatedSettingsOp::Update(new_settings) => {
                 self.inner_data.params.validate_settings(new_settings)?;
-                self.inner_data.params.settings = new_settings.clone();
-                Ok(())
+                let old_settings =
+                    std::mem::replace(&mut self.inner_data.params.settings, new_settings.clone());
+                Ok(AnnotatedSettingsOp::Update(old_settings))
             }
         }
     }
@@ -2993,12 +3022,13 @@ impl Data {
     fn apply_balancing(
         &mut self,
         balancing_op: &AnnotatedBalancingOp,
-    ) -> std::result::Result<(), BalancingError> {
+    ) -> std::result::Result<AnnotatedBalancingOp, BalancingError> {
         match balancing_op {
             AnnotatedBalancingOp::Update(new_balancing) => {
                 self.inner_data.params.validate_balancing(new_balancing)?;
-                self.inner_data.params.balancing = new_balancing.clone();
-                Ok(())
+                let old_balancing =
+                    std::mem::replace(&mut self.inner_data.params.balancing, new_balancing.clone());
+                Ok(AnnotatedBalancingOp::Update(old_balancing))
             }
         }
     }
@@ -3009,7 +3039,7 @@ impl Data {
     fn apply_colloscope(
         &mut self,
         colloscope_op: &AnnotatedColloscopeOp,
-    ) -> std::result::Result<(), ColloscopeError> {
+    ) -> std::result::Result<AnnotatedColloscopeOp, ColloscopeError> {
         match colloscope_op {
             AnnotatedColloscopeOp::UpdateGroupList(group_list_id, group_list) => {
                 let Some(params_group_list) = self
@@ -3029,12 +3059,28 @@ impl Data {
                     &self.inner_data.params.students,
                 )?;
 
-                self.inner_data
+                // Prefilled group lists have a params entry but no colloscope
+                // entry: the op must be rejected, not insert one.
+                if !self
+                    .inner_data
                     .colloscope
                     .group_lists
-                    .insert(*group_list_id, group_list.clone());
+                    .contains_key(group_list_id)
+                {
+                    return Err(ColloscopeError::InvalidGroupListId(*group_list_id));
+                }
 
-                Ok(())
+                let old_group_list = self
+                    .inner_data
+                    .colloscope
+                    .group_lists
+                    .insert(*group_list_id, group_list.clone())
+                    .expect("Entry presence was checked above");
+
+                Ok(AnnotatedColloscopeOp::UpdateGroupList(
+                    *group_list_id,
+                    old_group_list,
+                ))
             }
             AnnotatedColloscopeOp::UpdateInterrogation(
                 period_id,
@@ -3072,9 +3118,14 @@ impl Data {
                     ));
                 };
 
-                *interrogation = new_interrogation.clone();
+                let old_interrogation = std::mem::replace(interrogation, new_interrogation.clone());
 
-                Ok(())
+                Ok(AnnotatedColloscopeOp::UpdateInterrogation(
+                    *period_id,
+                    *slot_id,
+                    *week_in_period,
+                    old_interrogation,
+                ))
             }
         }
     }
@@ -3085,877 +3136,79 @@ impl Data {
     fn apply_export_config(
         &mut self,
         export_config_op: &AnnotatedExportConfigOp,
-    ) -> std::result::Result<(), ExportConfigError> {
-        match export_config_op {
+    ) -> std::result::Result<AnnotatedExportConfigOp, ExportConfigError> {
+        let backward = match export_config_op {
             AnnotatedExportConfigOp::UpdateGlobalConfig(v) => {
-                self.inner_data.export_config.global = v.clone();
+                let old = std::mem::replace(&mut self.inner_data.export_config.global, v.clone());
+                AnnotatedExportConfigOp::UpdateGlobalConfig(old)
             }
             AnnotatedExportConfigOp::UpdateColloscopeEnabled(v) => {
-                self.inner_data.export_config.colloscope_enabled = *v;
+                let old =
+                    std::mem::replace(&mut self.inner_data.export_config.colloscope_enabled, *v);
+                AnnotatedExportConfigOp::UpdateColloscopeEnabled(old)
             }
             AnnotatedExportConfigOp::UpdateAllGroupsEnabled(v) => {
-                self.inner_data.export_config.all_groups_enabled = *v;
+                let old =
+                    std::mem::replace(&mut self.inner_data.export_config.all_groups_enabled, *v);
+                AnnotatedExportConfigOp::UpdateAllGroupsEnabled(old)
             }
             AnnotatedExportConfigOp::UpdatePrefilledGroupsEnabled(v) => {
-                self.inner_data.export_config.prefilled_groups_enabled = *v;
+                let old = std::mem::replace(
+                    &mut self.inner_data.export_config.prefilled_groups_enabled,
+                    *v,
+                );
+                AnnotatedExportConfigOp::UpdatePrefilledGroupsEnabled(old)
             }
             AnnotatedExportConfigOp::UpdateAutomaticGroupsEnabled(v) => {
-                self.inner_data.export_config.automatic_groups_enabled = *v;
+                let old = std::mem::replace(
+                    &mut self.inner_data.export_config.automatic_groups_enabled,
+                    *v,
+                );
+                AnnotatedExportConfigOp::UpdateAutomaticGroupsEnabled(old)
             }
             AnnotatedExportConfigOp::UpdatePerGroupListEnabled(v) => {
-                self.inner_data.export_config.per_group_list_enabled = *v;
+                let old = std::mem::replace(
+                    &mut self.inner_data.export_config.per_group_list_enabled,
+                    *v,
+                );
+                AnnotatedExportConfigOp::UpdatePerGroupListEnabled(old)
             }
             AnnotatedExportConfigOp::UpdateColloscopeConfig(v) => {
-                self.inner_data.export_config.colloscope_config = v.clone();
+                let old = std::mem::replace(
+                    &mut self.inner_data.export_config.colloscope_config,
+                    v.clone(),
+                );
+                AnnotatedExportConfigOp::UpdateColloscopeConfig(old)
             }
             AnnotatedExportConfigOp::UpdateAllGroupsConfig(v) => {
-                self.inner_data.export_config.all_groups_config = v.clone();
+                let old = std::mem::replace(
+                    &mut self.inner_data.export_config.all_groups_config,
+                    v.clone(),
+                );
+                AnnotatedExportConfigOp::UpdateAllGroupsConfig(old)
             }
             AnnotatedExportConfigOp::UpdatePrefilledGroupsConfig(v) => {
-                self.inner_data.export_config.prefilled_groups_config = v.clone();
+                let old = std::mem::replace(
+                    &mut self.inner_data.export_config.prefilled_groups_config,
+                    v.clone(),
+                );
+                AnnotatedExportConfigOp::UpdatePrefilledGroupsConfig(old)
             }
             AnnotatedExportConfigOp::UpdateAutomaticGroupsConfig(v) => {
-                self.inner_data.export_config.automatic_groups_config = v.clone();
+                let old = std::mem::replace(
+                    &mut self.inner_data.export_config.automatic_groups_config,
+                    v.clone(),
+                );
+                AnnotatedExportConfigOp::UpdateAutomaticGroupsConfig(old)
             }
             AnnotatedExportConfigOp::UpdatePerGroupListConfig(v) => {
-                self.inner_data.export_config.per_group_list_config = v.clone();
+                let old = std::mem::replace(
+                    &mut self.inner_data.export_config.per_group_list_config,
+                    v.clone(),
+                );
+                AnnotatedExportConfigOp::UpdatePerGroupListConfig(old)
             }
-        }
-        Ok(())
-    }
-
-    /// Used internally
-    ///
-    /// Builds reverse of a student operation
-    fn build_rev_student(
-        &self,
-        student_op: &AnnotatedStudentOp,
-    ) -> std::result::Result<AnnotatedStudentOp, StudentError> {
-        match student_op {
-            AnnotatedStudentOp::Add(student_id, _student) => {
-                if self
-                    .inner_data
-                    .params
-                    .students
-                    .student_map
-                    .contains_key(student_id)
-                {
-                    return Err(StudentError::StudentIdAlreadyExists(*student_id));
-                }
-
-                Ok(AnnotatedStudentOp::Remove(*student_id))
-            }
-            AnnotatedStudentOp::Remove(student_id) => {
-                let Some(old_student) = self
-                    .inner_data
-                    .params
-                    .students
-                    .student_map
-                    .get(student_id)
-                    .cloned()
-                else {
-                    return Err(StudentError::InvalidStudentId(*student_id));
-                };
-
-                Ok(AnnotatedStudentOp::Add(*student_id, old_student))
-            }
-            AnnotatedStudentOp::Update(student_id, _student) => {
-                let Some(old_student) = self
-                    .inner_data
-                    .params
-                    .students
-                    .student_map
-                    .get(student_id)
-                    .cloned()
-                else {
-                    return Err(StudentError::InvalidStudentId(*student_id));
-                };
-
-                Ok(AnnotatedStudentOp::Update(*student_id, old_student))
-            }
-        }
-    }
-
-    /// Used internally
-    ///
-    /// Builds reverse of a period operation
-    fn build_rev_period(
-        &self,
-        period_op: &AnnotatedPeriodOp,
-    ) -> std::result::Result<AnnotatedPeriodOp, PeriodError> {
-        match period_op {
-            AnnotatedPeriodOp::ChangeStartDate(_new_date) => {
-                Ok(AnnotatedPeriodOp::ChangeStartDate(
-                    self.inner_data.params.periods.first_week.clone(),
-                ))
-            }
-            AnnotatedPeriodOp::AddFront(new_id, _desc) => {
-                if self
-                    .inner_data
-                    .params
-                    .periods
-                    .find_period_position(*new_id)
-                    .is_some()
-                {
-                    return Err(PeriodError::PeriodIdAlreadyExists(*new_id));
-                }
-
-                Ok(AnnotatedPeriodOp::Remove(*new_id))
-            }
-            AnnotatedPeriodOp::AddAfter(new_id, after_id, _desc) => {
-                if self
-                    .inner_data
-                    .params
-                    .periods
-                    .find_period_position(*new_id)
-                    .is_some()
-                {
-                    return Err(PeriodError::PeriodIdAlreadyExists(*new_id));
-                }
-
-                let Some(_after_position) = self
-                    .inner_data
-                    .params
-                    .periods
-                    .find_period_position(*after_id)
-                else {
-                    return Err(PeriodError::InvalidPeriodId(*after_id));
-                };
-
-                Ok(AnnotatedPeriodOp::Remove(*new_id))
-            }
-            AnnotatedPeriodOp::Remove(period_id) => {
-                let Some(position) = self
-                    .inner_data
-                    .params
-                    .periods
-                    .find_period_position(*period_id)
-                else {
-                    return Err(PeriodError::InvalidPeriodId(*period_id));
-                };
-
-                let old_desc = self.inner_data.params.periods.ordered_period_list[position]
-                    .1
-                    .clone();
-
-                Ok(if position == 0 {
-                    AnnotatedPeriodOp::AddFront(*period_id, old_desc)
-                } else {
-                    let previous_id =
-                        self.inner_data.params.periods.ordered_period_list[position - 1].0;
-                    AnnotatedPeriodOp::AddAfter(*period_id, previous_id, old_desc)
-                })
-            }
-            AnnotatedPeriodOp::Update(period_id, _desc) => {
-                let Some(position) = self
-                    .inner_data
-                    .params
-                    .periods
-                    .find_period_position(*period_id)
-                else {
-                    return Err(PeriodError::InvalidPeriodId(*period_id));
-                };
-
-                let old_desc = self.inner_data.params.periods.ordered_period_list[position]
-                    .1
-                    .clone();
-
-                Ok(AnnotatedPeriodOp::Update(*period_id, old_desc))
-            }
-        }
-    }
-
-    /// Used internally
-    ///
-    /// Builds reverse of a subject operation
-    fn build_rev_subject(
-        &self,
-        subject_op: &AnnotatedSubjectOp,
-    ) -> std::result::Result<AnnotatedSubjectOp, SubjectError> {
-        match subject_op {
-            AnnotatedSubjectOp::AddAfter(new_id, after_id, _params) => {
-                if self
-                    .inner_data
-                    .params
-                    .subjects
-                    .find_subject_position(*new_id)
-                    .is_some()
-                {
-                    return Err(SubjectError::SubjectIdAlreadyExists(*new_id));
-                }
-
-                if let Some(id) = after_id
-                    && self
-                        .inner_data
-                        .params
-                        .subjects
-                        .find_subject_position(*id)
-                        .is_none()
-                {
-                    return Err(SubjectError::InvalidSubjectId(*id));
-                }
-
-                Ok(AnnotatedSubjectOp::Remove(*new_id))
-            }
-            AnnotatedSubjectOp::Remove(subject_id) => {
-                let Some(position) = self
-                    .inner_data
-                    .params
-                    .subjects
-                    .find_subject_position(*subject_id)
-                else {
-                    return Err(SubjectError::InvalidSubjectId(*subject_id));
-                };
-
-                let old_params = self.inner_data.params.subjects.ordered_subject_list[position]
-                    .1
-                    .clone();
-
-                Ok(AnnotatedSubjectOp::AddAfter(
-                    *subject_id,
-                    if position == 0 {
-                        None
-                    } else {
-                        Some(self.inner_data.params.subjects.ordered_subject_list[position - 1].0)
-                    },
-                    old_params,
-                ))
-            }
-            AnnotatedSubjectOp::Update(subject_id, _new_params) => {
-                let Some(position) = self
-                    .inner_data
-                    .params
-                    .subjects
-                    .find_subject_position(*subject_id)
-                else {
-                    return Err(SubjectError::InvalidSubjectId(*subject_id));
-                };
-
-                let old_params = self.inner_data.params.subjects.ordered_subject_list[position]
-                    .1
-                    .clone();
-
-                Ok(AnnotatedSubjectOp::Update(*subject_id, old_params))
-            }
-            AnnotatedSubjectOp::ChangePosition(subject_id, _new_pos) => {
-                let Some(old_pos) = self
-                    .inner_data
-                    .params
-                    .subjects
-                    .find_subject_position(*subject_id)
-                else {
-                    return Err(SubjectError::InvalidSubjectId(*subject_id));
-                };
-
-                Ok(AnnotatedSubjectOp::ChangePosition(*subject_id, old_pos))
-            }
-        }
-    }
-
-    /// Used internally
-    ///
-    /// Builds reverse of a teacher operation
-    fn build_rev_teacher(
-        &self,
-        teacher_op: &AnnotatedTeacherOp,
-    ) -> std::result::Result<AnnotatedTeacherOp, TeacherError> {
-        match teacher_op {
-            AnnotatedTeacherOp::Add(new_id, _teacher) => {
-                if self
-                    .inner_data
-                    .params
-                    .teachers
-                    .teacher_map
-                    .contains_key(new_id)
-                {
-                    return Err(TeacherError::TeacherIdAlreadyExists(*new_id));
-                }
-
-                Ok(AnnotatedTeacherOp::Remove(*new_id))
-            }
-            AnnotatedTeacherOp::Remove(teacher_id) => {
-                let Some(old_teacher) = self.inner_data.params.teachers.teacher_map.get(teacher_id)
-                else {
-                    return Err(TeacherError::InvalidTeacherId(*teacher_id));
-                };
-
-                Ok(AnnotatedTeacherOp::Add(*teacher_id, old_teacher.clone()))
-            }
-            AnnotatedTeacherOp::Update(teacher_id, _new_teacher) => {
-                let Some(old_teacher) = self.inner_data.params.teachers.teacher_map.get(teacher_id)
-                else {
-                    return Err(TeacherError::InvalidTeacherId(*teacher_id));
-                };
-
-                Ok(AnnotatedTeacherOp::Update(*teacher_id, old_teacher.clone()))
-            }
-        }
-    }
-
-    /// Used internally
-    ///
-    /// Builds reverse of an assignment operation
-    fn build_rev_assignment(
-        &self,
-        assignment_op: &AnnotatedAssignmentOp,
-    ) -> std::result::Result<AnnotatedAssignmentOp, AssignmentError> {
-        match assignment_op {
-            AnnotatedAssignmentOp::Assign(period_id, student_id, subject_id, _status) => {
-                let Some(period_assignments) =
-                    self.inner_data.params.assignments.period_map.get(period_id)
-                else {
-                    return Err(AssignmentError::InvalidPeriodId(*period_id));
-                };
-
-                if self
-                    .inner_data
-                    .params
-                    .subjects
-                    .find_subject_position(*subject_id)
-                    .is_none()
-                {
-                    return Err(AssignmentError::InvalidSubjectId(*subject_id));
-                }
-
-                let Some(assigned_students) = period_assignments.subject_map.get(subject_id) else {
-                    return Err(AssignmentError::SubjectDoesNotRunOnPeriod(
-                        *subject_id,
-                        *period_id,
-                    ));
-                };
-
-                let Some(student_desc) =
-                    self.inner_data.params.students.student_map.get(student_id)
-                else {
-                    return Err(AssignmentError::InvalidStudentId(*student_id));
-                };
-
-                if student_desc.excluded_periods.contains(period_id) {
-                    return Err(AssignmentError::StudentIsNotPresentOnPeriod(
-                        *student_id,
-                        *period_id,
-                    ));
-                }
-
-                let previous_status = assigned_students.contains(student_id);
-
-                Ok(AnnotatedAssignmentOp::Assign(
-                    *period_id,
-                    *student_id,
-                    *subject_id,
-                    previous_status,
-                ))
-            }
-        }
-    }
-
-    /// Used internally
-    ///
-    /// Builds reverse of a week pattern operation
-    fn build_rev_week_pattern(
-        &self,
-        week_pattern_op: &AnnotatedWeekPatternOp,
-    ) -> std::result::Result<AnnotatedWeekPatternOp, WeekPatternError> {
-        match week_pattern_op {
-            AnnotatedWeekPatternOp::Add(new_id, _week_pattern) => {
-                if self
-                    .inner_data
-                    .params
-                    .week_patterns
-                    .week_pattern_map
-                    .contains_key(new_id)
-                {
-                    return Err(WeekPatternError::WeekPatternIdAlreadyExists(*new_id));
-                }
-
-                Ok(AnnotatedWeekPatternOp::Remove(*new_id))
-            }
-            AnnotatedWeekPatternOp::Remove(week_pattern_id) => {
-                let Some(old_week_pattern) = self
-                    .inner_data
-                    .params
-                    .week_patterns
-                    .week_pattern_map
-                    .get(week_pattern_id)
-                else {
-                    return Err(WeekPatternError::InvalidWeekPatternId(*week_pattern_id));
-                };
-
-                Ok(AnnotatedWeekPatternOp::Add(
-                    *week_pattern_id,
-                    old_week_pattern.clone(),
-                ))
-            }
-            AnnotatedWeekPatternOp::Update(week_pattern_id, _new_week_pattern) => {
-                let Some(old_week_pattern) = self
-                    .inner_data
-                    .params
-                    .week_patterns
-                    .week_pattern_map
-                    .get(week_pattern_id)
-                else {
-                    return Err(WeekPatternError::InvalidWeekPatternId(*week_pattern_id));
-                };
-
-                Ok(AnnotatedWeekPatternOp::Update(
-                    *week_pattern_id,
-                    old_week_pattern.clone(),
-                ))
-            }
-        }
-    }
-
-    /// Used internally
-    ///
-    /// Builds reverse of a slot operation
-    fn build_rev_slot(
-        &self,
-        slot_op: &AnnotatedSlotOp,
-    ) -> std::result::Result<AnnotatedSlotOp, SlotError> {
-        match slot_op {
-            AnnotatedSlotOp::AddAfter(new_id, _subject_id, after_id, _slot) => {
-                if self
-                    .inner_data
-                    .params
-                    .slots
-                    .find_slot_subject_and_position(*new_id)
-                    .is_some()
-                {
-                    return Err(SlotError::SlotIdAlreadyExists(*new_id));
-                }
-
-                if let Some(id) = after_id
-                    && self
-                        .inner_data
-                        .params
-                        .slots
-                        .find_slot_subject_and_position(*id)
-                        .is_none()
-                {
-                    return Err(SlotError::InvalidSlotId(*id));
-                }
-
-                Ok(AnnotatedSlotOp::Remove(*new_id))
-            }
-            AnnotatedSlotOp::Remove(slot_id) => {
-                let Some((subject_id, position)) = self
-                    .inner_data
-                    .params
-                    .slots
-                    .find_slot_subject_and_position(*slot_id)
-                else {
-                    return Err(SlotError::InvalidSlotId(*slot_id));
-                };
-
-                let subject_slots = self
-                    .inner_data
-                    .params
-                    .slots
-                    .subject_map
-                    .get(&subject_id)
-                    .expect("Subject id should be valid");
-
-                let old_slot = subject_slots.ordered_slots[position].1.clone();
-
-                let previous_id = if position == 0 {
-                    None
-                } else {
-                    Some(subject_slots.ordered_slots[position - 1].0)
-                };
-
-                Ok(AnnotatedSlotOp::AddAfter(
-                    *slot_id,
-                    subject_id,
-                    previous_id,
-                    old_slot,
-                ))
-            }
-            AnnotatedSlotOp::Update(slot_id, _new_slot) => {
-                let Some((subject_id, position)) = self
-                    .inner_data
-                    .params
-                    .slots
-                    .find_slot_subject_and_position(*slot_id)
-                else {
-                    return Err(SlotError::InvalidSlotId(*slot_id));
-                };
-
-                let subject_slots = self
-                    .inner_data
-                    .params
-                    .slots
-                    .subject_map
-                    .get(&subject_id)
-                    .expect("Subject id should be valid");
-
-                let old_slot = subject_slots.ordered_slots[position].1.clone();
-
-                Ok(AnnotatedSlotOp::Update(*slot_id, old_slot))
-            }
-            AnnotatedSlotOp::ChangePosition(slot_id, _new_pos) => {
-                let Some((_subject_id, old_pos)) = self
-                    .inner_data
-                    .params
-                    .slots
-                    .find_slot_subject_and_position(*slot_id)
-                else {
-                    return Err(SlotError::InvalidSlotId(*slot_id));
-                };
-
-                Ok(AnnotatedSlotOp::ChangePosition(*slot_id, old_pos))
-            }
-        }
-    }
-
-    /// Used internally
-    ///
-    /// Builds reverse of a schedule incompat operation
-    fn build_rev_incompat(
-        &self,
-        incompat_op: &AnnotatedIncompatOp,
-    ) -> std::result::Result<AnnotatedIncompatOp, IncompatError> {
-        match incompat_op {
-            AnnotatedIncompatOp::Add(new_id, _incompat) => Ok(AnnotatedIncompatOp::Remove(*new_id)),
-            AnnotatedIncompatOp::Remove(incompat_id) => {
-                let Some(old_incompat) = self
-                    .inner_data
-                    .params
-                    .incompats
-                    .incompat_map
-                    .get(incompat_id)
-                else {
-                    return Err(IncompatError::InvalidIncompatId(*incompat_id));
-                };
-
-                Ok(AnnotatedIncompatOp::Add(*incompat_id, old_incompat.clone()))
-            }
-            AnnotatedIncompatOp::Update(incompat_id, _new_incompat) => {
-                let Some(old_incompat) = self
-                    .inner_data
-                    .params
-                    .incompats
-                    .incompat_map
-                    .get(incompat_id)
-                else {
-                    return Err(IncompatError::InvalidIncompatId(*incompat_id));
-                };
-
-                Ok(AnnotatedIncompatOp::Update(
-                    *incompat_id,
-                    old_incompat.clone(),
-                ))
-            }
-        }
-    }
-
-    /// Used internally
-    ///
-    /// Builds reverse of a pairing rule operation
-    fn build_rev_pairing(
-        &self,
-        pairing_op: &AnnotatedPairingOp,
-    ) -> std::result::Result<AnnotatedPairingOp, PairingError> {
-        match pairing_op {
-            AnnotatedPairingOp::Add(new_id, _rule) => Ok(AnnotatedPairingOp::Remove(*new_id)),
-            AnnotatedPairingOp::Remove(id) => {
-                let Some(old_rule) = self.inner_data.params.pairings.pairing_rule_map.get(id)
-                else {
-                    return Err(PairingError::InvalidPairingRuleId(*id));
-                };
-
-                Ok(AnnotatedPairingOp::Add(*id, old_rule.clone()))
-            }
-            AnnotatedPairingOp::Update(id, _new_rule) => {
-                let Some(old_rule) = self.inner_data.params.pairings.pairing_rule_map.get(id)
-                else {
-                    return Err(PairingError::InvalidPairingRuleId(*id));
-                };
-
-                Ok(AnnotatedPairingOp::Update(*id, old_rule.clone()))
-            }
-        }
-    }
-
-    fn build_rev_slot_pairing(
-        &self,
-        slot_pairing_op: &AnnotatedSlotPairingOp,
-    ) -> Result<AnnotatedSlotPairingOp, SlotPairingError> {
-        match slot_pairing_op {
-            AnnotatedSlotPairingOp::Add(id, _rule) => Ok(AnnotatedSlotPairingOp::Remove(*id)),
-            AnnotatedSlotPairingOp::Remove(id) => {
-                let Some(old_rule) = self
-                    .inner_data
-                    .params
-                    .slot_pairings
-                    .slot_pairing_rule_map
-                    .get(id)
-                else {
-                    return Err(SlotPairingError::InvalidSlotPairingRuleId(*id));
-                };
-
-                Ok(AnnotatedSlotPairingOp::Add(*id, old_rule.clone()))
-            }
-            AnnotatedSlotPairingOp::Update(id, _new_rule) => {
-                let Some(old_rule) = self
-                    .inner_data
-                    .params
-                    .slot_pairings
-                    .slot_pairing_rule_map
-                    .get(id)
-                else {
-                    return Err(SlotPairingError::InvalidSlotPairingRuleId(*id));
-                };
-
-                Ok(AnnotatedSlotPairingOp::Update(*id, old_rule.clone()))
-            }
-        }
-    }
-
-    /// Used internally
-    ///
-    /// Builds reverse of a group list operation
-    fn build_rev_group_list(
-        &self,
-        group_list_op: &AnnotatedGroupListOp,
-    ) -> std::result::Result<AnnotatedGroupListOp, GroupListError> {
-        match group_list_op {
-            AnnotatedGroupListOp::Add(new_id, _params, _filling) => {
-                Ok(AnnotatedGroupListOp::Remove(*new_id))
-            }
-            AnnotatedGroupListOp::Remove(group_list_id) => {
-                let Some(old_group_list) = self
-                    .inner_data
-                    .params
-                    .group_lists
-                    .group_list_map
-                    .get(group_list_id)
-                else {
-                    return Err(GroupListError::InvalidGroupListId(*group_list_id));
-                };
-
-                match &old_group_list.filling {
-                    group_lists::GroupListFilling::Prefilled { groups } => {
-                        if groups.iter().any(|g| !g.students.is_empty()) {
-                            return Err(GroupListError::RemainingFilling);
-                        }
-                    }
-                    group_lists::GroupListFilling::Automatic { excluded_students } => {
-                        if !excluded_students.is_empty() {
-                            return Err(GroupListError::RemainingFilling);
-                        }
-                    }
-                }
-
-                Ok(AnnotatedGroupListOp::Add(
-                    *group_list_id,
-                    old_group_list.params.clone(),
-                    old_group_list.filling.clone(),
-                ))
-            }
-            AnnotatedGroupListOp::Update(group_list_id, _new_params) => {
-                let Some(old_group_list) = self
-                    .inner_data
-                    .params
-                    .group_lists
-                    .group_list_map
-                    .get(group_list_id)
-                else {
-                    return Err(GroupListError::InvalidGroupListId(*group_list_id));
-                };
-
-                Ok(AnnotatedGroupListOp::Update(
-                    *group_list_id,
-                    old_group_list.params.clone(),
-                ))
-            }
-            AnnotatedGroupListOp::SetFilling(group_list_id, _filling) => {
-                let Some(old_group_list) = self
-                    .inner_data
-                    .params
-                    .group_lists
-                    .group_list_map
-                    .get(group_list_id)
-                else {
-                    return Err(GroupListError::InvalidGroupListId(*group_list_id));
-                };
-
-                Ok(AnnotatedGroupListOp::SetFilling(
-                    *group_list_id,
-                    old_group_list.filling.clone(),
-                ))
-            }
-            AnnotatedGroupListOp::AssignToSubject(period_id, subject_id, _group_list_id) => {
-                let Some(subject_map) = self
-                    .inner_data
-                    .params
-                    .group_lists
-                    .subjects_associations
-                    .get(period_id)
-                else {
-                    return Err(GroupListError::InvalidPeriodId(*period_id));
-                };
-                let old_group_list_id = subject_map.get(subject_id).cloned();
-                Ok(AnnotatedGroupListOp::AssignToSubject(
-                    *period_id,
-                    *subject_id,
-                    old_group_list_id,
-                ))
-            }
-        }
-    }
-
-    /// Used internally
-    ///
-    /// Builds reverse of a settings operation
-    fn build_rev_settings(&self, settings_op: &AnnotatedSettingsOp) -> AnnotatedSettingsOp {
-        match settings_op {
-            AnnotatedSettingsOp::Update(_new_settings) => {
-                let old_settings = self.inner_data.params.settings.clone();
-                AnnotatedSettingsOp::Update(old_settings)
-            }
-        }
-    }
-
-    /// Used internally
-    ///
-    /// Builds reverse of a balancing operation
-    fn build_rev_balancing(&self, balancing_op: &AnnotatedBalancingOp) -> AnnotatedBalancingOp {
-        match balancing_op {
-            AnnotatedBalancingOp::Update(_new_balancing) => {
-                let old_balancing = self.inner_data.params.balancing.clone();
-                AnnotatedBalancingOp::Update(old_balancing)
-            }
-        }
-    }
-
-    /// Used internally
-    ///
-    /// Builds reverse of an export configuration operation
-    fn build_rev_export_config(
-        &self,
-        export_config_op: &AnnotatedExportConfigOp,
-    ) -> AnnotatedExportConfigOp {
-        match export_config_op {
-            AnnotatedExportConfigOp::UpdateGlobalConfig(_) => {
-                AnnotatedExportConfigOp::UpdateGlobalConfig(
-                    self.inner_data.export_config.global.clone(),
-                )
-            }
-            AnnotatedExportConfigOp::UpdateColloscopeEnabled(_) => {
-                AnnotatedExportConfigOp::UpdateColloscopeEnabled(
-                    self.inner_data.export_config.colloscope_enabled,
-                )
-            }
-            AnnotatedExportConfigOp::UpdateAllGroupsEnabled(_) => {
-                AnnotatedExportConfigOp::UpdateAllGroupsEnabled(
-                    self.inner_data.export_config.all_groups_enabled,
-                )
-            }
-            AnnotatedExportConfigOp::UpdatePrefilledGroupsEnabled(_) => {
-                AnnotatedExportConfigOp::UpdatePrefilledGroupsEnabled(
-                    self.inner_data.export_config.prefilled_groups_enabled,
-                )
-            }
-            AnnotatedExportConfigOp::UpdateAutomaticGroupsEnabled(_) => {
-                AnnotatedExportConfigOp::UpdateAutomaticGroupsEnabled(
-                    self.inner_data.export_config.automatic_groups_enabled,
-                )
-            }
-            AnnotatedExportConfigOp::UpdatePerGroupListEnabled(_) => {
-                AnnotatedExportConfigOp::UpdatePerGroupListEnabled(
-                    self.inner_data.export_config.per_group_list_enabled,
-                )
-            }
-            AnnotatedExportConfigOp::UpdateColloscopeConfig(_) => {
-                AnnotatedExportConfigOp::UpdateColloscopeConfig(
-                    self.inner_data.export_config.colloscope_config.clone(),
-                )
-            }
-            AnnotatedExportConfigOp::UpdateAllGroupsConfig(_) => {
-                AnnotatedExportConfigOp::UpdateAllGroupsConfig(
-                    self.inner_data.export_config.all_groups_config.clone(),
-                )
-            }
-            AnnotatedExportConfigOp::UpdatePrefilledGroupsConfig(_) => {
-                AnnotatedExportConfigOp::UpdatePrefilledGroupsConfig(
-                    self.inner_data
-                        .export_config
-                        .prefilled_groups_config
-                        .clone(),
-                )
-            }
-            AnnotatedExportConfigOp::UpdateAutomaticGroupsConfig(_) => {
-                AnnotatedExportConfigOp::UpdateAutomaticGroupsConfig(
-                    self.inner_data
-                        .export_config
-                        .automatic_groups_config
-                        .clone(),
-                )
-            }
-            AnnotatedExportConfigOp::UpdatePerGroupListConfig(_) => {
-                AnnotatedExportConfigOp::UpdatePerGroupListConfig(
-                    self.inner_data.export_config.per_group_list_config.clone(),
-                )
-            }
-        }
-    }
-
-    /// Used internally
-    ///
-    /// Builds reverse of a settings operation
-    fn build_rev_colloscope(
-        &self,
-        colloscope_op: &AnnotatedColloscopeOp,
-    ) -> std::result::Result<AnnotatedColloscopeOp, ColloscopeError> {
-        match colloscope_op {
-            AnnotatedColloscopeOp::UpdateGroupList(group_list_id, _group_list) => {
-                let Some(old_group_list) =
-                    self.inner_data.colloscope.group_lists.get(group_list_id)
-                else {
-                    return Err(ColloscopeError::InvalidGroupListId(*group_list_id));
-                };
-
-                Ok(AnnotatedColloscopeOp::UpdateGroupList(
-                    *group_list_id,
-                    old_group_list.clone(),
-                ))
-            }
-            AnnotatedColloscopeOp::UpdateInterrogation(
-                period_id,
-                slot_id,
-                week_in_period,
-                _interrogation,
-            ) => {
-                let Some(period) = self.inner_data.colloscope.period_map.get(period_id) else {
-                    return Err(ColloscopeError::InvalidPeriodId(*period_id));
-                };
-
-                let Some(slot) = period.slot_map.get(slot_id) else {
-                    return Err(ColloscopeError::InvalidSlotId(*slot_id));
-                };
-
-                let Some(interrogation_opt) = slot.interrogations.get(*week_in_period) else {
-                    return Err(ColloscopeError::InvalidWeekNumberInPeriod(
-                        *period_id,
-                        *week_in_period,
-                    ));
-                };
-
-                let Some(interrogation) = interrogation_opt else {
-                    return Err(ColloscopeError::NoInterrogationOnWeek(
-                        *period_id,
-                        *slot_id,
-                        *week_in_period,
-                    ));
-                };
-
-                Ok(AnnotatedColloscopeOp::UpdateInterrogation(
-                    *period_id,
-                    *slot_id,
-                    *week_in_period,
-                    interrogation.clone(),
-                ))
-            }
-        }
+        };
+        Ok(backward)
     }
 }

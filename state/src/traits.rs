@@ -51,24 +51,19 @@ pub trait InMemoryData: Clone + Send + Sync + std::fmt::Debug {
     /// accordingly.
     fn annotate(&self, op: Self::OriginalOperation) -> (Self::AnnotatedOperation, Self::NewInfo);
 
-    /// Build the reverse of an operation
+    /// Apply an operation to the data and return its inverse
     ///
-    /// Build the reverse of an operation from the current state.
-    /// This function should return the reversed operation of
-    /// the operation given as a parameter *if* it was applied to
-    /// the current state of the data.
+    /// The inverse operation is computed from the state as it was
+    /// *before* the operation was applied (the old value is captured
+    /// while it is still in hand).
     ///
-    /// It can fail as it might be non-sensical to apply the given
-    /// operation.
-    fn build_rev_with_current_state(
-        &self,
+    /// In case of failure, the data must be left strictly unchanged
+    /// (validate first, mutate after) and the error type [Self::Error]
+    /// is returned.
+    fn apply(
+        &mut self,
         op: &Self::AnnotatedOperation,
     ) -> std::result::Result<Self::AnnotatedOperation, Self::Error>;
-
-    /// Apply an operation to the data
-    ///
-    /// In case of failure, it can return the error type [Self::Error].
-    fn apply(&mut self, op: &Self::AnnotatedOperation) -> std::result::Result<(), Self::Error>;
 }
 
 use thiserror::Error;
@@ -113,15 +108,11 @@ pub trait Manager: private::ManagerInternal {
     > {
         let (annotated_op, new_info) = self.get_in_memory_data_mut().annotate(op);
 
-        let reverse_operation = self
-            .get_in_memory_data()
-            .build_rev_with_current_state(&annotated_op)?;
+        let backward = self.get_in_memory_data_mut().apply(&annotated_op)?;
         let rev_op = crate::history::ReversibleOp {
             forward: annotated_op,
-            backward: reverse_operation,
+            backward,
         };
-
-        self.get_in_memory_data_mut().apply(&rev_op.forward)?;
 
         let aggregated_op = crate::history::AggregatedOp::new(vec![rev_op]);
         self.get_modification_history_mut()
@@ -249,11 +240,17 @@ pub(crate) mod private {
         let mut count = 0;
 
         for rev_op in ops {
-            let result = manager.get_in_memory_data_mut().apply(&rev_op.forward);
-
-            if let Err(err) = result {
-                error = Some(err);
-                break;
+            match manager.get_in_memory_data_mut().apply(&rev_op.forward) {
+                Ok(inverse) => {
+                    debug_assert_eq!(
+                        inverse, rev_op.backward,
+                        "stored backward op is inconsistent with the inverse recomputed on replay"
+                    );
+                }
+                Err(err) => {
+                    error = Some(err);
+                    break;
+                }
             }
 
             count += 1;
@@ -358,12 +355,15 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Failed to reverse")]
-    fn update_with_aggregated_panics_if_rollback_fails() {
+    // The rollback "Failed to reverse" panic remains as the release-mode
+    // safety net: in debug builds the canary below fires first during the
+    // forward replay, so it has no direct debug-mode coverage.
+    #[should_panic(expected = "stored backward op is inconsistent")]
+    fn replay_panics_if_stored_backward_is_inconsistent() {
         let mut state = new_state(0);
         let broken_backward = ReversibleOp {
             forward: FakeOp::Set { old: 0, new: 1 },
-            // Wrong backward op: expects 42 but will find 1 during rollback
+            // Wrong backward op: the true inverse is Set { old: 1, new: 0 }
             backward: FakeOp::Set { old: 42, new: 0 },
         };
         let aggregated = AggregatedOp::new(vec![broken_backward, rev_set(5, 9)]);
@@ -385,22 +385,10 @@ mod tests {
     }
 
     #[test]
-    fn apply_failing_on_build_rev_leaves_state_untouched() {
+    fn apply_failing_leaves_state_untouched() {
         let mut state = new_state(0);
 
-        let result = state.apply(FakeOp::FailOnRev, "never happens");
-
-        assert_eq!(result, Err(FakeError::RevFailed));
-        assert_eq!(state.get_data().value, 0);
-        assert!(!state.can_undo());
-        assert_eq!(state.get_last_op(), None);
-    }
-
-    #[test]
-    fn apply_failing_on_apply_leaves_state_untouched() {
-        let mut state = new_state(0);
-
-        let result = state.apply(FakeOp::FailOnApply, "never happens");
+        let result = state.apply(FakeOp::Fail, "never happens");
 
         assert_eq!(result, Err(FakeError::ApplyFailed));
         assert_eq!(state.get_data().value, 0);

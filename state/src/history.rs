@@ -45,11 +45,12 @@
 //!   A [ReversibleOp] therefore depends on a particular [crate::InMemoryData] at a certain point in
 //!   time.
 //!
-//!   The type is defined here but it is actually build with [crate::InMemoryData::build_rev_with_current_state]. When an
-//!   operation is applied to [crate::InMemoryData], the state of [crate::InMemoryData] *at that moment* can be read
-//!   and the corresponding reverse operation can be built. So before applying the operation
-//!   we will call [crate::InMemoryData::build_rev_with_current_state] and build the corresponding
-//!   [ReversibleOp] that can be store in the modification history.
+//!   The type is defined here but it is actually built by [crate::InMemoryData::apply] itself:
+//!   while an operation is applied to [crate::InMemoryData], the old value it is about to
+//!   overwrite is still in hand, so [crate::InMemoryData::apply] computes and returns the
+//!   reverse operation alongside mutating the data. [Manager::apply](crate::traits::Manager::apply)
+//!   then pairs the forward and backward operations into the [ReversibleOp] that gets stored in
+//!   the modification history.
 //!
 //! - third, this module defines [ModificationHistory] which actually contains and
 //!   stores the modification history. Apart from the last point that will discuss

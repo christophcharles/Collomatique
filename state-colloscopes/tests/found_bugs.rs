@@ -330,15 +330,13 @@ fn remove_prefilled_group_list_round_trips_on_reverse() {
         panic!("Unexpected result after setting the prefilled filling");
     };
 
-    // Same annotate → build_rev → apply order as Manager::apply
+    // Same annotate → apply order as Manager::apply
     let mut data: Data = app_state.get_data().clone();
     let before = data.clone();
 
     let (annotated, _new_id) = data.annotate(Op::GroupList(GroupListOp::Remove(group_list_id)));
     let rev = data
-        .build_rev_with_current_state(&annotated)
-        .expect("the reverse of a valid remove should build");
-    data.apply(&annotated)
+        .apply(&annotated)
         .expect("removing an empty prefilled group list should succeed");
     data.apply(&rev)
         .expect("the reverse of a successfully applied op must apply");

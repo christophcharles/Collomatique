@@ -19,7 +19,7 @@ use super::synth;
 /// `cargo test` run (user decision: no env variables, no `#[ignore]`
 /// tiers). 100 seeds was verified to still catch every bug found by the
 /// original 500-seed configuration; the 500-seed version is kept as the
-/// slow reference for occasional milestone checks (temporary edit).
+/// slow reference for occasional milestone checks.
 pub struct RunConfig {
     pub seeds: u64,
     pub ops_per_run: usize,

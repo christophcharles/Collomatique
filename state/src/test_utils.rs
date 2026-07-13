@@ -30,10 +30,8 @@ pub enum FakeOp {
     /// The state-dependent failure makes it possible to build aggregated
     /// operations that fail midway.
     Set { old: i64, new: i64 },
-    /// Always fails on apply, but builds its reverse fine
-    FailOnApply,
-    /// Always fails when building its reverse
-    FailOnRev,
+    /// Always fails on apply
+    Fail,
 }
 
 impl Operation for FakeOp {}
@@ -44,8 +42,6 @@ pub enum FakeError {
     ValueMismatch { expected: i64, found: i64 },
     #[error("apply failed")]
     ApplyFailed,
-    #[error("build_rev failed")]
-    RevFailed,
 }
 
 impl InMemoryData for FakeData {
@@ -58,26 +54,7 @@ impl InMemoryData for FakeData {
         (op, ())
     }
 
-    fn build_rev_with_current_state(&self, op: &FakeOp) -> Result<FakeOp, FakeError> {
-        match op {
-            FakeOp::Set { old, new } => {
-                if self.value != *old {
-                    return Err(FakeError::ValueMismatch {
-                        expected: *old,
-                        found: self.value,
-                    });
-                }
-                Ok(FakeOp::Set {
-                    old: *new,
-                    new: *old,
-                })
-            }
-            FakeOp::FailOnApply => Ok(FakeOp::FailOnApply),
-            FakeOp::FailOnRev => Err(FakeError::RevFailed),
-        }
-    }
-
-    fn apply(&mut self, op: &FakeOp) -> Result<(), FakeError> {
+    fn apply(&mut self, op: &FakeOp) -> Result<FakeOp, FakeError> {
         match op {
             FakeOp::Set { old, new } => {
                 if self.value != *old {
@@ -87,10 +64,12 @@ impl InMemoryData for FakeData {
                     });
                 }
                 self.value = *new;
-                Ok(())
+                Ok(FakeOp::Set {
+                    old: *new,
+                    new: *old,
+                })
             }
-            FakeOp::FailOnApply => Err(FakeError::ApplyFailed),
-            FakeOp::FailOnRev => Ok(()),
+            FakeOp::Fail => Err(FakeError::ApplyFailed),
         }
     }
 }

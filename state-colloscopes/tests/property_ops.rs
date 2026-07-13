@@ -1,10 +1,10 @@
 //! Property tests over generated elementary-op sequences
 //!
 //! Phase 0 of the state consolidation plan (docs/state_consolidation_plan.md §3):
-//! a deterministic, seed-driven safety net exercising `Data::apply`,
-//! the `build_rev_*` family and the undo/redo machinery, using the
-//! explicit `InnerData::check_invariants` oracle (which stays valid once
-//! Phase 2 demotes the internal panicking check).
+//! a deterministic, seed-driven safety net exercising `Data::apply` (which
+//! computes and returns the reverse of every op) and the undo/redo
+//! machinery, using the explicit `InnerData::check_invariants` oracle
+//! (which stays valid once Phase 2 demotes the internal panicking check).
 //!
 //! On failure, the seed and the full op log are printed: re-running the
 //! same test binary reproduces the exact same sequence.
@@ -173,10 +173,9 @@ fn random_undo_redo_apply_walk() {
 }
 
 /// Property 4: for every op that applies successfully, applying the
-/// reverse built by `build_rev_with_current_state` restores the state
-/// exactly. This drives `InMemoryData` directly (in the same
-/// annotate → build_rev → apply order as `Manager::apply`) and targets
-/// the large untested `build_rev_*` family.
+/// reverse computed and returned by `apply` restores the state exactly.
+/// This drives `InMemoryData` directly (in the same annotate → apply
+/// order as `Manager::apply`) and targets the large `apply_*` family.
 #[test]
 fn apply_then_apply_rev_is_identity() {
     use collomatique_state::InMemoryData;
@@ -199,23 +198,19 @@ fn apply_then_apply_rev_is_identity() {
                 log.push(category, &op);
 
                 let (annotated, _new_id) = data.annotate(op);
-                let rev = match data.build_rev_with_current_state(&annotated) {
+                let before = data.clone();
+
+                let rev = match data.apply(&annotated) {
                     Ok(rev) => rev,
                     Err(_) => {
                         stats.record(category, false);
+                        assert!(
+                            data == before,
+                            "a failed apply must leave the state unchanged",
+                        );
                         continue;
                     }
                 };
-
-                let before = data.clone();
-                if data.apply(&annotated).is_err() {
-                    stats.record(category, false);
-                    assert!(
-                        data == before,
-                        "a failed apply must leave the state unchanged",
-                    );
-                    continue;
-                }
                 stats.record(category, true);
 
                 data.apply(&rev)
@@ -226,8 +221,13 @@ fn apply_then_apply_rev_is_identity() {
                 );
 
                 // Advance: the op is known to apply from this state
-                data.apply(&annotated)
+                let rev2 = data
+                    .apply(&annotated)
                     .expect("an op that applied once must apply again after its reverse");
+                assert_eq!(
+                    rev2, rev,
+                    "replaying from the same state must rebuild the same inverse",
+                );
 
                 if inner_snapshots.len() < 8 && rng.random_bool(0.02) {
                     inner_snapshots.push(data.get_inner_data().clone());
