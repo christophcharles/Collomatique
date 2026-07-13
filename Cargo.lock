@@ -521,6 +521,7 @@ dependencies = [
 name = "collomatique-state"
 version = "0.1.0"
 dependencies = [
+ "collomatique-state-derive",
  "serde",
  "serde_json",
  "thiserror",
@@ -538,6 +539,15 @@ dependencies = [
  "rand_chacha",
  "serde",
  "thiserror",
+]
+
+[[package]]
+name = "collomatique-state-derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.114",
 ]
 
 [[package]]

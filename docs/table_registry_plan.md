@@ -418,7 +418,7 @@ the three contract scripts, run by the user.
   serde-equivalence tests (`to_value(table) == to_value(btreemap)`, same for ordered vs `Vec`)
   pinning the wire format. Nothing adopted yet — zero fallout. **Cargo.lock changes (serde in
   `state/`): user refreshes the nix `cargoHash`.**
-- **A2**: `state-derive/` crate with `#[derive(EntityId)]` and `#[derive(References)]`
+- **A2** (DONE July 13 2026): `state-derive/` crate with `#[derive(EntityId)]` and `#[derive(References)]`
   (per amended §4.2; `#[entity(…)]` parsed but inert until A3); `ids.rs` shrinks to 10
   one-line derives + `IdIssuer` + `NewId`; `state/src/refs.rs` with the `References<K>` trait
   and container lifts. Derive tests are integration tests in `state/tests/` (generated code

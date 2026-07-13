@@ -4,6 +4,7 @@
 //! handling unique IDs for colloscopes
 //!
 
+use collomatique_state::EntityId;
 use collomatique_state::tools;
 use serde::{Deserialize, Serialize};
 
@@ -13,221 +14,91 @@ pub use collomatique_state::ids::Id;
 ///
 /// Every student gets a unique ID. IDs then identify students
 /// internally.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, EntityId,
+)]
 pub struct StudentId(u64);
-
-impl Id for StudentId {
-    fn inner(&self) -> u64 {
-        self.0
-    }
-
-    /// # Safety
-    ///
-    /// `value` should be a valid ID. If not, you might get inconsistent data.
-    /// Collomatique assumes consistent data everywhere. Generally, you should not
-    /// call this function directly
-    unsafe fn new(value: u64) -> StudentId {
-        StudentId(value)
-    }
-}
 
 /// This type represents an ID for a period
 ///
 /// Every period gets a unique ID. IDs then identify periods
 /// internally.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, EntityId,
+)]
 pub struct PeriodId(u64);
-
-impl Id for PeriodId {
-    fn inner(&self) -> u64 {
-        self.0
-    }
-
-    /// # Safety
-    ///
-    /// `value` should be a valid ID. If not, you might get inconsistent data.
-    /// Collomatique assumes consistent data everywhere. Generally, you should not
-    /// call this function directly
-    unsafe fn new(value: u64) -> PeriodId {
-        PeriodId(value)
-    }
-}
 
 /// This type represents an ID for a subject
 ///
 /// Every subject gets a unique ID. IDs then identify periods
 /// internally.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, EntityId,
+)]
 pub struct SubjectId(u64);
-
-impl Id for SubjectId {
-    fn inner(&self) -> u64 {
-        self.0
-    }
-
-    /// # Safety
-    ///
-    /// `value` should be a valid ID. If not, you might get inconsistent data.
-    /// Collomatique assumes consistent data everywhere. Generally, you should not
-    /// call this function directly
-    unsafe fn new(value: u64) -> SubjectId {
-        SubjectId(value)
-    }
-}
 
 /// This type represents an ID for a teacher
 ///
 /// Every teacher gets a unique ID. IDs then identify teachers
 /// internally.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, EntityId,
+)]
 pub struct TeacherId(u64);
-
-impl Id for TeacherId {
-    fn inner(&self) -> u64 {
-        self.0
-    }
-
-    /// # Safety
-    ///
-    /// `value` should be a valid ID. If not, you might get inconsistent data.
-    /// Collomatique assumes consistent data everywhere. Generally, you should not
-    /// call this function directly
-    unsafe fn new(value: u64) -> TeacherId {
-        TeacherId(value)
-    }
-}
 
 /// This type represents an ID for a week pattern
 ///
 /// Every week pattern gets a unique ID. IDs then identify week patterns
 /// internally.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, EntityId,
+)]
 pub struct WeekPatternId(u64);
-
-impl Id for WeekPatternId {
-    fn inner(&self) -> u64 {
-        self.0
-    }
-
-    /// # Safety
-    ///
-    /// `value` should be a valid ID. If not, you might get inconsistent data.
-    /// Collomatique assumes consistent data everywhere. Generally, you should not
-    /// call this function directly
-    unsafe fn new(value: u64) -> WeekPatternId {
-        WeekPatternId(value)
-    }
-}
 
 /// This type represents an ID for an interrogation slot
 ///
 /// Every interrogation slot gets a unique ID. IDs then identify slots
 /// internally.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, EntityId,
+)]
 pub struct SlotId(u64);
-
-impl Id for SlotId {
-    fn inner(&self) -> u64 {
-        self.0
-    }
-
-    /// # Safety
-    ///
-    /// `value` should be a valid ID. If not, you might get inconsistent data.
-    /// Collomatique assumes consistent data everywhere. Generally, you should not
-    /// call this function directly
-    unsafe fn new(value: u64) -> SlotId {
-        SlotId(value)
-    }
-}
 
 /// This type represents an ID for an schedule incompatibility
 ///
 /// Every incompatibility gets a unique ID. IDs then identify incompatibilities
 /// internally.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, EntityId,
+)]
 pub struct IncompatId(u64);
-
-impl Id for IncompatId {
-    fn inner(&self) -> u64 {
-        self.0
-    }
-
-    /// # Safety
-    ///
-    /// `value` should be a valid ID. If not, you might get inconsistent data.
-    /// Collomatique assumes consistent data everywhere. Generally, you should not
-    /// call this function directly
-    unsafe fn new(value: u64) -> IncompatId {
-        IncompatId(value)
-    }
-}
 
 /// This type represents an ID for a group list
 ///
 /// Every group list gets a unique ID. IDs then identify group lists
 /// internally.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, EntityId,
+)]
 pub struct GroupListId(u64);
 
 /// This type represents an ID for a pairing rule
 ///
 /// Every pairing rule gets a unique ID. IDs then identify pairing rules
 /// internally.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, EntityId,
+)]
 pub struct PairingRuleId(u64);
-
-impl Id for GroupListId {
-    fn inner(&self) -> u64 {
-        self.0
-    }
-
-    /// # Safety
-    ///
-    /// `value` should be a valid ID. If not, you might get inconsistent data.
-    /// Collomatique assumes consistent data everywhere. Generally, you should not
-    /// call this function directly
-    unsafe fn new(value: u64) -> GroupListId {
-        GroupListId(value)
-    }
-}
-
-impl Id for PairingRuleId {
-    fn inner(&self) -> u64 {
-        self.0
-    }
-
-    /// # Safety
-    ///
-    /// `value` should be a valid ID. If not, you might get inconsistent data.
-    /// Collomatique assumes consistent data everywhere. Generally, you should not
-    /// call this function directly
-    unsafe fn new(value: u64) -> PairingRuleId {
-        PairingRuleId(value)
-    }
-}
 
 /// This type represents an ID for a slot pairing rule
 ///
 /// Every slot pairing rule gets a unique ID. IDs then identify slot pairing rules
 /// internally.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, EntityId,
+)]
 pub struct SlotPairingRuleId(u64);
-
-impl Id for SlotPairingRuleId {
-    fn inner(&self) -> u64 {
-        self.0
-    }
-
-    /// # Safety
-    ///
-    /// `value` should be a valid ID. If not, you might get inconsistent data.
-    /// Collomatique assumes consistent data everywhere. Generally, you should not
-    /// call this function directly
-    unsafe fn new(value: u64) -> SlotPairingRuleId {
-        SlotPairingRuleId(value)
-    }
-}
 
 #[derive(Debug, Clone)]
 pub(crate) struct IdIssuer {
