@@ -3,19 +3,14 @@
 //! This module defines the various types matching the JSON representation
 //! of [collomatique_state_colloscopes::Data].
 //!
-//! If a file is correctly formatted, it should normally be representable as
-//! a [JsonData].
+//! Reading goes through [RawJsonData], whose entry payloads stay raw so
+//! that the spec-version check and the block-name tolerance rules can run
+//! before payload interpretation. Writing goes through [Spec2Document].
 //!
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct JsonData {
-    pub header: Header,
-    pub entries: Vec<Entry>,
-}
-
-/// Raw envelope used for spec-version dispatch
+/// Raw envelope used for the spec-version check
 ///
 /// The entry payloads are kept unparsed (as [serde_json::value::RawValue]) so
 /// that a file can be routed to the right decoding pipeline — legacy (spec 1)
@@ -125,52 +120,4 @@ pub enum ValidFileContent {
     Colloscope,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Entry {
-    pub minimum_spec_version: u32,
-    pub needed_entry: bool,
-    pub content: EntryContent,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-#[serde(untagged)]
-pub enum EntryContent {
-    ValidEntry(Box<ValidEntry>),
-    UnknownEntry,
-}
-
-impl<'de> Deserialize<'de> for EntryContent {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let value: Box<serde_json::value::RawValue> = Deserialize::deserialize(deserializer)?;
-
-        use serde::de::IntoDeserializer;
-        match ValidEntry::deserialize(value.into_deserializer()) {
-            Ok(valid_entry) => Ok(EntryContent::ValidEntry(Box::new(valid_entry))),
-            Err(_) => Ok(EntryContent::UnknownEntry),
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ValidEntry {
-    InnerDataDump(collomatique_state_colloscopes::InnerData),
-}
-
 pub const CURRENT_SPEC_VERSION: u32 = 2;
-
-impl ValidEntry {
-    pub fn minimum_spec_version(&self) -> u32 {
-        match self {
-            ValidEntry::InnerDataDump(_) => 1,
-        }
-    }
-
-    pub fn needed_entry(&self) -> bool {
-        match self {
-            ValidEntry::InnerDataDump(_) => true,
-        }
-    }
-}

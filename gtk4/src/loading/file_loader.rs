@@ -103,6 +103,10 @@ impl FileLoader {
                 DeserializationError::Decode(decode_error) => {
                     Self::generate_decode_error_message(decode_error)
                 }
+                DeserializationError::RetiredSpec1Format => (
+                    "Ce fichier utilise un format pré-alpha (spec 1) qui n'est plus pris en charge et ne peut plus être ouvert."
+                )
+                .into(),
                 DeserializationError::UnsupportedSpecVersions { versions } => format!(
                     "Le fichier est mal formé et est probablement corrompu.\n(Combinaison de versions de spécification non prise en charge dans les entrées : {:?})",
                     versions
@@ -125,7 +129,6 @@ impl FileLoader {
                 "Type de fichier Collomatique inconnu.\nCe fichier a peut-être été produit avec une version plus récente ({}).",
                 version
             ),
-            DecodeError::InnerDataDumpUsedOnModifiedInnerData => "Fichier mal formé et est probablement corrompu.\n(Entrée InnerDataDump utilisée sur des données déjà remplies)".into(),
             DecodeError::MalformedEntryContent => "Le fichier est mal formé et est probablement corrompu.\n(Le contenu d'une entrée n'est pas un objet avec exactement une clé)".into(),
             DecodeError::DuplicatedBlock(block) => format!(
                 "Le fichier est mal formé et est probablement corrompu.\n(Le bloc {} apparaît plusieurs fois)",

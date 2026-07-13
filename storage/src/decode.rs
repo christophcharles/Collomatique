@@ -1,16 +1,14 @@
 //! Decode submodule
 //!
 //! This module contains the logic that builds a [Data] from a file
-//! document: [self::decode] for the legacy (spec 1) pipeline, and
-//! [spec2::decode] for the spec-2 pipeline. The spec-1 pipeline is
-//! deprecated and kept only for the transition (see the versioning
-//! notes in `docs/file_format.md`).
+//! document via [spec2::decode], the spec-2 pipeline. (Spec 1, the
+//! pre-alpha dump format, is permanently retired and rejected before
+//! decoding — see the versioning notes in `docs/file_format.md`.)
 //!
-//! Whichever pipeline runs, decoding is never trusted for semantic
-//! integrity: both funnel through [Data::from_inner_data], the single
-//! trust boundary that revalidates any
-//! [InnerData](collomatique_state_colloscopes::InnerData) regardless of
-//! provenance. A decoder that happens to catch a problem earlier is a
+//! Decoding is never trusted for semantic integrity: it funnels through
+//! [Data::from_inner_data], the single trust boundary that revalidates
+//! any [InnerData](collomatique_state_colloscopes::InnerData) regardless
+//! of provenance. A decoder that happens to catch a problem earlier is a
 //! convenience, not a guarantee.
 //!
 //! Diagnostics ([DecodeError]) distinguish an *unrecognised* block
@@ -58,8 +56,6 @@ pub enum DecodeError {
     EndOfTheUniverse,
     #[error("Duplicated ID")]
     DuplicatedID,
-    #[error("InnerDataDump entry should only be used on non-modified inner-data")]
-    InnerDataDumpUsedOnModifiedInnerData,
     #[error(transparent)]
     InnerDataError(#[from] collomatique_state_colloscopes::InnerDataError),
 }
@@ -98,13 +94,6 @@ pub enum Caveat {
     /// might be missing and it is preferable to use a newer version
     /// of Collomatique.
     UnknownEntries,
-    /// The file uses the deprecated legacy (spec 1) format
-    ///
-    /// The file was decoded through the legacy pipeline (a raw dump
-    /// of the in-memory data). This format is deprecated and kept only
-    /// during the transition to spec 2. It can still be read, but the
-    /// file should be re-saved in the current format.
-    DeprecatedFormat,
 }
 
 pub(crate) fn check_header(
@@ -124,72 +113,4 @@ pub(crate) fn check_header(
     Ok(())
 }
 
-fn check_entries_consistency(
-    entries: &[Entry],
-    caveats: &mut BTreeSet<Caveat>,
-    version: &Version,
-) -> Result<(), DecodeError> {
-    for entry in entries {
-        match &entry.content {
-            EntryContent::UnknownEntry => {
-                if entry.minimum_spec_version <= CURRENT_SPEC_VERSION {
-                    return Err(DecodeError::ProbablyIllformedEntry);
-                }
-                if entry.needed_entry {
-                    return Err(DecodeError::UnknownNeededEntry(version.clone()));
-                }
-                caveats.insert(Caveat::UnknownEntries);
-            }
-            EntryContent::ValidEntry(valid_entry) => {
-                if entry.minimum_spec_version != valid_entry.minimum_spec_version() {
-                    return Err(DecodeError::MismatchedSpecRequirementInEntry);
-                }
-                if entry.needed_entry != valid_entry.needed_entry() {
-                    return Err(DecodeError::MismatchedSpecRequirementInEntry);
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
-pub fn decode(json_data: JsonData) -> Result<(Data, BTreeSet<Caveat>), DecodeError> {
-    let mut caveats = BTreeSet::new();
-
-    check_header(&json_data.header, &mut caveats)?;
-    check_entries_consistency(
-        &json_data.entries,
-        &mut caveats,
-        &json_data.header.produced_with_version,
-    )?;
-
-    let data = decode_entries(json_data.entries)?;
-    Ok((data, caveats))
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
-struct PreData {
-    inner_data: collomatique_state_colloscopes::InnerData,
-}
-
-mod inner_data_dump;
 pub(crate) mod spec2;
-
-fn decode_entries(entries: Vec<Entry>) -> Result<Data, DecodeError> {
-    let mut pre_data = PreData::default();
-
-    for entry in entries {
-        let EntryContent::ValidEntry(valid_entry) = entry.content else {
-            continue;
-        };
-
-        match *valid_entry {
-            ValidEntry::InnerDataDump(inner_data) => {
-                inner_data_dump::decode_entry(inner_data, &mut pre_data)?;
-            }
-        }
-    }
-
-    let data = Data::from_inner_data(pre_data.inner_data)?;
-    Ok(data)
-}

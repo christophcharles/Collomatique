@@ -29,9 +29,6 @@ impl Dialog {
                 "- Fichier généré avec la version {} de Collomatique\n  Il est préférable d'utiliser une version plus récente de Collomatique.",
                 version
             ),
-            Caveat::DeprecatedFormat => {
-                "- Ce fichier utilise un ancien format de fichier (déprécié).".to_string()
-            }
         }));
 
         list.join("\n")

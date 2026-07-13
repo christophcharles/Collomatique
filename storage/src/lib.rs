@@ -39,40 +39,44 @@ pub enum DeserializationError {
     /// Well-formed JSON structure but issues when decoding it
     #[error("Error whild decoding the colloscope file: {0}")]
     Decode(#[from] DecodeError),
-    /// The entries declare an unsupported combination of minimum spec versions
+    /// The file uses the retired pre-alpha format (spec 1)
     ///
-    /// Entries from the retired pre-alpha format (spec 1) cannot be mixed with
-    /// spec 2 (or later) entries, and spec version 0 does not exist.
+    /// Spec 1 was a raw dump of the in-memory data, used before any
+    /// release. It is permanently retired: such files can no longer be
+    /// opened. This is the tombstone described in `docs/file_format.md` —
+    /// a spec-1 file (any entry declaring `minimum_spec_version: 1`) is
+    /// rejected with this clear error rather than a generic decode failure.
     #[error(
-        "Unsupported combination of minimum spec versions in entries ({versions:?}): entries from the pre-alpha format (spec 1) cannot be mixed with spec 2 or later entries, and spec version 0 does not exist"
+        "This file uses the retired pre-alpha format (spec 1), which is no longer supported and cannot be opened"
     )]
+    RetiredSpec1Format,
+    /// The entries declare a spec version that cannot exist
+    ///
+    /// Spec version 0 does not exist.
+    #[error("Unsupported spec versions in entries ({versions:?}): spec version 0 does not exist")]
     UnsupportedSpecVersions { versions: BTreeSet<u32> },
 }
 
-/// The two decoding pipelines a file can be routed to
+/// Rejects entries the current reader cannot decode, based only on their
+/// declared `minimum_spec_version`, before any payload interpretation.
 ///
-/// The legacy pipeline (spec 1, a raw dump of the in-memory data) is
-/// kept alive only during the transition to spec 2 and will be retired
-/// once existing files have been bulk-converted.
-enum SpecFamily {
-    Legacy,
-    Spec2,
-}
-
-fn detect_spec_family(entries: &[json::RawEntry]) -> Result<SpecFamily, DeserializationError> {
-    if entries.is_empty() {
-        // An empty entry list is a valid blank spec-2 document
-        return Ok(SpecFamily::Spec2);
+/// Spec 1 (the pre-alpha dump format) is permanently retired: any file
+/// carrying a spec-1 entry is rejected with [DeserializationError::RetiredSpec1Format]
+/// (the tombstone). Spec version 0 never existed. Everything else —
+/// spec 2 and later — is routed to the spec-2 pipeline, which applies
+/// the forward-compatibility rules.
+fn reject_retired_or_invalid_spec_versions(
+    entries: &[json::RawEntry],
+) -> Result<(), DeserializationError> {
+    if entries.iter().any(|e| e.minimum_spec_version == 1) {
+        return Err(DeserializationError::RetiredSpec1Format);
     }
-    if entries.iter().all(|e| e.minimum_spec_version == 1) {
-        return Ok(SpecFamily::Legacy);
+    if entries.iter().any(|e| e.minimum_spec_version == 0) {
+        return Err(DeserializationError::UnsupportedSpecVersions {
+            versions: entries.iter().map(|e| e.minimum_spec_version).collect(),
+        });
     }
-    if entries.iter().all(|e| e.minimum_spec_version >= 2) {
-        return Ok(SpecFamily::Spec2);
-    }
-    Err(DeserializationError::UnsupportedSpecVersions {
-        versions: entries.iter().map(|e| e.minimum_spec_version).collect(),
-    })
+    Ok(())
 }
 
 /// Deserialize the content of a colloscope file
@@ -91,34 +95,22 @@ pub fn deserialize_data(
 ) -> Result<(Data, BTreeSet<Caveat>), DeserializationError> {
     let raw_data = serde_json::from_str::<json::RawJsonData>(file_content)?;
 
-    // The header check is path-independent: it must run before dispatch so
-    // that e.g. an unknown file content is reported the same way whatever
-    // the spec version of the entries.
+    // The header check is path-independent: it must run before the
+    // spec-version check so that e.g. an unknown file content is reported
+    // the same way whatever the spec version of the entries.
     let mut caveats = BTreeSet::new();
     decode::check_header(&raw_data.header, &mut caveats)?;
 
-    match detect_spec_family(&raw_data.entries)? {
-        SpecFamily::Legacy => {
-            // Deliberate re-parse of the original string: this keeps the
-            // legacy pipeline (due for retirement) byte-for-byte identical,
-            // including its quirks. The double parse is negligible.
-            let json_data = serde_json::from_str::<json::JsonData>(file_content)?;
-            let (data, mut legacy_caveats) = decode::decode(json_data)?;
-            legacy_caveats.append(&mut caveats);
-            // The legacy pipeline is the single place we know a file used the
-            // deprecated spec-1 format, so we flag it here.
-            legacy_caveats.insert(Caveat::DeprecatedFormat);
-            Ok((data, legacy_caveats))
-        }
-        SpecFamily::Spec2 => {
-            let data = decode::spec2::decode(
-                &raw_data.entries,
-                &raw_data.header.produced_with_version,
-                &mut caveats,
-            )?;
-            Ok((data, caveats))
-        }
-    }
+    // Retired (spec 1) and impossible (spec 0) versions are rejected here,
+    // before any payload interpretation. Everything else is spec 2 or later.
+    reject_retired_or_invalid_spec_versions(&raw_data.entries)?;
+
+    let data = decode::spec2::decode(
+        &raw_data.entries,
+        &raw_data.header.produced_with_version,
+        &mut caveats,
+    )?;
+    Ok((data, caveats))
 }
 
 /// Serialize the content of a colloscope file

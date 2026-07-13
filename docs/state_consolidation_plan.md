@@ -185,13 +185,13 @@ spec-version-dispatched decoding + legacy writer flag → `b1957d03` wire read/w
 `1360abe0` save in spec-2 by default). Spec 2 is the format actually written and read; the
 field-level reference lives in `docs/file_format.md`.
 
-**Decision — the legacy v1 path is kept for now.** The "delete the v1 decoder" step of
-*Migration and freeze* below was **not** taken: v1 reading (and legacy writing behind a flag)
-stays available so existing files keep opening. It remains **deprecated** and **will be
-removed** later, once the corpus has been converted over; that removal is deferred, not part
-of phase 1. The ordering constraint below still holds — because the v1 decoder reads the live
-`InnerData`, the bulk-convert-then-delete sequence must complete before any phase-2 change to
-`InnerData` — so keeping v1 is a decision to defer that work, not to skip it.
+**Update — the legacy v1 path has now been removed.** It was kept, deprecated, through
+phase 1 so existing files kept opening. Once the corpus was converted to spec 2, the writer
+was retired first (`dd385261`: dropped the `legacy` flag and the spec-1 encoder), then the
+reader (this change): a spec-1 file — any entry declaring `minimum_spec_version: 1` — is now
+rejected with the clear `RetiredSpec1Format` tombstone error instead of decoding. This lifts
+the ordering constraint below: the phase-2 changes to `InnerData` (items 2–5 of §6) are
+unblocked, since no decoder reads the live `InnerData` via serde anymore.
 
 ### Design
 
@@ -227,10 +227,10 @@ of phase 1. The ordering constraint below still holds — because the v1 decoder
   `InnerData` is unchanged. Therefore, strictly in this order:
   1. implement spec 2 (write + read) while v1 reading still works; **(done)**
   2. **bulk-convert every existing file** (all private test files, anything the Python
-     scripts produced) via a CLI subcommand or a small conversion script; *(deferred)*
+     scripts produced); **(done — the corpus was ported to spec 2)**
   3. delete the v1 decoder (leave the tombstone) — *before* any phase-2 change to
-     `InnerData`. *(deferred — see the decision note above: v1 is kept, deprecated, for
-     now)*
+     `InnerData`. **(done — `RetiredSpec1Format` is the tombstone; a byte-accurate spec-1
+     document survives as `storage/tests/fixtures/spec1_empty.json` to test rejection)**
 - **Golden fixture tests**: commit small populated spec-2 files (the themed examples of
   phase 1.5, §5, are the main corpus); CI asserts they decode successfully and that
   re-encoding is stable. Accidental format drift then fails CI instead of silently breaking
