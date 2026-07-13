@@ -296,7 +296,13 @@ before implementation.** Ordered by leverage:
    canary on the undo/redo replay path checks the recomputed inverse against the stored one.
    The one guard that lived only in `build_rev` (`Colloscope::UpdateGroupList`'s
    colloscope-entry-existence check) was transplanted into the fused method.
-2. **`Table<Id, T>` + declare-once relationship registry** — *proposal, to be validated*.
+2. **`Table<Id, T>` + declare-once relationship registry** — **detailed plan agreed
+   (July 2026): see `docs/table_registry_plan.md`**, which supersedes this sketch. Headline
+   decisions: proc-macro + generic `Table`/`OrderedTable`/registry runtime live in `state/`
+   (+ new `collomatique-state-derive` crate) for reuse (rooms side-project); consumers migrate
+   in four steps (Deref-compat containers → SQL-like read API → per-crate migration → remove
+   Deref); check-rerouting through the registry is handed off to item 3; `ops/` gets mechanical
+   read fixes only (slated for its own remaster). Original sketch kept below for context.
    "FK" = foreign key, the SQL term for a declared reference ("slots hold a `TeacherId`").
    Today every such relationship is hand-coded at least twice (delete-blocking scan in the
    `Remove` path + matching consistency pass). The proposal: one generic table type replacing
@@ -315,6 +321,9 @@ before implementation.** Ordered by leverage:
    whole-model `check_invariants()` after every op to `debug_assertions` and the phase-0
    property tests; full checks remain only at trust boundaries (file load, `GlobalUpdate`).
    Collapse `InvariantError`'s duplicated variants onto the per-entity error enums.
+   *Extended scope (decided July 2026 with item 2's plan)*: this item also reroutes the
+   triplicated referential checks (candidate validation / delete-blocking / consistency)
+   through the item-2 registry — see `docs/table_registry_plan.md` §6 for the hand-off notes.
 4. **Uniform op granularity**: every entity gets `Add / Remove / Update(whole entity)`
    (+ position ops where user-visible order exists, + association ops where relational).
    Collapse `ExportConfigOp`'s 11 per-field variants into one `Update`. Elementary ops only
@@ -387,8 +396,8 @@ When in doubt, ask the user to run the real scripts/files rather than guessing.
 
 ## 9. Open points
 
-- Phase 2 item 2 (`Table` + relationship registry) is a **proposal pending validation**;
-  detail it (API sketch, one worked entity, derive-macro vs. hand registration) in its own
-  planning session before starting.
+- Phase 2 item 2 (`Table` + relationship registry) — **validated**; the detailed multi-session
+  plan is `docs/table_registry_plan.md` (July 2026). Its §6 records the design notes item 3
+  needs for rerouting the triplicated checks through the registry.
 - Exact section list / field-level spec of format v2: fixed during phase 1 in
   `docs/file_format.md` before the conversion of existing files.
