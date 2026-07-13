@@ -6,7 +6,10 @@ use serde::{Deserialize, Serialize};
 use std::{collections::BTreeSet, num::NonZeroU32};
 use thiserror::Error;
 
+use crate::colloscopes;
 use crate::ids::{GroupListId, IncompatId, PairingRuleId, PeriodId, SlotId, SubjectId, TeacherId};
+use crate::ops::AnnotatedSubjectOp;
+use crate::slots;
 
 /// Description of the subjects
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -313,4 +316,422 @@ pub enum SubjectError {
     /// The subject is referenced by a pairing rule
     #[error("subject id ({0:?}) is referenced by pairing rule {1:?}")]
     SubjectIsReferencedByPairingRule(SubjectId, PairingRuleId),
+}
+
+impl crate::Data {
+    /// Used internally
+    ///
+    /// Apply period operations
+    pub(crate) fn apply_subject(
+        &mut self,
+        subject_op: &AnnotatedSubjectOp,
+    ) -> std::result::Result<AnnotatedSubjectOp, SubjectError> {
+        match subject_op {
+            AnnotatedSubjectOp::AddAfter(new_id, after_id, params) => {
+                if self
+                    .inner_data
+                    .params
+                    .subjects
+                    .find_subject_position(*new_id)
+                    .is_some()
+                {
+                    return Err(SubjectError::SubjectIdAlreadyExists(*new_id));
+                }
+                self.inner_data.params.validate_subject(params)?;
+
+                let position = match after_id {
+                    Some(id) => {
+                        self.inner_data
+                            .params
+                            .subjects
+                            .find_subject_position(*id)
+                            .ok_or(SubjectError::InvalidSubjectId(*id))?
+                            + 1
+                    }
+                    None => 0,
+                };
+
+                self.inner_data
+                    .params
+                    .subjects
+                    .ordered_subject_list
+                    .insert(position, (*new_id, params.clone()));
+                if params.parameters.interrogation_parameters.is_some() {
+                    self.inner_data.params.slots.subject_map.insert(
+                        *new_id,
+                        slots::SubjectSlots {
+                            ordered_slots: vec![],
+                        },
+                    );
+                }
+                for (period_id, _period) in &self.inner_data.params.periods.ordered_period_list {
+                    if params.excluded_periods.contains(period_id) {
+                        continue;
+                    }
+
+                    let period_assignment = self
+                        .inner_data
+                        .params
+                        .assignments
+                        .period_map
+                        .get_mut(period_id)
+                        .expect("Every period should appear in assignments");
+
+                    period_assignment
+                        .subject_map
+                        .insert(*new_id, BTreeSet::new());
+                }
+
+                Ok(AnnotatedSubjectOp::Remove(*new_id))
+            }
+            AnnotatedSubjectOp::ChangePosition(id, new_pos) => {
+                if *new_pos >= self.inner_data.params.subjects.ordered_subject_list.len() {
+                    return Err(SubjectError::PositionOutOfBounds(
+                        *new_pos,
+                        self.inner_data.params.subjects.ordered_subject_list.len(),
+                    ));
+                }
+                let Some(old_pos) = self.inner_data.params.subjects.find_subject_position(*id)
+                else {
+                    return Err(SubjectError::InvalidSubjectId(*id));
+                };
+
+                let data = self
+                    .inner_data
+                    .params
+                    .subjects
+                    .ordered_subject_list
+                    .remove(old_pos);
+                self.inner_data
+                    .params
+                    .subjects
+                    .ordered_subject_list
+                    .insert(*new_pos, data);
+                Ok(AnnotatedSubjectOp::ChangePosition(*id, old_pos))
+            }
+            AnnotatedSubjectOp::Remove(id) => {
+                let Some(position) = self.inner_data.params.subjects.find_subject_position(*id)
+                else {
+                    return Err(SubjectError::InvalidSubjectId(*id));
+                };
+
+                if self.inner_data.params.balancing.subjects.contains_key(id) {
+                    return Err(SubjectError::SubjectStillHasBalancingOptions(*id));
+                }
+
+                for (rule_id, rule) in &self.inner_data.params.pairings.pairing_rule_map {
+                    if rule.antecedent.subject_id == *id || rule.consequent.subject_id == *id {
+                        return Err(SubjectError::SubjectIsReferencedByPairingRule(
+                            *id, *rule_id,
+                        ));
+                    }
+                }
+
+                for (period_id, subject_map) in
+                    &self.inner_data.params.group_lists.subjects_associations
+                {
+                    if let Some(group_list_id) = subject_map.get(id) {
+                        return Err(SubjectError::SubjectStillHasAssociatedGroupList(
+                            *id,
+                            *group_list_id,
+                            *period_id,
+                        ));
+                    }
+                }
+
+                if let Some(subject_slots) = self.inner_data.params.slots.subject_map.get(id)
+                    && !subject_slots.ordered_slots.is_empty()
+                {
+                    return Err(SubjectError::SubjectStillHasAssociatedSlots(*id));
+                }
+
+                for (teacher_id, teacher) in &self.inner_data.params.teachers.teacher_map {
+                    if teacher.subjects.contains(id) {
+                        return Err(SubjectError::SubjectStillHasAssociatedTeachers(
+                            *teacher_id,
+                            *id,
+                        ));
+                    }
+                }
+
+                for (incompat_id, incompat) in &self.inner_data.params.incompats.incompat_map {
+                    if incompat.subject_id == *id {
+                        return Err(SubjectError::SubjectStillHasAssociatedIncompats(
+                            *id,
+                            *incompat_id,
+                        ));
+                    }
+                }
+
+                let params = &self.inner_data.params.subjects.ordered_subject_list[position].1;
+                for (period_id, _period) in &self.inner_data.params.periods.ordered_period_list {
+                    if params.excluded_periods.contains(period_id) {
+                        continue;
+                    }
+
+                    let period_assignment = self
+                        .inner_data
+                        .params
+                        .assignments
+                        .period_map
+                        .get(period_id)
+                        .expect("Every period should appear in assignments");
+
+                    let assigned_students = period_assignment
+                        .subject_map
+                        .get(id)
+                        .expect("Subject should appear in assignments for relevant periods");
+
+                    if !assigned_students.is_empty() {
+                        return Err(SubjectError::SubjectStillHasNonTrivialAssignments(
+                            *period_id, *id,
+                        ));
+                    }
+                }
+
+                let previous_id = (position > 0)
+                    .then(|| self.inner_data.params.subjects.ordered_subject_list[position - 1].0);
+
+                let (_, params) = self
+                    .inner_data
+                    .params
+                    .subjects
+                    .ordered_subject_list
+                    .remove(position);
+                self.inner_data.params.slots.subject_map.remove(id);
+                for (period_id, _period) in &self.inner_data.params.periods.ordered_period_list {
+                    if params.excluded_periods.contains(period_id) {
+                        continue;
+                    }
+
+                    let period_assignment = self
+                        .inner_data
+                        .params
+                        .assignments
+                        .period_map
+                        .get_mut(period_id)
+                        .expect("Every period should appear in assignments");
+
+                    period_assignment.subject_map.remove(id);
+                }
+
+                Ok(AnnotatedSubjectOp::AddAfter(*id, previous_id, params))
+            }
+            AnnotatedSubjectOp::Update(id, new_params) => {
+                self.inner_data.params.validate_subject(new_params)?;
+                let Some(position) = self.inner_data.params.subjects.find_subject_position(*id)
+                else {
+                    return Err(SubjectError::InvalidSubjectId(*id));
+                };
+
+                let old_params = self.inner_data.params.subjects.ordered_subject_list[position]
+                    .1
+                    .clone();
+
+                if old_params.parameters.interrogation_parameters.is_some()
+                    && new_params.parameters.interrogation_parameters.is_none()
+                {
+                    if self.inner_data.params.balancing.subjects.contains_key(id) {
+                        return Err(SubjectError::SubjectStillHasBalancingOptions(*id));
+                    }
+
+                    // The new subject does not have interrogations, let's check that no teacher has been assigned to it
+                    for (teacher_id, teacher) in &self.inner_data.params.teachers.teacher_map {
+                        if teacher.subjects.contains(id) {
+                            return Err(SubjectError::SubjectStillHasAssociatedTeachers(
+                                *teacher_id,
+                                *id,
+                            ));
+                        }
+                    }
+
+                    // Also, we should not have a corresponding group list
+                    for (period_id, subject_map) in
+                        &self.inner_data.params.group_lists.subjects_associations
+                    {
+                        if let Some(group_list_id) = subject_map.get(id) {
+                            return Err(SubjectError::SubjectStillHasAssociatedGroupList(
+                                *id,
+                                *group_list_id,
+                                *period_id,
+                            ));
+                        }
+                    }
+
+                    // Let's also check that we don't have corresponding interrogations
+                    let subject_slots = self
+                        .inner_data
+                        .params
+                        .slots
+                        .subject_map
+                        .get(id)
+                        .expect("Subject should have a slot list at this point");
+
+                    if !subject_slots.ordered_slots.is_empty() {
+                        return Err(SubjectError::SubjectStillHasAssociatedSlots(*id));
+                    }
+                }
+
+                for (period_id, _period) in &self.inner_data.params.periods.ordered_period_list {
+                    // If the period was excluded before, there is no structure to check
+                    // and if the period is not excluded now, the structure will be fine anyway
+                    if old_params.excluded_periods.contains(period_id)
+                        || !new_params.excluded_periods.contains(period_id)
+                    {
+                        continue;
+                    }
+
+                    let period_assignment = self
+                        .inner_data
+                        .params
+                        .assignments
+                        .period_map
+                        .get(period_id)
+                        .expect("Every period should appear in assignments");
+
+                    let assigned_students = period_assignment
+                        .subject_map
+                        .get(id)
+                        .expect("Subject should appear in assignments for relevant periods");
+
+                    if !assigned_students.is_empty() {
+                        return Err(SubjectError::SubjectStillHasNonTrivialAssignments(
+                            *period_id, *id,
+                        ));
+                    }
+
+                    let subject_map = self
+                        .inner_data
+                        .params
+                        .group_lists
+                        .subjects_associations
+                        .get(period_id)
+                        .expect("Period id should be valid at this point");
+
+                    if let Some(group_list_id) = subject_map.get(id) {
+                        return Err(SubjectError::SubjectStillHasAssociatedGroupList(
+                            *id,
+                            *group_list_id,
+                            *period_id,
+                        ));
+                    }
+
+                    // Check if there are non-empty slots in colloscope for the subject
+                    if let Some(subject_slots) = self.inner_data.params.slots.subject_map.get(id) {
+                        let colloscope_period = self
+                            .inner_data
+                            .colloscope
+                            .period_map
+                            .get(period_id)
+                            .expect("Period ID should be valid at this point");
+
+                        for (slot_id, _slot) in &subject_slots.ordered_slots {
+                            let Some(collo_slot) = colloscope_period.slot_map.get(slot_id) else {
+                                continue;
+                            };
+                            if !collo_slot.is_empty() {
+                                return Err(SubjectError::SubjectStillHasNonEmptySlotInColloscope(
+                                    *id, *slot_id,
+                                ));
+                            }
+                        }
+                    }
+                }
+
+                self.inner_data.params.subjects.ordered_subject_list[position].1 =
+                    new_params.clone();
+                if new_params.parameters.interrogation_parameters.is_some()
+                    != old_params.parameters.interrogation_parameters.is_some()
+                {
+                    if new_params.parameters.interrogation_parameters.is_some() {
+                        // We don't need to update the colloscope in this case: no slots have been added so far
+                        self.inner_data.params.slots.subject_map.insert(
+                            *id,
+                            slots::SubjectSlots {
+                                ordered_slots: vec![],
+                            },
+                        );
+                    } else {
+                        // We don't need to update the colloscope in this case: all slots have already been removed
+                        self.inner_data.params.slots.subject_map.remove(id);
+                    }
+                }
+
+                // Let's update the colloscope.
+                // However, if there are no interrogations, then we don't have slots to update
+                if new_params.parameters.interrogation_parameters.is_some() {
+                    let subject_slots = self
+                        .inner_data
+                        .params
+                        .slots
+                        .subject_map
+                        .get(id)
+                        .expect("Subject should have a slot list at this point");
+
+                    for (period_id, collo_period) in &mut self.inner_data.colloscope.period_map {
+                        // Only change in period status should be considered
+                        if old_params.excluded_periods.contains(period_id)
+                            == new_params.excluded_periods.contains(period_id)
+                        {
+                            continue;
+                        }
+
+                        if old_params.excluded_periods.contains(period_id) {
+                            // The period was excluded but is not anymore
+                            for (slot_id, _slot) in &subject_slots.ordered_slots {
+                                collo_period.slot_map.insert(
+                                    *slot_id,
+                                    colloscopes::ColloscopeSlot::new_empty_from_params(
+                                        &self.inner_data.params,
+                                        *period_id,
+                                        *slot_id,
+                                    ),
+                                );
+                            }
+                        } else {
+                            // The period was included but will now be excluded
+                            for (slot_id, _slot) in &subject_slots.ordered_slots {
+                                collo_period.slot_map.remove(slot_id);
+                            }
+                        }
+                    }
+                }
+
+                for (period_id, _period) in &self.inner_data.params.periods.ordered_period_list {
+                    // Only change in period status should be considered
+                    if old_params.excluded_periods.contains(period_id)
+                        == new_params.excluded_periods.contains(period_id)
+                    {
+                        continue;
+                    }
+
+                    if old_params.excluded_periods.contains(period_id) {
+                        // The period was excluded but is not anymore
+                        let period_assignment = self
+                            .inner_data
+                            .params
+                            .assignments
+                            .period_map
+                            .get_mut(period_id)
+                            .expect("Every period should appear in assignments");
+
+                        period_assignment.subject_map.insert(*id, BTreeSet::new());
+                    } else {
+                        // The period was included but will now be excluded
+                        let period_assignment = self
+                            .inner_data
+                            .params
+                            .assignments
+                            .period_map
+                            .get_mut(period_id)
+                            .expect("Every period should appear in assignments");
+
+                        period_assignment.subject_map.remove(id);
+                    }
+                }
+
+                Ok(AnnotatedSubjectOp::Update(*id, old_params))
+            }
+        }
+    }
 }

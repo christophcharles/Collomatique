@@ -3,11 +3,15 @@
 //! This module defines the relevant types to describes the periods
 
 use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, BTreeSet};
 use thiserror::Error;
 
+use crate::assignments;
+use crate::colloscopes::ColloscopePeriod;
 use crate::ids::{
     PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId, SubjectId, WeekPatternId,
 };
+use crate::ops::AnnotatedPeriodOp;
 
 /// Description of the periods
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -170,4 +174,352 @@ pub enum PeriodError {
     /// The period is referenced by a slot pairing rule
     #[error("period id ({0:?}) is referenced by slot pairing rule {1:?}")]
     PeriodIsReferencedBySlotPairingRule(PeriodId, SlotPairingRuleId),
+}
+
+impl crate::Data {
+    /// Used internally
+    ///
+    /// Apply period operations
+    pub(crate) fn apply_period(
+        &mut self,
+        period_op: &AnnotatedPeriodOp,
+    ) -> std::result::Result<AnnotatedPeriodOp, PeriodError> {
+        match period_op {
+            AnnotatedPeriodOp::ChangeStartDate(new_date) => {
+                let old_date = std::mem::replace(
+                    &mut self.inner_data.params.periods.first_week,
+                    new_date.clone(),
+                );
+                Ok(AnnotatedPeriodOp::ChangeStartDate(old_date))
+            }
+            AnnotatedPeriodOp::AddFront(period_id, desc) => {
+                if self
+                    .inner_data
+                    .params
+                    .periods
+                    .find_period_position(*period_id)
+                    .is_some()
+                {
+                    return Err(PeriodError::PeriodIdAlreadyExists(*period_id));
+                }
+
+                self.inner_data
+                    .params
+                    .periods
+                    .ordered_period_list
+                    .insert(0, (*period_id, desc.clone()));
+                self.inner_data.params.assignments.period_map.insert(
+                    *period_id,
+                    assignments::PeriodAssignments {
+                        subject_map: self
+                            .inner_data
+                            .params
+                            .subjects
+                            .ordered_subject_list
+                            .iter()
+                            .map(|(subject_id, _subject)| (*subject_id, BTreeSet::new()))
+                            .collect(),
+                    },
+                );
+                self.inner_data
+                    .params
+                    .group_lists
+                    .subjects_associations
+                    .insert(*period_id, BTreeMap::new());
+                for week_pattern in self
+                    .inner_data
+                    .params
+                    .week_patterns
+                    .week_pattern_map
+                    .values_mut()
+                {
+                    week_pattern.add_weeks(0, desc.len());
+                }
+                self.inner_data.colloscope.period_map.insert(
+                    *period_id,
+                    ColloscopePeriod::new_empty_from_params(&self.inner_data.params, *period_id),
+                );
+                Ok(AnnotatedPeriodOp::Remove(*period_id))
+            }
+            AnnotatedPeriodOp::AddAfter(period_id, after_id, desc) => {
+                if self
+                    .inner_data
+                    .params
+                    .periods
+                    .find_period_position(*period_id)
+                    .is_some()
+                {
+                    return Err(PeriodError::PeriodIdAlreadyExists(*period_id));
+                }
+
+                let Some((position, new_first_week)) = self
+                    .inner_data
+                    .params
+                    .periods
+                    .find_period_position_and_total_number_of_weeks(*after_id)
+                else {
+                    return Err(PeriodError::InvalidPeriodId(*after_id));
+                };
+
+                self.inner_data
+                    .params
+                    .periods
+                    .ordered_period_list
+                    .insert(position + 1, (*period_id, desc.clone()));
+                self.inner_data.params.assignments.period_map.insert(
+                    *period_id,
+                    assignments::PeriodAssignments {
+                        subject_map: self
+                            .inner_data
+                            .params
+                            .subjects
+                            .ordered_subject_list
+                            .iter()
+                            .map(|(subject_id, _subject)| (*subject_id, BTreeSet::new()))
+                            .collect(),
+                    },
+                );
+                self.inner_data
+                    .params
+                    .group_lists
+                    .subjects_associations
+                    .insert(*period_id, BTreeMap::new());
+                for week_pattern in self
+                    .inner_data
+                    .params
+                    .week_patterns
+                    .week_pattern_map
+                    .values_mut()
+                {
+                    week_pattern.add_weeks(new_first_week, desc.len());
+                }
+                self.inner_data.colloscope.period_map.insert(
+                    *period_id,
+                    ColloscopePeriod::new_empty_from_params(&self.inner_data.params, *period_id),
+                );
+                Ok(AnnotatedPeriodOp::Remove(*period_id))
+            }
+            AnnotatedPeriodOp::Remove(period_id) => {
+                let Some((position, first_week)) = self
+                    .inner_data
+                    .params
+                    .periods
+                    .find_period_position_and_first_week(*period_id)
+                else {
+                    return Err(PeriodError::InvalidPeriodId(*period_id));
+                };
+
+                let colloscope_period = self
+                    .inner_data
+                    .colloscope
+                    .period_map
+                    .get(period_id)
+                    .expect("Period ID should be valid at this point");
+
+                if !colloscope_period.is_empty() {
+                    return Err(PeriodError::NotEmptyPeriodInColloscope(*period_id));
+                }
+
+                let week_count = self.inner_data.params.periods.ordered_period_list[position]
+                    .1
+                    .len();
+
+                for (week_pattern_id, week_pattern) in
+                    &self.inner_data.params.week_patterns.week_pattern_map
+                {
+                    if !week_pattern.can_remove_weeks(first_week, week_count) {
+                        return Err(PeriodError::NonTrivialWeekPattern(
+                            *period_id,
+                            *week_pattern_id,
+                        ));
+                    }
+                }
+
+                for (subject_id, subject) in &self.inner_data.params.subjects.ordered_subject_list {
+                    if subject.excluded_periods.contains(period_id) {
+                        return Err(PeriodError::PeriodIsReferencedBySubject(
+                            *period_id,
+                            *subject_id,
+                        ));
+                    }
+                }
+
+                for (student_id, student) in &self.inner_data.params.students.student_map {
+                    if student.excluded_periods.contains(period_id) {
+                        return Err(PeriodError::PeriodIsReferencedByStudent(
+                            *period_id,
+                            *student_id,
+                        ));
+                    }
+                }
+
+                for (rule_id, rule) in &self.inner_data.params.pairings.pairing_rule_map {
+                    if rule.excluded_periods.contains(period_id) {
+                        return Err(PeriodError::PeriodIsReferencedByPairingRule(
+                            *period_id, *rule_id,
+                        ));
+                    }
+                }
+
+                for (rule_id, rule) in &self.inner_data.params.slot_pairings.slot_pairing_rule_map {
+                    if rule.excluded_periods.contains(period_id) {
+                        return Err(PeriodError::PeriodIsReferencedBySlotPairingRule(
+                            *period_id, *rule_id,
+                        ));
+                    }
+                }
+
+                let period_assignments = self
+                    .inner_data
+                    .params
+                    .assignments
+                    .period_map
+                    .get(period_id)
+                    .expect("At this point, period id should be valid");
+                for (subject_id, assigned_students) in &period_assignments.subject_map {
+                    if !assigned_students.is_empty() {
+                        return Err(PeriodError::PeriodStillHasNonTrivialAssignments(
+                            *period_id,
+                            *subject_id,
+                        ));
+                    }
+                }
+
+                let subject_map = self
+                    .inner_data
+                    .params
+                    .group_lists
+                    .subjects_associations
+                    .get(period_id)
+                    .expect("Period id should be valid at this point");
+                if !subject_map.is_empty() {
+                    return Err(PeriodError::PeriodStillHasNonTrivialGroupListAssociation(
+                        *period_id,
+                    ));
+                }
+
+                let previous_id = (position > 0)
+                    .then(|| self.inner_data.params.periods.ordered_period_list[position - 1].0);
+
+                let (_, old_desc) = self
+                    .inner_data
+                    .params
+                    .periods
+                    .ordered_period_list
+                    .remove(position);
+                self.inner_data
+                    .params
+                    .assignments
+                    .period_map
+                    .remove(period_id);
+                self.inner_data
+                    .params
+                    .group_lists
+                    .subjects_associations
+                    .remove(period_id);
+                for week_pattern in self
+                    .inner_data
+                    .params
+                    .week_patterns
+                    .week_pattern_map
+                    .values_mut()
+                {
+                    week_pattern.remove_weeks(first_week, week_count);
+                }
+                self.inner_data.colloscope.period_map.remove(period_id);
+
+                Ok(match previous_id {
+                    None => AnnotatedPeriodOp::AddFront(*period_id, old_desc),
+                    Some(prev) => AnnotatedPeriodOp::AddAfter(*period_id, prev, old_desc),
+                })
+            }
+            AnnotatedPeriodOp::Update(period_id, desc) => {
+                let Some((position, first_week)) = self
+                    .inner_data
+                    .params
+                    .periods
+                    .find_period_position_and_first_week(*period_id)
+                else {
+                    return Err(PeriodError::InvalidPeriodId(*period_id));
+                };
+
+                let period = &self.inner_data.params.periods.ordered_period_list[position].1;
+                let old_length = period.len();
+                if desc.len() < old_length {
+                    for (week_pattern_id, week_pattern) in
+                        &self.inner_data.params.week_patterns.week_pattern_map
+                    {
+                        if !week_pattern
+                            .can_remove_weeks(first_week + desc.len(), old_length - desc.len())
+                        {
+                            return Err(PeriodError::NonTrivialWeekPattern(
+                                *period_id,
+                                *week_pattern_id,
+                            ));
+                        }
+                    }
+                }
+                let colloscope_period = self
+                    .inner_data
+                    .colloscope
+                    .period_map
+                    .get(period_id)
+                    .expect("Period ID should be valid at this point");
+                for (slot_id, collo_slot) in &colloscope_period.slot_map {
+                    let slot = self
+                        .inner_data
+                        .params
+                        .slots
+                        .find_slot(*slot_id)
+                        .expect("Slot ID should be valid");
+                    let new_pattern = slot.build_pattern_for_new_period(
+                        desc,
+                        first_week,
+                        &self.inner_data.params.week_patterns,
+                    );
+
+                    if !collo_slot.check_empty_on_removed_weeks(&new_pattern) {
+                        return Err(PeriodError::NotCompatibleSlotInColloscope(*slot_id));
+                    }
+                }
+
+                let old_desc = std::mem::replace(
+                    &mut self.inner_data.params.periods.ordered_period_list[position].1,
+                    desc.clone(),
+                );
+                if desc.len() > old_length {
+                    let first_week_to_add = first_week + old_length;
+                    for week_pattern in self
+                        .inner_data
+                        .params
+                        .week_patterns
+                        .week_pattern_map
+                        .values_mut()
+                    {
+                        week_pattern.add_weeks(first_week_to_add, desc.len() - old_length);
+                    }
+                } else if desc.len() < old_length {
+                    let first_week_to_remove = first_week + desc.len();
+                    for week_pattern in self
+                        .inner_data
+                        .params
+                        .week_patterns
+                        .week_pattern_map
+                        .values_mut()
+                    {
+                        week_pattern.remove_weeks(first_week_to_remove, old_length - desc.len());
+                    }
+                }
+                for subject_slots in self.inner_data.params.slots.subject_map.values() {
+                    for (slot_id, _slot) in &subject_slots.ordered_slots {
+                        self.inner_data
+                            .colloscope
+                            .update_slot_to_match_week_pattern(*slot_id, &self.inner_data.params);
+                    }
+                }
+
+                Ok(AnnotatedPeriodOp::Update(*period_id, old_desc))
+            }
+        }
+    }
 }

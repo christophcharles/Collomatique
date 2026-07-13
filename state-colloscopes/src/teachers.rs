@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::ids::{SlotId, SubjectId, TeacherId};
+use crate::ops::AnnotatedTeacherOp;
 
 /// Description of the teachers
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -56,4 +57,87 @@ pub enum TeacherError {
     /// The teacher is referenced by slots for a bad subject
     #[error("teacher id ({0:?}) gives interrogation in a now forbidden subject ({1:?})")]
     TeacherStillHasAssociatedSlotsInSubject(TeacherId, SubjectId),
+}
+
+impl crate::Data {
+    /// Used internally
+    ///
+    /// Apply teacher operations
+    pub(crate) fn apply_teacher(
+        &mut self,
+        teacher_op: &AnnotatedTeacherOp,
+    ) -> std::result::Result<AnnotatedTeacherOp, TeacherError> {
+        match teacher_op {
+            AnnotatedTeacherOp::Add(new_id, teacher) => {
+                if self
+                    .inner_data
+                    .params
+                    .teachers
+                    .teacher_map
+                    .contains_key(new_id)
+                {
+                    return Err(TeacherError::TeacherIdAlreadyExists(*new_id));
+                }
+                self.inner_data.params.validate_teacher(teacher)?;
+
+                self.inner_data
+                    .params
+                    .teachers
+                    .teacher_map
+                    .insert(*new_id, teacher.clone());
+
+                Ok(AnnotatedTeacherOp::Remove(*new_id))
+            }
+            AnnotatedTeacherOp::Remove(id) => {
+                if !self.inner_data.params.teachers.teacher_map.contains_key(id) {
+                    return Err(TeacherError::InvalidTeacherId(*id));
+                }
+
+                for subject_slots in self.inner_data.params.slots.subject_map.values() {
+                    for (slot_id, slot) in &subject_slots.ordered_slots {
+                        if *id == slot.teacher_id {
+                            return Err(TeacherError::TeacherStillHasAssociatedSlots(
+                                *id, *slot_id,
+                            ));
+                        }
+                    }
+                }
+
+                let old_teacher = self
+                    .inner_data
+                    .params
+                    .teachers
+                    .teacher_map
+                    .remove(id)
+                    .expect("Teacher ID was checked above");
+
+                Ok(AnnotatedTeacherOp::Add(*id, old_teacher))
+            }
+            AnnotatedTeacherOp::Update(id, new_teacher) => {
+                self.inner_data.params.validate_teacher(new_teacher)?;
+                let Some(current_teacher) = self.inner_data.params.teachers.teacher_map.get_mut(id)
+                else {
+                    return Err(TeacherError::InvalidTeacherId(*id));
+                };
+
+                for (subject_id, subject_slots) in &self.inner_data.params.slots.subject_map {
+                    if new_teacher.subjects.contains(subject_id) {
+                        continue;
+                    }
+                    for (_slot_id, slot) in &subject_slots.ordered_slots {
+                        if *id == slot.teacher_id {
+                            return Err(TeacherError::TeacherStillHasAssociatedSlotsInSubject(
+                                *id,
+                                *subject_id,
+                            ));
+                        }
+                    }
+                }
+
+                let old_teacher = std::mem::replace(current_teacher, new_teacher.clone());
+
+                Ok(AnnotatedTeacherOp::Update(*id, old_teacher))
+            }
+        }
+    }
 }

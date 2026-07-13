@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::ids::{IncompatId, SlotId, WeekPatternId};
+use crate::ops::AnnotatedWeekPatternOp;
 
 /// Description of the week patterns
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -120,4 +121,135 @@ pub enum WeekPatternError {
     /// The slot in colloscope is incompatible with the new week pattern
     #[error("slot {0:?} in colloscope is not compatible with the new week pattern")]
     NotCompatibleSlotInColloscope(SlotId),
+}
+
+impl crate::Data {
+    /// Used internally
+    ///
+    /// Apply week pattern operations
+    pub(crate) fn apply_week_pattern(
+        &mut self,
+        week_pattern_op: &AnnotatedWeekPatternOp,
+    ) -> std::result::Result<AnnotatedWeekPatternOp, WeekPatternError> {
+        match week_pattern_op {
+            AnnotatedWeekPatternOp::Add(new_id, week_pattern) => {
+                if self
+                    .inner_data
+                    .params
+                    .week_patterns
+                    .week_pattern_map
+                    .contains_key(new_id)
+                {
+                    return Err(WeekPatternError::WeekPatternIdAlreadyExists(*new_id));
+                }
+
+                self.inner_data.params.validate_week_pattern(week_pattern)?;
+
+                self.inner_data
+                    .params
+                    .week_patterns
+                    .week_pattern_map
+                    .insert(*new_id, week_pattern.clone());
+
+                Ok(AnnotatedWeekPatternOp::Remove(*new_id))
+            }
+            AnnotatedWeekPatternOp::Remove(id) => {
+                if !self
+                    .inner_data
+                    .params
+                    .week_patterns
+                    .week_pattern_map
+                    .contains_key(id)
+                {
+                    return Err(WeekPatternError::InvalidWeekPatternId(*id));
+                }
+
+                for subject_slots in self.inner_data.params.slots.subject_map.values() {
+                    for (slot_id, slot) in &subject_slots.ordered_slots {
+                        if let Some(week_pattern_id) = &slot.week_pattern
+                            && *id == *week_pattern_id
+                        {
+                            return Err(WeekPatternError::WeekPatternStillHasAssociatedSlots(
+                                *id, *slot_id,
+                            ));
+                        }
+                    }
+                }
+
+                for (incompat_id, incompat) in &self.inner_data.params.incompats.incompat_map {
+                    if let Some(week_pattern_id) = &incompat.week_pattern_id
+                        && *id == *week_pattern_id
+                    {
+                        return Err(WeekPatternError::WeekPatternStillHasAssociatedIncompat(
+                            *id,
+                            *incompat_id,
+                        ));
+                    }
+                }
+
+                let old_week_pattern = self
+                    .inner_data
+                    .params
+                    .week_patterns
+                    .week_pattern_map
+                    .remove(id)
+                    .expect("Week pattern ID was checked above");
+
+                Ok(AnnotatedWeekPatternOp::Add(*id, old_week_pattern))
+            }
+            AnnotatedWeekPatternOp::Update(id, new_week_pattern) => {
+                self.inner_data
+                    .params
+                    .validate_week_pattern(new_week_pattern)?;
+                let new_merged_pattern = self
+                    .inner_data
+                    .params
+                    .merge_pattern(&new_week_pattern.weeks);
+
+                let Some(current_week_pattern) = self
+                    .inner_data
+                    .params
+                    .week_patterns
+                    .week_pattern_map
+                    .get_mut(id)
+                else {
+                    return Err(WeekPatternError::InvalidWeekPatternId(*id));
+                };
+
+                for subject_slots in self.inner_data.params.slots.subject_map.values() {
+                    for (slot_id, slot) in &subject_slots.ordered_slots {
+                        if slot.week_pattern != Some(*id) {
+                            continue;
+                        }
+
+                        if !self.inner_data.colloscope.check_empty_on_removed_weeks(
+                            *slot_id,
+                            &self.inner_data.params.periods,
+                            &new_merged_pattern,
+                        ) {
+                            return Err(WeekPatternError::NotCompatibleSlotInColloscope(*slot_id));
+                        }
+                    }
+                }
+
+                let old_week_pattern =
+                    std::mem::replace(current_week_pattern, new_week_pattern.clone());
+                for subject_slots in self.inner_data.params.slots.subject_map.values() {
+                    for (slot_id, slot) in &subject_slots.ordered_slots {
+                        if slot.week_pattern != Some(*id) {
+                            continue;
+                        }
+
+                        self.inner_data.colloscope.update_slot_for_week_pattern(
+                            *slot_id,
+                            &self.inner_data.params.periods,
+                            &new_merged_pattern,
+                        );
+                    }
+                }
+
+                Ok(AnnotatedWeekPatternOp::Update(*id, old_week_pattern))
+            }
+        }
+    }
 }

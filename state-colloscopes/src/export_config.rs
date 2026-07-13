@@ -3,6 +3,8 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::ops::AnnotatedExportConfigOp;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Color {
     pub red: u8,
@@ -183,3 +185,87 @@ impl Default for ExportConfig {
 /// These errors can be returned when trying to modify [crate::Data] with an export config op.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum ExportConfigError {}
+
+impl crate::Data {
+    /// Used internally
+    ///
+    /// Apply export configuration operations
+    pub(crate) fn apply_export_config(
+        &mut self,
+        export_config_op: &AnnotatedExportConfigOp,
+    ) -> std::result::Result<AnnotatedExportConfigOp, ExportConfigError> {
+        let backward = match export_config_op {
+            AnnotatedExportConfigOp::UpdateGlobalConfig(v) => {
+                let old = std::mem::replace(&mut self.inner_data.export_config.global, v.clone());
+                AnnotatedExportConfigOp::UpdateGlobalConfig(old)
+            }
+            AnnotatedExportConfigOp::UpdateColloscopeEnabled(v) => {
+                let old =
+                    std::mem::replace(&mut self.inner_data.export_config.colloscope_enabled, *v);
+                AnnotatedExportConfigOp::UpdateColloscopeEnabled(old)
+            }
+            AnnotatedExportConfigOp::UpdateAllGroupsEnabled(v) => {
+                let old =
+                    std::mem::replace(&mut self.inner_data.export_config.all_groups_enabled, *v);
+                AnnotatedExportConfigOp::UpdateAllGroupsEnabled(old)
+            }
+            AnnotatedExportConfigOp::UpdatePrefilledGroupsEnabled(v) => {
+                let old = std::mem::replace(
+                    &mut self.inner_data.export_config.prefilled_groups_enabled,
+                    *v,
+                );
+                AnnotatedExportConfigOp::UpdatePrefilledGroupsEnabled(old)
+            }
+            AnnotatedExportConfigOp::UpdateAutomaticGroupsEnabled(v) => {
+                let old = std::mem::replace(
+                    &mut self.inner_data.export_config.automatic_groups_enabled,
+                    *v,
+                );
+                AnnotatedExportConfigOp::UpdateAutomaticGroupsEnabled(old)
+            }
+            AnnotatedExportConfigOp::UpdatePerGroupListEnabled(v) => {
+                let old = std::mem::replace(
+                    &mut self.inner_data.export_config.per_group_list_enabled,
+                    *v,
+                );
+                AnnotatedExportConfigOp::UpdatePerGroupListEnabled(old)
+            }
+            AnnotatedExportConfigOp::UpdateColloscopeConfig(v) => {
+                let old = std::mem::replace(
+                    &mut self.inner_data.export_config.colloscope_config,
+                    v.clone(),
+                );
+                AnnotatedExportConfigOp::UpdateColloscopeConfig(old)
+            }
+            AnnotatedExportConfigOp::UpdateAllGroupsConfig(v) => {
+                let old = std::mem::replace(
+                    &mut self.inner_data.export_config.all_groups_config,
+                    v.clone(),
+                );
+                AnnotatedExportConfigOp::UpdateAllGroupsConfig(old)
+            }
+            AnnotatedExportConfigOp::UpdatePrefilledGroupsConfig(v) => {
+                let old = std::mem::replace(
+                    &mut self.inner_data.export_config.prefilled_groups_config,
+                    v.clone(),
+                );
+                AnnotatedExportConfigOp::UpdatePrefilledGroupsConfig(old)
+            }
+            AnnotatedExportConfigOp::UpdateAutomaticGroupsConfig(v) => {
+                let old = std::mem::replace(
+                    &mut self.inner_data.export_config.automatic_groups_config,
+                    v.clone(),
+                );
+                AnnotatedExportConfigOp::UpdateAutomaticGroupsConfig(old)
+            }
+            AnnotatedExportConfigOp::UpdatePerGroupListConfig(v) => {
+                let old = std::mem::replace(
+                    &mut self.inner_data.export_config.per_group_list_config,
+                    v.clone(),
+                );
+                AnnotatedExportConfigOp::UpdatePerGroupListConfig(old)
+            }
+        };
+        Ok(backward)
+    }
+}

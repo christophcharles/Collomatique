@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::ids::{GroupListId, PeriodId, SlotId, StudentId};
+use crate::ops::AnnotatedColloscopeOp;
 
 /// Description of a colloscope
 ///
@@ -646,4 +647,103 @@ pub enum ColloscopeError {
 
     #[error("Non-prefilled group list {0:?} is missing from colloscope")]
     MissingNonPrefilledGroupList(GroupListId),
+}
+
+impl crate::Data {
+    /// Used internally
+    ///
+    /// Apply colloscope operations
+    pub(crate) fn apply_colloscope(
+        &mut self,
+        colloscope_op: &AnnotatedColloscopeOp,
+    ) -> std::result::Result<AnnotatedColloscopeOp, ColloscopeError> {
+        match colloscope_op {
+            AnnotatedColloscopeOp::UpdateGroupList(group_list_id, group_list) => {
+                let Some(params_group_list) = self
+                    .inner_data
+                    .params
+                    .group_lists
+                    .group_list_map
+                    .get(group_list_id)
+                else {
+                    return Err(ColloscopeError::InvalidGroupListId(*group_list_id));
+                };
+
+                group_list.validate_against_params(
+                    *group_list_id,
+                    &params_group_list.params,
+                    &params_group_list.filling,
+                    &self.inner_data.params.students,
+                )?;
+
+                // Prefilled group lists have a params entry but no colloscope
+                // entry: the op must be rejected, not insert one.
+                if !self
+                    .inner_data
+                    .colloscope
+                    .group_lists
+                    .contains_key(group_list_id)
+                {
+                    return Err(ColloscopeError::InvalidGroupListId(*group_list_id));
+                }
+
+                let old_group_list = self
+                    .inner_data
+                    .colloscope
+                    .group_lists
+                    .insert(*group_list_id, group_list.clone())
+                    .expect("Entry presence was checked above");
+
+                Ok(AnnotatedColloscopeOp::UpdateGroupList(
+                    *group_list_id,
+                    old_group_list,
+                ))
+            }
+            AnnotatedColloscopeOp::UpdateInterrogation(
+                period_id,
+                slot_id,
+                week_in_period,
+                new_interrogation,
+            ) => {
+                new_interrogation.validate_against_params(
+                    *period_id,
+                    *slot_id,
+                    *week_in_period,
+                    &self.inner_data.params,
+                )?;
+
+                let Some(period) = self.inner_data.colloscope.period_map.get_mut(period_id) else {
+                    return Err(ColloscopeError::InvalidPeriodId(*period_id));
+                };
+
+                let Some(slot) = period.slot_map.get_mut(slot_id) else {
+                    return Err(ColloscopeError::InvalidSlotId(*slot_id));
+                };
+
+                let Some(interrogation_opt) = slot.interrogations.get_mut(*week_in_period) else {
+                    return Err(ColloscopeError::InvalidWeekNumberInPeriod(
+                        *period_id,
+                        *week_in_period,
+                    ));
+                };
+
+                let Some(interrogation) = interrogation_opt else {
+                    return Err(ColloscopeError::NoInterrogationOnWeek(
+                        *period_id,
+                        *slot_id,
+                        *week_in_period,
+                    ));
+                };
+
+                let old_interrogation = std::mem::replace(interrogation, new_interrogation.clone());
+
+                Ok(AnnotatedColloscopeOp::UpdateInterrogation(
+                    *period_id,
+                    *slot_id,
+                    *week_in_period,
+                    old_interrogation,
+                ))
+            }
+        }
+    }
 }

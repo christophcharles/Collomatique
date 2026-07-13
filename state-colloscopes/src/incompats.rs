@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::ids::{IncompatId, SubjectId, WeekPatternId};
+use crate::ops::AnnotatedIncompatOp;
 
 /// Description of the schedule incompatibilities
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -58,4 +59,62 @@ pub enum IncompatError {
     /// week pattern id is invalid
     #[error("invalid week pattern id ({0:?})")]
     InvalidWeekPatternId(WeekPatternId),
+}
+
+impl crate::Data {
+    /// Used internally
+    ///
+    /// Apply incompat operations
+    pub(crate) fn apply_incompat(
+        &mut self,
+        incompat_op: &AnnotatedIncompatOp,
+    ) -> std::result::Result<AnnotatedIncompatOp, IncompatError> {
+        match incompat_op {
+            AnnotatedIncompatOp::Add(new_id, incompat) => {
+                if self
+                    .inner_data
+                    .params
+                    .incompats
+                    .incompat_map
+                    .contains_key(new_id)
+                {
+                    return Err(IncompatError::IncompatIdAlreadyExists(*new_id));
+                }
+                self.inner_data.params.validate_incompat(incompat)?;
+
+                self.inner_data
+                    .params
+                    .incompats
+                    .incompat_map
+                    .insert(*new_id, incompat.clone());
+
+                Ok(AnnotatedIncompatOp::Remove(*new_id))
+            }
+            AnnotatedIncompatOp::Remove(id) => {
+                let Some(old_incompat) = self.inner_data.params.incompats.incompat_map.remove(id)
+                else {
+                    return Err(IncompatError::InvalidIncompatId(*id));
+                };
+
+                Ok(AnnotatedIncompatOp::Add(*id, old_incompat))
+            }
+            AnnotatedIncompatOp::Update(incompat_id, new_incompat) => {
+                self.inner_data.params.validate_incompat(new_incompat)?;
+
+                let Some(incompat) = self
+                    .inner_data
+                    .params
+                    .incompats
+                    .incompat_map
+                    .get_mut(incompat_id)
+                else {
+                    return Err(IncompatError::InvalidIncompatId(*incompat_id));
+                };
+
+                let old_incompat = std::mem::replace(incompat, new_incompat.clone());
+
+                Ok(AnnotatedIncompatOp::Update(*incompat_id, old_incompat))
+            }
+        }
+    }
 }

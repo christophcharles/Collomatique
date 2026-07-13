@@ -3,6 +3,7 @@
 //! This module defines the relevant types to describes general settings
 
 use crate::ids::StudentId;
+use crate::ops::AnnotatedSettingsOp;
 use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 
@@ -40,4 +41,23 @@ pub enum SettingsError {
     /// student id is invalid
     #[error("invalid student id ({0:?})")]
     InvalidStudentId(StudentId),
+}
+
+impl crate::Data {
+    /// Used internally
+    ///
+    /// Apply settings operations
+    pub(crate) fn apply_settings(
+        &mut self,
+        settings_op: &AnnotatedSettingsOp,
+    ) -> std::result::Result<AnnotatedSettingsOp, SettingsError> {
+        match settings_op {
+            AnnotatedSettingsOp::Update(new_settings) => {
+                self.inner_data.params.validate_settings(new_settings)?;
+                let old_settings =
+                    std::mem::replace(&mut self.inner_data.params.settings, new_settings.clone());
+                Ok(AnnotatedSettingsOp::Update(old_settings))
+            }
+        }
+    }
 }

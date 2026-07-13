@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::ids::{PairingRuleId, PeriodId, SubjectId};
+use crate::ops::AnnotatedPairingOp;
 
 /// Description of the pairing rules
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -73,4 +74,57 @@ pub enum PairingError {
     /// Antecedent and consequent subjects are the same
     #[error("antecedent and consequent subjects are the same ({0:?})")]
     SameSubjectInBothParts(SubjectId),
+}
+
+impl crate::Data {
+    /// Used internally
+    ///
+    /// Apply pairing rule operations
+    pub(crate) fn apply_pairing(
+        &mut self,
+        pairing_op: &AnnotatedPairingOp,
+    ) -> std::result::Result<AnnotatedPairingOp, PairingError> {
+        match pairing_op {
+            AnnotatedPairingOp::Add(new_id, rule) => {
+                if self
+                    .inner_data
+                    .params
+                    .pairings
+                    .pairing_rule_map
+                    .contains_key(new_id)
+                {
+                    return Err(PairingError::PairingRuleIdAlreadyExists(*new_id));
+                }
+                self.inner_data.params.validate_pairing_rule(rule)?;
+
+                self.inner_data
+                    .params
+                    .pairings
+                    .pairing_rule_map
+                    .insert(*new_id, rule.clone());
+
+                Ok(AnnotatedPairingOp::Remove(*new_id))
+            }
+            AnnotatedPairingOp::Remove(id) => {
+                let Some(old_rule) = self.inner_data.params.pairings.pairing_rule_map.remove(id)
+                else {
+                    return Err(PairingError::InvalidPairingRuleId(*id));
+                };
+
+                Ok(AnnotatedPairingOp::Add(*id, old_rule))
+            }
+            AnnotatedPairingOp::Update(id, new_rule) => {
+                self.inner_data.params.validate_pairing_rule(new_rule)?;
+
+                let Some(rule) = self.inner_data.params.pairings.pairing_rule_map.get_mut(id)
+                else {
+                    return Err(PairingError::InvalidPairingRuleId(*id));
+                };
+
+                let old_rule = std::mem::replace(rule, new_rule.clone());
+
+                Ok(AnnotatedPairingOp::Update(*id, old_rule))
+            }
+        }
+    }
 }

@@ -4,6 +4,7 @@
 //! for interrogation scheduling (teacher rotation, avoiding same teacher twice in a row).
 
 use crate::ids::SubjectId;
+use crate::ops::AnnotatedBalancingOp;
 use crate::soft_param::SoftParam;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -70,4 +71,23 @@ pub enum BalancingError {
     /// Subject does not have interrogations
     #[error("subject id ({0:?}) does not have interrogations")]
     SubjectHasNoInterrogation(SubjectId),
+}
+
+impl crate::Data {
+    /// Used internally
+    ///
+    /// Apply balancing operations
+    pub(crate) fn apply_balancing(
+        &mut self,
+        balancing_op: &AnnotatedBalancingOp,
+    ) -> std::result::Result<AnnotatedBalancingOp, BalancingError> {
+        match balancing_op {
+            AnnotatedBalancingOp::Update(new_balancing) => {
+                self.inner_data.params.validate_balancing(new_balancing)?;
+                let old_balancing =
+                    std::mem::replace(&mut self.inner_data.params.balancing, new_balancing.clone());
+                Ok(AnnotatedBalancingOp::Update(old_balancing))
+            }
+        }
+    }
 }

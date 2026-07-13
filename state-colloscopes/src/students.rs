@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::ids::{GroupListId, PeriodId, StudentId, SubjectId};
+use crate::ops::AnnotatedStudentOp;
 
 /// Description of the students
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -66,4 +67,130 @@ pub enum StudentError {
     /// Student still has per-student settings
     #[error("student id {0:?} still has per-student settings")]
     StudentStillHasSettings(StudentId),
+}
+
+impl crate::Data {
+    /// Used internally
+    ///
+    /// Apply student operations
+    pub(crate) fn apply_student(
+        &mut self,
+        student_op: &AnnotatedStudentOp,
+    ) -> std::result::Result<AnnotatedStudentOp, StudentError> {
+        match student_op {
+            AnnotatedStudentOp::Add(new_id, student) => {
+                if self
+                    .inner_data
+                    .params
+                    .students
+                    .student_map
+                    .contains_key(new_id)
+                {
+                    return Err(StudentError::StudentIdAlreadyExists(*new_id));
+                }
+                self.inner_data.params.validate_student(student)?;
+
+                self.inner_data
+                    .params
+                    .students
+                    .student_map
+                    .insert(*new_id, student.clone());
+
+                Ok(AnnotatedStudentOp::Remove(*new_id))
+            }
+            AnnotatedStudentOp::Remove(id) => {
+                let Some(current_student) = self.inner_data.params.students.student_map.get(id)
+                else {
+                    return Err(StudentError::InvalidStudentId(*id));
+                };
+
+                for (group_list_id, group_list) in &self.inner_data.colloscope.group_lists {
+                    if group_list.groups_for_students.contains_key(id) {
+                        return Err(StudentError::StudentIsReferencedInColloscopeGroupList(
+                            *id,
+                            *group_list_id,
+                        ));
+                    }
+                }
+
+                for (group_list_id, group_list) in
+                    &self.inner_data.params.group_lists.group_list_map
+                {
+                    if group_list.filling.excluded_students().contains(id) {
+                        return Err(StudentError::StudentIsStillExcludedByGroupList(
+                            *id,
+                            *group_list_id,
+                        ));
+                    }
+                    if group_list.filling.contains_student(*id) {
+                        return Err(StudentError::StudentIsStillReferencedByPrefilledGroupList(
+                            *id,
+                            *group_list_id,
+                        ));
+                    }
+                }
+
+                for (period_id, period_assignments) in
+                    &self.inner_data.params.assignments.period_map
+                {
+                    if current_student.excluded_periods.contains(period_id) {
+                        continue;
+                    }
+                    for (subject_id, assigned_students) in &period_assignments.subject_map {
+                        if assigned_students.contains(id) {
+                            return Err(StudentError::StudentStillHasNonTrivialAssignments(
+                                *id,
+                                *subject_id,
+                                *period_id,
+                            ));
+                        }
+                    }
+                }
+
+                if self.inner_data.params.settings.students.contains_key(id) {
+                    return Err(StudentError::StudentStillHasSettings(*id));
+                }
+
+                let old_student = self
+                    .inner_data
+                    .params
+                    .students
+                    .student_map
+                    .remove(id)
+                    .expect("Student ID was checked above");
+
+                Ok(AnnotatedStudentOp::Add(*id, old_student))
+            }
+            AnnotatedStudentOp::Update(id, new_student) => {
+                self.inner_data.params.validate_student(new_student)?;
+                let Some(current_student) = self.inner_data.params.students.student_map.get_mut(id)
+                else {
+                    return Err(StudentError::InvalidStudentId(*id));
+                };
+
+                for (period_id, period_assignments) in
+                    &self.inner_data.params.assignments.period_map
+                {
+                    if current_student.excluded_periods.contains(period_id)
+                        || !new_student.excluded_periods.contains(period_id)
+                    {
+                        continue;
+                    }
+                    for (subject_id, assigned_students) in &period_assignments.subject_map {
+                        if assigned_students.contains(id) {
+                            return Err(StudentError::StudentStillHasNonTrivialAssignments(
+                                *id,
+                                *subject_id,
+                                *period_id,
+                            ));
+                        }
+                    }
+                }
+
+                let old_student = std::mem::replace(current_student, new_student.clone());
+
+                Ok(AnnotatedStudentOp::Update(*id, old_student))
+            }
+        }
+    }
 }

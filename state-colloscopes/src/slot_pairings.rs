@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::ids::{PeriodId, SlotId, SlotPairingRuleId};
+use crate::ops::AnnotatedSlotPairingOp;
 
 /// Description of the slot pairing rules
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -66,4 +67,68 @@ pub enum SlotPairingError {
     SameSlotInBothParts(SlotId),
     #[error("slots {0:?} and {1:?} do not belong to the same subject")]
     SlotsNotInSameSubject(SlotId, SlotId),
+}
+
+impl crate::Data {
+    pub(crate) fn apply_slot_pairing(
+        &mut self,
+        slot_pairing_op: &AnnotatedSlotPairingOp,
+    ) -> Result<AnnotatedSlotPairingOp, SlotPairingError> {
+        let backward = match slot_pairing_op {
+            AnnotatedSlotPairingOp::Add(new_id, rule) => {
+                if self
+                    .inner_data
+                    .params
+                    .slot_pairings
+                    .slot_pairing_rule_map
+                    .contains_key(new_id)
+                {
+                    return Err(SlotPairingError::SlotPairingRuleIdAlreadyExists(*new_id));
+                }
+
+                self.inner_data.params.validate_slot_pairing_rule(rule)?;
+
+                self.inner_data
+                    .params
+                    .slot_pairings
+                    .slot_pairing_rule_map
+                    .insert(*new_id, rule.clone());
+
+                AnnotatedSlotPairingOp::Remove(*new_id)
+            }
+            AnnotatedSlotPairingOp::Remove(id) => {
+                let Some(old_rule) = self
+                    .inner_data
+                    .params
+                    .slot_pairings
+                    .slot_pairing_rule_map
+                    .remove(id)
+                else {
+                    return Err(SlotPairingError::InvalidSlotPairingRuleId(*id));
+                };
+
+                AnnotatedSlotPairingOp::Add(*id, old_rule)
+            }
+            AnnotatedSlotPairingOp::Update(id, new_rule) => {
+                self.inner_data
+                    .params
+                    .validate_slot_pairing_rule(new_rule)?;
+
+                let Some(rule) = self
+                    .inner_data
+                    .params
+                    .slot_pairings
+                    .slot_pairing_rule_map
+                    .get_mut(id)
+                else {
+                    return Err(SlotPairingError::InvalidSlotPairingRuleId(*id));
+                };
+
+                let old_rule = std::mem::replace(rule, new_rule.clone());
+
+                AnnotatedSlotPairingOp::Update(*id, old_rule)
+            }
+        };
+        Ok(backward)
+    }
 }
