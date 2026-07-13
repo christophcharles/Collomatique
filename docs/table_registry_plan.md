@@ -1,6 +1,9 @@
 # Table + relationship registry plan (phase 2, item 2)
 
-Status: **agreed detailed plan** (July 13 2026, branch `consolidate_state`).
+Status: **agreed detailed plan** (July 13 2026, branch `consolidate_state`); §4.1, §4.2 and
+§5 phase A amended July 13 2026 during the A1 session with the settled phase-A design
+(validating `OrderedTable`, `References<K>` union parameterization, join machinery pulled
+forward into a new A3 session).
 Scope: phase 2 item 2 of `docs/state_consolidation_plan.md` — the generic `Table<Id, T>`
 containers, the declare-once relationship ("FK") registry, and the staged migration of all
 consumer code to the new SQL-like read interface.
@@ -239,10 +242,10 @@ pub struct OrderedTable<I: Id, T> { inner: Vec<(I, T)> }      // #[serde(transpa
   The common iterator is named `entries()`, NOT `iter()`: an inherent `iter()` would shadow the
   Deref'd `BTreeMap::iter` / `slice::iter` (whose item types differ) and break existing call
   sites during the compat window.
-- **`OrderedTable` position API**: `position_of(&I)`, `get_at(usize)`, and `pub(crate)`-level
-  mutators `insert_at`, `remove_at`, `replace_value_at`, `move_entry` (covers today's
-  `insert(0,…)`, `insert(pos+1,…)`, `remove(pos)`, `mem::replace(&mut v[pos].1, …)`, and the
-  ChangePosition remove+insert pairs).
+- **`OrderedTable` position API**: `position_of(&I)`, `get_at(usize)`, and doc-marked-internal
+  mutators `insert_at` (fallible, see below), `remove_at`, `replace_value_at`, `move_entry`
+  (covers today's `insert(0,…)`, `insert(pos+1,…)`, `remove(pos)`,
+  `mem::replace(&mut v[pos].1, …)`, and the ChangePosition remove+insert pairs).
 - **Compat window (consumer step (a))**: `Deref<Target = BTreeMap<I, T>>` resp.
   `Deref<Target = [(I, T)]>` keeps the ~350 consumer read sites compiling unchanged. No
   `DerefMut` — mutation happens only through restricted methods whose names shadow the
@@ -251,13 +254,22 @@ pub struct OrderedTable<I: Id, T> { inner: Vec<(I, T)> }      // #[serde(transpa
   is free to change.
 - **Serde**: `#[serde(transparent)]`, so the serialized form is exactly today's
   `BTreeMap`/`Vec<(Id, T)>` form. This pins the rpc wire (`serde_json` of `InnerData`) and any
-  in-memory serde (`AnnotatedOp::GlobalUpdate`). Constructors from iterators/`Vec`/`BTreeMap`
-  are non-validating (duplicate detection stays at trust boundaries, exactly today's model:
-  `Data::from_inner_data`).
-- Mutation-visibility note: `pub(crate)` in `state/` would be useless to `state-colloscopes`.
-  The A1 session picks the mechanism (a `pub` but doc-marked-internal mutation API, a sealed
-  extension trait, or a `raw()` accessor gated behind a naming convention) — the requirement is
-  only that *consumers of `state-colloscopes`* cannot mutate through the read API.
+  in-memory serde (`AnnotatedOp::GlobalUpdate`).
+- **Per-table primary-key uniqueness is a type invariant** (settled July 13 2026, replacing
+  the earlier non-validating-constructors sketch). `Table` gets it structurally from its map
+  backend (`insert` keeps `BTreeMap` replace semantics and the `Option<T>` return, so B1 call
+  sites stay textually unchanged). `OrderedTable` enforces it: construction is
+  `TryFrom<Vec<(I, T)>>` (errors on a duplicated id), `insert_at` is fallible, and
+  `Deserialize` is hand-written to route through the checked constructor. Consequence:
+  single-table duplicate corruption surfaces at deserialize time (D1 maps it into a proper
+  storage decode error). The **global cross-kind** uniqueness check
+  (`InnerData::check_no_duplicate_ids` chains all id kinds into one `u64` stream) is not
+  expressible per table and stays in `from_inner_data`/`check_invariants`.
+- Mutation-visibility (settled July 13 2026): fully opaque inner field, all access through
+  methods. Mutators are `pub` (Rust has no crate-friend visibility) but doc-marked
+  state-layer-internal; the real boundary is that consumers of `state-colloscopes` only ever
+  hold `&Table`/`&OrderedTable`. The `Deref` impls are the *sole* representation leak,
+  removed in phase E.
 
 ### 4.2 The derive crate
 
@@ -272,10 +284,16 @@ re-exported via `collomatique-state`. Two derives:
   trait in `state/`:
 
 ```rust
-// state/ — sketch
-pub trait References<I: Id> {
-    fn for_each_ref(&self, f: &mut impl FnMut(I));
+// state/src/refs.rs — settled July 13 2026 (replaces the earlier References<I: Id> sketch)
+pub trait References<K> {
+    fn for_each_ref(&self, f: &mut dyn FnMut(K));
 }
+// K is a target *union* type, instantiated at K = NewId in state-colloscopes (its ten
+// From<XxxId> impls already exist). Leaf impls come from #[derive(EntityId)]:
+//     impl<K: From<XxxId>> References<K> for XxxId
+// Option/Vec/BTreeSet lifts live in state/; derived struct impls are generic over K with
+// per-field `FieldTy: References<K>` bounds — so nested #[fk] structs (PairingRule's
+// PairingPart) compose with no manual impls and no extra attributes.
 ```
 
 ```rust
@@ -288,16 +306,43 @@ pub struct Slot {
     pub cost: u32,
     pub extra_info: Option<NonEmptyString>,
 }
-// generates: impl References<TeacherId> for Slot + impl References<WeekPatternId> for Slot
+// generates:
+// impl<K> References<K> for Slot
+// where TeacherId: References<K>, Option<WeekPatternId>: References<K> { … }
+// (walk order = field declaration order)
 ```
 
-  Covered shapes (decision 2): plain `Id`, `Option<Id>`, `BTreeSet<Id>`/`Vec<Id>`. Everything
+  Covered shapes (decision 2): plain `Id`, `Option<Id>`, `BTreeSet<Id>`/`Vec<Id>`, plus nested
+  structs whose type implements `References` (free through the generic bounds). Everything
   else — `GroupListFilling`'s per-variant student sets (#23, #24), map-key references
   (#5–7, #10, #12, #13, #15, #21, #25, #26, #28), the week-pattern length coupling (#8) — is a
-  hand-written `impl References<…>` or a container-level walker (see 4.3). The exact attribute
-  grammar (whether `#[fk]` needs arguments, how multiple id types per struct disambiguate) is
-  settled in the A2 session; the rule is that anything beyond the simple shapes is a manual
-  impl, not an attribute.
+  hand-written `impl References<…>` or a container-level walker (see 4.3).
+
+- **Join machinery (pulled forward from C3 into phase A — its interface constrains the derive
+  design).** Reference-based only, in `state/src/join.rs`:
+
+```rust
+pub trait Joinable {                    // context-independent type level
+    type Output<'a> where Self: 'a;
+    type Error;
+}
+pub trait Join<Ctx>: Joinable {         // value level
+    fn join<'a>(&'a self, ctx: &'a Ctx) -> Result<Self::Output<'a>, Self::Error>;
+}
+pub trait Lookup<I> {                   // what a context provides, per id type
+    type Entity;
+    fn lookup(&self, id: I) -> Option<&Self::Entity>;
+}
+```
+
+  `#[entity(Teacher)]` on `#[derive(EntityId)]` declares the id→entity association and
+  generates the leaf impls (`Output<'a> = &'a Teacher`, `Error = TeacherId` — the dangling id
+  is the diagnostic; `Join<Ctx>` bounded by `Ctx: Lookup<TeacherId, Entity = Teacher>`).
+  `Option`/`Vec`/`BTreeSet` lifts live in `state/`. `#[derive(Join)]` on a struct generates a
+  borrowed `Joined{Name}<'a>` struct (non-`#[fk]` fields appear as `&'a T`); it requires
+  `#[join(error = Type)]` (with generated `From` bounds — `state/` defines no error type);
+  field names are kept as-is, `#[fk(name = ident)]` renames explicitly (no automatic naming).
+  `Lookup` impls on `Parameters` and any registry wiring remain C3 work.
 
 Standing note for every commit that adds a crate or dependency: **Cargo.lock changes ⇒ the user
 refreshes `collomatique.nix`'s `cargoHash` before committing.**
@@ -365,16 +410,24 @@ exact-error asserts + storage `populated_round_trip` byte-stability + the `examp
 test. Milestones marked ★ additionally run the 500-seed slow reference and (per decision 7)
 the three contract scripts, run by the user.
 
-### Phase A — generic layer in `state/`
+### Phase A — generic layer in `state/` (three sessions since the July 13 2026 amendment)
 
-- **A1**: `state/src/tables.rs` — `Table`, `OrderedTable`, `Id` trait moved into `state/`
-  (re-exported from `state-colloscopes::ids` so no consumer path changes), full unit tests
-  including serde-equivalence tests (`to_value(table) == to_value(btreemap)`, same for ordered
-  vs `Vec`) pinning the wire format. Nothing adopted yet — zero fallout.
-- **A2**: `state-derive/` crate with `#[derive(EntityId)]`; `ids.rs` shrinks to 10 one-line
-  derives + `IdIssuer` + `NewId`. The `References` trait lands in `state/` with the derive
-  (regular shapes only) + trybuild-style or unit tests on a toy struct. **Cargo.lock changes:
-  user refreshes the nix `cargoHash`.**
+- **A1** (DONE July 13 2026): `state/src/tables.rs` — `Table`, `OrderedTable` (validating,
+  per amended §4.1), `Id` trait moved into `state/src/ids.rs` (re-exported from
+  `state-colloscopes::ids` so no consumer path changes), full unit tests including
+  serde-equivalence tests (`to_value(table) == to_value(btreemap)`, same for ordered vs `Vec`)
+  pinning the wire format. Nothing adopted yet — zero fallout. **Cargo.lock changes (serde in
+  `state/`): user refreshes the nix `cargoHash`.**
+- **A2**: `state-derive/` crate with `#[derive(EntityId)]` and `#[derive(References)]`
+  (per amended §4.2; `#[entity(…)]` parsed but inert until A3); `ids.rs` shrinks to 10
+  one-line derives + `IdIssuer` + `NewId`; `state/src/refs.rs` with the `References<K>` trait
+  and container lifts. Derive tests are integration tests in `state/tests/` (generated code
+  uses absolute `::collomatique_state::` paths) on toy types; real entity structs are C2.
+  **Cargo.lock changes: user refreshes the nix `cargoHash`.**
+- **A3**: `state/src/join.rs` (`Joinable`/`Join`/`Lookup` + container lifts, per amended
+  §4.2), `#[derive(Join)]`, `#[entity(Type)]` activated in `EntityId` and applied to the ten
+  real ids (`PeriodId → Vec<WeekDesc>` — periods have no entity struct today). No `Lookup`
+  impls on `Parameters` (C3). Integration tests on a toy world. No new dependencies.
 
 ### Phase B — container adoption with `Deref` compat (consumer step (a))
 
@@ -401,8 +454,9 @@ the three contract scripts, run by the user.
   manual `References` impls for the irregular ones (`GroupListFilling`, `Teacher.subjects` is
   regular, week-pattern length coupling #8 stays a special walker case). The C1 pin test must
   not change — it is the proof the derive emits the same references the hand walk did.
-- **C3** ★: the SQL-like read API (4.4): `TableLookup`/resolution, table enumeration replacing
-  `Parameters::ids()`, ordered accessors. New tests; no consumer migrated yet.
+- **C3** ★: the SQL-like read API (4.4): `Lookup` impls on `Parameters`/`InnerData` (the
+  trait itself lands in A3), table enumeration replacing `Parameters::ids()`, ordered
+  accessors. New tests; no consumer migrated yet.
 
 ### Phase D — consumer migration (consumer step (c))
 

@@ -521,6 +521,8 @@ dependencies = [
 name = "collomatique-state"
 version = "0.1.0"
 dependencies = [
+ "serde",
+ "serde_json",
  "thiserror",
 ]
 
