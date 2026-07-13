@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 // Re-export for backward compatibility
 pub use crate::soft_param::SoftParam;
@@ -29,4 +30,14 @@ pub struct Limits {
     pub interrogations_per_week_max: Option<SoftParam<u32>>,
     /// maximum number of interrogation in a single day for each student
     pub max_interrogations_per_day: Option<SoftParam<NonZeroU32>>,
+}
+
+/// Errors for settings operations
+///
+/// These errors can be returned when trying to modify [crate::Data] with a settings op.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum SettingsError {
+    /// student id is invalid
+    #[error("invalid student id ({0:?})")]
+    InvalidStudentId(StudentId),
 }

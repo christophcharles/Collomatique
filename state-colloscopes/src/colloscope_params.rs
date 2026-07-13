@@ -10,6 +10,7 @@ use crate::ids::{
 use super::*;
 
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 /// Full set of parameters to describe the constraints for colloscopes
 ///
@@ -1018,4 +1019,60 @@ impl Parameters {
 
         Ok(())
     }
+}
+
+/// Invariant violations in [Parameters]
+///
+/// These errors can be returned when checking the internal
+/// consistency of a full set of parameters.
+#[derive(Clone, Debug, PartialEq, Eq, Error, Serialize, Deserialize)]
+pub enum InvariantError {
+    #[error("duplicated id")]
+    DuplicatedId,
+    #[error("invalid subject")]
+    InvalidSubject,
+    #[error("invalid teacher")]
+    InvalidTeacher,
+    #[error("invalid student")]
+    InvalidStudent,
+    #[error("invalid period id in assignments")]
+    InvalidPeriodIdInAssignements,
+    #[error("invalid subject id in assignments")]
+    InvalidSubjectIdInAssignments,
+    #[error("invalid student id in assignments")]
+    InvalidStudentIdInAssignments,
+    #[error("student assigned but not present")]
+    AssignedStudentNotPresentForPeriod,
+    #[error("wrong number of subjects in a period for assignments")]
+    WrongSubjectCountInAssignments,
+    #[error("wrong number of subjects in slots")]
+    WrongSubjectCountInSlots,
+    #[error("invalid slot")]
+    InvalidSlot,
+    #[error("invalid incompat")]
+    InvalidIncompat,
+    #[error("invalid group list")]
+    InvalidGroupList,
+    #[error("wrong number of periods in subject associations for group lists")]
+    WrongPeriodCountInSubjectAssociationsForGroupLists,
+    #[error("invalid group list id in subject associations")]
+    InvalidGroupListIdInSubjectAssociations,
+    #[error("invalid subject id in subject associations")]
+    InvalidSubjectIdInSubjectAssociations,
+    #[error("subject association given but subject does not have interrogations")]
+    SubjectAssociationForSubjectWithoutInterrogations,
+    #[error("subject association given but subject does not run on given period")]
+    SubjectAssociationForSubjectNotRunningOnPeriod,
+    #[error("invalid student id in settings")]
+    InvalidStudentIdInSettings,
+    #[error("week pattern is invalid")]
+    InvalidWeekPattern,
+    #[error("invalid subject id in balancing")]
+    InvalidSubjectIdInBalancing,
+    #[error("balancing options given for subject without interrogations")]
+    BalancingForSubjectWithoutInterrogations,
+    #[error("invalid pairing rule")]
+    InvalidPairingRule,
+    #[error("invalid slot pairing rule")]
+    InvalidSlotPairingRule,
 }

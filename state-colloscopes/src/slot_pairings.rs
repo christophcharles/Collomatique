@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use crate::ids::{PeriodId, SlotId, SlotPairingRuleId};
 
@@ -46,4 +47,23 @@ pub struct SlotPairingRule {
     pub excluded_periods: BTreeSet<PeriodId>,
     /// Whether this is a soft constraint (best-effort) or hard (strict)
     pub soft: bool,
+}
+
+/// Errors for slot pairing rule operations
+///
+/// These errors can be returned when trying to modify [crate::Data] with a slot pairing op.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum SlotPairingError {
+    #[error("invalid slot pairing rule id ({0:?})")]
+    InvalidSlotPairingRuleId(SlotPairingRuleId),
+    #[error("slot pairing rule id ({0:?}) already exists")]
+    SlotPairingRuleIdAlreadyExists(SlotPairingRuleId),
+    #[error("invalid slot id ({0:?})")]
+    InvalidSlotId(SlotId),
+    #[error("invalid period id ({0:?})")]
+    InvalidPeriodId(PeriodId),
+    #[error("same slot in both parts ({0:?})")]
+    SameSlotInBothParts(SlotId),
+    #[error("slots {0:?} and {1:?} do not belong to the same subject")]
+    SlotsNotInSameSubject(SlotId, SlotId),
 }

@@ -7,6 +7,7 @@ use crate::ids::SubjectId;
 use crate::soft_param::SoftParam;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use thiserror::Error;
 
 /// Description of the balancing configuration
 ///
@@ -56,4 +57,17 @@ impl Default for BalancingOptions {
             period_teacher_rotation: false,
         }
     }
+}
+
+/// Errors for balancing operations
+///
+/// These errors can be returned when trying to modify [crate::Data] with a balancing op.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum BalancingError {
+    /// A subject id is invalid
+    #[error("invalid subject id ({0:?})")]
+    InvalidSubjectId(SubjectId),
+    /// Subject does not have interrogations
+    #[error("subject id ({0:?}) does not have interrogations")]
+    SubjectHasNoInterrogation(SubjectId),
 }

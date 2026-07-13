@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use crate::ids::{IncompatId, SubjectId, WeekPatternId};
 
@@ -35,4 +36,26 @@ pub struct Incompatibility {
     ///
     /// If `None`, this means every week
     pub week_pattern_id: Option<WeekPatternId>,
+}
+
+/// Errors for schedule incompatibility operations
+///
+/// These errors can be returned when trying to modify [crate::Data] with an incompat op.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum IncompatError {
+    /// A incompat id is invalid
+    #[error("invalid incompat id ({0:?})")]
+    InvalidIncompatId(IncompatId),
+
+    /// The incompat id already exists
+    #[error("incompat id ({0:?}) already exists")]
+    IncompatIdAlreadyExists(IncompatId),
+
+    /// subject id is invalid
+    #[error("invalid subject id ({0:?})")]
+    InvalidSubjectId(SubjectId),
+
+    /// week pattern id is invalid
+    #[error("invalid week pattern id ({0:?})")]
+    InvalidWeekPatternId(WeekPatternId),
 }

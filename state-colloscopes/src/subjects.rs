@@ -4,8 +4,9 @@
 
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeSet, num::NonZeroU32};
+use thiserror::Error;
 
-use crate::ids::{PeriodId, SubjectId};
+use crate::ids::{GroupListId, IncompatId, PairingRuleId, PeriodId, SlotId, SubjectId, TeacherId};
 
 /// Description of the subjects
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -244,4 +245,72 @@ impl Subjects {
 
         Some(&self.ordered_subject_list[pos].1)
     }
+}
+
+/// Errors for subject operations
+///
+/// These errors can be returned when trying to modify [crate::Data] with a subject op.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum SubjectError {
+    /// A subject id is invalid
+    #[error("invalid subject id ({0:?})")]
+    InvalidSubjectId(SubjectId),
+
+    /// The subject id already exists
+    #[error("subject id ({0:?}) already exists")]
+    SubjectIdAlreadyExists(SubjectId),
+
+    /// A position is outside of bounds
+    #[error("Position {0} is outside the list (size = {1})")]
+    PositionOutOfBounds(usize, usize),
+
+    /// A reference period is invalid
+    #[error("Referenced period id {0:?} is invalid")]
+    InvalidPeriodId(PeriodId),
+
+    /// Invalid parameters : students per group
+    #[error("Students per group range should allow at least one value")]
+    StudentsPerGroupRangeIsEmpty,
+
+    /// Invalid parameters : groups per interrogation
+    #[error("Groups per interrogations range should allow at least one value")]
+    GroupsPerInterrogationRangeIsEmpty,
+
+    /// Invalid parameters : week block has empty range for interrogation count
+    #[error("Interrogation count range should allow at least one value")]
+    InterrogationCountRangeIsEmpty,
+
+    /// Some non-default assignments are still present for the subject
+    #[error(
+        "period id ({0:?}) has non-default assignments for subject id {1:?} and cannot be removed or updated"
+    )]
+    SubjectStillHasNonTrivialAssignments(PeriodId, SubjectId),
+
+    /// Some teachers still are associated to the subject
+    #[error("teacher id ({0:?}) is associated to the subject id {1:?}")]
+    SubjectStillHasAssociatedTeachers(TeacherId, SubjectId),
+
+    /// The subject is referenced by a slot
+    #[error("subject id ({0:?}) is referenced by slots")]
+    SubjectStillHasAssociatedSlots(SubjectId),
+
+    /// The subject is referenced by a schedule incompatibility
+    #[error("subject id ({0:?}) is referenced by the incompat id {1:?}")]
+    SubjectStillHasAssociatedIncompats(SubjectId, IncompatId),
+
+    /// The subject is associated to a group list
+    #[error("subject id ({0:?}) is associated to group list id {1:?} for period {2:?}")]
+    SubjectStillHasAssociatedGroupList(SubjectId, GroupListId, PeriodId),
+
+    /// The subject has filled slots in colloscope
+    #[error("subject id {0:?} has a least one non-empty slot {1:?} in colloscope")]
+    SubjectStillHasNonEmptySlotInColloscope(SubjectId, SlotId),
+
+    /// The subject still has balancing options
+    #[error("subject id {0:?} still has balancing options")]
+    SubjectStillHasBalancingOptions(SubjectId),
+
+    /// The subject is referenced by a pairing rule
+    #[error("subject id ({0:?}) is referenced by pairing rule {1:?}")]
+    SubjectIsReferencedByPairingRule(SubjectId, PairingRuleId),
 }

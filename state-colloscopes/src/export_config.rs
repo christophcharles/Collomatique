@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Color {
@@ -176,3 +177,9 @@ impl Default for ExportConfig {
         }
     }
 }
+
+/// Errors for export configuration operations
+///
+/// These errors can be returned when trying to modify [crate::Data] with an export config op.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum ExportConfigError {}

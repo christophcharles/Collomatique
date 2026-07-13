@@ -7,8 +7,9 @@ use std::num::NonZeroU32;
 use std::ops::RangeInclusive;
 
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
-use crate::ids::{GroupListId, PeriodId, StudentId, SubjectId};
+use crate::ids::{GroupListId, PeriodId, SlotId, StudentId, SubjectId};
 
 /// Description of the group lists
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -194,4 +195,82 @@ impl GroupList {
                 .collect(),
         }
     }
+}
+
+/// Errors for group list operations
+///
+/// These errors can be returned when trying to modify [crate::Data] with a group list op.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum GroupListError {
+    /// group list id is invalid
+    #[error("invalid group list id ({0:?})")]
+    InvalidGroupListId(GroupListId),
+
+    /// The group list id already exists
+    #[error("group list id ({0:?}) already exists")]
+    GroupListIdAlreadyExists(GroupListId),
+
+    /// student id is invalid
+    #[error("invalid student id ({0:?})")]
+    InvalidStudentId(StudentId),
+
+    /// subject id is invalid
+    #[error("invalid subject id ({0:?})")]
+    InvalidSubjectId(SubjectId),
+
+    /// subject does not have interrogations
+    #[error("subject id ({0:?}) has no interrogations")]
+    SubjectHasNoInterrogation(SubjectId),
+
+    /// period id is invalid
+    #[error("invalid period id ({0:?})")]
+    InvalidPeriodId(PeriodId),
+
+    /// Subject does not run on given period
+    #[error("invalid subject id {0:?} for period {1:?}")]
+    SubjectDoesNotRunOnPeriod(SubjectId, PeriodId),
+
+    /// students per group range is empty
+    #[error("students_per_group range is empty")]
+    StudentsPerGroupRangeIsEmpty,
+
+    /// cannot remove group list as it still has a filling (prefilled or automatic with exclusions)
+    #[error("Group list still has a filling and cannot be removed")]
+    RemainingFilling,
+
+    /// students appear multiple times in prefilled groups
+    #[error("Some students appear multiple times in prefilled groups")]
+    DuplicatedStudentInPrefilledGroups,
+
+    /// cannot remove group list as there are still associated subjects
+    #[error("Group list still is associated to subjects and cannot be removed")]
+    RemainingAssociatedSubjects,
+
+    /// Group list is not empty in colloscope
+    #[error("group list id {0:?} in colloscope is not empty")]
+    NotEmptyGroupListInColloscope(GroupListId),
+
+    /// Group list in colloscope not compatible with new parameters
+    #[error("group list id {0:?} in colloscope is not compatible with the given parameters")]
+    NotCompatibleGroupListInColloscope(GroupListId),
+
+    /// The subject has non-empty slots associated to the old group list with invalid numbers
+    #[error(
+        "subject {0:?} in colloscope has non-empty slots (slot {2:?}) in period {1:?} with invalid group number"
+    )]
+    InvalidGroupInSubjectSlotInColloscope(SubjectId, PeriodId, SlotId),
+
+    /// Prefilled groups count does not match group_names count
+    #[error("prefilled groups count ({actual}) does not match group names count ({expected})")]
+    PrefillGroupCountMismatch { expected: usize, actual: usize },
+
+    /// Cannot reduce group count when last groups have students
+    #[error(
+        "cannot reduce group count: groups to be removed still have students (ops layer should clean first)"
+    )]
+    NonEmptyGroupsWhenReducing,
+
+    /// Cannot set prefilling: colloscope group list has students assigned
+    #[error("Cannot set prefilling: colloscope group list {0:?} has students assigned")]
+    NonEmptyColloscopeGroupListWhenPrefilling(GroupListId),
 }

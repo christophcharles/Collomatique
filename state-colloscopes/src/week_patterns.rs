@@ -5,8 +5,9 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
-use crate::ids::WeekPatternId;
+use crate::ids::{IncompatId, SlotId, WeekPatternId};
 
 /// Description of the week patterns
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -89,4 +90,34 @@ impl WeekPattern {
 
         true
     }
+}
+
+/// Errors for week pattern operations
+///
+/// These errors can be returned when trying to modify [crate::Data] with a week pattern op.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum WeekPatternError {
+    /// A week pattern id is invalid
+    #[error("invalid week pattern id ({0:?})")]
+    InvalidWeekPatternId(WeekPatternId),
+
+    /// The week pattern id already exists
+    #[error("week pattern id ({0:?}) already exists")]
+    WeekPatternIdAlreadyExists(WeekPatternId),
+
+    /// The week pattern is referenced by a slot
+    #[error("week pattern id ({0:?}) is referenced by a slot ({1:?})")]
+    WeekPatternStillHasAssociatedSlots(WeekPatternId, SlotId),
+
+    /// The week pattern is referenced by a schedule incompatibility
+    #[error("week pattern id ({0:?}) is referenced by an incompat ({1:?})")]
+    WeekPatternStillHasAssociatedIncompat(WeekPatternId, IncompatId),
+
+    /// The week pattern does not have the right length
+    #[error("week pattern does not have the right length")]
+    BadWeekPatternLength,
+
+    /// The slot in colloscope is incompatible with the new week pattern
+    #[error("slot {0:?} in colloscope is not compatible with the new week pattern")]
+    NotCompatibleSlotInColloscope(SlotId),
 }

@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use crate::ids::{PairingRuleId, PeriodId, SubjectId};
 
@@ -46,4 +47,30 @@ pub struct PairingRule {
     pub excluded_periods: BTreeSet<PeriodId>,
     /// Whether this is a soft constraint (best-effort) or hard (strict)
     pub soft: bool,
+}
+
+/// Errors for pairing rule operations
+///
+/// These errors can be returned when trying to modify [crate::Data] with a pairing op.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum PairingError {
+    /// A pairing rule id is invalid
+    #[error("invalid pairing rule id ({0:?})")]
+    InvalidPairingRuleId(PairingRuleId),
+
+    /// The pairing rule id already exists
+    #[error("pairing rule id ({0:?}) already exists")]
+    PairingRuleIdAlreadyExists(PairingRuleId),
+
+    /// A subject id is invalid
+    #[error("invalid subject id ({0:?})")]
+    InvalidSubjectId(SubjectId),
+
+    /// A period id is invalid
+    #[error("invalid period id ({0:?})")]
+    InvalidPeriodId(PeriodId),
+
+    /// Antecedent and consequent subjects are the same
+    #[error("antecedent and consequent subjects are the same ({0:?})")]
+    SameSubjectInBothParts(SubjectId),
 }

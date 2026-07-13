@@ -5,8 +5,9 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
-use crate::ids::{SlotId, SubjectId, TeacherId, WeekPatternId};
+use crate::ids::{PeriodId, SlotId, SlotPairingRuleId, SubjectId, TeacherId, WeekPatternId};
 
 /// Description of the interrogation slots
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -120,4 +121,62 @@ impl Slots {
                 .1,
         )
     }
+}
+
+/// Errors for interrogation slot operations
+///
+/// These errors can be returned when trying to modify [crate::Data] with a slot op.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum SlotError {
+    /// A slot id is invalid
+    #[error("invalid slot id ({0:?})")]
+    InvalidSlotId(SlotId),
+
+    /// The slot id already exists
+    #[error("slot id ({0:?}) already exists")]
+    SlotIdAlreadyExists(SlotId),
+
+    /// A position is outside of bounds
+    #[error("Position {0} is outside the list (size = {1})")]
+    PositionOutOfBounds(usize, usize),
+
+    /// The previous slot given is not for the same subject
+    #[error("Slot {0:?} to be previous slot is not for subject {1:?}")]
+    PreviousSlotIsNotInRightSubject(SlotId, SubjectId),
+
+    /// subject id is invalid
+    #[error("invalid subject id ({0:?})")]
+    InvalidSubjectId(SubjectId),
+
+    /// subject has no interrogations
+    #[error("subject ({0:?}) does not have interrogations")]
+    SubjectHasNoInterrogation(SubjectId),
+
+    /// teacher id is invalid
+    #[error("invalid teacher id ({0:?})")]
+    InvalidTeacherId(TeacherId),
+
+    /// week pattern id is invalid
+    #[error("invalid week pattern id ({0:?})")]
+    InvalidWeekPatternId(WeekPatternId),
+
+    /// Provided teacher does not teach in the corresponding subject
+    #[error("Provided teacher ({0:?}) does not teach in subject ({1:?})")]
+    TeacherDoesNotTeachInSubject(TeacherId, SubjectId),
+
+    /// Slot overlaps with next day
+    #[error("The slot start time is too late and the slot overlaps with the next day")]
+    SlotOverlapsWithNextDay,
+
+    /// The slot is not empty in colloscope
+    #[error("slot {0:?} in colloscope is not empty for period {1:?}")]
+    NotEmptySlotInColloscope(SlotId, PeriodId),
+
+    /// The slot in colloscope is incomaptible with the new week pattern
+    #[error("slot {0:?} in colloscope is not compatible with the new week pattern {1:?}")]
+    NotCompatibleSlotInColloscope(SlotId, Option<WeekPatternId>),
+
+    /// The slot is referenced by a slot pairing rule
+    #[error("slot id ({0:?}) is referenced by a slot pairing rule ({1:?})")]
+    SlotIsReferencedBySlotPairingRule(SlotId, SlotPairingRuleId),
 }

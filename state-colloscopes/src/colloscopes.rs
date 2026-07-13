@@ -5,6 +5,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use crate::ids::{GroupListId, PeriodId, SlotId, StudentId};
 
@@ -79,9 +80,7 @@ impl Colloscope {
     pub(crate) fn validate_against_params(
         &self,
         params: &super::colloscope_params::Parameters,
-    ) -> Result<(), super::ColloscopeError> {
-        use super::ColloscopeError;
-
+    ) -> Result<(), ColloscopeError> {
         if self.period_map.len() != params.periods.ordered_period_list.len() {
             return Err(ColloscopeError::WrongPeriodCountInColloscopeData);
         }
@@ -245,9 +244,7 @@ impl ColloscopePeriod {
         &self,
         period_id: PeriodId,
         params: &super::colloscope_params::Parameters,
-    ) -> Result<(), super::ColloscopeError> {
-        use super::ColloscopeError;
-
+    ) -> Result<(), ColloscopeError> {
         let mut slot_count = 0usize;
 
         for (subject_id, subject) in &params.subjects.ordered_subject_list {
@@ -383,9 +380,7 @@ impl ColloscopeSlot {
         period_id: PeriodId,
         slot_id: SlotId,
         params: &super::colloscope_params::Parameters,
-    ) -> Result<(), super::ColloscopeError> {
-        use super::ColloscopeError;
-
+    ) -> Result<(), ColloscopeError> {
         let Some(period_pos) = params.periods.find_period_position(period_id) else {
             return Err(ColloscopeError::InvalidPeriodId(period_id));
         };
@@ -492,9 +487,7 @@ impl ColloscopeInterrogation {
         slot_id: SlotId,
         week: usize,
         params: &super::colloscope_params::Parameters,
-    ) -> Result<(), super::ColloscopeError> {
-        use super::ColloscopeError;
-
+    ) -> Result<(), ColloscopeError> {
         let Some(subject_association) = params.group_lists.subjects_associations.get(&period_id)
         else {
             return Err(ColloscopeError::InvalidPeriodId(period_id));
@@ -566,9 +559,7 @@ impl ColloscopeGroupList {
         group_list_params: &super::group_lists::GroupListParameters,
         group_list_filling: &super::group_lists::GroupListFilling,
         students: &super::students::Students,
-    ) -> Result<(), super::ColloscopeError> {
-        use super::ColloscopeError;
-
+    ) -> Result<(), ColloscopeError> {
         let first_forbidden_value = group_list_params.group_names.len() as u32;
         let excluded_students = group_list_filling.excluded_students();
 
@@ -594,4 +585,65 @@ impl ColloscopeGroupList {
 
         Ok(())
     }
+}
+
+/// Errors for colloscopes operations
+///
+/// These errors can be returned when trying to modify [crate::Data] with a colloscope op.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum ColloscopeError {
+    /// Student original id is invalid
+    #[error("invalid student id ({0:?})")]
+    InvalidStudentId(StudentId),
+
+    /// Period original id is invalid
+    #[error("invalid period id ({0:?})")]
+    InvalidPeriodId(PeriodId),
+
+    /// Slot original id is invalid
+    #[error("invalid slot id ({0:?})")]
+    InvalidSlotId(SlotId),
+
+    /// Group list original id is invalid
+    #[error("invalid group list id ({0:?})")]
+    InvalidGroupListId(GroupListId),
+
+    #[error("Wrong period count")]
+    WrongPeriodCountInColloscopeData,
+
+    #[error("Wrong group list count")]
+    WrongGroupListCountInColloscopeData,
+
+    #[error("Wrong slot count in period")]
+    WrongSlotCountInPeriodInColloscopeData(PeriodId),
+
+    #[error("Wrong interrogation count for slot in period")]
+    WrongInterrogationCountForSlotInPeriodInColloscopeData(PeriodId, SlotId),
+
+    #[error("Interrogation on non-interrogation week")]
+    InterrogationOnNonInterrogationWeek(PeriodId, SlotId, usize),
+
+    #[error("Missing interrogation on interrogation week")]
+    MissingInterrogationOnInterrogationWeek(PeriodId, SlotId, usize),
+
+    #[error("Invalid group number in interrogation")]
+    InvalidGroupNumInInterrogation(PeriodId, SlotId, usize),
+
+    #[error("excluded student in group list")]
+    ExcludedStudentInGroupList(GroupListId, StudentId),
+
+    #[error("Invalid group number for student")]
+    InvalidGroupNumForStudentInGroupList(GroupListId, StudentId),
+
+    #[error("Invalid week number in period")]
+    InvalidWeekNumberInPeriod(PeriodId, usize),
+
+    #[error("No interrogation for the given week in period and slot")]
+    NoInterrogationOnWeek(PeriodId, SlotId, usize),
+
+    #[error("Prefilled group list {0:?} should not be in colloscope")]
+    PrefilledGroupListInColloscope(GroupListId),
+
+    #[error("Non-prefilled group list {0:?} is missing from colloscope")]
+    MissingNonPrefilledGroupList(GroupListId),
 }

@@ -3,8 +3,11 @@
 //! This module defines the relevant types to describes the periods
 
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
-use crate::ids::PeriodId;
+use crate::ids::{
+    PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId, SubjectId, WeekPatternId,
+};
 
 /// Description of the periods
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -115,4 +118,56 @@ impl Periods {
 
         None
     }
+}
+
+/// Errors for periods operations
+///
+/// These errors can be returned when trying to modify [crate::Data] with a period op.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum PeriodError {
+    /// A period id is invalid
+    #[error("invalid period id ({0:?})")]
+    InvalidPeriodId(PeriodId),
+
+    /// The period id already exists
+    #[error("period id ({0:?}) already exists")]
+    PeriodIdAlreadyExists(PeriodId),
+
+    /// The period is referenced by a subject
+    #[error("period id ({0:?}) is referenced by subject {1:?}")]
+    PeriodIsReferencedBySubject(PeriodId, SubjectId),
+
+    /// The period is referenced by a student
+    #[error("period id ({0:?}) is referenced by student {1:?}")]
+    PeriodIsReferencedByStudent(PeriodId, StudentId),
+
+    /// Some non-default assignments are still present for the period
+    #[error(
+        "period id ({0:?}) has non-default assignments for subject id {1:?} and cannot be removed"
+    )]
+    PeriodStillHasNonTrivialAssignments(PeriodId, SubjectId),
+
+    /// Some non-default group list association are still present for the period
+    #[error("period id ({0:?}) has non-default group list associations and cannot be removed")]
+    PeriodStillHasNonTrivialGroupListAssociation(PeriodId),
+
+    /// Period is not empty in colloscope
+    #[error("period id ({0:?}) is not empty in colloscope")]
+    NotEmptyPeriodInColloscope(PeriodId),
+
+    /// A week pattern is not trivial on the period to be cut
+    #[error("week pattern {1:?} is not trivial for the period {0:?}")]
+    NonTrivialWeekPattern(PeriodId, WeekPatternId),
+
+    /// The slot in colloscope is incompatible with the new period
+    #[error("slot {0:?} in colloscope is not compatible with the new period")]
+    NotCompatibleSlotInColloscope(SlotId),
+
+    /// The period is referenced by a pairing rule
+    #[error("period id ({0:?}) is referenced by pairing rule {1:?}")]
+    PeriodIsReferencedByPairingRule(PeriodId, PairingRuleId),
+
+    /// The period is referenced by a slot pairing rule
+    #[error("period id ({0:?}) is referenced by slot pairing rule {1:?}")]
+    PeriodIsReferencedBySlotPairingRule(PeriodId, SlotPairingRuleId),
 }
