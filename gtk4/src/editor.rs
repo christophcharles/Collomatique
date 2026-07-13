@@ -310,7 +310,7 @@ impl EditorPanel {
     fn save_button_tooltip(&self) -> Option<String> {
         match self.file_name {
             FileName::CaveatFile(_) => Some(
-                "Fichier chargé dans un ancien format : « Enregistrer » demandera un nouvel emplacement."
+                "Ce fichier utilise un format qui n'est pas entièrement pris en charge (il provient probablement d'une version plus récente) : « Enregistrer » demandera un nouvel emplacement."
                     .into(),
             ),
             FileName::OkFile(_) | FileName::NewFile => None,
