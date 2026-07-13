@@ -117,7 +117,7 @@ fn blank_data_serializes_to_zero_blocks() {
     // ExportConfig).
     let data = collomatique_state_colloscopes::Data::new();
 
-    let content = serialize_data(&data, false);
+    let content = serialize_data(&data);
     let value: serde_json::Value =
         serde_json::from_str(&content).expect("Serialized data should be valid JSON");
     assert_eq!(value["entries"], serde_json::json!([]));
@@ -324,7 +324,7 @@ fn spec_complete_example_decodes_and_reserializes_identically() {
     // displays records more compactly than our pretty-printer does);
     // byte determinism itself is pinned just below and by
     // `populated_round_trip::reserialize_is_stable_spec2`.
-    let reserialized = serialize_data(&data, false);
+    let reserialized = serialize_data(&data);
     let expected: serde_json::Value = serde_json::from_str(SPEC_COMPLETE_EXAMPLE).unwrap();
     let actual: serde_json::Value = serde_json::from_str(&reserialized).unwrap();
     assert_eq!(actual, expected);
@@ -333,7 +333,7 @@ fn spec_complete_example_decodes_and_reserializes_identically() {
     let (decoded_again, _caveats) =
         deserialize_data(&reserialized).expect("Reserialized document should decode");
     assert_eq!(decoded_again, data);
-    assert_eq!(serialize_data(&decoded_again, false), reserialized);
+    assert_eq!(serialize_data(&decoded_again), reserialized);
 }
 
 #[test]
@@ -635,10 +635,7 @@ fn neutral_rows_decode_identically_to_their_absence() {
     assert_eq!(bare_data, redundant_data);
 
     // And the canonical form of both omits the neutral rows
-    assert_eq!(
-        serialize_data(&bare_data, false),
-        serialize_data(&redundant_data, false)
-    );
+    assert_eq!(serialize_data(&bare_data), serialize_data(&redundant_data));
 }
 
 #[test]

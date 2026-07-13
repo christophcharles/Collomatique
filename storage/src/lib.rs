@@ -125,23 +125,13 @@ pub fn deserialize_data(
 ///
 /// This function takes an in-memory [Data] representation
 /// and serialize it into the content of a colloscope file
-/// represented as a UTF-8 string.
-///
-/// If `legacy` is `true`, the file is written in the pre-alpha
-/// format (spec 1, a raw dump of the in-memory data); otherwise in
-/// the spec-2 format. The parameter only exists for the transition
-/// period and will be retired (along with the legacy writer) once
-/// existing files have been bulk-converted to spec 2.
+/// represented as a UTF-8 string. The file is written in the
+/// current (spec-2) format.
 ///
 /// This cannot fail as [Data] is always a valid representation.
-pub fn serialize_data(data: &Data, legacy: bool) -> String {
-    if legacy {
-        let json_data = encode::encode(data);
-        serde_json::to_string_pretty(&json_data).expect("Serializing to JSON should not fail")
-    } else {
-        let document = encode::spec2::encode(data);
-        serde_json::to_string_pretty(&document).expect("Serializing to JSON should not fail")
-    }
+pub fn serialize_data(data: &Data) -> String {
+    let document = encode::spec2::encode(data);
+    serde_json::to_string_pretty(&document).expect("Serializing to JSON should not fail")
 }
 
 /// Errors when loading data from a file
@@ -181,16 +171,9 @@ pub async fn load_data_from_file(file_path: &Path) -> Result<(Data, BTreeSet<Cav
 /// The method can fail for various reasons like wrong permissions.
 /// This will be reported as an [io::Error].
 ///
-/// The `legacy` flag has the same meaning as in [serialize_data]
-/// and will be retired with it.
-///
 /// This is a convenience function encapsulating [serialize_data].
-pub async fn save_data_to_file(
-    data: &Data,
-    file_path: &Path,
-    legacy: bool,
-) -> Result<(), io::Error> {
+pub async fn save_data_to_file(data: &Data, file_path: &Path) -> Result<(), io::Error> {
     use tokio::fs;
-    let content = serialize_data(data, legacy);
+    let content = serialize_data(data);
     fs::write(file_path, content.as_bytes()).await
 }

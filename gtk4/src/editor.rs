@@ -1030,7 +1030,7 @@ impl Component for EditorPanel {
                     timeout: None,
                 });
                 sender.oneshot_command(async move {
-                    match collomatique_storage::save_data_to_file(&data_copy, &path, false).await {
+                    match collomatique_storage::save_data_to_file(&data_copy, &path).await {
                         Ok(()) => EditorCommandOutput::SaveSuccessful(path),
                         Err(e) => EditorCommandOutput::SaveFailed(path, e.to_string()),
                     }

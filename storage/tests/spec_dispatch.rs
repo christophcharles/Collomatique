@@ -76,18 +76,17 @@ fn decode_fails_on_spec_version_zero() {
 
 #[test]
 fn all_spec_1_document_still_uses_legacy_path() {
-    let data = collomatique_state_colloscopes::Data::new();
-
-    // The legacy writer produces a single InnerDataDump entry with
-    // minimum_spec_version 1: it must keep decoding through the
-    // legacy pipeline.
-    let content = serialize_data(&data, true);
+    // A committed spec-1 document (a single InnerDataDump entry with
+    // minimum_spec_version 1) must keep decoding through the legacy
+    // pipeline. The fixture was produced by the (now removed) legacy
+    // writer.
+    let content = include_str!("fixtures/spec1_empty.json");
     assert!(content.contains("InnerDataDump"));
     assert!(content.contains("\"minimum_spec_version\": 1"));
 
     let (decoded, caveats) =
-        deserialize_data(&content).expect("Legacy document should still decode");
-    assert_eq!(decoded, data);
+        deserialize_data(content).expect("Legacy document should still decode");
+    assert_eq!(decoded, collomatique_state_colloscopes::Data::new());
     // Decoding through the legacy pipeline must flag the deprecated format.
     assert!(caveats.contains(&Caveat::DeprecatedFormat));
 }
@@ -98,7 +97,7 @@ fn spec_2_document_has_no_deprecated_format_caveat() {
 
     // The spec-2 writer must not emit any InnerDataDump entry, and its
     // documents must decode without the deprecated-format caveat.
-    let content = serialize_data(&data, false);
+    let content = serialize_data(&data);
     assert!(!content.contains("InnerDataDump"));
 
     let (decoded, caveats) = deserialize_data(&content).expect("Spec-2 document should decode");
