@@ -179,6 +179,20 @@ still exist*:
 
 ## 4. Phase 1 — the real file format (spec 2)
 
+**DONE** (commits `453dbdf1` spec reference doc → `92ce5217` format structs → `c9970a40`
+spec-version-dispatched decoding + legacy writer flag → `b1957d03` wire read/write, bump
+`CURRENT_SPEC_VERSION` to 2 → `2841d1de` encapsulate the invariant-carrying scalars →
+`1360abe0` save in spec-2 by default). Spec 2 is the format actually written and read; the
+field-level reference lives in `docs/file_format.md`.
+
+**Decision — the legacy v1 path is kept for now.** The "delete the v1 decoder" step of
+*Migration and freeze* below was **not** taken: v1 reading (and legacy writing behind a flag)
+stays available so existing files keep opening. It remains **deprecated** and **will be
+removed** later, once the corpus has been converted over; that removal is deferred, not part
+of phase 1. The ordering constraint below still holds — because the v1 decoder reads the live
+`InnerData`, the bulk-convert-then-delete sequence must complete before any phase-2 change to
+`InnerData` — so keeping v1 is a decision to defer that work, not to skip it.
+
 ### Design
 
 - **Keep the envelope** exactly as is: `Header { file_type, produced_with_version,
@@ -211,11 +225,12 @@ still exist*:
 
 - The legacy v1 decoder reads the *live* `InnerData` type via serde, so it only works while
   `InnerData` is unchanged. Therefore, strictly in this order:
-  1. implement spec 2 (write + read) while v1 reading still works;
+  1. implement spec 2 (write + read) while v1 reading still works; **(done)**
   2. **bulk-convert every existing file** (all private test files, anything the Python
-     scripts produced) via a CLI subcommand or a small conversion script;
+     scripts produced) via a CLI subcommand or a small conversion script; *(deferred)*
   3. delete the v1 decoder (leave the tombstone) — *before* any phase-2 change to
-     `InnerData`.
+     `InnerData`. *(deferred — see the decision note above: v1 is kept, deprecated, for
+     now)*
 - **Golden fixture tests**: commit small populated spec-2 files (the themed examples of
   phase 1.5, §5, are the main corpus); CI asserts they decode successfully and that
   re-encoding is stable. Accidental format drift then fails CI instead of silently breaking
@@ -234,29 +249,38 @@ dumb so conversions are mechanical; and golden tests turn "silent maintenance bu
 
 ## 5. Phase 1.5 — example files in the repo
 
-Once the spec-2 format is fixed, produce a few **example files with non-sensitive, fun data**
-and commit them (proposed location: `examples/` at the repo root). They serve three purposes
-at once: golden fixtures for CI (see §4 — these files *are* the fixture corpus, or the bulk
-of it), integration-test inputs for the whole stack (load → edit via ops → solve → export),
-and documentation-by-example for users.
+**DONE** (commit `c1e12e13` the Hogwarts fixture; `06fed862` the smoke test loading and
+building every `examples/` file).
 
-Planned themes (naming only — the theme carries no technical meaning):
+**Decision — one broad fixture, not a themed set.** Rather than several themed files each
+covering a slice of the format, a single **Hogwarts** example (`examples/hogwarts.collomatique`)
+was built to exercise *most* features at once. Additional fixtures (the Scientists /
+Scholastics themes originally sketched below) may still be added later but are **not a
+priority** — one good fixture already gives CI a golden file and the stack an integration
+input. The originally-planned themes are kept below as notes only.
 
-- **Hogwarts**: Harry Potter characters; interrogations in Potions, Defense against the Dark
-  Arts, etc.
-- **Scientists**: known physicists/chemists with *plausible generations* (e.g. Rutherford as
-  teacher, Bohr as student).
-- **Scholastics**: St Thomas Aquinas, St Anselm, etc.
+The example lives at `examples/` (repo root) with non-sensitive, fun data, and serves three
+purposes at once: golden fixture for CI (see §4 — this file *is* the fixture corpus for now),
+integration-test input for the whole stack (load → edit via ops → solve → export), and
+documentation-by-example for users.
 
-Feature coverage is decided independently of the themes, when the files are created: the
-goal is that the three files *together* cover the whole format — group lists (both prefilled
-and automatic filling, different lists on different subjects), multiple periods, week
-patterns, incompatibilities, pairing and slot-pairing rules, per-student/per-subject
-overrides in settings and balancing, export config, and both a filled and a not-yet-solved
-colloscope. Which file covers what is recorded in a short README next to the files.
+Themes originally sketched (naming only — the theme carries no technical meaning); only
+Hogwarts was built:
 
-Guidelines: hand-checkable size; created through the app or the Python API (not hand-written
-JSON) so they are guaranteed valid; CI asserts each file decodes, passes
+- **Hogwarts** *(built)*: Harry Potter characters; interrogations in Potions, Defense against
+  the Dark Arts, etc.
+- **Scientists** *(not built)*: known physicists/chemists with *plausible generations* (e.g.
+  Rutherford as teacher, Bohr as student).
+- **Scholastics** *(not built)*: St Thomas Aquinas, St Anselm, etc.
+
+Feature coverage goal (now carried by the single Hogwarts file): the format is exercised
+broadly — group lists (both prefilled and automatic filling, different lists on different
+subjects), multiple periods, week patterns, incompatibilities, pairing and slot-pairing
+rules, per-student/per-subject overrides in settings and balancing, export config, and a
+colloscope. Any later fixtures would extend coverage rather than partition it.
+
+Guidelines (met): hand-checkable size; created through the app or the Python API (not
+hand-written JSON) so it is guaranteed valid; CI asserts the file decodes, passes
 `Data::from_inner_data` validation, and re-encodes stably.
 
 ## 6. Phase 2 — in-memory restructuring (only after the format is frozen)
