@@ -27,9 +27,28 @@ fn expand(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
         ));
     }
 
-    // Validated here, but the associated `Joinable`/`Join` impls belong to
-    // the Join machinery
-    let _entity = extract_entity_attribute(&input.attrs)?;
+    // These leaf impls must stay concrete per-ID: a blanket impl in
+    // `state/` would overlap with the container lifts
+    let join_impls = extract_entity_attribute(&input.attrs)?.map(|entity| {
+        quote! {
+            impl ::collomatique_state::join::Joinable for #name {
+                type Output<'a>
+                    = &'a #entity
+                where
+                    Self: 'a;
+                type Error = #name;
+            }
+
+            impl<Ctx: ::collomatique_state::join::Lookup<#name, Entity = #entity>>
+                ::collomatique_state::join::Join<Ctx> for #name
+            {
+                fn join<'a>(&'a self, ctx: &'a Ctx) -> ::core::result::Result<&'a #entity, #name> {
+                    <Ctx as ::collomatique_state::join::Lookup<#name>>::lookup(ctx, *self)
+                        .ok_or(*self)
+                }
+            }
+        }
+    });
 
     Ok(quote! {
         impl ::collomatique_state::ids::Id for #name {
@@ -47,6 +66,8 @@ fn expand(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 f(<K as ::core::convert::From<#name>>::from(*self));
             }
         }
+
+        #join_impls
     })
 }
 

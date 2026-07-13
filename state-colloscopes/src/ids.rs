@@ -8,6 +8,17 @@ use collomatique_state::EntityId;
 use collomatique_state::tools;
 use serde::{Deserialize, Serialize};
 
+use crate::group_lists::GroupList;
+use crate::incompats::Incompatibility;
+use crate::pairings::PairingRule;
+use crate::periods::WeekDesc;
+use crate::slot_pairings::SlotPairingRule;
+use crate::slots::Slot;
+use crate::students::Student;
+use crate::subjects::Subject;
+use crate::teachers::Teacher;
+use crate::week_patterns::WeekPattern;
+
 pub use collomatique_state::ids::Id;
 
 /// This type represents an ID for a student
@@ -17,6 +28,7 @@ pub use collomatique_state::ids::Id;
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, EntityId,
 )]
+#[entity(Student)]
 pub struct StudentId(u64);
 
 /// This type represents an ID for a period
@@ -26,6 +38,7 @@ pub struct StudentId(u64);
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, EntityId,
 )]
+#[entity(Vec<WeekDesc>)]
 pub struct PeriodId(u64);
 
 /// This type represents an ID for a subject
@@ -35,6 +48,7 @@ pub struct PeriodId(u64);
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, EntityId,
 )]
+#[entity(Subject)]
 pub struct SubjectId(u64);
 
 /// This type represents an ID for a teacher
@@ -44,6 +58,7 @@ pub struct SubjectId(u64);
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, EntityId,
 )]
+#[entity(Teacher)]
 pub struct TeacherId(u64);
 
 /// This type represents an ID for a week pattern
@@ -53,6 +68,7 @@ pub struct TeacherId(u64);
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, EntityId,
 )]
+#[entity(WeekPattern)]
 pub struct WeekPatternId(u64);
 
 /// This type represents an ID for an interrogation slot
@@ -62,6 +78,7 @@ pub struct WeekPatternId(u64);
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, EntityId,
 )]
+#[entity(Slot)]
 pub struct SlotId(u64);
 
 /// This type represents an ID for an schedule incompatibility
@@ -71,6 +88,7 @@ pub struct SlotId(u64);
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, EntityId,
 )]
+#[entity(Incompatibility)]
 pub struct IncompatId(u64);
 
 /// This type represents an ID for a group list
@@ -80,6 +98,7 @@ pub struct IncompatId(u64);
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, EntityId,
 )]
+#[entity(GroupList)]
 pub struct GroupListId(u64);
 
 /// This type represents an ID for a pairing rule
@@ -89,6 +108,7 @@ pub struct GroupListId(u64);
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, EntityId,
 )]
+#[entity(PairingRule)]
 pub struct PairingRuleId(u64);
 
 /// This type represents an ID for a slot pairing rule
@@ -98,6 +118,7 @@ pub struct PairingRuleId(u64);
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, EntityId,
 )]
+#[entity(SlotPairingRule)]
 pub struct SlotPairingRuleId(u64);
 
 #[derive(Debug, Clone)]

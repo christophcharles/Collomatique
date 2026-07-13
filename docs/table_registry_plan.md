@@ -424,7 +424,7 @@ the three contract scripts, run by the user.
   and container lifts. Derive tests are integration tests in `state/tests/` (generated code
   uses absolute `::collomatique_state::` paths) on toy types; real entity structs are C2.
   **Cargo.lock changes: user refreshes the nix `cargoHash`.**
-- **A3**: `state/src/join.rs` (`Joinable`/`Join`/`Lookup` + container lifts, per amended
+- **A3** (DONE July 13 2026): `state/src/join.rs` (`Joinable`/`Join`/`Lookup` + container lifts, per amended
   §4.2), `#[derive(Join)]`, `#[entity(Type)]` activated in `EntityId` and applied to the ten
   real ids (`PeriodId → Vec<WeekDesc>` — periods have no entity struct today). No `Lookup`
   impls on `Parameters` (C3). Integration tests on a toy world. No new dependencies.
