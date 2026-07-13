@@ -36,7 +36,8 @@ hand-coded at least three times in `state-colloscopes/`:
 
 On top of that, `ops/` hand-codes ~21 reverse-lookup loops ("who references X?") in its
 cleaning cascades, duplicate-ID scanning exists in three implementations, and the 10 typed ID
-newtypes in `ids.rs` are 10 hand-written copies of the same 20 lines.
+newtypes in `ids.rs` are 10 hand-written copies of the same 20 lines (since A2: one-line
+`#[derive(EntityId)]`s).
 
 The goal of this item: **declare each relationship once**, derive the mechanical parts
 generically, and give consumer code a small SQL-like read interface (keyed lookup, FK
@@ -274,7 +275,8 @@ pub struct OrderedTable<I: Id, T> { inner: Vec<(I, T)> }      // #[serde(transpa
 ### 4.2 The derive crate
 
 New crate `state-derive/` (package `collomatique-state-derive`, `proc-macro = true`),
-re-exported via `collomatique-state`. Two derives:
+re-exported via `collomatique-state`. Three derives (`EntityId`, `References`, and — since the
+A3 amendment — `Join`, described with the join machinery below):
 
 - **`#[derive(EntityId)]`** — replaces the 10 hand-written `pub struct XxxId(u64)` + `impl Id`
   blocks in `state-colloscopes/src/ids.rs` (the `Id` trait itself moves to `state/`). Also a
@@ -339,7 +341,9 @@ pub trait Lookup<I> {                   // what a context provides, per id type
   generates the leaf impls (`Output<'a> = &'a Teacher`, `Error = TeacherId` — the dangling id
   is the diagnostic; `Join<Ctx>` bounded by `Ctx: Lookup<TeacherId, Entity = Teacher>`).
   `Option`/`Vec`/`BTreeSet` lifts live in `state/`. `#[derive(Join)]` on a struct generates a
-  borrowed `Joined{Name}<'a>` struct (non-`#[fk]` fields appear as `&'a T`); it requires
+  borrowed `Joined{Name}<'a>` struct (non-`#[fk]` fields appear as `&'a T`; the name is
+  overridable via `#[join(output = Name)]`; the view derives `Debug + Clone`, so entity types
+  must be `Debug`); it requires
   `#[join(error = Type)]` (with generated `From` bounds — `state/` defines no error type);
   field names are kept as-is, `#[fk(name = ident)]` renames explicitly (no automatic naming).
   `Lookup` impls on `Parameters` and any registry wiring remain C3 work.

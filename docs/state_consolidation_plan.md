@@ -10,7 +10,7 @@ before touching any of the crates above.
 
 ---
 
-## 1. Background: the state stack today
+## 1. Background: the state stack at review time (July 11 2026)
 
 Four layers, cleanly separated in intent:
 
@@ -20,6 +20,10 @@ Four layers, cleanly separated in intent:
 | `state-colloscopes/` | ~8,200 loc | `Data { Mutex<IdIssuer>, InnerData }`; `InnerData { params, colloscope, export_config }`; elementary `Op`/`AnnotatedOp` (16 categories); all invariant checking. `lib.rs` alone is 3.9k loc |
 | `ops/` | ~7,700 loc | "Natural" UI-level `UpdateOp`s composed of elementary ops; recursive cleaning-op cascade with `UpdateWarning`s; `dry_apply` via `AppSession` |
 | `storage/` | ~700 loc | JSON file: versioned envelope (header + entries with `minimum_spec_version` / `needed_entry` / `Caveat`s) whose sole payload entry is `InnerDataDump(InnerData)` — raw serde of the in-memory struct |
+
+*The table is the pre-work snapshot the review was based on — sizes and payload descriptions
+have since moved (spec-2 format structs in `storage/`, `lib.rs` split, generic layer in
+`state/`); §§3–6 track what changed.*
 
 Consumers: `gtk4` (reads `get_inner_data`, writes via `ops`), `python` (pyo3: writes via `ops`,
 reads via pyclass mirrors of `InnerData` types), `constraints-colloscopes`
@@ -41,7 +45,7 @@ reads via pyclass mirrors of `InnerData` types), `constraints-colloscopes`
 
 ### Problems identified (review of July 2026)
 
-1. **File format**: the envelope is honest but the payload is serde-derive output of
+1. **File format** *(resolved — phase 1)*: the envelope is honest but the payload is serde-derive output of
    `InnerData` — any field rename/retype silently changes the on-disk format. Old-file
    failures surface as a misleading `ProbablyIllformedEntry` because the custom
    `EntryContent::deserialize` swallows the underlying serde error. Only `#[serde(default)]`
@@ -62,8 +66,8 @@ reads via pyclass mirrors of `InnerData` types), `constraints-colloscopes`
 5. **Inconsistent op granularity**: whole-struct `Update`s (Settings, Balancing, entities)
    next to 11 per-field `ExportConfigOp` variants and a single-bool `AssignmentOp`. No
    principle.
-6. **Test coverage**: zero tests in `state/`; 3 integration tests in `state-colloscopes/`;
-   storage tests use only empty data.
+6. **Test coverage** *(resolved — phase 0)*: zero tests in `state/`; 3 integration tests in
+   `state-colloscopes/`; storage tests use only empty data.
 7. Read-path indirection (O(n) `find_*` scans, nested lookups) is **noise, not a performance
    problem** at real data sizes (~50 students); the only super-linear cost is item 2.
 
@@ -101,7 +105,7 @@ reads via pyclass mirrors of `InnerData` types), `constraints-colloscopes`
 - **The file stores a snapshot only.** No undo history, no op log in the file for now. The
   entry mechanism leaves the door open (a serializable op-log entry with
   `needed_entry: false` is possible later; note `ops::UpdateOp` is already serde-capable).
-- **Python scripts are a compatibility contract** (see §6). Scripts are updated in the same
+- **Python scripts are a compatibility contract** (see §7). Scripts are updated in the same
   change when the Python API must move, and the user runs them as acceptance tests.
 
 ---
@@ -188,7 +192,7 @@ field-level reference lives in `docs/file_format.md`.
 **Update — the legacy v1 path has now been removed.** It was kept, deprecated, through
 phase 1 so existing files kept opening. Once the corpus was converted to spec 2, the writer
 was retired first (`dd385261`: dropped the `legacy` flag and the spec-1 encoder), then the
-reader (this change): a spec-1 file — any entry declaring `minimum_spec_version: 1` — is now
+reader (`04ff63b2`): a spec-1 file — any entry declaring `minimum_spec_version: 1` — is now
 rejected with the clear `RetiredSpec1Format` tombstone error instead of decoding. This lifts
 the ordering constraint below: the phase-2 changes to `InnerData` (items 2–5 of §6) are
 unblocked, since no decoder reads the live `InnerData` via serde anymore.
@@ -297,7 +301,9 @@ before implementation.** Ordered by leverage:
    The one guard that lived only in `build_rev` (`Colloscope::UpdateGroupList`'s
    colloscope-entry-existence check) was transplanted into the fused method.
 2. **`Table<Id, T>` + declare-once relationship registry** — **detailed plan agreed
-   (July 2026): see `docs/table_registry_plan.md`**, which supersedes this sketch. Headline
+   (July 2026): see `docs/table_registry_plan.md`**, which supersedes this sketch; its phase A
+   (generic containers + derives + join machinery) completed July 13 2026, phase B (container
+   adoption) is next. Headline
    decisions: proc-macro + generic `Table`/`OrderedTable`/registry runtime live in `state/`
    (+ new `collomatique-state-derive` crate) for reuse (rooms side-project); consumers migrate
    in four steps (Deref-compat containers → SQL-like read API → per-crate migration → remove
@@ -396,8 +402,9 @@ When in doubt, ask the user to run the real scripts/files rather than guessing.
 
 ## 9. Open points
 
-- Phase 2 item 2 (`Table` + relationship registry) — **validated**; the detailed multi-session
-  plan is `docs/table_registry_plan.md` (July 2026). Its §6 records the design notes item 3
-  needs for rerouting the triplicated checks through the registry.
-- Exact section list / field-level spec of format v2: fixed during phase 1 in
-  `docs/file_format.md` before the conversion of existing files.
+- Phase 2 item 2 (`Table` + relationship registry) — **validated and in progress**; the
+  detailed multi-session plan is `docs/table_registry_plan.md` (July 2026). Its §6 records the
+  design notes item 3 needs for rerouting the triplicated checks through the registry.
+  Phase A (generic containers, `EntityId`/`References`/`Join` derives, join machinery)
+  completed July 13 2026 (`c2973c76`, `cb409f44`, `66bcc1c9`); phase B (container adoption)
+  is next.
