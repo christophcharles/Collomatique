@@ -331,3 +331,78 @@ impl IdIssuer {
         SlotPairingRuleId(self.helper.get_new_id().inner())
     }
 }
+
+/// Potential new id returned by annotation
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum NewId {
+    StudentId(StudentId),
+    PeriodId(PeriodId),
+    SubjectId(SubjectId),
+    TeacherId(TeacherId),
+    WeekPatternId(WeekPatternId),
+    SlotId(SlotId),
+    IncompatId(IncompatId),
+    GroupListId(GroupListId),
+    PairingRuleId(PairingRuleId),
+    SlotPairingRuleId(SlotPairingRuleId),
+}
+
+impl From<StudentId> for NewId {
+    fn from(value: StudentId) -> Self {
+        NewId::StudentId(value)
+    }
+}
+
+impl From<PeriodId> for NewId {
+    fn from(value: PeriodId) -> Self {
+        NewId::PeriodId(value)
+    }
+}
+
+impl From<SubjectId> for NewId {
+    fn from(value: SubjectId) -> Self {
+        NewId::SubjectId(value)
+    }
+}
+
+impl From<TeacherId> for NewId {
+    fn from(value: TeacherId) -> Self {
+        NewId::TeacherId(value)
+    }
+}
+
+impl From<WeekPatternId> for NewId {
+    fn from(value: WeekPatternId) -> Self {
+        NewId::WeekPatternId(value)
+    }
+}
+
+impl From<SlotId> for NewId {
+    fn from(value: SlotId) -> Self {
+        NewId::SlotId(value)
+    }
+}
+
+impl From<IncompatId> for NewId {
+    fn from(value: IncompatId) -> Self {
+        NewId::IncompatId(value)
+    }
+}
+
+impl From<GroupListId> for NewId {
+    fn from(value: GroupListId) -> Self {
+        NewId::GroupListId(value)
+    }
+}
+
+impl From<PairingRuleId> for NewId {
+    fn from(value: PairingRuleId) -> Self {
+        NewId::PairingRuleId(value)
+    }
+}
+
+impl From<SlotPairingRuleId> for NewId {
+    fn from(value: SlotPairingRuleId) -> Self {
+        NewId::SlotPairingRuleId(value)
+    }
+}

@@ -324,8 +324,15 @@ before implementation.** Ordered by leverage:
    patterns) but centralize the fan-out (candidate: the registry owns "structural param ops
    propagate to colloscope"), and consider keying interrogations by week index instead of
    positional `Vec<Option<_>>`. The spec-2 format is already shaped so this changes no files.
-6. **Split the `lib.rs` god-file** along the per-entity module lines that already exist
-   (style rule: `foo.rs` + `foo/` directory, never `foo/mod.rs`).
+6. **Split the `lib.rs` god-file** — **DONE** (commits `29974361` error enums, `7210ead5`
+   `apply_*` methods, plus `NewId`→`ids.rs`). Done ahead of items 2-5 because it needs no
+   `InnerData` change (those are blocked on the legacy-file migration): each per-entity
+   error enum and `apply_*` method moved verbatim into its existing entity module
+   (`pub(crate)` methods in `impl Data` blocks; `InvariantError` to `colloscope_params.rs`,
+   its construction site). Crate-root `pub use` re-exports keep every external path
+   unchanged. `lib.rs` is now ~400 lines: `Data`/`InnerData`, the aggregate `Error`, and
+   the `InMemoryData` dispatch. No new files were needed, so the style rule (`foo.rs` +
+   `foo/` directory, never `foo/mod.rs`) was moot.
 7. **Python glue**: the write path is already insulated behind `ops::UpdateOp`; the read-path
    pyclass mirrors break compile-visibly and are regenerated mechanically per struct change.
    No Python API redesign in this phase (a full redesign is expected later, with the MVVM UI
