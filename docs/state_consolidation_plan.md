@@ -16,7 +16,7 @@ Four layers, cleanly separated in intent:
 
 | Layer | Size | Role |
 |---|---|---|
-| `state/` | ~1,000 loc | Generic undo/redo: `InMemoryData` trait (`annotate` / `build_rev_with_current_state` / `apply`), `Manager`, `AppState`, `AppSession` (transactional commit/cancel), `ModificationHistory` |
+| `state/` | ~1,000 loc | Generic undo/redo: `InMemoryData` trait (`annotate` / `apply`, where `apply` returns the inverse op), `Manager`, `AppState`, `AppSession` (transactional commit/cancel), `ModificationHistory` |
 | `state-colloscopes/` | ~8,200 loc | `Data { Mutex<IdIssuer>, InnerData }`; `InnerData { params, colloscope, export_config }`; elementary `Op`/`AnnotatedOp` (16 categories); all invariant checking. `lib.rs` alone is 3.9k loc |
 | `ops/` | ~7,700 loc | "Natural" UI-level `UpdateOp`s composed of elementary ops; recursive cleaning-op cascade with `UpdateWarning`s; `dry_apply` via `AppSession` |
 | `storage/` | ~700 loc | JSON file: versioned envelope (header + entries with `minimum_spec_version` / `needed_entry` / `Caveat`s) whose sole payload entry is `InnerDataDump(InnerData)` — raw serde of the in-memory struct |
@@ -53,8 +53,9 @@ reads via pyclass mirrors of `InnerData` types), `constraints-colloscopes`
    implementations; and `Data::apply` re-validates the **entire document after every op** —
    including every undo/redo sub-op (O(history × doc size)), panicking on failure. The load
    path (`Data::from_inner_data`) checks twice more.
-3. **apply/build_rev duplication**: two parallel 15-way method families (~1,900 loc) that must
-   agree; the inverse builders are almost entirely untested.
+3. **apply/build_rev duplication** *(resolved — Phase 2 item 1)*: was two parallel 15-way method
+   families (~1,900 loc) that had to agree, with the inverse builders almost entirely untested.
+   `apply` now computes and returns the inverse itself; `build_rev_with_current_state` is gone.
 4. **Write fan-out from the params↔colloscope mirror**: e.g. adding a slot must insert an
    empty `ColloscopeSlot` into every colloscope period; period ops span ~330 lines. Every
    structural op mutates two parallel representations by hand.
@@ -114,7 +115,7 @@ still exist*:
    sequences →
    - after every apply, `check_invariants` holds;
    - undo-all returns exactly the initial state;
-   - `apply(op)` then `apply(build_rev(op))` is the identity;
+   - applying an op then applying the inverse it returns is the identity;
    - redo after undo reproduces the same state (annotated-op ID stability).
 2. **Populated round-trip storage tests** (encode→decode == identity on non-trivial data —
    current tests only cover empty colloscopes).
@@ -263,11 +264,14 @@ JSON) so they are guaranteed valid; CI asserts each file decodes, passes
 Direction agreed in outline; **each item below gets its own detailed plan (and user sign-off)
 before implementation.** Ordered by leverage:
 
-1. **Fuse `build_rev` into `apply`** (`state/` trait change:
-   `fn apply(&mut self, op) -> Result<AnnotatedOperation, Error>` returning the inverse,
-   computed while the old value is in hand). Halves the two 15-way families, eliminates the
-   apply/build_rev agreement problem, removes one validation pass. Stored
-   `ReversibleOp { forward, backward }` and the history machinery are unchanged.
+1. **Fuse `build_rev` into `apply`** — **DONE** (commit `90096d0d`). `state/` trait change:
+   `fn apply(&mut self, op) -> Result<AnnotatedOperation, Error>` returns the inverse,
+   computed while the old value is in hand. Halved the two 15-way families, eliminated the
+   apply/build_rev agreement problem, removed one validation pass. Stored
+   `ReversibleOp { forward, backward }` and the history machinery unchanged; a `debug_assert`
+   canary on the undo/redo replay path checks the recomputed inverse against the stored one.
+   The one guard that lived only in `build_rev` (`Colloscope::UpdateGroupList`'s
+   colloscope-entry-existence check) was transplanted into the fused method.
 2. **`Table<Id, T>` + declare-once relationship registry** — *proposal, to be validated*.
    "FK" = foreign key, the SQL term for a declared reference ("slots hold a `TeacherId`").
    Today every such relationship is hand-coded at least twice (delete-blocking scan in the
