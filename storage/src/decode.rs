@@ -2,7 +2,22 @@
 //!
 //! This module contains the logic that builds a [Data] from a file
 //! document: [self::decode] for the legacy (spec 1) pipeline, and
-//! [spec2::decode] for the spec-2 pipeline.
+//! [spec2::decode] for the spec-2 pipeline. The spec-1 pipeline is
+//! deprecated and kept only for the transition (see the versioning
+//! notes in `docs/file_format.md`).
+//!
+//! Whichever pipeline runs, decoding is never trusted for semantic
+//! integrity: both funnel through [Data::from_inner_data], the single
+//! trust boundary that revalidates any
+//! [InnerData](collomatique_state_colloscopes::InnerData) regardless of
+//! provenance. A decoder that happens to catch a problem earlier is a
+//! convenience, not a guarantee.
+//!
+//! Diagnostics ([DecodeError]) distinguish an *unrecognised* block
+//! (handled by the forward-compatibility rules — a [Caveat] or
+//! [DecodeError::UnknownNeededEntry]) from a *recognised block with a
+//! bad payload* ([DecodeError::IllformedBlock], which carries the serde
+//! diagnostics); the latter is never silently swallowed.
 
 use super::*;
 use crate::json::*;

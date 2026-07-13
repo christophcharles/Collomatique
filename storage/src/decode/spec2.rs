@@ -1,7 +1,7 @@
 //! Spec-2 decode submodule
 //!
 //! This module builds a [Data] from the raw entries of a spec-2
-//! document, in three layers (see `docs/file_format_impl.md`):
+//! document, in three layers:
 //!
 //! 1. [collect_blocks]: sort the entries into typed blocks. Unknown
 //!    block names go through the forward-compatibility rules (spec §5);
