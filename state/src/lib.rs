@@ -26,5 +26,5 @@ pub use ids::Id;
 pub use join::{Join, Joinable, Lookup};
 pub use refs::References;
 pub use state::{AppSession, AppState};
-pub use tables::{OrderedTable, Table};
+pub use tables::{Key, OrderedKey, OrderedTable, Table};
 pub use traits::{Description, InMemoryData, Operation};

@@ -15,32 +15,79 @@
 //! the mutating methods are for the state layer itself.
 //!
 //! The serialized form is stable and independent of the opaque backend:
-//! [Table] serializes exactly like a `BTreeMap<I, T>` and [OrderedTable]
-//! exactly like a `Vec<(I, T)>`.
+//! both [Table] and [OrderedTable] serialize exactly like a `Vec<(I, T)>` — a
+//! sequence of `(id, value)` pairs in table order. (A sequence rather than a map
+//! so that composite keys like `(PeriodId, SubjectId)`, which a JSON object
+//! cannot key on, round-trip just as well as scalar ids.)
 
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::ids::Id;
+/// Key bound for [Table]
+///
+/// [Table] is `BTreeMap`-backed, so its key only needs to be cheaply copyable
+/// and totally ordered. Every entity [`Id`](crate::ids::Id) satisfies this (its
+/// supertraits already include `Copy + Ord`), and so does any tuple of ids —
+/// which is what lets a junction table use a composite key like
+/// `(PeriodId, SubjectId)`.
+pub trait Key: Copy + Ord {}
+impl<T: Copy + Ord> Key for T {}
+
+/// Key bound for [OrderedTable]
+///
+/// [OrderedTable] is `Vec`-backed and finds entries by linear `==` scan, so its
+/// key needs even less than [Key]: only `Copy + Eq`. `Debug` is required so
+/// [DuplicatedIdError] can format the offending key.
+pub trait OrderedKey: Copy + Eq + std::fmt::Debug {}
+impl<T: Copy + Eq + std::fmt::Debug> OrderedKey for T {}
 
 /// Error returned when an operation would insert an ID already present in the table
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Error)]
 #[error("duplicated ID {0:?} in table")]
-pub struct DuplicatedIdError<I: Id>(pub I);
+pub struct DuplicatedIdError<I: OrderedKey>(pub I);
 
 /// Id-indexed table without user-visible ordering
 ///
 /// Entries are stored (and iterated) in ID order. Primary-key uniqueness
 /// is structural: inserting an existing ID replaces the previous value.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct Table<I: Id, T> {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Table<I: Key, T> {
     inner: BTreeMap<I, T>,
 }
 
-impl<I: Id, T> Default for Table<I, T> {
+/// Serializes as a sequence of `(id, value)` pairs in ID order.
+///
+/// Not a map: a JSON object cannot be keyed on a composite key like
+/// `(PeriodId, SubjectId)`, so a sequence is used for every key type uniformly
+/// (matching [OrderedTable]).
+impl<I: Key + Serialize, T: Serialize> Serialize for Table<I, T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.collect_seq(self.inner.iter())
+    }
+}
+
+impl<'de, I, T> Deserialize<'de> for Table<I, T>
+where
+    I: Key + Deserialize<'de>,
+    T: Deserialize<'de>,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let entries = Vec::<(I, T)>::deserialize(deserializer)?;
+        Ok(Table {
+            inner: entries.into_iter().collect(),
+        })
+    }
+}
+
+impl<I: Key, T> Default for Table<I, T> {
     fn default() -> Self {
         Table {
             inner: BTreeMap::new(),
@@ -48,7 +95,7 @@ impl<I: Id, T> Default for Table<I, T> {
     }
 }
 
-impl<I: Id, T> Table<I, T> {
+impl<I: Key, T> Table<I, T> {
     /// Creates an empty table
     pub fn new() -> Self {
         Self::default()
@@ -128,7 +175,7 @@ impl<I: Id, T> Table<I, T> {
     }
 }
 
-impl<I: Id, T: Clone> Table<I, T> {
+impl<I: Key, T: Clone> Table<I, T> {
     /// Copies the table into a plain `BTreeMap`
     ///
     /// Compatibility-window helper for consumers that store their own
@@ -140,13 +187,13 @@ impl<I: Id, T: Clone> Table<I, T> {
     }
 }
 
-impl<I: Id, T> From<BTreeMap<I, T>> for Table<I, T> {
+impl<I: Key, T> From<BTreeMap<I, T>> for Table<I, T> {
     fn from(inner: BTreeMap<I, T>) -> Self {
         Table { inner }
     }
 }
 
-impl<I: Id, T> FromIterator<(I, T)> for Table<I, T> {
+impl<I: Key, T> FromIterator<(I, T)> for Table<I, T> {
     fn from_iter<It: IntoIterator<Item = (I, T)>>(iter: It) -> Self {
         Table {
             inner: iter.into_iter().collect(),
@@ -159,7 +206,7 @@ impl<I: Id, T> FromIterator<(I, T)> for Table<I, T> {
 /// This is the dual of [`FromIterator`]: it drains the table without exposing
 /// the backend representation, so it is part of the stable API (unlike the
 /// `Deref` and `&Table` iteration compatibility shims).
-impl<I: Id, T> IntoIterator for Table<I, T> {
+impl<I: Key, T> IntoIterator for Table<I, T> {
     type Item = (I, T);
     type IntoIter = std::collections::btree_map::IntoIter<I, T>;
 
@@ -170,7 +217,7 @@ impl<I: Id, T> IntoIterator for Table<I, T> {
 
 /// Compatibility window only: lets existing call sites keep using the map API
 /// during the migration. Scheduled for removal — do not use in new code.
-impl<I: Id, T> std::ops::Deref for Table<I, T> {
+impl<I: Key, T> std::ops::Deref for Table<I, T> {
     type Target = BTreeMap<I, T>;
 
     fn deref(&self) -> &BTreeMap<I, T> {
@@ -185,25 +232,26 @@ impl<I: Id, T> std::ops::Deref for Table<I, T> {
 /// is an enforced invariant: construction and insertion are fallible.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(transparent)]
-pub struct OrderedTable<I: Id, T> {
+pub struct OrderedTable<I: OrderedKey, T> {
     inner: Vec<(I, T)>,
 }
 
-impl<I: Id, T> Default for OrderedTable<I, T> {
+impl<I: OrderedKey, T> Default for OrderedTable<I, T> {
     fn default() -> Self {
         OrderedTable { inner: Vec::new() }
     }
 }
 
-impl<I: Id, T> TryFrom<Vec<(I, T)>> for OrderedTable<I, T> {
+impl<I: OrderedKey, T> TryFrom<Vec<(I, T)>> for OrderedTable<I, T> {
     type Error = DuplicatedIdError<I>;
 
     fn try_from(inner: Vec<(I, T)>) -> Result<Self, DuplicatedIdError<I>> {
-        let mut seen = std::collections::BTreeSet::new();
+        let mut seen: Vec<I> = Vec::new();
         for (id, _) in &inner {
-            if !seen.insert(*id) {
+            if seen.contains(id) {
                 return Err(DuplicatedIdError(*id));
             }
+            seen.push(*id);
         }
         Ok(OrderedTable { inner })
     }
@@ -211,7 +259,7 @@ impl<I: Id, T> TryFrom<Vec<(I, T)>> for OrderedTable<I, T> {
 
 impl<'de, I, T> Deserialize<'de> for OrderedTable<I, T>
 where
-    I: Id + Deserialize<'de>,
+    I: OrderedKey + Deserialize<'de>,
     T: Deserialize<'de>,
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -223,7 +271,7 @@ where
     }
 }
 
-impl<I: Id, T> OrderedTable<I, T> {
+impl<I: OrderedKey, T> OrderedTable<I, T> {
     /// Creates an empty table
     pub fn new() -> Self {
         Self::default()
@@ -347,7 +395,7 @@ impl<I: Id, T> OrderedTable<I, T> {
 /// constructor: it drains the table without exposing the backend
 /// representation, so it is part of the stable API (unlike the `Deref` and
 /// `&OrderedTable` iteration compatibility shims).
-impl<I: Id, T> IntoIterator for OrderedTable<I, T> {
+impl<I: OrderedKey, T> IntoIterator for OrderedTable<I, T> {
     type Item = (I, T);
     type IntoIter = std::vec::IntoIter<(I, T)>;
 
@@ -356,7 +404,7 @@ impl<I: Id, T> IntoIterator for OrderedTable<I, T> {
     }
 }
 
-impl<I: Id, T: Clone> OrderedTable<I, T> {
+impl<I: OrderedKey, T: Clone> OrderedTable<I, T> {
     /// Copies the table into a plain `Vec<(I, T)>`, in table order
     ///
     /// Compatibility-window helper for consumers that store their own
@@ -370,7 +418,7 @@ impl<I: Id, T: Clone> OrderedTable<I, T> {
 
 /// Compatibility window only: lets existing call sites keep using the slice API
 /// during the migration. Scheduled for removal — do not use in new code.
-impl<I: Id, T> std::ops::Deref for OrderedTable<I, T> {
+impl<I: OrderedKey, T> std::ops::Deref for OrderedTable<I, T> {
     type Target = [(I, T)];
 
     fn deref(&self) -> &[(I, T)] {
@@ -381,6 +429,7 @@ impl<I: Id, T> std::ops::Deref for OrderedTable<I, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ids::Id;
 
     #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
     struct ToyId(u64);
@@ -417,12 +466,16 @@ mod tests {
     }
 
     #[test]
-    fn table_wire_format_matches_btreemap() {
+    fn table_wire_format_matches_vec_of_pairs() {
         let (table, map) = table_fixture();
+
+        // Serializes as a sequence of `(id, value)` pairs in ID order, not as a
+        // map — so composite keys round-trip too (see `Table`'s serde impls).
+        let expected: Vec<(ToyId, String)> = map.iter().map(|(&id, v)| (id, v.clone())).collect();
 
         assert_eq!(
             serde_json::to_value(&table).expect("table serializes"),
-            serde_json::to_value(&map).expect("map serializes"),
+            serde_json::to_value(&expected).expect("vec serializes"),
         );
     }
 
@@ -585,5 +638,49 @@ mod tests {
             table.keys().collect::<Vec<_>>(),
             vec![ToyId(1), ToyId(2), ToyId(3), ToyId(4)]
         );
+    }
+
+    fn composite_fixture() -> Table<(ToyId, ToyId), String> {
+        let mut table: Table<(ToyId, ToyId), String> = Table::new();
+        table.insert((ToyId(1), ToyId(2)), "a".to_string());
+        table.insert((ToyId(1), ToyId(1)), "b".to_string());
+        table.insert((ToyId(2), ToyId(1)), "c".to_string());
+        table
+    }
+
+    #[test]
+    fn table_supports_composite_tuple_key() {
+        // A tuple of ids is `Copy + Ord`, so the `Key` blanket impl makes it a
+        // valid `Table` key — this is what junction tables like assignments and
+        // associations rely on.
+        let table = composite_fixture();
+
+        assert_eq!(table.get(&(ToyId(1), ToyId(2))), Some(&"a".to_string()));
+        assert!(table.contains(&(ToyId(2), ToyId(1))));
+        assert_eq!(table.get(&(ToyId(2), ToyId(2))), None);
+
+        // Iterates in tuple (lexicographic) key order.
+        assert_eq!(
+            table.keys().collect::<Vec<_>>(),
+            vec![
+                (ToyId(1), ToyId(1)),
+                (ToyId(1), ToyId(2)),
+                (ToyId(2), ToyId(1)),
+            ]
+        );
+    }
+
+    #[test]
+    fn table_composite_tuple_key_round_trips_through_serde() {
+        // The array-of-pairs wire format lets a composite key survive JSON,
+        // which a map (object) form cannot — this is exercised for real when
+        // `InnerData` (carrying these tables) is round-tripped over rpc.
+        let table = composite_fixture();
+
+        let json = serde_json::to_string(&table).expect("table serializes");
+        let back: Table<(ToyId, ToyId), String> =
+            serde_json::from_str(&json).expect("table deserializes");
+
+        assert_eq!(back, table);
     }
 }
