@@ -208,7 +208,7 @@ impl AssignmentsUpdateOp {
                     .student_map
                     .clone();
 
-                for (student_id, student) in student_map.entries() {
+                for (student_id, student) in student_map.iter() {
                     let student_id = &student_id;
                     if student.excluded_periods.contains(period_id) {
                         continue;
@@ -278,7 +278,7 @@ impl AssignmentsUpdateOp {
                     .students
                     .student_map
                     .clone();
-                for (student_id, student) in student_map.entries() {
+                for (student_id, student) in student_map.iter() {
                     if student.excluded_periods.contains(period_id) {
                         continue;
                     }

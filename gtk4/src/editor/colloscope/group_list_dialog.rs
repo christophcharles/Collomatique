@@ -200,7 +200,7 @@ impl Dialog {
         self.students_to_display = self
             .students
             .student_map
-            .entries()
+            .iter()
             .filter_map(|(id, student)| {
                 let id = &id;
                 if self.group_list.filling.excluded_students().contains(id) {

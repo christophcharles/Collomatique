@@ -139,14 +139,14 @@ impl Component for Subjects {
                     &mut self.subjects_list,
                     self.subjects
                         .ordered_subject_list
-                        .entries()
+                        .iter()
                         .map(|(id, desc)| subjects_display::EntryData {
                             subject_params: desc.parameters.clone(),
                             global_first_week: self.periods.first_week.clone(),
                             periods: self
                                 .periods
                                 .ordered_period_list
-                                .entries()
+                                .iter()
                                 .map(|(id, period_desc)| subjects_display::PeriodData {
                                     week_count: period_desc.len(),
                                     status: !desc.excluded_periods.contains(&id),

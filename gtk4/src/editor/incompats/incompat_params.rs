@@ -370,7 +370,7 @@ impl Dialog {
         let mut subjects: Vec<_> = self
             .subjects
             .ordered_subject_list
-            .entries()
+            .iter()
             .map(|(subject_id, subject)| (subject_id, subject.parameters.name.clone()))
             .collect();
         subjects.sort_by_key(|(id, name)| (name.clone(), *id));
@@ -381,7 +381,7 @@ impl Dialog {
         let mut week_patterns: Vec<_> = self
             .week_patterns
             .week_pattern_map
-            .entries()
+            .iter()
             .map(|(week_pattern_id, week_pattern)| (week_pattern_id, week_pattern.name.clone()))
             .collect();
         week_patterns.sort_by_key(|(id, name)| (name.clone(), *id));

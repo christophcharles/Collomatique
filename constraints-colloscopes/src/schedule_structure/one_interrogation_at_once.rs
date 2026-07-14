@@ -52,7 +52,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                 .collect();
 
             for &week in weeks_a.intersection(&weeks_b) {
-                for &student in env.students.student_map.keys() {
+                for student in env.students.student_map.keys() {
                     if !is_student_enrolled(env, student, *subject_a, week)
                         || !is_student_enrolled(env, student, *subject_b, week)
                     {

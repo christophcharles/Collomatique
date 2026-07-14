@@ -229,7 +229,7 @@ impl SlotsUpdateOp {
                     .params
                     .periods
                     .ordered_period_list
-                    .entries()
+                    .iter()
                 {
                     let period_id = &period_id;
                     let collo_period = data
@@ -314,7 +314,7 @@ impl SlotsUpdateOp {
                     .params
                     .slot_pairings
                     .slot_pairing_rule_map
-                    .entries()
+                    .iter()
                 {
                     let rule_id = &rule_id;
                     if rule.antecedent.slot_id == *slot_id || rule.consequent.slot_id == *slot_id {

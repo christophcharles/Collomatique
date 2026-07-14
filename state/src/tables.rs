@@ -65,12 +65,18 @@ impl<I: Id, T> Table<I, T> {
     }
 
     /// Iterates over the IDs in the table, in ID order
-    pub fn ids(&self) -> impl Iterator<Item = I> + '_ {
+    ///
+    /// Defined inherently so it shadows the `Deref` [`BTreeMap::keys`], yielding
+    /// owned IDs (all IDs are `Copy`) rather than references.
+    pub fn keys(&self) -> impl Iterator<Item = I> + '_ {
         self.inner.keys().copied()
     }
 
     /// Iterates over the `(id, value)` entries in the table, in ID order
-    pub fn entries(&self) -> impl Iterator<Item = (I, &T)> {
+    ///
+    /// Defined inherently so it shadows the `Deref` [`BTreeMap::iter`], yielding
+    /// an owned ID with each value rather than a reference pair.
+    pub fn iter(&self) -> impl Iterator<Item = (I, &T)> {
         self.inner.iter().map(|(&id, value)| (id, value))
     }
 
@@ -247,13 +253,25 @@ impl<I: Id, T> OrderedTable<I, T> {
     }
 
     /// Iterates over the IDs in the table, in table order
-    pub fn ids(&self) -> impl Iterator<Item = I> + '_ {
+    ///
+    /// Defined inherently so it shadows the `Deref` slice API, yielding owned
+    /// IDs (all IDs are `Copy`).
+    pub fn keys(&self) -> impl Iterator<Item = I> + '_ {
         self.inner.iter().map(|(id, _)| *id)
     }
 
     /// Iterates over the `(id, value)` entries in the table, in table order
-    pub fn entries(&self) -> impl Iterator<Item = (I, &T)> {
+    ///
+    /// Defined inherently so it shadows the `Deref` slice [`slice::iter`],
+    /// yielding an owned ID with each value rather than a reference to the
+    /// backing `(id, value)` pair.
+    pub fn iter(&self) -> impl Iterator<Item = (I, &T)> {
         self.inner.iter().map(|(id, value)| (*id, value))
+    }
+
+    /// Iterates over the values in the table, in table order
+    pub fn values(&self) -> impl Iterator<Item = &T> {
+        self.inner.iter().map(|(_, value)| value)
     }
 
     /// Returns the number of entries in the table
@@ -422,7 +440,7 @@ mod tests {
     fn table_iterates_in_id_order() {
         let (table, _) = table_fixture();
 
-        let ids: Vec<_> = table.ids().collect();
+        let ids: Vec<_> = table.keys().collect();
 
         assert_eq!(ids, vec![ToyId(1), ToyId(2), ToyId(3)]);
     }
@@ -477,7 +495,7 @@ mod tests {
     fn ordered_table_preserves_insertion_order() {
         let (table, entries) = ordered_fixture();
 
-        let ids: Vec<_> = table.ids().collect();
+        let ids: Vec<_> = table.keys().collect();
 
         assert_eq!(ids, entries.iter().map(|(id, _)| *id).collect::<Vec<_>>());
         assert_eq!(table.get_at(0), Some((ToyId(3), &"three".to_string())));
@@ -514,7 +532,7 @@ mod tests {
 
         assert_eq!(result, Err(DuplicatedIdError(ToyId(2))));
         assert_eq!(
-            table.entries().map(|(id, _)| id).collect::<Vec<_>>(),
+            table.iter().map(|(id, _)| id).collect::<Vec<_>>(),
             entries.iter().map(|(id, _)| *id).collect::<Vec<_>>()
         );
     }
@@ -536,14 +554,14 @@ mod tests {
 
         let removed = table.remove_at(1);
         assert_eq!(removed, (ToyId(1), "one".to_string()));
-        assert_eq!(table.ids().collect::<Vec<_>>(), vec![ToyId(3), ToyId(2)]);
+        assert_eq!(table.keys().collect::<Vec<_>>(), vec![ToyId(3), ToyId(2)]);
 
         let previous = table.replace_value_at(0, "THREE".to_string());
         assert_eq!(previous, "three".to_string());
         assert_eq!(table.get(&ToyId(3)), Some(&"THREE".to_string()));
 
         table.move_entry(0, 1);
-        assert_eq!(table.ids().collect::<Vec<_>>(), vec![ToyId(2), ToyId(3)]);
+        assert_eq!(table.keys().collect::<Vec<_>>(), vec![ToyId(2), ToyId(3)]);
     }
 
     #[test]
@@ -558,13 +576,13 @@ mod tests {
 
         table.move_entry(0, 2);
         assert_eq!(
-            table.ids().collect::<Vec<_>>(),
+            table.keys().collect::<Vec<_>>(),
             vec![ToyId(2), ToyId(3), ToyId(1), ToyId(4)]
         );
 
         table.move_entry(2, 0);
         assert_eq!(
-            table.ids().collect::<Vec<_>>(),
+            table.keys().collect::<Vec<_>>(),
             vec![ToyId(1), ToyId(2), ToyId(3), ToyId(4)]
         );
     }

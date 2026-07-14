@@ -659,7 +659,7 @@ fn slot_pairing_info(
                 .and_then(|(subj_id, _)| {
                     env.subjects
                         .ordered_subject_list
-                        .entries()
+                        .iter()
                         .find(|(id, _)| *id == subj_id)
                         .map(|(_, s)| s.parameters.name.clone())
                 })
@@ -734,7 +734,7 @@ fn subject_name(
 ) -> String {
     env.subjects
         .ordered_subject_list
-        .entries()
+        .iter()
         .find(|(id, _)| *id == subject)
         .map(|(_, s)| s.parameters.name.clone())
         .unwrap_or_else(|| format!("{:?}", subject))
@@ -762,7 +762,7 @@ fn slot_name(
         .and_then(|(subj_id, _)| {
             env.subjects
                 .ordered_subject_list
-                .entries()
+                .iter()
                 .find(|(id, _)| *id == subj_id)
                 .map(|(_, s)| s.parameters.name.as_str())
         });

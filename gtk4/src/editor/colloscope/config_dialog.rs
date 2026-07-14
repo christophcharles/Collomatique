@@ -90,7 +90,7 @@ impl Dialog {
         self.params
             .group_lists
             .group_list_map
-            .entries()
+            .iter()
             .any(|(_, group_list)| !group_list.is_prefilled())
     }
 
@@ -100,7 +100,7 @@ impl Dialog {
         self.params
             .periods
             .ordered_period_list
-            .entries()
+            .iter()
             .enumerate()
             .scan(0usize, |first_week_num, (index, (_id, weeks))| {
                 let week_count = weeks.len();
@@ -140,7 +140,7 @@ impl Dialog {
             .params
             .periods
             .ordered_period_list
-            .entries()
+            .iter()
             .zip(self.period_titles())
             .map(|((id, _), title)| {
                 let data = &sanitized_config.periods[&id];
@@ -155,7 +155,7 @@ impl Dialog {
             .params
             .group_lists
             .group_list_map
-            .entries()
+            .iter()
             .filter(|(_id, group_list)| !group_list.is_prefilled())
             .zip(self.group_list_names())
             .map(|((id, _), title)| {
@@ -180,7 +180,7 @@ impl Dialog {
                 .params
                 .periods
                 .ordered_period_list
-                .entries()
+                .iter()
                 .zip(self.periods_data.iter())
                 .map(|((id, _), data)| {
                     (
@@ -196,7 +196,7 @@ impl Dialog {
                 .params
                 .group_lists
                 .group_list_map
-                .entries()
+                .iter()
                 .filter(|(_id, group_list)| !group_list.is_prefilled())
                 .zip(self.group_lists_data.iter())
                 .map(|((id, _), data)| {

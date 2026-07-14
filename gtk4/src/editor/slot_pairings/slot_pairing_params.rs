@@ -93,7 +93,7 @@ impl Dialog {
         self.period_data = self
             .periods
             .ordered_period_list
-            .entries()
+            .iter()
             .enumerate()
             .map(|(i, (period_id, _desc))| {
                 let period_id = &period_id;

@@ -150,7 +150,7 @@ impl Assignments {
         let new_data = self
             .periods
             .ordered_period_list
-            .entries()
+            .iter()
             .scan(0usize, |acc, (id, desc)| {
                 let id = &id;
                 let current_first_week = *acc;
@@ -159,7 +159,7 @@ impl Assignments {
                 let filtered_subjects = self
                     .subjects
                     .ordered_subject_list
-                    .entries()
+                    .iter()
                     .filter(|(_subject_id, subject)| !subject.excluded_periods.contains(id))
                     .map(|(sid, s)| (sid, s.clone()))
                     .collect();
@@ -167,7 +167,7 @@ impl Assignments {
                 let mut filtered_students: Vec<_> = self
                     .students
                     .student_map
-                    .entries()
+                    .iter()
                     .filter_map(|(student_id, student)| {
                         if !student.excluded_periods.contains(id) {
                             Some((student_id, student.clone()))

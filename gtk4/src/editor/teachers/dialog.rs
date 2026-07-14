@@ -205,7 +205,7 @@ impl SimpleComponent for Dialog {
                 self.filtered_subjects = self
                     .subjects
                     .ordered_subject_list
-                    .entries()
+                    .iter()
                     .filter(|(_id, subject)| subject.parameters.interrogation_parameters.is_some())
                     .map(|(sid, s)| (sid, s.clone()))
                     .collect();

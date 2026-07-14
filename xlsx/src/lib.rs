@@ -278,7 +278,7 @@ pub(crate) fn non_empty_group_lists_by_name(
         .params
         .group_lists
         .group_list_map
-        .entries()
+        .iter()
         .filter(|(gl_id, gl)| {
             let has_automatic_students = data
                 .colloscope

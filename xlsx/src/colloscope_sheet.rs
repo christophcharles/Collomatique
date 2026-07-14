@@ -96,7 +96,7 @@ pub fn build(
     for (period_index, (period_id, weeks)) in params
         .periods
         .ordered_period_list
-        .entries()
+        .iter()
         .filter(|(_period_id, weeks)| !weeks.is_empty())
         .enumerate()
     {
@@ -125,7 +125,7 @@ pub fn build(
     let mut no_interrog_weeks: HashSet<(PeriodId, usize)> = HashSet::new();
     // Annotations — collected early so we can use them for week background colors
     let mut annotations: HashMap<(PeriodId, usize), String> = HashMap::new();
-    for (period_id, weeks) in params.periods.ordered_period_list.entries() {
+    for (period_id, weeks) in params.periods.ordered_period_list.iter() {
         for (week_index, week) in weeks.iter().enumerate() {
             if !week.interrogations {
                 no_interrog_weeks.insert((period_id, week_index));
@@ -246,7 +246,7 @@ pub fn build(
     let group_names_map: HashMap<GroupListId, Vec<String>> = params
         .group_lists
         .group_list_map
-        .entries()
+        .iter()
         .map(|(gl_id, gl)| (gl_id, crate::group_names_vec(gl)))
         .collect();
 
@@ -255,7 +255,7 @@ pub fn build(
     let mut first_subject = true;
     let mut stripe_index: usize = 0;
 
-    for (subject_id, subject) in params.subjects.ordered_subject_list.entries() {
+    for (subject_id, subject) in params.subjects.ordered_subject_list.iter() {
         let subject_id = &subject_id;
         let subject_name = &subject.parameters.name;
 

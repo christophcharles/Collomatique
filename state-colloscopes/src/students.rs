@@ -115,7 +115,7 @@ impl crate::Data {
                 }
 
                 for (group_list_id, group_list) in
-                    self.inner_data.params.group_lists.group_list_map.entries()
+                    self.inner_data.params.group_lists.group_list_map.iter()
                 {
                     if group_list.filling.excluded_students().contains(id) {
                         return Err(StudentError::StudentIsStillExcludedByGroupList(

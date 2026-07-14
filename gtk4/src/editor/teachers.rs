@@ -261,7 +261,7 @@ impl Teachers {
         subject_id: collomatique_state_colloscopes::SubjectId,
     ) -> Option<usize> {
         let mut pos = 0usize;
-        for (id, subject) in self.subjects.ordered_subject_list.entries() {
+        for (id, subject) in self.subjects.ordered_subject_list.iter() {
             if subject.parameters.interrogation_parameters.is_none() {
                 continue;
             }
@@ -278,7 +278,7 @@ impl Teachers {
         pos: usize,
     ) -> Option<collomatique_state_colloscopes::SubjectId> {
         let mut current_pos = 0usize;
-        for (subject_id, subject) in self.subjects.ordered_subject_list.entries() {
+        for (subject_id, subject) in self.subjects.ordered_subject_list.iter() {
             if subject.parameters.interrogation_parameters.is_none() {
                 continue;
             }
@@ -293,7 +293,7 @@ impl Teachers {
     fn update_filter_droplist(&mut self) {
         let mut list = vec!["Toutes les matières".into(), "Aucune matière".into()];
 
-        for (_subject_id, subject) in self.subjects.ordered_subject_list.entries() {
+        for (_subject_id, subject) in self.subjects.ordered_subject_list.iter() {
             if subject.parameters.interrogation_parameters.is_none() {
                 continue;
             }
@@ -323,7 +323,7 @@ impl Teachers {
     fn update_current_list(&mut self) {
         self.current_list = vec![];
 
-        for (teacher_id, teacher) in self.teachers.teacher_map.entries() {
+        for (teacher_id, teacher) in self.teachers.teacher_map.iter() {
             let keep_teacher = match self.current_filter {
                 TeacherFilter::NoFilter => true,
                 TeacherFilter::NoSubjectLinked => teacher.subjects.is_empty(),

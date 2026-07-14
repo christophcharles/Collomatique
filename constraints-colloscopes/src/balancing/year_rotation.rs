@@ -18,7 +18,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
     let first_week = GlobalWeek(0);
     let last_week = last_global_week(env);
 
-    for (subject_id, subject) in env.subjects.ordered_subject_list.entries() {
+    for (subject_id, subject) in env.subjects.ordered_subject_list.iter() {
         let subject_id = &subject_id;
         let Some(_params) = subject_interrogation_params(env, *subject_id) else {
             continue;

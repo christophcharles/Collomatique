@@ -1069,7 +1069,7 @@ impl Colloscope {
             .params
             .group_lists
             .group_list_map
-            .entries()
+            .iter()
             .filter(|(_id, group_list)| !group_list.is_prefilled())
             .map(|(id, group_list)| group_lists_display::EntryData {
                 id,

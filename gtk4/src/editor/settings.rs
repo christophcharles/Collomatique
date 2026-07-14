@@ -221,7 +221,7 @@ impl Settings {
         let mut students: Vec<_> = self
             .students
             .student_map
-            .entries()
+            .iter()
             .map(|(id, student)| {
                 (
                     id,

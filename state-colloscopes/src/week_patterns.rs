@@ -175,8 +175,7 @@ impl crate::Data {
                     }
                 }
 
-                for (incompat_id, incompat) in
-                    self.inner_data.params.incompats.incompat_map.entries()
+                for (incompat_id, incompat) in self.inner_data.params.incompats.incompat_map.iter()
                 {
                     if let Some(week_pattern_id) = &incompat.week_pattern_id
                         && *id == *week_pattern_id

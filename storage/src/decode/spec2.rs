@@ -421,11 +421,11 @@ fn reconstruct_assignments(
     // subject, empty by default (spec §4.5)
     let mut period_map: BTreeMap<PeriodId, mem::assignments::PeriodAssignments> = periods
         .ordered_period_list
-        .entries()
+        .iter()
         .map(|(period_id, _desc)| {
             let subject_map = subjects
                 .ordered_subject_list
-                .entries()
+                .iter()
                 .filter(|(_subject_id, subject)| !subject.excluded_periods.contains(&period_id))
                 .map(|(subject_id, _subject)| (subject_id, BTreeSet::new()))
                 .collect();
@@ -485,7 +485,7 @@ fn reconstruct_slots(
     // subjects are inserted anyway: layer 3 rejects them.
     let mut subject_map: BTreeMap<SubjectId, mem::slots::SubjectSlots> = subjects
         .ordered_subject_list
-        .entries()
+        .iter()
         .filter(|(_subject_id, subject)| subject.parameters.interrogation_parameters.is_some())
         .map(|(subject_id, _subject)| {
             (
@@ -611,7 +611,7 @@ fn reconstruct_group_lists(
     // add an extra entry which layer 3 rejects.
     let mut subjects_associations: BTreeMap<PeriodId, BTreeMap<SubjectId, GroupListId>> = periods
         .ordered_period_list
-        .entries()
+        .iter()
         .map(|(period_id, _desc)| (period_id, BTreeMap::new()))
         .collect();
     for row in associations.into_inner() {
@@ -739,7 +739,7 @@ fn reconstruct_colloscope(
 
     // Global week index -> (period, week position within the period)
     let mut week_table = Vec::new();
-    for (period_id, desc) in params.periods.ordered_period_list.entries() {
+    for (period_id, desc) in params.periods.ordered_period_list.iter() {
         for week_in_period in 0..desc.len() {
             week_table.push((period_id, week_in_period));
         }

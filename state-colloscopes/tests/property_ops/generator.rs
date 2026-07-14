@@ -100,26 +100,26 @@ impl Pools {
         let period_ids: Vec<_> = params
             .periods
             .ordered_period_list
-            .entries()
+            .iter()
             .map(|(id, _)| id)
             .collect();
         let subject_ids: Vec<_> = params
             .subjects
             .ordered_subject_list
-            .entries()
+            .iter()
             .map(|(id, _)| id)
             .collect();
         let interrogation_subject_ids: Vec<_> = params
             .subjects
             .ordered_subject_list
-            .entries()
+            .iter()
             .filter(|(_, s)| s.parameters.interrogation_parameters.is_some())
             .map(|(id, _)| id)
             .collect();
         let non_interrogation_subject_ids: Vec<_> = params
             .subjects
             .ordered_subject_list
-            .entries()
+            .iter()
             .filter(|(_, s)| s.parameters.interrogation_parameters.is_none())
             .map(|(id, _)| id)
             .collect();
@@ -163,28 +163,18 @@ impl Pools {
         Pools {
             total_weeks: params.periods.count_weeks(),
             period_ids,
-            student_ids: params.students.student_map.keys().copied().collect(),
+            student_ids: params.students.student_map.keys().collect(),
             subject_ids,
             interrogation_subject_ids,
             non_interrogation_subject_ids,
-            teacher_ids: params.teachers.teacher_map.keys().copied().collect(),
-            week_pattern_ids: params
-                .week_patterns
-                .week_pattern_map
-                .keys()
-                .copied()
-                .collect(),
+            teacher_ids: params.teachers.teacher_map.keys().collect(),
+            week_pattern_ids: params.week_patterns.week_pattern_map.keys().collect(),
             slots_by_subject,
             slot_ids,
-            incompat_ids: params.incompats.incompat_map.keys().copied().collect(),
-            group_list_ids: params.group_lists.group_list_map.keys().copied().collect(),
-            pairing_rule_ids: params.pairings.pairing_rule_map.keys().copied().collect(),
-            slot_pairing_rule_ids: params
-                .slot_pairings
-                .slot_pairing_rule_map
-                .keys()
-                .copied()
-                .collect(),
+            incompat_ids: params.incompats.incompat_map.keys().collect(),
+            group_list_ids: params.group_lists.group_list_map.keys().collect(),
+            pairing_rule_ids: params.pairings.pairing_rule_map.keys().collect(),
+            slot_pairing_rule_ids: params.slot_pairings.slot_pairing_rule_map.keys().collect(),
             colloscope_group_list_ids: inner.colloscope.group_lists.keys().copied().collect(),
             colloscope_targets,
         }
@@ -196,7 +186,7 @@ fn teachers_for_subject(inner: &InnerData, subject_id: SubjectId) -> Vec<Teacher
         .params
         .teachers
         .teacher_map
-        .entries()
+        .iter()
         .filter(|(_, teacher)| teacher.subjects.contains(&subject_id))
         .map(|(id, _)| id)
         .collect()
@@ -457,7 +447,7 @@ fn gen_assignment(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invali
         .params
         .subjects
         .ordered_subject_list
-        .entries()
+        .iter()
         .filter(|(_, s)| !s.excluded_periods.contains(&period_id))
         .map(|(id, _)| id)
         .collect();
@@ -465,7 +455,7 @@ fn gen_assignment(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invali
         .params
         .students
         .student_map
-        .entries()
+        .iter()
         .filter(|(_, s)| !s.excluded_periods.contains(&period_id))
         .map(|(id, _)| id)
         .collect();
@@ -732,7 +722,7 @@ fn gen_group_list(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invali
                 .params
                 .subjects
                 .ordered_subject_list
-                .entries()
+                .iter()
                 .filter(|(_, s)| {
                     s.parameters.interrogation_parameters.is_some()
                         && !s.excluded_periods.contains(&period_id)

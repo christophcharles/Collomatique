@@ -26,7 +26,7 @@ fn slot_group_count_expr(
 pub(super) fn build(env: &VarEnv) -> MyBundle {
     let mut output = MyBundle::new();
 
-    for (rule_id, rule) in env.slot_pairings.slot_pairing_rule_map.entries() {
+    for (rule_id, rule) in env.slot_pairings.slot_pairing_rule_map.iter() {
         let ant_slot_id = rule.antecedent.slot_id;
         let con_slot_id = rule.consequent.slot_id;
 

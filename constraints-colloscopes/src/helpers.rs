@@ -59,7 +59,7 @@ pub(crate) fn enrolled_students_for_subject(
 pub(crate) fn all_active_global_weeks(env: &VarEnv) -> Vec<GlobalWeek> {
     let mut result = Vec::new();
     let mut global_week = 0usize;
-    for (_period_id, period_desc) in env.periods.ordered_period_list.entries() {
+    for (_period_id, period_desc) in env.periods.ordered_period_list.iter() {
         for week_desc in period_desc {
             if week_desc.interrogations {
                 result.push(GlobalWeek(global_week));
@@ -74,7 +74,7 @@ pub(crate) fn last_global_week(env: &VarEnv) -> GlobalWeek {
     let total: usize = env
         .periods
         .ordered_period_list
-        .entries()
+        .iter()
         .map(|(_, desc)| desc.len())
         .sum();
     GlobalWeek(total.saturating_sub(1))

@@ -136,7 +136,7 @@ impl SolveConfig {
         let new_periods: BTreeMap<_, _> = params
             .periods
             .ordered_period_list
-            .entries()
+            .iter()
             .map(|(id, _)| {
                 (
                     id,
@@ -150,7 +150,7 @@ impl SolveConfig {
         let new_group_lists: BTreeMap<_, _> = params
             .group_lists
             .group_list_map
-            .entries()
+            .iter()
             .filter_map(|(id, group_list)| {
                 if group_list.is_prefilled() {
                     return None;

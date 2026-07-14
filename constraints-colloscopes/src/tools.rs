@@ -16,7 +16,7 @@ pub fn group_list_for_slot(
 
 pub fn week_to_period_id(params: &Parameters, week: usize) -> Option<(PeriodId, usize)> {
     let mut current_week = 0usize;
-    for (period_id, period_desc) in params.periods.ordered_period_list.entries() {
+    for (period_id, period_desc) in params.periods.ordered_period_list.iter() {
         let next_period_week = current_week + period_desc.len();
         if week >= current_week && week < next_period_week {
             return Some((period_id, week - current_week));
@@ -78,7 +78,7 @@ pub fn extract_week_pattern(
     };
 
     let mut current_first_week = 0usize;
-    for (_period_id, period_desc) in params.periods.ordered_period_list.entries() {
+    for (_period_id, period_desc) in params.periods.ordered_period_list.iter() {
         for (num, week_desc) in period_desc.iter().enumerate() {
             if !week_desc.interrogations {
                 output.push(false);

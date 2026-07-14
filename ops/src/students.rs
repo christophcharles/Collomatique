@@ -245,7 +245,7 @@ impl StudentsUpdateOp {
                     .params
                     .group_lists
                     .group_list_map
-                    .entries()
+                    .iter()
                 {
                     let group_list_id = &group_list_id;
                     match &group_list.filling {

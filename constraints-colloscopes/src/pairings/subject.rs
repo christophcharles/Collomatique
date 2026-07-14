@@ -12,7 +12,7 @@ use collomatique_state_colloscopes::ids::{PairingRuleId, StudentId, SubjectId};
 pub(super) fn build(env: &VarEnv) -> MyBundle {
     let mut output = MyBundle::new();
 
-    for (rule_id, rule) in env.pairings.pairing_rule_map.entries() {
+    for (rule_id, rule) in env.pairings.pairing_rule_map.iter() {
         let ant_subject = rule.antecedent.subject_id;
         let con_subject = rule.consequent.subject_id;
 
@@ -27,7 +27,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         let mut soft_output = MyBundle::new();
 
         let mut global_week_offset = 0usize;
-        for (period_id, period_desc) in env.periods.ordered_period_list.entries() {
+        for (period_id, period_desc) in env.periods.ordered_period_list.iter() {
             let period_id = &period_id;
             if rule.excluded_periods.contains(period_id)
                 || ant_subj.excluded_periods.contains(period_id)

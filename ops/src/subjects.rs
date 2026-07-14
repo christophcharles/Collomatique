@@ -360,7 +360,7 @@ impl SubjectsUpdateOp {
                         .params
                         .teachers
                         .teacher_map
-                        .entries()
+                        .iter()
                     {
                         let teacher_id = &teacher_id;
                         if teacher.subjects.contains(subject_id) {
@@ -573,7 +573,7 @@ impl SubjectsUpdateOp {
                     .params
                     .teachers
                     .teacher_map
-                    .entries()
+                    .iter()
                 {
                     let teacher_id = &teacher_id;
                     if teacher.subjects.contains(subject_id) {
@@ -621,7 +621,7 @@ impl SubjectsUpdateOp {
                     .params
                     .incompats
                     .incompat_map
-                    .entries()
+                    .iter()
                 {
                     let incompat_id = &incompat_id;
                     if incompat.subject_id == *subject_id {
@@ -717,7 +717,7 @@ impl SubjectsUpdateOp {
                     .params
                     .pairings
                     .pairing_rule_map
-                    .entries()
+                    .iter()
                 {
                     let rule_id = &rule_id;
                     if rule.antecedent.subject_id == *subject_id

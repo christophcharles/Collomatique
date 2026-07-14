@@ -28,7 +28,7 @@ fn period_interrogation_windows(
 
     let mut period_active_weeks: Vec<(Vec<GlobalWeek>, u32)> = Vec::new();
     let mut global_week = 0usize;
-    for (i, (period_id, period_desc)) in env.periods.ordered_period_list.entries().enumerate() {
+    for (i, (period_id, period_desc)) in env.periods.ordered_period_list.iter().enumerate() {
         if subject.excluded_periods.contains(&period_id) {
             global_week += period_desc.len();
             continue;
@@ -71,7 +71,7 @@ fn period_interrogation_windows(
 pub(super) fn build(env: &VarEnv) -> MyBundle {
     let mut output = MyBundle::new();
 
-    for (subject_id, subject) in env.subjects.ordered_subject_list.entries() {
+    for (subject_id, subject) in env.subjects.ordered_subject_list.iter() {
         let subject_id = &subject_id;
         let Some(_params) = subject_interrogation_params(env, *subject_id) else {
             continue;

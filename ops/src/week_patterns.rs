@@ -238,7 +238,7 @@ impl WeekPatternsUpdateOp {
                             .params
                             .periods
                             .ordered_period_list
-                            .entries()
+                            .iter()
                         {
                             let period_id = &period_id;
                             let collo_period = data
@@ -313,7 +313,7 @@ impl WeekPatternsUpdateOp {
                     .params
                     .incompats
                     .incompat_map
-                    .entries()
+                    .iter()
                 {
                     let incompat_id = &incompat_id;
                     if incompat.week_pattern_id == Some(*week_pattern_id) {

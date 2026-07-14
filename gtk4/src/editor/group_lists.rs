@@ -297,7 +297,7 @@ impl GroupLists {
         let mut group_lists_vec: Vec<_> = self
             .group_lists
             .group_list_map
-            .entries()
+            .iter()
             .map(|(id, group_list)| group_lists_display::EntryData {
                 id,
                 group_list: group_list.clone(),
@@ -317,7 +317,7 @@ impl GroupLists {
         let periods_vec: Vec<_> = self
             .periods
             .ordered_period_list
-            .entries()
+            .iter()
             .enumerate()
             .scan(0usize, |acc, (num, (id, desc))| {
                 let id = &id;
@@ -333,7 +333,7 @@ impl GroupLists {
                     subjects: self
                         .subjects
                         .ordered_subject_list
-                        .entries()
+                        .iter()
                         .filter_map(|(subject_id, subject)| {
                             if subject.excluded_periods.contains(id) {
                                 return None;

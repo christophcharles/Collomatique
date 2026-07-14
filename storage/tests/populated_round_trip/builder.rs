@@ -790,7 +790,7 @@ fn check_all_sections_populated(data: &Data) {
         params
             .periods
             .ordered_period_list
-            .entries()
+            .iter()
             .flat_map(|(_id, weeks)| weeks)
             .any(|week| week.annotation.is_some())
     );
@@ -809,14 +809,14 @@ fn check_all_sections_populated(data: &Data) {
         params
             .subjects
             .ordered_subject_list
-            .entries()
+            .iter()
             .any(|(_id, subject)| subject.parameters.interrogation_parameters.is_none())
     );
     assert!(
         params
             .subjects
             .ordered_subject_list
-            .entries()
+            .iter()
             .any(|(_id, subject)| !subject.excluded_periods.is_empty())
     );
 

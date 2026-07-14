@@ -138,7 +138,7 @@ impl Component for Pairings {
                 let new_data: Vec<_> = self
                     .pairings
                     .pairing_rule_map
-                    .entries()
+                    .iter()
                     .map(|(rule_id, rule)| pairings_display::EntryData {
                         rule_id,
                         rule: rule.clone(),

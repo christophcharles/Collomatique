@@ -81,7 +81,7 @@ impl Dialog {
         let mut subjects: Vec<_> = self
             .subjects
             .ordered_subject_list
-            .entries()
+            .iter()
             .map(|(subject_id, subject)| (subject_id, subject.parameters.name.clone()))
             .collect();
         subjects.sort_by_key(|(id, name)| (name.clone(), *id));
@@ -101,7 +101,7 @@ impl Dialog {
         self.period_data = self
             .periods
             .ordered_period_list
-            .entries()
+            .iter()
             .enumerate()
             .map(|(i, (period_id, _desc))| PeriodData {
                 period_index: i,

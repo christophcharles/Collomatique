@@ -314,7 +314,7 @@ impl crate::Data {
                     .params
                     .slot_pairings
                     .slot_pairing_rule_map
-                    .entries()
+                    .iter()
                 {
                     if rule.antecedent.slot_id == *id || rule.consequent.slot_id == *id {
                         return Err(SlotError::SlotIsReferencedBySlotPairingRule(*id, rule_id));

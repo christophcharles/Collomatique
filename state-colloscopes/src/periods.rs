@@ -61,7 +61,7 @@ impl WeekDesc {
 
 impl Periods {
     pub fn count_weeks(&self) -> usize {
-        self.ordered_period_list.entries().map(|x| x.1.len()).sum()
+        self.ordered_period_list.iter().map(|x| x.1.len()).sum()
     }
 
     /// Finds the position of a period by id
@@ -73,7 +73,7 @@ impl Periods {
     pub fn find_period_position_and_first_week(&self, id: PeriodId) -> Option<(usize, usize)> {
         let mut first_week = 0usize;
 
-        for (pos, (period_id, desc)) in self.ordered_period_list.entries().enumerate() {
+        for (pos, (period_id, desc)) in self.ordered_period_list.iter().enumerate() {
             if period_id == id {
                 return Some((pos, first_week));
             }
@@ -91,7 +91,7 @@ impl Periods {
     ) -> Option<(usize, usize)> {
         let mut total_weeks = 0usize;
 
-        for (pos, (period_id, desc)) in self.ordered_period_list.entries().enumerate() {
+        for (pos, (period_id, desc)) in self.ordered_period_list.iter().enumerate() {
             total_weeks += desc.len();
             if period_id == id {
                 return Some((pos, total_weeks));
@@ -112,7 +112,7 @@ impl Periods {
     pub fn get_first_week_and_length_for_period(&self, id: PeriodId) -> Option<(usize, usize)> {
         let mut first_week = 0usize;
 
-        for (period_id, desc) in self.ordered_period_list.entries() {
+        for (period_id, desc) in self.ordered_period_list.iter() {
             if period_id == id {
                 return Some((first_week, desc.len()));
             }
@@ -216,7 +216,7 @@ impl crate::Data {
                             .params
                             .subjects
                             .ordered_subject_list
-                            .entries()
+                            .iter()
                             .map(|(subject_id, _subject)| (subject_id, BTreeSet::new()))
                             .collect(),
                     },
@@ -275,7 +275,7 @@ impl crate::Data {
                             .params
                             .subjects
                             .ordered_subject_list
-                            .entries()
+                            .iter()
                             .map(|(subject_id, _subject)| (subject_id, BTreeSet::new()))
                             .collect(),
                     },
@@ -325,12 +325,8 @@ impl crate::Data {
                     .1
                     .len();
 
-                for (week_pattern_id, week_pattern) in self
-                    .inner_data
-                    .params
-                    .week_patterns
-                    .week_pattern_map
-                    .entries()
+                for (week_pattern_id, week_pattern) in
+                    self.inner_data.params.week_patterns.week_pattern_map.iter()
                 {
                     if !week_pattern.can_remove_weeks(first_week, week_count) {
                         return Err(PeriodError::NonTrivialWeekPattern(
@@ -340,12 +336,8 @@ impl crate::Data {
                     }
                 }
 
-                for (subject_id, subject) in self
-                    .inner_data
-                    .params
-                    .subjects
-                    .ordered_subject_list
-                    .entries()
+                for (subject_id, subject) in
+                    self.inner_data.params.subjects.ordered_subject_list.iter()
                 {
                     if subject.excluded_periods.contains(period_id) {
                         return Err(PeriodError::PeriodIsReferencedBySubject(
@@ -354,7 +346,7 @@ impl crate::Data {
                     }
                 }
 
-                for (student_id, student) in self.inner_data.params.students.student_map.entries() {
+                for (student_id, student) in self.inner_data.params.students.student_map.iter() {
                     if student.excluded_periods.contains(period_id) {
                         return Err(PeriodError::PeriodIsReferencedByStudent(
                             *period_id, student_id,
@@ -362,7 +354,7 @@ impl crate::Data {
                     }
                 }
 
-                for (rule_id, rule) in self.inner_data.params.pairings.pairing_rule_map.entries() {
+                for (rule_id, rule) in self.inner_data.params.pairings.pairing_rule_map.iter() {
                     if rule.excluded_periods.contains(period_id) {
                         return Err(PeriodError::PeriodIsReferencedByPairingRule(
                             *period_id, rule_id,
@@ -375,7 +367,7 @@ impl crate::Data {
                     .params
                     .slot_pairings
                     .slot_pairing_rule_map
-                    .entries()
+                    .iter()
                 {
                     if rule.excluded_periods.contains(period_id) {
                         return Err(PeriodError::PeriodIsReferencedBySlotPairingRule(
@@ -461,12 +453,8 @@ impl crate::Data {
                 let period = &self.inner_data.params.periods.ordered_period_list[position].1;
                 let old_length = period.len();
                 if desc.len() < old_length {
-                    for (week_pattern_id, week_pattern) in self
-                        .inner_data
-                        .params
-                        .week_patterns
-                        .week_pattern_map
-                        .entries()
+                    for (week_pattern_id, week_pattern) in
+                        self.inner_data.params.week_patterns.week_pattern_map.iter()
                     {
                         if !week_pattern
                             .can_remove_weeks(first_week + desc.len(), old_length - desc.len())

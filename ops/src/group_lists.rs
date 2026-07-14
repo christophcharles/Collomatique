@@ -852,7 +852,7 @@ impl GroupListsUpdateOp {
                     .params
                     .subjects
                     .ordered_subject_list
-                    .entries()
+                    .iter()
                 {
                     let subject_id = &subject_id;
                     if subject.excluded_periods.contains(period_id) {
@@ -1208,7 +1208,7 @@ impl GroupListsUpdateOp {
                     .ordered_subject_list
                     .clone();
 
-                for (subject_id, subject) in subjects.entries() {
+                for (subject_id, subject) in subjects.iter() {
                     let subject_id = &subject_id;
                     if subject.excluded_periods.contains(period_id) {
                         continue;

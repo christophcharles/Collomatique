@@ -201,7 +201,7 @@ impl SimpleComponent for Dialog {
                 let transformed_data: Vec<_> = self
                     .periods
                     .ordered_period_list
-                    .entries()
+                    .iter()
                     .scan(0usize, |current_week, (id, period_data)| {
                         let new_period = PeriodData {
                             global_first_week: self.periods.first_week.clone(),

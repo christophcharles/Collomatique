@@ -132,13 +132,13 @@ impl Component for Incompats {
                 let new_data: Vec<_> = self
                     .subjects
                     .ordered_subject_list
-                    .entries()
+                    .iter()
                     .map(|(id, desc)| {
                         let id = &id;
                         let subject_incompats = self
                             .incompats
                             .incompat_map
-                            .entries()
+                            .iter()
                             .filter_map(|(incompat_id, incompat)| {
                                 if incompat.subject_id != *id {
                                     return None;

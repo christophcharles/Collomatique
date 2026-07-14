@@ -44,7 +44,7 @@ impl Parameters {
     pub(crate) fn merge_pattern(&self, pattern: &[bool]) -> Vec<bool> {
         let mut current_week = 0usize;
         let mut output = Vec::new();
-        for (_period_id, period_desc) in self.periods.ordered_period_list.entries() {
+        for (_period_id, period_desc) in self.periods.ordered_period_list.iter() {
             for week_desk in period_desc {
                 if !week_desk.interrogations {
                     output.push(false);
@@ -75,7 +75,7 @@ impl Parameters {
 impl Parameters {
     /// Promotes an u64 to a [PeriodId] if it is valid
     pub fn validate_period_id(&self, id: u64) -> Option<PeriodId> {
-        for (period_id, _) in self.periods.ordered_period_list.entries() {
+        for (period_id, _) in self.periods.ordered_period_list.iter() {
             if period_id.inner() == id {
                 return Some(period_id);
             }
@@ -97,7 +97,7 @@ impl Parameters {
 
     /// Promotes an u64 to a [SubjectId] if it is valid
     pub fn validate_subject_id(&self, id: u64) -> Option<SubjectId> {
-        for (subject_id, _) in self.subjects.ordered_subject_list.entries() {
+        for (subject_id, _) in self.subjects.ordered_subject_list.iter() {
             if subject_id.inner() == id {
                 return Some(subject_id);
             }
@@ -177,12 +177,12 @@ impl Parameters {
         let period_ids = self
             .periods
             .ordered_period_list
-            .entries()
+            .iter()
             .map(|(id, _d)| id.inner());
         let subject_ids = self
             .subjects
             .ordered_subject_list
-            .entries()
+            .iter()
             .map(|(id, _d)| id.inner());
         let teacher_ids = self.teachers.teacher_map.keys().map(|x| x.inner());
         let week_patterns_ids = self
@@ -286,7 +286,7 @@ impl Parameters {
         &self,
         period_ids: &BTreeSet<PeriodId>,
     ) -> Result<(), InvariantError> {
-        for (_subject_id, subject) in self.subjects.ordered_subject_list.entries() {
+        for (_subject_id, subject) in self.subjects.ordered_subject_list.iter() {
             if Self::validate_subject_internal(subject, period_ids).is_err() {
                 return Err(InvariantError::InvalidSubject);
             }
@@ -387,7 +387,7 @@ impl Parameters {
             }
 
             let mut subject_count_for_period = 0usize;
-            for (subject_id, subject) in self.subjects.ordered_subject_list.entries() {
+            for (subject_id, subject) in self.subjects.ordered_subject_list.iter() {
                 if subject.excluded_periods.contains(period_id) {
                     continue;
                 }
@@ -485,7 +485,7 @@ impl Parameters {
         let subjects_with_interrogations_count = self
             .subjects
             .ordered_subject_list
-            .entries()
+            .iter()
             .filter(|(_id, subject)| subject.parameters.interrogation_parameters.is_some())
             .count();
         if self.slots.subject_map.len() != subjects_with_interrogations_count {
@@ -820,7 +820,7 @@ impl Parameters {
         let period_ids: BTreeSet<PeriodId> = self
             .periods
             .ordered_period_list
-            .entries()
+            .iter()
             .map(|(id, _)| id)
             .collect();
         Self::validate_slot_pairing_rule_internal(rule, &slot_subject_map, &period_ids)
@@ -909,7 +909,7 @@ impl Parameters {
         let total_week_count: usize = self
             .periods
             .ordered_period_list
-            .entries()
+            .iter()
             .map(|(_period_id, desc)| desc.len())
             .sum();
 
@@ -938,7 +938,7 @@ impl Parameters {
     /// This is useful to check that references are valid
     fn build_period_ids(&self) -> BTreeSet<PeriodId> {
         let mut ids = BTreeSet::new();
-        for (id, _) in self.periods.ordered_period_list.entries() {
+        for (id, _) in self.periods.ordered_period_list.iter() {
             ids.insert(id);
         }
         ids
@@ -950,11 +950,7 @@ impl Parameters {
     ///
     /// This is useful to check that references are valid
     fn build_week_pattern_ids(&self) -> BTreeSet<WeekPatternId> {
-        self.week_patterns
-            .week_pattern_map
-            .keys()
-            .copied()
-            .collect()
+        self.week_patterns.week_pattern_map.keys().collect()
     }
 
     /// USED INTERNALLY
@@ -965,7 +961,7 @@ impl Parameters {
     fn build_subject_ids(&self) -> BTreeSet<SubjectId> {
         self.subjects
             .ordered_subject_list
-            .entries()
+            .iter()
             .map(|(id, _)| id)
             .collect()
     }
@@ -999,7 +995,7 @@ impl Parameters {
         let total_week_count = self
             .periods
             .ordered_period_list
-            .entries()
+            .iter()
             .map(|(_period_id, desc)| desc.len())
             .sum();
 

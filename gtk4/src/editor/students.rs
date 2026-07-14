@@ -257,7 +257,7 @@ impl Students {
         let mut list = vec!["Toutes les périodes".into(), "Aucune période".into()];
 
         let mut first_week_num = 0usize;
-        for (index, (_id, period)) in self.periods.ordered_period_list.entries().enumerate() {
+        for (index, (_id, period)) in self.periods.ordered_period_list.iter().enumerate() {
             list.push(super::generate_week_succession_title(
                 "La période",
                 &self.periods.first_week,
@@ -293,7 +293,7 @@ impl Students {
     fn update_current_list(&mut self) {
         self.current_list = vec![];
 
-        for (student_id, student) in self.students.student_map.entries() {
+        for (student_id, student) in self.students.student_map.iter() {
             let keep_student = match self.current_filter {
                 StudentFilter::NoFilter => true,
                 StudentFilter::NoSubjectLinked => {

@@ -13,7 +13,7 @@ use super::helpers::{
 pub(super) fn build(env: &VarEnv, mut bundle: MyBundle) -> MyBundle {
     let all_active_weeks = all_active_global_weeks(env);
 
-    for (subject_id, subject) in env.subjects.ordered_subject_list.entries() {
+    for (subject_id, subject) in env.subjects.ordered_subject_list.iter() {
         let subject_id = &subject_id;
         let Some(params) = subject_interrogation_params(env, *subject_id) else {
             continue;
@@ -35,7 +35,7 @@ pub(super) fn build(env: &VarEnv, mut bundle: MyBundle) -> MyBundle {
 
         // Per-period block constraints
         let mut global_week_offset = 0usize;
-        for (period_id, period_desc) in env.periods.ordered_period_list.entries() {
+        for (period_id, period_desc) in env.periods.ordered_period_list.iter() {
             let period_id = &period_id;
             let first_global_week = GlobalWeek(global_week_offset);
             let last_global_week =

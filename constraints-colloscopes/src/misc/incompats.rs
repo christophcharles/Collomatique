@@ -38,7 +38,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         result
     };
 
-    for (incompat_id, incompat) in env.incompats.incompat_map.entries() {
+    for (incompat_id, incompat) in env.incompats.incompat_map.iter() {
         let Some(subject) = env.subjects.find_subject(incompat.subject_id) else {
             continue;
         };

@@ -98,7 +98,7 @@ impl Var {
     }
 
     pub fn compute_group_list_range(env: &VarEnv) -> Vec<GroupListId> {
-        env.group_lists.group_list_map.keys().copied().collect()
+        env.group_lists.group_list_map.keys().collect()
     }
 
     pub fn compute_student_ids(env: &VarEnv, group_list: &GroupListId) -> Vec<StudentId> {
@@ -114,7 +114,6 @@ impl Var {
                 .student_map
                 .keys()
                 .filter(|student_id| !excluded_students.contains(student_id))
-                .copied()
                 .collect(),
             collomatique_state_colloscopes::group_lists::GroupListFilling::Prefilled { groups } => {
                 groups

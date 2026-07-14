@@ -365,7 +365,7 @@ impl crate::Data {
                     );
                 }
                 for (period_id, _period) in
-                    self.inner_data.params.periods.ordered_period_list.entries()
+                    self.inner_data.params.periods.ordered_period_list.iter()
                 {
                     if params.excluded_periods.contains(&period_id) {
                         continue;
@@ -415,7 +415,7 @@ impl crate::Data {
                     return Err(SubjectError::SubjectStillHasBalancingOptions(*id));
                 }
 
-                for (rule_id, rule) in self.inner_data.params.pairings.pairing_rule_map.entries() {
+                for (rule_id, rule) in self.inner_data.params.pairings.pairing_rule_map.iter() {
                     if rule.antecedent.subject_id == *id || rule.consequent.subject_id == *id {
                         return Err(SubjectError::SubjectIsReferencedByPairingRule(*id, rule_id));
                     }
@@ -439,7 +439,7 @@ impl crate::Data {
                     return Err(SubjectError::SubjectStillHasAssociatedSlots(*id));
                 }
 
-                for (teacher_id, teacher) in self.inner_data.params.teachers.teacher_map.entries() {
+                for (teacher_id, teacher) in self.inner_data.params.teachers.teacher_map.iter() {
                     if teacher.subjects.contains(id) {
                         return Err(SubjectError::SubjectStillHasAssociatedTeachers(
                             teacher_id, *id,
@@ -447,8 +447,7 @@ impl crate::Data {
                     }
                 }
 
-                for (incompat_id, incompat) in
-                    self.inner_data.params.incompats.incompat_map.entries()
+                for (incompat_id, incompat) in self.inner_data.params.incompats.incompat_map.iter()
                 {
                     if incompat.subject_id == *id {
                         return Err(SubjectError::SubjectStillHasAssociatedIncompats(
@@ -460,7 +459,7 @@ impl crate::Data {
 
                 let params = &self.inner_data.params.subjects.ordered_subject_list[position].1;
                 for (period_id, _period) in
-                    self.inner_data.params.periods.ordered_period_list.entries()
+                    self.inner_data.params.periods.ordered_period_list.iter()
                 {
                     if params.excluded_periods.contains(&period_id) {
                         continue;
@@ -497,7 +496,7 @@ impl crate::Data {
                     .remove_at(position);
                 self.inner_data.params.slots.subject_map.remove(id);
                 for (period_id, _period) in
-                    self.inner_data.params.periods.ordered_period_list.entries()
+                    self.inner_data.params.periods.ordered_period_list.iter()
                 {
                     if params.excluded_periods.contains(&period_id) {
                         continue;
@@ -535,8 +534,7 @@ impl crate::Data {
                     }
 
                     // The new subject does not have interrogations, let's check that no teacher has been assigned to it
-                    for (teacher_id, teacher) in
-                        self.inner_data.params.teachers.teacher_map.entries()
+                    for (teacher_id, teacher) in self.inner_data.params.teachers.teacher_map.iter()
                     {
                         if teacher.subjects.contains(id) {
                             return Err(SubjectError::SubjectStillHasAssociatedTeachers(
@@ -573,7 +571,7 @@ impl crate::Data {
                 }
 
                 for (period_id, _period) in
-                    self.inner_data.params.periods.ordered_period_list.entries()
+                    self.inner_data.params.periods.ordered_period_list.iter()
                 {
                     let period_id = &period_id;
                     // If the period was excluded before, there is no structure to check
@@ -704,7 +702,7 @@ impl crate::Data {
                 }
 
                 for (period_id, _period) in
-                    self.inner_data.params.periods.ordered_period_list.entries()
+                    self.inner_data.params.periods.ordered_period_list.iter()
                 {
                     let period_id = &period_id;
                     // Only change in period status should be considered

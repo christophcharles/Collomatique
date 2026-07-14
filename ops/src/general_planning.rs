@@ -380,7 +380,7 @@ impl GeneralPlanningUpdateOp {
                     .params
                     .week_patterns
                     .week_pattern_map
-                    .entries()
+                    .iter()
                 {
                     let week_pattern_id = &week_pattern_id;
                     if !week_pattern.can_remove_weeks(first_week_to_remove, weeks_to_remove) {
@@ -498,7 +498,7 @@ impl GeneralPlanningUpdateOp {
                     .params
                     .week_patterns
                     .week_pattern_map
-                    .entries()
+                    .iter()
                 {
                     let week_pattern_id = &week_pattern_id;
                     if !week_pattern.can_remove_weeks(first_week, week_count) {
@@ -524,7 +524,7 @@ impl GeneralPlanningUpdateOp {
                     .params
                     .subjects
                     .ordered_subject_list
-                    .entries()
+                    .iter()
                 {
                     let subject_id = &subject_id;
                     if subject.excluded_periods.contains(period_id) {
@@ -548,7 +548,7 @@ impl GeneralPlanningUpdateOp {
                     .params
                     .students
                     .student_map
-                    .entries()
+                    .iter()
                 {
                     let student_id = &student_id;
                     if student.excluded_periods.contains(period_id) {
@@ -573,7 +573,7 @@ impl GeneralPlanningUpdateOp {
                     .params
                     .pairings
                     .pairing_rule_map
-                    .entries()
+                    .iter()
                 {
                     let rule_id = &rule_id;
                     if rule.excluded_periods.contains(period_id) {
@@ -597,7 +597,7 @@ impl GeneralPlanningUpdateOp {
                     .params
                     .slot_pairings
                     .slot_pairing_rule_map
-                    .entries()
+                    .iter()
                 {
                     let rule_id = &rule_id;
                     if rule.excluded_periods.contains(period_id) {
@@ -694,7 +694,7 @@ impl GeneralPlanningUpdateOp {
                     .params
                     .subjects
                     .ordered_subject_list
-                    .entries()
+                    .iter()
                 {
                     let subject_id = &subject_id;
                     if subject.excluded_periods.contains(period_id)
@@ -720,7 +720,7 @@ impl GeneralPlanningUpdateOp {
                     .params
                     .students
                     .student_map
-                    .entries()
+                    .iter()
                 {
                     let student_id = &student_id;
                     if student.excluded_periods.contains(period_id)
@@ -751,7 +751,7 @@ impl GeneralPlanningUpdateOp {
                     .params
                     .pairings
                     .pairing_rule_map
-                    .entries()
+                    .iter()
                 {
                     let rule_id = &rule_id;
                     if rule.excluded_periods.contains(period_id) {
@@ -775,7 +775,7 @@ impl GeneralPlanningUpdateOp {
                     .params
                     .slot_pairings
                     .slot_pairing_rule_map
-                    .entries()
+                    .iter()
                 {
                     let rule_id = &rule_id;
                     if rule.excluded_periods.contains(period_id) {
@@ -837,13 +837,13 @@ impl GeneralPlanningUpdateOp {
                                 .student_map
                                 .keys()
                             {
-                                if assigned_students.contains(student_id)
-                                    != previous_students.contains(student_id)
+                                if assigned_students.contains(&student_id)
+                                    != previous_students.contains(&student_id)
                                 {
                                     return Some(CleaningOp {
                                         warning: GeneralPlanningUpdateWarning::LooseStudentAssignmentsForPeriod(*period_id),
                                         op: UpdateOp::Assignments(
-                                            AssignmentsUpdateOp::Assign(*period_id, *student_id, *subject_id, previous_students.contains(student_id))
+                                            AssignmentsUpdateOp::Assign(*period_id, student_id, *subject_id, previous_students.contains(&student_id))
                                         ),
                                     });
                                 }
@@ -1064,7 +1064,7 @@ impl GeneralPlanningUpdateOp {
                     .subjects
                     .ordered_subject_list
                     .clone();
-                for (subject_id, subject) in ordered_subject_list.entries() {
+                for (subject_id, subject) in ordered_subject_list.iter() {
                     if subject.excluded_periods.contains(period_id) {
                         let mut new_subject = subject.clone();
                         new_subject.excluded_periods.insert(new_id);
@@ -1092,7 +1092,7 @@ impl GeneralPlanningUpdateOp {
                     .students
                     .student_map
                     .clone();
-                for (student_id, student) in student_map.entries() {
+                for (student_id, student) in student_map.iter() {
                     if student.excluded_periods.contains(period_id) {
                         let mut new_student = student.clone();
                         new_student.excluded_periods.insert(new_id);

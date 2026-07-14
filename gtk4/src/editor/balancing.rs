@@ -180,7 +180,7 @@ impl Component for Balancing {
                 let subject = self
                     .subjects
                     .ordered_subject_list
-                    .entries()
+                    .iter()
                     .find(|(id, _)| *id == subject_id)
                     .expect("Subject ID should be valid");
                 self.dialog
@@ -220,7 +220,7 @@ impl Balancing {
     fn has_subjects_with_interrogations(&self) -> bool {
         self.subjects
             .ordered_subject_list
-            .entries()
+            .iter()
             .any(|(_, subject)| subject.parameters.interrogation_parameters.is_some())
     }
 
@@ -228,7 +228,7 @@ impl Balancing {
         let mut subjects: Vec<_> = self
             .subjects
             .ordered_subject_list
-            .entries()
+            .iter()
             .filter(|(_, subject)| subject.parameters.interrogation_parameters.is_some())
             .map(|(id, subject)| (id, subject.parameters.name.clone()))
             .collect();
