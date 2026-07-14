@@ -284,19 +284,17 @@ fn build_assignments(
     params: &mem::colloscope_params::Parameters,
 ) -> format::assignments::Assignments {
     let mut rows = Vec::new();
-    for (period_id, period_assignments) in &params.assignments.period_map {
-        for (subject_id, students) in &period_assignments.subject_map {
-            if students.is_empty() {
-                // Neutral entry of a derived key set: omitted in
-                // canonical form
-                continue;
-            }
-            rows.push(format::assignments::Assignment {
-                period_id: period_id.inner(),
-                subject_id: subject_id.inner(),
-                students: id_set(students),
-            });
+    for ((period_id, subject_id), students) in params.assignments.map.iter() {
+        if students.is_empty() {
+            // Neutral entry of a derived key set: omitted in
+            // canonical form
+            continue;
         }
+        rows.push(format::assignments::Assignment {
+            period_id: period_id.inner(),
+            subject_id: subject_id.inner(),
+            students: id_set(students),
+        });
     }
     keyed(rows)
 }
@@ -424,14 +422,13 @@ fn build_group_list_associations(
     params: &mem::colloscope_params::Parameters,
 ) -> format::group_list_associations::GroupListAssociations {
     let mut rows = Vec::new();
-    for (period_id, subject_map) in &params.group_lists.subjects_associations {
-        for (subject_id, group_list_id) in subject_map {
-            rows.push(format::group_list_associations::GroupListAssociation {
-                period_id: period_id.inner(),
-                subject_id: subject_id.inner(),
-                group_list_id: group_list_id.inner(),
-            });
-        }
+    for ((period_id, subject_id), group_list_id) in params.group_lists.subjects_associations.iter()
+    {
+        rows.push(format::group_list_associations::GroupListAssociation {
+            period_id: period_id.inner(),
+            subject_id: subject_id.inner(),
+            group_list_id: group_list_id.inner(),
+        });
     }
     keyed(rows)
 }

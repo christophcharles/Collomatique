@@ -47,9 +47,8 @@ pub(crate) fn enrolled_students_for_subject(
     subject_id: SubjectId,
 ) -> BTreeSet<StudentId> {
     env.assignments
-        .period_map
-        .values()
-        .filter_map(|pa| pa.subject_map.get(&subject_id))
+        .iter()
+        .filter_map(|(_period, subject, students)| (subject == subject_id).then_some(students))
         .flat_map(|students| students.iter().copied())
         .collect()
 }

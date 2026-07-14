@@ -86,9 +86,17 @@ scans, `ON DELETE CASCADE` ↔ today's structural fan-out).
    same change** and the user runs them as acceptance. The write API changes later, outside
    phase 2.
 8. **Dense mirrors are out of scope.** `assignments`, `group_lists.subjects_associations`,
-   `slots.subject_map`'s key set, and the whole `colloscope` keep their container types and
-   their hand-written fan-out maintenance — centralizing that is item 5. The registry only
-   *reads* them (their keys/values are references like any other).
+   `slots`' per-subject ordering key set, and the whole `colloscope` keep their fan-out
+   maintenance — centralizing that is item 5. The registry only *reads* them (their
+   keys/values are references like any other).
+
+   *Update (pre-phase-C cleanup):* the junction containers were retyped to composite-keyed
+   `Table`s ahead of the registry: `assignments.map: Table<(PeriodId, SubjectId),
+   BTreeSet<StudentId>>` (dense) and `group_lists.subjects_associations: Table<(PeriodId,
+   SubjectId), GroupListId>` (**now sparse** — the old per-period denseness was never
+   observable and is retired), plus `settings.students`/`balancing.subjects` →
+   `Table<Id, _>` and `slots.ordering` → `Table<SubjectId, Vec<SlotId>>`. Only the
+   maintenance-centralization (item 5) still remains; the container shapes are settled.
 
 ---
 
@@ -111,13 +119,15 @@ Two shapes dominate; only three containers carry user-visible order.
 | Pairing rules | `Pairings::pairing_rule_map: BTreeMap<…>` (`pairings.rs`) | no |
 | Slot pairing rules | `SlotPairings::slot_pairing_rule_map: BTreeMap<…>` (`slot_pairings.rs`) | no |
 
-**Dense derived mirrors** (keys fan-out-maintained by parent ops, NOT free tables — out of
-scope per decision 8): `assignments.period_map[p].subject_map[s] = BTreeSet<StudentId>` (one
+**Junction / derived containers** (keys fan-out-maintained by parent ops, NOT free tables —
+maintenance-centralization is item 5). As of the pre-phase-C cleanup these are composite-keyed
+`Table`s: `assignments.map: Table<(PeriodId, SubjectId), BTreeSet<StudentId>>` (dense — one
 entry per period × non-excluded subject), `group_lists.subjects_associations:
-BTreeMap<PeriodId, BTreeMap<SubjectId, GroupListId>>` (one entry per period),
-`slots.subject_map` (one entry per subject with interrogations), and the whole `colloscope`
-(`period_map` per period, `slot_map` per slot, `interrogations: Vec<Option<…>>` per week,
-`group_lists` per non-prefilled group list).
+Table<(PeriodId, SubjectId), GroupListId>` (**sparse** — one entry per actual association).
+Plus `slots.ordering: Table<SubjectId, Vec<SlotId>>` (one entry per subject with
+interrogations) and the whole `colloscope` (`period_map` per period, `slot_map` per slot,
+`interrogations: Vec<Option<…>>` per week, `group_lists` per non-prefilled group list — still
+plain `BTreeMap`s).
 
 **Singletons**: `settings` (global `Limits` + `students: BTreeMap<StudentId, Limits>`),
 `balancing` (global + `subjects: BTreeMap<SubjectId, BalancingOptions>`), `export_config`
@@ -137,8 +147,8 @@ when their payload is non-trivial.
 | 2 | `Student.excluded_periods` | `BTreeSet<PeriodId>` | `PeriodIsReferencedByStudent` (`:347`) | `InvalidStudent` (`:343`) |
 | 3 | `PairingRule.excluded_periods` | `BTreeSet<PeriodId>` | `PeriodIsReferencedByPairingRule` (`:356`) | `InvalidPairingRule` (`:737`) |
 | 4 | `SlotPairingRule.excluded_periods` | `BTreeSet<PeriodId>` | `PeriodIsReferencedBySlotPairingRule` (`:364`) | `InvalidSlotPairingRule` (`:804`) |
-| 5 | `assignments.period_map` key (dense) | map key | `PeriodStillHasNonTrivialAssignments` (`:372`) | `InvalidPeriodIdInAssignements` (`:384`) |
-| 6 | `subjects_associations` key (dense) | map key | `PeriodStillHasNonTrivialGroupListAssociation` (`:388`) | `WrongPeriodCountInSubjectAssociationsForGroupLists` (`:643`) |
+| 5 | `assignments.map` key `(period, _)` (dense) | composite key | `PeriodStillHasNonTrivialAssignments` | `InvalidPeriodIdInAssignements` |
+| 6 | `subjects_associations` key `(period, _)` (sparse) | composite key | `PeriodStillHasNonTrivialGroupListAssociation` | `WrongPeriodCountInSubjectAssociationsForGroupLists` (now fires on an invalid period in a row) |
 | 7 | `colloscope.period_map` key (dense) | map key | `NotEmptyPeriodInColloscope` (`:312`) | `ColloscopeError::WrongPeriodCountInColloscopeData`/`InvalidPeriodId` (`colloscopes.rs:85`) |
 | 8 | `WeekPattern.weeks` length coupling | `Vec<bool>` length | `NonTrivialWeekPattern` (`:327`) | `InvalidWeekPattern` (`:895`) |
 

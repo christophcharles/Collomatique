@@ -200,10 +200,9 @@ impl Assignments {
                     filtered_students,
                     period_assignments: self
                         .assignments
-                        .period_map
-                        .get(id)
-                        .expect("Period id should be valid at this poind")
-                        .clone(),
+                        .subjects_for_period(*id)
+                        .map(|(subject_id, students)| (subject_id, students.clone()))
+                        .collect(),
                 })
             })
             .collect::<Vec<_>>();

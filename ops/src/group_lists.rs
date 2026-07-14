@@ -402,18 +402,18 @@ impl GroupListsUpdateOp {
                 for (period_id, collo_period) in
                     &data.get_data().get_inner_data().colloscope.period_map
                 {
-                    let subject_associations = data
+                    for ((assoc_period, subject_id), associated_group_list) in data
                         .get_data()
                         .get_inner_data()
                         .params
                         .group_lists
                         .subjects_associations
-                        .get(period_id)
-                        .expect("Period ID should be valid");
-                    for (subject_id, associated_group_list) in subject_associations {
-                        if *associated_group_list != *group_list_id {
+                        .iter()
+                    {
+                        if assoc_period != *period_id || *associated_group_list != *group_list_id {
                             continue;
                         }
+                        let subject_id = &subject_id;
 
                         let subject_slots = data
                             .get_data()
@@ -518,18 +518,18 @@ impl GroupListsUpdateOp {
                 for (period_id, collo_period) in
                     &data.get_data().get_inner_data().colloscope.period_map
                 {
-                    let subject_associations = data
+                    for ((assoc_period, subject_id), associated_group_list) in data
                         .get_data()
                         .get_inner_data()
                         .params
                         .group_lists
                         .subjects_associations
-                        .get(period_id)
-                        .expect("Period ID should be valid");
-                    for (subject_id, associated_group_list) in subject_associations {
-                        if *associated_group_list != *group_list_id {
+                        .iter()
+                    {
+                        if assoc_period != *period_id || *associated_group_list != *group_list_id {
                             continue;
                         }
+                        let subject_id = &subject_id;
 
                         let subject_slots = data
                             .get_data()
@@ -616,30 +616,25 @@ impl GroupListsUpdateOp {
                     });
                 }
 
-                for (period_id, subject_map) in &data
+                for ((period_id, subject_id), associated_id) in data
                     .get_data()
                     .get_inner_data()
                     .params
                     .group_lists
                     .subjects_associations
+                    .iter()
                 {
-                    for (subject_id, associated_id) in subject_map {
-                        if *group_list_id == *associated_id {
-                            return Some(CleaningOp {
-                                warning: GroupListsUpdateWarning::LooseSubjectAssociation(
-                                    *group_list_id,
-                                    *subject_id,
-                                    *period_id,
-                                ),
-                                op: UpdateOp::GroupLists(
-                                    GroupListsUpdateOp::AssignGroupListToSubject(
-                                        *period_id,
-                                        *subject_id,
-                                        None,
-                                    ),
-                                ),
-                            });
-                        }
+                    if *group_list_id == *associated_id {
+                        return Some(CleaningOp {
+                            warning: GroupListsUpdateWarning::LooseSubjectAssociation(
+                                *group_list_id,
+                                subject_id,
+                                period_id,
+                            ),
+                            op: UpdateOp::GroupLists(GroupListsUpdateOp::AssignGroupListToSubject(
+                                period_id, subject_id, None,
+                            )),
+                        });
                     }
                 }
 
@@ -823,15 +818,17 @@ impl GroupListsUpdateOp {
                     .periods
                     .ordered_period_list[position - 1]
                     .0;
-                let previous_period_assignments = data
+                let previous_period_assignments: std::collections::BTreeMap<_, _> = data
                     .get_data()
                     .get_inner_data()
                     .params
                     .group_lists
                     .subjects_associations
-                    .get(&previous_period_id)
-                    .expect("Previous period id should be valid at this point")
-                    .clone();
+                    .iter()
+                    .filter_map(|((period, subject), group_list)| {
+                        (period == previous_period_id).then_some((subject, *group_list))
+                    })
+                    .collect();
 
                 let Some(collo_period) = data
                     .get_data()
@@ -1115,13 +1112,13 @@ impl GroupListsUpdateOp {
                     .into());
                 }
 
-                if !data
+                if data
                     .get_data()
                     .get_inner_data()
                     .params
-                    .group_lists
-                    .subjects_associations
-                    .contains_key(period_id)
+                    .periods
+                    .find_period_position(*period_id)
+                    .is_none()
                 {
                     return Err(AssignGroupListToSubjectError::InvalidPeriodId(*period_id).into());
                 }
@@ -1186,15 +1183,17 @@ impl GroupListsUpdateOp {
                     .periods
                     .ordered_period_list[position - 1]
                     .0;
-                let previous_period_assignments = data
+                let previous_period_assignments: std::collections::BTreeMap<_, _> = data
                     .get_data()
                     .get_inner_data()
                     .params
                     .group_lists
                     .subjects_associations
-                    .get(&previous_period_id)
-                    .expect("Previous period id should be valid at this point")
-                    .clone();
+                    .iter()
+                    .filter_map(|((period, subject), group_list)| {
+                        (period == previous_period_id).then_some((subject, *group_list))
+                    })
+                    .collect();
 
                 let subjects = data
                     .get_data()

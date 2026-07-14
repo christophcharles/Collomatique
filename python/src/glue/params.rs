@@ -43,6 +43,12 @@ impl TryFrom<collomatique_state_colloscopes::colloscope_params::Parameters> for 
     fn try_from(
         value: collomatique_state_colloscopes::colloscope_params::Parameters,
     ) -> PyResult<Self> {
+        // The assignments and associations junction tables are keyed by
+        // `(period, subject)`, but the Python-visible shape is a per-period
+        // nested map with one (possibly empty) entry per period. Seed the
+        // outer maps from the full period list to keep that shape.
+        let all_period_ids: Vec<collomatique_state_colloscopes::PeriodId> =
+            value.periods.ordered_period_list.keys().collect();
         Ok(Parameters {
             periods: value
                 .periods
@@ -80,26 +86,20 @@ impl TryFrom<collomatique_state_colloscopes::colloscope_params::Parameters> for 
                 .into_iter()
                 .map(|(student_id, student)| (student_id.into(), student.into()))
                 .collect(),
-            assignments: value
-                .assignments
-                .period_map
-                .into_iter()
-                .map(|(period_id, period_assignements)| {
-                    (
-                        period_id.into(),
-                        period_assignements
-                            .subject_map
-                            .into_iter()
-                            .map(|(subject_id, students)| {
-                                (
-                                    subject_id.into(),
-                                    students.into_iter().map(|id| id.into()).collect(),
-                                )
-                            })
-                            .collect(),
-                    )
-                })
-                .collect(),
+            assignments: {
+                let mut out: BTreeMap<PeriodId, BTreeMap<SubjectId, BTreeSet<StudentId>>> =
+                    all_period_ids
+                        .iter()
+                        .map(|id| ((*id).into(), BTreeMap::new()))
+                        .collect();
+                for ((period_id, subject_id), students) in value.assignments.map {
+                    out.entry(period_id.into()).or_default().insert(
+                        subject_id.into(),
+                        students.into_iter().map(|id| id.into()).collect(),
+                    );
+                }
+                out
+            },
             week_patterns: value
                 .week_patterns
                 .week_pattern_map
@@ -146,22 +146,21 @@ impl TryFrom<collomatique_state_colloscopes::colloscope_params::Parameters> for 
                 .into_iter()
                 .map(|(group_list_id, group_list)| (group_list_id.into(), group_list.into()))
                 .collect(),
-            group_lists_associations: value
-                .group_lists
-                .subjects_associations
-                .into_iter()
-                .map(|(period_id, subject_map)| {
-                    (
-                        period_id.into(),
-                        subject_map
-                            .into_iter()
-                            .map(|(subject_id, group_list_id)| {
-                                (subject_id.into(), group_list_id.into())
-                            })
-                            .collect(),
-                    )
-                })
-                .collect(),
+            group_lists_associations: {
+                let mut out: BTreeMap<PeriodId, BTreeMap<SubjectId, group_lists::GroupListId>> =
+                    all_period_ids
+                        .iter()
+                        .map(|id| ((*id).into(), BTreeMap::new()))
+                        .collect();
+                for ((period_id, subject_id), group_list_id) in
+                    value.group_lists.subjects_associations
+                {
+                    out.entry(period_id.into())
+                        .or_default()
+                        .insert(subject_id.into(), group_list_id.into());
+                }
+                out
+            },
             settings: value.settings.into(),
         })
     }

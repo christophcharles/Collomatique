@@ -181,24 +181,22 @@ impl AssignmentsUpdateOp {
                     .periods
                     .ordered_period_list[position - 1]
                     .0;
-                let current_period_assignments = data
+                let current_subjects: Vec<_> = data
                     .get_data()
                     .get_inner_data()
                     .params
                     .assignments
-                    .period_map
-                    .get(period_id)
-                    .expect("Period id should be valid at this point")
-                    .clone();
-                let previous_period_assignments = data
+                    .subjects_for_period(*period_id)
+                    .map(|(subject_id, _students)| subject_id)
+                    .collect();
+                let previous_period_assignments: std::collections::BTreeMap<_, _> = data
                     .get_data()
                     .get_inner_data()
                     .params
                     .assignments
-                    .period_map
-                    .get(&previous_period_id)
-                    .expect("Previous period id should be valid at this point")
-                    .clone();
+                    .subjects_for_period(previous_period_id)
+                    .map(|(subject_id, students)| (subject_id, students.clone()))
+                    .collect();
 
                 let student_map = data
                     .get_data()
@@ -217,9 +215,9 @@ impl AssignmentsUpdateOp {
                         continue;
                     }
 
-                    for subject_id in current_period_assignments.subject_map.keys() {
+                    for subject_id in &current_subjects {
                         let Some(previous_assigned_students) =
-                            previous_period_assignments.subject_map.get(subject_id)
+                            previous_period_assignments.get(subject_id)
                         else {
                             continue;
                         };

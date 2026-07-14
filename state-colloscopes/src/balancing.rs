@@ -3,29 +3,29 @@
 //! This module defines the relevant types to describe balancing requirements
 //! for interrogation scheduling (teacher rotation, avoiding same teacher twice in a row).
 
+use crate::Table;
 use crate::ids::SubjectId;
 use crate::ops::AnnotatedBalancingOp;
 use crate::soft_param::SoftParam;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 use thiserror::Error;
 
 /// Description of the balancing configuration
 ///
 /// Contains global balancing options and optional per-subject overrides.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Balancing {
     /// Global balancing options
     pub global: BalancingOptions,
     /// Optional per-subject overrides
-    pub subjects: BTreeMap<SubjectId, BalancingOptions>,
+    pub subjects: Table<SubjectId, BalancingOptions>,
 }
 
 impl Default for Balancing {
     fn default() -> Self {
         Self {
             global: BalancingOptions::default(),
-            subjects: BTreeMap::new(),
+            subjects: Table::new(),
         }
     }
 }

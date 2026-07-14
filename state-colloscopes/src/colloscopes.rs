@@ -476,16 +476,18 @@ impl ColloscopeInterrogation {
         week: usize,
         params: &super::colloscope_params::Parameters,
     ) -> Result<(), ColloscopeError> {
-        let Some(subject_association) = params.group_lists.subjects_associations.get(&period_id)
-        else {
+        if params.periods.find_period_position(period_id).is_none() {
             return Err(ColloscopeError::InvalidPeriodId(period_id));
-        };
+        }
 
         let Some((subject_id, _pos)) = params.slots.find_slot_subject_and_position(slot_id) else {
             return Err(ColloscopeError::InvalidSlotId(slot_id));
         };
 
-        let group_list_id_opt = subject_association.get(&subject_id);
+        let group_list_id_opt = params
+            .group_lists
+            .subjects_associations
+            .get(&(period_id, subject_id));
 
         let first_forbidden_value = match group_list_id_opt {
             None => 0u32,

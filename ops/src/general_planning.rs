@@ -615,18 +615,13 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
-                let Some(period_assignments) = data
+                for (subject_id, assigned_students) in data
                     .get_data()
                     .get_inner_data()
                     .params
                     .assignments
-                    .period_map
-                    .get(period_id)
-                else {
-                    return None;
-                };
-
-                for (subject_id, assigned_students) in &period_assignments.subject_map {
+                    .subjects_for_period(*period_id)
+                {
                     if let Some(student_id) = assigned_students.first() {
                         return Some(CleaningOp {
                             warning: GeneralPlanningUpdateWarning::LooseStudentAssignmentsForPeriod(
@@ -635,32 +630,30 @@ impl GeneralPlanningUpdateOp {
                             op: UpdateOp::Assignments(AssignmentsUpdateOp::Assign(
                                 *period_id,
                                 *student_id,
-                                *subject_id,
+                                subject_id,
                                 false,
                             )),
                         });
                     }
                 }
 
-                if let Some(subject_map) = data
+                if let Some(((_period, subject_id), group_list_id)) = data
                     .get_data()
                     .get_inner_data()
                     .params
                     .group_lists
                     .subjects_associations
-                    .get(period_id)
-                    && let Some((subject_id, group_list_id)) = subject_map.iter().next()
+                    .iter()
+                    .find(|((period, _subject), _)| *period == *period_id)
                 {
                     return Some(CleaningOp {
                         warning: GeneralPlanningUpdateWarning::LooseSubjectAssociation(
                             *group_list_id,
-                            *subject_id,
+                            subject_id,
                             *period_id,
                         ),
                         op: UpdateOp::GroupLists(GroupListsUpdateOp::AssignGroupListToSubject(
-                            *period_id,
-                            *subject_id,
-                            None,
+                            *period_id, subject_id, None,
                         )),
                     });
                 }
@@ -793,31 +786,26 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
-                let Some(period_assignments) = data
+                let period_assignments: std::collections::BTreeMap<_, _> = data
                     .get_data()
                     .get_inner_data()
                     .params
                     .assignments
-                    .period_map
-                    .get(period_id)
-                    .cloned()
-                else {
-                    return None;
-                };
+                    .subjects_for_period(*period_id)
+                    .map(|(subject_id, students)| (subject_id, students.clone()))
+                    .collect();
 
-                let Some(previous_assignments) = data
+                let previous_assignments: std::collections::BTreeMap<_, _> = data
                     .get_data()
                     .get_inner_data()
                     .params
                     .assignments
-                    .period_map
-                    .get(&previous_id)
-                else {
-                    return None;
-                };
+                    .subjects_for_period(previous_id)
+                    .map(|(subject_id, students)| (subject_id, students.clone()))
+                    .collect();
 
-                for (subject_id, assigned_students) in &period_assignments.subject_map {
-                    match previous_assignments.subject_map.get(subject_id) {
+                for (subject_id, assigned_students) in &period_assignments {
+                    match previous_assignments.get(subject_id) {
                         None => {
                             if let Some(student_id) = assigned_students.iter().next() {
                                 return Some(CleaningOp {
@@ -852,25 +840,23 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
-                if let Some(subject_map) = data
+                if let Some(((_period, subject_id), group_list_id)) = data
                     .get_data()
                     .get_inner_data()
                     .params
                     .group_lists
                     .subjects_associations
-                    .get(period_id)
-                    && let Some((subject_id, group_list_id)) = subject_map.iter().next()
+                    .iter()
+                    .find(|((period, _subject), _)| *period == *period_id)
                 {
                     return Some(CleaningOp {
                         warning: GeneralPlanningUpdateWarning::LooseSubjectAssociation(
                             *group_list_id,
-                            *subject_id,
+                            subject_id,
                             *period_id,
                         ),
                         op: UpdateOp::GroupLists(GroupListsUpdateOp::AssignGroupListToSubject(
-                            *period_id,
-                            *subject_id,
-                            None,
+                            *period_id, subject_id, None,
                         )),
                     });
                 }
@@ -1113,17 +1099,16 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
-                let period_assignments = data
+                let period_assignments: Vec<(_, std::collections::BTreeSet<_>)> = data
                     .get_data()
                     .get_inner_data()
                     .params
                     .assignments
-                    .period_map
-                    .get(period_id)
-                    .expect("Period id should be valid at this point")
-                    .clone();
+                    .subjects_for_period(*period_id)
+                    .map(|(subject_id, students)| (subject_id, students.clone()))
+                    .collect();
 
-                for (subject_id, assigned_students) in period_assignments.subject_map {
+                for (subject_id, assigned_students) in period_assignments {
                     for student_id in assigned_students {
                         let result = data
                             .apply(
@@ -1142,31 +1127,32 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
-                if let Some(subject_map) = data
+                let period_associations: Vec<(_, _)> = data
                     .get_data()
                     .get_inner_data()
                     .params
                     .group_lists
                     .subjects_associations
-                    .get(period_id)
-                    .cloned()
-                {
-                    for (subject_id, group_list_id) in subject_map {
-                        let result = data
-                            .apply(
-                                collomatique_state_colloscopes::Op::GroupList(
-                                    collomatique_state_colloscopes::GroupListOp::AssignToSubject(
-                                        new_id,
-                                        subject_id,
-                                        Some(group_list_id),
-                                    ),
+                    .iter()
+                    .filter_map(|((period, subject), group_list)| {
+                        (period == *period_id).then_some((subject, *group_list))
+                    })
+                    .collect();
+                for (subject_id, group_list_id) in period_associations {
+                    let result = data
+                        .apply(
+                            collomatique_state_colloscopes::Op::GroupList(
+                                collomatique_state_colloscopes::GroupListOp::AssignToSubject(
+                                    new_id,
+                                    subject_id,
+                                    Some(group_list_id),
                                 ),
-                                self.get_desc(),
-                            )
-                            .expect("All data should be valid at this point");
-                        if result.is_some() {
-                            panic!("Unexpected result! {:?}", result);
-                        }
+                            ),
+                            self.get_desc(),
+                        )
+                        .expect("All data should be valid at this point");
+                    if result.is_some() {
+                        panic!("Unexpected result! {:?}", result);
                     }
                 }
 

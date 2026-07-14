@@ -2,9 +2,9 @@
 //!
 //! This module defines the relevant types to describes general settings
 
+use crate::Table;
 use crate::ids::StudentId;
 use crate::ops::AnnotatedSettingsOp;
-use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 
 use serde::{Deserialize, Serialize};
@@ -14,12 +14,12 @@ use thiserror::Error;
 pub use crate::soft_param::SoftParam;
 
 /// Description of the general settings
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Settings {
     /// Global limits to impose during resolution
     pub global: Limits,
     /// Optional limits per students
-    pub students: BTreeMap<StudentId, Limits>,
+    pub students: Table<StudentId, Limits>,
 }
 
 /// Strict limits in resolution

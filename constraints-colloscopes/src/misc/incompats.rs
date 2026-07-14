@@ -58,11 +58,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                 continue;
             };
 
-            let enrolled_in_subject = env
-                .assignments
-                .period_map
-                .get(&period_id)
-                .and_then(|pa| pa.subject_map.get(&incompat.subject_id));
+            let enrolled_in_subject = env.assignments.students(period_id, incompat.subject_id);
             let Some(enrolled_students) = enrolled_in_subject else {
                 continue;
             };

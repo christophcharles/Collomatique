@@ -2,8 +2,6 @@
 //!
 //! This module defines the relevant types to describes the interrogation slots
 
-use std::collections::BTreeMap;
-
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -34,7 +32,7 @@ pub struct Slots {
     ///
     /// One entry per subject with interrogations (empty vec when the subject
     /// has no slots yet).
-    ordering: BTreeMap<SubjectId, Vec<SlotId>>,
+    ordering: Table<SubjectId, Vec<SlotId>>,
 }
 
 /// Error returned when building [Slots] from rows with a duplicated slot id
@@ -107,7 +105,7 @@ impl Slots {
         entries: impl IntoIterator<Item = (SubjectId, Vec<(SlotId, Slot)>)>,
     ) -> Result<Self, DuplicatedSlotIdError> {
         let mut slot_map = Table::new();
-        let mut ordering = BTreeMap::new();
+        let mut ordering = Table::new();
         for (subject_id, slots) in entries {
             let mut order = Vec::with_capacity(slots.len());
             for (slot_id, slot) in slots {
@@ -152,12 +150,12 @@ impl Slots {
 
     /// Iterator over the subjects that have interrogations (dense-key semantics), in id order.
     pub fn subjects_with_slots(&self) -> impl Iterator<Item = SubjectId> + '_ {
-        self.ordering.keys().copied()
+        self.ordering.keys()
     }
 
     /// Whether the subject is a valid subject with interrogations (has an ordering entry).
     pub fn has_interrogations(&self, subject_id: SubjectId) -> bool {
-        self.ordering.contains_key(&subject_id)
+        self.ordering.contains(&subject_id)
     }
 
     /// Whether there is no subject with interrogations at all.
@@ -243,7 +241,7 @@ impl Slots {
     pub(crate) fn ordering_entries(&self) -> impl Iterator<Item = (SubjectId, &[SlotId])> {
         self.ordering
             .iter()
-            .map(|(id, order)| (*id, order.as_slice()))
+            .map(|(id, order)| (id, order.as_slice()))
     }
 
     // ---- Compound mutators ----

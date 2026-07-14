@@ -563,7 +563,8 @@ pub fn build_rich_data() -> Data {
                     }),
                     max_interrogations_per_day: None,
                 },
-            )]),
+            )])
+            .into(),
         })),
         "settings",
     );
@@ -594,7 +595,8 @@ pub fn build_rich_data() -> Data {
                     year_teacher_rotation: true,
                     period_teacher_rotation: false,
                 },
-            )]),
+            )])
+            .into(),
         })),
         "balancing",
     );
@@ -828,12 +830,13 @@ fn check_all_sections_populated(data: &Data) {
             .any(|teacher| teacher.subjects.len() >= 2)
     );
 
-    assert!(params.assignments.period_map.values().any(|period| {
-        period
-            .subject_map
+    assert!(
+        params
+            .assignments
+            .map
             .values()
             .any(|students| !students.is_empty())
-    }));
+    );
 
     assert!(params.week_patterns.week_pattern_map.len() >= 2);
 
@@ -868,13 +871,7 @@ fn check_all_sections_populated(data: &Data) {
             .values()
             .any(|group_list| !group_list.filling.is_prefilled())
     );
-    assert!(
-        params
-            .group_lists
-            .subjects_associations
-            .values()
-            .any(|subject_map| !subject_map.is_empty())
-    );
+    assert!(!params.group_lists.subjects_associations.is_empty());
 
     assert!(!params.settings.students.is_empty());
     assert!(!params.balancing.subjects.is_empty());

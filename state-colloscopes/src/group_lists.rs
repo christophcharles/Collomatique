@@ -2,7 +2,7 @@
 //!
 //! This module defines the relevant types to describes the lists of groups
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::num::NonZeroU32;
 use std::ops::RangeInclusive;
 
@@ -25,8 +25,10 @@ pub struct GroupLists {
 
     /// Associations between subjects and group lists
     ///
-    /// If a subject does not appear no group list has been associated to it
-    pub subjects_associations: BTreeMap<PeriodId, BTreeMap<SubjectId, GroupListId>>,
+    /// A sparse junction table keyed by `(period, subject)`: a pair is present
+    /// exactly when a group list has been associated to that subject on that
+    /// period. Absent means no association.
+    pub subjects_associations: Table<(PeriodId, SubjectId), GroupListId>,
 }
 
 /// Description of a single group list
@@ -395,17 +397,15 @@ impl crate::Data {
                     }
                 }
 
-                for subject_map in self
+                for group_list_id in self
                     .inner_data
                     .params
                     .group_lists
                     .subjects_associations
                     .values()
                 {
-                    for group_list_id in subject_map.values() {
-                        if *group_list_id == *id {
-                            return Err(GroupListError::RemainingAssociatedSubjects);
-                        }
+                    if *group_list_id == *id {
+                        return Err(GroupListError::RemainingAssociatedSubjects);
                     }
                 }
 
@@ -463,17 +463,19 @@ impl crate::Data {
                 // The interrogations of every subject associated with this
                 // list must stay within the new group count
                 let first_forbidden_group_number = new_params.group_names.len() as u32;
-                for (period_id, subject_map) in
-                    &self.inner_data.params.group_lists.subjects_associations
+                for ((period_id, subject_id), associated_list) in self
+                    .inner_data
+                    .params
+                    .group_lists
+                    .subjects_associations
+                    .iter()
                 {
-                    for (subject_id, associated_list) in subject_map {
-                        if associated_list == group_list_id {
-                            self.check_interrogations_group_bound(
-                                *period_id,
-                                *subject_id,
-                                first_forbidden_group_number,
-                            )?;
-                        }
+                    if associated_list == group_list_id {
+                        self.check_interrogations_group_bound(
+                            period_id,
+                            subject_id,
+                            first_forbidden_group_number,
+                        )?;
                     }
                 }
 
@@ -641,12 +643,12 @@ impl crate::Data {
                         *period_id,
                     ));
                 }
-                if !self
+                if self
                     .inner_data
                     .params
-                    .group_lists
-                    .subjects_associations
-                    .contains_key(period_id)
+                    .periods
+                    .find_period_position(*period_id)
+                    .is_none()
                 {
                     return Err(GroupListError::InvalidPeriodId(*period_id));
                 }
@@ -669,17 +671,11 @@ impl crate::Data {
                     first_forbidden_group_number,
                 )?;
 
-                let subject_map = self
-                    .inner_data
-                    .params
-                    .group_lists
-                    .subjects_associations
-                    .get_mut(period_id)
-                    .expect("Period ID was just checked");
+                let associations = &mut self.inner_data.params.group_lists.subjects_associations;
 
                 let old_group_list_id = match group_list_id {
-                    Some(id) => subject_map.insert(*subject_id, *id),
-                    None => subject_map.remove(subject_id),
+                    Some(id) => associations.insert((*period_id, *subject_id), *id),
+                    None => associations.remove(&(*period_id, *subject_id)),
                 };
 
                 Ok(AnnotatedGroupListOp::AssignToSubject(

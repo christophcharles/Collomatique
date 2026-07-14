@@ -22,7 +22,10 @@ pub struct PeriodEntryData {
         collomatique_state_colloscopes::StudentId,
         collomatique_state_colloscopes::students::Student,
     )>,
-    pub period_assignments: collomatique_state_colloscopes::assignments::PeriodAssignments,
+    pub period_assignments: std::collections::BTreeMap<
+        collomatique_state_colloscopes::SubjectId,
+        std::collections::BTreeSet<collomatique_state_colloscopes::StudentId>,
+    >,
 }
 
 use crate::tools::dynamic_column_view::{DynamicColumnView, LabelColumn, RelmColumn};
@@ -250,7 +253,6 @@ impl FactoryComponent for PeriodEntry {
                 let current_status = self
                     .data
                     .period_assignments
-                    .subject_map
                     .get(&subject_id)
                     .expect("Subject id should be valid at this point")
                     .contains(&student_id);
@@ -371,7 +373,6 @@ impl PeriodEntry {
                 assigned_subjects: self
                     .data
                     .period_assignments
-                    .subject_map
                     .iter()
                     .filter_map(|(subject_id, assigned_students)| {
                         if assigned_students.contains(student_id) {

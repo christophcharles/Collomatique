@@ -43,7 +43,7 @@ fn remove_student_with_settings_is_rejected() {
     let Ok(None) = app_state.apply(
         Op::Settings(SettingsOp::Update(Settings {
             global: Limits::default(),
-            students: BTreeMap::from([(student_id, Limits::default())]),
+            students: BTreeMap::from([(student_id, Limits::default())]).into(),
         })),
         "Add per-student settings".into(),
     ) else {

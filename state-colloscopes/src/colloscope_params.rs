@@ -365,22 +365,19 @@ impl Parameters {
         &self,
         period_ids: &BTreeSet<PeriodId>,
     ) -> Result<(), InvariantError> {
-        assert!(self.assignments.period_map.len() == period_ids.len());
-        for (period_id, period_assignments) in &self.assignments.period_map {
-            if !period_ids.contains(period_id) {
-                return Err(InvariantError::InvalidPeriodIdInAssignements);
-            }
-
-            let mut subject_count_for_period = 0usize;
+        // Dense key set: exactly one `(period, subject)` entry per period and
+        // per subject that runs on it (i.e. is not excluded on it).
+        let mut expected_count = 0usize;
+        for period_id in period_ids {
             for (subject_id, subject) in self.subjects.ordered_subject_list.iter() {
                 if subject.excluded_periods.contains(period_id) {
                     continue;
                 }
-                subject_count_for_period += 1;
+                expected_count += 1;
 
-                let subject_assignments = period_assignments
-                    .subject_map
-                    .get(&subject_id)
+                let subject_assignments = self
+                    .assignments
+                    .students(*period_id, subject_id)
                     .ok_or(InvariantError::InvalidSubjectIdInAssignments)?;
 
                 for student_id in subject_assignments {
@@ -395,9 +392,17 @@ impl Parameters {
                     }
                 }
             }
-            if subject_count_for_period != period_assignments.subject_map.len() {
-                return Err(InvariantError::WrongSubjectCountInAssignments);
+        }
+
+        // Any extra key is either on an unknown period or on an excluded/unknown
+        // subject; distinguish the two so each keeps its historical error.
+        if self.assignments.map.len() != expected_count {
+            for (period_id, _subject_id) in self.assignments.map.keys() {
+                if !period_ids.contains(&period_id) {
+                    return Err(InvariantError::InvalidPeriodIdInAssignements);
+                }
             }
+            return Err(InvariantError::WrongSubjectCountInAssignments);
         }
 
         Ok(())
@@ -646,25 +651,29 @@ impl Parameters {
     ///
     /// checks all the invariants in assignments data
     fn check_group_lists_data_consistency(&self) -> Result<(), InvariantError> {
-        if self.group_lists.subjects_associations.len() != self.periods.ordered_period_list.len() {
-            return Err(InvariantError::WrongPeriodCountInSubjectAssociationsForGroupLists);
-        }
-        for (period_id, subject_map) in &self.group_lists.subjects_associations {
-            for (subject_id, group_list_id) in subject_map {
-                if !self.group_lists.group_list_map.contains_key(group_list_id) {
-                    return Err(InvariantError::InvalidGroupListIdInSubjectAssociations);
-                }
-                let subject = self
-                    .subjects
-                    .find_subject(*subject_id)
-                    .ok_or(InvariantError::InvalidSubjectIdInSubjectAssociations)?;
+        // The associations table is sparse (one row per associated
+        // `(period, subject)`), so there is no per-period denseness to check;
+        // instead every row's period and subject must be valid.
+        let period_ids = self.build_period_ids();
+        for ((period_id, subject_id), group_list_id) in
+            self.group_lists.subjects_associations.iter()
+        {
+            if !period_ids.contains(&period_id) {
+                return Err(InvariantError::WrongPeriodCountInSubjectAssociationsForGroupLists);
+            }
+            if !self.group_lists.group_list_map.contains(group_list_id) {
+                return Err(InvariantError::InvalidGroupListIdInSubjectAssociations);
+            }
+            let subject = self
+                .subjects
+                .find_subject(subject_id)
+                .ok_or(InvariantError::InvalidSubjectIdInSubjectAssociations)?;
 
-                if subject.parameters.interrogation_parameters.is_none() {
-                    return Err(InvariantError::SubjectAssociationForSubjectWithoutInterrogations);
-                };
-                if subject.excluded_periods.contains(period_id) {
-                    return Err(InvariantError::SubjectAssociationForSubjectNotRunningOnPeriod);
-                }
+            if subject.parameters.interrogation_parameters.is_none() {
+                return Err(InvariantError::SubjectAssociationForSubjectWithoutInterrogations);
+            };
+            if subject.excluded_periods.contains(&period_id) {
+                return Err(InvariantError::SubjectAssociationForSubjectNotRunningOnPeriod);
             }
         }
         for group_list in self.group_lists.group_list_map.values() {
@@ -684,8 +693,8 @@ impl Parameters {
         settings: &settings::Settings,
     ) -> Result<(), SettingsError> {
         for student_id in settings.students.keys() {
-            if !self.students.student_map.contains_key(student_id) {
-                return Err(SettingsError::InvalidStudentId(*student_id));
+            if !self.students.student_map.contains_key(&student_id) {
+                return Err(SettingsError::InvalidStudentId(student_id));
             }
         }
         Ok(())
@@ -711,11 +720,11 @@ impl Parameters {
         balancing: &balancing::Balancing,
     ) -> Result<(), BalancingError> {
         for subject_id in balancing.subjects.keys() {
-            let Some(subject) = self.subjects.find_subject(*subject_id) else {
-                return Err(BalancingError::InvalidSubjectId(*subject_id));
+            let Some(subject) = self.subjects.find_subject(subject_id) else {
+                return Err(BalancingError::InvalidSubjectId(subject_id));
             };
             if subject.parameters.interrogation_parameters.is_none() {
-                return Err(BalancingError::SubjectHasNoInterrogation(*subject_id));
+                return Err(BalancingError::SubjectHasNoInterrogation(subject_id));
             }
         }
         Ok(())

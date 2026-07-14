@@ -37,9 +37,7 @@ fn compute_period_runs(
         let is_active = !excluded_periods.contains(period_id)
             && env
                 .assignments
-                .period_map
-                .get(period_id)
-                .and_then(|pa| pa.subject_map.get(&subject_id))
+                .students(*period_id, subject_id)
                 .is_some_and(|students| students.contains(&student));
 
         if is_active {

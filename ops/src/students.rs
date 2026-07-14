@@ -291,32 +291,26 @@ impl StudentsUpdateOp {
                     }
                 }
 
-                for (period_id, period_assignments) in &data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .assignments
-                    .period_map
+                for (period_id, subject_id, assigned_students) in
+                    data.get_data().get_inner_data().params.assignments.iter()
                 {
-                    if old_student.excluded_periods.contains(period_id) {
+                    if old_student.excluded_periods.contains(&period_id) {
                         continue;
                     }
 
-                    for (subject_id, assigned_students) in &period_assignments.subject_map {
-                        if assigned_students.contains(student_id) {
-                            return Some(CleaningOp {
-                                warning: StudentsUpdateWarning::LooseStudentAssignmentForPeriod(
-                                    *student_id,
-                                    *period_id,
-                                ),
-                                op: UpdateOp::Assignments(AssignmentsUpdateOp::Assign(
-                                    *period_id,
-                                    *student_id,
-                                    *subject_id,
-                                    false,
-                                )),
-                            });
-                        }
+                    if assigned_students.contains(student_id) {
+                        return Some(CleaningOp {
+                            warning: StudentsUpdateWarning::LooseStudentAssignmentForPeriod(
+                                *student_id,
+                                period_id,
+                            ),
+                            op: UpdateOp::Assignments(AssignmentsUpdateOp::Assign(
+                                period_id,
+                                *student_id,
+                                subject_id,
+                                false,
+                            )),
+                        });
                     }
                 }
 
@@ -348,35 +342,29 @@ impl StudentsUpdateOp {
                     return None;
                 };
 
-                for (period_id, period_assignments) in &data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .assignments
-                    .period_map
+                for (period_id, subject_id, assigned_students) in
+                    data.get_data().get_inner_data().params.assignments.iter()
                 {
-                    if old_student.excluded_periods.contains(period_id) {
+                    if old_student.excluded_periods.contains(&period_id) {
                         continue;
                     }
-                    if !student.excluded_periods.contains(period_id) {
+                    if !student.excluded_periods.contains(&period_id) {
                         continue;
                     }
 
-                    for (subject_id, assigned_students) in &period_assignments.subject_map {
-                        if assigned_students.contains(student_id) {
-                            return Some(CleaningOp {
-                                warning: StudentsUpdateWarning::LooseStudentAssignmentForPeriod(
-                                    *student_id,
-                                    *period_id,
-                                ),
-                                op: UpdateOp::Assignments(AssignmentsUpdateOp::Assign(
-                                    *period_id,
-                                    *student_id,
-                                    *subject_id,
-                                    false,
-                                )),
-                            });
-                        }
+                    if assigned_students.contains(student_id) {
+                        return Some(CleaningOp {
+                            warning: StudentsUpdateWarning::LooseStudentAssignmentForPeriod(
+                                *student_id,
+                                period_id,
+                            ),
+                            op: UpdateOp::Assignments(AssignmentsUpdateOp::Assign(
+                                period_id,
+                                *student_id,
+                                subject_id,
+                                false,
+                            )),
+                        });
                     }
                 }
 

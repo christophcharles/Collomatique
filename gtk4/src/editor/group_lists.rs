@@ -346,9 +346,11 @@ impl GroupLists {
                     group_list_associations: self
                         .group_lists
                         .subjects_associations
-                        .get(id)
-                        .expect("Period ID should be valid")
-                        .clone(),
+                        .iter()
+                        .filter_map(|((period, subject), group_list)| {
+                            (period == *id).then_some((subject, *group_list))
+                        })
+                        .collect(),
                     group_lists: self.group_lists.group_list_map.to_map(),
                 };
 

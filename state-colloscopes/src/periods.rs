@@ -3,11 +3,10 @@
 //! This module defines the relevant types to describes the periods
 
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use thiserror::Error;
 
 use crate::OrderedTable;
-use crate::assignments;
 use crate::colloscopes::ColloscopePeriod;
 use crate::ids::{
     PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId, SubjectId, WeekPatternId,
@@ -208,24 +207,17 @@ impl crate::Data {
                     .ordered_period_list
                     .insert_at(0, *period_id, desc.clone())
                     .expect("period id absence checked above");
-                self.inner_data.params.assignments.period_map.insert(
-                    *period_id,
-                    assignments::PeriodAssignments {
-                        subject_map: self
-                            .inner_data
-                            .params
-                            .subjects
-                            .ordered_subject_list
-                            .iter()
-                            .map(|(subject_id, _subject)| (subject_id, BTreeSet::new()))
-                            .collect(),
-                    },
-                );
-                self.inner_data
-                    .params
-                    .group_lists
-                    .subjects_associations
-                    .insert(*period_id, BTreeMap::new());
+                // A fresh period is excluded by no subject, so the dense
+                // assignments key set gets one empty entry per subject. The
+                // (sparse) associations table gets nothing until a group list
+                // is assigned.
+                for subject_id in self.inner_data.params.subjects.ordered_subject_list.keys() {
+                    self.inner_data
+                        .params
+                        .assignments
+                        .map
+                        .insert((*period_id, subject_id), BTreeSet::new());
+                }
                 for week_pattern in self
                     .inner_data
                     .params
@@ -267,24 +259,17 @@ impl crate::Data {
                     .ordered_period_list
                     .insert_at(position + 1, *period_id, desc.clone())
                     .expect("period id absence checked above");
-                self.inner_data.params.assignments.period_map.insert(
-                    *period_id,
-                    assignments::PeriodAssignments {
-                        subject_map: self
-                            .inner_data
-                            .params
-                            .subjects
-                            .ordered_subject_list
-                            .iter()
-                            .map(|(subject_id, _subject)| (subject_id, BTreeSet::new()))
-                            .collect(),
-                    },
-                );
-                self.inner_data
-                    .params
-                    .group_lists
-                    .subjects_associations
-                    .insert(*period_id, BTreeMap::new());
+                // A fresh period is excluded by no subject, so the dense
+                // assignments key set gets one empty entry per subject. The
+                // (sparse) associations table gets nothing until a group list
+                // is assigned.
+                for subject_id in self.inner_data.params.subjects.ordered_subject_list.keys() {
+                    self.inner_data
+                        .params
+                        .assignments
+                        .map
+                        .insert((*period_id, subject_id), BTreeSet::new());
+                }
                 for week_pattern in self
                     .inner_data
                     .params
@@ -376,30 +361,27 @@ impl crate::Data {
                     }
                 }
 
-                let period_assignments = self
+                for (subject_id, assigned_students) in self
                     .inner_data
                     .params
                     .assignments
-                    .period_map
-                    .get(period_id)
-                    .expect("At this point, period id should be valid");
-                for (subject_id, assigned_students) in &period_assignments.subject_map {
+                    .subjects_for_period(*period_id)
+                {
                     if !assigned_students.is_empty() {
                         return Err(PeriodError::PeriodStillHasNonTrivialAssignments(
-                            *period_id,
-                            *subject_id,
+                            *period_id, subject_id,
                         ));
                     }
                 }
 
-                let subject_map = self
+                if self
                     .inner_data
                     .params
                     .group_lists
                     .subjects_associations
-                    .get(period_id)
-                    .expect("Period id should be valid at this point");
-                if !subject_map.is_empty() {
+                    .keys()
+                    .any(|(p, _)| p == *period_id)
+                {
                     return Err(PeriodError::PeriodStillHasNonTrivialGroupListAssociation(
                         *period_id,
                     ));
@@ -414,16 +396,35 @@ impl crate::Data {
                     .periods
                     .ordered_period_list
                     .remove_at(position);
-                self.inner_data
+                // Drop this period's rows from both junction tables (the
+                // associations table has none once the emptiness check passes,
+                // but stays consistent regardless).
+                let assignment_keys: Vec<_> = self
+                    .inner_data
                     .params
                     .assignments
-                    .period_map
-                    .remove(period_id);
-                self.inner_data
+                    .map
+                    .keys()
+                    .filter(|(p, _)| *p == *period_id)
+                    .collect();
+                for key in assignment_keys {
+                    self.inner_data.params.assignments.map.remove(&key);
+                }
+                let association_keys: Vec<_> = self
+                    .inner_data
                     .params
                     .group_lists
                     .subjects_associations
-                    .remove(period_id);
+                    .keys()
+                    .filter(|(p, _)| *p == *period_id)
+                    .collect();
+                for key in association_keys {
+                    self.inner_data
+                        .params
+                        .group_lists
+                        .subjects_associations
+                        .remove(&key);
+                }
                 for week_pattern in self
                     .inner_data
                     .params

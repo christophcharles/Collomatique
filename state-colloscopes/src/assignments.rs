@@ -2,34 +2,50 @@
 //!
 //! This module defines the relevant types to describes the assignments
 
-use std::collections::{BTreeMap, BTreeSet};
-
-use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 
 use thiserror::Error;
 
+use crate::Table;
 use crate::ids::{PeriodId, StudentId, SubjectId};
 use crate::ops::AnnotatedAssignmentOp;
 
 /// Description of the assignments
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// Assignments are stored as a dense junction table keyed by
+/// `(period, subject)`: there is exactly one entry for every period and
+/// every subject that runs on it (i.e. is not excluded on it), holding the
+/// set of students who attend that subject on that period. The dense key set
+/// is maintained by the period/subject fan-out and checked in
+/// `check_assignments_data_consistency`.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Assignments {
-    /// Assignments for each period
-    ///
-    /// Each item associates a period id to an assignment description
-    /// There should be an entry for each valid period
-    pub period_map: BTreeMap<PeriodId, PeriodAssignments>,
+    /// Attending students for each `(period, subject)` pair
+    pub map: Table<(PeriodId, SubjectId), BTreeSet<StudentId>>,
 }
 
-/// Description of an assignment for a period
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PeriodAssignments {
-    /// Assignments for each student on the period
-    ///
-    /// Each item associates a subject id to an assignment description
-    /// There should be an entry for each valid subject in the period
-    /// The set is the list of students who do attend during the period
-    pub subject_map: BTreeMap<SubjectId, BTreeSet<StudentId>>,
+impl Assignments {
+    /// Attending students for a `(period, subject)` pair, if the pair exists.
+    pub fn students(&self, period: PeriodId, subject: SubjectId) -> Option<&BTreeSet<StudentId>> {
+        self.map.get(&(period, subject))
+    }
+
+    /// Iterates over the `(period, subject, students)` entries, in key order.
+    pub fn iter(&self) -> impl Iterator<Item = (PeriodId, SubjectId, &BTreeSet<StudentId>)> {
+        self.map
+            .iter()
+            .map(|((period, subject), students)| (period, subject, students))
+    }
+
+    /// Iterates over the `(subject, students)` entries for a period, in subject-id order.
+    pub fn subjects_for_period(
+        &self,
+        period: PeriodId,
+    ) -> impl Iterator<Item = (SubjectId, &BTreeSet<StudentId>)> {
+        self.map
+            .iter()
+            .filter_map(move |((p, s), students)| (p == period).then_some((s, students)))
+    }
 }
 
 /// Errors for assignment operations
@@ -68,15 +84,15 @@ impl crate::Data {
     ) -> std::result::Result<AnnotatedAssignmentOp, AssignmentError> {
         match assignment_op {
             AnnotatedAssignmentOp::Assign(period_id, student_id, subject_id, status) => {
-                let Some(period_assignments) = self
+                if self
                     .inner_data
                     .params
-                    .assignments
-                    .period_map
-                    .get_mut(period_id)
-                else {
+                    .periods
+                    .find_period_position(*period_id)
+                    .is_none()
+                {
                     return Err(AssignmentError::InvalidPeriodId(*period_id));
-                };
+                }
 
                 if self
                     .inner_data
@@ -88,7 +104,14 @@ impl crate::Data {
                     return Err(AssignmentError::InvalidSubjectId(*subject_id));
                 }
 
-                let Some(assigned_students) = period_assignments.subject_map.get_mut(subject_id)
+                // Dense key set: a missing `(period, subject)` row means the
+                // subject does not run on the period.
+                let Some(assigned_students) = self
+                    .inner_data
+                    .params
+                    .assignments
+                    .map
+                    .get_mut(&(*period_id, *subject_id))
                 else {
                     return Err(AssignmentError::SubjectDoesNotRunOnPeriod(
                         *subject_id,

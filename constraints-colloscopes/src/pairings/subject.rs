@@ -37,16 +37,8 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                 continue;
             }
 
-            let ant_enrolled = env
-                .assignments
-                .period_map
-                .get(period_id)
-                .and_then(|pa| pa.subject_map.get(&ant_subject));
-            let con_enrolled = env
-                .assignments
-                .period_map
-                .get(period_id)
-                .and_then(|pa| pa.subject_map.get(&con_subject));
+            let ant_enrolled = env.assignments.students(*period_id, ant_subject);
+            let con_enrolled = env.assignments.students(*period_id, con_subject);
             let (Some(ant_set), Some(con_set)) = (ant_enrolled, con_enrolled) else {
                 global_week_offset += period_desc.len();
                 continue;

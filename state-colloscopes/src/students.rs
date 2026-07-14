@@ -131,20 +131,16 @@ impl crate::Data {
                     }
                 }
 
-                for (period_id, period_assignments) in
-                    &self.inner_data.params.assignments.period_map
+                for (period_id, subject_id, assigned_students) in
+                    self.inner_data.params.assignments.iter()
                 {
-                    if current_student.excluded_periods.contains(period_id) {
+                    if current_student.excluded_periods.contains(&period_id) {
                         continue;
                     }
-                    for (subject_id, assigned_students) in &period_assignments.subject_map {
-                        if assigned_students.contains(id) {
-                            return Err(StudentError::StudentStillHasNonTrivialAssignments(
-                                *id,
-                                *subject_id,
-                                *period_id,
-                            ));
-                        }
+                    if assigned_students.contains(id) {
+                        return Err(StudentError::StudentStillHasNonTrivialAssignments(
+                            *id, subject_id, period_id,
+                        ));
                     }
                 }
 
@@ -169,22 +165,18 @@ impl crate::Data {
                     return Err(StudentError::InvalidStudentId(*id));
                 };
 
-                for (period_id, period_assignments) in
-                    &self.inner_data.params.assignments.period_map
+                for (period_id, subject_id, assigned_students) in
+                    self.inner_data.params.assignments.iter()
                 {
-                    if current_student.excluded_periods.contains(period_id)
-                        || !new_student.excluded_periods.contains(period_id)
+                    if current_student.excluded_periods.contains(&period_id)
+                        || !new_student.excluded_periods.contains(&period_id)
                     {
                         continue;
                     }
-                    for (subject_id, assigned_students) in &period_assignments.subject_map {
-                        if assigned_students.contains(id) {
-                            return Err(StudentError::StudentStillHasNonTrivialAssignments(
-                                *id,
-                                *subject_id,
-                                *period_id,
-                            ));
-                        }
+                    if assigned_students.contains(id) {
+                        return Err(StudentError::StudentStillHasNonTrivialAssignments(
+                            *id, subject_id, period_id,
+                        ));
                     }
                 }
 

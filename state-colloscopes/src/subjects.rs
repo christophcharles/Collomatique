@@ -365,17 +365,11 @@ impl crate::Data {
                         continue;
                     }
 
-                    let period_assignment = self
-                        .inner_data
+                    self.inner_data
                         .params
                         .assignments
-                        .period_map
-                        .get_mut(&period_id)
-                        .expect("Every period should appear in assignments");
-
-                    period_assignment
-                        .subject_map
-                        .insert(*new_id, BTreeSet::new());
+                        .map
+                        .insert((period_id, *new_id), BTreeSet::new());
                 }
 
                 Ok(AnnotatedSubjectOp::Remove(*new_id))
@@ -415,14 +409,18 @@ impl crate::Data {
                     }
                 }
 
-                for (period_id, subject_map) in
-                    &self.inner_data.params.group_lists.subjects_associations
+                for ((period_id, subject_id), group_list_id) in self
+                    .inner_data
+                    .params
+                    .group_lists
+                    .subjects_associations
+                    .iter()
                 {
-                    if let Some(group_list_id) = subject_map.get(id) {
+                    if subject_id == *id {
                         return Err(SubjectError::SubjectStillHasAssociatedGroupList(
                             *id,
                             *group_list_id,
-                            *period_id,
+                            period_id,
                         ));
                     }
                 }
@@ -459,17 +457,11 @@ impl crate::Data {
                         continue;
                     }
 
-                    let period_assignment = self
+                    let assigned_students = self
                         .inner_data
                         .params
                         .assignments
-                        .period_map
-                        .get(&period_id)
-                        .expect("Every period should appear in assignments");
-
-                    let assigned_students = period_assignment
-                        .subject_map
-                        .get(id)
+                        .students(period_id, *id)
                         .expect("Subject should appear in assignments for relevant periods");
 
                     if !assigned_students.is_empty() {
@@ -496,15 +488,11 @@ impl crate::Data {
                         continue;
                     }
 
-                    let period_assignment = self
-                        .inner_data
+                    self.inner_data
                         .params
                         .assignments
-                        .period_map
-                        .get_mut(&period_id)
-                        .expect("Every period should appear in assignments");
-
-                    period_assignment.subject_map.remove(id);
+                        .map
+                        .remove(&(period_id, *id));
                 }
 
                 Ok(AnnotatedSubjectOp::AddAfter(*id, previous_id, params))
@@ -538,14 +526,18 @@ impl crate::Data {
                     }
 
                     // Also, we should not have a corresponding group list
-                    for (period_id, subject_map) in
-                        &self.inner_data.params.group_lists.subjects_associations
+                    for ((period_id, subject_id), group_list_id) in self
+                        .inner_data
+                        .params
+                        .group_lists
+                        .subjects_associations
+                        .iter()
                     {
-                        if let Some(group_list_id) = subject_map.get(id) {
+                        if subject_id == *id {
                             return Err(SubjectError::SubjectStillHasAssociatedGroupList(
                                 *id,
                                 *group_list_id,
-                                *period_id,
+                                period_id,
                             ));
                         }
                     }
@@ -566,47 +558,38 @@ impl crate::Data {
                 for (period_id, _period) in
                     self.inner_data.params.periods.ordered_period_list.iter()
                 {
-                    let period_id = &period_id;
                     // If the period was excluded before, there is no structure to check
                     // and if the period is not excluded now, the structure will be fine anyway
-                    if old_params.excluded_periods.contains(period_id)
-                        || !new_params.excluded_periods.contains(period_id)
+                    if old_params.excluded_periods.contains(&period_id)
+                        || !new_params.excluded_periods.contains(&period_id)
                     {
                         continue;
                     }
 
-                    let period_assignment = self
+                    let assigned_students = self
                         .inner_data
                         .params
                         .assignments
-                        .period_map
-                        .get(period_id)
-                        .expect("Every period should appear in assignments");
-
-                    let assigned_students = period_assignment
-                        .subject_map
-                        .get(id)
+                        .students(period_id, *id)
                         .expect("Subject should appear in assignments for relevant periods");
 
                     if !assigned_students.is_empty() {
                         return Err(SubjectError::SubjectStillHasNonTrivialAssignments(
-                            *period_id, *id,
+                            period_id, *id,
                         ));
                     }
 
-                    let subject_map = self
+                    if let Some(group_list_id) = self
                         .inner_data
                         .params
                         .group_lists
                         .subjects_associations
-                        .get(period_id)
-                        .expect("Period id should be valid at this point");
-
-                    if let Some(group_list_id) = subject_map.get(id) {
+                        .get(&(period_id, *id))
+                    {
                         return Err(SubjectError::SubjectStillHasAssociatedGroupList(
                             *id,
                             *group_list_id,
-                            *period_id,
+                            period_id,
                         ));
                     }
 
@@ -617,7 +600,7 @@ impl crate::Data {
                             .inner_data
                             .colloscope
                             .period_map
-                            .get(period_id)
+                            .get(&period_id)
                             .expect("Period ID should be valid at this point");
 
                         for (slot_id, _slot) in subject_slots {
@@ -696,36 +679,27 @@ impl crate::Data {
                 for (period_id, _period) in
                     self.inner_data.params.periods.ordered_period_list.iter()
                 {
-                    let period_id = &period_id;
                     // Only change in period status should be considered
-                    if old_params.excluded_periods.contains(period_id)
-                        == new_params.excluded_periods.contains(period_id)
+                    if old_params.excluded_periods.contains(&period_id)
+                        == new_params.excluded_periods.contains(&period_id)
                     {
                         continue;
                     }
 
-                    if old_params.excluded_periods.contains(period_id) {
+                    if old_params.excluded_periods.contains(&period_id) {
                         // The period was excluded but is not anymore
-                        let period_assignment = self
-                            .inner_data
+                        self.inner_data
                             .params
                             .assignments
-                            .period_map
-                            .get_mut(period_id)
-                            .expect("Every period should appear in assignments");
-
-                        period_assignment.subject_map.insert(*id, BTreeSet::new());
+                            .map
+                            .insert((period_id, *id), BTreeSet::new());
                     } else {
                         // The period was included but will now be excluded
-                        let period_assignment = self
-                            .inner_data
+                        self.inner_data
                             .params
                             .assignments
-                            .period_map
-                            .get_mut(period_id)
-                            .expect("Every period should appear in assignments");
-
-                        period_assignment.subject_map.remove(id);
+                            .map
+                            .remove(&(period_id, *id));
                     }
                 }
 

@@ -590,17 +590,8 @@ fn derived_key_sets_are_completed() {
     assert!(caveats.is_empty());
 
     let params = &data.get_inner_data().params;
-    assert_eq!(params.assignments.period_map.len(), 1);
-    let period_assignments = params.assignments.period_map.values().next().unwrap();
-    assert_eq!(period_assignments.subject_map.len(), 1);
-    assert!(
-        period_assignments
-            .subject_map
-            .values()
-            .next()
-            .unwrap()
-            .is_empty()
-    );
+    assert_eq!(params.assignments.map.len(), 1);
+    assert!(params.assignments.map.values().next().unwrap().is_empty());
     assert_eq!(params.slots.subjects_with_slots().count(), 1);
     let subject_id = params.slots.subjects_with_slots().next().unwrap();
     assert_eq!(params.slots.slot_count_for_subject(subject_id), Some(0));

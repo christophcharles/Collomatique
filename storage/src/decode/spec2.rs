@@ -222,7 +222,6 @@ fn reconstruct(blocks: Blocks) -> Result<InnerData, DecodeError> {
     let group_lists = reconstruct_group_lists(
         blocks.group_lists.unwrap_or_default(),
         blocks.group_list_associations.unwrap_or_default(),
-        &periods,
     );
     let settings = reconstruct_settings(blocks.settings.unwrap_or_default());
     let pairings = reconstruct_pairings(blocks.pairings.unwrap_or_default());
@@ -418,42 +417,37 @@ fn reconstruct_assignments(
     subjects: &mem::subjects::Subjects,
 ) -> Result<mem::assignments::Assignments, DecodeError> {
     // The key set is derived: one entry per period × non-excluded
-    // subject, empty by default (spec §4.5)
-    let mut period_map: BTreeMap<PeriodId, mem::assignments::PeriodAssignments> = periods
-        .ordered_period_list
-        .iter()
-        .map(|(period_id, _desc)| {
-            let subject_map = subjects
-                .ordered_subject_list
-                .iter()
-                .filter(|(_subject_id, subject)| !subject.excluded_periods.contains(&period_id))
-                .map(|(subject_id, _subject)| (subject_id, BTreeSet::new()))
-                .collect();
-            (
-                period_id,
-                mem::assignments::PeriodAssignments { subject_map },
-            )
-        })
-        .collect();
+    // subject, empty by default (spec §4.5). Collecting a `Vec` of entries
+    // into the table's `FromIterator` keeps the last value per key, so the
+    // rows below override the empty skeleton entries.
+    let mut entries: Vec<((PeriodId, SubjectId), BTreeSet<StudentId>)> = Vec::new();
+    for (period_id, _desc) in periods.ordered_period_list.iter() {
+        for (subject_id, subject) in subjects.ordered_subject_list.iter() {
+            if subject.excluded_periods.contains(&period_id) {
+                continue;
+            }
+            entries.push(((period_id, subject_id), BTreeSet::new()));
+        }
+    }
 
     for row in block.into_inner() {
-        let Some(period_assignments) = period_map.get_mut(&id(row.period_id)) else {
+        let period_id = id::<PeriodId>(row.period_id);
+        if periods.find_period_position(period_id).is_none() {
             // Layer 3 rejects unknown period ids with this same error,
-            // but its assignments check asserts on the period count
-            // before reaching it, so the row cannot be inserted for
-            // layer 3 to find.
+            // but a row on an unknown period cannot be represented in the
+            // derived dense key set, so it is rejected here instead.
             return Err(
                 InnerDataError::Params(InvariantError::InvalidPeriodIdInAssignements).into(),
             );
-        };
+        }
         // A row on an unknown or excluded subject is inserted anyway:
         // layer 3 rejects it
-        period_assignments
-            .subject_map
-            .insert(id(row.subject_id), id_set(row.students));
+        entries.push(((period_id, id(row.subject_id)), id_set(row.students)));
     }
 
-    Ok(mem::assignments::Assignments { period_map })
+    Ok(mem::assignments::Assignments {
+        map: entries.into_iter().collect(),
+    })
 }
 
 fn reconstruct_week_patterns(
@@ -563,7 +557,6 @@ fn reconstruct_incompats(
 fn reconstruct_group_lists(
     block: format::group_lists::GroupLists,
     associations: format::group_list_associations::GroupListAssociations,
-    periods: &mem::periods::Periods,
 ) -> mem::group_lists::GroupLists {
     let group_list_map = block
         .into_inner()
@@ -601,20 +594,22 @@ fn reconstruct_group_lists(
         })
         .collect();
 
-    // The key set of the outer association map is derived: one (possibly
-    // empty) entry per period (spec §4.10). Rows on an unknown period
-    // add an extra entry which layer 3 rejects.
-    let mut subjects_associations: BTreeMap<PeriodId, BTreeMap<SubjectId, GroupListId>> = periods
-        .ordered_period_list
-        .iter()
-        .map(|(period_id, _desc)| (period_id, BTreeMap::new()))
+    // The associations table is sparse: one row per associated
+    // `(period, subject)` (spec §4.10). Rows on an unknown period are kept
+    // here and rejected by layer 3.
+    let subjects_associations = associations
+        .into_inner()
+        .into_iter()
+        .map(|row| {
+            (
+                (
+                    id::<PeriodId>(row.period_id),
+                    id::<SubjectId>(row.subject_id),
+                ),
+                id::<GroupListId>(row.group_list_id),
+            )
+        })
         .collect();
-    for row in associations.into_inner() {
-        subjects_associations
-            .entry(id(row.period_id))
-            .or_default()
-            .insert(id(row.subject_id), id(row.group_list_id));
-    }
 
     mem::group_lists::GroupLists {
         group_list_map,

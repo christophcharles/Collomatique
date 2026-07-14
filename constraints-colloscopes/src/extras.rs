@@ -41,8 +41,10 @@ pub(crate) fn group_list_for_interrogation(
     week: GlobalWeek,
 ) -> Option<GroupListId> {
     let (period_id, _) = week_to_period_id(env, week)?;
-    let period_associations = env.group_lists.subjects_associations.get(&period_id)?;
-    period_associations.get(&subject).copied()
+    env.group_lists
+        .subjects_associations
+        .get(&(period_id, subject))
+        .copied()
 }
 
 pub(crate) fn groups_for_interrogation(
@@ -70,9 +72,7 @@ pub(crate) fn is_student_enrolled(
         return false;
     };
     env.assignments
-        .period_map
-        .get(&period_id)
-        .and_then(|pa| pa.subject_map.get(&subject))
+        .students(period_id, subject)
         .is_some_and(|students| students.contains(&student))
 }
 
@@ -112,11 +112,7 @@ pub(crate) fn students_for_subject_period_group_list(
     subject: SubjectId,
     period: PeriodId,
 ) -> Vec<StudentId> {
-    let enrolled = env
-        .assignments
-        .period_map
-        .get(&period)
-        .and_then(|pa| pa.subject_map.get(&subject));
+    let enrolled = env.assignments.students(period, subject);
     let Some(enrolled) = enrolled else {
         return vec![];
     };
@@ -610,11 +606,8 @@ fn build_student_not_at_incompat_slot(env: &VarEnv) -> MyBundle {
                     None => continue,
                 };
 
-                let enrolled_in_incompat_subject = env
-                    .assignments
-                    .period_map
-                    .get(&period_id)
-                    .and_then(|pa| pa.subject_map.get(&incompat.subject_id));
+                let enrolled_in_incompat_subject =
+                    env.assignments.students(period_id, incompat.subject_id);
                 let Some(enrolled_students) = enrolled_in_incompat_subject else {
                     continue;
                 };

@@ -379,23 +379,24 @@ impl SubjectsUpdateOp {
                         }
                     }
 
-                    for (period_id, subject_map) in &data
+                    for ((period_id, assoc_subject), group_list_id) in data
                         .get_data()
                         .get_inner_data()
                         .params
                         .group_lists
                         .subjects_associations
+                        .iter()
                     {
-                        if let Some(group_list_id) = subject_map.get(subject_id) {
+                        if assoc_subject == *subject_id {
                             return Some(CleaningOp {
                                 warning: SubjectsUpdateWarning::LooseGroupListAssociation(
                                     *subject_id,
                                     *group_list_id,
-                                    *period_id,
+                                    period_id,
                                 ),
                                 op: UpdateOp::GroupLists(
                                     GroupListsUpdateOp::AssignGroupListToSubject(
-                                        *period_id,
+                                        period_id,
                                         *subject_id,
                                         None,
                                     ),
@@ -454,19 +455,13 @@ impl SubjectsUpdateOp {
                 let old_status = !current_subject.excluded_periods.contains(period_id);
 
                 if !*new_status && old_status {
-                    if let Some(period_assignments) = data
+                    if let Some(assigned_students) = data
                         .get_data()
                         .get_inner_data()
                         .params
                         .assignments
-                        .period_map
-                        .get(period_id)
+                        .students(*period_id, *subject_id)
                     {
-                        let assigned_students = period_assignments
-                            .subject_map
-                            .get(subject_id)
-                            .expect("subject_id should be available in subject map at this point");
-
                         if let Some(student_id) = assigned_students.iter().next() {
                             return Some(CleaningOp {
                                 warning: SubjectsUpdateWarning::LooseStudentsAssignmentsForPeriod(
@@ -539,14 +534,13 @@ impl SubjectsUpdateOp {
                         }
                     }
 
-                    if let Some(subject_map) = data
+                    if let Some(group_list_id) = data
                         .get_data()
                         .get_inner_data()
                         .params
                         .group_lists
                         .subjects_associations
-                        .get(period_id)
-                        && let Some(group_list_id) = subject_map.get(subject_id)
+                        .get(&(*period_id, *subject_id))
                     {
                         return Some(CleaningOp {
                             warning: SubjectsUpdateWarning::LooseGroupListAssociation(
@@ -591,22 +585,23 @@ impl SubjectsUpdateOp {
                     }
                 }
 
-                for (period_id, subject_map) in &data
+                for ((period_id, assoc_subject), group_list_id) in data
                     .get_data()
                     .get_inner_data()
                     .params
                     .group_lists
                     .subjects_associations
+                    .iter()
                 {
-                    if let Some(group_list_id) = subject_map.get(subject_id) {
+                    if assoc_subject == *subject_id {
                         return Some(CleaningOp {
                             warning: SubjectsUpdateWarning::LooseGroupListAssociation(
                                 *subject_id,
                                 *group_list_id,
-                                *period_id,
+                                period_id,
                             ),
                             op: UpdateOp::GroupLists(GroupListsUpdateOp::AssignGroupListToSubject(
-                                *period_id,
+                                period_id,
                                 *subject_id,
                                 None,
                             )),
@@ -661,27 +656,21 @@ impl SubjectsUpdateOp {
 
                 let excluded_periods = &subject.excluded_periods;
 
-                for (period_id, period_assignments) in &data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .assignments
-                    .period_map
+                for (period_id, assoc_subject, assigned_students) in
+                    data.get_data().get_inner_data().params.assignments.iter()
                 {
-                    if excluded_periods.contains(period_id) {
+                    if assoc_subject != *subject_id || excluded_periods.contains(&period_id) {
                         continue;
                     }
-                    let assigned_students = period_assignments.subject_map.get(subject_id)
-                        .expect("Assignment data is inconsistent and does not have a required subject entry");
 
                     if let Some(student_id) = assigned_students.iter().next() {
                         return Some(CleaningOp {
                             warning: SubjectsUpdateWarning::LooseStudentsAssignmentsForPeriod(
-                                *period_id,
+                                period_id,
                                 *subject_id,
                             ),
                             op: UpdateOp::Assignments(AssignmentsUpdateOp::Assign(
-                                *period_id,
+                                period_id,
                                 *student_id,
                                 *subject_id,
                                 false,

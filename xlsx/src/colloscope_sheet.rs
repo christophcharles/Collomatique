@@ -331,8 +331,7 @@ pub fn build(
                 let group_names = params
                     .group_lists
                     .subjects_associations
-                    .get(&pl.period_id)
-                    .and_then(|subject_map| subject_map.get(subject_id))
+                    .get(&(pl.period_id, *subject_id))
                     .and_then(|gl_id| group_names_map.get(gl_id));
 
                 let colloscope_slot = data

@@ -68,9 +68,7 @@ fn counted_slots_for_student_week(
         }
         let enrolled = env
             .assignments
-            .period_map
-            .get(&period)
-            .and_then(|pa| pa.subject_map.get(&subject_id))
+            .students(period, subject_id)
             .is_some_and(|students| students.contains(&student));
         if !enrolled {
             continue;

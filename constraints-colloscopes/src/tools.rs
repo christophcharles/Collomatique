@@ -10,8 +10,11 @@ pub fn group_list_for_slot(
     slot: SlotId,
 ) -> Option<GroupListId> {
     let (subject_id, _) = params.slots.find_slot_subject_and_position(slot)?;
-    let period_associations = params.group_lists.subjects_associations.get(&period)?;
-    period_associations.get(&subject_id).copied()
+    params
+        .group_lists
+        .subjects_associations
+        .get(&(period, subject_id))
+        .copied()
 }
 
 pub fn week_to_period_id(params: &Parameters, week: usize) -> Option<(PeriodId, usize)> {

@@ -673,14 +673,11 @@ impl Component for Colloscope {
                     .slots
                     .find_slot_subject_and_position(slot_id)
                     .expect("Slot ID should be valid");
-                let period_associations = self
+                let group_list_id = self
                     .params
                     .group_lists
                     .subjects_associations
-                    .get(&period_id)
-                    .expect("Period ID should be valid");
-                let group_list_id = period_associations
-                    .get(&subject_id)
+                    .get(&(period_id, subject_id))
                     .expect("A group list is needed to be able to edit a slot");
                 let group_list = self
                     .params

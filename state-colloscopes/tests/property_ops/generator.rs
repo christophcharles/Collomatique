@@ -941,8 +941,7 @@ fn gen_colloscope(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invali
         .params
         .group_lists
         .subjects_associations
-        .get(period_id)
-        .and_then(|map| map.get(&subject_id))
+        .get(&(*period_id, subject_id))
         .map(|group_list_id| {
             inner.params.group_lists.group_list_map[group_list_id]
                 .params

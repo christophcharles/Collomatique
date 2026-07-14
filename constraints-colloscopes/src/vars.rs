@@ -77,11 +77,11 @@ impl Var {
             Some((id, _)) => id,
             None => return default,
         };
-        let period_associations = match env.group_lists.subjects_associations.get(&period_id) {
-            Some(period_associations) => period_associations,
-            None => return default,
-        };
-        let group_list_id = match period_associations.get(&subject_id) {
+        let group_list_id = match env
+            .group_lists
+            .subjects_associations
+            .get(&(period_id, subject_id))
+        {
             Some(id) => id,
             None => return default,
         };

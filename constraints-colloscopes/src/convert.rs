@@ -106,17 +106,16 @@ pub fn build_complete_config(env: &Parameters, colloscope: &Colloscope) -> Confi
             .get(period_id)
             .expect("Period ID should be valid");
 
-        let subject_associations = env
-            .group_lists
-            .subjects_associations
-            .get(period_id)
-            .expect("Period Id should be valid");
         for (slot_id, slot) in &period.slot_map {
             let (subject_id, _pos) = env
                 .slots
                 .find_slot_subject_and_position(*slot_id)
                 .expect("Slot ID should be valid");
-            let Some(group_list_id) = subject_associations.get(&subject_id) else {
+            let Some(group_list_id) = env
+                .group_lists
+                .subjects_associations
+                .get(&(*period_id, subject_id))
+            else {
                 continue;
             };
             let group_list = env

@@ -32,11 +32,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
 
                 match &gl.filling {
                     GroupListFilling::Prefilled { groups } => {
-                        let enrolled = env
-                            .assignments
-                            .period_map
-                            .get(&period)
-                            .and_then(|pa| pa.subject_map.get(&subject_id));
+                        let enrolled = env.assignments.students(period, subject_id);
 
                         for (group_index, prefilled_group) in groups.iter().enumerate() {
                             let group = GroupNum::new(env, group_list, group_index)

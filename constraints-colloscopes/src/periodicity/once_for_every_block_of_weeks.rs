@@ -54,11 +54,7 @@ pub(super) fn build(env: &VarEnv, mut bundle: MyBundle) -> MyBundle {
                 continue;
             }
 
-            let period_students = env
-                .assignments
-                .period_map
-                .get(period_id)
-                .and_then(|pa| pa.subject_map.get(subject_id));
+            let period_students = env.assignments.students(*period_id, *subject_id);
             let Some(period_students) = period_students else {
                 continue;
             };

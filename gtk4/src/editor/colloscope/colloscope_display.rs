@@ -251,11 +251,10 @@ impl Display {
                         continue;
                     };
 
-                    let group_list_id = match self.group_lists.subjects_associations.get(period_id)
-                    {
-                        Some(period_associations) => period_associations.get(subject_id),
-                        None => None,
-                    };
+                    let group_list_id = self
+                        .group_lists
+                        .subjects_associations
+                        .get(&(*period_id, *subject_id));
 
                     let group_list = match group_list_id {
                         Some(id) => self.group_lists.group_list_map.get(id),
