@@ -23,24 +23,24 @@ fn all_interrogation_weeks(env: &VarEnv) -> Vec<(GlobalWeek, PeriodId)> {
 }
 
 fn effective_max_per_day(env: &VarEnv, student: StudentId) -> Option<&SoftParam<NonZeroU32>> {
-    match env.settings.students.get(&student) {
-        Some(s) => s.max_interrogations_per_day.as_ref(),
-        None => env.settings.global.max_interrogations_per_day.as_ref(),
-    }
+    env.settings
+        .limits_for(student)
+        .max_interrogations_per_day
+        .as_ref()
 }
 
 fn effective_max_per_week(env: &VarEnv, student: StudentId) -> Option<&SoftParam<u32>> {
-    match env.settings.students.get(&student) {
-        Some(s) => s.interrogations_per_week_max.as_ref(),
-        None => env.settings.global.interrogations_per_week_max.as_ref(),
-    }
+    env.settings
+        .limits_for(student)
+        .interrogations_per_week_max
+        .as_ref()
 }
 
 fn effective_min_per_week(env: &VarEnv, student: StudentId) -> Option<&SoftParam<u32>> {
-    match env.settings.students.get(&student) {
-        Some(s) => s.interrogations_per_week_min.as_ref(),
-        None => env.settings.global.interrogations_per_week_min.as_ref(),
-    }
+    env.settings
+        .limits_for(student)
+        .interrogations_per_week_min
+        .as_ref()
 }
 
 fn counted_slots_for_student_week(

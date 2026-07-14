@@ -14,10 +14,7 @@ pub(super) fn effective_balancing_option<'a>(
     subject_id: SubjectId,
     extract: impl Fn(&BalancingOptions) -> &Option<SoftParam<()>>,
 ) -> Option<&'a SoftParam<()>> {
-    match env.balancing.subjects.get(&subject_id) {
-        Some(b) => extract(b).as_ref(),
-        None => extract(&env.balancing.global).as_ref(),
-    }
+    extract(env.balancing.options_for(subject_id)).as_ref()
 }
 
 pub(super) fn effective_balancing_flag(
@@ -25,10 +22,7 @@ pub(super) fn effective_balancing_flag(
     subject_id: SubjectId,
     extract: impl Fn(&BalancingOptions) -> bool,
 ) -> bool {
-    match env.balancing.subjects.get(&subject_id) {
-        Some(b) => extract(b),
-        None => extract(&env.balancing.global),
-    }
+    extract(env.balancing.options_for(subject_id))
 }
 
 pub(super) fn teachers_for_subject(env: &VarEnv, subject_id: SubjectId) -> BTreeSet<TeacherId> {
