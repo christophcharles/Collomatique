@@ -223,10 +223,12 @@ pub fn slot_start_crossing_midnight(rng: &mut ChaCha8Rng) -> SlotStart {
 
 pub fn slot(
     rng: &mut ChaCha8Rng,
+    subject_id: SubjectId,
     teacher_id: TeacherId,
     week_pattern_ids: &[WeekPatternId],
 ) -> Slot {
     Slot {
+        subject_id,
         teacher_id,
         start_time: slot_start(rng),
         extra_info: if rng.random_bool(0.3) {

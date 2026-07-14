@@ -216,6 +216,7 @@ impl Component for Slots {
                     .expect("There should be at least one teacher for the subject")
                     .0;
                 let default_slot = collomatique_state_colloscopes::slots::Slot {
+                    subject_id,
                     teacher_id,
                     start_time: collomatique_time::SlotStart {
                         weekday: collomatique_time::Weekday(chrono::Weekday::Mon),

@@ -147,7 +147,10 @@ pub enum WeekPatternOp {
 pub enum SlotOp {
     /// Add a slot after an existing slot
     /// If `None`, it is placed first
-    AddAfter(SubjectId, Option<SlotId>, slots::Slot),
+    ///
+    /// The subject the slot belongs to is carried by the slot itself
+    /// (`slot.subject_id`).
+    AddAfter(Option<SlotId>, slots::Slot),
     /// Remove an existing slot
     Remove(SlotId),
     /// Move a subject to another position in the list
@@ -526,7 +529,10 @@ pub enum AnnotatedSlotOp {
     /// Add a slot after an existing slot
     /// If `None`, it is placed first
     /// First parameter is the slot id for the new slot
-    AddAfter(SlotId, SubjectId, Option<SlotId>, slots::Slot),
+    ///
+    /// The subject the slot belongs to is carried by the slot itself
+    /// (`slot.subject_id`).
+    AddAfter(SlotId, Option<SlotId>, slots::Slot),
     /// Remove an existing slot
     Remove(SlotId),
     /// Move a subject to another position in the list
@@ -912,10 +918,10 @@ impl AnnotatedSlotOp {
     /// Annotates the subcategory of operations [SlotOp].
     fn annotate(slot_op: SlotOp, id_issuer: &mut IdIssuer) -> (AnnotatedSlotOp, Option<SlotId>) {
         match slot_op {
-            SlotOp::AddAfter(subject_id, after_id, slot) => {
+            SlotOp::AddAfter(after_id, slot) => {
                 let new_id = id_issuer.get_slot_id();
                 (
-                    AnnotatedSlotOp::AddAfter(new_id, subject_id, after_id, slot),
+                    AnnotatedSlotOp::AddAfter(new_id, after_id, slot),
                     Some(new_id),
                 )
             }

@@ -380,9 +380,9 @@ pub fn build_rich_data() -> Data {
     let slot_maths1 = apply_new_id!(
         &mut state,
         Op::Slot(SlotOp::AddAfter(
-            subject_maths,
             None,
             Slot {
+                subject_id: subject_maths,
                 teacher_id: teacher1,
                 start_time: slot_start(chrono::Weekday::Mon, 14, 0),
                 extra_info: "Salle 101".to_string(),
@@ -396,9 +396,9 @@ pub fn build_rich_data() -> Data {
     let slot_maths2 = apply_new_id!(
         &mut state,
         Op::Slot(SlotOp::AddAfter(
-            subject_maths,
             Some(slot_maths1),
             Slot {
+                subject_id: subject_maths,
                 teacher_id: teacher2,
                 start_time: slot_start(chrono::Weekday::Tue, 17, 0),
                 extra_info: String::new(),
@@ -412,9 +412,9 @@ pub fn build_rich_data() -> Data {
     let slot_physics = apply_new_id!(
         &mut state,
         Op::Slot(SlotOp::AddAfter(
-            subject_physics,
             None,
             Slot {
+                subject_id: subject_physics,
                 teacher_id: teacher1,
                 start_time: slot_start(chrono::Weekday::Wed, 15, 30),
                 extra_info: "Labo".to_string(),
@@ -428,9 +428,9 @@ pub fn build_rich_data() -> Data {
     let _slot_english = apply_new_id!(
         &mut state,
         Op::Slot(SlotOp::AddAfter(
-            subject_english,
             None,
             Slot {
+                subject_id: subject_english,
                 teacher_id: teacher3,
                 start_time: slot_start(chrono::Weekday::Fri, 8, 0),
                 extra_info: String::new(),
@@ -840,9 +840,14 @@ fn check_all_sections_populated(data: &Data) {
     assert!(
         params
             .slots
-            .subject_map
-            .values()
-            .filter(|slots| !slots.ordered_slots.is_empty())
+            .subjects_with_slots()
+            .filter(|subject_id| {
+                params
+                    .slots
+                    .slot_count_for_subject(*subject_id)
+                    .expect("subject comes from subjects_with_slots")
+                    > 0
+            })
             .count()
             >= 2
     );

@@ -125,14 +125,19 @@ impl Pools {
             .collect();
         let slots_by_subject: Vec<_> = params
             .slots
-            .subject_map
-            .iter()
-            .filter(|(_, slots)| !slots.ordered_slots.is_empty())
-            .map(|(subject_id, slots)| {
-                (
-                    *subject_id,
-                    slots.ordered_slots.iter().map(|(id, _)| *id).collect(),
-                )
+            .subjects_with_slots()
+            .filter_map(|subject_id| {
+                let slot_ids: Vec<SlotId> = params
+                    .slots
+                    .slots_for_subject(subject_id)
+                    .expect("subject comes from subjects_with_slots")
+                    .map(|(id, _)| *id)
+                    .collect();
+                if slot_ids.is_empty() {
+                    None
+                } else {
+                    Some((subject_id, slot_ids))
+                }
             })
             .collect();
         let slot_ids: Vec<_> = slots_by_subject
@@ -512,18 +517,17 @@ fn gen_slot(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invalid: boo
                 // Valid teacher, but a start time crossing midnight
                 let subject_id = pick(rng, &addable);
                 let teacher_id = pick(rng, &teachers_for_subject(inner, subject_id));
-                let mut slot = synth::slot(rng, teacher_id, &pools.week_pattern_ids);
+                let mut slot = synth::slot(rng, subject_id, teacher_id, &pools.week_pattern_ids);
                 slot.start_time = synth::slot_start_crossing_midnight(rng);
-                SlotOp::AddAfter(subject_id, None, slot)
+                SlotOp::AddAfter(None, slot)
             }
             1 if !pools.interrogation_subject_ids.is_empty() => {
                 // Dangling teacher
                 let subject_id = pick(rng, &pools.interrogation_subject_ids);
                 let teacher_id = unsafe { TeacherId::new(dangling(rng)) };
                 SlotOp::AddAfter(
-                    subject_id,
                     None,
-                    synth::slot(rng, teacher_id, &pools.week_pattern_ids),
+                    synth::slot(rng, subject_id, teacher_id, &pools.week_pattern_ids),
                 )
             }
             _ => SlotOp::Remove(unsafe { SlotId::new(dangling(rng)) }),
@@ -552,9 +556,8 @@ fn gen_slot(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invalid: boo
                 .filter(|_| rng.random_bool(0.5))
                 .map(|(_, slots)| pick(rng, slots));
             SlotOp::AddAfter(
-                subject_id,
                 anchor,
-                synth::slot(rng, teacher_id, &pools.week_pattern_ids),
+                synth::slot(rng, subject_id, teacher_id, &pools.week_pattern_ids),
             )
         }
         1 => {
@@ -572,7 +575,7 @@ fn gen_slot(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invalid: boo
                 let teacher_id = pick(rng, &teachers);
                 SlotOp::Update(
                     slot_id,
-                    synth::slot(rng, teacher_id, &pools.week_pattern_ids),
+                    synth::slot(rng, subject_id, teacher_id, &pools.week_pattern_ids),
                 )
             }
         }

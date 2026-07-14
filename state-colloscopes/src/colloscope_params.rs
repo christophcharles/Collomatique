@@ -132,15 +132,12 @@ impl Parameters {
 
     /// Promotes an u64 to a [SlotId] if it is valid
     pub fn validate_slot_id(&self, id: u64) -> Option<SlotId> {
-        for subject_slots in self.slots.subject_map.values() {
-            for (slot_id, _slot) in &subject_slots.ordered_slots {
-                if slot_id.inner() == id {
-                    return Some(*slot_id);
-                }
-            }
+        let slot_id = unsafe { SlotId::new(id) };
+        if self.slots.find_slot(slot_id).is_some() {
+            Some(slot_id)
+        } else {
+            None
         }
-
-        None
     }
 
     /// Promotes an u64 to a [IncompatId] if it is valid
@@ -190,16 +187,7 @@ impl Parameters {
             .week_pattern_map
             .keys()
             .map(|x| x.inner());
-        let slot_ids = self
-            .slots
-            .subject_map
-            .iter()
-            .flat_map(|(_subject_id, subject_slots)| {
-                subject_slots
-                    .ordered_slots
-                    .iter()
-                    .map(|(id, _d)| id.inner())
-            });
+        let slot_ids = self.slots.slot_ids().map(|id| id.inner());
         let incompat_ids = self.incompats.incompat_map.keys().map(|x| x.inner());
         let group_list_ids = self.group_lists.group_list_map.keys().map(|x| x.inner());
         let pairing_rule_ids = self.pairings.pairing_rule_map.keys().map(|x| x.inner());
@@ -459,16 +447,12 @@ impl Parameters {
     /// USED INTERNALLY
     ///
     /// used to check a teacher before commiting a teacher op
-    pub(crate) fn validate_slot(
-        &self,
-        slot: &slots::Slot,
-        subject_id: SubjectId,
-    ) -> Result<(), SlotError> {
+    pub(crate) fn validate_slot(&self, slot: &slots::Slot) -> Result<(), SlotError> {
         let week_pattern_ids = self.build_week_pattern_ids();
 
         Self::validate_slot_internal(
             slot,
-            subject_id,
+            slot.subject_id,
             &week_pattern_ids,
             &self.teachers,
             &self.subjects,
@@ -482,21 +466,39 @@ impl Parameters {
         &self,
         week_pattern_ids: &BTreeSet<WeekPatternId>,
     ) -> Result<(), InvariantError> {
-        let subjects_with_interrogations_count = self
+        // Dense-key semantics: the ordering sidecar has exactly one entry per
+        // subject with interrogations.
+        let subjects_with_interrogations: BTreeSet<SubjectId> = self
             .subjects
             .ordered_subject_list
             .iter()
             .filter(|(_id, subject)| subject.parameters.interrogation_parameters.is_some())
-            .count();
-        if self.slots.subject_map.len() != subjects_with_interrogations_count {
+            .map(|(id, _)| id)
+            .collect();
+        let ordering_subjects: BTreeSet<SubjectId> = self.slots.subjects_with_slots().collect();
+        if ordering_subjects != subjects_with_interrogations {
             return Err(InvariantError::WrongSubjectCountInSlots);
         }
 
-        for (subject_id, subject_slots) in &self.slots.subject_map {
-            for (_slot_id, slot) in &subject_slots.ordered_slots {
+        // Every slot referenced by the ordering must exist in the slot table,
+        // sit under the subject naming it (matching `slot.subject_id`), appear
+        // exactly once, and validate. `find_slot` is used (not `slots_for_subject`)
+        // so a desynchronized ordering yields a clean error rather than panicking.
+        let mut ordered_ids = BTreeSet::new();
+        for (subject_id, order) in self.slots.ordering_entries() {
+            for slot_id in order {
+                let Some(slot) = self.slots.find_slot(*slot_id) else {
+                    return Err(InvariantError::InvalidSlot);
+                };
+                if slot.subject_id != subject_id {
+                    return Err(InvariantError::InvalidSlot);
+                }
+                if !ordered_ids.insert(*slot_id) {
+                    return Err(InvariantError::InvalidSlot);
+                }
                 if Self::validate_slot_internal(
                     slot,
-                    *subject_id,
+                    subject_id,
                     week_pattern_ids,
                     &self.teachers,
                     &self.subjects,
@@ -505,6 +507,13 @@ impl Parameters {
                 {
                     return Err(InvariantError::InvalidSlot);
                 }
+            }
+        }
+
+        // No orphan slots: every slot in the table is covered by the ordering.
+        for slot_id in self.slots.slot_ids() {
+            if !ordered_ids.contains(&slot_id) {
+                return Err(InvariantError::InvalidSlot);
             }
         }
 
@@ -767,13 +776,10 @@ impl Parameters {
 
     /// Builds a map from SlotId to SubjectId for all slots
     fn build_slot_subject_map(&self) -> BTreeMap<SlotId, SubjectId> {
-        let mut map = BTreeMap::new();
-        for (subject_id, subject_slots) in &self.slots.subject_map {
-            for (slot_id, _slot) in &subject_slots.ordered_slots {
-                map.insert(*slot_id, *subject_id);
-            }
-        }
-        map
+        self.slots
+            .all_slots()
+            .map(|(slot_id, slot)| (*slot_id, slot.subject_id))
+            .collect()
     }
 
     /// USED INTERNALLY

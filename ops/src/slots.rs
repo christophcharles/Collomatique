@@ -361,13 +361,16 @@ impl SlotsUpdateOp {
                     .slots
                     .last_slot_id_for_subject(*subject_id);
 
+                // The state op takes the subject from the slot itself.
+                let mut slot = slot.clone();
+                slot.subject_id = *subject_id;
+
                 let result = data
                     .apply(
                         collomatique_state_colloscopes::Op::Slot(
                             collomatique_state_colloscopes::SlotOp::AddAfter(
-                                *subject_id,
                                 last_slot_id,
-                                slot.clone(),
+                                slot,
                             )
                         ),
                         self.get_desc(),
@@ -390,12 +393,27 @@ impl SlotsUpdateOp {
                 Ok(Some(new_id))
             }
             Self::UpdateSlot(slot_id, slot) => {
+                // A slot cannot change subject, so pin the new slot to its
+                // current subject (the incoming slot's subject is not carried
+                // by the UI/glue layers). An invalid slot id is reported by the
+                // state op itself.
+                let mut slot = slot.clone();
+                if let Some((subject_id, _pos)) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .slots
+                    .find_slot_subject_and_position(*slot_id)
+                {
+                    slot.subject_id = subject_id;
+                }
+
                 let result = data
                     .apply(
                         collomatique_state_colloscopes::Op::Slot(
                             collomatique_state_colloscopes::SlotOp::Update(
                                 *slot_id,
-                                slot.clone(),
+                                slot,
                             )
                         ),
                         self.get_desc()

@@ -7,30 +7,49 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::Table;
 use crate::colloscopes;
 use crate::ids::{PeriodId, SlotId, SlotPairingRuleId, SubjectId, TeacherId, WeekPatternId};
 use crate::ops::AnnotatedSlotOp;
 
 /// Description of the interrogation slots
+///
+/// The backend is a flat id-keyed [Table] of slots (each slot carries its
+/// subject as a foreign key) plus an explicit per-subject ordering sidecar.
+/// The two must stay consistent; the invariant is checked in
+/// `check_slots_data_consistency`:
+/// - `ordering` has exactly one entry per subject with interrogations
+///   (dense-key semantics), and
+/// - `ordering[s]` is a duplicate-free permutation of
+///   `{ id | slot_map[id].subject_id == s }`.
+///
+/// All mutation goes through the compound `pub(crate)` helpers below so no
+/// call site can desynchronize the two structures. The fields are private:
+/// consumers read through the accessor surface further down.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Slots {
-    /// Slots for each subject
+    /// Every slot, keyed by its id
+    slot_map: Table<SlotId, Slot>,
+    /// Per-subject ordered list of slot ids
     ///
-    /// Each item associates a subject id to a collection of slots
-    /// There should be an entry for each valid subject with interrogations
-    pub subject_map: BTreeMap<SubjectId, SubjectSlots>,
+    /// One entry per subject with interrogations (empty vec when the subject
+    /// has no slots yet).
+    ordering: BTreeMap<SubjectId, Vec<SlotId>>,
 }
 
-/// Description of the interrogation slots for a subject
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SubjectSlots {
-    /// Slots for the subject in order
-    pub ordered_slots: Vec<(SlotId, Slot)>,
-}
+/// Error returned when building [Slots] from rows with a duplicated slot id
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Error)]
+#[error("duplicated slot id {0:?}")]
+pub struct DuplicatedSlotIdError(pub SlotId);
 
 /// Description of a single slot
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Slot {
+    /// Subject this slot belongs to
+    ///
+    /// This is authoritative: the slot is grouped under this subject in the
+    /// ordering sidecar, and [crate::SlotOp::Update] rejects changing it.
+    pub subject_id: SubjectId,
     /// Teacher for the interrogation
     pub teacher_id: TeacherId,
     /// Day and start time for the interrogation
@@ -76,89 +95,74 @@ impl Slot {
     }
 }
 
-impl SubjectSlots {
-    pub fn find_slot_position(&self, slot_id: SlotId) -> Option<usize> {
-        for (pos, (id, _slot)) in self.ordered_slots.iter().enumerate() {
-            if slot_id == *id {
-                return Some(pos);
-            }
-        }
-        None
-    }
-
-    pub fn find_slot(&self, slot_id: SlotId) -> Option<&Slot> {
-        let pos = self.find_slot_position(slot_id)?;
-
-        Some(
-            &self
-                .ordered_slots
-                .get(pos)
-                .expect("Position should be valid at this point")
-                .1,
-        )
-    }
-}
-
 impl Slots {
-    pub fn find_slot_subject_and_position(&self, slot_id: SlotId) -> Option<(SubjectId, usize)> {
-        for (subject_id, subject_slots) in &self.subject_map {
-            if let Some(pos) = subject_slots.find_slot_position(slot_id) {
-                return Some((*subject_id, pos));
+    /// Builds a [Slots] from dense per-subject rows (used by storage decode).
+    ///
+    /// `entries` provides one row per subject with interrogations: the subject
+    /// id and its ordered slots (in the intended order). Each slot must already
+    /// carry the matching `subject_id`. Returns an error if a slot id appears
+    /// more than once across all rows — otherwise the two backend structures
+    /// would silently desynchronize.
+    pub fn from_subject_rows(
+        entries: impl IntoIterator<Item = (SubjectId, Vec<(SlotId, Slot)>)>,
+    ) -> Result<Self, DuplicatedSlotIdError> {
+        let mut slot_map = Table::new();
+        let mut ordering = BTreeMap::new();
+        for (subject_id, slots) in entries {
+            let mut order = Vec::with_capacity(slots.len());
+            for (slot_id, slot) in slots {
+                if slot_map.insert(slot_id, slot).is_some() {
+                    return Err(DuplicatedSlotIdError(slot_id));
+                }
+                order.push(slot_id);
             }
+            ordering.insert(subject_id, order);
         }
-        None
+        Ok(Slots { slot_map, ordering })
     }
 
-    pub fn find_slot(&self, slot_id: SlotId) -> Option<&Slot> {
-        let (subject_id, pos) = self.find_slot_subject_and_position(slot_id)?;
-
-        Some(
-            &self
-                .subject_map
-                .get(&subject_id)
-                .expect("Subject id should be valid at this point")
-                .ordered_slots
-                .get(pos)
-                .expect("Position should be valid at this point")
-                .1,
-        )
-    }
-
-    // ---- Read surface (phase B commit 2) ----
+    // ---- Read surface ----
     //
-    // These methods are the sanctioned way to read the slots. Consumers must go
-    // through them rather than the `subject_map` / `ordered_slots` fields, so that
-    // the backend swap in phase B commit 3 (flat `slot_map` + `ordering` sidecar)
-    // only has to reimplement these methods, not touch every call site.
+    // These methods are the sanctioned way to read the slots. Consumers go
+    // through them rather than the private `slot_map` / `ordering` fields.
+
+    /// Returns the subject and position (within its subject) of a slot id, if valid.
+    pub fn find_slot_subject_and_position(&self, slot_id: SlotId) -> Option<(SubjectId, usize)> {
+        let subject_id = self.slot_map.get(&slot_id)?.subject_id;
+        let pos = self
+            .ordering
+            .get(&subject_id)
+            .expect("slot's subject should have an ordering entry")
+            .iter()
+            .position(|id| *id == slot_id)
+            .expect("slot should appear in its subject's ordering");
+        Some((subject_id, pos))
+    }
+
+    /// Returns the slot description for a slot id, if it is valid.
+    pub fn find_slot(&self, slot_id: SlotId) -> Option<&Slot> {
+        self.slot_map.get(&slot_id)
+    }
 
     /// Returns the subject and the slot description for a slot id, if it is valid.
     pub fn find_slot_with_subject(&self, slot_id: SlotId) -> Option<(SubjectId, &Slot)> {
-        let (subject_id, pos) = self.find_slot_subject_and_position(slot_id)?;
-
-        let slot = &self
-            .subject_map
-            .get(&subject_id)
-            .expect("Subject id should be valid at this point")
-            .ordered_slots
-            .get(pos)
-            .expect("Position should be valid at this point")
-            .1;
-        Some((subject_id, slot))
+        let slot = self.slot_map.get(&slot_id)?;
+        Some((slot.subject_id, slot))
     }
 
     /// Iterator over the subjects that have interrogations (dense-key semantics), in id order.
     pub fn subjects_with_slots(&self) -> impl Iterator<Item = SubjectId> + '_ {
-        self.subject_map.keys().copied()
+        self.ordering.keys().copied()
     }
 
-    /// Whether the subject is a valid subject with interrogations (has a slot entry).
+    /// Whether the subject is a valid subject with interrogations (has an ordering entry).
     pub fn has_interrogations(&self, subject_id: SubjectId) -> bool {
-        self.subject_map.contains_key(&subject_id)
+        self.ordering.contains_key(&subject_id)
     }
 
     /// Whether there is no subject with interrogations at all.
     pub fn is_empty(&self) -> bool {
-        self.subject_map.is_empty()
+        self.ordering.is_empty()
     }
 
     /// Ordered slots for a subject, or `None` if the subject has no interrogations.
@@ -166,57 +170,156 @@ impl Slots {
         &self,
         subject_id: SubjectId,
     ) -> Option<impl Iterator<Item = (&SlotId, &Slot)>> {
-        self.subject_map.get(&subject_id).map(|subject_slots| {
-            subject_slots
-                .ordered_slots
-                .iter()
-                .map(|(id, slot)| (id, slot))
-        })
+        let order = self.ordering.get(&subject_id)?;
+        Some(order.iter().map(move |slot_id| {
+            let slot = self
+                .slot_map
+                .get(slot_id)
+                .expect("ordering id should be present in slot_map");
+            (slot_id, slot)
+        }))
     }
 
     /// Owned copy of the ordered slots for a subject, or `None` if it has no interrogations.
-    ///
-    /// Compat-window copy helper (same lifecycle as [`Table::to_vec`](crate::tables::OrderedTable::to_vec)):
-    /// returns a plain `Vec` so consumers do not have to name the backend type.
     pub fn slots_vec_for_subject(&self, subject_id: SubjectId) -> Option<Vec<(SlotId, Slot)>> {
-        self.subject_map
-            .get(&subject_id)
-            .map(|subject_slots| subject_slots.ordered_slots.clone())
+        let order = self.ordering.get(&subject_id)?;
+        Some(
+            order
+                .iter()
+                .map(|slot_id| {
+                    (
+                        *slot_id,
+                        self.slot_map
+                            .get(slot_id)
+                            .expect("ordering id should be present in slot_map")
+                            .clone(),
+                    )
+                })
+                .collect(),
+        )
     }
 
     /// Number of slots for a subject, or `None` if the subject has no interrogations.
     pub fn slot_count_for_subject(&self, subject_id: SubjectId) -> Option<usize> {
-        self.subject_map
-            .get(&subject_id)
-            .map(|subject_slots| subject_slots.ordered_slots.len())
+        self.ordering.get(&subject_id).map(|order| order.len())
     }
 
     /// First slot id for a subject (in order), or `None` if the subject is absent or empty.
     pub fn first_slot_id_for_subject(&self, subject_id: SubjectId) -> Option<SlotId> {
-        self.subject_map
-            .get(&subject_id)?
-            .ordered_slots
-            .first()
-            .map(|(id, _)| *id)
+        self.ordering.get(&subject_id)?.first().copied()
     }
 
     /// Last slot id for a subject (in order), or `None` if the subject is absent or empty.
     pub fn last_slot_id_for_subject(&self, subject_id: SubjectId) -> Option<SlotId> {
-        self.subject_map
-            .get(&subject_id)?
-            .ordered_slots
-            .last()
-            .map(|(id, _)| *id)
+        self.ordering.get(&subject_id)?.last().copied()
     }
 
-    /// Iterator over every slot across all subjects (subject grouping flattened), in id order.
+    /// Iterator over every slot across all subjects (subject grouping flattened), in subject-then-position order.
     pub fn all_slots(&self) -> impl Iterator<Item = (&SlotId, &Slot)> {
-        self.subject_map.values().flat_map(|subject_slots| {
-            subject_slots
-                .ordered_slots
-                .iter()
-                .map(|(id, slot)| (id, slot))
+        self.ordering.values().flat_map(move |order| {
+            order.iter().map(move |slot_id| {
+                let slot = self
+                    .slot_map
+                    .get(slot_id)
+                    .expect("ordering id should be present in slot_map");
+                (slot_id, slot)
+            })
         })
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// Iterator over every slot id, in id order, straight from the slot table
+    /// (independent of the ordering sidecar, so it is safe on potentially
+    /// inconsistent data during invariant checking).
+    pub(crate) fn slot_ids(&self) -> impl Iterator<Item = SlotId> + '_ {
+        self.slot_map.keys()
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// Raw view of the ordering sidecar (subject → ordered slot ids), for the
+    /// consistency invariant check.
+    pub(crate) fn ordering_entries(&self) -> impl Iterator<Item = (SubjectId, &[SlotId])> {
+        self.ordering
+            .iter()
+            .map(|(id, order)| (*id, order.as_slice()))
+    }
+
+    // ---- Compound mutators ----
+    //
+    // Every mutation goes through one of these so `slot_map` and `ordering`
+    // can never desynchronize.
+
+    /// Registers a subject as having interrogations (empty ordering entry).
+    pub(crate) fn add_subject_entry(&mut self, subject_id: SubjectId) {
+        self.ordering.insert(subject_id, Vec::new());
+    }
+
+    /// Deregisters a subject's interrogations.
+    ///
+    /// The subject must have no remaining slots.
+    pub(crate) fn remove_subject_entry(&mut self, subject_id: SubjectId) {
+        let previous = self.ordering.remove(&subject_id);
+        debug_assert!(
+            previous.map(|order| order.is_empty()).unwrap_or(true),
+            "removing a subject entry that still has slots"
+        );
+    }
+
+    /// Inserts a slot at `position` within its subject's ordering.
+    ///
+    /// The subject is taken from `slot.subject_id` and must already be registered.
+    pub(crate) fn insert_slot_at(&mut self, slot_id: SlotId, slot: Slot, position: usize) {
+        let subject_id = slot.subject_id;
+        self.ordering
+            .get_mut(&subject_id)
+            .expect("subject should be registered before inserting a slot")
+            .insert(position, slot_id);
+        self.slot_map.insert(slot_id, slot);
+    }
+
+    /// Removes a slot, returning its former position (within its subject) and data.
+    pub(crate) fn remove_slot(&mut self, slot_id: SlotId) -> (usize, Slot) {
+        let slot = self.slot_map.remove(&slot_id).expect("slot should exist");
+        let order = self
+            .ordering
+            .get_mut(&slot.subject_id)
+            .expect("slot's subject should be registered");
+        let pos = order
+            .iter()
+            .position(|id| *id == slot_id)
+            .expect("slot should appear in its subject's ordering");
+        order.remove(pos);
+        (pos, slot)
+    }
+
+    /// Moves a slot to `new_pos` within its subject's ordering, returning the old position.
+    pub(crate) fn move_slot(&mut self, slot_id: SlotId, new_pos: usize) -> usize {
+        let subject_id = self
+            .slot_map
+            .get(&slot_id)
+            .expect("slot should exist")
+            .subject_id;
+        let order = self
+            .ordering
+            .get_mut(&subject_id)
+            .expect("slot's subject should be registered");
+        let old_pos = order
+            .iter()
+            .position(|id| *id == slot_id)
+            .expect("slot should appear in its subject's ordering");
+        let id = order.remove(old_pos);
+        order.insert(new_pos, id);
+        old_pos
+    }
+
+    /// Replaces a slot's data (subject unchanged), returning the old data.
+    pub(crate) fn replace_slot(&mut self, slot_id: SlotId, new_slot: Slot) -> Slot {
+        std::mem::replace(
+            self.slot_map.get_mut(&slot_id).expect("slot should exist"),
+            new_slot,
+        )
     }
 }
 
@@ -248,6 +351,10 @@ pub enum SlotError {
     /// subject has no interrogations
     #[error("subject ({0:?}) does not have interrogations")]
     SubjectHasNoInterrogation(SubjectId),
+
+    /// An update tried to move the slot to a different subject
+    #[error("slot ({0:?}) cannot change subject (from {1:?} to {2:?})")]
+    CannotChangeSubject(SlotId, SubjectId, SubjectId),
 
     /// teacher id is invalid
     #[error("invalid teacher id ({0:?})")]
@@ -287,17 +394,14 @@ impl crate::Data {
         slot_op: &AnnotatedSlotOp,
     ) -> std::result::Result<AnnotatedSlotOp, SlotError> {
         match slot_op {
-            AnnotatedSlotOp::AddAfter(new_id, subject_id, after_id, slot) => {
-                if self
-                    .inner_data
-                    .params
-                    .slots
-                    .find_slot_subject_and_position(*new_id)
-                    .is_some()
-                {
+            AnnotatedSlotOp::AddAfter(new_id, after_id, slot) => {
+                // The subject is authoritative from the slot itself.
+                let subject_id = slot.subject_id;
+
+                if self.inner_data.params.slots.find_slot(*new_id).is_some() {
                     return Err(SlotError::SlotIdAlreadyExists(*new_id));
                 }
-                self.inner_data.params.validate_slot(slot, *subject_id)?;
+                self.inner_data.params.validate_slot(slot)?;
 
                 let position = match after_id {
                     Some(id) => {
@@ -307,10 +411,9 @@ impl crate::Data {
                             .slots
                             .find_slot_subject_and_position(*id)
                             .ok_or(SlotError::InvalidSlotId(*id))?;
-                        if sub_id != *subject_id {
+                        if sub_id != subject_id {
                             return Err(SlotError::PreviousSlotIsNotInRightSubject(
-                                *id,
-                                *subject_id,
+                                *id, subject_id,
                             ));
                         }
 
@@ -319,23 +422,20 @@ impl crate::Data {
                     None => 0,
                 };
 
-                let subject_slots = self
-                    .inner_data
+                if !self.inner_data.params.slots.has_interrogations(subject_id) {
+                    return Err(SlotError::SubjectHasNoInterrogation(subject_id));
+                }
+
+                self.inner_data
                     .params
                     .slots
-                    .subject_map
-                    .get_mut(subject_id)
-                    .ok_or(SlotError::SubjectHasNoInterrogation(*subject_id))?;
-
-                subject_slots
-                    .ordered_slots
-                    .insert(position, (*new_id, slot.clone()));
+                    .insert_slot_at(*new_id, slot.clone(), position);
 
                 let subject = self
                     .inner_data
                     .params
                     .subjects
-                    .find_subject(*subject_id)
+                    .find_subject(subject_id)
                     .expect("Subject ID should be valid at this point");
                 for (period_id, period) in &mut self.inner_data.colloscope.period_map {
                     if subject.excluded_periods.contains(period_id) {
@@ -364,23 +464,17 @@ impl crate::Data {
                     return Err(SlotError::InvalidSlotId(*id));
                 };
 
-                let subject_slots = self
+                let count = self
                     .inner_data
                     .params
                     .slots
-                    .subject_map
-                    .get_mut(&subject_id)
+                    .slot_count_for_subject(subject_id)
                     .expect("Subject id should be valid at this point");
-
-                if *new_pos >= subject_slots.ordered_slots.len() {
-                    return Err(SlotError::PositionOutOfBounds(
-                        *new_pos,
-                        subject_slots.ordered_slots.len(),
-                    ));
+                if *new_pos >= count {
+                    return Err(SlotError::PositionOutOfBounds(*new_pos, count));
                 }
 
-                let data = subject_slots.ordered_slots.remove(old_pos);
-                subject_slots.ordered_slots.insert(*new_pos, data);
+                self.inner_data.params.slots.move_slot(*id, *new_pos);
 
                 Ok(AnnotatedSlotOp::ChangePosition(*id, old_pos))
             }
@@ -416,29 +510,28 @@ impl crate::Data {
                     }
                 }
 
-                let subject_slots = self
-                    .inner_data
-                    .params
-                    .slots
-                    .subject_map
-                    .get_mut(&subject_id)
-                    .expect("Subject id should be valid at this point");
-                let previous_id = (old_pos > 0).then(|| subject_slots.ordered_slots[old_pos - 1].0);
-                let (_, old_slot) = subject_slots.ordered_slots.remove(old_pos);
+                // Capture the previous slot in the subject ordering before removing.
+                let previous_id = if old_pos > 0 {
+                    self.inner_data
+                        .params
+                        .slots
+                        .slots_for_subject(subject_id)
+                        .expect("Subject id should be valid at this point")
+                        .nth(old_pos - 1)
+                        .map(|(slot_id, _)| *slot_id)
+                } else {
+                    None
+                };
+                let (_old_pos, old_slot) = self.inner_data.params.slots.remove_slot(*id);
                 for collo_period in self.inner_data.colloscope.period_map.values_mut() {
                     // The slot might not be in period but this won't raise an error
                     collo_period.slot_map.remove(id);
                 }
 
-                Ok(AnnotatedSlotOp::AddAfter(
-                    *id,
-                    subject_id,
-                    previous_id,
-                    old_slot,
-                ))
+                Ok(AnnotatedSlotOp::AddAfter(*id, previous_id, old_slot))
             }
             AnnotatedSlotOp::Update(slot_id, new_slot) => {
-                let Some((subject_id, position)) = self
+                let Some((subject_id, _position)) = self
                     .inner_data
                     .params
                     .slots
@@ -447,7 +540,16 @@ impl crate::Data {
                     return Err(SlotError::InvalidSlotId(*slot_id));
                 };
 
-                self.inner_data.params.validate_slot(new_slot, subject_id)?;
+                // A slot cannot be moved to a different subject.
+                if new_slot.subject_id != subject_id {
+                    return Err(SlotError::CannotChangeSubject(
+                        *slot_id,
+                        subject_id,
+                        new_slot.subject_id,
+                    ));
+                }
+
+                self.inner_data.params.validate_slot(new_slot)?;
                 let pattern = self
                     .inner_data
                     .params
@@ -463,18 +565,11 @@ impl crate::Data {
                     ));
                 }
 
-                let subject_slots = self
+                let old_slot = self
                     .inner_data
                     .params
                     .slots
-                    .subject_map
-                    .get_mut(&subject_id)
-                    .expect("Subject id should be valid at this point");
-
-                let old_slot = std::mem::replace(
-                    &mut subject_slots.ordered_slots[position].1,
-                    new_slot.clone(),
-                );
+                    .replace_slot(*slot_id, new_slot.clone());
                 self.inner_data.colloscope.update_slot_for_week_pattern(
                     *slot_id,
                     &self.inner_data.params.periods,

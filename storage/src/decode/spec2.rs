@@ -217,7 +217,7 @@ fn reconstruct(blocks: Blocks) -> Result<InnerData, DecodeError> {
     let assignments =
         reconstruct_assignments(blocks.assignments.unwrap_or_default(), &periods, &subjects)?;
     let week_patterns = reconstruct_week_patterns(blocks.week_patterns.unwrap_or_default());
-    let slots = reconstruct_slots(blocks.slots.unwrap_or_default(), &subjects);
+    let slots = reconstruct_slots(blocks.slots.unwrap_or_default(), &subjects)?;
     let incompats = reconstruct_incompats(blocks.incompatibilities.unwrap_or_default())?;
     let group_lists = reconstruct_group_lists(
         blocks.group_lists.unwrap_or_default(),
@@ -479,25 +479,19 @@ fn reconstruct_week_patterns(
 fn reconstruct_slots(
     block: format::slots::Slots,
     subjects: &mem::subjects::Subjects,
-) -> mem::slots::Slots {
-    // The key set is derived: one entry per subject with
-    // interrogations, empty by default (spec §4.7). Rows on other
-    // subjects are inserted anyway: layer 3 rejects them.
-    let mut subject_map: BTreeMap<SubjectId, mem::slots::SubjectSlots> = subjects
+) -> Result<mem::slots::Slots, DecodeError> {
+    // The key set is derived: one row per subject with interrogations, empty by
+    // default (spec §4.7). Rows on other subjects are inserted anyway: layer 3
+    // rejects them.
+    let mut rows: BTreeMap<SubjectId, Vec<(SlotId, mem::slots::Slot)>> = subjects
         .ordered_subject_list
         .iter()
         .filter(|(_subject_id, subject)| subject.parameters.interrogation_parameters.is_some())
-        .map(|(subject_id, _subject)| {
-            (
-                subject_id,
-                mem::slots::SubjectSlots {
-                    ordered_slots: vec![],
-                },
-            )
-        })
+        .map(|(subject_id, _subject)| (subject_id, Vec::new()))
         .collect();
 
     for row in block.into_inner() {
+        let subject_id = id::<SubjectId>(row.subject_id);
         let ordered_slots = row
             .slots
             .into_iter()
@@ -505,6 +499,7 @@ fn reconstruct_slots(
                 (
                     id::<SlotId>(slot.id),
                     mem::slots::Slot {
+                        subject_id,
                         teacher_id: id(slot.teacher_id),
                         start_time: collomatique_time::SlotStart {
                             weekday: weekday(slot.start.day),
@@ -517,13 +512,13 @@ fn reconstruct_slots(
                 )
             })
             .collect();
-        subject_map.insert(
-            id(row.subject_id),
-            mem::slots::SubjectSlots { ordered_slots },
-        );
+        rows.insert(subject_id, ordered_slots);
     }
 
-    mem::slots::Slots { subject_map }
+    // A slot id duplicated across subjects would silently collapse the flat
+    // slot table; detect it explicitly instead (it previously surfaced as a
+    // duplicate-id invariant error).
+    mem::slots::Slots::from_subject_rows(rows).map_err(|_| DecodeError::DuplicatedID)
 }
 
 fn reconstruct_incompats(

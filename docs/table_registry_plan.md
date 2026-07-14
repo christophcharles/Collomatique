@@ -102,7 +102,7 @@ Two shapes dominate; only three containers carry user-visible order.
 |---|---|---|
 | Periods | `Periods::ordered_period_list: Vec<(PeriodId, Vec<WeekDesc>)>` (`periods.rs:34`) | **yes** — user order, positional ops |
 | Subjects | `Subjects::ordered_subject_list: Vec<(SubjectId, Subject)>` (`subjects.rs:21`) | **yes** |
-| Slots (per subject) | `SubjectSlots::ordered_slots: Vec<(SlotId, Slot)>` (`slots.rs:28`), inside `Slots::subject_map: BTreeMap<SubjectId, SubjectSlots>` | **yes** (inner); outer map is a dense mirror keyed by interrogation-subjects |
+| Slots | `Slots::slot_map: Table<SlotId, Slot>` + `ordering: BTreeMap<SubjectId, Vec<SlotId>>` sidecar (`slots.rs`) — **restructured in commit 3**; `Slot` carries `subject_id`. Was `SubjectSlots::ordered_slots` inside `Slots::subject_map` | **yes** — the per-subject `ordering` is user order; the sidecar is a dense mirror keyed by interrogation-subjects |
 | Teachers | `Teachers::teacher_map: BTreeMap<TeacherId, Teacher>` (`teachers.rs`) | no (id-sorted) |
 | Students | `Students::student_map: BTreeMap<StudentId, Student>` (`students.rs`) | no |
 | Week patterns | `WeekPatterns::week_pattern_map: BTreeMap<…>` (`week_patterns.rs`) | no |
@@ -147,7 +147,7 @@ when their payload is non-trivial.
 | # | Referencing site | Cardinality | Block error | Twin |
 |---|---|---|---|---|
 | 9 | `Teacher.subjects` | `BTreeSet<SubjectId>` | `SubjectStillHasAssociatedTeachers` (`subjects.rs:448`) | `InvalidTeacher` (`:305`) |
-| 10 | `slots.subject_map` key (dense) | map key | `SubjectStillHasAssociatedSlots` (`:442`) | `WrongSubjectCountInSlots` (`:491`) |
+| 10 | `slots.ordering` key (dense) — was `subject_map` key; slots themselves carry `Slot.subject_id` as a regular `#[fk]` | dense-mirror key | `SubjectStillHasAssociatedSlots` | `WrongSubjectCountInSlots` |
 | 11 | `Incompatibility.subject_id` | single | `SubjectStillHasAssociatedIncompats` (`:457`) | `InvalidIncompat` (`:522`) |
 | 12 | `subjects_associations[p]` inner key | map key | `SubjectStillHasAssociatedGroupList` (`:430`) | `InvalidSubjectIdInSubjectAssociations` (`:653`) |
 | 13 | `balancing.subjects` key | map key | `SubjectStillHasBalancingOptions` (`:418`) | `InvalidSubjectIdInBalancing` (`:707`) |
@@ -299,9 +299,12 @@ pub trait References<K> {
 ```
 
 ```rust
-// state-colloscopes — usage sketch (worked example: Slot, relationships #17 and #18)
+// state-colloscopes — usage sketch (worked example: Slot, relationships #10, #17 and #18)
+// Since commit 3 the slot carries its subject as a regular FK (#10): slots live in a
+// flat `Table<SlotId, Slot>` and the per-subject `ordering` sidecar mirrors this field.
 #[derive(References)]
 pub struct Slot {
+    #[fk] pub subject_id: SubjectId,          // plain Id field (grouping FK, #10)
     #[fk] pub teacher_id: TeacherId,          // plain Id field
     pub start_time: SlotStart,                // no attribute → ignored
     #[fk] pub week_pattern: Option<WeekPatternId>,  // Option<Id>
@@ -444,9 +447,17 @@ the three contract scripts, run by the user.
 - **B2**: `ordered_period_list` + `ordered_subject_list` → `OrderedTable<…>`. Positional
   mutator rewrites (audited): `periods.rs:210,268,409,486`; `subjects.rs:358,399-409,500,641`.
   Public `find_*_position` helpers delegate to `position_of`; external callers untouched.
-- **B3** ★: `ordered_slots` → `OrderedTable<…>` (`slots.rs:237,287-288,326,373`; in-crate
-  `.get(pos)` → `get_at(pos)` at `slots.rs:94,121` — the inherent keyed `get(&I)` shadows
-  `slice::get(usize)`, all such collisions are compile-visible). Phase-B milestone check.
+- **B3** ★ — **SUPERSEDED by the commit-2/commit-3 slots restructure** (July 14 2026, done).
+  Rather than wrapping today's per-subject `Vec` in `OrderedTable`, the slots backend was
+  rebuilt as the right relational shape: a flat `slot_map: Table<SlotId, Slot>` (each `Slot`
+  carries `subject_id` as a regular FK, #10) plus an explicit `ordering: BTreeMap<SubjectId,
+  Vec<SlotId>>` sidecar (dense, user order). `SubjectSlots` is deleted; all mutation goes
+  through compound `pub(crate)` helpers so the two structures cannot desynchronize.
+  `SlotOp::AddAfter` dropped its `SubjectId` parameter (`AddAfter(Option<SlotId>, Slot)`);
+  `SlotOp::Update` rejects a changed subject (`SlotError::CannotChangeSubject`). Commit 2 first
+  narrowed every consumer onto a `Slots` read surface (zero behavior change); commit 3 swapped
+  the backend behind it. On-disk format frozen (encode joins `ordering`→`slot_map` byte-for-byte;
+  decode rebuilds both fields with explicit duplicate-slot-id detection). Phase-B milestone check.
 
 ### Phase C — registry + SQL-like functions (consumer step (b))
 

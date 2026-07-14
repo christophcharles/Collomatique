@@ -15,7 +15,7 @@ use collomatique_state_colloscopes::{
     group_lists::{GroupListFilling, GroupListParameters, PrefilledGroup},
     periods::WeekDesc,
     settings::{Limits, Settings},
-    slots::Slot,
+    slots::{Slot, SlotError},
     students::Student,
     teachers::Teacher,
 };
@@ -207,9 +207,9 @@ fn update_shrinking_group_names_below_assigned_group_is_rejected() {
 
     let Ok(Some(NewId::SlotId(slot_id))) = app_state.apply(
         Op::Slot(SlotOp::AddAfter(
-            subject_id,
             None,
             Slot {
+                subject_id,
                 teacher_id,
                 start_time: collomatique_time::SlotStart {
                     weekday: collomatique_time::Weekday(chrono::Weekday::Mon),
@@ -418,6 +418,105 @@ fn assign_to_subject_with_dangling_group_list_id_errors() {
         result,
         Err(Error::GroupList(GroupListError::InvalidGroupListId(
             group_list_id
+        ))),
+    );
+}
+
+/// `SlotOp::Update` must reject an update that moves the slot to a
+/// different subject: `slot.subject_id` is authoritative and the slots
+/// backend groups slots per subject. Since the flat-table restructure
+/// (phase B commit 3), the subject is carried by the slot itself; without
+/// this guard a changed `subject_id` would desynchronize the slot table
+/// from the per-subject ordering sidecar.
+#[test]
+fn slot_update_changing_subject_is_rejected() {
+    let mut app_state = AppState::<_, String>::new(Data::new());
+
+    let Ok(Some(NewId::PeriodId(_period_id))) = app_state.apply(
+        Op::Period(PeriodOp::AddFront(vec![
+            WeekDesc::new(true),
+            WeekDesc::new(true),
+        ])),
+        "Add period".into(),
+    ) else {
+        panic!("Unexpected result after adding the period");
+    };
+
+    let interrogation_subject = |name: &str| Subject {
+        parameters: SubjectParameters {
+            name: name.into(),
+            interrogation_parameters: Some(SubjectInterrogationParameters {
+                students_per_group: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+                groups_per_interrogation: NonZeroU32::new(1).unwrap()..=NonZeroU32::new(1).unwrap(),
+                duration: collomatique_time::NonZeroMinutes::new(60).unwrap(),
+                take_duration_into_account: true,
+                periodicity: SubjectPeriodicity::ExactlyPeriodic {
+                    periodicity_in_weeks: NonZeroU32::new(2).unwrap(),
+                },
+            }),
+        },
+        excluded_periods: BTreeSet::new(),
+    };
+
+    let Ok(Some(NewId::SubjectId(subject_a))) = app_state.apply(
+        Op::Subject(SubjectOp::AddAfter(None, interrogation_subject("Math"))),
+        "Add subject A".into(),
+    ) else {
+        panic!("Unexpected result after adding subject A");
+    };
+    let Ok(Some(NewId::SubjectId(subject_b))) = app_state.apply(
+        Op::Subject(SubjectOp::AddAfter(
+            Some(subject_a),
+            interrogation_subject("Physics"),
+        )),
+        "Add subject B".into(),
+    ) else {
+        panic!("Unexpected result after adding subject B");
+    };
+
+    // A teacher that teaches in both subjects, so the update would pass
+    // teacher validation and only the subject-change guard can reject it.
+    let Ok(Some(NewId::TeacherId(teacher_id))) = app_state.apply(
+        Op::Teacher(TeacherOp::Add(Teacher {
+            desc: Default::default(),
+            subjects: BTreeSet::from([subject_a, subject_b]),
+        })),
+        "Add teacher".into(),
+    ) else {
+        panic!("Unexpected result after adding the teacher");
+    };
+
+    let slot = |subject_id| Slot {
+        subject_id,
+        teacher_id,
+        start_time: collomatique_time::SlotStart {
+            weekday: collomatique_time::Weekday(chrono::Weekday::Mon),
+            start_time: collomatique_time::WholeMinuteTime::new(
+                chrono::NaiveTime::from_hms_opt(8, 0, 0).unwrap(),
+            )
+            .unwrap(),
+        },
+        extra_info: String::new(),
+        week_pattern: None,
+        cost: 0,
+    };
+
+    let Ok(Some(NewId::SlotId(slot_id))) = app_state.apply(
+        Op::Slot(SlotOp::AddAfter(None, slot(subject_a))),
+        "Add slot to subject A".into(),
+    ) else {
+        panic!("Unexpected result after adding the slot");
+    };
+
+    // Updating the slot with a different (but otherwise valid) subject must fail.
+    let result = app_state.apply(
+        Op::Slot(SlotOp::Update(slot_id, slot(subject_b))),
+        "Move slot to subject B".into(),
+    );
+    assert_eq!(
+        result,
+        Err(Error::Slot(SlotError::CannotChangeSubject(
+            slot_id, subject_a, subject_b
         ))),
     );
 }

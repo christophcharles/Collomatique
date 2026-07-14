@@ -10,7 +10,6 @@ use crate::OrderedTable;
 use crate::colloscopes;
 use crate::ids::{GroupListId, IncompatId, PairingRuleId, PeriodId, SlotId, SubjectId, TeacherId};
 use crate::ops::AnnotatedSubjectOp;
-use crate::slots;
 
 /// Description of the subjects
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -357,12 +356,7 @@ impl crate::Data {
                     .insert_at(position, *new_id, params.clone())
                     .expect("subject id absence checked above");
                 if params.parameters.interrogation_parameters.is_some() {
-                    self.inner_data.params.slots.subject_map.insert(
-                        *new_id,
-                        slots::SubjectSlots {
-                            ordered_slots: vec![],
-                        },
-                    );
+                    self.inner_data.params.slots.add_subject_entry(*new_id);
                 }
                 for (period_id, _period) in
                     self.inner_data.params.periods.ordered_period_list.iter()
@@ -433,8 +427,8 @@ impl crate::Data {
                     }
                 }
 
-                if let Some(subject_slots) = self.inner_data.params.slots.subject_map.get(id)
-                    && !subject_slots.ordered_slots.is_empty()
+                if let Some(slot_count) = self.inner_data.params.slots.slot_count_for_subject(*id)
+                    && slot_count != 0
                 {
                     return Err(SubjectError::SubjectStillHasAssociatedSlots(*id));
                 }
@@ -494,7 +488,7 @@ impl crate::Data {
                     .subjects
                     .ordered_subject_list
                     .remove_at(position);
-                self.inner_data.params.slots.subject_map.remove(id);
+                self.inner_data.params.slots.remove_subject_entry(*id);
                 for (period_id, _period) in
                     self.inner_data.params.periods.ordered_period_list.iter()
                 {
@@ -557,15 +551,14 @@ impl crate::Data {
                     }
 
                     // Let's also check that we don't have corresponding interrogations
-                    let subject_slots = self
+                    let slot_count = self
                         .inner_data
                         .params
                         .slots
-                        .subject_map
-                        .get(id)
+                        .slot_count_for_subject(*id)
                         .expect("Subject should have a slot list at this point");
 
-                    if !subject_slots.ordered_slots.is_empty() {
+                    if slot_count != 0 {
                         return Err(SubjectError::SubjectStillHasAssociatedSlots(*id));
                     }
                 }
@@ -618,7 +611,8 @@ impl crate::Data {
                     }
 
                     // Check if there are non-empty slots in colloscope for the subject
-                    if let Some(subject_slots) = self.inner_data.params.slots.subject_map.get(id) {
+                    if let Some(subject_slots) = self.inner_data.params.slots.slots_for_subject(*id)
+                    {
                         let colloscope_period = self
                             .inner_data
                             .colloscope
@@ -626,7 +620,7 @@ impl crate::Data {
                             .get(period_id)
                             .expect("Period ID should be valid at this point");
 
-                        for (slot_id, _slot) in &subject_slots.ordered_slots {
+                        for (slot_id, _slot) in subject_slots {
                             let Some(collo_slot) = colloscope_period.slot_map.get(slot_id) else {
                                 continue;
                             };
@@ -649,28 +643,26 @@ impl crate::Data {
                 {
                     if new_params.parameters.interrogation_parameters.is_some() {
                         // We don't need to update the colloscope in this case: no slots have been added so far
-                        self.inner_data.params.slots.subject_map.insert(
-                            *id,
-                            slots::SubjectSlots {
-                                ordered_slots: vec![],
-                            },
-                        );
+                        self.inner_data.params.slots.add_subject_entry(*id);
                     } else {
                         // We don't need to update the colloscope in this case: all slots have already been removed
-                        self.inner_data.params.slots.subject_map.remove(id);
+                        self.inner_data.params.slots.remove_subject_entry(*id);
                     }
                 }
 
                 // Let's update the colloscope.
                 // However, if there are no interrogations, then we don't have slots to update
                 if new_params.parameters.interrogation_parameters.is_some() {
-                    let subject_slots = self
+                    // Snapshot the slot ids so the params borrow does not overlap the
+                    // mutable colloscope borrow below.
+                    let slot_ids: Vec<SlotId> = self
                         .inner_data
                         .params
                         .slots
-                        .subject_map
-                        .get(id)
-                        .expect("Subject should have a slot list at this point");
+                        .slots_for_subject(*id)
+                        .expect("Subject should have a slot list at this point")
+                        .map(|(slot_id, _slot)| *slot_id)
+                        .collect();
 
                     for (period_id, collo_period) in &mut self.inner_data.colloscope.period_map {
                         // Only change in period status should be considered
@@ -682,7 +674,7 @@ impl crate::Data {
 
                         if old_params.excluded_periods.contains(period_id) {
                             // The period was excluded but is not anymore
-                            for (slot_id, _slot) in &subject_slots.ordered_slots {
+                            for slot_id in &slot_ids {
                                 collo_period.slot_map.insert(
                                     *slot_id,
                                     colloscopes::ColloscopeSlot::new_empty_from_params(
@@ -694,7 +686,7 @@ impl crate::Data {
                             }
                         } else {
                             // The period was included but will now be excluded
-                            for (slot_id, _slot) in &subject_slots.ordered_slots {
+                            for slot_id in &slot_ids {
                                 collo_period.slot_map.remove(slot_id);
                             }
                         }

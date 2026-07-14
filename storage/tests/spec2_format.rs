@@ -601,17 +601,9 @@ fn derived_key_sets_are_completed() {
             .unwrap()
             .is_empty()
     );
-    assert_eq!(params.slots.subject_map.len(), 1);
-    assert!(
-        params
-            .slots
-            .subject_map
-            .values()
-            .next()
-            .unwrap()
-            .ordered_slots
-            .is_empty()
-    );
+    assert_eq!(params.slots.subjects_with_slots().count(), 1);
+    let subject_id = params.slots.subjects_with_slots().next().unwrap();
+    assert_eq!(params.slots.slot_count_for_subject(subject_id), Some(0));
 }
 
 #[test]
@@ -690,4 +682,59 @@ fn object_id_above_the_id_space_is_rejected() {
     ))]);
 
     assert_eq!(expect_decode_error(&content), DecodeError::EndOfTheUniverse);
+}
+
+#[test]
+fn duplicate_slot_id_across_subjects_is_rejected() {
+    // A slot id shared by two subjects must be rejected explicitly. Since
+    // the flat slot-table restructure (phase B commit 3) the slots are
+    // keyed by id, so collapsing two rows onto the same id would silently
+    // drop a slot; decode detects the duplicate instead.
+    let subject = |id: u64, name: &str| {
+        format!(
+            r#"{{ "id": {id}, "name": "{name}", "interrogation_parameters": {{
+                "students_per_group": {{ "min": 1, "max": 2 }},
+                "groups_per_interrogation": {{ "min": 1, "max": 1 }},
+                "duration_minutes": 60,
+                "take_duration_into_account": true,
+                "periodicity": {{ "ExactlyPeriodic": {{ "periodicity_in_weeks": 2 }} }}
+            }}, "excluded_periods": [] }}"#
+        )
+    };
+    let entries = vec![
+        entry(
+            r#"{ "GeneralPlanning": {
+                "first_week": null,
+                "periods": [
+                    { "id": 1, "weeks": [
+                        { "interrogations": true, "annotation": null },
+                        { "interrogations": true, "annotation": null }
+                    ] }
+                ]
+            } }"#,
+        ),
+        entry(&format!(
+            r#"{{ "Subjects": [ {}, {} ] }}"#,
+            subject(2, "Mathématiques"),
+            subject(4, "Physique")
+        )),
+        entry(
+            r#"{ "Teachers": [
+                { "id": 3, "surname": "Rogue", "firstname": "Severus", "tel": null, "email": null, "subjects": [2, 4] }
+            ] }"#,
+        ),
+        // Both subject rows reference the same slot id 8.
+        entry(
+            r#"{ "Slots": [
+                { "subject_id": 2, "slots": [
+                    { "id": 8, "teacher_id": 3, "start": { "day": "monday", "time": "14:00" }, "extra_info": "", "week_pattern_id": null, "cost": 0 }
+                ] },
+                { "subject_id": 4, "slots": [
+                    { "id": 8, "teacher_id": 3, "start": { "day": "tuesday", "time": "15:00" }, "extra_info": "", "week_pattern_id": null, "cost": 0 }
+                ] }
+            ] }"#,
+        ),
+    ];
+    let content = document(&entries);
+    assert_eq!(expect_decode_error(&content), DecodeError::DuplicatedID);
 }
