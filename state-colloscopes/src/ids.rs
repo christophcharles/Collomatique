@@ -214,6 +214,29 @@ pub enum NewId {
     SlotPairingRuleId(SlotPairingRuleId),
 }
 
+impl NewId {
+    /// The raw `u64` behind whichever id kind this is.
+    ///
+    /// The typed wrapper is erased — two different id kinds sharing the same
+    /// underlying number compare equal through this. Used where a single
+    /// numeric id space is needed across all tables (e.g. duplicate scanning
+    /// and the `IdIssuer` high-water mark).
+    pub fn inner(&self) -> u64 {
+        match *self {
+            NewId::StudentId(id) => id.inner(),
+            NewId::PeriodId(id) => id.inner(),
+            NewId::SubjectId(id) => id.inner(),
+            NewId::TeacherId(id) => id.inner(),
+            NewId::WeekPatternId(id) => id.inner(),
+            NewId::SlotId(id) => id.inner(),
+            NewId::IncompatId(id) => id.inner(),
+            NewId::GroupListId(id) => id.inner(),
+            NewId::PairingRuleId(id) => id.inner(),
+            NewId::SlotPairingRuleId(id) => id.inner(),
+        }
+    }
+}
+
 impl From<StudentId> for NewId {
     fn from(value: StudentId) -> Self {
         NewId::StudentId(value)

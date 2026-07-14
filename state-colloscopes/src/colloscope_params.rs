@@ -3,7 +3,7 @@
 //! This module defines the relevant types to describes the full set of parameters for colloscopes
 
 use crate::ids::{
-    GroupListId, IncompatId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId,
+    GroupListId, IncompatId, NewId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId,
     SubjectId, TeacherId, WeekPatternId,
 };
 
@@ -271,47 +271,41 @@ impl Parameters {
 }
 
 impl Parameters {
+    /// Every primary-key id in the document, typed as [`NewId`], in the
+    /// canonical table order.
+    ///
+    /// This is the single declared enumeration of the ten entity tables. The
+    /// order — students, periods, subjects, teachers, week patterns, slots,
+    /// incompats, group lists, pairing rules, slot pairing rules — is kept
+    /// identical to the historical [`Parameters::ids`] chain, which now defers
+    /// to this method.
+    pub fn all_ids(&self) -> impl Iterator<Item = NewId> + '_ {
+        self.students
+            .student_map
+            .keys()
+            .map(NewId::from)
+            .chain(self.periods.ordered_period_list.keys().map(NewId::from))
+            .chain(self.subjects.ordered_subject_list.keys().map(NewId::from))
+            .chain(self.teachers.teacher_map.keys().map(NewId::from))
+            .chain(self.week_patterns.week_pattern_map.keys().map(NewId::from))
+            .chain(self.slots.slot_ids().map(NewId::from))
+            .chain(self.incompats.incompat_map.keys().map(NewId::from))
+            .chain(self.group_lists.group_list_map.keys().map(NewId::from))
+            .chain(self.pairings.pairing_rule_map.keys().map(NewId::from))
+            .chain(
+                self.slot_pairings
+                    .slot_pairing_rule_map
+                    .keys()
+                    .map(NewId::from),
+            )
+    }
+
     /// USED INTERNALLY
     ///
-    /// Returns an iterator on all ids that appear in the colloscope params
-    pub(crate) fn ids(&self) -> impl Iterator<Item = u64> {
-        let student_ids = self.students.student_map.keys().map(|x| x.inner());
-        let period_ids = self
-            .periods
-            .ordered_period_list
-            .iter()
-            .map(|(id, _d)| id.inner());
-        let subject_ids = self
-            .subjects
-            .ordered_subject_list
-            .iter()
-            .map(|(id, _d)| id.inner());
-        let teacher_ids = self.teachers.teacher_map.keys().map(|x| x.inner());
-        let week_patterns_ids = self
-            .week_patterns
-            .week_pattern_map
-            .keys()
-            .map(|x| x.inner());
-        let slot_ids = self.slots.slot_ids().map(|id| id.inner());
-        let incompat_ids = self.incompats.incompat_map.keys().map(|x| x.inner());
-        let group_list_ids = self.group_lists.group_list_map.keys().map(|x| x.inner());
-        let pairing_rule_ids = self.pairings.pairing_rule_map.keys().map(|x| x.inner());
-        let slot_pairing_rule_ids = self
-            .slot_pairings
-            .slot_pairing_rule_map
-            .keys()
-            .map(|x| x.inner());
-
-        student_ids
-            .chain(period_ids)
-            .chain(subject_ids)
-            .chain(teacher_ids)
-            .chain(week_patterns_ids)
-            .chain(slot_ids)
-            .chain(incompat_ids)
-            .chain(group_list_ids)
-            .chain(pairing_rule_ids)
-            .chain(slot_pairing_rule_ids)
+    /// Returns an iterator on all ids that appear in the colloscope params, as
+    /// raw `u64`. A thin numeric adapter over [`Parameters::all_ids`].
+    pub(crate) fn ids(&self) -> impl Iterator<Item = u64> + '_ {
+        self.all_ids().map(|id| id.inner())
     }
 
     /// USED INTERNALLY

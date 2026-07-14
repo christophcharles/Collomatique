@@ -6,7 +6,8 @@
 //! rebuilt), a dangling id resolves to `None`, and `resolve` round-trips on
 //! valid ids while panicking on a dangling one.
 //!
-//! Later phase-C commits (Join views, `all_ids`) extend this file.
+//! Two further phase-C sections extend this file: the `Join`-view tests (C3b)
+//! and the `all_ids` table-enumeration test (C3c).
 
 use collomatique_state::{AppState, Join, traits::Manager};
 use collomatique_state_colloscopes::{
@@ -87,6 +88,7 @@ struct Built {
     student: StudentId,
     week_pattern: WeekPatternId,
     slot: SlotId,
+    slot2: SlotId,
     incompat: IncompatId,
     group_list: GroupListId,
     pairing: PairingRuleId,
@@ -220,6 +222,7 @@ fn build_document(app: &mut AppState<Data, String>) -> Built {
         student,
         week_pattern,
         slot,
+        slot2,
         incompat,
         group_list,
         pairing,
@@ -419,4 +422,40 @@ fn dangling_fk_join_returns_the_new_id_error() {
         bogus.join(params),
         Err(NewId::TeacherId(id)) if id == dangling_teacher
     ));
+}
+
+// --- Table enumeration (C3c) --------------------------------------------
+
+#[test]
+fn all_ids_lists_every_table_in_canonical_order() {
+    let mut app = AppState::<_, String>::new(Data::new());
+    let ids = build_document(&mut app);
+    let params = &app.get_data().get_inner_data().params;
+
+    // `all_ids` is the single declared enumeration of the ten tables. The order
+    // is fixed: students, periods, subjects (in OrderedTable order: Math then
+    // Physics), teachers, week patterns, slots (id order: slot then slot2),
+    // incompats, group lists, pairing rules, slot pairing rules.
+    let expected = vec![
+        NewId::StudentId(ids.student),
+        NewId::PeriodId(ids.period),
+        NewId::SubjectId(ids.subject),
+        NewId::SubjectId(ids.phys),
+        NewId::TeacherId(ids.teacher),
+        NewId::WeekPatternId(ids.week_pattern),
+        NewId::SlotId(ids.slot),
+        NewId::SlotId(ids.slot2),
+        NewId::IncompatId(ids.incompat),
+        NewId::GroupListId(ids.group_list),
+        NewId::PairingRuleId(ids.pairing),
+        NewId::SlotPairingRuleId(ids.slot_pairing),
+    ];
+    assert_eq!(params.all_ids().collect::<Vec<_>>(), expected);
+
+    // `NewId::inner` strips the typed wrapper to the raw `u64` the numeric
+    // `ids()` view (and duplicate scanning) runs on.
+    assert_eq!(
+        NewId::SlotId(ids.slot).inner(),
+        <SlotId as Id>::inner(&ids.slot)
+    );
 }

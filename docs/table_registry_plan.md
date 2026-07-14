@@ -471,6 +471,19 @@ types in the entity modules, same philosophy as the item-6 split):
     id-sorted `Vec<&Subject>` from the `BTreeSet` FK lift, `Option` FK both ways, nested
     `JoinedRulePart` composition, and a dangling FK → `Err(NewId::TeacherId(_))`. Storage
     byte-stability (`round_trip_identity`) confirms the Join derive adds no serde/on-disk impact.
+  - *C3c status (shipped)*: table enumeration. `NewId::inner()` (ten-arm match → each id's
+    `inner()`) erases the typed wrapper to the raw `u64` the duplicate-scan / `IdIssuer` path runs
+    on. New public `Parameters::all_ids() -> impl Iterator<Item = NewId> + '_` is the single
+    declared enumeration of the ten tables in the canonical order (students, periods, subjects,
+    teachers, week patterns, slots, incompats, group lists, pairing rules, slot pairing rules),
+    each table via `keys()`/`slot_ids()` mapped through `NewId::from`. The historical
+    `pub(crate) fn ids() -> impl Iterator<Item = u64>` becomes a thin adapter,
+    `self.all_ids().map(|id| id.inner())` — the *only* touch to an existing code path in all of
+    phase C; its in-crate callers (`check_no_duplicate_ids`, `IdIssuer` seeding, the invariant
+    max-check) are untouched. `tests/read_api.rs` extended with a pin asserting `all_ids()` equals
+    the exact captured id list in declared order (also pinning each of the ten `NewId` variants
+    once) plus a `NewId::inner` vs `Id::inner` equivalence check. Byte-stability and the property
+    harness (which run through `ids()`) regression-cover the re-plumbing.
 - **Reverse lookups** (public, the item-2 deliverable):
 
 ```rust
@@ -558,17 +571,20 @@ the three contract scripts, run by the user.
 
 ### Phase C — registry + SQL-like functions (consumer step (b))
 
-- **C1**: `refs.rs` — `RefSite` (~26 variants, payloads per 4.3), visitor trait, walker with
+- **C1** ✅ DONE: `refs.rs` — `RefSite` (~26 variants, payloads per 4.3), visitor trait, walker with
   its fixed documented order, dense-mirror walkers, `references_to_*` API. A pin test asserts
   the exact site list and order for each id kind on a small hand-built document (built via ops,
   like `found_bugs.rs`).
-- **C2**: `#[derive(References)]` + `#[fk]` attributes applied to all regular relationships;
+- **C2** ✅ DONE: `#[derive(References)]` + `#[fk]` attributes applied to all regular relationships;
   manual `References` impls for the irregular ones (`GroupListFilling`, `Teacher.subjects` is
   regular, week-pattern length coupling #8 stays a special walker case). The C1 pin test must
   not change — it is the proof the derive emits the same references the hand walk did.
-- **C3** ★: the SQL-like read API (4.4): `Lookup` impls on `Parameters`/`InnerData` (the
-  trait itself lands in A3), table enumeration replacing `Parameters::ids()`, ordered
-  accessors. New tests; no consumer migrated yet.
+- **C3** ✅ DONE: the SQL-like read API (4.4), shipped in three commits — C3a (`Lookup` impls +
+  `lookup`/`resolve`), C3b (`Join` derives + `Joined*` views), C3c (`NewId::inner` +
+  `Parameters::all_ids` replacing the `ids()` chain). Ordered accessors deferred to phase D
+  (consumers still call the `find_*_position` helpers). New tests; no consumer migrated yet.
+  Per-commit status detail in §4.3. **★ phase-C milestone**: user runs the 500-seed property
+  reference + the three contract scripts before phase D.
 
 ### Phase D — consumer migration (consumer step (c))
 
