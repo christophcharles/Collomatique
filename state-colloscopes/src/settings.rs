@@ -22,6 +22,18 @@ pub struct Settings {
     pub students: Table<StudentId, Limits>,
 }
 
+impl Settings {
+    /// Return the effective [`Limits`] for a student.
+    ///
+    /// A per-student override entry wins **verbatim** (whole-entry): if the
+    /// student has an entry in [`Settings::students`], that entry is returned as
+    /// is — a `None` field disables the corresponding global limit. Otherwise the
+    /// [`Settings::global`] limits apply.
+    pub fn limits_for(&self, student: StudentId) -> &Limits {
+        self.students.get(&student).unwrap_or(&self.global)
+    }
+}
+
 /// Strict limits in resolution
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Limits {
@@ -59,5 +71,49 @@ impl crate::Data {
                 Ok(AnnotatedSettingsOp::Update(old_settings))
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ids::Id;
+
+    fn soft(value: u32) -> Option<SoftParam<u32>> {
+        Some(SoftParam { soft: true, value })
+    }
+
+    #[test]
+    fn limits_for_falls_back_to_global_without_override() {
+        let mut settings = Settings::default();
+        settings.global.interrogations_per_week_max = soft(3);
+
+        let student = unsafe { StudentId::new(1) };
+        assert_eq!(settings.limits_for(student), &settings.global);
+        assert_eq!(
+            settings.limits_for(student).interrogations_per_week_max,
+            soft(3)
+        );
+    }
+
+    #[test]
+    fn limits_for_returns_override_entry_verbatim() {
+        let mut settings = Settings::default();
+        settings.global.interrogations_per_week_max = soft(3);
+
+        // A whole-entry override with the weekly-max field `None` must win
+        // verbatim — it disables the global limit rather than inheriting it.
+        let student = unsafe { StudentId::new(1) };
+        let override_limits = Limits {
+            interrogations_per_week_max: None,
+            ..Default::default()
+        };
+        settings.students.insert(student, override_limits.clone());
+
+        assert_eq!(settings.limits_for(student), &override_limits);
+        assert_eq!(
+            settings.limits_for(student).interrogations_per_week_max,
+            None
+        );
     }
 }

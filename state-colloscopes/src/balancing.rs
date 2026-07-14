@@ -30,6 +30,18 @@ impl Default for Balancing {
     }
 }
 
+impl Balancing {
+    /// Return the effective [`BalancingOptions`] for a subject.
+    ///
+    /// A per-subject override entry wins **verbatim** (whole-entry): if the
+    /// subject has an entry in [`Balancing::subjects`], that entry is returned as
+    /// is — a `None` field disables the corresponding global option. Otherwise the
+    /// [`Balancing::global`] options apply.
+    pub fn options_for(&self, subject: SubjectId) -> &BalancingOptions {
+        self.subjects.get(&subject).unwrap_or(&self.global)
+    }
+}
+
 /// Options for balancing interrogations
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BalancingOptions {
@@ -89,5 +101,38 @@ impl crate::Data {
                 Ok(AnnotatedBalancingOp::Update(old_balancing))
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ids::Id;
+
+    #[test]
+    fn options_for_falls_back_to_global_without_override() {
+        let balancing = Balancing::default();
+
+        let subject = unsafe { SubjectId::new(1) };
+        assert_eq!(balancing.options_for(subject), &balancing.global);
+        assert!(balancing.options_for(subject).teacher_rotation.is_some());
+    }
+
+    #[test]
+    fn options_for_returns_override_entry_verbatim() {
+        let mut balancing = Balancing::default();
+        assert!(balancing.global.teacher_rotation.is_some());
+
+        // A whole-entry override with `teacher_rotation: None` must win verbatim —
+        // it disables the global option rather than inheriting it.
+        let subject = unsafe { SubjectId::new(1) };
+        let override_options = BalancingOptions {
+            teacher_rotation: None,
+            ..Default::default()
+        };
+        balancing.subjects.insert(subject, override_options.clone());
+
+        assert_eq!(balancing.options_for(subject), &override_options);
+        assert!(balancing.options_for(subject).teacher_rotation.is_none());
     }
 }
