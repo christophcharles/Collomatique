@@ -436,6 +436,17 @@ types in the entity modules, same philosophy as the item-6 split):
     single `references_to_impl!` filtering-visitor macro. The temporary `walk_params_refs_for_tests`
     shim was removed — `tests/refs_registry.rs` now drives `walk_refs`/`references_to_*` and pins
     the full ordered output plus every reverse lookup (both `non_trivial` polarities).
+  - *C2 status (shipped)*: `#[derive(References)]` + `#[fk]` applied to the ten entity structs
+    (`Subject`, `Student`, `Teacher`, `Slot`, `Incompatibility`, `RulePart`, `PairingRule`,
+    `SlotRulePart`, `SlotPairingRule`, `GroupList`), with the `#[fk(name = …)]` join renames
+    (`subject_id→subject`, `teacher_id→teacher`, `week_pattern_id→week_pattern`, `slot_id→slot`)
+    added now (validated-and-ignored by `References`, used by C3b `Join`). `GroupListFilling`
+    gets a manual `References` impl (references live inside the enum variants) composing with the
+    derive through the generic `K` bound. The eight per-entity family walkers in `refs.rs` now
+    drive `for_each_ref::<NewId>` + kind-dispatch (a `match NewId` per entity, `unreachable!` on
+    kinds the entity cannot reference); the dense-mirror/colloscope/settings/balancing/week-pattern
+    walkers stay hand-written. Acceptance held: the C1b pin test passes **unchanged**, proving the
+    derives emit exactly the hand walk's ordered output.
 - **Reverse lookups** (public, the item-2 deliverable):
 
 ```rust

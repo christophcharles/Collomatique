@@ -8,6 +8,8 @@ use std::collections::BTreeSet;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use collomatique_state::References;
+
 use crate::Table;
 use crate::ids::{PeriodId, SlotId, SlotPairingRuleId};
 use crate::ops::AnnotatedSlotPairingOp;
@@ -20,9 +22,10 @@ pub struct SlotPairings {
 }
 
 /// One part (antecedent or consequent) of a slot pairing rule
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References)]
 pub struct SlotRulePart {
     /// The slot this part refers to
+    #[fk(name = slot)]
     pub slot_id: SlotId,
     /// Whether the slot should be used (true) or not used (false)
     pub should_have: bool,
@@ -38,13 +41,16 @@ pub struct SlotRulePart {
 ///
 /// Both slots must belong to the same subject. Rules only apply on weeks where
 /// both slots are active.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References)]
 pub struct SlotPairingRule {
     /// The antecedent of the implication
+    #[fk]
     pub antecedent: SlotRulePart,
     /// The consequent of the implication
+    #[fk]
     pub consequent: SlotRulePart,
     /// Periods where the rule does NOT apply
+    #[fk]
     pub excluded_periods: BTreeSet<PeriodId>,
     /// Whether this is a soft constraint (best-effort) or hard (strict)
     pub soft: bool,

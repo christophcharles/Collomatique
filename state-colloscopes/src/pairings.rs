@@ -7,6 +7,8 @@ use std::collections::BTreeSet;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use collomatique_state::References;
+
 use crate::Table;
 use crate::ids::{PairingRuleId, PeriodId, SubjectId};
 use crate::ops::AnnotatedPairingOp;
@@ -19,9 +21,10 @@ pub struct Pairings {
 }
 
 /// One part (antecedent or consequent) of a pairing rule
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References)]
 pub struct RulePart {
     /// The subject this part refers to
+    #[fk(name = subject)]
     pub subject_id: SubjectId,
     /// Whether the student should have an interrogation in the subject (true)
     /// or should not have one (false)
@@ -38,13 +41,16 @@ pub struct RulePart {
 /// interrogation that week.
 ///
 /// Rules only apply to students enrolled in both subjects.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References)]
 pub struct PairingRule {
     /// The antecedent of the implication
+    #[fk]
     pub antecedent: RulePart,
     /// The consequent of the implication
+    #[fk]
     pub consequent: RulePart,
     /// Periods where the rule does NOT apply
+    #[fk]
     pub excluded_periods: BTreeSet<PeriodId>,
     /// Whether this is a soft constraint (best-effort) or hard (strict)
     pub soft: bool,

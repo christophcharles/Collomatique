@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 use std::{collections::BTreeSet, num::NonZeroU32};
 use thiserror::Error;
 
+use collomatique_state::References;
+
 use crate::OrderedTable;
 use crate::colloscopes;
 use crate::ids::{GroupListId, IncompatId, PairingRuleId, PeriodId, SlotId, SubjectId, TeacherId};
@@ -22,7 +24,7 @@ pub struct Subjects {
 }
 
 /// Description of one subject
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, References)]
 pub struct Subject {
     /// Parameters for the subject
     ///
@@ -32,6 +34,7 @@ pub struct Subject {
     /// Periods that should not be covered by the subject
     ///
     /// By default a subject is present for every period.
+    #[fk]
     pub excluded_periods: BTreeSet<PeriodId>,
 }
 

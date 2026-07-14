@@ -5,6 +5,8 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use collomatique_state::References;
+
 use crate::Table;
 use crate::colloscopes;
 use crate::ids::{PeriodId, SlotId, SlotPairingRuleId, SubjectId, TeacherId, WeekPatternId};
@@ -41,14 +43,16 @@ pub struct Slots {
 pub struct DuplicatedSlotIdError(pub SlotId);
 
 /// Description of a single slot
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References)]
 pub struct Slot {
     /// Subject this slot belongs to
     ///
     /// This is authoritative: the slot is grouped under this subject in the
     /// ordering sidecar, and [crate::SlotOp::Update] rejects changing it.
+    #[fk(name = subject)]
     pub subject_id: SubjectId,
     /// Teacher for the interrogation
+    #[fk(name = teacher)]
     pub teacher_id: TeacherId,
     /// Day and start time for the interrogation
     /// The duration is fixed by the subject
@@ -58,6 +62,7 @@ pub struct Slot {
     /// Week pattern for the interrogation
     ///
     /// If None, the interrogation happens everyweek
+    #[fk]
     pub week_pattern: Option<WeekPatternId>,
     /// Cost for the interrogation
     ///

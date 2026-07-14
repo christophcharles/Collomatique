@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 
 use thiserror::Error;
 
+use collomatique_state::References;
+
 use crate::Table;
 use crate::ids::{GroupListId, PeriodId, StudentId, SubjectId};
 use crate::ops::AnnotatedStudentOp;
@@ -22,11 +24,12 @@ pub struct Students {
 }
 
 /// Description of a single student
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, References)]
 pub struct Student {
     /// Description of the student in term of name and contact
     pub desc: crate::PersonWithContact,
     /// List of periods the student will not take part in
+    #[fk]
     pub excluded_periods: BTreeSet<PeriodId>,
 }
 

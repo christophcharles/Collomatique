@@ -38,12 +38,14 @@
 //!   the structural no-orphan/count checks.
 //! - colloscope group *indices*: not ids.
 
+use collomatique_state::References;
+
 use crate::InnerData;
 use crate::colloscope_params::Parameters;
 use crate::colloscopes::Colloscope;
 use crate::group_lists::GroupListFilling;
 use crate::ids::{
-    GroupListId, IncompatId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId,
+    GroupListId, IncompatId, NewId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId,
     SubjectId, TeacherId, WeekPatternId,
 };
 
@@ -177,97 +179,99 @@ pub(crate) fn walk_params_refs(params: &Parameters, v: &mut impl RefVisitor) {
     walk_week_pattern_coupling(params, v);
 }
 
+// The per-entity family walkers below drive `References::for_each_ref` and map
+// each yielded `NewId` to its [RefSite]. Within a single entity value the
+// referenced-id *kind* names the site uniquely (verified against the relationship
+// inventory), so the `match` on `NewId` is exhaustive over the kinds that entity
+// can reference; every other arm is `unreachable!`. `for_each_ref` visits fields
+// in declaration order, which is exactly the documented within-entity walk order.
+
 fn walk_subjects(params: &Parameters, v: &mut impl RefVisitor) {
     for (subject_id, subject) in params.subjects.ordered_subject_list.iter() {
-        for &period_id in &subject.excluded_periods {
-            v.period_ref(period_id, RefSite::SubjectExcludedPeriods(subject_id));
-        }
+        subject.for_each_ref(&mut |id: NewId| match id {
+            NewId::PeriodId(p) => v.period_ref(p, RefSite::SubjectExcludedPeriods(subject_id)),
+            _ => unreachable!("Subject only references periods"),
+        });
     }
 }
 
 fn walk_teachers(params: &Parameters, v: &mut impl RefVisitor) {
     for (teacher_id, teacher) in params.teachers.teacher_map.iter() {
-        for &subject_id in &teacher.subjects {
-            v.subject_ref(subject_id, RefSite::TeacherSubjects(teacher_id));
-        }
+        teacher.for_each_ref(&mut |id: NewId| match id {
+            NewId::SubjectId(s) => v.subject_ref(s, RefSite::TeacherSubjects(teacher_id)),
+            _ => unreachable!("Teacher only references subjects"),
+        });
     }
 }
 
 fn walk_students(params: &Parameters, v: &mut impl RefVisitor) {
     for (student_id, student) in params.students.student_map.iter() {
-        for &period_id in &student.excluded_periods {
-            v.period_ref(period_id, RefSite::StudentExcludedPeriods(student_id));
-        }
+        student.for_each_ref(&mut |id: NewId| match id {
+            NewId::PeriodId(p) => v.period_ref(p, RefSite::StudentExcludedPeriods(student_id)),
+            _ => unreachable!("Student only references periods"),
+        });
     }
 }
 
 fn walk_slots(params: &Parameters, v: &mut impl RefVisitor) {
     for (slot_id, slot) in params.slots.slot_entries() {
-        v.subject_ref(slot.subject_id, RefSite::SlotSubject(slot_id));
-        v.teacher_ref(slot.teacher_id, RefSite::SlotTeacher(slot_id));
-        if let Some(week_pattern) = slot.week_pattern {
-            v.week_pattern_ref(week_pattern, RefSite::SlotWeekPattern(slot_id));
-        }
+        slot.for_each_ref(&mut |id: NewId| match id {
+            NewId::SubjectId(s) => v.subject_ref(s, RefSite::SlotSubject(slot_id)),
+            NewId::TeacherId(t) => v.teacher_ref(t, RefSite::SlotTeacher(slot_id)),
+            NewId::WeekPatternId(w) => v.week_pattern_ref(w, RefSite::SlotWeekPattern(slot_id)),
+            _ => unreachable!("Slot only references subject/teacher/week pattern"),
+        });
     }
 }
 
 fn walk_incompats(params: &Parameters, v: &mut impl RefVisitor) {
     for (incompat_id, incompat) in params.incompats.incompat_map.iter() {
-        v.subject_ref(incompat.subject_id, RefSite::IncompatSubject(incompat_id));
-        if let Some(week_pattern) = incompat.week_pattern_id {
-            v.week_pattern_ref(week_pattern, RefSite::IncompatWeekPattern(incompat_id));
-        }
+        incompat.for_each_ref(&mut |id: NewId| match id {
+            NewId::SubjectId(s) => v.subject_ref(s, RefSite::IncompatSubject(incompat_id)),
+            NewId::WeekPatternId(w) => {
+                v.week_pattern_ref(w, RefSite::IncompatWeekPattern(incompat_id))
+            }
+            _ => unreachable!("Incompatibility only references subject/week pattern"),
+        });
     }
 }
 
 fn walk_pairings(params: &Parameters, v: &mut impl RefVisitor) {
+    // Both parts share `RefSite::PairingRulePart` (the block error does not
+    // distinguish them); `for_each_ref` visits antecedent then consequent then
+    // the excluded periods, matching the documented order.
     for (rule_id, rule) in params.pairings.pairing_rule_map.iter() {
-        v.subject_ref(
-            rule.antecedent.subject_id,
-            RefSite::PairingRulePart(rule_id),
-        );
-        v.subject_ref(
-            rule.consequent.subject_id,
-            RefSite::PairingRulePart(rule_id),
-        );
-        for &period_id in &rule.excluded_periods {
-            v.period_ref(period_id, RefSite::PairingRuleExcludedPeriods(rule_id));
-        }
+        rule.for_each_ref(&mut |id: NewId| match id {
+            NewId::SubjectId(s) => v.subject_ref(s, RefSite::PairingRulePart(rule_id)),
+            NewId::PeriodId(p) => v.period_ref(p, RefSite::PairingRuleExcludedPeriods(rule_id)),
+            _ => unreachable!("PairingRule only references subject/period"),
+        });
     }
 }
 
 fn walk_slot_pairings(params: &Parameters, v: &mut impl RefVisitor) {
     for (rule_id, rule) in params.slot_pairings.slot_pairing_rule_map.iter() {
-        v.slot_ref(
-            rule.antecedent.slot_id,
-            RefSite::SlotPairingRulePart(rule_id),
-        );
-        v.slot_ref(
-            rule.consequent.slot_id,
-            RefSite::SlotPairingRulePart(rule_id),
-        );
-        for &period_id in &rule.excluded_periods {
-            v.period_ref(period_id, RefSite::SlotPairingRuleExcludedPeriods(rule_id));
-        }
+        rule.for_each_ref(&mut |id: NewId| match id {
+            NewId::SlotId(s) => v.slot_ref(s, RefSite::SlotPairingRulePart(rule_id)),
+            NewId::PeriodId(p) => v.period_ref(p, RefSite::SlotPairingRuleExcludedPeriods(rule_id)),
+            _ => unreachable!("SlotPairingRule only references slot/period"),
+        });
     }
 }
 
 fn walk_group_lists(params: &Parameters, v: &mut impl RefVisitor) {
     for (gl_id, gl) in params.group_lists.group_list_map.iter() {
-        match &gl.filling {
-            GroupListFilling::Prefilled { groups } => {
-                for group in groups {
-                    for &student_id in &group.students {
-                        v.student_ref(student_id, RefSite::GroupListPrefilledStudent(gl_id));
-                    }
-                }
-            }
-            GroupListFilling::Automatic { excluded_students } => {
-                for &student_id in excluded_students {
-                    v.student_ref(student_id, RefSite::GroupListExcludedStudent(gl_id));
-                }
-            }
-        }
+        // A group list value is exactly one filling variant, so pre-matching once
+        // picks the site constructor soundly (the two student sites are
+        // distinguished by variant, not by which student is referenced).
+        let site = match &gl.filling {
+            GroupListFilling::Prefilled { .. } => RefSite::GroupListPrefilledStudent(gl_id),
+            GroupListFilling::Automatic { .. } => RefSite::GroupListExcludedStudent(gl_id),
+        };
+        gl.for_each_ref(&mut |id: NewId| match id {
+            NewId::StudentId(s) => v.student_ref(s, site),
+            _ => unreachable!("GroupList only references students"),
+        });
     }
 }
 

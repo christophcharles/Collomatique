@@ -9,6 +9,8 @@ use std::ops::RangeInclusive;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use collomatique_state::References;
+
 use crate::Table;
 use crate::colloscopes;
 use crate::group_lists;
@@ -32,11 +34,12 @@ pub struct GroupLists {
 }
 
 /// Description of a single group list
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default, References)]
 pub struct GroupList {
     /// parameters for the group list
     pub params: GroupListParameters,
     /// Filling strategy for the group list
+    #[fk]
     pub filling: GroupListFilling,
 }
 
@@ -55,6 +58,31 @@ impl Default for GroupListFilling {
     fn default() -> Self {
         GroupListFilling::Automatic {
             excluded_students: BTreeSet::new(),
+        }
+    }
+}
+
+// Irregular shape: the referenced students live inside the enum variants, so the
+// `#[derive(References)]` field-walk on `GroupList` cannot reach them. This manual
+// impl bridges the gap and composes with that derive through its generic `K` bound
+// (the derive only requires `GroupListFilling: References<K>`). The visit order
+// matches the hand-written walker it replaces: prefilled groups in `Vec` order
+// then students in set order, or excluded students in set order.
+impl<K: From<StudentId>> References<K> for GroupListFilling {
+    fn for_each_ref(&self, f: &mut dyn FnMut(K)) {
+        match self {
+            GroupListFilling::Prefilled { groups } => {
+                for group in groups {
+                    for &student_id in &group.students {
+                        f(K::from(student_id));
+                    }
+                }
+            }
+            GroupListFilling::Automatic { excluded_students } => {
+                for &student_id in excluded_students {
+                    f(K::from(student_id));
+                }
+            }
         }
     }
 }
