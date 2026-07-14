@@ -447,6 +447,17 @@ types in the entity modules, same philosophy as the item-6 split):
     kinds the entity cannot reference); the dense-mirror/colloscope/settings/balancing/week-pattern
     walkers stay hand-written. Acceptance held: the C1b pin test passes **unchanged**, proving the
     derives emit exactly the hand walk's ordered output.
+  - *C3a status (shipped)*: the ten `Lookup<XxxId> for Parameters` impls (keyed on each typed id,
+    `Entity` matching the id's `#[entity(…)]` type), each delegating to the container accessor
+    already in `colloscope_params.rs` (`find_period`/`find_subject`/`find_slot` for the ordered
+    tables, `Table::get` for the rest) so lookup borrows straight out of the table — no clone. Two
+    inherent helpers on `Parameters`: `lookup<I>` (fallible entry point, shadowing the trait method,
+    delegating via fully-qualified `<Self as Lookup<I>>::lookup`) and `resolve<I: Id>` (infallible
+    for already-validated data, panics printing the dangling id). New `tests/read_api.rs` builds one
+    entity of every kind through the op API and pins: `lookup`/`resolve` return the live borrow
+    (pointer identity), a `1 << 40` dangling id resolves to `None` for every kind, and `resolve`
+    panics on a dangling id. Kept separate from C3b (the Join derive) so this trivial foundation
+    stays an isolated, fully-tested checkpoint. No consumer code touched; no on-disk/wire impact.
 - **Reverse lookups** (public, the item-2 deliverable):
 
 ```rust

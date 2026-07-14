@@ -9,6 +9,7 @@ use crate::ids::{
 
 use super::*;
 
+use collomatique_state::Lookup;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -159,6 +160,113 @@ impl Parameters {
         }
 
         None
+    }
+}
+
+// --- Keyed read interface (SQL-like lookup) ---
+//
+// One [`Lookup`] impl per entity kind, keyed on the matching typed id and
+// resolving to the entity type declared in that id's `#[entity(…)]` attribute
+// (`ids.rs`). Each delegates to the container accessor already used elsewhere
+// in this module, so lookup borrows straight out of the table — no clone, no
+// rebuild. These are the context impls the `Join` derives resolve against.
+
+impl Lookup<PeriodId> for Parameters {
+    type Entity = Vec<periods::WeekDesc>;
+    fn lookup(&self, id: PeriodId) -> Option<&Vec<periods::WeekDesc>> {
+        self.periods.find_period(id)
+    }
+}
+
+impl Lookup<SubjectId> for Parameters {
+    type Entity = subjects::Subject;
+    fn lookup(&self, id: SubjectId) -> Option<&subjects::Subject> {
+        self.subjects.find_subject(id)
+    }
+}
+
+impl Lookup<TeacherId> for Parameters {
+    type Entity = teachers::Teacher;
+    fn lookup(&self, id: TeacherId) -> Option<&teachers::Teacher> {
+        self.teachers.teacher_map.get(&id)
+    }
+}
+
+impl Lookup<StudentId> for Parameters {
+    type Entity = students::Student;
+    fn lookup(&self, id: StudentId) -> Option<&students::Student> {
+        self.students.student_map.get(&id)
+    }
+}
+
+impl Lookup<WeekPatternId> for Parameters {
+    type Entity = week_patterns::WeekPattern;
+    fn lookup(&self, id: WeekPatternId) -> Option<&week_patterns::WeekPattern> {
+        self.week_patterns.week_pattern_map.get(&id)
+    }
+}
+
+impl Lookup<SlotId> for Parameters {
+    type Entity = slots::Slot;
+    fn lookup(&self, id: SlotId) -> Option<&slots::Slot> {
+        self.slots.find_slot(id)
+    }
+}
+
+impl Lookup<IncompatId> for Parameters {
+    type Entity = incompats::Incompatibility;
+    fn lookup(&self, id: IncompatId) -> Option<&incompats::Incompatibility> {
+        self.incompats.incompat_map.get(&id)
+    }
+}
+
+impl Lookup<GroupListId> for Parameters {
+    type Entity = group_lists::GroupList;
+    fn lookup(&self, id: GroupListId) -> Option<&group_lists::GroupList> {
+        self.group_lists.group_list_map.get(&id)
+    }
+}
+
+impl Lookup<PairingRuleId> for Parameters {
+    type Entity = pairings::PairingRule;
+    fn lookup(&self, id: PairingRuleId) -> Option<&pairings::PairingRule> {
+        self.pairings.pairing_rule_map.get(&id)
+    }
+}
+
+impl Lookup<SlotPairingRuleId> for Parameters {
+    type Entity = slot_pairings::SlotPairingRule;
+    fn lookup(&self, id: SlotPairingRuleId) -> Option<&slot_pairings::SlotPairingRule> {
+        self.slot_pairings.slot_pairing_rule_map.get(&id)
+    }
+}
+
+impl Parameters {
+    /// Typed keyed lookup — the fallible entry point.
+    ///
+    /// Resolves any typed id against its table, returning `None` when the id
+    /// dangles. Use this for candidate/unvalidated data where a missing target
+    /// is a legitimate outcome. The concrete entity type is inferred from the
+    /// id kind through the [`Lookup`] impls above.
+    pub fn lookup<I>(&self, id: I) -> Option<&<Self as Lookup<I>>::Entity>
+    where
+        Self: Lookup<I>,
+    {
+        <Self as Lookup<I>>::lookup(self, id)
+    }
+
+    /// Infallible resolution for already-validated data.
+    ///
+    /// The invariant checks guarantee no reference dangles once a document is
+    /// committed, so on that data every id resolves. This variant unwraps that
+    /// guarantee and **panics** (printing the offending id) if it is ever
+    /// violated — a dangling id here is a bug, not an expected input.
+    pub fn resolve<I: Id>(&self, id: I) -> &<Self as Lookup<I>>::Entity
+    where
+        Self: Lookup<I>,
+    {
+        <Self as Lookup<I>>::lookup(self, id)
+            .unwrap_or_else(|| panic!("dangling {id:?} in validated data"))
     }
 }
 
