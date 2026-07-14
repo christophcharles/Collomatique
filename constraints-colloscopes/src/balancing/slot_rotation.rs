@@ -50,7 +50,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         }
 
         let enrolled = enrolled_students_for_subject(env, *subject_id);
-        let Some(subject_slots) = env.slots.subject_map.get(subject_id) else {
+        let Some(subject_slots) = env.slots.slots_vec_for_subject(*subject_id) else {
             continue;
         };
 
@@ -65,7 +65,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
             // week's epoch completes. See rotation.rs for the full rationale.
             let n = active_weeks.len();
             if n >= 2 {
-                for (slot_id, _slot_data) in &subject_slots.ordered_slots {
+                for (slot_id, _slot_data) in &subject_slots {
                     let slot_pairs = slot_week_pairs_for_slot(&slot_week_pairs, *slot_id);
                     for &student in &enrolled {
                         for i in 1..=n {
@@ -125,7 +125,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                     continue;
                 }
 
-                for (slot_id, _slot_data) in &subject_slots.ordered_slots {
+                for (slot_id, _slot_data) in &subject_slots {
                     let slot_pairs = slot_week_pairs_for_slot(&slot_week_pairs, *slot_id);
                     let ns = slot_weeks_in_range(&slot_pairs, *first_week, *last_week);
                     let max_count =

@@ -123,6 +123,101 @@ impl Slots {
                 .1,
         )
     }
+
+    // ---- Read surface (phase B commit 2) ----
+    //
+    // These methods are the sanctioned way to read the slots. Consumers must go
+    // through them rather than the `subject_map` / `ordered_slots` fields, so that
+    // the backend swap in phase B commit 3 (flat `slot_map` + `ordering` sidecar)
+    // only has to reimplement these methods, not touch every call site.
+
+    /// Returns the subject and the slot description for a slot id, if it is valid.
+    pub fn find_slot_with_subject(&self, slot_id: SlotId) -> Option<(SubjectId, &Slot)> {
+        let (subject_id, pos) = self.find_slot_subject_and_position(slot_id)?;
+
+        let slot = &self
+            .subject_map
+            .get(&subject_id)
+            .expect("Subject id should be valid at this point")
+            .ordered_slots
+            .get(pos)
+            .expect("Position should be valid at this point")
+            .1;
+        Some((subject_id, slot))
+    }
+
+    /// Iterator over the subjects that have interrogations (dense-key semantics), in id order.
+    pub fn subjects_with_slots(&self) -> impl Iterator<Item = SubjectId> + '_ {
+        self.subject_map.keys().copied()
+    }
+
+    /// Whether the subject is a valid subject with interrogations (has a slot entry).
+    pub fn has_interrogations(&self, subject_id: SubjectId) -> bool {
+        self.subject_map.contains_key(&subject_id)
+    }
+
+    /// Whether there is no subject with interrogations at all.
+    pub fn is_empty(&self) -> bool {
+        self.subject_map.is_empty()
+    }
+
+    /// Ordered slots for a subject, or `None` if the subject has no interrogations.
+    pub fn slots_for_subject(
+        &self,
+        subject_id: SubjectId,
+    ) -> Option<impl Iterator<Item = (&SlotId, &Slot)>> {
+        self.subject_map.get(&subject_id).map(|subject_slots| {
+            subject_slots
+                .ordered_slots
+                .iter()
+                .map(|(id, slot)| (id, slot))
+        })
+    }
+
+    /// Owned copy of the ordered slots for a subject, or `None` if it has no interrogations.
+    ///
+    /// Compat-window copy helper (same lifecycle as [`Table::to_vec`](crate::tables::OrderedTable::to_vec)):
+    /// returns a plain `Vec` so consumers do not have to name the backend type.
+    pub fn slots_vec_for_subject(&self, subject_id: SubjectId) -> Option<Vec<(SlotId, Slot)>> {
+        self.subject_map
+            .get(&subject_id)
+            .map(|subject_slots| subject_slots.ordered_slots.clone())
+    }
+
+    /// Number of slots for a subject, or `None` if the subject has no interrogations.
+    pub fn slot_count_for_subject(&self, subject_id: SubjectId) -> Option<usize> {
+        self.subject_map
+            .get(&subject_id)
+            .map(|subject_slots| subject_slots.ordered_slots.len())
+    }
+
+    /// First slot id for a subject (in order), or `None` if the subject is absent or empty.
+    pub fn first_slot_id_for_subject(&self, subject_id: SubjectId) -> Option<SlotId> {
+        self.subject_map
+            .get(&subject_id)?
+            .ordered_slots
+            .first()
+            .map(|(id, _)| *id)
+    }
+
+    /// Last slot id for a subject (in order), or `None` if the subject is absent or empty.
+    pub fn last_slot_id_for_subject(&self, subject_id: SubjectId) -> Option<SlotId> {
+        self.subject_map
+            .get(&subject_id)?
+            .ordered_slots
+            .last()
+            .map(|(id, _)| *id)
+    }
+
+    /// Iterator over every slot across all subjects (subject grouping flattened), in id order.
+    pub fn all_slots(&self) -> impl Iterator<Item = (&SlotId, &Slot)> {
+        self.subject_map.values().flat_map(|subject_slots| {
+            subject_slots
+                .ordered_slots
+                .iter()
+                .map(|(id, slot)| (id, slot))
+        })
+    }
 }
 
 /// Errors for interrogation slot operations

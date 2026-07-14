@@ -260,8 +260,8 @@ pub fn build(
         let subject_name = &subject.parameters.name;
 
         // Slots for this subject, in order
-        let slots = match params.slots.subject_map.get(subject_id) {
-            Some(subject_slots) => &subject_slots.ordered_slots,
+        let slots = match params.slots.slots_vec_for_subject(*subject_id) {
+            Some(subject_slots) => subject_slots,
             None => continue,
         };
 

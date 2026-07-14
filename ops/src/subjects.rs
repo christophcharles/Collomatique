@@ -404,15 +404,15 @@ impl SubjectsUpdateOp {
                         }
                     }
 
-                    let subject_slots = data
+                    if let Some((slot_id, _slot)) = data
                         .get_data()
                         .get_inner_data()
                         .params
                         .slots
-                        .subject_map
-                        .get(subject_id)
-                        .expect("Subject should have associated slots at this point");
-                    if let Some((slot_id, _slot)) = subject_slots.ordered_slots.first() {
+                        .slots_for_subject(*subject_id)
+                        .expect("Subject should have associated slots at this point")
+                        .next()
+                    {
                         return Some(CleaningOp {
                             warning: SubjectsUpdateWarning::LooseInterrogationSlots(*subject_id),
                             op: UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(*slot_id)),
@@ -503,11 +503,10 @@ impl SubjectsUpdateOp {
                             .get_inner_data()
                             .params
                             .slots
-                            .subject_map
-                            .get(subject_id)
+                            .slots_for_subject(*subject_id)
                             .expect("Subject should have slots at this point");
 
-                        for (slot_id, _slot) in &subject_slots.ordered_slots {
+                        for (slot_id, _slot) in subject_slots {
                             let collo_slot = colloscope_period
                                 .slot_map
                                 .get(slot_id)
@@ -637,18 +636,16 @@ impl SubjectsUpdateOp {
                     }
                 }
 
-                if let Some(subject_slots) = data
+                if let Some(slot_id) = data
                     .get_data()
                     .get_inner_data()
                     .params
                     .slots
-                    .subject_map
-                    .get(subject_id)
-                    && let Some((slot_id, _slot)) = subject_slots.ordered_slots.first()
+                    .first_slot_id_for_subject(*subject_id)
                 {
                     return Some(CleaningOp {
                         warning: SubjectsUpdateWarning::LooseInterrogationSlots(*subject_id),
-                        op: UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(*slot_id)),
+                        op: UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(slot_id)),
                     });
                 }
 

@@ -53,13 +53,7 @@ impl Var {
     }
 
     pub fn compute_slot_range(env: &VarEnv) -> Vec<SlotId> {
-        env.slots
-            .subject_map
-            .iter()
-            .flat_map(|(_subject_id, subject_slots)| {
-                subject_slots.ordered_slots.iter().map(|(id, _)| *id)
-            })
-            .collect()
+        env.slots.all_slots().map(|(id, _)| *id).collect()
     }
 
     pub fn enumerate_weeks_for_slot(env: &VarEnv, slot: &SlotId) -> Vec<GlobalWeek> {

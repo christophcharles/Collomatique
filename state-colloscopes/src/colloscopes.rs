@@ -224,11 +224,10 @@ impl ColloscopePeriod {
 
             let subject_slots = params
                 .slots
-                .subject_map
-                .get(&subject_id)
+                .slots_for_subject(subject_id)
                 .expect("Subjects should have slots");
 
-            for (slot_id, _slot) in &subject_slots.ordered_slots {
+            for (slot_id, _slot) in subject_slots {
                 slot_map.insert(
                     *slot_id,
                     ColloscopeSlot::new_empty_from_params(params, period_id, *slot_id),
@@ -254,12 +253,10 @@ impl ColloscopePeriod {
                 continue;
             }
 
-            let subject_slots = params
+            slot_count += params
                 .slots
-                .subject_map
-                .get(&subject_id)
+                .slot_count_for_subject(subject_id)
                 .expect("Subject should have slots at this point");
-            slot_count += subject_slots.ordered_slots.len();
         }
 
         if slot_count != self.slot_map.len() {
@@ -333,9 +330,9 @@ impl ColloscopeSlot {
             .map(|i| params.periods.ordered_period_list[i].1.len())
             .sum();
 
-        let (subject_id, pos) = params
+        let (subject_id, slot) = params
             .slots
-            .find_slot_subject_and_position(slot_id)
+            .find_slot_with_subject(slot_id)
             .expect("Slot ID should be valid");
 
         let subject = params
@@ -349,14 +346,6 @@ impl ColloscopeSlot {
         if subject.parameters.interrogation_parameters.is_none() {
             panic!("Subject should have interrogations")
         }
-
-        let orig_slots = params
-            .slots
-            .subject_map
-            .get(&subject_id)
-            .expect("Subject ID should be valid");
-
-        let slot = &orig_slots.ordered_slots[pos].1;
 
         let mut interrogations = vec![];
 

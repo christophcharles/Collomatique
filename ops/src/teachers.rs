@@ -83,13 +83,25 @@ impl TeachersUpdateOp {
         match self {
             Self::AddNewTeacher(_) => None,
             Self::UpdateTeacher(teacher_id, teacher) => {
-                for (subject_id, subject_slots) in
-                    &data.get_data().get_inner_data().params.slots.subject_map
+                for subject_id in data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .slots
+                    .subjects_with_slots()
                 {
-                    if teacher.subjects.contains(subject_id) {
+                    if teacher.subjects.contains(&subject_id) {
                         continue;
                     }
-                    for (slot_id, slot) in &subject_slots.ordered_slots {
+                    for (slot_id, slot) in data
+                        .get_data()
+                        .get_inner_data()
+                        .params
+                        .slots
+                        .slots_for_subject(subject_id)
+                        .into_iter()
+                        .flatten()
+                    {
                         if slot.teacher_id == *teacher_id {
                             return Some(CleaningOp {
                                 warning: TeachersUpdateWarning::LooseInterrogationSlots(
@@ -104,23 +116,12 @@ impl TeachersUpdateOp {
                 None
             }
             Self::DeleteTeacher(teacher_id) => {
-                for subject_slots in data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .slots
-                    .subject_map
-                    .values()
-                {
-                    for (slot_id, slot) in &subject_slots.ordered_slots {
-                        if slot.teacher_id == *teacher_id {
-                            return Some(CleaningOp {
-                                warning: TeachersUpdateWarning::LooseInterrogationSlots(
-                                    *teacher_id,
-                                ),
-                                op: UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(*slot_id)),
-                            });
-                        }
+                for (slot_id, slot) in data.get_data().get_inner_data().params.slots.all_slots() {
+                    if slot.teacher_id == *teacher_id {
+                        return Some(CleaningOp {
+                            warning: TeachersUpdateWarning::LooseInterrogationSlots(*teacher_id),
+                            op: UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(*slot_id)),
+                        });
                     }
                 }
 

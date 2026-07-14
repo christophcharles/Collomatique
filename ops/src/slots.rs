@@ -18,12 +18,12 @@ impl SlotsUpdateWarning {
     ) -> Option<String> {
         match self {
             Self::LooseColloscopeDataForSlot(slot_id) => {
-                let Some((subject_id, position)) = data
+                let Some((subject_id, slot)) = data
                     .get_data()
                     .get_inner_data()
                     .params
                     .slots
-                    .find_slot_subject_and_position(*slot_id)
+                    .find_slot_with_subject(*slot_id)
                 else {
                     return None;
                 };
@@ -36,16 +36,6 @@ impl SlotsUpdateWarning {
                 else {
                     return None;
                 };
-                let slot = &data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .slots
-                    .subject_map
-                    .get(&subject_id)
-                    .expect("Subject id should be valid at this point")
-                    .ordered_slots[position]
-                    .1;
                 let Some(teacher) = data
                     .get_data()
                     .get_inner_data()
@@ -354,18 +344,22 @@ impl SlotsUpdateOp {
                 {
                     return Err(AddNewSlotError::InvalidSubjectId(*subject_id).into());
                 }
-                let Some(subject_slots) = data
+                if !data
                     .get_data()
                     .get_inner_data()
                     .params
                     .slots
-                    .subject_map
-                    .get(subject_id)
-                else {
+                    .has_interrogations(*subject_id)
+                {
                     return Err(AddNewSlotError::SubjectHasNoInterrogation(*subject_id).into());
-                };
+                }
 
-                let last_slot_id = subject_slots.ordered_slots.last().map(|(id, _)| *id);
+                let last_slot_id = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .slots
+                    .last_slot_id_for_subject(*subject_id);
 
                 let result = data
                     .apply(
@@ -493,11 +487,8 @@ impl SlotsUpdateOp {
                         .get_inner_data()
                         .params
                         .slots
-                        .subject_map
-                        .get(&subject_id)
+                        .slot_count_for_subject(subject_id)
                         .expect("Subject id should be valid at this point")
-                        .ordered_slots
-                        .len()
                         - 1
                 {
                     Err(MoveSlotDownError::NoLowerPosition)?;

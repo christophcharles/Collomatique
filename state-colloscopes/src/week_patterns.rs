@@ -163,15 +163,13 @@ impl crate::Data {
                     return Err(WeekPatternError::InvalidWeekPatternId(*id));
                 }
 
-                for subject_slots in self.inner_data.params.slots.subject_map.values() {
-                    for (slot_id, slot) in &subject_slots.ordered_slots {
-                        if let Some(week_pattern_id) = &slot.week_pattern
-                            && *id == *week_pattern_id
-                        {
-                            return Err(WeekPatternError::WeekPatternStillHasAssociatedSlots(
-                                *id, *slot_id,
-                            ));
-                        }
+                for (slot_id, slot) in self.inner_data.params.slots.all_slots() {
+                    if let Some(week_pattern_id) = &slot.week_pattern
+                        && *id == *week_pattern_id
+                    {
+                        return Err(WeekPatternError::WeekPatternStillHasAssociatedSlots(
+                            *id, *slot_id,
+                        ));
                     }
                 }
 
@@ -216,36 +214,32 @@ impl crate::Data {
                     return Err(WeekPatternError::InvalidWeekPatternId(*id));
                 };
 
-                for subject_slots in self.inner_data.params.slots.subject_map.values() {
-                    for (slot_id, slot) in &subject_slots.ordered_slots {
-                        if slot.week_pattern != Some(*id) {
-                            continue;
-                        }
+                for (slot_id, slot) in self.inner_data.params.slots.all_slots() {
+                    if slot.week_pattern != Some(*id) {
+                        continue;
+                    }
 
-                        if !self.inner_data.colloscope.check_empty_on_removed_weeks(
-                            *slot_id,
-                            &self.inner_data.params.periods,
-                            &new_merged_pattern,
-                        ) {
-                            return Err(WeekPatternError::NotCompatibleSlotInColloscope(*slot_id));
-                        }
+                    if !self.inner_data.colloscope.check_empty_on_removed_weeks(
+                        *slot_id,
+                        &self.inner_data.params.periods,
+                        &new_merged_pattern,
+                    ) {
+                        return Err(WeekPatternError::NotCompatibleSlotInColloscope(*slot_id));
                     }
                 }
 
                 let old_week_pattern =
                     std::mem::replace(current_week_pattern, new_week_pattern.clone());
-                for subject_slots in self.inner_data.params.slots.subject_map.values() {
-                    for (slot_id, slot) in &subject_slots.ordered_slots {
-                        if slot.week_pattern != Some(*id) {
-                            continue;
-                        }
-
-                        self.inner_data.colloscope.update_slot_for_week_pattern(
-                            *slot_id,
-                            &self.inner_data.params.periods,
-                            &new_merged_pattern,
-                        );
+                for (slot_id, slot) in self.inner_data.params.slots.all_slots() {
+                    if slot.week_pattern != Some(*id) {
+                        continue;
                     }
+
+                    self.inner_data.colloscope.update_slot_for_week_pattern(
+                        *slot_id,
+                        &self.inner_data.params.periods,
+                        &new_merged_pattern,
+                    );
                 }
 
                 Ok(AnnotatedWeekPatternOp::Update(*id, old_week_pattern))

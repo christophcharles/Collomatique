@@ -420,10 +420,9 @@ impl GroupListsUpdateOp {
                             .get_inner_data()
                             .params
                             .slots
-                            .subject_map
-                            .get(subject_id)
+                            .slots_for_subject(*subject_id)
                             .expect("Subject ID should be valid");
-                        for (slot_id, _slot) in &subject_slots.ordered_slots {
+                        for (slot_id, _slot) in subject_slots {
                             let collo_slot = collo_period
                                 .slot_map
                                 .get(slot_id)
@@ -537,10 +536,9 @@ impl GroupListsUpdateOp {
                             .get_inner_data()
                             .params
                             .slots
-                            .subject_map
-                            .get(subject_id)
+                            .slots_for_subject(*subject_id)
                             .expect("Subject ID should be valid");
-                        for (slot_id, _slot) in &subject_slots.ordered_slots {
+                        for (slot_id, _slot) in subject_slots {
                             let collo_slot = collo_period
                                 .slot_map
                                 .get(slot_id)
@@ -760,13 +758,12 @@ impl GroupListsUpdateOp {
                     .get_inner_data()
                     .params
                     .slots
-                    .subject_map
-                    .get(subject_id)
+                    .slots_for_subject(*subject_id)
                 else {
                     return None;
                 };
 
-                for (slot_id, _slot) in &subject_slots.ordered_slots {
+                for (slot_id, _slot) in subject_slots {
                     let Some(collo_slot) = collo_period.slot_map.get(slot_id) else {
                         return None;
                     };
@@ -890,13 +887,12 @@ impl GroupListsUpdateOp {
                         .get_inner_data()
                         .params
                         .slots
-                        .subject_map
-                        .get(subject_id)
+                        .slots_for_subject(*subject_id)
                     else {
                         return None;
                     };
 
-                    for (slot_id, _slot) in &subject_slots.ordered_slots {
+                    for (slot_id, _slot) in subject_slots {
                         let Some(collo_slot) = collo_period.slot_map.get(slot_id) else {
                             return None;
                         };

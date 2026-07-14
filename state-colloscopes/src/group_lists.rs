@@ -297,11 +297,11 @@ impl crate::Data {
             .period_map
             .get(&period_id)
             .expect("Period ID should be valid at this point");
-        let Some(subject_slots) = self.inner_data.params.slots.subject_map.get(&subject_id) else {
+        let Some(subject_slots) = self.inner_data.params.slots.slots_for_subject(subject_id) else {
             // No slots: no interrogation can reference a group number
             return Ok(());
         };
-        for (slot_id, _slot) in &subject_slots.ordered_slots {
+        for (slot_id, _slot) in subject_slots {
             let collo_slot = collo_period
                 .slot_map
                 .get(slot_id)

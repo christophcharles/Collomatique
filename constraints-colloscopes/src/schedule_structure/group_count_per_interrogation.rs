@@ -6,7 +6,7 @@ use collomatique_ilp::int_linexpr::IntLinExpr;
 pub(super) fn build(env: &VarEnv) -> MyBundle {
     let mut bundle = MyBundle::new();
 
-    for (&subject_id, subject_slots) in &env.slots.subject_map {
+    for subject_id in env.slots.subjects_with_slots() {
         let Some(subject) = env.subjects.find_subject(subject_id) else {
             continue;
         };
@@ -16,7 +16,12 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         let min_groups = params.groups_per_interrogation.start().get();
         let max_groups = params.groups_per_interrogation.end().get();
 
-        for (slot_id, slot_data) in &subject_slots.ordered_slots {
+        for (slot_id, slot_data) in env
+            .slots
+            .slots_for_subject(subject_id)
+            .into_iter()
+            .flatten()
+        {
             let slot = *slot_id;
             for week in weeks_for_slot(env, slot_data, &subject.excluded_periods) {
                 let groups = groups_for_interrogation(env, subject_id, week);

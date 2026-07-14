@@ -27,10 +27,9 @@ pub fn week_to_period_id(params: &Parameters, week: usize) -> Option<(PeriodId, 
 }
 
 pub(crate) fn enumerate_weeks_for_slot_id(params: &Parameters, slot: SlotId) -> Vec<usize> {
-    let Some((subject_id, pos)) = params.slots.find_slot_subject_and_position(slot) else {
+    let Some((subject_id, slot_desc)) = params.slots.find_slot_with_subject(slot) else {
         return vec![];
     };
-    let slot_desc = &params.slots.subject_map[&subject_id].ordered_slots[pos].1;
     let subject_desc = params
         .subjects
         .find_subject(subject_id)

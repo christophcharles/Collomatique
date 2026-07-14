@@ -16,25 +16,15 @@ impl WeekPatternsUpdateWarning {
     ) -> Option<String> {
         match self {
             WeekPatternsUpdateWarning::LooseInterrogationSlot(slot_id) => {
-                let Some((subject_id, position)) = data
+                let Some((subject_id, slot)) = data
                     .get_data()
                     .get_inner_data()
                     .params
                     .slots
-                    .find_slot_subject_and_position(*slot_id)
+                    .find_slot_with_subject(*slot_id)
                 else {
                     return None;
                 };
-                let slot = &data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .slots
-                    .subject_map
-                    .get(&subject_id)
-                    .expect("Subject id should be valid at this point")
-                    .ordered_slots[position]
-                    .1;
                 let Some(teacher) = data
                     .get_data()
                     .get_inner_data()
@@ -103,12 +93,12 @@ impl WeekPatternsUpdateWarning {
                 ))
             }
             Self::LooseColloscopeDataForSlot(slot_id) => {
-                let Some((subject_id, position)) = data
+                let Some((subject_id, slot)) = data
                     .get_data()
                     .get_inner_data()
                     .params
                     .slots
-                    .find_slot_subject_and_position(*slot_id)
+                    .find_slot_with_subject(*slot_id)
                 else {
                     return None;
                 };
@@ -121,16 +111,6 @@ impl WeekPatternsUpdateWarning {
                 else {
                     return None;
                 };
-                let slot = &data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .slots
-                    .subject_map
-                    .get(&subject_id)
-                    .expect("Subject id should be valid at this point")
-                    .ordered_slots[position]
-                    .1;
                 let Some(teacher) = data
                     .get_data()
                     .get_inner_data()
@@ -218,53 +198,45 @@ impl WeekPatternsUpdateOp {
                     return None;
                 }
 
-                for subject_slots in data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .slots
-                    .subject_map
-                    .values()
-                {
-                    for (slot_id, slot) in &subject_slots.ordered_slots {
-                        if slot.week_pattern != Some(*week_pattern_id) {
-                            continue;
-                        }
+                for (slot_id, slot) in data.get_data().get_inner_data().params.slots.all_slots() {
+                    if slot.week_pattern != Some(*week_pattern_id) {
+                        continue;
+                    }
 
-                        let mut first_week_in_period = 0usize;
-                        for (period_id, period) in data
+                    let mut first_week_in_period = 0usize;
+                    for (period_id, period) in data
+                        .get_data()
+                        .get_inner_data()
+                        .params
+                        .periods
+                        .ordered_period_list
+                        .iter()
+                    {
+                        let period_id = &period_id;
+                        let collo_period = data
                             .get_data()
                             .get_inner_data()
-                            .params
-                            .periods
-                            .ordered_period_list
-                            .iter()
-                        {
-                            let period_id = &period_id;
-                            let collo_period = data
-                                .get_data()
-                                .get_inner_data()
-                                .colloscope
-                                .period_map
-                                .get(period_id)
-                                .expect("Period ID should appear in colloscope");
-                            let Some(collo_slot) = collo_period.slot_map.get(slot_id) else {
+                            .colloscope
+                            .period_map
+                            .get(period_id)
+                            .expect("Period ID should appear in colloscope");
+                        let Some(collo_slot) = collo_period.slot_map.get(slot_id) else {
+                            continue;
+                        };
+                        for week_in_period in 0..period.len() {
+                            // If the week is disabled at the period level then it is already disabled in colloscope
+                            if !period[week_in_period].interrogations {
                                 continue;
-                            };
-                            for week_in_period in 0..period.len() {
-                                // If the week is disabled at the period level then it is already disabled in colloscope
-                                if !period[week_in_period].interrogations {
-                                    continue;
-                                }
+                            }
 
-                                let current_week = first_week_in_period + week_in_period;
-                                let old_status = old_week_pattern.weeks[current_week];
-                                let new_status = new_week_pattern.weeks[current_week];
-                                if old_status && !new_status {
-                                    let interrogation = collo_slot.interrogations[week_in_period].as_ref().expect("There should be an interrogation as the week used to be enabled");
+                            let current_week = first_week_in_period + week_in_period;
+                            let old_status = old_week_pattern.weeks[current_week];
+                            let new_status = new_week_pattern.weeks[current_week];
+                            if old_status && !new_status {
+                                let interrogation = collo_slot.interrogations[week_in_period].as_ref().expect("There should be an interrogation as the week used to be enabled");
 
-                                    if !interrogation.is_empty() {
-                                        return Some(CleaningOp {
+                                if !interrogation.is_empty() {
+                                    return Some(CleaningOp {
                                             warning: WeekPatternsUpdateWarning::LooseColloscopeDataForSlot(
                                                 *slot_id,
                                             ),
@@ -275,35 +247,23 @@ impl WeekPatternsUpdateOp {
                                                 collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
                                             )),
                                         });
-                                    }
                                 }
                             }
-
-                            first_week_in_period += period.len();
                         }
+
+                        first_week_in_period += period.len();
                     }
                 }
 
                 None
             }
             Self::DeleteWeekPattern(week_pattern_id) => {
-                for subject_slots in data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .slots
-                    .subject_map
-                    .values()
-                {
-                    for (slot_id, slot) in &subject_slots.ordered_slots {
-                        if slot.week_pattern == Some(*week_pattern_id) {
-                            return Some(CleaningOp {
-                                warning: WeekPatternsUpdateWarning::LooseInterrogationSlot(
-                                    *slot_id,
-                                ),
-                                op: UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(*slot_id)),
-                            });
-                        }
+                for (slot_id, slot) in data.get_data().get_inner_data().params.slots.all_slots() {
+                    if slot.week_pattern == Some(*week_pattern_id) {
+                        return Some(CleaningOp {
+                            warning: WeekPatternsUpdateWarning::LooseInterrogationSlot(*slot_id),
+                            op: UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(*slot_id)),
+                        });
                     }
                 }
 

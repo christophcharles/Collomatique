@@ -322,26 +322,29 @@ fn build_week_patterns(
 
 fn build_slots(params: &mem::colloscope_params::Parameters) -> format::slots::Slots {
     let mut rows = Vec::new();
-    for (subject_id, subject_slots) in &params.slots.subject_map {
-        if subject_slots.ordered_slots.is_empty() {
+    for subject_id in params.slots.subjects_with_slots() {
+        let slots: Vec<_> = params
+            .slots
+            .slots_for_subject(subject_id)
+            .into_iter()
+            .flatten()
+            .map(|(slot_id, slot)| format::slots::Slot {
+                id: slot_id.inner(),
+                teacher_id: slot.teacher_id.inner(),
+                start: day_time(&slot.start_time),
+                extra_info: slot.extra_info.clone(),
+                week_pattern_id: slot.week_pattern.map(|id| id.inner()),
+                cost: slot.cost,
+            })
+            .collect();
+        if slots.is_empty() {
             // Neutral entry of a derived key set: omitted in canonical
             // form
             continue;
         }
         rows.push(format::slots::SubjectSlots {
             subject_id: subject_id.inner(),
-            slots: subject_slots
-                .ordered_slots
-                .iter()
-                .map(|(slot_id, slot)| format::slots::Slot {
-                    id: slot_id.inner(),
-                    teacher_id: slot.teacher_id.inner(),
-                    start: day_time(&slot.start_time),
-                    extra_info: slot.extra_info.clone(),
-                    week_pattern_id: slot.week_pattern.map(|id| id.inner()),
-                    cost: slot.cost,
-                })
-                .collect(),
+            slots,
         });
     }
     keyed(rows)

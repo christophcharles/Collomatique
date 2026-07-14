@@ -94,13 +94,9 @@ impl crate::Data {
                     return Err(TeacherError::InvalidTeacherId(*id));
                 }
 
-                for subject_slots in self.inner_data.params.slots.subject_map.values() {
-                    for (slot_id, slot) in &subject_slots.ordered_slots {
-                        if *id == slot.teacher_id {
-                            return Err(TeacherError::TeacherStillHasAssociatedSlots(
-                                *id, *slot_id,
-                            ));
-                        }
+                for (slot_id, slot) in self.inner_data.params.slots.all_slots() {
+                    if *id == slot.teacher_id {
+                        return Err(TeacherError::TeacherStillHasAssociatedSlots(*id, *slot_id));
                     }
                 }
 
@@ -121,15 +117,21 @@ impl crate::Data {
                     return Err(TeacherError::InvalidTeacherId(*id));
                 };
 
-                for (subject_id, subject_slots) in &self.inner_data.params.slots.subject_map {
-                    if new_teacher.subjects.contains(subject_id) {
+                for subject_id in self.inner_data.params.slots.subjects_with_slots() {
+                    if new_teacher.subjects.contains(&subject_id) {
                         continue;
                     }
-                    for (_slot_id, slot) in &subject_slots.ordered_slots {
+                    for (_slot_id, slot) in self
+                        .inner_data
+                        .params
+                        .slots
+                        .slots_for_subject(subject_id)
+                        .into_iter()
+                        .flatten()
+                    {
                         if *id == slot.teacher_id {
                             return Err(TeacherError::TeacherStillHasAssociatedSlotsInSubject(
-                                *id,
-                                *subject_id,
+                                *id, subject_id,
                             ));
                         }
                     }

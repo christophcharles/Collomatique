@@ -191,14 +191,7 @@ impl Display {
             Some(DisplayIssue::NoWeeks)
         } else if self.subjects.ordered_subject_list.is_empty() {
             Some(DisplayIssue::NoSubjects)
-        } else if self
-            .slots
-            .subject_map
-            .values()
-            .map(|subject_slots| subject_slots.ordered_slots.len())
-            .sum::<usize>()
-            == 0
-        {
+        } else if self.slots.all_slots().next().is_none() {
             Some(DisplayIssue::NoSlots)
         } else {
             None
@@ -232,11 +225,11 @@ impl Display {
 
         for (subject_id, subject) in self.subjects.ordered_subject_list.iter() {
             let subject_id = &subject_id;
-            let Some(subject_slots) = self.slots.subject_map.get(subject_id) else {
+            let Some(subject_slots) = self.slots.slots_for_subject(*subject_id) else {
                 continue;
             };
 
-            for (slot_id, slot) in &subject_slots.ordered_slots {
+            for (slot_id, slot) in subject_slots {
                 let mut period_map = BTreeMap::new();
 
                 for (period_id, period) in self.periods.ordered_period_list.iter() {

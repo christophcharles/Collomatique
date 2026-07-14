@@ -11,12 +11,10 @@ pub(crate) fn slot_week_pairs_for_subject(
     subject_id: SubjectId,
     excluded_periods: &BTreeSet<PeriodId>,
 ) -> Vec<(SlotId, GlobalWeek)> {
-    let Some(subject_slots) = env.slots.subject_map.get(&subject_id) else {
+    let Some(subject_slots) = env.slots.slots_for_subject(subject_id) else {
         return vec![];
     };
     subject_slots
-        .ordered_slots
-        .iter()
         .flat_map(|(slot_id, slot_data)| {
             weeks_for_slot(env, slot_data, excluded_periods)
                 .into_iter()

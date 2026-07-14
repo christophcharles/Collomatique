@@ -41,15 +41,16 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         };
         let max_groups = i64::from(params.groups_per_interrogation.end().get());
 
-        let Some(subject_slots) = env.slots.subject_map.get(&subject_id) else {
+        let Some(ant_slot_data) = env.slots.find_slot(ant_slot_id) else {
             continue;
         };
-        let Some(ant_slot_data) = subject_slots.find_slot(ant_slot_id) else {
+        let Some((con_subject_id, con_slot_data)) = env.slots.find_slot_with_subject(con_slot_id)
+        else {
             continue;
         };
-        let Some(con_slot_data) = subject_slots.find_slot(con_slot_id) else {
+        if con_subject_id != subject_id {
             continue;
-        };
+        }
 
         let combined_excluded: BTreeSet<_> = subject
             .excluded_periods

@@ -519,12 +519,17 @@ impl crate::Data {
                         week_pattern.remove_weeks(first_week_to_remove, old_length - desc.len());
                     }
                 }
-                for subject_slots in self.inner_data.params.slots.subject_map.values() {
-                    for (slot_id, _slot) in &subject_slots.ordered_slots {
-                        self.inner_data
-                            .colloscope
-                            .update_slot_to_match_week_pattern(*slot_id, &self.inner_data.params);
-                    }
+                let slot_ids: Vec<_> = self
+                    .inner_data
+                    .params
+                    .slots
+                    .all_slots()
+                    .map(|(slot_id, _slot)| *slot_id)
+                    .collect();
+                for slot_id in slot_ids {
+                    self.inner_data
+                        .colloscope
+                        .update_slot_to_match_week_pattern(slot_id, &self.inner_data.params);
                 }
 
                 Ok(AnnotatedPeriodOp::Update(*period_id, old_desc))

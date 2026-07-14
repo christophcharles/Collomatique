@@ -142,15 +142,13 @@ pub(crate) fn active_slots_for_subject_week(
     subject: SubjectId,
     week: GlobalWeek,
 ) -> Vec<crate::ids::SlotId> {
-    let Some(subject_slots) = env.slots.subject_map.get(&subject) else {
+    let Some(subject_slots) = env.slots.slots_for_subject(subject) else {
         return vec![];
     };
     let Some(subj) = env.subjects.find_subject(subject) else {
         return vec![];
     };
     subject_slots
-        .ordered_slots
-        .iter()
         .filter(|(_, slot_data)| {
             if subj
                 .excluded_periods
@@ -230,11 +228,16 @@ pub(crate) fn weeks_for_week_pattern(
 
 fn build_interrogation_has_groups(env: &VarEnv) -> MyBundle {
     let mut bundle = MyBundle::new();
-    for (&subject_id, subject_slots) in &env.slots.subject_map {
+    for subject_id in env.slots.subjects_with_slots() {
         let Some(subject) = env.subjects.find_subject(subject_id) else {
             continue;
         };
-        for (slot_id, slot_data) in &subject_slots.ordered_slots {
+        for (slot_id, slot_data) in env
+            .slots
+            .slots_for_subject(subject_id)
+            .into_iter()
+            .flatten()
+        {
             let slot = *slot_id;
             for week in weeks_for_slot(env, slot_data, &subject.excluded_periods) {
                 let groups = groups_for_interrogation(env, subject_id, week);
@@ -348,11 +351,16 @@ fn build_group_has_students(env: &VarEnv) -> MyBundle {
 
 fn build_student_at_interrogation_in_group(env: &VarEnv) -> MyBundle {
     let mut bundle = MyBundle::new();
-    for (&subject_id, subject_slots) in &env.slots.subject_map {
+    for subject_id in env.slots.subjects_with_slots() {
         let Some(subject) = env.subjects.find_subject(subject_id) else {
             continue;
         };
-        for (slot_id, slot_data) in &subject_slots.ordered_slots {
+        for (slot_id, slot_data) in env
+            .slots
+            .slots_for_subject(subject_id)
+            .into_iter()
+            .flatten()
+        {
             let slot = *slot_id;
             for week in weeks_for_slot(env, slot_data, &subject.excluded_periods) {
                 let Some(group_list) = group_list_for_interrogation(env, subject_id, week) else {
@@ -400,11 +408,16 @@ fn build_student_at_interrogation(env: &VarEnv) -> MyBundle {
     use collomatique_state_colloscopes::group_lists::GroupListFilling;
 
     let mut bundle = MyBundle::new();
-    for (&subject_id, subject_slots) in &env.slots.subject_map {
+    for subject_id in env.slots.subjects_with_slots() {
         let Some(subject) = env.subjects.find_subject(subject_id) else {
             continue;
         };
-        for (slot_id, slot_data) in &subject_slots.ordered_slots {
+        for (slot_id, slot_data) in env
+            .slots
+            .slots_for_subject(subject_id)
+            .into_iter()
+            .flatten()
+        {
             let slot = *slot_id;
             for week in weeks_for_slot(env, slot_data, &subject.excluded_periods) {
                 for student in env.students.student_map.keys() {
@@ -491,14 +504,19 @@ fn build_student_at_interrogation(env: &VarEnv) -> MyBundle {
 
 fn build_student_has_interrogation_in(env: &VarEnv) -> MyBundle {
     let mut bundle = MyBundle::new();
-    for (&subject_id, subject_slots) in &env.slots.subject_map {
+    for subject_id in env.slots.subjects_with_slots() {
         let Some(subject) = env.subjects.find_subject(subject_id) else {
             continue;
         };
         let active_slot_ids_per_week: Vec<(GlobalWeek, Vec<crate::ids::SlotId>)> = {
             let mut weeks_seen = std::collections::BTreeSet::new();
             let mut result = Vec::new();
-            for (_, slot_data) in &subject_slots.ordered_slots {
+            for (_, slot_data) in env
+                .slots
+                .slots_for_subject(subject_id)
+                .into_iter()
+                .flatten()
+            {
                 for week in weeks_for_slot(env, slot_data, &subject.excluded_periods) {
                     if weeks_seen.insert(week) {
                         let slots = active_slots_for_subject_week(env, subject_id, week);
@@ -547,14 +565,19 @@ fn build_student_not_at_incompat_slot(env: &VarEnv) -> MyBundle {
 
     let all_interrog_slots: Vec<_> = {
         let mut result = Vec::new();
-        for (&subject_id, subject_slots) in &env.slots.subject_map {
+        for subject_id in env.slots.subjects_with_slots() {
             let Some(subject) = env.subjects.find_subject(subject_id) else {
                 continue;
             };
             let Some(params) = subject.parameters.interrogation_parameters.as_ref() else {
                 continue;
             };
-            for (slot_id, slot_data) in &subject_slots.ordered_slots {
+            for (slot_id, slot_data) in env
+                .slots
+                .slots_for_subject(subject_id)
+                .into_iter()
+                .flatten()
+            {
                 let Some(swd) =
                     SlotWithDuration::new(slot_data.start_time.clone(), params.duration)
                 else {

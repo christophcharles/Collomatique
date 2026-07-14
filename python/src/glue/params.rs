@@ -116,13 +116,15 @@ impl TryFrom<collomatique_state_colloscopes::colloscope_params::Parameters> for 
                 .collect(),
             slots: value
                 .slots
-                .subject_map
-                .into_iter()
-                .map(|(subject_id, subject_slots)| {
+                .subjects_with_slots()
+                .map(|subject_id| {
+                    let subject_slots = value
+                        .slots
+                        .slots_vec_for_subject(subject_id)
+                        .expect("subject came from subjects_with_slots");
                     (
                         subject_id.into(),
                         subject_slots
-                            .ordered_slots
                             .into_iter()
                             .map(|(slot_id, slot)| slots::Slot {
                                 id: slot_id.into(),

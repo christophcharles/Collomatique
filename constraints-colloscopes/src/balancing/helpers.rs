@@ -33,12 +33,10 @@ pub(super) fn effective_balancing_flag(
 }
 
 pub(super) fn teachers_for_subject(env: &VarEnv, subject_id: SubjectId) -> BTreeSet<TeacherId> {
-    let Some(subject_slots) = env.slots.subject_map.get(&subject_id) else {
+    let Some(subject_slots) = env.slots.slots_for_subject(subject_id) else {
         return BTreeSet::new();
     };
     subject_slots
-        .ordered_slots
-        .iter()
         .map(|(_, slot_data)| slot_data.teacher_id)
         .collect()
 }
@@ -49,12 +47,10 @@ pub(super) fn slot_week_pairs_for_teacher(
     subject_id: SubjectId,
     teacher_id: TeacherId,
 ) -> Vec<(SlotId, GlobalWeek)> {
-    let Some(subject_slots) = env.slots.subject_map.get(&subject_id) else {
+    let Some(subject_slots) = env.slots.slots_for_subject(subject_id) else {
         return vec![];
     };
     let teacher_slots: BTreeSet<SlotId> = subject_slots
-        .ordered_slots
-        .iter()
         .filter(|(_, slot_data)| slot_data.teacher_id == teacher_id)
         .map(|(slot_id, _)| *slot_id)
         .collect();
