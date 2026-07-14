@@ -6,7 +6,8 @@
 //! the target id (the target is the visitor-callback argument / query argument).
 //!
 //! [RefVisitor] is called once per reference, in a fixed, documented order (see
-//! [walk_params_refs] and, from commit 2 on, `InnerData::walk_refs`):
+//! [InnerData::walk_refs], which composes the family, dense-mirror and colloscope
+//! walks below):
 //!
 //! 1. subjects (`OrderedTable` order) — `excluded_periods` (set order)
 //! 2. teachers (id order) — `subjects`
@@ -19,8 +20,15 @@
 //! 9. `settings.students` keys
 //! 10. `balancing.subjects` keys
 //! 11. week-pattern length coupling: week patterns (id order) × periods (table order)
-//!
-//! (Dense mirrors and the colloscope are walked after these, in commit 2.)
+//! 12. dense mirrors, in this order:
+//!     a. `assignments.map` (per entry: key site to period then subject, then the
+//!        assigned students), in `(period, subject)` key order
+//!     b. `group_lists.subjects_associations` (per entry: period, subject, group
+//!        list), in `(period, subject)` key order
+//!     c. `slots.ordering` keys → subject, in subject-id order
+//! 13. colloscope: `period_map` entries (period key site, then that period's
+//!     `slot_map` key sites), then `group_lists` entries (group-list key site,
+//!     then that list's `groups_for_students` keys → student)
 //!
 //! ## Documented exclusions
 //!
@@ -30,7 +38,9 @@
 //!   the structural no-orphan/count checks.
 //! - colloscope group *indices*: not ids.
 
+use crate::InnerData;
 use crate::colloscope_params::Parameters;
+use crate::colloscopes::Colloscope;
 use crate::group_lists::GroupListFilling;
 use crate::ids::{
     GroupListId, IncompatId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId,
@@ -151,8 +161,8 @@ pub trait RefVisitor {
 /// Walks the reference sites that live directly in [Parameters] entity families
 /// (steps 1–11 of the module walk order), in the fixed documented order.
 ///
-/// The dense-mirror and colloscope sites are walked separately (commit 2);
-/// `InnerData::walk_refs` composes both.
+/// The dense-mirror and colloscope sites are walked separately;
+/// [InnerData::walk_refs] composes all three.
 pub(crate) fn walk_params_refs(params: &Parameters, v: &mut impl RefVisitor) {
     walk_subjects(params, v);
     walk_teachers(params, v);
@@ -299,11 +309,150 @@ fn walk_week_pattern_coupling(params: &Parameters, v: &mut impl RefVisitor) {
     }
 }
 
-/// TEMPORARY test hook (removed in commit 2 when `InnerData::walk_refs` lands).
-///
-/// Lets the integration pin test drive [walk_params_refs] before the public
-/// `walk_refs` entry point exists.
-#[doc(hidden)]
-pub fn walk_params_refs_for_tests(params: &Parameters, v: &mut impl RefVisitor) {
-    walk_params_refs(params, v);
+/// Walks the dense assignments mirror (step 12a): each `(period, subject)` key
+/// references *both* a period and a subject, then each assigned student.
+fn walk_assignments(params: &Parameters, v: &mut impl RefVisitor) {
+    for ((period, subject), students) in params.assignments.map.iter() {
+        let site = RefSite::AssignmentsKey {
+            period,
+            subject,
+            non_trivial: !students.is_empty(),
+        };
+        v.period_ref(period, site);
+        v.subject_ref(subject, site);
+        for &student_id in students {
+            v.student_ref(student_id, RefSite::AssignmentsStudent { period, subject });
+        }
+    }
+}
+
+/// Walks the subject/group-list association mirror (step 12b): each entry
+/// references a period, a subject and a group list at once.
+fn walk_associations(params: &Parameters, v: &mut impl RefVisitor) {
+    for ((period, subject), group_list) in params.group_lists.subjects_associations.iter() {
+        let site = RefSite::AssociationEntry {
+            period,
+            subject,
+            group_list: *group_list,
+        };
+        v.period_ref(period, site);
+        v.subject_ref(subject, site);
+        v.group_list_ref(*group_list, site);
+    }
+}
+
+/// Walks the slots ordering mirror keys (step 12c): each key references a subject.
+fn walk_slots_ordering_keys(params: &Parameters, v: &mut impl RefVisitor) {
+    for (subject_id, row) in params.slots.ordering_entries() {
+        v.subject_ref(
+            subject_id,
+            RefSite::SlotsOrderingKey {
+                non_trivial: !row.is_empty(),
+            },
+        );
+    }
+}
+
+/// Walks the colloscope (step 13): period keys (then their slot keys), then
+/// group-list keys (then their placed students).
+fn walk_colloscope(colloscope: &Colloscope, v: &mut impl RefVisitor) {
+    for (period_id, collo_period) in colloscope.period_map.iter() {
+        v.period_ref(
+            *period_id,
+            RefSite::ColloscopePeriodKey {
+                non_trivial: !collo_period.is_empty(),
+            },
+        );
+        for (slot_id, collo_slot) in collo_period.slot_map.iter() {
+            v.slot_ref(
+                *slot_id,
+                RefSite::ColloscopeSlotKey {
+                    period: *period_id,
+                    non_trivial: !collo_slot.is_empty(),
+                },
+            );
+        }
+    }
+    for (gl_id, collo_gl) in colloscope.group_lists.iter() {
+        v.group_list_ref(
+            *gl_id,
+            RefSite::ColloscopeGroupListKey {
+                non_trivial: !collo_gl.is_empty(),
+            },
+        );
+        for student_id in collo_gl.groups_for_students.keys() {
+            v.student_ref(*student_id, RefSite::ColloscopeGroupListStudent(*gl_id));
+        }
+    }
+}
+
+impl InnerData {
+    /// Walks every reference in the document, in the documented fixed order (see
+    /// the module docs): first the [Parameters] entity families (steps 1–11),
+    /// then the dense mirrors (step 12), then the colloscope (step 13).
+    pub fn walk_refs(&self, v: &mut impl RefVisitor) {
+        walk_params_refs(&self.params, v);
+        walk_assignments(&self.params, v);
+        walk_associations(&self.params, v);
+        walk_slots_ordering_keys(&self.params, v);
+        walk_colloscope(&self.colloscope, v);
+    }
+}
+
+/// Generates a `references_to_*` reverse lookup: every [RefSite] whose target is
+/// the given id, in walk order. Each shares one filtering [RefVisitor].
+macro_rules! references_to_impl {
+    ($(#[$m:meta])* $fn_name:ident, $id_ty:ty, $callback:ident) => {
+        $(#[$m])*
+        pub fn $fn_name(&self, id: $id_ty) -> Vec<RefSite> {
+            struct Filter {
+                target: $id_ty,
+                sites: Vec<RefSite>,
+            }
+            impl RefVisitor for Filter {
+                fn $callback(&mut self, target: $id_ty, site: RefSite) {
+                    if target == self.target {
+                        self.sites.push(site);
+                    }
+                }
+            }
+            let mut f = Filter {
+                target: id,
+                sites: Vec::new(),
+            };
+            self.walk_refs(&mut f);
+            f.sites
+        }
+    };
+}
+
+impl InnerData {
+    references_to_impl!(
+        /// Every reference site targeting the given period, in walk order.
+        references_to_period, PeriodId, period_ref
+    );
+    references_to_impl!(
+        /// Every reference site targeting the given subject, in walk order.
+        references_to_subject, SubjectId, subject_ref
+    );
+    references_to_impl!(
+        /// Every reference site targeting the given teacher, in walk order.
+        references_to_teacher, TeacherId, teacher_ref
+    );
+    references_to_impl!(
+        /// Every reference site targeting the given student, in walk order.
+        references_to_student, StudentId, student_ref
+    );
+    references_to_impl!(
+        /// Every reference site targeting the given week pattern, in walk order.
+        references_to_week_pattern, WeekPatternId, week_pattern_ref
+    );
+    references_to_impl!(
+        /// Every reference site targeting the given slot, in walk order.
+        references_to_slot, SlotId, slot_ref
+    );
+    references_to_impl!(
+        /// Every reference site targeting the given group list, in walk order.
+        references_to_group_list, GroupListId, group_list_ref
+    );
 }

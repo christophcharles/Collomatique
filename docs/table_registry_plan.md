@@ -428,10 +428,14 @@ types in the entity modules, same philosophy as the item-6 split):
   The visitor (`RefVisitor`) has one callback per referenced id kind (period/subject/teacher/
   student/week-pattern/slot/group-list — the seven referenced kinds); every callback defaults to
   a no-op so a filtering visitor implements only what it needs.
-  - *C1a status*: `RefSite`, `RefVisitor`, the family walkers (`walk_params_refs`) and the pin
-    test (`tests/refs_registry.rs`, families only) are in; a temporary `#[doc(hidden)]`
-    `walk_params_refs_for_tests` shim exposes the `pub(crate)` walker to the integration test
-    until `InnerData::walk_refs` lands in C1b, which deletes the shim.
+  - *C1a status (shipped)*: `RefSite`, `RefVisitor`, the family walkers (`walk_params_refs`) and
+    the family-only pin test.
+  - *C1b status (shipped)*: the dense-mirror walkers (`walk_assignments`, `walk_associations`,
+    `walk_slots_ordering_keys`) and the colloscope walker (`walk_colloscope`); the public
+    `InnerData::walk_refs` composing all three; the seven `references_to_*` reverse lookups via a
+    single `references_to_impl!` filtering-visitor macro. The temporary `walk_params_refs_for_tests`
+    shim was removed — `tests/refs_registry.rs` now drives `walk_refs`/`references_to_*` and pins
+    the full ordered output plus every reverse lookup (both `non_trivial` polarities).
 - **Reverse lookups** (public, the item-2 deliverable):
 
 ```rust

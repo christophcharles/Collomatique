@@ -1,20 +1,21 @@
 //! Pin tests for the reference registry ([`RefSite`] / [`RefVisitor`]).
 //!
 //! These lock the exact set and order of reference sites the walker emits for a
-//! document that exercises every entity-family relationship. They are the
-//! phase-C spec: later commits (dense mirrors, colloscope, and the derive-based
-//! reroute) must keep them passing.
+//! document that exercises every relationship — entity families, dense mirrors
+//! and the colloscope. They are the phase-C spec: the derive-based reroute
+//! (commit 3) must keep them passing.
 //!
-//! Commit 1 covers the [`Parameters`]-family sites only (steps 1–11 of the walk
-//! order); dense-mirror and colloscope sites arrive in commit 2.
+//! Two things are pinned: the full ordered `walk_refs` output (per referenced
+//! kind), and each `references_to_*` reverse lookup on the interesting ids.
 
 use collomatique_state::{AppState, traits::Manager};
 use collomatique_state_colloscopes::{
-    BalancingOp, Data, GroupListOp, IncompatOp, NewId, Op, PairingOp, PeriodOp, RefSite,
-    RefVisitor, SettingsOp, SlotOp, SlotPairingOp, StudentOp, Subject,
+    AssignmentOp, BalancingOp, ColloscopeOp, Data, GroupListOp, IncompatOp, NewId, Op, PairingOp,
+    PeriodOp, RefSite, RefVisitor, SettingsOp, SlotOp, SlotPairingOp, StudentOp, Subject,
     SubjectInterrogationParameters, SubjectOp, SubjectParameters, SubjectPeriodicity, TeacherOp,
     WeekPatternOp,
     balancing::{Balancing, BalancingOptions},
+    colloscopes::{ColloscopeGroupList, ColloscopeInterrogation},
     group_lists::{GroupListFilling, GroupListParameters, PrefilledGroup},
     ids::{GroupListId, PeriodId, SlotId, StudentId, SubjectId, TeacherId, WeekPatternId},
     incompats::Incompatibility,
@@ -113,7 +114,7 @@ fn one_group_params(name: &str) -> GroupListParameters {
 }
 
 #[test]
-fn walk_covers_every_family_site_in_order() {
+fn walk_covers_every_site_in_order() {
     let mut app = AppState::<_, String>::new(Data::new());
 
     macro_rules! apply_new {
@@ -311,14 +312,88 @@ fn walk_covers_every_family_site_in_order() {
         "add per-subject balancing"
     );
 
+    // --- Dense-mirror and colloscope content ---
+
+    // Assign st2 to Math on p0 → the (p0, Math) assignment cell is non-trivial;
+    // the other dense cells ((p0, Physics), (p1, Physics)) stay empty.
+    apply_none!(
+        Op::Assignment(AssignmentOp::Assign(p0, st2, math, true)),
+        "assign st2 to math on p0"
+    );
+
+    // Associate the automatic group list with Math on p0 (must come before the
+    // interrogation so its group number 0 validates against a one-group list).
+    apply_none!(
+        Op::GroupList(GroupListOp::AssignToSubject(p0, math, Some(gl_auto))),
+        "associate gl_auto to math on p0"
+    );
+
+    // Place st2 in the colloscope's automatic group list → the list is non-empty.
+    apply_none!(
+        Op::Colloscope(ColloscopeOp::UpdateGroupList(
+            gl_auto,
+            ColloscopeGroupList {
+                groups_for_students: BTreeMap::from([(st2, 0)]),
+            },
+        )),
+        "fill colloscope group list"
+    );
+
+    // Assign group 0 to slot1's interrogation on p0 week 0 → that period and slot
+    // become non-trivial in the colloscope; p1 and slot2 stay empty.
+    apply_none!(
+        Op::Colloscope(ColloscopeOp::UpdateInterrogation(
+            p0,
+            slot1,
+            0,
+            ColloscopeInterrogation {
+                assigned_groups: BTreeSet::from([0]),
+            },
+        )),
+        "assign group to interrogation"
+    );
+
     // Walk and collect.
     let mut c = Collect::default();
-    let params = &app.get_data().get_inner_data().params;
-    collomatique_state_colloscopes::refs::walk_params_refs_for_tests(params, &mut c);
+    app.get_data().get_inner_data().walk_refs(&mut c);
+
+    // Convenient site aliases for the mirror/colloscope entries.
+    let assign_p0_math = RefSite::AssignmentsKey {
+        period: p0,
+        subject: math,
+        non_trivial: true,
+    };
+    let assign_p0_phys = RefSite::AssignmentsKey {
+        period: p0,
+        subject: phys,
+        non_trivial: false,
+    };
+    let assign_p1_phys = RefSite::AssignmentsKey {
+        period: p1,
+        subject: phys,
+        non_trivial: false,
+    };
+    let association = RefSite::AssociationEntry {
+        period: p0,
+        subject: math,
+        group_list: gl_auto,
+    };
+    let collo_p0 = RefSite::ColloscopePeriodKey { non_trivial: true };
+    let collo_p1 = RefSite::ColloscopePeriodKey { non_trivial: false };
+    let collo_slot1 = RefSite::ColloscopeSlotKey {
+        period: p0,
+        non_trivial: true,
+    };
+    let collo_slot2 = RefSite::ColloscopeSlotKey {
+        period: p0,
+        non_trivial: false,
+    };
+    let collo_gl = RefSite::ColloscopeGroupListKey { non_trivial: true };
 
     assert_eq!(
         c.period,
         vec![
+            // families
             (p1, RefSite::SubjectExcludedPeriods(math)),
             (p1, RefSite::StudentExcludedPeriods(st1)),
             (p1, RefSite::PairingRuleExcludedPeriods(pairing)),
@@ -337,12 +412,22 @@ fn walk_covers_every_family_site_in_order() {
                     non_trivial: true,
                 },
             ),
+            // assignments mirror
+            (p0, assign_p0_math),
+            (p0, assign_p0_phys),
+            (p1, assign_p1_phys),
+            // association mirror
+            (p0, association),
+            // colloscope
+            (p0, collo_p0),
+            (p1, collo_p1),
         ],
     );
 
     assert_eq!(
         c.subject,
         vec![
+            // families
             (math, RefSite::TeacherSubjects(teacher)),
             (phys, RefSite::TeacherSubjects(teacher)),
             (math, RefSite::SlotSubject(slot1)),
@@ -351,9 +436,19 @@ fn walk_covers_every_family_site_in_order() {
             (math, RefSite::PairingRulePart(pairing)),
             (phys, RefSite::PairingRulePart(pairing)),
             (phys, RefSite::BalancingSubjectKey),
+            // assignments mirror
+            (math, assign_p0_math),
+            (phys, assign_p0_phys),
+            (phys, assign_p1_phys),
+            // association mirror
+            (math, association),
+            // ordering keys mirror
+            (math, RefSite::SlotsOrderingKey { non_trivial: true }),
+            (phys, RefSite::SlotsOrderingKey { non_trivial: false }),
         ],
     );
 
+    // Teachers are never referenced by mirrors or the colloscope.
     assert_eq!(
         c.teacher,
         vec![
@@ -365,12 +460,24 @@ fn walk_covers_every_family_site_in_order() {
     assert_eq!(
         c.student,
         vec![
+            // families
             (st2, RefSite::GroupListPrefilledStudent(gl_pre)),
             (st1, RefSite::GroupListExcludedStudent(gl_auto)),
             (st2, RefSite::SettingsStudentKey),
+            // assignments mirror
+            (
+                st2,
+                RefSite::AssignmentsStudent {
+                    period: p0,
+                    subject: math,
+                },
+            ),
+            // colloscope group list
+            (st2, RefSite::ColloscopeGroupListStudent(gl_auto)),
         ],
     );
 
+    // Week patterns are never referenced by mirrors or the colloscope.
     assert_eq!(
         c.week_pattern,
         vec![
@@ -382,12 +489,126 @@ fn walk_covers_every_family_site_in_order() {
     assert_eq!(
         c.slot,
         vec![
+            // families
             (slot1, RefSite::SlotPairingRulePart(slot_pairing)),
             (slot2, RefSite::SlotPairingRulePart(slot_pairing)),
+            // colloscope
+            (slot1, collo_slot1),
+            (slot2, collo_slot2),
         ],
     );
 
-    // No group-list references are emitted by family walkers (associations and
-    // colloscope sites arrive in commit 2).
-    assert_eq!(c.group_list, vec![]);
+    assert_eq!(
+        c.group_list,
+        vec![
+            // association mirror
+            (gl_auto, association),
+            // colloscope
+            (gl_auto, collo_gl),
+        ],
+    );
+
+    // --- Reverse lookups (references_to_*) on the interesting ids ---
+    let inner = app.get_data().get_inner_data();
+
+    assert_eq!(
+        inner.references_to_period(p0),
+        vec![
+            RefSite::WeekPatternLengthCoupling {
+                week_pattern: wp,
+                non_trivial: false,
+            },
+            assign_p0_math,
+            assign_p0_phys,
+            association,
+            collo_p0,
+        ],
+    );
+    assert_eq!(
+        inner.references_to_period(p1),
+        vec![
+            RefSite::SubjectExcludedPeriods(math),
+            RefSite::StudentExcludedPeriods(st1),
+            RefSite::PairingRuleExcludedPeriods(pairing),
+            RefSite::SlotPairingRuleExcludedPeriods(slot_pairing),
+            RefSite::WeekPatternLengthCoupling {
+                week_pattern: wp,
+                non_trivial: true,
+            },
+            assign_p1_phys,
+            collo_p1,
+        ],
+    );
+
+    assert_eq!(
+        inner.references_to_subject(math),
+        vec![
+            RefSite::TeacherSubjects(teacher),
+            RefSite::SlotSubject(slot1),
+            RefSite::SlotSubject(slot2),
+            RefSite::IncompatSubject(incompat),
+            RefSite::PairingRulePart(pairing),
+            assign_p0_math,
+            association,
+            RefSite::SlotsOrderingKey { non_trivial: true },
+        ],
+    );
+    assert_eq!(
+        inner.references_to_subject(phys),
+        vec![
+            RefSite::TeacherSubjects(teacher),
+            RefSite::PairingRulePart(pairing),
+            RefSite::BalancingSubjectKey,
+            assign_p0_phys,
+            assign_p1_phys,
+            RefSite::SlotsOrderingKey { non_trivial: false },
+        ],
+    );
+
+    assert_eq!(
+        inner.references_to_teacher(teacher),
+        vec![RefSite::SlotTeacher(slot1), RefSite::SlotTeacher(slot2),],
+    );
+
+    assert_eq!(
+        inner.references_to_student(st1),
+        vec![RefSite::GroupListExcludedStudent(gl_auto)],
+    );
+    assert_eq!(
+        inner.references_to_student(st2),
+        vec![
+            RefSite::GroupListPrefilledStudent(gl_pre),
+            RefSite::SettingsStudentKey,
+            RefSite::AssignmentsStudent {
+                period: p0,
+                subject: math,
+            },
+            RefSite::ColloscopeGroupListStudent(gl_auto),
+        ],
+    );
+
+    assert_eq!(
+        inner.references_to_week_pattern(wp),
+        vec![
+            RefSite::SlotWeekPattern(slot1),
+            RefSite::IncompatWeekPattern(incompat),
+        ],
+    );
+
+    assert_eq!(
+        inner.references_to_slot(slot1),
+        vec![RefSite::SlotPairingRulePart(slot_pairing), collo_slot1],
+    );
+    assert_eq!(
+        inner.references_to_slot(slot2),
+        vec![RefSite::SlotPairingRulePart(slot_pairing), collo_slot2],
+    );
+
+    assert_eq!(
+        inner.references_to_group_list(gl_auto),
+        vec![association, collo_gl],
+    );
+    // The prefilled group list is never *referenced* (its students show up as
+    // `GroupListPrefilledStudent` student refs, not group-list refs).
+    assert_eq!(inner.references_to_group_list(gl_pre), vec![]);
 }
