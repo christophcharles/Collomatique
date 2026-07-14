@@ -236,6 +236,15 @@ impl Slots {
 
     /// USED INTERNALLY
     ///
+    /// Iterator over every `(slot id, slot)` entry, in id order, straight from
+    /// the slot table (independent of the ordering sidecar). Used by the
+    /// reference registry, which walks slots in id order.
+    pub(crate) fn slot_entries(&self) -> impl Iterator<Item = (SlotId, &Slot)> {
+        self.slot_map.iter()
+    }
+
+    /// USED INTERNALLY
+    ///
     /// Raw view of the ordering sidecar (subject → ordered slot ids), for the
     /// consistency invariant check.
     pub(crate) fn ordering_entries(&self) -> impl Iterator<Item = (SubjectId, &[SlotId])> {

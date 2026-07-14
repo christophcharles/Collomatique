@@ -391,21 +391,47 @@ refreshes `collomatique.nix`'s `cargoHash` before committing.**
 In `state-colloscopes` (new module `refs.rs`; entity-level declarations live next to their
 types in the entity modules, same philosophy as the item-6 split):
 
-- **`RefSite`** — one enum (~26 variants) describing *where* a reference lives; the payload is
-  the referencing entity's identity, chosen to carry exactly what today's typed errors need
-  (verified against the error payloads: e.g. `TeacherStillHasAssociatedSlots(TeacherId,
+- **`RefSite`** — one enum (25 variants, shipped in C1a) describing *where* a reference lives;
+  the payload is the referencing entity's identity, chosen to carry exactly what today's typed
+  errors need (verified against the error payloads: e.g. `TeacherStillHasAssociatedSlots(TeacherId,
   SlotId)` needs the referencing `SlotId`; `SubjectStillHasAssociatedGroupList(SubjectId,
-  GroupListId, PeriodId)` needs both association coordinates). Dense-mirror sites carry a
-  `non_trivial: bool` computed at walk time, so item 3's delete-blocking can skip trivial dense
-  sites while consistency checks all of them — reproducing today's asymmetry exactly.
+  GroupListId, PeriodId)` needs both association coordinates). Dense-mirror / colloscope sites
+  carry a `non_trivial: bool` computed at walk time, so item 3's delete-blocking can skip trivial
+  dense sites while consistency checks all of them — reproducing today's asymmetry exactly. The
+  shipped variants (see `state-colloscopes/src/refs.rs`):
+  - *entity fields*: `SubjectExcludedPeriods`, `StudentExcludedPeriods`,
+    `PairingRuleExcludedPeriods`, `SlotPairingRuleExcludedPeriods`, `TeacherSubjects`,
+    `SlotSubject`, `SlotTeacher`, `SlotWeekPattern`, `IncompatSubject`, `IncompatWeekPattern`,
+    `PairingRulePart` (one variant for both parts — the block error doesn't distinguish them),
+    `SlotPairingRulePart`, `GroupListPrefilledStudent`, `GroupListExcludedStudent`,
+    `SettingsStudentKey`, `BalancingSubjectKey`,
+    `WeekPatternLengthCoupling { week_pattern, non_trivial }` (emitted per week-pattern × period
+    pair; `non_trivial = week_count != 0 && !wp.can_remove_weeks(first_week, week_count)`);
+  - *dense mirrors / junctions*: `AssignmentsKey { period, subject, non_trivial }`,
+    `AssignmentsStudent { period, subject }`, `AssociationEntry { period, subject, group_list }`,
+    `SlotsOrderingKey { non_trivial }`;
+  - *colloscope*: `ColloscopePeriodKey { non_trivial }`, `ColloscopeSlotKey { period, non_trivial }`,
+    `ColloscopeGroupListKey { non_trivial }`, `ColloscopeGroupListStudent`.
+  - *documented exclusions*: `SubjectStillHasNonEmptySlotInColloscope` (update-only + indirect via
+    slot → subject, handled by item 3 as a wrapper); `slots.ordering` row *values* (pure mirror of
+    `slot_map` keys); colloscope group *indices* (not ids).
 - **Walker** — composes, in a fixed documented order (the `check_invariants` family order,
-  then dense mirrors, then colloscope; within a family, container order):
-  - per-entity `References<I>` impls (derived or manual), wrapped by table iteration that
-    attaches the `RefSite` (the entity value alone does not know its own id);
-  - hand-written container-level walkers for the dense mirrors (`walk_assignments`,
-    `walk_associations`, `walk_slots_keys`, `walk_colloscope`).
-  The visitor has one callback per referenced id kind (period/subject/teacher/student/
-  week-pattern/slot/group-list — the seven referenced kinds).
+  then dense mirrors, then colloscope; within a family, container order; within an entity, field
+  declaration order). The exact order is spelled out in the `refs.rs` module doc:
+  1–11 the [Parameters] families (subjects, teachers, students, slots, incompats, pairings, slot
+  pairings, group lists, `settings.students` keys, `balancing.subjects` keys, week-pattern length
+  coupling), then 12 the dense mirrors (`walk_assignments`, `walk_associations`,
+  `walk_slots_ordering_keys`), then 13 the colloscope (`walk_colloscope`).
+  - C1a (shipped) hand-writes the family walkers inline; C2 rewrites the per-entity bodies to
+    `for_each_ref::<NewId>` + kind-dispatch while keeping the same decomposition and pin output;
+  - the dense-mirror / colloscope walkers stay hand-written (no entity `References` involved).
+  The visitor (`RefVisitor`) has one callback per referenced id kind (period/subject/teacher/
+  student/week-pattern/slot/group-list — the seven referenced kinds); every callback defaults to
+  a no-op so a filtering visitor implements only what it needs.
+  - *C1a status*: `RefSite`, `RefVisitor`, the family walkers (`walk_params_refs`) and the pin
+    test (`tests/refs_registry.rs`, families only) are in; a temporary `#[doc(hidden)]`
+    `walk_params_refs_for_tests` shim exposes the `pub(crate)` walker to the integration test
+    until `InnerData::walk_refs` lands in C1b, which deletes the shim.
 - **Reverse lookups** (public, the item-2 deliverable):
 
 ```rust

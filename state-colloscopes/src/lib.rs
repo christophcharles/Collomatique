@@ -44,6 +44,7 @@ pub mod group_lists;
 pub mod incompats;
 pub mod pairings;
 pub mod periods;
+pub mod refs;
 pub mod settings;
 pub mod slot_pairings;
 pub mod slots;
@@ -69,6 +70,8 @@ pub use students::StudentError;
 pub use subjects::SubjectError;
 pub use teachers::TeacherError;
 pub use week_patterns::WeekPatternError;
+
+pub use refs::{RefSite, RefVisitor};
 
 /// Description of a person with contacts
 ///
