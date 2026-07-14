@@ -119,7 +119,6 @@ pub struct PersonWithContact {
 pub struct InnerData {
     pub params: colloscope_params::Parameters,
     pub colloscope: colloscopes::Colloscope,
-    #[serde(default)]
     pub export_config: export_config::ExportConfig,
 }
 

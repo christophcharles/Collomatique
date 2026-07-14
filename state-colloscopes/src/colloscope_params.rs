@@ -32,11 +32,8 @@ pub struct Parameters {
     pub incompats: incompats::Incompats,
     pub group_lists: group_lists::GroupLists,
     pub settings: settings::Settings,
-    #[serde(default)]
     pub pairings: pairings::Pairings,
-    #[serde(default)]
     pub slot_pairings: slot_pairings::SlotPairings,
-    #[serde(default)]
     pub balancing: balancing::Balancing,
 }
 
