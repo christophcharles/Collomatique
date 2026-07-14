@@ -97,6 +97,18 @@ scans, `ON DELETE CASCADE` ↔ today's structural fan-out).
    observable and is retired), plus `settings.students`/`balancing.subjects` →
    `Table<Id, _>` and `slots.ordering` → `Table<SubjectId, Vec<SlotId>>`. Only the
    maintenance-centralization (item 5) still remains; the container shapes are settled.
+   The composite-key retype needed the `Table`/`OrderedTable` key bound relaxed from `Id` to
+   `Key`/`OrderedKey` (see §4.1).
+
+   *Whole-entry override rule (same cleanup, out of this item's scope but recorded here since it
+   rides on the `settings.students`/`balancing.subjects` retype):* those two per-entity override
+   tables are **whole-entry** — an entry wins verbatim, `None` fields included, so an override can
+   *disable* a globally-enabled limit/option. This is now expressed once by
+   `Settings::limits_for(student) -> &Limits` / `Balancing::options_for(subject) -> &BalancingOptions`
+   (each `self.<table>.get(&id).unwrap_or(&self.global)`). The `constraints-colloscopes`
+   `effective_*` helpers route through these accessors; a prior per-field
+   `get(id).and_then(extract).or(global)` fallback silently re-inherited disabled fields (bug,
+   fixed with regression tests in `constraints-colloscopes/tests/override_disable_regression.rs`).
 
 ---
 
@@ -243,16 +255,26 @@ New module `state/src/tables.rs` (style rule: `foo.rs` + `foo/` directory if it 
 `mod.rs`), re-exported by `state-colloscopes`.
 
 ```rust
-// state/src/tables.rs — sketch; final signatures settled in the A1 session
-pub struct Table<I: Id, T> { inner: BTreeMap<I, T> }          // #[serde(transparent)]
-pub struct OrderedTable<I: Id, T> { inner: Vec<(I, T)> }      // #[serde(transparent)]
+// state/src/tables.rs — as shipped (A1, then bound-relaxed in the pre-phase-C cleanup)
+pub trait Key: Copy + Ord {}                        // blanket impl for every Copy + Ord type
+pub trait OrderedKey: Copy + Eq + std::fmt::Debug {} // blanket impl; Debug for DuplicatedIdError
+pub struct Table<I: Key, T> { inner: BTreeMap<I, T> }          // #[serde(transparent)]
+pub struct OrderedTable<I: OrderedKey, T> { inner: Vec<(I, T)> } // #[serde(transparent)]
 ```
 
+The key bound is `Key`/`OrderedKey`, **not `Id`** (relaxed in the pre-phase-C cleanup — see
+decision 8's Update): the containers never call `Id::inner()`/`Id::new()`, only key supertraits,
+so a minimal `Copy + Ord` (resp. `Copy + Eq + Debug`) bound is enough. Every `Id` newtype
+satisfies it via the blanket impls, and so does a tuple of ids — which is exactly what lets the
+junction tables use a composite `(PeriodId, SubjectId)` key.
+
 - **Common, representation-independent keyed API** on both: `get(&I) -> Option<&T>`,
-  `contains(&I) -> bool`, `ids()`, `entries()` (yields `(I, &T)`), `len()`, `is_empty()`.
-  The common iterator is named `entries()`, NOT `iter()`: an inherent `iter()` would shadow the
-  Deref'd `BTreeMap::iter` / `slice::iter` (whose item types differ) and break existing call
-  sites during the compat window.
+  `contains(&I) -> bool`, `keys()` (yields owned `I`), `values()`, `iter()` (yields `(I, &T)`),
+  `len()`, `is_empty()`. The inherent `keys()`/`iter()`/`values()` **deliberately shadow** the
+  Deref'd `BTreeMap::keys`/`iter`/`values`: since every `I` is `Copy`, they yield an owned id
+  (rather than a `&I` reference pair), which is the ergonomic shape consumers want. (An earlier
+  draft named the iterator `entries()` to *avoid* shadowing; that was reversed — shadowing with
+  owned-id item types is what shipped.)
 - **`OrderedTable` position API**: `position_of(&I)`, `get_at(usize)`, and doc-marked-internal
   mutators `insert_at` (fallible, see below), `remove_at`, `replace_value_at`, `move_entry`
   (covers today's `insert(0,…)`, `insert(pos+1,…)`, `remove(pos)`,
