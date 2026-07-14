@@ -14,11 +14,10 @@ pub(super) fn effective_balancing_option<'a>(
     subject_id: SubjectId,
     extract: impl Fn(&BalancingOptions) -> &Option<SoftParam<()>>,
 ) -> Option<&'a SoftParam<()>> {
-    env.balancing
-        .subjects
-        .get(&subject_id)
-        .and_then(|b| extract(b).as_ref())
-        .or_else(|| extract(&env.balancing.global).as_ref())
+    match env.balancing.subjects.get(&subject_id) {
+        Some(b) => extract(b).as_ref(),
+        None => extract(&env.balancing.global).as_ref(),
+    }
 }
 
 pub(super) fn effective_balancing_flag(
