@@ -430,8 +430,8 @@ impl Dialog {
         let mut week_patterns: Vec<_> = self
             .week_patterns
             .week_pattern_map
-            .iter()
-            .map(|(week_pattern_id, week_pattern)| (*week_pattern_id, week_pattern.name.clone()))
+            .entries()
+            .map(|(week_pattern_id, week_pattern)| (week_pattern_id, week_pattern.name.clone()))
             .collect();
         week_patterns.sort_by_key(|(id, name)| (name.clone(), *id));
         self.ordered_week_patterns = week_patterns;

@@ -155,7 +155,7 @@ fn build_general_planning(
         periods: params
             .periods
             .ordered_period_list
-            .iter()
+            .entries()
             .map(|(period_id, weeks)| format::general_planning::Period {
                 id: period_id.inner(),
                 weeks: weeks
@@ -174,7 +174,7 @@ fn build_subjects(params: &mem::colloscope_params::Parameters) -> format::subjec
     params
         .subjects
         .ordered_subject_list
-        .iter()
+        .entries()
         .map(|(subject_id, subject)| format::subjects::Subject {
             id: subject_id.inner(),
             name: subject.parameters.name.clone(),
@@ -249,7 +249,7 @@ fn build_teachers(params: &mem::colloscope_params::Parameters) -> format::teache
         params
             .teachers
             .teacher_map
-            .iter()
+            .entries()
             .map(|(teacher_id, teacher)| format::teachers::Teacher {
                 id: teacher_id.inner(),
                 surname: teacher.desc.surname.clone(),
@@ -267,7 +267,7 @@ fn build_students(params: &mem::colloscope_params::Parameters) -> format::studen
         params
             .students
             .student_map
-            .iter()
+            .entries()
             .map(|(student_id, student)| format::students::Student {
                 id: student_id.inner(),
                 surname: student.desc.surname.clone(),
@@ -308,7 +308,7 @@ fn build_week_patterns(
         params
             .week_patterns
             .week_pattern_map
-            .iter()
+            .entries()
             .map(
                 |(week_pattern_id, week_pattern)| format::week_patterns::WeekPattern {
                     id: week_pattern_id.inner(),
@@ -354,7 +354,7 @@ fn build_incompatibilities(
         params
             .incompats
             .incompat_map
-            .iter()
+            .entries()
             .map(
                 |(incompat_id, incompat)| format::incompatibilities::Incompatibility {
                     id: incompat_id.inner(),
@@ -386,7 +386,7 @@ fn build_group_lists(
         params
             .group_lists
             .group_list_map
-            .iter()
+            .entries()
             .map(|(group_list_id, group_list)| {
                 let filling = match &group_list.filling {
                     mem::group_lists::GroupListFilling::Prefilled { groups } => {
@@ -438,7 +438,7 @@ fn build_pairings(params: &mem::colloscope_params::Parameters) -> format::pairin
         params
             .pairings
             .pairing_rule_map
-            .iter()
+            .entries()
             .map(|(rule_id, rule)| {
                 let part = |part: &mem::pairings::RulePart| format::pairings::PairingPart {
                     subject_id: part.subject_id.inner(),
@@ -463,7 +463,7 @@ fn build_slot_pairings(
         params
             .slot_pairings
             .slot_pairing_rule_map
-            .iter()
+            .entries()
             .map(|(rule_id, rule)| {
                 let part = |part: &mem::slot_pairings::SlotRulePart| {
                     format::slot_pairings::SlotPairingPart {
@@ -547,11 +547,11 @@ fn build_colloscope(inner: &mem::InnerData) -> format::colloscope::Colloscope {
     // and then sorted by their (slot_id, week) key.
     let mut interrogation_rows = Vec::new();
     let mut first_week = 0usize;
-    for (period_id, desc) in &inner.params.periods.ordered_period_list {
+    for (period_id, desc) in inner.params.periods.ordered_period_list.entries() {
         let period = inner
             .colloscope
             .period_map
-            .get(period_id)
+            .get(&period_id)
             .expect("Every period has an entry in the colloscope");
         for (slot_id, slot) in &period.slot_map {
             for (week_in_period, cell) in slot.interrogations.iter().enumerate() {

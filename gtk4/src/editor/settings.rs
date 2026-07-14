@@ -221,10 +221,10 @@ impl Settings {
         let mut students: Vec<_> = self
             .students
             .student_map
-            .iter()
+            .entries()
             .map(|(id, student)| {
                 (
-                    *id,
+                    id,
                     student.desc.firstname.clone(),
                     student.desc.surname.clone(),
                 )

@@ -374,13 +374,15 @@ impl GeneralPlanningUpdateOp {
                 let first_week_to_remove = first_week + *week_count;
                 let weeks_to_remove = old_week_count - *week_count;
 
-                for (week_pattern_id, week_pattern) in &data
+                for (week_pattern_id, week_pattern) in data
                     .get_data()
                     .get_inner_data()
                     .params
                     .week_patterns
                     .week_pattern_map
+                    .entries()
                 {
+                    let week_pattern_id = &week_pattern_id;
                     if !week_pattern.can_remove_weeks(first_week_to_remove, weeks_to_remove) {
                         let mut new_week_patten = week_pattern.clone();
                         new_week_patten.clean_weeks(first_week_to_remove, weeks_to_remove);
@@ -490,13 +492,15 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
-                for (week_pattern_id, week_pattern) in &data
+                for (week_pattern_id, week_pattern) in data
                     .get_data()
                     .get_inner_data()
                     .params
                     .week_patterns
                     .week_pattern_map
+                    .entries()
                 {
+                    let week_pattern_id = &week_pattern_id;
                     if !week_pattern.can_remove_weeks(first_week, week_count) {
                         let mut new_week_patten = week_pattern.clone();
                         new_week_patten.clean_weeks(first_week, week_count);
@@ -514,13 +518,15 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
-                for (subject_id, subject) in &data
+                for (subject_id, subject) in data
                     .get_data()
                     .get_inner_data()
                     .params
                     .subjects
                     .ordered_subject_list
+                    .entries()
                 {
+                    let subject_id = &subject_id;
                     if subject.excluded_periods.contains(period_id) {
                         return Some(CleaningOp {
                             warning: GeneralPlanningUpdateWarning::LooseSubjectDataForPeriod(
@@ -536,9 +542,15 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
-                for (student_id, student) in
-                    &data.get_data().get_inner_data().params.students.student_map
+                for (student_id, student) in data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .students
+                    .student_map
+                    .entries()
                 {
+                    let student_id = &student_id;
                     if student.excluded_periods.contains(period_id) {
                         let mut new_student = student.clone();
                         new_student.excluded_periods.remove(period_id);
@@ -555,13 +567,15 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
-                for (rule_id, rule) in &data
+                for (rule_id, rule) in data
                     .get_data()
                     .get_inner_data()
                     .params
                     .pairings
                     .pairing_rule_map
+                    .entries()
                 {
+                    let rule_id = &rule_id;
                     if rule.excluded_periods.contains(period_id) {
                         let mut new_rule = rule.clone();
                         new_rule.excluded_periods.remove(period_id);
@@ -577,13 +591,15 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
-                for (rule_id, rule) in &data
+                for (rule_id, rule) in data
                     .get_data()
                     .get_inner_data()
                     .params
                     .slot_pairings
                     .slot_pairing_rule_map
+                    .entries()
                 {
+                    let rule_id = &rule_id;
                     if rule.excluded_periods.contains(period_id) {
                         let mut new_rule = rule.clone();
                         new_rule.excluded_periods.remove(period_id);
@@ -672,13 +688,15 @@ impl GeneralPlanningUpdateOp {
                     .ordered_period_list[pos - 1]
                     .0;
 
-                for (subject_id, subject) in &data
+                for (subject_id, subject) in data
                     .get_data()
                     .get_inner_data()
                     .params
                     .subjects
                     .ordered_subject_list
+                    .entries()
                 {
+                    let subject_id = &subject_id;
                     if subject.excluded_periods.contains(period_id)
                         != subject.excluded_periods.contains(&previous_id)
                     {
@@ -696,9 +714,15 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
-                for (student_id, student) in
-                    &data.get_data().get_inner_data().params.students.student_map
+                for (student_id, student) in data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .students
+                    .student_map
+                    .entries()
                 {
+                    let student_id = &student_id;
                     if student.excluded_periods.contains(period_id)
                         != student.excluded_periods.contains(&previous_id)
                     {
@@ -721,13 +745,15 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
-                for (rule_id, rule) in &data
+                for (rule_id, rule) in data
                     .get_data()
                     .get_inner_data()
                     .params
                     .pairings
                     .pairing_rule_map
+                    .entries()
                 {
+                    let rule_id = &rule_id;
                     if rule.excluded_periods.contains(period_id) {
                         let mut new_rule = rule.clone();
                         new_rule.excluded_periods.remove(period_id);
@@ -743,13 +769,15 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
-                for (rule_id, rule) in &data
+                for (rule_id, rule) in data
                     .get_data()
                     .get_inner_data()
                     .params
                     .slot_pairings
                     .slot_pairing_rule_map
+                    .entries()
                 {
+                    let rule_id = &rule_id;
                     if rule.excluded_periods.contains(period_id) {
                         let mut new_rule = rule.clone();
                         new_rule.excluded_periods.remove(period_id);
@@ -1036,7 +1064,7 @@ impl GeneralPlanningUpdateOp {
                     .subjects
                     .ordered_subject_list
                     .clone();
-                for (subject_id, subject) in &ordered_subject_list {
+                for (subject_id, subject) in ordered_subject_list.entries() {
                     if subject.excluded_periods.contains(period_id) {
                         let mut new_subject = subject.clone();
                         new_subject.excluded_periods.insert(new_id);
@@ -1044,7 +1072,7 @@ impl GeneralPlanningUpdateOp {
                             .apply(
                                 collomatique_state_colloscopes::Op::Subject(
                                     collomatique_state_colloscopes::SubjectOp::Update(
-                                        *subject_id,
+                                        subject_id,
                                         new_subject,
                                     ),
                                 ),
@@ -1064,7 +1092,7 @@ impl GeneralPlanningUpdateOp {
                     .students
                     .student_map
                     .clone();
-                for (student_id, student) in &student_map {
+                for (student_id, student) in student_map.entries() {
                     if student.excluded_periods.contains(period_id) {
                         let mut new_student = student.clone();
                         new_student.excluded_periods.insert(new_id);
@@ -1072,7 +1100,7 @@ impl GeneralPlanningUpdateOp {
                             .apply(
                                 collomatique_state_colloscopes::Op::Student(
                                     collomatique_state_colloscopes::StudentOp::Update(
-                                        *student_id,
+                                        student_id,
                                         new_student,
                                     ),
                                 ),
@@ -1353,7 +1381,7 @@ impl GeneralPlanningUpdateOp {
             .params
             .week_patterns
             .week_pattern_map
-            .clone();
+            .to_map();
         let saved_colloscope_period = data
             .get_data()
             .get_inner_data()

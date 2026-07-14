@@ -239,13 +239,15 @@ impl StudentsUpdateOp {
                     }
                 }
 
-                for (group_list_id, group_list) in &data
+                for (group_list_id, group_list) in data
                     .get_data()
                     .get_inner_data()
                     .params
                     .group_lists
                     .group_list_map
+                    .entries()
                 {
+                    let group_list_id = &group_list_id;
                     match &group_list.filling {
                         collomatique_state_colloscopes::group_lists::GroupListFilling::Prefilled { groups } => {
                             if group_list.filling.contains_student(*student_id) {

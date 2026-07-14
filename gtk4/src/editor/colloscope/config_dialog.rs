@@ -90,7 +90,7 @@ impl Dialog {
         self.params
             .group_lists
             .group_list_map
-            .iter()
+            .entries()
             .any(|(_, group_list)| !group_list.is_prefilled())
     }
 
@@ -100,7 +100,7 @@ impl Dialog {
         self.params
             .periods
             .ordered_period_list
-            .iter()
+            .entries()
             .enumerate()
             .scan(0usize, |first_week_num, (index, (_id, weeks))| {
                 let week_count = weeks.len();
@@ -140,10 +140,10 @@ impl Dialog {
             .params
             .periods
             .ordered_period_list
-            .iter()
+            .entries()
             .zip(self.period_titles())
             .map(|((id, _), title)| {
-                let data = &sanitized_config.periods[id];
+                let data = &sanitized_config.periods[&id];
                 period_group::Data {
                     title,
                     recompute: data.recompute,
@@ -155,11 +155,11 @@ impl Dialog {
             .params
             .group_lists
             .group_list_map
-            .iter()
+            .entries()
             .filter(|(_id, group_list)| !group_list.is_prefilled())
             .zip(self.group_list_names())
             .map(|((id, _), title)| {
-                let data = &sanitized_config.group_lists[id];
+                let data = &sanitized_config.group_lists[&id];
                 group_list_group::Data {
                     title,
                     recompute: data.recompute.is_some(),
@@ -180,7 +180,7 @@ impl Dialog {
                 .params
                 .periods
                 .ordered_period_list
-                .iter()
+                .entries()
                 .zip(self.periods_data.iter())
                 .map(|((id, _), data)| {
                     (
@@ -196,7 +196,7 @@ impl Dialog {
                 .params
                 .group_lists
                 .group_list_map
-                .iter()
+                .entries()
                 .filter(|(_id, group_list)| !group_list.is_prefilled())
                 .zip(self.group_lists_data.iter())
                 .map(|((id, _), data)| {

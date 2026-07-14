@@ -2,12 +2,12 @@
 //!
 //! This module defines the relevant types to describes the schedule incompatibilities
 
-use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::Table;
 use crate::ids::{IncompatId, SubjectId, WeekPatternId};
 use crate::ops::AnnotatedIncompatOp;
 
@@ -17,7 +17,7 @@ pub struct Incompats {
     /// Incompats for subjects
     ///
     /// Each item associates an incompat id to a schedule incompatibility
-    pub incompat_map: BTreeMap<IncompatId, Incompatibility>,
+    pub incompat_map: Table<IncompatId, Incompatibility>,
 }
 
 /// Description of a single schedule incompat

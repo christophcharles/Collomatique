@@ -29,7 +29,8 @@ fn compute_period_runs(
     let mut current_active_weeks = Vec::new();
     let mut global_week = 0usize;
 
-    for (period_id, period_desc) in &env.periods.ordered_period_list {
+    for (period_id, period_desc) in env.periods.ordered_period_list.entries() {
+        let period_id = &period_id;
         let first_of_period = GlobalWeek(global_week);
         let last_of_period = GlobalWeek(global_week + period_desc.len().saturating_sub(1));
 
@@ -75,7 +76,8 @@ fn compute_period_runs(
 }
 
 pub(super) fn build(env: &VarEnv, mut bundle: MyBundle) -> MyBundle {
-    for (subject_id, subject) in &env.subjects.ordered_subject_list {
+    for (subject_id, subject) in env.subjects.ordered_subject_list.entries() {
+        let subject_id = &subject_id;
         let Some(params) = subject_interrogation_params(env, *subject_id) else {
             continue;
         };

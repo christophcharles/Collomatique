@@ -136,11 +136,11 @@ impl SolveConfig {
         let new_periods: BTreeMap<_, _> = params
             .periods
             .ordered_period_list
-            .iter()
+            .entries()
             .map(|(id, _)| {
                 (
-                    id.clone(),
-                    match self.periods.get(id) {
+                    id,
+                    match self.periods.get(&id) {
                         Some(data) => data.clone(),
                         None => PeriodSolveData::default(),
                     },
@@ -150,14 +150,14 @@ impl SolveConfig {
         let new_group_lists: BTreeMap<_, _> = params
             .group_lists
             .group_list_map
-            .iter()
+            .entries()
             .filter_map(|(id, group_list)| {
                 if group_list.is_prefilled() {
                     return None;
                 }
                 Some((
-                    id.clone(),
-                    match self.group_lists.get(id) {
+                    id,
+                    match self.group_lists.get(&id) {
                         Some(data) => data.clone(),
                         None => GroupListSolveData::default(),
                     },

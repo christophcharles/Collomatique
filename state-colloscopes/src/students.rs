@@ -2,12 +2,13 @@
 //!
 //! This module defines the relevant types to describes the students
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
 
 use thiserror::Error;
 
+use crate::Table;
 use crate::ids::{GroupListId, PeriodId, StudentId, SubjectId};
 use crate::ops::AnnotatedStudentOp;
 
@@ -17,7 +18,7 @@ pub struct Students {
     /// List of students
     ///
     /// Each item associates an id to a student description
-    pub student_map: BTreeMap<StudentId, Student>,
+    pub student_map: Table<StudentId, Student>,
 }
 
 /// Description of a single student
@@ -114,18 +115,18 @@ impl crate::Data {
                 }
 
                 for (group_list_id, group_list) in
-                    &self.inner_data.params.group_lists.group_list_map
+                    self.inner_data.params.group_lists.group_list_map.entries()
                 {
                     if group_list.filling.excluded_students().contains(id) {
                         return Err(StudentError::StudentIsStillExcludedByGroupList(
                             *id,
-                            *group_list_id,
+                            group_list_id,
                         ));
                     }
                     if group_list.filling.contains_student(*id) {
                         return Err(StudentError::StudentIsStillReferencedByPrefilledGroupList(
                             *id,
-                            *group_list_id,
+                            group_list_id,
                         ));
                     }
                 }

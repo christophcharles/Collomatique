@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::{collections::BTreeSet, num::NonZeroU32};
 use thiserror::Error;
 
+use crate::OrderedTable;
 use crate::colloscopes;
 use crate::ids::{GroupListId, IncompatId, PairingRuleId, PeriodId, SlotId, SubjectId, TeacherId};
 use crate::ops::AnnotatedSubjectOp;
@@ -18,7 +19,7 @@ pub struct Subjects {
     ///
     /// Each item represent a subject. It is described
     /// by a unique id and a description of type [Subject]
-    pub ordered_subject_list: Vec<(SubjectId, Subject)>,
+    pub ordered_subject_list: OrderedTable<SubjectId, Subject>,
 }
 
 /// Description of one subject
@@ -237,9 +238,7 @@ impl Default for SubjectInterrogationParameters {
 impl Subjects {
     /// Finds the position of a subject by id
     pub fn find_subject_position(&self, id: SubjectId) -> Option<usize> {
-        self.ordered_subject_list
-            .iter()
-            .position(|(current_id, _desc)| *current_id == id)
+        self.ordered_subject_list.position_of(&id)
     }
 
     /// Finds a subject by id
@@ -355,7 +354,8 @@ impl crate::Data {
                     .params
                     .subjects
                     .ordered_subject_list
-                    .insert(position, (*new_id, params.clone()));
+                    .insert_at(position, *new_id, params.clone())
+                    .expect("subject id absence checked above");
                 if params.parameters.interrogation_parameters.is_some() {
                     self.inner_data.params.slots.subject_map.insert(
                         *new_id,
@@ -364,8 +364,10 @@ impl crate::Data {
                         },
                     );
                 }
-                for (period_id, _period) in &self.inner_data.params.periods.ordered_period_list {
-                    if params.excluded_periods.contains(period_id) {
+                for (period_id, _period) in
+                    self.inner_data.params.periods.ordered_period_list.entries()
+                {
+                    if params.excluded_periods.contains(&period_id) {
                         continue;
                     }
 
@@ -374,7 +376,7 @@ impl crate::Data {
                         .params
                         .assignments
                         .period_map
-                        .get_mut(period_id)
+                        .get_mut(&period_id)
                         .expect("Every period should appear in assignments");
 
                     period_assignment
@@ -396,17 +398,11 @@ impl crate::Data {
                     return Err(SubjectError::InvalidSubjectId(*id));
                 };
 
-                let data = self
-                    .inner_data
-                    .params
-                    .subjects
-                    .ordered_subject_list
-                    .remove(old_pos);
                 self.inner_data
                     .params
                     .subjects
                     .ordered_subject_list
-                    .insert(*new_pos, data);
+                    .move_entry(old_pos, *new_pos);
                 Ok(AnnotatedSubjectOp::ChangePosition(*id, old_pos))
             }
             AnnotatedSubjectOp::Remove(id) => {
@@ -419,11 +415,9 @@ impl crate::Data {
                     return Err(SubjectError::SubjectStillHasBalancingOptions(*id));
                 }
 
-                for (rule_id, rule) in &self.inner_data.params.pairings.pairing_rule_map {
+                for (rule_id, rule) in self.inner_data.params.pairings.pairing_rule_map.entries() {
                     if rule.antecedent.subject_id == *id || rule.consequent.subject_id == *id {
-                        return Err(SubjectError::SubjectIsReferencedByPairingRule(
-                            *id, *rule_id,
-                        ));
+                        return Err(SubjectError::SubjectIsReferencedByPairingRule(*id, rule_id));
                     }
                 }
 
@@ -445,27 +439,30 @@ impl crate::Data {
                     return Err(SubjectError::SubjectStillHasAssociatedSlots(*id));
                 }
 
-                for (teacher_id, teacher) in &self.inner_data.params.teachers.teacher_map {
+                for (teacher_id, teacher) in self.inner_data.params.teachers.teacher_map.entries() {
                     if teacher.subjects.contains(id) {
                         return Err(SubjectError::SubjectStillHasAssociatedTeachers(
-                            *teacher_id,
-                            *id,
+                            teacher_id, *id,
                         ));
                     }
                 }
 
-                for (incompat_id, incompat) in &self.inner_data.params.incompats.incompat_map {
+                for (incompat_id, incompat) in
+                    self.inner_data.params.incompats.incompat_map.entries()
+                {
                     if incompat.subject_id == *id {
                         return Err(SubjectError::SubjectStillHasAssociatedIncompats(
                             *id,
-                            *incompat_id,
+                            incompat_id,
                         ));
                     }
                 }
 
                 let params = &self.inner_data.params.subjects.ordered_subject_list[position].1;
-                for (period_id, _period) in &self.inner_data.params.periods.ordered_period_list {
-                    if params.excluded_periods.contains(period_id) {
+                for (period_id, _period) in
+                    self.inner_data.params.periods.ordered_period_list.entries()
+                {
+                    if params.excluded_periods.contains(&period_id) {
                         continue;
                     }
 
@@ -474,7 +471,7 @@ impl crate::Data {
                         .params
                         .assignments
                         .period_map
-                        .get(period_id)
+                        .get(&period_id)
                         .expect("Every period should appear in assignments");
 
                     let assigned_students = period_assignment
@@ -484,7 +481,7 @@ impl crate::Data {
 
                     if !assigned_students.is_empty() {
                         return Err(SubjectError::SubjectStillHasNonTrivialAssignments(
-                            *period_id, *id,
+                            period_id, *id,
                         ));
                     }
                 }
@@ -497,10 +494,12 @@ impl crate::Data {
                     .params
                     .subjects
                     .ordered_subject_list
-                    .remove(position);
+                    .remove_at(position);
                 self.inner_data.params.slots.subject_map.remove(id);
-                for (period_id, _period) in &self.inner_data.params.periods.ordered_period_list {
-                    if params.excluded_periods.contains(period_id) {
+                for (period_id, _period) in
+                    self.inner_data.params.periods.ordered_period_list.entries()
+                {
+                    if params.excluded_periods.contains(&period_id) {
                         continue;
                     }
 
@@ -509,7 +508,7 @@ impl crate::Data {
                         .params
                         .assignments
                         .period_map
-                        .get_mut(period_id)
+                        .get_mut(&period_id)
                         .expect("Every period should appear in assignments");
 
                     period_assignment.subject_map.remove(id);
@@ -536,11 +535,12 @@ impl crate::Data {
                     }
 
                     // The new subject does not have interrogations, let's check that no teacher has been assigned to it
-                    for (teacher_id, teacher) in &self.inner_data.params.teachers.teacher_map {
+                    for (teacher_id, teacher) in
+                        self.inner_data.params.teachers.teacher_map.entries()
+                    {
                         if teacher.subjects.contains(id) {
                             return Err(SubjectError::SubjectStillHasAssociatedTeachers(
-                                *teacher_id,
-                                *id,
+                                teacher_id, *id,
                             ));
                         }
                     }
@@ -572,7 +572,10 @@ impl crate::Data {
                     }
                 }
 
-                for (period_id, _period) in &self.inner_data.params.periods.ordered_period_list {
+                for (period_id, _period) in
+                    self.inner_data.params.periods.ordered_period_list.entries()
+                {
+                    let period_id = &period_id;
                     // If the period was excluded before, there is no structure to check
                     // and if the period is not excluded now, the structure will be fine anyway
                     if old_params.excluded_periods.contains(period_id)
@@ -638,8 +641,11 @@ impl crate::Data {
                     }
                 }
 
-                self.inner_data.params.subjects.ordered_subject_list[position].1 =
-                    new_params.clone();
+                self.inner_data
+                    .params
+                    .subjects
+                    .ordered_subject_list
+                    .replace_value_at(position, new_params.clone());
                 if new_params.parameters.interrogation_parameters.is_some()
                     != old_params.parameters.interrogation_parameters.is_some()
                 {
@@ -697,7 +703,10 @@ impl crate::Data {
                     }
                 }
 
-                for (period_id, _period) in &self.inner_data.params.periods.ordered_period_list {
+                for (period_id, _period) in
+                    self.inner_data.params.periods.ordered_period_list.entries()
+                {
+                    let period_id = &period_id;
                     // Only change in period status should be considered
                     if old_params.excluded_periods.contains(period_id)
                         == new_params.excluded_periods.contains(period_id)

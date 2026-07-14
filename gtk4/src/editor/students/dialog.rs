@@ -201,13 +201,13 @@ impl SimpleComponent for Dialog {
                 let transformed_data: Vec<_> = self
                     .periods
                     .ordered_period_list
-                    .iter()
+                    .entries()
                     .scan(0usize, |current_week, (id, period_data)| {
                         let new_period = PeriodData {
                             global_first_week: self.periods.first_week.clone(),
                             first_week_num: *current_week,
                             week_count: period_data.len(),
-                            enable: !self.student_data.excluded_periods.contains(id),
+                            enable: !self.student_data.excluded_periods.contains(&id),
                         };
                         *current_week += period_data.len();
                         Some(new_period)

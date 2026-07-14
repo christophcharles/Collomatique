@@ -32,11 +32,11 @@ fn prefilled_student_groups(
     data: &InnerData,
     student_groups: &mut HashMap<(GroupListId, StudentId), i64>,
 ) {
-    for (gl_id, group_list) in &data.params.group_lists.group_list_map {
+    for (gl_id, group_list) in data.params.group_lists.group_list_map.entries() {
         if let GroupListFilling::Prefilled { groups } = &group_list.filling {
             for (group_index, group) in groups.iter().enumerate() {
                 for student_id in &group.students {
-                    student_groups.insert((*gl_id, *student_id), group_index as i64);
+                    student_groups.insert((gl_id, *student_id), group_index as i64);
                 }
             }
         }
@@ -83,9 +83,9 @@ fn query_prefilled(data: &InnerData) -> GroupListsAndMembers {
         .params
         .group_lists
         .group_list_map
-        .iter()
+        .entries()
         .filter(|(_gl_id, gl)| gl.filling.iter_students().next().is_some())
-        .map(|(gl_id, gl)| (*gl_id, gl.params.name.clone()))
+        .map(|(gl_id, gl)| (gl_id, gl.params.name.clone()))
         .collect();
     group_lists.sort_by(|a, b| a.1.cmp(&b.1));
 
@@ -144,8 +144,8 @@ fn build_internal(
         .params
         .students
         .student_map
-        .iter()
-        .map(|(student_id, student)| (*student_id, &student.desc))
+        .entries()
+        .map(|(student_id, student)| (student_id, &student.desc))
         .collect();
     students.sort_by(|a, b| (&a.1.surname, &a.1.firstname).cmp(&(&b.1.surname, &b.1.firstname)));
 
@@ -154,8 +154,8 @@ fn build_internal(
         .params
         .group_lists
         .group_list_map
-        .iter()
-        .map(|(gl_id, gl)| (*gl_id, crate::group_names_vec(gl)))
+        .entries()
+        .map(|(gl_id, gl)| (gl_id, crate::group_names_vec(gl)))
         .collect();
 
     let student_count = students.len();

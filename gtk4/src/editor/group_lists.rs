@@ -250,7 +250,7 @@ impl Component for GroupLists {
                     .expect("Group list ID should be valid")
                     .clone();
                 // Pass all students - exclusion is now handled in the prefill dialog
-                let filtered_students = self.students.student_map.clone();
+                let filtered_students = self.students.student_map.to_map();
                 self.prefill_group_list_id = Some(group_list_id);
                 self.prefill_dialog
                     .sender()
@@ -297,9 +297,9 @@ impl GroupLists {
         let mut group_lists_vec: Vec<_> = self
             .group_lists
             .group_list_map
-            .iter()
+            .entries()
             .map(|(id, group_list)| group_lists_display::EntryData {
-                id: *id,
+                id,
                 group_list: group_list.clone(),
             })
             .collect();
@@ -317,9 +317,10 @@ impl GroupLists {
         let periods_vec: Vec<_> = self
             .periods
             .ordered_period_list
-            .iter()
+            .entries()
             .enumerate()
             .scan(0usize, |acc, (num, (id, desc))| {
+                let id = &id;
                 let out = associations_display::PeriodEntryData {
                     period_id: *id,
                     period_text: super::generate_week_succession_title(
@@ -332,14 +333,14 @@ impl GroupLists {
                     subjects: self
                         .subjects
                         .ordered_subject_list
-                        .iter()
+                        .entries()
                         .filter_map(|(subject_id, subject)| {
                             if subject.excluded_periods.contains(id) {
                                 return None;
                             }
                             subject.parameters.interrogation_parameters.as_ref()?;
 
-                            Some((*subject_id, subject.clone()))
+                            Some((subject_id, subject.clone()))
                         })
                         .collect(),
                     group_list_associations: self
@@ -348,7 +349,7 @@ impl GroupLists {
                         .get(id)
                         .expect("Period ID should be valid")
                         .clone(),
-                    group_lists: self.group_lists.group_list_map.clone(),
+                    group_lists: self.group_lists.group_list_map.to_map(),
                 };
 
                 *acc += desc.len();

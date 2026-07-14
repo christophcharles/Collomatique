@@ -278,7 +278,7 @@ pub(crate) fn non_empty_group_lists_by_name(
         .params
         .group_lists
         .group_list_map
-        .iter()
+        .entries()
         .filter(|(gl_id, gl)| {
             let has_automatic_students = data
                 .colloscope
@@ -288,7 +288,7 @@ pub(crate) fn non_empty_group_lists_by_name(
             let has_prefilled_students = gl.filling.iter_students().next().is_some();
             has_automatic_students || has_prefilled_students
         })
-        .map(|(gl_id, gl)| (*gl_id, gl.params.name.clone()))
+        .map(|(gl_id, gl)| (gl_id, gl.params.name.clone()))
         .collect();
     group_lists.sort_by(|a, b| a.1.cmp(&b.1));
     group_lists

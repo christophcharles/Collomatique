@@ -354,9 +354,15 @@ impl SubjectsUpdateOp {
                 let no_more_interrogations = params.interrogation_parameters.is_none();
 
                 if previously_had_interrogations && no_more_interrogations {
-                    for (teacher_id, teacher) in
-                        &data.get_data().get_inner_data().params.teachers.teacher_map
+                    for (teacher_id, teacher) in data
+                        .get_data()
+                        .get_inner_data()
+                        .params
+                        .teachers
+                        .teacher_map
+                        .entries()
                     {
+                        let teacher_id = &teacher_id;
                         if teacher.subjects.contains(subject_id) {
                             let mut new_teacher = teacher.clone();
                             new_teacher.subjects.remove(subject_id);
@@ -561,9 +567,15 @@ impl SubjectsUpdateOp {
                 None
             }
             Self::DeleteSubject(subject_id) => {
-                for (teacher_id, teacher) in
-                    &data.get_data().get_inner_data().params.teachers.teacher_map
+                for (teacher_id, teacher) in data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .teachers
+                    .teacher_map
+                    .entries()
                 {
+                    let teacher_id = &teacher_id;
                     if teacher.subjects.contains(subject_id) {
                         let mut new_teacher = teacher.clone();
                         new_teacher.subjects.remove(subject_id);
@@ -603,13 +615,15 @@ impl SubjectsUpdateOp {
                     }
                 }
 
-                for (incompat_id, incompat) in &data
+                for (incompat_id, incompat) in data
                     .get_data()
                     .get_inner_data()
                     .params
                     .incompats
                     .incompat_map
+                    .entries()
                 {
+                    let incompat_id = &incompat_id;
                     if incompat.subject_id == *subject_id {
                         return Some(CleaningOp {
                             warning: SubjectsUpdateWarning::LooseScheduleIncompat(
@@ -697,13 +711,15 @@ impl SubjectsUpdateOp {
                     });
                 }
 
-                for (rule_id, rule) in &data
+                for (rule_id, rule) in data
                     .get_data()
                     .get_inner_data()
                     .params
                     .pairings
                     .pairing_rule_map
+                    .entries()
                 {
+                    let rule_id = &rule_id;
                     if rule.antecedent.subject_id == *subject_id
                         || rule.consequent.subject_id == *subject_id
                     {

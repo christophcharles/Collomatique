@@ -232,13 +232,15 @@ impl WeekPatternsUpdateOp {
                         }
 
                         let mut first_week_in_period = 0usize;
-                        for (period_id, period) in &data
+                        for (period_id, period) in data
                             .get_data()
                             .get_inner_data()
                             .params
                             .periods
                             .ordered_period_list
+                            .entries()
                         {
+                            let period_id = &period_id;
                             let collo_period = data
                                 .get_data()
                                 .get_inner_data()
@@ -305,13 +307,15 @@ impl WeekPatternsUpdateOp {
                     }
                 }
 
-                for (incompat_id, incompat) in &data
+                for (incompat_id, incompat) in data
                     .get_data()
                     .get_inner_data()
                     .params
                     .incompats
                     .incompat_map
+                    .entries()
                 {
+                    let incompat_id = &incompat_id;
                     if incompat.week_pattern_id == Some(*week_pattern_id) {
                         return Some(CleaningOp {
                             warning: WeekPatternsUpdateWarning::LooseScheduleIncompat(*incompat_id),

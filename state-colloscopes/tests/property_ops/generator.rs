@@ -100,28 +100,28 @@ impl Pools {
         let period_ids: Vec<_> = params
             .periods
             .ordered_period_list
-            .iter()
-            .map(|(id, _)| *id)
+            .entries()
+            .map(|(id, _)| id)
             .collect();
         let subject_ids: Vec<_> = params
             .subjects
             .ordered_subject_list
-            .iter()
-            .map(|(id, _)| *id)
+            .entries()
+            .map(|(id, _)| id)
             .collect();
         let interrogation_subject_ids: Vec<_> = params
             .subjects
             .ordered_subject_list
-            .iter()
+            .entries()
             .filter(|(_, s)| s.parameters.interrogation_parameters.is_some())
-            .map(|(id, _)| *id)
+            .map(|(id, _)| id)
             .collect();
         let non_interrogation_subject_ids: Vec<_> = params
             .subjects
             .ordered_subject_list
-            .iter()
+            .entries()
             .filter(|(_, s)| s.parameters.interrogation_parameters.is_none())
-            .map(|(id, _)| *id)
+            .map(|(id, _)| id)
             .collect();
         let slots_by_subject: Vec<_> = params
             .slots
@@ -196,9 +196,9 @@ fn teachers_for_subject(inner: &InnerData, subject_id: SubjectId) -> Vec<Teacher
         .params
         .teachers
         .teacher_map
-        .iter()
+        .entries()
         .filter(|(_, teacher)| teacher.subjects.contains(&subject_id))
-        .map(|(id, _)| *id)
+        .map(|(id, _)| id)
         .collect()
 }
 
@@ -457,17 +457,17 @@ fn gen_assignment(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invali
         .params
         .subjects
         .ordered_subject_list
-        .iter()
+        .entries()
         .filter(|(_, s)| !s.excluded_periods.contains(&period_id))
-        .map(|(id, _)| *id)
+        .map(|(id, _)| id)
         .collect();
     let period_students: Vec<StudentId> = inner
         .params
         .students
         .student_map
-        .iter()
+        .entries()
         .filter(|(_, s)| !s.excluded_periods.contains(&period_id))
-        .map(|(id, _)| *id)
+        .map(|(id, _)| id)
         .collect();
     let subject_id = if period_subjects.is_empty() {
         pick(rng, &pools.subject_ids)
@@ -732,12 +732,12 @@ fn gen_group_list(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invali
                 .params
                 .subjects
                 .ordered_subject_list
-                .iter()
+                .entries()
                 .filter(|(_, s)| {
                     s.parameters.interrogation_parameters.is_some()
                         && !s.excluded_periods.contains(&period_id)
                 })
-                .map(|(id, _)| *id)
+                .map(|(id, _)| id)
                 .collect();
             let subject_id = if eligible_subjects.is_empty() {
                 pick(rng, &pools.interrogation_subject_ids)

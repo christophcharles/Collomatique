@@ -93,9 +93,10 @@ impl Dialog {
         self.period_data = self
             .periods
             .ordered_period_list
-            .iter()
+            .entries()
             .enumerate()
             .map(|(i, (period_id, _desc))| {
+                let period_id = &period_id;
                 let subject_excluded = self.subject_excluded_periods.contains(period_id);
                 PeriodData {
                     period_index: i,

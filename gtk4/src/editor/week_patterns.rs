@@ -175,9 +175,9 @@ impl WeekPatterns {
         let mut week_patterns_vec: Vec<_> = self
             .week_patterns
             .week_pattern_map
-            .iter()
+            .entries()
             .map(|(id, week_pattern)| EntryData {
-                id: *id,
+                id,
                 name: week_pattern.name.clone(),
             })
             .collect();

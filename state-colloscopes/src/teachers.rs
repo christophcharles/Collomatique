@@ -2,12 +2,13 @@
 //!
 //! This module defines the relevant types to describes the teachers
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
 
 use thiserror::Error;
 
+use crate::Table;
 use crate::ids::{SlotId, SubjectId, TeacherId};
 use crate::ops::AnnotatedTeacherOp;
 
@@ -17,7 +18,7 @@ pub struct Teachers {
     /// List of teachers
     ///
     /// Each item associates an id to a teacher description
-    pub teacher_map: BTreeMap<TeacherId, Teacher>,
+    pub teacher_map: Table<TeacherId, Teacher>,
 }
 
 /// Description of a single teacher

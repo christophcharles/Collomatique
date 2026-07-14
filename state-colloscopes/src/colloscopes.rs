@@ -53,19 +53,19 @@ impl Colloscope {
         let group_lists = params
             .group_lists
             .group_list_map
-            .iter()
+            .entries()
             .filter(|(_id, group_list)| !group_list.is_prefilled())
-            .map(|(group_list_id, _group_list)| (*group_list_id, ColloscopeGroupList::new_empty()))
+            .map(|(group_list_id, _group_list)| (group_list_id, ColloscopeGroupList::new_empty()))
             .collect();
 
         let period_map = params
             .periods
             .ordered_period_list
-            .iter()
+            .entries()
             .map(|(period_id, _period)| {
                 (
-                    *period_id,
-                    ColloscopePeriod::new_empty_from_params(params, *period_id),
+                    period_id,
+                    ColloscopePeriod::new_empty_from_params(params, period_id),
                 )
             })
             .collect();
@@ -113,11 +113,9 @@ impl Colloscope {
         }
 
         // Check all non-prefilled group lists are present
-        for (group_list_id, group_list) in &params.group_lists.group_list_map {
-            if !group_list.is_prefilled() && !self.group_lists.contains_key(group_list_id) {
-                return Err(ColloscopeError::MissingNonPrefilledGroupList(
-                    *group_list_id,
-                ));
+        for (group_list_id, group_list) in params.group_lists.group_list_map.entries() {
+            if !group_list.is_prefilled() && !self.group_lists.contains_key(&group_list_id) {
+                return Err(ColloscopeError::MissingNonPrefilledGroupList(group_list_id));
             }
         }
 
@@ -131,7 +129,7 @@ impl Colloscope {
         pattern: &[bool],
     ) -> bool {
         let mut current_first_week = 0usize;
-        for (period_id, period_desc) in &periods.ordered_period_list {
+        for (period_id, period_desc) in periods.ordered_period_list.entries() {
             let last_week = current_first_week + period_desc.len();
             if pattern.len() < last_week {
                 return false;
@@ -139,7 +137,7 @@ impl Colloscope {
 
             let collo_period = self
                 .period_map
-                .get(period_id)
+                .get(&period_id)
                 .expect("Period Id should be valid");
             if let Some(collo_slot) = collo_period.slot_map.get(&slot_id)
                 && !collo_slot.check_empty_on_removed_weeks(&pattern[current_first_week..last_week])
@@ -176,13 +174,13 @@ impl Colloscope {
         pattern: &[bool],
     ) {
         let mut current_first_week = 0usize;
-        for (period_id, period_desc) in &periods.ordered_period_list {
+        for (period_id, period_desc) in periods.ordered_period_list.entries() {
             let last_week = current_first_week + period_desc.len();
             assert!(pattern.len() >= last_week);
 
             let collo_period = self
                 .period_map
-                .get_mut(period_id)
+                .get_mut(&period_id)
                 .expect("Period Id should be valid");
             if let Some(collo_slot) = collo_period.slot_map.get_mut(&slot_id) {
                 collo_slot.update_slot_for_week_pattern(&pattern[current_first_week..last_week]);
@@ -216,7 +214,7 @@ impl ColloscopePeriod {
 
         let mut slot_map = BTreeMap::new();
 
-        for (subject_id, subject) in &params.subjects.ordered_subject_list {
+        for (subject_id, subject) in params.subjects.ordered_subject_list.entries() {
             if subject.excluded_periods.contains(&period_id) {
                 continue;
             }
@@ -227,7 +225,7 @@ impl ColloscopePeriod {
             let subject_slots = params
                 .slots
                 .subject_map
-                .get(subject_id)
+                .get(&subject_id)
                 .expect("Subjects should have slots");
 
             for (slot_id, _slot) in &subject_slots.ordered_slots {
@@ -248,7 +246,7 @@ impl ColloscopePeriod {
     ) -> Result<(), ColloscopeError> {
         let mut slot_count = 0usize;
 
-        for (subject_id, subject) in &params.subjects.ordered_subject_list {
+        for (subject_id, subject) in params.subjects.ordered_subject_list.entries() {
             if subject.excluded_periods.contains(&period_id) {
                 continue;
             }
@@ -259,7 +257,7 @@ impl ColloscopePeriod {
             let subject_slots = params
                 .slots
                 .subject_map
-                .get(subject_id)
+                .get(&subject_id)
                 .expect("Subject should have slots at this point");
             slot_count += subject_slots.ordered_slots.len();
         }

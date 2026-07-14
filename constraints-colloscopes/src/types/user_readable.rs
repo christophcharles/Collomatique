@@ -659,7 +659,7 @@ fn slot_pairing_info(
                 .and_then(|(subj_id, _)| {
                     env.subjects
                         .ordered_subject_list
-                        .iter()
+                        .entries()
                         .find(|(id, _)| *id == subj_id)
                         .map(|(_, s)| s.parameters.name.clone())
                 })
@@ -734,7 +734,7 @@ fn subject_name(
 ) -> String {
     env.subjects
         .ordered_subject_list
-        .iter()
+        .entries()
         .find(|(id, _)| *id == subject)
         .map(|(_, s)| s.parameters.name.clone())
         .unwrap_or_else(|| format!("{:?}", subject))
@@ -746,8 +746,7 @@ fn period_position(
 ) -> usize {
     env.periods
         .ordered_period_list
-        .iter()
-        .position(|(id, _)| *id == period)
+        .position_of(&period)
         .map(|p| p + 1)
         .unwrap_or(0)
 }
@@ -763,7 +762,7 @@ fn slot_name(
         .and_then(|(subj_id, _)| {
             env.subjects
                 .ordered_subject_list
-                .iter()
+                .entries()
                 .find(|(id, _)| *id == subj_id)
                 .map(|(_, s)| s.parameters.name.as_str())
         });

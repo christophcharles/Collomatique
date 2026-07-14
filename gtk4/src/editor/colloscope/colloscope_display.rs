@@ -215,10 +215,10 @@ impl Display {
         self.column_view.append_column(DateTimeColumn {});
 
         let mut period_first_week = 0usize;
-        for (period_id, period_desc) in &self.periods.ordered_period_list {
+        for (period_id, period_desc) in self.periods.ordered_period_list.entries() {
             for week_in_period in 0..period_desc.len() {
                 self.column_view.append_column(WeekColumn {
-                    period_id: *period_id,
+                    period_id,
                     period_first_week,
                     week_in_period,
                 });
@@ -230,7 +230,8 @@ impl Display {
     fn update_view_wrapper(&mut self, sender: ComponentSender<Self>) {
         let mut new_items = vec![];
 
-        for (subject_id, subject) in &self.subjects.ordered_subject_list {
+        for (subject_id, subject) in self.subjects.ordered_subject_list.entries() {
+            let subject_id = &subject_id;
             let Some(subject_slots) = self.slots.subject_map.get(subject_id) else {
                 continue;
             };
@@ -238,7 +239,8 @@ impl Display {
             for (slot_id, slot) in &subject_slots.ordered_slots {
                 let mut period_map = BTreeMap::new();
 
-                for (period_id, period) in &self.periods.ordered_period_list {
+                for (period_id, period) in self.periods.ordered_period_list.entries() {
+                    let period_id = &period_id;
                     let collo_period = self
                         .colloscope
                         .period_map

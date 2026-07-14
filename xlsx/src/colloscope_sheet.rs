@@ -96,13 +96,13 @@ pub fn build(
     for (period_index, (period_id, weeks)) in params
         .periods
         .ordered_period_list
-        .iter()
+        .entries()
         .filter(|(_period_id, weeks)| !weeks.is_empty())
         .enumerate()
     {
         let nw = weeks.len();
         period_layout.push(PeriodLayout {
-            period_id: *period_id,
+            period_id,
             col_start: col_offset,
             num_weeks: nw,
             period_index,
@@ -125,13 +125,13 @@ pub fn build(
     let mut no_interrog_weeks: HashSet<(PeriodId, usize)> = HashSet::new();
     // Annotations — collected early so we can use them for week background colors
     let mut annotations: HashMap<(PeriodId, usize), String> = HashMap::new();
-    for (period_id, weeks) in &params.periods.ordered_period_list {
+    for (period_id, weeks) in params.periods.ordered_period_list.entries() {
         for (week_index, week) in weeks.iter().enumerate() {
             if !week.interrogations {
-                no_interrog_weeks.insert((*period_id, week_index));
+                no_interrog_weeks.insert((period_id, week_index));
             }
             if let Some(annotation) = &week.annotation {
-                annotations.insert((*period_id, week_index), annotation.to_string());
+                annotations.insert((period_id, week_index), annotation.to_string());
             }
         }
     }
@@ -246,8 +246,8 @@ pub fn build(
     let group_names_map: HashMap<GroupListId, Vec<String>> = params
         .group_lists
         .group_list_map
-        .iter()
-        .map(|(gl_id, gl)| (*gl_id, crate::group_names_vec(gl)))
+        .entries()
+        .map(|(gl_id, gl)| (gl_id, crate::group_names_vec(gl)))
         .collect();
 
     // -- Data rows --
@@ -255,7 +255,8 @@ pub fn build(
     let mut first_subject = true;
     let mut stripe_index: usize = 0;
 
-    for (subject_id, subject) in &params.subjects.ordered_subject_list {
+    for (subject_id, subject) in params.subjects.ordered_subject_list.entries() {
+        let subject_id = &subject_id;
         let subject_name = &subject.parameters.name;
 
         // Slots for this subject, in order

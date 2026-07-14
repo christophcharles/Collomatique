@@ -132,17 +132,18 @@ impl Component for Incompats {
                 let new_data: Vec<_> = self
                     .subjects
                     .ordered_subject_list
-                    .iter()
+                    .entries()
                     .map(|(id, desc)| {
+                        let id = &id;
                         let subject_incompats = self
                             .incompats
                             .incompat_map
-                            .iter()
+                            .entries()
                             .filter_map(|(incompat_id, incompat)| {
                                 if incompat.subject_id != *id {
                                     return None;
                                 }
-                                Some((*incompat_id, incompat.clone()))
+                                Some((incompat_id, incompat.clone()))
                             })
                             .collect();
                         incompats_display::EntryData {

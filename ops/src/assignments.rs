@@ -208,7 +208,8 @@ impl AssignmentsUpdateOp {
                     .student_map
                     .clone();
 
-                for (student_id, student) in &student_map {
+                for (student_id, student) in student_map.entries() {
+                    let student_id = &student_id;
                     if student.excluded_periods.contains(period_id) {
                         continue;
                     }
@@ -277,7 +278,7 @@ impl AssignmentsUpdateOp {
                     .students
                     .student_map
                     .clone();
-                for (student_id, student) in &student_map {
+                for (student_id, student) in student_map.entries() {
                     if student.excluded_periods.contains(period_id) {
                         continue;
                     }
@@ -287,7 +288,7 @@ impl AssignmentsUpdateOp {
                             collomatique_state_colloscopes::Op::Assignment(
                                 collomatique_state_colloscopes::AssignmentOp::Assign(
                                     *period_id,
-                                    *student_id,
+                                    student_id,
                                     *subject_id,
                                     *status,
                                 ),

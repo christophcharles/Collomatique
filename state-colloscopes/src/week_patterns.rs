@@ -2,11 +2,10 @@
 //!
 //! This module defines the relevant types to describes the week patterns
 
-use std::collections::BTreeMap;
-
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::Table;
 use crate::ids::{IncompatId, SlotId, WeekPatternId};
 use crate::ops::AnnotatedWeekPatternOp;
 
@@ -16,7 +15,7 @@ pub struct WeekPatterns {
     /// Week patterns
     ///
     /// Each item associate to a single ID a sequence of weeks
-    pub week_pattern_map: BTreeMap<WeekPatternId, WeekPattern>,
+    pub week_pattern_map: Table<WeekPatternId, WeekPattern>,
 }
 
 impl WeekPatterns {
@@ -176,13 +175,15 @@ impl crate::Data {
                     }
                 }
 
-                for (incompat_id, incompat) in &self.inner_data.params.incompats.incompat_map {
+                for (incompat_id, incompat) in
+                    self.inner_data.params.incompats.incompat_map.entries()
+                {
                     if let Some(week_pattern_id) = &incompat.week_pattern_id
                         && *id == *week_pattern_id
                     {
                         return Err(WeekPatternError::WeekPatternStillHasAssociatedIncompat(
                             *id,
-                            *incompat_id,
+                            incompat_id,
                         ));
                     }
                 }

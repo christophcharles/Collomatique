@@ -1069,15 +1069,15 @@ impl Colloscope {
             .params
             .group_lists
             .group_list_map
-            .iter()
+            .entries()
             .filter(|(_id, group_list)| !group_list.is_prefilled())
             .map(|(id, group_list)| group_lists_display::EntryData {
-                id: *id,
+                id,
                 group_list: group_list.clone(),
                 collo_group_list: self
                     .colloscope
                     .group_lists
-                    .get(id)
+                    .get(&id)
                     .expect("Non-prefilled group list should have colloscope entry")
                     .clone(),
                 total_student_count: self.params.students.student_map.len(),

@@ -68,7 +68,7 @@ impl GeneralPlanning {
 
     fn count_interrogation_weeks(&self) -> usize {
         let mut count = 0usize;
-        for (_id, desc) in &self.periods.ordered_period_list {
+        for (_id, desc) in self.periods.ordered_period_list.entries() {
             for v in desc {
                 if v.interrogations {
                     count += 1;
@@ -240,7 +240,7 @@ impl Component for GeneralPlanning {
                 let new_data = self
                     .periods
                     .ordered_period_list
-                    .iter()
+                    .entries()
                     .scan(0usize, |acc, (id, desc)| {
                         let current_first_week = *acc;
                         *acc += desc.len();
@@ -248,7 +248,7 @@ impl Component for GeneralPlanning {
                             global_first_week: self.periods.first_week.clone(),
                             first_week_num: current_first_week,
                             desc: desc.clone(),
-                            period_id: *id,
+                            period_id: id,
                         })
                     })
                     .collect::<Vec<_>>();

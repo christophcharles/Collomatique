@@ -2,12 +2,12 @@
 //!
 //! This module defines the relevant types to describe pairing rules between subjects
 
-use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::Table;
 use crate::ids::{PairingRuleId, PeriodId, SubjectId};
 use crate::ops::AnnotatedPairingOp;
 
@@ -15,7 +15,7 @@ use crate::ops::AnnotatedPairingOp;
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Pairings {
     /// Map from pairing rule id to pairing rule
-    pub pairing_rule_map: BTreeMap<PairingRuleId, PairingRule>,
+    pub pairing_rule_map: Table<PairingRuleId, PairingRule>,
 }
 
 /// One part (antecedent or consequent) of a pairing rule

@@ -29,7 +29,8 @@ pub fn build_config(env: &Parameters, colloscope: &Colloscope) -> ConfigData<Var
     }
 
     let mut first_week_in_period = 0usize;
-    for (period_id, period_desc) in &env.periods.ordered_period_list {
+    for (period_id, period_desc) in env.periods.ordered_period_list.entries() {
+        let period_id = &period_id;
         let period = colloscope
             .period_map
             .get(period_id)
@@ -72,7 +73,8 @@ pub fn build_config(env: &Parameters, colloscope: &Colloscope) -> ConfigData<Var
 pub fn build_complete_config(env: &Parameters, colloscope: &Colloscope) -> ConfigData<Var> {
     let mut config_data = build_config(env, colloscope);
 
-    for (group_list_id, group_list) in &env.group_lists.group_list_map {
+    for (group_list_id, group_list) in env.group_lists.group_list_map.entries() {
+        let group_list_id = &group_list_id;
         let data_group_list = env
             .group_lists
             .group_list_map
@@ -97,7 +99,8 @@ pub fn build_complete_config(env: &Parameters, colloscope: &Colloscope) -> Confi
     }
 
     let mut first_week_in_period = 0usize;
-    for (period_id, period_desc) in &env.periods.ordered_period_list {
+    for (period_id, period_desc) in env.periods.ordered_period_list.entries() {
+        let period_id = &period_id;
         let period = colloscope
             .period_map
             .get(period_id)

@@ -122,6 +122,18 @@ impl<I: Id, T> Table<I, T> {
     }
 }
 
+impl<I: Id, T: Clone> Table<I, T> {
+    /// Copies the table into a plain `BTreeMap`
+    ///
+    /// Compatibility-window helper for consumers that store their own
+    /// `BTreeMap` copy of table data. Same lifecycle as the [`Deref`](std::ops::Deref)
+    /// impl: scheduled for removal once consumers move to join patterns —
+    /// do not use in new code.
+    pub fn to_map(&self) -> BTreeMap<I, T> {
+        self.inner.clone()
+    }
+}
+
 impl<I: Id, T> From<BTreeMap<I, T>> for Table<I, T> {
     fn from(inner: BTreeMap<I, T>) -> Self {
         Table { inner }
@@ -133,6 +145,20 @@ impl<I: Id, T> FromIterator<(I, T)> for Table<I, T> {
         Table {
             inner: iter.into_iter().collect(),
         }
+    }
+}
+
+/// Consuming iterator over the `(id, value)` entries, in ID order.
+///
+/// This is the dual of [`FromIterator`]: it drains the table without exposing
+/// the backend representation, so it is part of the stable API (unlike the
+/// `Deref` and `&Table` iteration compatibility shims).
+impl<I: Id, T> IntoIterator for Table<I, T> {
+    type Item = (I, T);
+    type IntoIter = std::collections::btree_map::IntoIter<I, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.inner.into_iter()
     }
 }
 
@@ -297,6 +323,33 @@ impl<I: Id, T> OrderedTable<I, T> {
     }
 }
 
+/// Consuming iterator over the `(id, value)` entries, in table order.
+///
+/// This is the dual of the [`TryFrom<Vec<(I, T)>>`](OrderedTable::try_from)
+/// constructor: it drains the table without exposing the backend
+/// representation, so it is part of the stable API (unlike the `Deref` and
+/// `&OrderedTable` iteration compatibility shims).
+impl<I: Id, T> IntoIterator for OrderedTable<I, T> {
+    type Item = (I, T);
+    type IntoIter = std::vec::IntoIter<(I, T)>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.inner.into_iter()
+    }
+}
+
+impl<I: Id, T: Clone> OrderedTable<I, T> {
+    /// Copies the table into a plain `Vec<(I, T)>`, in table order
+    ///
+    /// Compatibility-window helper for consumers that store their own
+    /// `Vec` copy of ordered table data. Same lifecycle as the
+    /// [`Deref`](std::ops::Deref) impl: scheduled for removal once consumers
+    /// move to join patterns — do not use in new code.
+    pub fn to_vec(&self) -> Vec<(I, T)> {
+        self.inner.clone()
+    }
+}
+
 /// Compatibility window only: lets existing call sites keep using the slice API
 /// during the migration. Scheduled for removal — do not use in new code.
 impl<I: Id, T> std::ops::Deref for OrderedTable<I, T> {
@@ -386,6 +439,13 @@ mod tests {
     }
 
     #[test]
+    fn table_to_map_copies_backing_store() {
+        let (table, map) = table_fixture();
+
+        assert_eq!(table.to_map(), map);
+    }
+
+    #[test]
     fn ordered_table_wire_format_matches_vec() {
         let (table, entries) = ordered_fixture();
 
@@ -404,6 +464,13 @@ mod tests {
             serde_json::from_str(&json).expect("table deserializes");
 
         assert_eq!(back, table);
+    }
+
+    #[test]
+    fn ordered_table_to_vec_copies_entries_in_order() {
+        let (table, entries) = ordered_fixture();
+
+        assert_eq!(table.to_vec(), entries);
     }
 
     #[test]

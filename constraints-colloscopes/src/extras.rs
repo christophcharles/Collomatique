@@ -133,7 +133,7 @@ pub(crate) fn subject_interrogation_params(
 ) -> Option<&collomatique_state_colloscopes::subjects::SubjectInterrogationParameters> {
     env.subjects
         .ordered_subject_list
-        .iter()
+        .entries()
         .find(|(id, _)| *id == subject)
         .and_then(|(_, s)| s.parameters.interrogation_parameters.as_ref())
 }
@@ -213,11 +213,11 @@ pub(crate) fn weeks_for_week_pattern(
     let week_pattern = crate::tools::extract_week_pattern(env, week_pattern_id);
     let mut output = Vec::new();
     let mut global_week = 0usize;
-    for (period_id, period_desc) in &env.periods.ordered_period_list {
+    for (period_id, period_desc) in env.periods.ordered_period_list.entries() {
         for week_desc in period_desc {
             if week_desc.interrogations
                 && *week_pattern.get(global_week).unwrap_or(&true)
-                && !excluded_periods.contains(period_id)
+                && !excluded_periods.contains(&period_id)
             {
                 output.push(GlobalWeek(global_week));
             }
@@ -266,7 +266,7 @@ fn build_interrogation_has_groups(env: &VarEnv) -> MyBundle {
 
 fn build_student_in_group(env: &VarEnv) -> MyBundle {
     let mut bundle = MyBundle::new();
-    for (&group_list, gl) in &env.group_lists.group_list_map {
+    for (group_list, gl) in env.group_lists.group_list_map.entries() {
         let students = students_for_group_list(env, gl);
         for group in GroupNum::enumerate(env, group_list) {
             for &student in &students {
@@ -298,7 +298,7 @@ fn build_group_has_students(env: &VarEnv) -> MyBundle {
     use collomatique_state_colloscopes::group_lists::GroupListFilling;
 
     let mut bundle = MyBundle::new();
-    for (&group_list, gl) in &env.group_lists.group_list_map {
+    for (group_list, gl) in env.group_lists.group_list_map.entries() {
         for group in GroupNum::enumerate(env, group_list) {
             let var = ExtraVarName::GroupHasStudents { group_list, group };
             match &gl.filling {
@@ -574,7 +574,7 @@ fn build_student_not_at_incompat_slot(env: &VarEnv) -> MyBundle {
         result
     };
 
-    for (&incompat_id, incompat) in &env.incompats.incompat_map {
+    for (incompat_id, incompat) in env.incompats.incompat_map.entries() {
         let Some(subject) = env.subjects.find_subject(incompat.subject_id) else {
             continue;
         };

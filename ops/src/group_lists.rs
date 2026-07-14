@@ -846,13 +846,15 @@ impl GroupListsUpdateOp {
                     return None;
                 };
 
-                for (subject_id, subject) in &data
+                for (subject_id, subject) in data
                     .get_data()
                     .get_inner_data()
                     .params
                     .subjects
                     .ordered_subject_list
+                    .entries()
                 {
+                    let subject_id = &subject_id;
                     if subject.excluded_periods.contains(period_id) {
                         continue;
                     }
@@ -1206,7 +1208,8 @@ impl GroupListsUpdateOp {
                     .ordered_subject_list
                     .clone();
 
-                for (subject_id, subject) in &subjects {
+                for (subject_id, subject) in subjects.entries() {
+                    let subject_id = &subject_id;
                     if subject.excluded_periods.contains(period_id) {
                         continue;
                     }

@@ -210,8 +210,8 @@ fn soft_flag(flag: format::scalars::SoftFlag) -> mem::soft_param::SoftParam<()> 
 }
 
 fn reconstruct(blocks: Blocks) -> Result<InnerData, DecodeError> {
-    let periods = reconstruct_periods(blocks.general_planning.unwrap_or_default());
-    let subjects = reconstruct_subjects(blocks.subjects.unwrap_or_default());
+    let periods = reconstruct_periods(blocks.general_planning.unwrap_or_default())?;
+    let subjects = reconstruct_subjects(blocks.subjects.unwrap_or_default())?;
     let teachers = reconstruct_teachers(blocks.teachers.unwrap_or_default());
     let students = reconstruct_students(blocks.students.unwrap_or_default());
     let assignments =
@@ -260,52 +260,64 @@ fn reconstruct(blocks: Blocks) -> Result<InnerData, DecodeError> {
     })
 }
 
-fn reconstruct_periods(block: format::general_planning::GeneralPlanning) -> mem::periods::Periods {
-    mem::periods::Periods {
+fn reconstruct_periods(
+    block: format::general_planning::GeneralPlanning,
+) -> Result<mem::periods::Periods, DecodeError> {
+    let ordered_period_list = block
+        .periods
+        .into_iter()
+        .map(|period| {
+            (
+                id(period.id),
+                period
+                    .weeks
+                    .into_iter()
+                    .map(|week| mem::periods::WeekDesc {
+                        interrogations: week.interrogations,
+                        annotation: week.annotation,
+                    })
+                    .collect(),
+            )
+        })
+        .collect::<Vec<_>>()
+        .try_into()
+        .map_err(|_| DecodeError::DuplicatedID)?;
+
+    Ok(mem::periods::Periods {
         first_week: block.first_week.map(|date| {
             collomatique_time::WeekStart::new(date.date())
                 .expect("Format week start date is a Monday")
         }),
-        ordered_period_list: block
-            .periods
-            .into_iter()
-            .map(|period| {
-                (
-                    id(period.id),
-                    period
-                        .weeks
-                        .into_iter()
-                        .map(|week| mem::periods::WeekDesc {
-                            interrogations: week.interrogations,
-                            annotation: week.annotation,
-                        })
-                        .collect(),
-                )
-            })
-            .collect(),
-    }
+        ordered_period_list,
+    })
 }
 
-fn reconstruct_subjects(block: format::subjects::Subjects) -> mem::subjects::Subjects {
-    mem::subjects::Subjects {
-        ordered_subject_list: block
-            .into_iter()
-            .map(|subject| {
-                (
-                    id(subject.id),
-                    mem::subjects::Subject {
-                        parameters: mem::subjects::SubjectParameters {
-                            name: subject.name,
-                            interrogation_parameters: subject
-                                .interrogation_parameters
-                                .map(interrogation_parameters),
-                        },
-                        excluded_periods: id_set(subject.excluded_periods),
+fn reconstruct_subjects(
+    block: format::subjects::Subjects,
+) -> Result<mem::subjects::Subjects, DecodeError> {
+    let ordered_subject_list = block
+        .into_iter()
+        .map(|subject| {
+            (
+                id(subject.id),
+                mem::subjects::Subject {
+                    parameters: mem::subjects::SubjectParameters {
+                        name: subject.name,
+                        interrogation_parameters: subject
+                            .interrogation_parameters
+                            .map(interrogation_parameters),
                     },
-                )
-            })
-            .collect(),
-    }
+                    excluded_periods: id_set(subject.excluded_periods),
+                },
+            )
+        })
+        .collect::<Vec<_>>()
+        .try_into()
+        .map_err(|_| DecodeError::DuplicatedID)?;
+
+    Ok(mem::subjects::Subjects {
+        ordered_subject_list,
+    })
 }
 
 fn interrogation_parameters(
@@ -409,16 +421,16 @@ fn reconstruct_assignments(
     // subject, empty by default (spec §4.5)
     let mut period_map: BTreeMap<PeriodId, mem::assignments::PeriodAssignments> = periods
         .ordered_period_list
-        .iter()
+        .entries()
         .map(|(period_id, _desc)| {
             let subject_map = subjects
                 .ordered_subject_list
-                .iter()
-                .filter(|(_subject_id, subject)| !subject.excluded_periods.contains(period_id))
-                .map(|(subject_id, _subject)| (*subject_id, BTreeSet::new()))
+                .entries()
+                .filter(|(_subject_id, subject)| !subject.excluded_periods.contains(&period_id))
+                .map(|(subject_id, _subject)| (subject_id, BTreeSet::new()))
                 .collect();
             (
-                *period_id,
+                period_id,
                 mem::assignments::PeriodAssignments { subject_map },
             )
         })
@@ -473,11 +485,11 @@ fn reconstruct_slots(
     // subjects are inserted anyway: layer 3 rejects them.
     let mut subject_map: BTreeMap<SubjectId, mem::slots::SubjectSlots> = subjects
         .ordered_subject_list
-        .iter()
+        .entries()
         .filter(|(_subject_id, subject)| subject.parameters.interrogation_parameters.is_some())
         .map(|(subject_id, _subject)| {
             (
-                *subject_id,
+                subject_id,
                 mem::slots::SubjectSlots {
                     ordered_slots: vec![],
                 },
@@ -548,7 +560,9 @@ fn reconstruct_incompats(
         );
     }
 
-    Ok(mem::incompats::Incompats { incompat_map })
+    Ok(mem::incompats::Incompats {
+        incompat_map: incompat_map.into(),
+    })
 }
 
 fn reconstruct_group_lists(
@@ -597,8 +611,8 @@ fn reconstruct_group_lists(
     // add an extra entry which layer 3 rejects.
     let mut subjects_associations: BTreeMap<PeriodId, BTreeMap<SubjectId, GroupListId>> = periods
         .ordered_period_list
-        .iter()
-        .map(|(period_id, _desc)| (*period_id, BTreeMap::new()))
+        .entries()
+        .map(|(period_id, _desc)| (period_id, BTreeMap::new()))
         .collect();
     for row in associations.into_inner() {
         subjects_associations
@@ -725,9 +739,9 @@ fn reconstruct_colloscope(
 
     // Global week index -> (period, week position within the period)
     let mut week_table = Vec::new();
-    for (period_id, desc) in &params.periods.ordered_period_list {
+    for (period_id, desc) in params.periods.ordered_period_list.entries() {
         for week_in_period in 0..desc.len() {
-            week_table.push((*period_id, week_in_period));
+            week_table.push((period_id, week_in_period));
         }
     }
 

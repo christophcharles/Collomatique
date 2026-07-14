@@ -9,6 +9,7 @@ use std::ops::RangeInclusive;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::Table;
 use crate::colloscopes;
 use crate::group_lists;
 use crate::ids::{GroupListId, PeriodId, SlotId, StudentId, SubjectId};
@@ -20,7 +21,7 @@ pub struct GroupLists {
     /// Group lists
     ///
     /// Each item associates a group list id to an actual group list
-    pub group_list_map: BTreeMap<GroupListId, GroupList>,
+    pub group_list_map: Table<GroupListId, GroupList>,
 
     /// Associations between subjects and group lists
     ///

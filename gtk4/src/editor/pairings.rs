@@ -138,9 +138,9 @@ impl Component for Pairings {
                 let new_data: Vec<_> = self
                     .pairings
                     .pairing_rule_map
-                    .iter()
+                    .entries()
                     .map(|(rule_id, rule)| pairings_display::EntryData {
-                        rule_id: *rule_id,
+                        rule_id,
                         rule: rule.clone(),
                         subjects: self.subjects.clone(),
                         periods: self.periods.clone(),
@@ -183,7 +183,11 @@ impl Component for Pairings {
                     .ordered_subject_list
                     .first()
                     .map(|(id, _)| *id);
-                let second_subject = self.subjects.ordered_subject_list.get(1).map(|(id, _)| *id);
+                let second_subject = self
+                    .subjects
+                    .ordered_subject_list
+                    .get_at(1)
+                    .map(|(id, _)| id);
                 let (ant_id, con_id) = match (first_subject, second_subject) {
                     (Some(a), Some(b)) => (a, b),
                     _ => return, // Need at least 2 subjects

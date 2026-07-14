@@ -3,12 +3,12 @@
 //! This module defines the relevant types to describe pairing rules between slots
 //! within the same subject
 
-use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::Table;
 use crate::ids::{PeriodId, SlotId, SlotPairingRuleId};
 use crate::ops::AnnotatedSlotPairingOp;
 
@@ -16,7 +16,7 @@ use crate::ops::AnnotatedSlotPairingOp;
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SlotPairings {
     /// Map from slot pairing rule id to slot pairing rule
-    pub slot_pairing_rule_map: BTreeMap<SlotPairingRuleId, SlotPairingRule>,
+    pub slot_pairing_rule_map: Table<SlotPairingRuleId, SlotPairingRule>,
 }
 
 /// One part (antecedent or consequent) of a slot pairing rule

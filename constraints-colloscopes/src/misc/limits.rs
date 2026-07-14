@@ -11,10 +11,10 @@ use std::num::NonZeroU32;
 fn all_interrogation_weeks(env: &VarEnv) -> Vec<(GlobalWeek, PeriodId)> {
     let mut result = Vec::new();
     let mut global_week = 0;
-    for (period_id, period_desc) in &env.periods.ordered_period_list {
+    for (period_id, period_desc) in env.periods.ordered_period_list.entries() {
         for week_desc in period_desc {
             if week_desc.interrogations {
-                result.push((GlobalWeek(global_week), *period_id));
+                result.push((GlobalWeek(global_week), period_id));
             }
             global_week += 1;
         }
@@ -113,7 +113,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
 
     let interrogation_weeks = all_interrogation_weeks(env);
 
-    for (&student, student_data) in &env.students.student_map {
+    for (student, student_data) in env.students.student_map.entries() {
         let max_per_day = effective_max_per_day(env, student);
         let max_per_week = effective_max_per_week(env, student);
         let min_per_week = effective_min_per_week(env, student);

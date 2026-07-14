@@ -136,8 +136,9 @@ impl Component for Slots {
                 let new_data: Vec<_> = self
                     .subjects
                     .ordered_subject_list
-                    .iter()
+                    .entries()
                     .filter_map(|(id, desc)| {
+                        let id = &id;
                         desc.parameters.interrogation_parameters.as_ref()?;
 
                         let subject_slots = self
@@ -273,10 +274,10 @@ impl Slots {
     > {
         self.teachers
             .teacher_map
-            .iter()
+            .entries()
             .filter_map(|(teacher_id, teacher)| {
                 if teacher.subjects.contains(&subject_id) {
-                    Some((*teacher_id, teacher.clone()))
+                    Some((teacher_id, teacher.clone()))
                 } else {
                     None
                 }

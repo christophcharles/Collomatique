@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use thiserror::Error;
 
+use crate::OrderedTable;
 use crate::assignments;
 use crate::colloscopes::ColloscopePeriod;
 use crate::ids::{
@@ -31,7 +32,7 @@ pub struct Periods {
     /// Each boolean represents a week. If it is true
     /// there is an interrogation on the given week
     /// otherwise there isn't.
-    pub ordered_period_list: Vec<(PeriodId, Vec<WeekDesc>)>,
+    pub ordered_period_list: OrderedTable<PeriodId, Vec<WeekDesc>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -60,22 +61,20 @@ impl WeekDesc {
 
 impl Periods {
     pub fn count_weeks(&self) -> usize {
-        self.ordered_period_list.iter().map(|x| x.1.len()).sum()
+        self.ordered_period_list.entries().map(|x| x.1.len()).sum()
     }
 
     /// Finds the position of a period by id
     pub fn find_period_position(&self, id: PeriodId) -> Option<usize> {
-        self.ordered_period_list
-            .iter()
-            .position(|(current_id, _desc)| *current_id == id)
+        self.ordered_period_list.position_of(&id)
     }
 
     /// Finds the position of a period by id and gives the number of the first week
     pub fn find_period_position_and_first_week(&self, id: PeriodId) -> Option<(usize, usize)> {
         let mut first_week = 0usize;
 
-        for (pos, (period_id, desc)) in self.ordered_period_list.iter().enumerate() {
-            if *period_id == id {
+        for (pos, (period_id, desc)) in self.ordered_period_list.entries().enumerate() {
+            if period_id == id {
                 return Some((pos, first_week));
             }
             first_week += desc.len();
@@ -92,9 +91,9 @@ impl Periods {
     ) -> Option<(usize, usize)> {
         let mut total_weeks = 0usize;
 
-        for (pos, (period_id, desc)) in self.ordered_period_list.iter().enumerate() {
+        for (pos, (period_id, desc)) in self.ordered_period_list.entries().enumerate() {
             total_weeks += desc.len();
-            if *period_id == id {
+            if period_id == id {
                 return Some((pos, total_weeks));
             }
         }
@@ -113,8 +112,8 @@ impl Periods {
     pub fn get_first_week_and_length_for_period(&self, id: PeriodId) -> Option<(usize, usize)> {
         let mut first_week = 0usize;
 
-        for (period_id, desc) in &self.ordered_period_list {
-            if *period_id == id {
+        for (period_id, desc) in self.ordered_period_list.entries() {
+            if period_id == id {
                 return Some((first_week, desc.len()));
             }
             first_week += desc.len();
@@ -207,7 +206,8 @@ impl crate::Data {
                     .params
                     .periods
                     .ordered_period_list
-                    .insert(0, (*period_id, desc.clone()));
+                    .insert_at(0, *period_id, desc.clone())
+                    .expect("period id absence checked above");
                 self.inner_data.params.assignments.period_map.insert(
                     *period_id,
                     assignments::PeriodAssignments {
@@ -216,8 +216,8 @@ impl crate::Data {
                             .params
                             .subjects
                             .ordered_subject_list
-                            .iter()
-                            .map(|(subject_id, _subject)| (*subject_id, BTreeSet::new()))
+                            .entries()
+                            .map(|(subject_id, _subject)| (subject_id, BTreeSet::new()))
                             .collect(),
                     },
                 );
@@ -265,7 +265,8 @@ impl crate::Data {
                     .params
                     .periods
                     .ordered_period_list
-                    .insert(position + 1, (*period_id, desc.clone()));
+                    .insert_at(position + 1, *period_id, desc.clone())
+                    .expect("period id absence checked above");
                 self.inner_data.params.assignments.period_map.insert(
                     *period_id,
                     assignments::PeriodAssignments {
@@ -274,8 +275,8 @@ impl crate::Data {
                             .params
                             .subjects
                             .ordered_subject_list
-                            .iter()
-                            .map(|(subject_id, _subject)| (*subject_id, BTreeSet::new()))
+                            .entries()
+                            .map(|(subject_id, _subject)| (subject_id, BTreeSet::new()))
                             .collect(),
                     },
                 );
@@ -324,47 +325,61 @@ impl crate::Data {
                     .1
                     .len();
 
-                for (week_pattern_id, week_pattern) in
-                    &self.inner_data.params.week_patterns.week_pattern_map
+                for (week_pattern_id, week_pattern) in self
+                    .inner_data
+                    .params
+                    .week_patterns
+                    .week_pattern_map
+                    .entries()
                 {
                     if !week_pattern.can_remove_weeks(first_week, week_count) {
                         return Err(PeriodError::NonTrivialWeekPattern(
                             *period_id,
-                            *week_pattern_id,
+                            week_pattern_id,
                         ));
                     }
                 }
 
-                for (subject_id, subject) in &self.inner_data.params.subjects.ordered_subject_list {
+                for (subject_id, subject) in self
+                    .inner_data
+                    .params
+                    .subjects
+                    .ordered_subject_list
+                    .entries()
+                {
                     if subject.excluded_periods.contains(period_id) {
                         return Err(PeriodError::PeriodIsReferencedBySubject(
-                            *period_id,
-                            *subject_id,
+                            *period_id, subject_id,
                         ));
                     }
                 }
 
-                for (student_id, student) in &self.inner_data.params.students.student_map {
+                for (student_id, student) in self.inner_data.params.students.student_map.entries() {
                     if student.excluded_periods.contains(period_id) {
                         return Err(PeriodError::PeriodIsReferencedByStudent(
-                            *period_id,
-                            *student_id,
+                            *period_id, student_id,
                         ));
                     }
                 }
 
-                for (rule_id, rule) in &self.inner_data.params.pairings.pairing_rule_map {
+                for (rule_id, rule) in self.inner_data.params.pairings.pairing_rule_map.entries() {
                     if rule.excluded_periods.contains(period_id) {
                         return Err(PeriodError::PeriodIsReferencedByPairingRule(
-                            *period_id, *rule_id,
+                            *period_id, rule_id,
                         ));
                     }
                 }
 
-                for (rule_id, rule) in &self.inner_data.params.slot_pairings.slot_pairing_rule_map {
+                for (rule_id, rule) in self
+                    .inner_data
+                    .params
+                    .slot_pairings
+                    .slot_pairing_rule_map
+                    .entries()
+                {
                     if rule.excluded_periods.contains(period_id) {
                         return Err(PeriodError::PeriodIsReferencedBySlotPairingRule(
-                            *period_id, *rule_id,
+                            *period_id, rule_id,
                         ));
                     }
                 }
@@ -406,7 +421,7 @@ impl crate::Data {
                     .params
                     .periods
                     .ordered_period_list
-                    .remove(position);
+                    .remove_at(position);
                 self.inner_data
                     .params
                     .assignments
@@ -446,15 +461,19 @@ impl crate::Data {
                 let period = &self.inner_data.params.periods.ordered_period_list[position].1;
                 let old_length = period.len();
                 if desc.len() < old_length {
-                    for (week_pattern_id, week_pattern) in
-                        &self.inner_data.params.week_patterns.week_pattern_map
+                    for (week_pattern_id, week_pattern) in self
+                        .inner_data
+                        .params
+                        .week_patterns
+                        .week_pattern_map
+                        .entries()
                     {
                         if !week_pattern
                             .can_remove_weeks(first_week + desc.len(), old_length - desc.len())
                         {
                             return Err(PeriodError::NonTrivialWeekPattern(
                                 *period_id,
-                                *week_pattern_id,
+                                week_pattern_id,
                             ));
                         }
                     }
@@ -483,10 +502,12 @@ impl crate::Data {
                     }
                 }
 
-                let old_desc = std::mem::replace(
-                    &mut self.inner_data.params.periods.ordered_period_list[position].1,
-                    desc.clone(),
-                );
+                let old_desc = self
+                    .inner_data
+                    .params
+                    .periods
+                    .ordered_period_list
+                    .replace_value_at(position, desc.clone());
                 if desc.len() > old_length {
                     let first_week_to_add = first_week + old_length;
                     for week_pattern in self

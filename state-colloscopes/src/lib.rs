@@ -11,6 +11,13 @@ use collomatique_state::{InMemoryData, Operation, tools};
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
+/// Internal re-export of the generic table containers.
+///
+/// Tables are an implementation detail of this crate: consumers read them
+/// through the `Deref` compatibility layer and copy plain `BTreeMap`/`Vec`
+/// when they need their own copy. Kept `pub(crate)` so the path does not leak.
+pub(crate) use collomatique_state::{OrderedTable, Table};
+
 pub mod ids;
 use ids::Id;
 use ids::IdIssuer;

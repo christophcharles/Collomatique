@@ -564,7 +564,7 @@ impl EditorPanel {
             .params
             .periods
             .ordered_period_list
-            .iter()
+            .entries()
             .flat_map(|(_, weeks)| weeks.iter())
             .filter_map(|w| w.annotation.as_ref().map(|a| a.to_string()))
             .collect();

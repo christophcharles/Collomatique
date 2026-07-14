@@ -178,8 +178,9 @@ impl Component for SlotPairings {
                 let new_data: Vec<_> = self
                     .subjects
                     .ordered_subject_list
-                    .iter()
+                    .entries()
                     .filter_map(|(id, desc)| {
+                        let id = &id;
                         desc.parameters.interrogation_parameters.as_ref()?;
 
                         let subject_slots = self
@@ -193,7 +194,7 @@ impl Component for SlotPairings {
                         let rules: Vec<_> = self
                             .slot_pairings
                             .slot_pairing_rule_map
-                            .iter()
+                            .entries()
                             .filter(|(_rule_id, rule)| {
                                 // Check if antecedent slot belongs to this subject
                                 subject_slots
@@ -201,7 +202,7 @@ impl Component for SlotPairings {
                                     .iter()
                                     .any(|(slot_id, _)| *slot_id == rule.antecedent.slot_id)
                             })
-                            .map(|(rule_id, rule)| (*rule_id, rule.clone()))
+                            .map(|(rule_id, rule)| (rule_id, rule.clone()))
                             .collect();
 
                         // Build slot descriptions for this subject
