@@ -10,8 +10,4 @@ derive = ["dep:collomatique-state-derive"]
 
 [dependencies]
 collomatique-state-derive = { path = "../state-derive", optional = true }
-serde = { workspace = true, features = ["derive"] }
 thiserror.workspace = true
-
-[dev-dependencies]
-serde_json.workspace = true

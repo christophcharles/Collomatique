@@ -115,7 +115,7 @@ pub struct PersonWithContact {
 /// [InnerData] represents this actual 'on-disk' data so we can
 /// directly use `derive(PartialEq, Eq)` with it. The implementation
 /// of [Eq] and [PartialEq] for [Data] relies on it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct InnerData {
     pub params: colloscope_params::Parameters,
     pub colloscope: colloscopes::Colloscope,
@@ -396,5 +396,11 @@ impl Data {
     /// you can inspect the current data via this function
     pub fn get_inner_data(&self) -> &InnerData {
         &self.inner_data
+    }
+
+    /// Similar to [Self::get_inner_data] but consumes the [Data] and returns
+    /// an owned [InnerData]
+    pub fn into_inner_data(self) -> InnerData {
+        self.inner_data
     }
 }

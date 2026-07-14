@@ -489,6 +489,7 @@ dependencies = [
  "anyhow",
  "collomatique-ilp",
  "collomatique-state-colloscopes",
+ "collomatique-storage",
  "collomatique-time",
  "ordered-float",
  "serde",
@@ -522,8 +523,6 @@ name = "collomatique-state"
 version = "0.1.0"
 dependencies = [
  "collomatique-state-derive",
- "serde",
- "serde_json",
  "thiserror",
 ]
 

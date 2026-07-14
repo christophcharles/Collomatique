@@ -12,7 +12,7 @@ use crate::ids::{PairingRuleId, PeriodId, SubjectId};
 use crate::ops::AnnotatedPairingOp;
 
 /// Description of the pairing rules
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Pairings {
     /// Map from pairing rule id to pairing rule
     pub pairing_rule_map: Table<PairingRuleId, PairingRule>,

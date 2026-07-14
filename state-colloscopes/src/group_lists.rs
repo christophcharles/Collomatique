@@ -16,7 +16,7 @@ use crate::ids::{GroupListId, PeriodId, SlotId, StudentId, SubjectId};
 use crate::ops::AnnotatedGroupListOp;
 
 /// Description of the group lists
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct GroupLists {
     /// Group lists
     ///

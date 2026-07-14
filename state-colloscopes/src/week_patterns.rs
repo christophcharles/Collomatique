@@ -10,7 +10,7 @@ use crate::ids::{IncompatId, SlotId, WeekPatternId};
 use crate::ops::AnnotatedWeekPatternOp;
 
 /// Description of the week patterns
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct WeekPatterns {
     /// Week patterns
     ///

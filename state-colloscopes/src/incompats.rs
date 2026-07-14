@@ -12,7 +12,7 @@ use crate::ids::{IncompatId, SubjectId, WeekPatternId};
 use crate::ops::AnnotatedIncompatOp;
 
 /// Description of the schedule incompatibilities
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Incompats {
     /// Incompats for subjects
     ///

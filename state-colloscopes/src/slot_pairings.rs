@@ -13,7 +13,7 @@ use crate::ids::{PeriodId, SlotId, SlotPairingRuleId};
 use crate::ops::AnnotatedSlotPairingOp;
 
 /// Description of the slot pairing rules
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SlotPairings {
     /// Map from slot pairing rule id to slot pairing rule
     pub slot_pairing_rule_map: Table<SlotPairingRuleId, SlotPairingRule>,

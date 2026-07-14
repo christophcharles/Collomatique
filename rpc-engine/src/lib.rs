@@ -26,7 +26,7 @@ fn try_solve() -> Result<(), anyhow::Error> {
     let data_msg =
         EncodedMsg::send_rpc(CmdMsg::GetData).map_err(|e| anyhow!("Error on GetData: {}", e))?;
     let inner_data = match data_msg {
-        ResultMsg::Data(data) => collomatique_state_colloscopes::InnerData::from(data),
+        ResultMsg::Data(data) => collomatique_state_colloscopes::Data::from(data).into_inner_data(),
         _ => return Err(anyhow!("Bad Data packet: {:?}", data_msg)),
     };
 
@@ -71,7 +71,9 @@ fn try_solve() -> Result<(), anyhow::Error> {
         colloscope: new_colloscope,
         export_config,
     };
-    let data_stream = InternalDataStream::from(&new_inner_data);
+    let new_data = collomatique_state_colloscopes::Data::from_inner_data(new_inner_data)
+        .map_err(|e| anyhow!("Solver produced invalid data: {}", e))?;
+    let data_stream = InternalDataStream::from(&new_data);
     EncodedMsg::send_rpc(CmdMsg::SetData(data_stream))
         .map_err(|e| anyhow!("Error on SetData: {}", e))?;
 
@@ -313,12 +315,10 @@ pub fn run_rpc_engine() -> Result<(), anyhow::Error> {
             eprintln!("Receiving file data...");
             let data_msg = EncodedMsg::send_rpc(CmdMsg::GetData)
                 .map_err(|e| anyhow!("Error on GetData: {}", e))?;
-            let inner_data = match data_msg {
-                ResultMsg::Data(data) => collomatique_state_colloscopes::InnerData::from(data),
+            let data = match data_msg {
+                ResultMsg::Data(data) => collomatique_state_colloscopes::Data::from(data),
                 _ => return Err(anyhow!("Bad Data packet: {:?}", data_msg)),
             };
-            let data = collomatique_state_colloscopes::Data::from_inner_data(inner_data)
-                .map_err(|e| anyhow!("Error building Data: {}", e))?;
             let app_state = collomatique_state::AppState::new(data);
             let shared = std::sync::Arc::new(std::sync::Mutex::new(app_state));
 
@@ -332,8 +332,7 @@ pub fn run_rpc_engine() -> Result<(), anyhow::Error> {
                 let state = shared.lock().unwrap();
                 if state.can_undo() {
                     eprintln!("Sending final file data...");
-                    let inner_data = state.get_data().get_inner_data();
-                    let data_stream = InternalDataStream::from(inner_data);
+                    let data_stream = InternalDataStream::from(state.get_data());
                     EncodedMsg::send_rpc(CmdMsg::SetData(data_stream))
                         .map_err(|e| anyhow!("Error on SetData: {}", e))?;
                 }

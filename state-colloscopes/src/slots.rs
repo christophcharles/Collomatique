@@ -26,7 +26,7 @@ use crate::ops::AnnotatedSlotOp;
 /// All mutation goes through the compound `pub(crate)` helpers below so no
 /// call site can desynchronize the two structures. The fields are private:
 /// consumers read through the accessor surface further down.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Slots {
     /// Every slot, keyed by its id
     slot_map: Table<SlotId, Slot>,

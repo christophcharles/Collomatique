@@ -20,7 +20,7 @@ use thiserror::Error;
 /// This structure is used in two ways:
 /// - a main version is used in [InnerData] to represent the currently edited parameters
 /// - another version is used for each colloscope to store the parameters used for its generation
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Parameters {
     pub periods: periods::Periods,
     pub subjects: subjects::Subjects,

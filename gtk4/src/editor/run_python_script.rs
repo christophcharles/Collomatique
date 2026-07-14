@@ -356,9 +356,10 @@ impl Component for Dialog {
                             .app_session
                             .as_mut()
                             .expect("there should be some current state to accept");
-                        let inner_data: collomatique_state_colloscopes::InnerData =
-                            data_stream.into();
-                        let op = collomatique_state_colloscopes::Op::GlobalUpdate(inner_data);
+                        let data: collomatique_state_colloscopes::Data = data_stream.into();
+                        let op = collomatique_state_colloscopes::Op::GlobalUpdate(
+                            data.into_inner_data(),
+                        );
                         let desc = (
                             collomatique_ops::OpCategory::None,
                             String::from("Mise à jour globale"),

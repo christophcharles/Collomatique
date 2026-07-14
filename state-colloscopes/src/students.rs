@@ -13,7 +13,7 @@ use crate::ids::{GroupListId, PeriodId, StudentId, SubjectId};
 use crate::ops::AnnotatedStudentOp;
 
 /// Description of the students
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Students {
     /// List of students
     ///

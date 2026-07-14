@@ -12,7 +12,7 @@ use crate::ids::{GroupListId, IncompatId, PairingRuleId, PeriodId, SlotId, Subje
 use crate::ops::AnnotatedSubjectOp;
 
 /// Description of the subjects
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Subjects {
     /// Ordered list of subjects
     ///

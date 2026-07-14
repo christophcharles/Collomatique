@@ -15,7 +15,7 @@ use crate::ids::{
 use crate::ops::AnnotatedPeriodOp;
 
 /// Description of the periods
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Periods {
     /// Start date for the colloscope
     ///

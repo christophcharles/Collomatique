@@ -13,16 +13,9 @@
 //! The inner representation is deliberately opaque so it can change later
 //! without touching consumer code. Consumers should only ever read tables;
 //! the mutating methods are for the state layer itself.
-//!
-//! The serialized form is stable and independent of the opaque backend:
-//! both [Table] and [OrderedTable] serialize exactly like a `Vec<(I, T)>` — a
-//! sequence of `(id, value)` pairs in table order. (A sequence rather than a map
-//! so that composite keys like `(PeriodId, SubjectId)`, which a JSON object
-//! cannot key on, round-trip just as well as scalar ids.)
 
 use std::collections::BTreeMap;
 
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// Key bound for [Table]
@@ -55,36 +48,6 @@ pub struct DuplicatedIdError<I: OrderedKey>(pub I);
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Table<I: Key, T> {
     inner: BTreeMap<I, T>,
-}
-
-/// Serializes as a sequence of `(id, value)` pairs in ID order.
-///
-/// Not a map: a JSON object cannot be keyed on a composite key like
-/// `(PeriodId, SubjectId)`, so a sequence is used for every key type uniformly
-/// (matching [OrderedTable]).
-impl<I: Key + Serialize, T: Serialize> Serialize for Table<I, T> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.collect_seq(self.inner.iter())
-    }
-}
-
-impl<'de, I, T> Deserialize<'de> for Table<I, T>
-where
-    I: Key + Deserialize<'de>,
-    T: Deserialize<'de>,
-{
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let entries = Vec::<(I, T)>::deserialize(deserializer)?;
-        Ok(Table {
-            inner: entries.into_iter().collect(),
-        })
-    }
 }
 
 impl<I: Key, T> Default for Table<I, T> {
@@ -230,8 +193,7 @@ impl<I: Key, T> std::ops::Deref for Table<I, T> {
 /// Entries keep the order they were built/inserted in, and that order is
 /// meaningful data (e.g. subject or period ordering). Primary-key uniqueness
 /// is an enforced invariant: construction and insertion are fallible.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-#[serde(transparent)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OrderedTable<I: OrderedKey, T> {
     inner: Vec<(I, T)>,
 }
@@ -254,20 +216,6 @@ impl<I: OrderedKey, T> TryFrom<Vec<(I, T)>> for OrderedTable<I, T> {
             seen.push(*id);
         }
         Ok(OrderedTable { inner })
-    }
-}
-
-impl<'de, I, T> Deserialize<'de> for OrderedTable<I, T>
-where
-    I: OrderedKey + Deserialize<'de>,
-    T: Deserialize<'de>,
-{
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let entries = Vec::<(I, T)>::deserialize(deserializer)?;
-        OrderedTable::try_from(entries).map_err(serde::de::Error::custom)
     }
 }
 
@@ -431,7 +379,7 @@ mod tests {
     use super::*;
     use crate::ids::Id;
 
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
     struct ToyId(u64);
 
     impl Id for ToyId {
@@ -466,30 +414,6 @@ mod tests {
     }
 
     #[test]
-    fn table_wire_format_matches_vec_of_pairs() {
-        let (table, map) = table_fixture();
-
-        // Serializes as a sequence of `(id, value)` pairs in ID order, not as a
-        // map — so composite keys round-trip too (see `Table`'s serde impls).
-        let expected: Vec<(ToyId, String)> = map.iter().map(|(&id, v)| (id, v.clone())).collect();
-
-        assert_eq!(
-            serde_json::to_value(&table).expect("table serializes"),
-            serde_json::to_value(&expected).expect("vec serializes"),
-        );
-    }
-
-    #[test]
-    fn table_round_trips_through_serde() {
-        let (table, _) = table_fixture();
-
-        let json = serde_json::to_string(&table).expect("table serializes");
-        let back: Table<ToyId, String> = serde_json::from_str(&json).expect("table deserializes");
-
-        assert_eq!(back, table);
-    }
-
-    #[test]
     fn table_iterates_in_id_order() {
         let (table, _) = table_fixture();
 
@@ -514,27 +438,6 @@ mod tests {
         let (table, map) = table_fixture();
 
         assert_eq!(table.to_map(), map);
-    }
-
-    #[test]
-    fn ordered_table_wire_format_matches_vec() {
-        let (table, entries) = ordered_fixture();
-
-        assert_eq!(
-            serde_json::to_value(&table).expect("table serializes"),
-            serde_json::to_value(&entries).expect("vec serializes"),
-        );
-    }
-
-    #[test]
-    fn ordered_table_round_trips_through_serde() {
-        let (table, _) = ordered_fixture();
-
-        let json = serde_json::to_string(&table).expect("table serializes");
-        let back: OrderedTable<ToyId, String> =
-            serde_json::from_str(&json).expect("table deserializes");
-
-        assert_eq!(back, table);
     }
 
     #[test]
@@ -566,15 +469,6 @@ mod tests {
         let result = OrderedTable::try_from(entries);
 
         assert_eq!(result.err(), Some(DuplicatedIdError(ToyId(1))));
-    }
-
-    #[test]
-    fn ordered_table_deserialize_rejects_duplicated_ids() {
-        let json = r#"[[1, "one"], [2, "two"], [1, "one again"]]"#;
-
-        let result: Result<OrderedTable<ToyId, String>, _> = serde_json::from_str(json);
-
-        assert!(result.is_err());
     }
 
     #[test]
@@ -668,19 +562,5 @@ mod tests {
                 (ToyId(2), ToyId(1)),
             ]
         );
-    }
-
-    #[test]
-    fn table_composite_tuple_key_round_trips_through_serde() {
-        // The array-of-pairs wire format lets a composite key survive JSON,
-        // which a map (object) form cannot — this is exercised for real when
-        // `InnerData` (carrying these tables) is round-tripped over rpc.
-        let table = composite_fixture();
-
-        let json = serde_json::to_string(&table).expect("table serializes");
-        let back: Table<(ToyId, ToyId), String> =
-            serde_json::from_str(&json).expect("table deserializes");
-
-        assert_eq!(back, table);
     }
 }

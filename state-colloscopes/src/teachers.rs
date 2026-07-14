@@ -13,7 +13,7 @@ use crate::ids::{SlotId, SubjectId, TeacherId};
 use crate::ops::AnnotatedTeacherOp;
 
 /// Description of the teachers
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Teachers {
     /// List of teachers
     ///
