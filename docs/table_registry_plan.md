@@ -458,6 +458,19 @@ types in the entity modules, same philosophy as the item-6 split):
     (pointer identity), a `1 << 40` dangling id resolves to `None` for every kind, and `resolve`
     panics on a dangling id. Kept separate from C3b (the Join derive) so this trivial foundation
     stays an isolated, fully-tested checkpoint. No consumer code touched; no on-disk/wire impact.
+  - *C3b status (shipped)*: `#[derive(Join)] #[join(error = NewId)]` added to the nine regular
+    entity structs (`Slot`, `Teacher`, `Student`, `Subject`, `Incompatibility`, `RulePart`,
+    `PairingRule`, `SlotRulePart`, `SlotPairingRule`) — attributes only, the `#[fk]`/`#[fk(name =
+    …)]` markers already existed from C2. Each generates a `Joined*` view (every FK field resolved
+    to a borrow of its entity, non-FK fields borrowed as `&'a T`) plus `Joinable`/`Join<Ctx>` impls
+    that resolve against any `Ctx: Lookup<…>` — i.e. `Parameters` via C3a. `NewId` is the error out
+    of the box (its ten `From<XxxId>` impls + the std `From<NewId>` identity cover the nested
+    `RulePart`/`SlotRulePart` cases). Views re-exported from the lib root (item-6 pattern).
+    `GroupList` (refs inside the `GroupListFilling` enum) and `WeekPattern`/periods (no/absent FK
+    fields) are excluded, as planned. `tests/read_api.rs` extended: ptr-eq borrows for scalar FKs,
+    id-sorted `Vec<&Subject>` from the `BTreeSet` FK lift, `Option` FK both ways, nested
+    `JoinedRulePart` composition, and a dangling FK → `Err(NewId::TeacherId(_))`. Storage
+    byte-stability (`round_trip_identity`) confirms the Join derive adds no serde/on-disk impact.
 - **Reverse lookups** (public, the item-2 deliverable):
 
 ```rust

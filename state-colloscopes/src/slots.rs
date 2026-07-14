@@ -5,11 +5,11 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use collomatique_state::References;
+use collomatique_state::{Join, References};
 
 use crate::Table;
 use crate::colloscopes;
-use crate::ids::{PeriodId, SlotId, SlotPairingRuleId, SubjectId, TeacherId, WeekPatternId};
+use crate::ids::{NewId, PeriodId, SlotId, SlotPairingRuleId, SubjectId, TeacherId, WeekPatternId};
 use crate::ops::AnnotatedSlotOp;
 
 /// Description of the interrogation slots
@@ -43,7 +43,8 @@ pub struct Slots {
 pub struct DuplicatedSlotIdError(pub SlotId);
 
 /// Description of a single slot
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References, Join)]
+#[join(error = NewId)]
 pub struct Slot {
     /// Subject this slot belongs to
     ///

@@ -7,10 +7,10 @@ use std::num::NonZeroU32;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use collomatique_state::References;
+use collomatique_state::{Join, References};
 
 use crate::Table;
-use crate::ids::{IncompatId, SubjectId, WeekPatternId};
+use crate::ids::{IncompatId, NewId, SubjectId, WeekPatternId};
 use crate::ops::AnnotatedIncompatOp;
 
 /// Description of the schedule incompatibilities
@@ -23,7 +23,8 @@ pub struct Incompats {
 }
 
 /// Description of a single schedule incompat
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References, Join)]
+#[join(error = NewId)]
 pub struct Incompatibility {
     /// Subject the incompatibility is linked to
     #[fk(name = subject)]

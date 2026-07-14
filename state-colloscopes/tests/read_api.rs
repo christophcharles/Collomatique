@@ -8,11 +8,11 @@
 //!
 //! Later phase-C commits (Join views, `all_ids`) extend this file.
 
-use collomatique_state::{AppState, traits::Manager};
+use collomatique_state::{AppState, Join, traits::Manager};
 use collomatique_state_colloscopes::{
-    Data, GroupListOp, IncompatOp, NewId, Op, PairingOp, PeriodOp, SlotOp, SlotPairingOp,
-    StudentOp, Subject, SubjectInterrogationParameters, SubjectOp, SubjectParameters,
-    SubjectPeriodicity, TeacherOp, WeekPatternOp,
+    Data, GroupListOp, IncompatOp, JoinedRulePart, NewId, Op, PairingOp, PeriodOp, SlotOp,
+    SlotPairingOp, StudentOp, Subject, SubjectInterrogationParameters, SubjectOp,
+    SubjectParameters, SubjectPeriodicity, TeacherOp, WeekPatternOp,
     group_lists::GroupListParameters,
     ids::{
         GroupListId, Id, IncompatId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId,
@@ -82,6 +82,7 @@ fn one_group_params(name: &str) -> GroupListParameters {
 struct Built {
     period: PeriodId,
     subject: SubjectId,
+    phys: SubjectId,
     teacher: TeacherId,
     student: StudentId,
     week_pattern: WeekPatternId,
@@ -214,6 +215,7 @@ fn build_document(app: &mut AppState<Data, String>) -> Built {
     Built {
         period,
         subject,
+        phys,
         teacher,
         student,
         week_pattern,
@@ -318,4 +320,103 @@ fn resolve_panics_on_a_dangling_id() {
 
     let dangling = unsafe { TeacherId::new(1u64 << 40) };
     params.resolve(dangling);
+}
+
+// --- Join views (C3b) ---------------------------------------------------
+
+#[test]
+fn join_borrows_every_entity_it_resolves() {
+    let mut app = AppState::<_, String>::new(Data::new());
+    let ids = build_document(&mut app);
+    let params = &app.get_data().get_inner_data().params;
+
+    // The slot's scalar FKs (subject, teacher) and its `Some` week pattern must
+    // each resolve to the very borrow `resolve` hands back — the join copies no
+    // entity, it only rewrites ids into borrows out of `params`.
+    let slot = params.resolve(ids.slot);
+    let joined = slot.join(params).expect("validated slot joins");
+    assert!(std::ptr::eq(joined.subject, params.resolve(ids.subject)));
+    assert!(std::ptr::eq(joined.teacher, params.resolve(ids.teacher)));
+    let wp = joined.week_pattern.expect("slot 1 has a week pattern");
+    assert!(std::ptr::eq(wp, params.resolve(ids.week_pattern)));
+    // Non-FK fields appear as plain borrows of the source value.
+    assert!(std::ptr::eq(joined.extra_info, &slot.extra_info));
+}
+
+#[test]
+fn btree_set_fk_joins_to_id_sorted_borrows() {
+    let mut app = AppState::<_, String>::new(Data::new());
+    let ids = build_document(&mut app);
+    let params = &app.get_data().get_inner_data().params;
+
+    // The teacher teaches {Math, Physics}; the set-of-ids FK lifts to a Vec of
+    // borrows in id order (Math was created first, so it sorts first).
+    let teacher = params.resolve(ids.teacher);
+    let joined = teacher.join(params).expect("validated teacher joins");
+    assert_eq!(joined.subjects.len(), 2);
+    assert!(std::ptr::eq(
+        joined.subjects[0],
+        params.resolve(ids.subject)
+    ));
+    assert!(std::ptr::eq(joined.subjects[1], params.resolve(ids.phys)));
+}
+
+#[test]
+fn option_fk_joins_both_ways() {
+    let mut app = AppState::<_, String>::new(Data::new());
+    let ids = build_document(&mut app);
+    let params = &app.get_data().get_inner_data().params;
+
+    // Some(week_pattern) → Some(borrow).
+    let with_wp = make_slot(ids.subject, ids.teacher, Some(ids.week_pattern));
+    let joined = with_wp
+        .join(params)
+        .expect("candidate with a valid wp joins");
+    assert!(std::ptr::eq(
+        joined.week_pattern.expect("Some maps to Some"),
+        params.resolve(ids.week_pattern)
+    ));
+
+    // None → None (the join never touches the lookup for an absent FK).
+    let without_wp = make_slot(ids.subject, ids.teacher, None);
+    let joined = without_wp
+        .join(params)
+        .expect("candidate without a wp joins");
+    assert!(joined.week_pattern.is_none());
+}
+
+#[test]
+fn nested_rule_part_composes_through_its_own_view() {
+    let mut app = AppState::<_, String>::new(Data::new());
+    let ids = build_document(&mut app);
+    let params = &app.get_data().get_inner_data().params;
+
+    // A PairingRule joins by first joining each RulePart into a JoinedRulePart,
+    // whose `subject` field is itself a borrow out of `params`.
+    let pairing = params.resolve(ids.pairing);
+    let joined = pairing.join(params).expect("validated pairing joins");
+    let antecedent: &JoinedRulePart = &joined.antecedent;
+    let consequent: &JoinedRulePart = &joined.consequent;
+    assert!(std::ptr::eq(
+        antecedent.subject,
+        params.resolve(ids.subject)
+    ));
+    assert!(std::ptr::eq(consequent.subject, params.resolve(ids.phys)));
+}
+
+#[test]
+fn dangling_fk_join_returns_the_new_id_error() {
+    let mut app = AppState::<_, String>::new(Data::new());
+    let ids = build_document(&mut app);
+    let params = &app.get_data().get_inner_data().params;
+
+    // A candidate value never inserted into the document: its subject FK is
+    // valid but its teacher FK dangles. The join is fail-fast in field order
+    // (subject resolves, teacher does not), so the error names the teacher id.
+    let dangling_teacher = unsafe { TeacherId::new(1u64 << 40) };
+    let bogus = make_slot(ids.subject, dangling_teacher, Some(ids.week_pattern));
+    assert!(matches!(
+        bogus.join(params),
+        Err(NewId::TeacherId(id)) if id == dangling_teacher
+    ));
 }

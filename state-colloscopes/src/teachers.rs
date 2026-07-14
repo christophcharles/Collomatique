@@ -8,10 +8,10 @@ use serde::{Deserialize, Serialize};
 
 use thiserror::Error;
 
-use collomatique_state::References;
+use collomatique_state::{Join, References};
 
 use crate::Table;
-use crate::ids::{SlotId, SubjectId, TeacherId};
+use crate::ids::{NewId, SlotId, SubjectId, TeacherId};
 use crate::ops::AnnotatedTeacherOp;
 
 /// Description of the teachers
@@ -24,7 +24,8 @@ pub struct Teachers {
 }
 
 /// Description of a single teacher
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, References)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, References, Join)]
+#[join(error = NewId)]
 pub struct Teacher {
     /// Description of the teacher in term of name and contact
     pub desc: crate::PersonWithContact,

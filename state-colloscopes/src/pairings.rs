@@ -7,10 +7,10 @@ use std::collections::BTreeSet;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use collomatique_state::References;
+use collomatique_state::{Join, References};
 
 use crate::Table;
-use crate::ids::{PairingRuleId, PeriodId, SubjectId};
+use crate::ids::{NewId, PairingRuleId, PeriodId, SubjectId};
 use crate::ops::AnnotatedPairingOp;
 
 /// Description of the pairing rules
@@ -21,7 +21,8 @@ pub struct Pairings {
 }
 
 /// One part (antecedent or consequent) of a pairing rule
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References, Join)]
+#[join(error = NewId)]
 pub struct RulePart {
     /// The subject this part refers to
     #[fk(name = subject)]
@@ -41,7 +42,8 @@ pub struct RulePart {
 /// interrogation that week.
 ///
 /// Rules only apply to students enrolled in both subjects.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References, Join)]
+#[join(error = NewId)]
 pub struct PairingRule {
     /// The antecedent of the implication
     #[fk]

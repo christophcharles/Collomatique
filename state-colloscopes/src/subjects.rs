@@ -6,11 +6,13 @@ use serde::{Deserialize, Serialize};
 use std::{collections::BTreeSet, num::NonZeroU32};
 use thiserror::Error;
 
-use collomatique_state::References;
+use collomatique_state::{Join, References};
 
 use crate::OrderedTable;
 use crate::colloscopes;
-use crate::ids::{GroupListId, IncompatId, PairingRuleId, PeriodId, SlotId, SubjectId, TeacherId};
+use crate::ids::{
+    GroupListId, IncompatId, NewId, PairingRuleId, PeriodId, SlotId, SubjectId, TeacherId,
+};
 use crate::ops::AnnotatedSubjectOp;
 
 /// Description of the subjects
@@ -24,7 +26,8 @@ pub struct Subjects {
 }
 
 /// Description of one subject
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, References)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, References, Join)]
+#[join(error = NewId)]
 pub struct Subject {
     /// Parameters for the subject
     ///

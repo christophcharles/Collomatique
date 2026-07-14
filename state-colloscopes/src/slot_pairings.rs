@@ -8,10 +8,10 @@ use std::collections::BTreeSet;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use collomatique_state::References;
+use collomatique_state::{Join, References};
 
 use crate::Table;
-use crate::ids::{PeriodId, SlotId, SlotPairingRuleId};
+use crate::ids::{NewId, PeriodId, SlotId, SlotPairingRuleId};
 use crate::ops::AnnotatedSlotPairingOp;
 
 /// Description of the slot pairing rules
@@ -22,7 +22,8 @@ pub struct SlotPairings {
 }
 
 /// One part (antecedent or consequent) of a slot pairing rule
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References, Join)]
+#[join(error = NewId)]
 pub struct SlotRulePart {
     /// The slot this part refers to
     #[fk(name = slot)]
@@ -41,7 +42,8 @@ pub struct SlotRulePart {
 ///
 /// Both slots must belong to the same subject. Rules only apply on weeks where
 /// both slots are active.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References, Join)]
+#[join(error = NewId)]
 pub struct SlotPairingRule {
     /// The antecedent of the implication
     #[fk]
