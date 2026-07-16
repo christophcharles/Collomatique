@@ -49,6 +49,19 @@ impl TryFrom<collomatique_state_colloscopes::colloscope_params::Parameters> for 
         // outer maps from the full period list to keep that shape.
         let all_period_ids: Vec<collomatique_state_colloscopes::PeriodId> =
             value.periods.ordered_period_list.keys().collect();
+        // The sparse core only stores non-empty assignment rows, but the
+        // Python-visible shape is dense (one entry per period × non-excluded
+        // subject). Snapshot each subject's excluded-period set so the dense
+        // skeleton can be seeded below, before `value.subjects` is consumed.
+        let subject_excluded: Vec<(
+            collomatique_state_colloscopes::SubjectId,
+            std::collections::BTreeSet<collomatique_state_colloscopes::PeriodId>,
+        )> = value
+            .subjects
+            .ordered_subject_list
+            .iter()
+            .map(|(subject_id, subject)| (subject_id, subject.excluded_periods.clone()))
+            .collect();
         Ok(Parameters {
             periods: value
                 .periods
@@ -92,6 +105,19 @@ impl TryFrom<collomatique_state_colloscopes::colloscope_params::Parameters> for 
                         .iter()
                         .map(|id| ((*id).into(), BTreeMap::new()))
                         .collect();
+                // Seed the dense skeleton: one (possibly empty) entry per
+                // non-excluded subject on each period.
+                for (subject_id, excluded) in &subject_excluded {
+                    for period_id in &all_period_ids {
+                        if excluded.contains(period_id) {
+                            continue;
+                        }
+                        out.entry((*period_id).into())
+                            .or_default()
+                            .insert((*subject_id).into(), BTreeSet::new());
+                    }
+                }
+                // Overwrite with the actual (non-empty) rows from the core.
                 for ((period_id, subject_id), students) in value.assignments.map {
                     out.entry(period_id.into()).or_default().insert(
                         subject_id.into(),

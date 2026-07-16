@@ -467,44 +467,37 @@ impl Parameters {
         &self,
         period_ids: &BTreeSet<PeriodId>,
     ) -> Result<(), InvariantError> {
-        // Dense key set: exactly one `(period, subject)` entry per period and
-        // per subject that runs on it (i.e. is not excluded on it).
-        let mut expected_count = 0usize;
-        for period_id in period_ids {
-            for (subject_id, subject) in self.subjects.ordered_subject_list.iter() {
-                if subject.excluded_periods.contains(period_id) {
-                    continue;
-                }
-                expected_count += 1;
+        // Sparse canonical form: a `(period, subject)` row exists iff at least
+        // one student is assigned. Validate every row directly; there is no
+        // skeleton to reconstruct or count against.
+        for (period_id, subject_id, students) in self.assignments.iter() {
+            if !period_ids.contains(&period_id) {
+                return Err(InvariantError::InvalidPeriodIdInAssignements);
+            }
 
-                let subject_assignments = self
-                    .assignments
-                    .students(*period_id, subject_id)
-                    .ok_or(InvariantError::InvalidSubjectIdInAssignments)?;
+            let Some(subject) = self.subjects.find_subject(subject_id) else {
+                return Err(InvariantError::InvalidSubjectIdInAssignments);
+            };
 
-                for student_id in subject_assignments {
-                    let student = self
-                        .students
-                        .student_map
-                        .get(student_id)
-                        .ok_or(InvariantError::InvalidStudentIdInAssignments)?;
+            if subject.excluded_periods.contains(&period_id) {
+                return Err(InvariantError::AssignmentForSubjectNotRunningOnPeriod);
+            }
 
-                    if student.excluded_periods.contains(period_id) {
-                        return Err(InvariantError::AssignedStudentNotPresentForPeriod);
-                    }
+            if students.is_empty() {
+                return Err(InvariantError::EmptyAssignmentRow);
+            }
+
+            for student_id in students {
+                let student = self
+                    .students
+                    .student_map
+                    .get(student_id)
+                    .ok_or(InvariantError::InvalidStudentIdInAssignments)?;
+
+                if student.excluded_periods.contains(&period_id) {
+                    return Err(InvariantError::AssignedStudentNotPresentForPeriod);
                 }
             }
-        }
-
-        // Any extra key is either on an unknown period or on an excluded/unknown
-        // subject; distinguish the two so each keeps its historical error.
-        if self.assignments.map.len() != expected_count {
-            for (period_id, _subject_id) in self.assignments.map.keys() {
-                if !period_ids.contains(&period_id) {
-                    return Err(InvariantError::InvalidPeriodIdInAssignements);
-                }
-            }
-            return Err(InvariantError::WrongSubjectCountInAssignments);
         }
 
         Ok(())
@@ -1153,8 +1146,10 @@ pub enum InvariantError {
     InvalidStudentIdInAssignments,
     #[error("student assigned but not present")]
     AssignedStudentNotPresentForPeriod,
-    #[error("wrong number of subjects in a period for assignments")]
-    WrongSubjectCountInAssignments,
+    #[error("assignment row for a subject not running on the period")]
+    AssignmentForSubjectNotRunningOnPeriod,
+    #[error("empty assignment row (non-canonical)")]
+    EmptyAssignmentRow,
     #[error("wrong number of subjects in slots")]
     WrongSubjectCountInSlots,
     #[error("invalid slot")]

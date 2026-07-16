@@ -362,19 +362,8 @@ impl crate::Data {
                 if params.parameters.interrogation_parameters.is_some() {
                     self.inner_data.params.slots.add_subject_entry(*new_id);
                 }
-                for (period_id, _period) in
-                    self.inner_data.params.periods.ordered_period_list.iter()
-                {
-                    if params.excluded_periods.contains(&period_id) {
-                        continue;
-                    }
-
-                    self.inner_data
-                        .params
-                        .assignments
-                        .map
-                        .insert((period_id, *new_id), BTreeSet::new());
-                }
+                // A fresh subject carries no assignments, so the (sparse)
+                // assignments table gets no row until a student is assigned.
 
                 Ok(AnnotatedSubjectOp::Remove(*new_id))
             }
@@ -453,32 +442,18 @@ impl crate::Data {
                     }
                 }
 
-                let (_, params) = self
+                // Under canonical-absent, a row exists iff it is non-trivial,
+                // so any surviving row for this subject blocks the removal.
+                if let Some((period_id, _, _)) = self
                     .inner_data
                     .params
-                    .subjects
-                    .ordered_subject_list
-                    .get_at(position)
-                    .expect("position comes from find_subject_position");
-                for (period_id, _period) in
-                    self.inner_data.params.periods.ordered_period_list.iter()
+                    .assignments
+                    .iter()
+                    .find(|&(_, subject_id, _)| subject_id == *id)
                 {
-                    if params.excluded_periods.contains(&period_id) {
-                        continue;
-                    }
-
-                    let assigned_students = self
-                        .inner_data
-                        .params
-                        .assignments
-                        .students(period_id, *id)
-                        .expect("Subject should appear in assignments for relevant periods");
-
-                    if !assigned_students.is_empty() {
-                        return Err(SubjectError::SubjectStillHasNonTrivialAssignments(
-                            period_id, *id,
-                        ));
-                    }
+                    return Err(SubjectError::SubjectStillHasNonTrivialAssignments(
+                        period_id, *id,
+                    ));
                 }
 
                 let previous_id = (position > 0).then(|| {
@@ -498,19 +473,8 @@ impl crate::Data {
                     .ordered_subject_list
                     .remove_at(position);
                 self.inner_data.params.slots.remove_subject_entry(*id);
-                for (period_id, _period) in
-                    self.inner_data.params.periods.ordered_period_list.iter()
-                {
-                    if params.excluded_periods.contains(&period_id) {
-                        continue;
-                    }
-
-                    self.inner_data
-                        .params
-                        .assignments
-                        .map
-                        .remove(&(period_id, *id));
-                }
+                // No assignment rows to drop: the guard above rejects the
+                // removal while any survive.
 
                 Ok(AnnotatedSubjectOp::AddAfter(*id, previous_id, params))
             }
@@ -589,14 +553,17 @@ impl crate::Data {
                         continue;
                     }
 
-                    let assigned_students = self
+                    // Sparse assignments: an absent row means nobody is
+                    // assigned, so only a present (non-empty) row blocks the
+                    // exclusion.
+                    let has_assignments = self
                         .inner_data
                         .params
                         .assignments
                         .students(period_id, *id)
-                        .expect("Subject should appear in assignments for relevant periods");
+                        .is_some_and(|students| !students.is_empty());
 
-                    if !assigned_students.is_empty() {
+                    if has_assignments {
                         return Err(SubjectError::SubjectStillHasNonTrivialAssignments(
                             period_id, *id,
                         ));
@@ -699,32 +666,10 @@ impl crate::Data {
                     }
                 }
 
-                for (period_id, _period) in
-                    self.inner_data.params.periods.ordered_period_list.iter()
-                {
-                    // Only change in period status should be considered
-                    if old_params.excluded_periods.contains(&period_id)
-                        == new_params.excluded_periods.contains(&period_id)
-                    {
-                        continue;
-                    }
-
-                    if old_params.excluded_periods.contains(&period_id) {
-                        // The period was excluded but is not anymore
-                        self.inner_data
-                            .params
-                            .assignments
-                            .map
-                            .insert((period_id, *id), BTreeSet::new());
-                    } else {
-                        // The period was included but will now be excluded
-                        self.inner_data
-                            .params
-                            .assignments
-                            .map
-                            .remove(&(period_id, *id));
-                    }
-                }
+                // Sparse assignments need no fan-out on an exclusion change: a
+                // newly-included period starts with no row, and a newly-excluded
+                // period has none either (the guard above rejects the update
+                // while any survive).
 
                 Ok(AnnotatedSubjectOp::Update(*id, old_params))
             }

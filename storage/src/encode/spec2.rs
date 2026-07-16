@@ -286,8 +286,8 @@ fn build_assignments(
     let mut rows = Vec::new();
     for ((period_id, subject_id), students) in params.assignments.map.iter() {
         if students.is_empty() {
-            // Neutral entry of a derived key set: omitted in
-            // canonical form
+            // Canonical sparse form never stores an empty row; guard the
+            // invariant so a stray empty row is omitted rather than emitted.
             continue;
         }
         rows.push(format::assignments::Assignment {

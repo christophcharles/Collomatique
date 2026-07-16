@@ -313,8 +313,9 @@ fn walk_week_pattern_coupling(params: &Parameters, v: &mut impl RefVisitor) {
     }
 }
 
-/// Walks the dense assignments mirror (step 12a): each `(period, subject)` key
-/// references *both* a period and a subject, then each assigned student.
+/// Walks the sparse assignments mirror (step 12a): each stored `(period,
+/// subject)` row references *both* a period and a subject, then each assigned
+/// student. Rows are canonical-absent, so a walked row is always non-trivial.
 fn walk_assignments(params: &Parameters, v: &mut impl RefVisitor) {
     for ((period, subject), students) in params.assignments.map.iter() {
         let site = RefSite::AssignmentsKey {

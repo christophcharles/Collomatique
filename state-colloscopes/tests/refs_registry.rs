@@ -312,10 +312,11 @@ fn walk_covers_every_site_in_order() {
         "add per-subject balancing"
     );
 
-    // --- Dense-mirror and colloscope content ---
+    // --- Mirror and colloscope content ---
 
-    // Assign st2 to Math on p0 → the (p0, Math) assignment cell is non-trivial;
-    // the other dense cells ((p0, Physics), (p1, Physics)) stay empty.
+    // Assign st2 to Math on p0 → the (p0, Math) assignment row appears. Under
+    // sparse assignments no other rows exist (nobody else is assigned), so the
+    // walker emits exactly this one assignment mirror site.
     apply_none!(
         Op::Assignment(AssignmentOp::Assign(p0, st2, math, true)),
         "assign st2 to math on p0"
@@ -363,16 +364,6 @@ fn walk_covers_every_site_in_order() {
         subject: math,
         non_trivial: true,
     };
-    let assign_p0_phys = RefSite::AssignmentsKey {
-        period: p0,
-        subject: phys,
-        non_trivial: false,
-    };
-    let assign_p1_phys = RefSite::AssignmentsKey {
-        period: p1,
-        subject: phys,
-        non_trivial: false,
-    };
     let association = RefSite::AssociationEntry {
         period: p0,
         subject: math,
@@ -414,8 +405,6 @@ fn walk_covers_every_site_in_order() {
             ),
             // assignments mirror
             (p0, assign_p0_math),
-            (p0, assign_p0_phys),
-            (p1, assign_p1_phys),
             // association mirror
             (p0, association),
             // colloscope
@@ -438,8 +427,6 @@ fn walk_covers_every_site_in_order() {
             (phys, RefSite::BalancingSubjectKey),
             // assignments mirror
             (math, assign_p0_math),
-            (phys, assign_p0_phys),
-            (phys, assign_p1_phys),
             // association mirror
             (math, association),
             // ordering keys mirror
@@ -519,7 +506,6 @@ fn walk_covers_every_site_in_order() {
                 non_trivial: false,
             },
             assign_p0_math,
-            assign_p0_phys,
             association,
             collo_p0,
         ],
@@ -535,7 +521,6 @@ fn walk_covers_every_site_in_order() {
                 week_pattern: wp,
                 non_trivial: true,
             },
-            assign_p1_phys,
             collo_p1,
         ],
     );
@@ -559,8 +544,6 @@ fn walk_covers_every_site_in_order() {
             RefSite::TeacherSubjects(teacher),
             RefSite::PairingRulePart(pairing),
             RefSite::BalancingSubjectKey,
-            assign_p0_phys,
-            assign_p1_phys,
             RefSite::SlotsOrderingKey { non_trivial: false },
         ],
     );

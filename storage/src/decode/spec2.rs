@@ -214,8 +214,7 @@ fn reconstruct(blocks: Blocks) -> Result<InnerData, DecodeError> {
     let subjects = reconstruct_subjects(blocks.subjects.unwrap_or_default())?;
     let teachers = reconstruct_teachers(blocks.teachers.unwrap_or_default());
     let students = reconstruct_students(blocks.students.unwrap_or_default());
-    let assignments =
-        reconstruct_assignments(blocks.assignments.unwrap_or_default(), &periods, &subjects)?;
+    let assignments = reconstruct_assignments(blocks.assignments.unwrap_or_default(), &periods)?;
     let week_patterns = reconstruct_week_patterns(blocks.week_patterns.unwrap_or_default());
     let slots = reconstruct_slots(blocks.slots.unwrap_or_default(), &subjects)?;
     let incompats = reconstruct_incompats(blocks.incompatibilities.unwrap_or_default())?;
@@ -414,35 +413,29 @@ fn reconstruct_students(block: format::students::Students) -> mem::students::Stu
 fn reconstruct_assignments(
     block: format::assignments::Assignments,
     periods: &mem::periods::Periods,
-    subjects: &mem::subjects::Subjects,
 ) -> Result<mem::assignments::Assignments, DecodeError> {
-    // The key set is derived: one entry per period × non-excluded
-    // subject, empty by default (spec §4.5). Collecting a `Vec` of entries
-    // into the table's `FromIterator` keeps the last value per key, so the
-    // rows below override the empty skeleton entries.
+    // Sparse canonical form: a row is stored iff at least one student is
+    // assigned (spec §4.5). An explicitly-empty row in the file decodes to an
+    // absent row — the two are indistinguishable once loaded.
     let mut entries: Vec<((PeriodId, SubjectId), BTreeSet<StudentId>)> = Vec::new();
-    for (period_id, _desc) in periods.ordered_period_list.iter() {
-        for (subject_id, subject) in subjects.ordered_subject_list.iter() {
-            if subject.excluded_periods.contains(&period_id) {
-                continue;
-            }
-            entries.push(((period_id, subject_id), BTreeSet::new()));
-        }
-    }
-
     for row in block.into_inner() {
         let period_id = id::<PeriodId>(row.period_id);
         if periods.find_period_position(period_id).is_none() {
-            // Layer 3 rejects unknown period ids with this same error,
-            // but a row on an unknown period cannot be represented in the
-            // derived dense key set, so it is rejected here instead.
+            // Layer 3 rejects unknown period ids with this same error, but a
+            // row on an unknown period could not otherwise be caught, so it is
+            // rejected here.
             return Err(
                 InnerDataError::Params(InvariantError::InvalidPeriodIdInAssignements).into(),
             );
         }
+        let students = id_set(row.students);
+        if students.is_empty() {
+            // Neutral row: drop it to keep the canonical (absent) form.
+            continue;
+        }
         // A row on an unknown or excluded subject is inserted anyway:
         // layer 3 rejects it
-        entries.push(((period_id, id(row.subject_id)), id_set(row.students)));
+        entries.push(((period_id, id(row.subject_id)), students));
     }
 
     Ok(mem::assignments::Assignments {

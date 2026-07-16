@@ -3,7 +3,6 @@
 //! This module defines the relevant types to describes the periods
 
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
 use thiserror::Error;
 
 use crate::OrderedTable;
@@ -205,17 +204,9 @@ impl crate::Data {
                     .ordered_period_list
                     .insert_at(0, *period_id, desc.clone())
                     .expect("period id absence checked above");
-                // A fresh period is excluded by no subject, so the dense
-                // assignments key set gets one empty entry per subject. The
-                // (sparse) associations table gets nothing until a group list
-                // is assigned.
-                for subject_id in self.inner_data.params.subjects.ordered_subject_list.keys() {
-                    self.inner_data
-                        .params
-                        .assignments
-                        .map
-                        .insert((*period_id, subject_id), BTreeSet::new());
-                }
+                // A fresh period carries no assignments and no associations,
+                // so neither (sparse) junction table gets a row until content
+                // is added.
                 for week_pattern in self
                     .inner_data
                     .params
@@ -257,17 +248,9 @@ impl crate::Data {
                     .ordered_period_list
                     .insert_at(position + 1, *period_id, desc.clone())
                     .expect("period id absence checked above");
-                // A fresh period is excluded by no subject, so the dense
-                // assignments key set gets one empty entry per subject. The
-                // (sparse) associations table gets nothing until a group list
-                // is assigned.
-                for subject_id in self.inner_data.params.subjects.ordered_subject_list.keys() {
-                    self.inner_data
-                        .params
-                        .assignments
-                        .map
-                        .insert((*period_id, subject_id), BTreeSet::new());
-                }
+                // A fresh period carries no assignments and no associations,
+                // so neither (sparse) junction table gets a row until content
+                // is added.
                 for week_pattern in self
                     .inner_data
                     .params
@@ -365,17 +348,18 @@ impl crate::Data {
                     }
                 }
 
-                for (subject_id, assigned_students) in self
+                // Under canonical-absent, a row exists iff it is non-trivial,
+                // so any surviving row for this period blocks the removal.
+                if let Some((subject_id, _)) = self
                     .inner_data
                     .params
                     .assignments
                     .subjects_for_period(*period_id)
+                    .next()
                 {
-                    if !assigned_students.is_empty() {
-                        return Err(PeriodError::PeriodStillHasNonTrivialAssignments(
-                            *period_id, subject_id,
-                        ));
-                    }
+                    return Err(PeriodError::PeriodStillHasNonTrivialAssignments(
+                        *period_id, subject_id,
+                    ));
                 }
 
                 if self
@@ -407,20 +391,10 @@ impl crate::Data {
                     .periods
                     .ordered_period_list
                     .remove_at(position);
-                // Drop this period's rows from both junction tables (the
-                // associations table has none once the emptiness check passes,
-                // but stays consistent regardless).
-                let assignment_keys: Vec<_> = self
-                    .inner_data
-                    .params
-                    .assignments
-                    .map
-                    .keys()
-                    .filter(|(p, _)| *p == *period_id)
-                    .collect();
-                for key in assignment_keys {
-                    self.inner_data.params.assignments.map.remove(&key);
-                }
+                // Drop this period's rows from the associations table (none
+                // remain once the emptiness check passes, but stay consistent
+                // regardless). Assignment rows are already gone: the guard
+                // above rejects the removal while any survive.
                 let association_keys: Vec<_> = self
                     .inner_data
                     .params

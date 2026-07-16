@@ -12,15 +12,16 @@ use crate::ops::AnnotatedAssignmentOp;
 
 /// Description of the assignments
 ///
-/// Assignments are stored as a dense junction table keyed by
-/// `(period, subject)`: there is exactly one entry for every period and
-/// every subject that runs on it (i.e. is not excluded on it), holding the
-/// set of students who attend that subject on that period. The dense key set
-/// is maintained by the period/subject fan-out and checked in
-/// `check_assignments_data_consistency`.
+/// Assignments are stored as a sparse junction table keyed by
+/// `(period, subject)`: a row is present exactly when at least one student is
+/// assigned to that subject on that period. An absent row means nobody is
+/// assigned (the canonical form — ops never leave an empty row behind).
+/// Whether a subject *runs* on a period is not encoded here; consult
+/// [`crate::subjects::Subject::excluded_periods`] instead. Canonical absence
+/// is checked in `check_assignments_data_consistency`.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Assignments {
-    /// Attending students for each `(period, subject)` pair
+    /// Attending students for each `(period, subject)` pair with ≥1 student
     pub map: Table<(PeriodId, SubjectId), BTreeSet<StudentId>>,
 }
 
@@ -122,23 +123,24 @@ impl crate::Data {
                     ));
                 }
 
-                // The dense key set still guarantees a row for every
-                // non-excluded `(period, subject)` pair (phase 1a makes this
-                // sparse); until then the row is present by construction.
-                let assigned_students = self
-                    .inner_data
-                    .params
-                    .assignments
-                    .map
-                    .get_mut(&(*period_id, *subject_id))
-                    .expect("dense assignments must hold a row for a non-excluded subject");
-
-                let previous_status = assigned_students.contains(student_id);
+                // Sparse canonical form: a `(period, subject)` row exists iff
+                // its student set is non-empty. Assigning creates the row on
+                // demand; de-assigning drops the row once it empties.
+                let map = &mut self.inner_data.params.assignments.map;
+                let key = (*period_id, *subject_id);
+                let previous_status = map.get(&key).is_some_and(|s| s.contains(student_id));
 
                 if *status {
-                    assigned_students.insert(*student_id);
-                } else {
+                    if let Some(assigned_students) = map.get_mut(&key) {
+                        assigned_students.insert(*student_id);
+                    } else {
+                        map.insert(key, BTreeSet::from([*student_id]));
+                    }
+                } else if let Some(assigned_students) = map.get_mut(&key) {
                     assigned_students.remove(student_id);
+                    if assigned_students.is_empty() {
+                        map.remove(&key);
+                    }
                 }
 
                 Ok(AnnotatedAssignmentOp::Assign(
