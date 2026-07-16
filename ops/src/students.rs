@@ -320,7 +320,7 @@ impl StudentsUpdateOp {
                     .params
                     .settings
                     .students
-                    .contains_key(student_id)
+                    .contains(student_id)
                 {
                     return Some(CleaningOp {
                         warning: StudentsUpdateWarning::LooseLimitsForStudent(*student_id),

@@ -91,7 +91,7 @@ impl SettingsUpdateOp {
                     .params
                     .students
                     .student_map
-                    .contains_key(student_id)
+                    .contains(student_id)
                 {
                     return Err(UpdateStudentLimitsError::InvalidStudentId(*student_id).into());
                 }
@@ -119,7 +119,7 @@ impl SettingsUpdateOp {
                     .params
                     .students
                     .student_map
-                    .contains_key(student_id)
+                    .contains(student_id)
                 {
                     return Err(RemoveStudentLimitsError::InvalidStudentId(*student_id).into());
                 }

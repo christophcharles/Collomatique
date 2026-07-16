@@ -816,7 +816,9 @@ impl GroupListsUpdateOp {
                     .get_inner_data()
                     .params
                     .periods
-                    .ordered_period_list[position - 1]
+                    .ordered_period_list
+                    .get_at(position - 1)
+                    .expect("position > 0 checked above")
                     .0;
                 let previous_period_assignments: std::collections::BTreeMap<_, _> = data
                     .get_data()
@@ -968,7 +970,7 @@ impl GroupListsUpdateOp {
                     .params
                     .group_lists
                     .group_list_map
-                    .contains_key(group_list_id)
+                    .contains(group_list_id)
                 {
                     return Err(UpdateGroupListError::InvalidGroupListId(*group_list_id).into());
                 };
@@ -995,7 +997,7 @@ impl GroupListsUpdateOp {
                     .params
                     .group_lists
                     .group_list_map
-                    .contains_key(group_list_id)
+                    .contains(group_list_id)
                 {
                     return Err(DeleteGroupListError::InvalidGroupListId(*group_list_id).into());
                 };
@@ -1026,7 +1028,7 @@ impl GroupListsUpdateOp {
                     .params
                     .group_lists
                     .group_list_map
-                    .contains_key(group_list_id)
+                    .contains(group_list_id)
                 {
                     return Err(SetFillingError::InvalidGroupListId(*group_list_id).into());
                 }
@@ -1044,7 +1046,7 @@ impl GroupListsUpdateOp {
                                     .params
                                     .students
                                     .student_map
-                                    .contains_key(student_id)
+                                    .contains(student_id)
                                 {
                                     return Err(
                                         SetFillingError::InvalidStudentId(*student_id).into()
@@ -1063,7 +1065,7 @@ impl GroupListsUpdateOp {
                                 .params
                                 .students
                                 .student_map
-                                .contains_key(student_id)
+                                .contains(student_id)
                             {
                                 return Err(SetFillingError::InvalidStudentId(*student_id).into());
                             }
@@ -1130,7 +1132,7 @@ impl GroupListsUpdateOp {
                         .params
                         .group_lists
                         .group_list_map
-                        .contains_key(group_list_id)
+                        .contains(group_list_id)
                 {
                     return Err(
                         AssignGroupListToSubjectError::InvalidGroupListId(*group_list_id).into(),
@@ -1181,7 +1183,9 @@ impl GroupListsUpdateOp {
                     .get_inner_data()
                     .params
                     .periods
-                    .ordered_period_list[position - 1]
+                    .ordered_period_list
+                    .get_at(position - 1)
+                    .expect("position > 0 checked above")
                     .0;
                 let previous_period_assignments: std::collections::BTreeMap<_, _> = data
                     .get_data()

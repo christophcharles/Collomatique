@@ -330,13 +330,14 @@ impl GeneralPlanningUpdateOp {
                 else {
                     return None;
                 };
-                let period = &data
+                let (_, period) = data
                     .get_data()
                     .get_inner_data()
                     .params
                     .periods
-                    .ordered_period_list[pos]
-                    .1;
+                    .ordered_period_list
+                    .get_at(pos)
+                    .expect("pos comes from find_period_position_and_first_week");
                 let old_week_count = period.len();
 
                 if *week_count >= old_week_count {
@@ -452,13 +453,14 @@ impl GeneralPlanningUpdateOp {
                 else {
                     return None;
                 };
-                let period = &data
+                let (_, period) = data
                     .get_data()
                     .get_inner_data()
                     .params
                     .periods
-                    .ordered_period_list[pos]
-                    .1;
+                    .ordered_period_list
+                    .get_at(pos)
+                    .expect("pos comes from find_period_position_and_first_week");
                 let week_count = period.len();
 
                 let colloscope_period = data
@@ -678,7 +680,9 @@ impl GeneralPlanningUpdateOp {
                     .get_inner_data()
                     .params
                     .periods
-                    .ordered_period_list[pos - 1]
+                    .ordered_period_list
+                    .get_at(pos - 1)
+                    .expect("pos > 0 checked above")
                     .0;
 
                 for (subject_id, subject) in data
@@ -915,12 +919,11 @@ impl GeneralPlanningUpdateOp {
                                 .params
                                 .periods
                                 .ordered_period_list
+                                .iter()
                                 .last()
                             {
                                 Some((id, _)) => {
-                                    collomatique_state_colloscopes::PeriodOp::AddAfter(
-                                        *id, new_desc,
-                                    )
+                                    collomatique_state_colloscopes::PeriodOp::AddAfter(id, new_desc)
                                 }
                                 None => {
                                     collomatique_state_colloscopes::PeriodOp::AddFront(new_desc)
@@ -948,7 +951,9 @@ impl GeneralPlanningUpdateOp {
                     .get_inner_data()
                     .params
                     .periods
-                    .ordered_period_list[pos]
+                    .ordered_period_list
+                    .get_at(pos)
+                    .expect("pos comes from find_period_position")
                     .1
                     .clone();
 
@@ -1012,7 +1017,9 @@ impl GeneralPlanningUpdateOp {
                     .get_inner_data()
                     .params
                     .periods
-                    .ordered_period_list[pos]
+                    .ordered_period_list
+                    .get_at(pos)
+                    .expect("pos comes from find_period_position")
                     .1
                     .clone();
 
@@ -1200,7 +1207,9 @@ impl GeneralPlanningUpdateOp {
                     .get_inner_data()
                     .params
                     .periods
-                    .ordered_period_list[pos - 1]
+                    .ordered_period_list
+                    .get_at(pos - 1)
+                    .expect("pos > 0 checked above")
                     .0;
 
                 let mut prev_desc = data
@@ -1208,7 +1217,9 @@ impl GeneralPlanningUpdateOp {
                     .get_inner_data()
                     .params
                     .periods
-                    .ordered_period_list[pos - 1]
+                    .ordered_period_list
+                    .get_at(pos - 1)
+                    .expect("pos > 0 checked above")
                     .1
                     .clone();
                 let old_previous_week_count = prev_desc.len();
@@ -1217,7 +1228,9 @@ impl GeneralPlanningUpdateOp {
                     .get_inner_data()
                     .params
                     .periods
-                    .ordered_period_list[pos]
+                    .ordered_period_list
+                    .get_at(pos)
+                    .expect("pos comes from find_period_position")
                     .1
                     .clone();
 
@@ -1276,7 +1289,9 @@ impl GeneralPlanningUpdateOp {
                     .get_inner_data()
                     .params
                     .periods
-                    .ordered_period_list[pos]
+                    .ordered_period_list
+                    .get_at(pos)
+                    .expect("pos comes from find_period_position")
                     .1
                     .clone();
 
@@ -1315,7 +1330,9 @@ impl GeneralPlanningUpdateOp {
                     .get_inner_data()
                     .params
                     .periods
-                    .ordered_period_list[pos]
+                    .ordered_period_list
+                    .get_at(pos)
+                    .expect("pos comes from find_period_position")
                     .1
                     .clone();
 
@@ -1361,13 +1378,15 @@ impl GeneralPlanningUpdateOp {
         ),
         GeneralPlanningUpdateError,
     > {
-        let saved_week_patterns = data
+        let saved_week_patterns: std::collections::BTreeMap<_, _> = data
             .get_data()
             .get_inner_data()
             .params
             .week_patterns
             .week_pattern_map
-            .to_map();
+            .iter()
+            .map(|(id, wp)| (id, wp.clone()))
+            .collect();
         let saved_colloscope_period = data
             .get_data()
             .get_inner_data()

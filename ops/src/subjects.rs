@@ -426,7 +426,7 @@ impl SubjectsUpdateOp {
                         .params
                         .balancing
                         .subjects
-                        .contains_key(subject_id)
+                        .contains(subject_id)
                     {
                         return Some(CleaningOp {
                             warning: SubjectsUpdateWarning::LooseBalancingOptionsForSubject(
@@ -685,7 +685,7 @@ impl SubjectsUpdateOp {
                     .params
                     .balancing
                     .subjects
-                    .contains_key(subject_id)
+                    .contains(subject_id)
                 {
                     return Some(CleaningOp {
                         warning: SubjectsUpdateWarning::LooseBalancingOptionsForSubject(
@@ -736,7 +736,7 @@ impl SubjectsUpdateOp {
                     .apply(
                         collomatique_state_colloscopes::Op::Subject(
                             collomatique_state_colloscopes::SubjectOp::AddAfter(
-                                data.get_data().get_inner_data().params.subjects.ordered_subject_list.last().map(|x| x.0),
+                                data.get_data().get_inner_data().params.subjects.ordered_subject_list.iter().last().map(|(id, _)| id),
                                 collomatique_state_colloscopes::Subject {
                                     parameters: params.clone(),
                                     excluded_periods: BTreeSet::new(),
