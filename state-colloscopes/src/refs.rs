@@ -120,8 +120,9 @@ pub enum RefSite {
         subject: SubjectId,
         group_list: GroupListId,
     },
-    /// A `slots.ordering` key — references a subject. `non_trivial` is `true`
-    /// when the subject's ordering row is non-empty.
+    /// A `slots.ordering` key — references a subject. The ordering is sparse
+    /// (canonical-absent), so a walked row is always non-empty and
+    /// `non_trivial` is always `true`.
     SlotsOrderingKey { non_trivial: bool },
     // --- colloscope ---
     /// A `colloscope.period_map` key — references a period. `non_trivial`

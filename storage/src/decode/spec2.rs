@@ -216,7 +216,7 @@ fn reconstruct(blocks: Blocks) -> Result<InnerData, DecodeError> {
     let students = reconstruct_students(blocks.students.unwrap_or_default());
     let assignments = reconstruct_assignments(blocks.assignments.unwrap_or_default(), &periods)?;
     let week_patterns = reconstruct_week_patterns(blocks.week_patterns.unwrap_or_default());
-    let slots = reconstruct_slots(blocks.slots.unwrap_or_default(), &subjects)?;
+    let slots = reconstruct_slots(blocks.slots.unwrap_or_default())?;
     let incompats = reconstruct_incompats(blocks.incompatibilities.unwrap_or_default())?;
     let group_lists = reconstruct_group_lists(
         blocks.group_lists.unwrap_or_default(),
@@ -463,23 +463,16 @@ fn reconstruct_week_patterns(
     }
 }
 
-fn reconstruct_slots(
-    block: format::slots::Slots,
-    subjects: &mem::subjects::Subjects,
-) -> Result<mem::slots::Slots, DecodeError> {
-    // The key set is derived: one row per subject with interrogations, empty by
-    // default (spec §4.7). Rows on other subjects are inserted anyway: layer 3
-    // rejects them.
-    let mut rows: BTreeMap<SubjectId, Vec<(SlotId, mem::slots::Slot)>> = subjects
-        .ordered_subject_list
-        .iter()
-        .filter(|(_subject_id, subject)| subject.parameters.interrogation_parameters.is_some())
-        .map(|(subject_id, _subject)| (subject_id, Vec::new()))
-        .collect();
+fn reconstruct_slots(block: format::slots::Slots) -> Result<mem::slots::Slots, DecodeError> {
+    // Sparse ordering: one row per subject that has slots. An explicitly-empty
+    // row in the file (a redundant neutral entry of the derived key set, spec
+    // §4.7) decodes to no row, matching the canonical absent form. Rows on
+    // subjects without interrogations are inserted anyway: layer 3 rejects them.
+    let mut rows: BTreeMap<SubjectId, Vec<(SlotId, mem::slots::Slot)>> = BTreeMap::new();
 
     for row in block.into_inner() {
         let subject_id = id::<SubjectId>(row.subject_id);
-        let ordered_slots = row
+        let ordered_slots: Vec<(SlotId, mem::slots::Slot)> = row
             .slots
             .into_iter()
             .map(|slot| {
@@ -499,6 +492,10 @@ fn reconstruct_slots(
                 )
             })
             .collect();
+        if ordered_slots.is_empty() {
+            // Neutral row: drop it to keep the canonical (absent) form.
+            continue;
+        }
         rows.insert(subject_id, ordered_slots);
     }
 

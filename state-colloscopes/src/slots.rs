@@ -18,8 +18,9 @@ use crate::ops::AnnotatedSlotOp;
 /// subject as a foreign key) plus an explicit per-subject ordering sidecar.
 /// The two must stay consistent; the invariant is checked in
 /// `check_slots_data_consistency`:
-/// - `ordering` has exactly one entry per subject with interrogations
-///   (dense-key semantics), and
+/// - `ordering` is sparse: a row is present exactly when the subject has at
+///   least one slot (canonical form — no empty rows), and that subject exists
+///   and has interrogations, and
 /// - `ordering[s]` is a duplicate-free permutation of
 ///   `{ id | slot_map[id].subject_id == s }`.
 ///
@@ -32,8 +33,8 @@ pub struct Slots {
     slot_map: Table<SlotId, Slot>,
     /// Per-subject ordered list of slot ids
     ///
-    /// One entry per subject with interrogations (empty vec when the subject
-    /// has no slots yet).
+    /// Sparse: one entry per subject that has at least one slot. A subject
+    /// with interrogations but no slots yet has no entry (canonical absent).
     ordering: Table<SubjectId, Vec<SlotId>>,
 }
 
@@ -100,19 +101,24 @@ impl Slot {
 }
 
 impl Slots {
-    /// Builds a [Slots] from dense per-subject rows (used by storage decode).
+    /// Builds a [Slots] from per-subject rows (used by storage decode).
     ///
-    /// `entries` provides one row per subject with interrogations: the subject
-    /// id and its ordered slots (in the intended order). Each slot must already
-    /// carry the matching `subject_id`. Returns an error if a slot id appears
-    /// more than once across all rows — otherwise the two backend structures
-    /// would silently desynchronize.
+    /// `entries` provides one row per subject that has slots: the subject id
+    /// and its ordered slots (in the intended order). Each slot must already
+    /// carry the matching `subject_id`. Empty rows are dropped so the sparse
+    /// canonical form (no empty ordering entry) is preserved. Returns an error
+    /// if a slot id appears more than once across all rows — otherwise the two
+    /// backend structures would silently desynchronize.
     pub fn from_subject_rows(
         entries: impl IntoIterator<Item = (SubjectId, Vec<(SlotId, Slot)>)>,
     ) -> Result<Self, DuplicatedSlotIdError> {
         let mut slot_map = Table::new();
         let mut ordering = Table::new();
         for (subject_id, slots) in entries {
+            if slots.is_empty() {
+                // Canonical sparse form: a subject with no slots gets no row.
+                continue;
+            }
             let mut order = Vec::with_capacity(slots.len());
             for (slot_id, slot) in slots {
                 if slot_map.insert(slot_id, slot).is_some() {
@@ -154,17 +160,17 @@ impl Slots {
         Some((slot.subject_id, slot))
     }
 
-    /// Iterator over the subjects that have interrogations (dense-key semantics), in id order.
+    /// Iterator over the subjects that have at least one slot, in id order.
+    ///
+    /// Under the sparse ordering this is *not* the same as "subjects with
+    /// interrogations": a subject with interrogation parameters but no slots
+    /// yet is absent. Consult `Subject::interrogation_parameters` when the
+    /// interrogation flag itself is what matters.
     pub fn subjects_with_slots(&self) -> impl Iterator<Item = SubjectId> + '_ {
         self.ordering.keys()
     }
 
-    /// Whether the subject is a valid subject with interrogations (has an ordering entry).
-    pub fn has_interrogations(&self, subject_id: SubjectId) -> bool {
-        self.ordering.contains(&subject_id)
-    }
-
-    /// Whether there is no subject with interrogations at all.
+    /// Whether no subject has any slots.
     pub fn is_empty(&self) -> bool {
         self.ordering.is_empty()
     }
@@ -264,46 +270,43 @@ impl Slots {
     // Every mutation goes through one of these so `slot_map` and `ordering`
     // can never desynchronize.
 
-    /// Registers a subject as having interrogations (empty ordering entry).
-    pub(crate) fn add_subject_entry(&mut self, subject_id: SubjectId) {
-        self.ordering.insert(subject_id, Vec::new());
-    }
-
-    /// Deregisters a subject's interrogations.
-    ///
-    /// The subject must have no remaining slots.
-    pub(crate) fn remove_subject_entry(&mut self, subject_id: SubjectId) {
-        let previous = self.ordering.remove(&subject_id);
-        debug_assert!(
-            previous.map(|order| order.is_empty()).unwrap_or(true),
-            "removing a subject entry that still has slots"
-        );
-    }
-
     /// Inserts a slot at `position` within its subject's ordering.
     ///
-    /// The subject is taken from `slot.subject_id` and must already be registered.
+    /// The subject is taken from `slot.subject_id`. Under the sparse ordering
+    /// the row is created on demand for the subject's first slot (which lands
+    /// at position 0).
     pub(crate) fn insert_slot_at(&mut self, slot_id: SlotId, slot: Slot, position: usize) {
         let subject_id = slot.subject_id;
-        self.ordering
-            .get_mut(&subject_id)
-            .expect("subject should be registered before inserting a slot")
-            .insert(position, slot_id);
+        if let Some(order) = self.ordering.get_mut(&subject_id) {
+            order.insert(position, slot_id);
+        } else {
+            debug_assert_eq!(
+                position, 0,
+                "first slot of a subject must land at position 0"
+            );
+            self.ordering.insert(subject_id, vec![slot_id]);
+        }
         self.slot_map.insert(slot_id, slot);
     }
 
     /// Removes a slot, returning its former position (within its subject) and data.
+    ///
+    /// Dropping a subject's last slot removes its ordering row, keeping the
+    /// sparse canonical form.
     pub(crate) fn remove_slot(&mut self, slot_id: SlotId) -> (usize, Slot) {
         let slot = self.slot_map.remove(&slot_id).expect("slot should exist");
         let order = self
             .ordering
             .get_mut(&slot.subject_id)
-            .expect("slot's subject should be registered");
+            .expect("slot's subject should have an ordering row");
         let pos = order
             .iter()
             .position(|id| *id == slot_id)
             .expect("slot should appear in its subject's ordering");
         order.remove(pos);
+        if order.is_empty() {
+            self.ordering.remove(&slot.subject_id);
+        }
         (pos, slot)
     }
 
@@ -435,10 +438,10 @@ impl crate::Data {
                     None => 0,
                 };
 
-                if !self.inner_data.params.slots.has_interrogations(subject_id) {
-                    return Err(SlotError::SubjectHasNoInterrogation(subject_id));
-                }
-
+                // `validate_slot` above already rejected a subject without
+                // interrogation parameters (`SubjectHasNoInterrogation`), so no
+                // separate ordering-presence guard is needed: the sparse row is
+                // created on demand by `insert_slot_at`.
                 self.inner_data
                     .params
                     .slots

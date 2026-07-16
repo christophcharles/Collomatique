@@ -359,11 +359,10 @@ impl crate::Data {
                     .ordered_subject_list
                     .insert_at(position, *new_id, params.clone())
                     .expect("subject id absence checked above");
-                if params.parameters.interrogation_parameters.is_some() {
-                    self.inner_data.params.slots.add_subject_entry(*new_id);
-                }
-                // A fresh subject carries no assignments, so the (sparse)
-                // assignments table gets no row until a student is assigned.
+                // Sparse ordering: a fresh subject gets no slots row until its
+                // first slot is added, so nothing to register here. Likewise
+                // the sparse assignments table gets no row until a student is
+                // assigned.
 
                 Ok(AnnotatedSubjectOp::Remove(*new_id))
             }
@@ -472,9 +471,10 @@ impl crate::Data {
                     .subjects
                     .ordered_subject_list
                     .remove_at(position);
-                self.inner_data.params.slots.remove_subject_entry(*id);
-                // No assignment rows to drop: the guard above rejects the
-                // removal while any survive.
+                // Sparse ordering: a removable subject has no slots (the
+                // associated-slots guard above blocks otherwise), so it has no
+                // ordering row to drop. No assignment rows to drop either: the
+                // guard above rejects the removal while any survive.
 
                 Ok(AnnotatedSubjectOp::AddAfter(*id, previous_id, params))
             }
@@ -529,13 +529,14 @@ impl crate::Data {
                         }
                     }
 
-                    // Let's also check that we don't have corresponding interrogations
+                    // Let's also check that we don't have corresponding interrogations.
+                    // Sparse ordering: an absent row means no slots.
                     let slot_count = self
                         .inner_data
                         .params
                         .slots
                         .slot_count_for_subject(*id)
-                        .expect("Subject should have a slot list at this point");
+                        .unwrap_or(0);
 
                     if slot_count != 0 {
                         return Err(SubjectError::SubjectStillHasAssociatedSlots(*id));
@@ -611,17 +612,9 @@ impl crate::Data {
                     .subjects
                     .ordered_subject_list
                     .replace_value_at(position, new_params.clone());
-                if new_params.parameters.interrogation_parameters.is_some()
-                    != old_params.parameters.interrogation_parameters.is_some()
-                {
-                    if new_params.parameters.interrogation_parameters.is_some() {
-                        // We don't need to update the colloscope in this case: no slots have been added so far
-                        self.inner_data.params.slots.add_subject_entry(*id);
-                    } else {
-                        // We don't need to update the colloscope in this case: all slots have already been removed
-                        self.inner_data.params.slots.remove_subject_entry(*id);
-                    }
-                }
+                // Sparse ordering: gaining interrogations creates no row (the
+                // first slot does that lazily); losing interrogations requires
+                // no slots (guarded above), so no row exists to drop.
 
                 // Let's update the colloscope.
                 // However, if there are no interrogations, then we don't have slots to update
@@ -633,7 +626,8 @@ impl crate::Data {
                         .params
                         .slots
                         .slots_for_subject(*id)
-                        .expect("Subject should have a slot list at this point")
+                        .into_iter()
+                        .flatten()
                         .map(|(slot_id, _slot)| *slot_id)
                         .collect();
 

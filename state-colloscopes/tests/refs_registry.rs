@@ -429,9 +429,9 @@ fn walk_covers_every_site_in_order() {
             (math, assign_p0_math),
             // association mirror
             (math, association),
-            // ordering keys mirror
+            // ordering keys mirror (sparse: phys has interrogations but no
+            // slots, so it has no ordering row and no site here)
             (math, RefSite::SlotsOrderingKey { non_trivial: true }),
-            (phys, RefSite::SlotsOrderingKey { non_trivial: false }),
         ],
     );
 
@@ -544,7 +544,7 @@ fn walk_covers_every_site_in_order() {
             RefSite::TeacherSubjects(teacher),
             RefSite::PairingRulePart(pairing),
             RefSite::BalancingSubjectKey,
-            RefSite::SlotsOrderingKey { non_trivial: false },
+            // Sparse ordering: phys has no slots, hence no SlotsOrderingKey site.
         ],
     );
 

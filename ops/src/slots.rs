@@ -344,12 +344,16 @@ impl SlotsUpdateOp {
                 {
                     return Err(AddNewSlotError::InvalidSubjectId(*subject_id).into());
                 }
+                // The sparse slots ordering no longer tracks "subject has
+                // interrogations" (a row only appears once a slot exists);
+                // consult the subject's interrogation parameters directly.
                 if !data
                     .get_data()
                     .get_inner_data()
                     .params
-                    .slots
-                    .has_interrogations(*subject_id)
+                    .subjects
+                    .find_subject(*subject_id)
+                    .is_some_and(|subject| subject.parameters.interrogation_parameters.is_some())
                 {
                     return Err(AddNewSlotError::SubjectHasNoInterrogation(*subject_id).into());
                 }

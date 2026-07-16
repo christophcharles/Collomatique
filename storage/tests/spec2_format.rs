@@ -556,10 +556,10 @@ fn colloscope_group_list_row_on_prefilled_list_is_rejected() {
 
 #[test]
 fn derived_key_sets_are_completed() {
-    // No Assignments block and no per-subject slots row. Assignments are
-    // sparse, so the skeleton file yields zero assignment rows; the slots
-    // ordering is still a derived key set the decoder rebuilds (one entry per
-    // interrogation subject).
+    // No Assignments block and no per-subject slots row. Both are sparse, so
+    // the skeleton file yields zero assignment rows and zero slots ordering
+    // rows: a subject with interrogations but no slots gets no ordering entry
+    // (canonical absent).
     let entries = vec![
         entry(
             r#"{ "GeneralPlanning": {
@@ -591,9 +591,7 @@ fn derived_key_sets_are_completed() {
 
     let params = &data.get_inner_data().params;
     assert_eq!(params.assignments.map.len(), 0);
-    assert_eq!(params.slots.subjects_with_slots().count(), 1);
-    let subject_id = params.slots.subjects_with_slots().next().unwrap();
-    assert_eq!(params.slots.slot_count_for_subject(subject_id), Some(0));
+    assert_eq!(params.slots.subjects_with_slots().count(), 0);
 }
 
 #[test]

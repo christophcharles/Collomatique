@@ -222,10 +222,13 @@ impl ColloscopePeriod {
                 continue;
             }
 
+            // Sparse ordering: a subject with interrogations but no slots yet
+            // has no ordering row, so treat `None` as an empty slot list.
             let subject_slots = params
                 .slots
                 .slots_for_subject(subject_id)
-                .expect("Subjects should have slots");
+                .into_iter()
+                .flatten();
 
             for (slot_id, _slot) in subject_slots {
                 slot_map.insert(
@@ -253,10 +256,8 @@ impl ColloscopePeriod {
                 continue;
             }
 
-            slot_count += params
-                .slots
-                .slot_count_for_subject(subject_id)
-                .expect("Subject should have slots at this point");
+            // Sparse ordering: an absent row means the subject has no slots.
+            slot_count += params.slots.slot_count_for_subject(subject_id).unwrap_or(0);
         }
 
         if slot_count != self.slot_map.len() {

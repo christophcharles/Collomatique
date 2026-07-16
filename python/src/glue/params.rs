@@ -62,6 +62,17 @@ impl TryFrom<collomatique_state_colloscopes::colloscope_params::Parameters> for 
             .iter()
             .map(|(subject_id, subject)| (subject_id, subject.excluded_periods.clone()))
             .collect();
+        // The sparse slots ordering only stores subjects that have slots, but
+        // the Python-visible shape is dense (one entry per subject with
+        // interrogations, empty vector when it has no slots yet). Snapshot the
+        // interrogation subjects before `value.subjects` is consumed.
+        let interrogation_subject_ids: Vec<collomatique_state_colloscopes::SubjectId> = value
+            .subjects
+            .ordered_subject_list
+            .iter()
+            .filter(|(_, subject)| subject.parameters.interrogation_parameters.is_some())
+            .map(|(subject_id, _)| subject_id)
+            .collect();
         Ok(Parameters {
             periods: value
                 .periods
@@ -140,14 +151,15 @@ impl TryFrom<collomatique_state_colloscopes::colloscope_params::Parameters> for 
                     )
                 })
                 .collect(),
-            slots: value
-                .slots
-                .subjects_with_slots()
-                .map(|subject_id| {
+            slots: interrogation_subject_ids
+                .iter()
+                .map(|&subject_id| {
+                    // Sparse ordering: no row for a subject without slots, so
+                    // fall back to an empty list to keep the dense shape.
                     let subject_slots = value
                         .slots
                         .slots_vec_for_subject(subject_id)
-                        .expect("subject came from subjects_with_slots");
+                        .unwrap_or_default();
                     (
                         subject_id.into(),
                         subject_slots

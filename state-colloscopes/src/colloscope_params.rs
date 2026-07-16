@@ -563,8 +563,9 @@ impl Parameters {
         &self,
         week_pattern_ids: &BTreeSet<WeekPatternId>,
     ) -> Result<(), InvariantError> {
-        // Dense-key semantics: the ordering sidecar has exactly one entry per
-        // subject with interrogations.
+        // Sparse-key semantics: an ordering row is present exactly when its
+        // subject has at least one slot. Each row's subject must exist and have
+        // interrogations, and the row must be non-empty (canonical form).
         let subjects_with_interrogations: BTreeSet<SubjectId> = self
             .subjects
             .ordered_subject_list
@@ -572,10 +573,6 @@ impl Parameters {
             .filter(|(_id, subject)| subject.parameters.interrogation_parameters.is_some())
             .map(|(id, _)| id)
             .collect();
-        let ordering_subjects: BTreeSet<SubjectId> = self.slots.subjects_with_slots().collect();
-        if ordering_subjects != subjects_with_interrogations {
-            return Err(InvariantError::WrongSubjectCountInSlots);
-        }
 
         // Every slot referenced by the ordering must exist in the slot table,
         // sit under the subject naming it (matching `slot.subject_id`), appear
@@ -583,6 +580,12 @@ impl Parameters {
         // so a desynchronized ordering yields a clean error rather than panicking.
         let mut ordered_ids = BTreeSet::new();
         for (subject_id, order) in self.slots.ordering_entries() {
+            if !subjects_with_interrogations.contains(&subject_id) {
+                return Err(InvariantError::SlotsForSubjectWithoutInterrogations);
+            }
+            if order.is_empty() {
+                return Err(InvariantError::EmptySlotsRow);
+            }
             for slot_id in order {
                 let Some(slot) = self.slots.find_slot(*slot_id) else {
                     return Err(InvariantError::InvalidSlot);
@@ -1150,8 +1153,10 @@ pub enum InvariantError {
     AssignmentForSubjectNotRunningOnPeriod,
     #[error("empty assignment row (non-canonical)")]
     EmptyAssignmentRow,
-    #[error("wrong number of subjects in slots")]
-    WrongSubjectCountInSlots,
+    #[error("slots ordering row for a subject without interrogations")]
+    SlotsForSubjectWithoutInterrogations,
+    #[error("empty slots ordering row (non-canonical)")]
+    EmptySlotsRow,
     #[error("invalid slot")]
     InvalidSlot,
     #[error("invalid incompat")]
