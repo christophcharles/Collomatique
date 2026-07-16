@@ -354,7 +354,7 @@ impl GeneralPlanningUpdateOp {
 
                 if !colloscope_period.is_empty() {
                     for (slot_id, collo_slot) in &colloscope_period.slot_map {
-                        for week in old_week_count..*week_count {
+                        for week in *week_count..old_week_count {
                             if let Some(interrogation) = &collo_slot.interrogations[week]
                                 && !interrogation.is_empty()
                             {
