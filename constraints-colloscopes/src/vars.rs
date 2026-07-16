@@ -85,7 +85,7 @@ impl Var {
             Some(id) => id,
             None => return default,
         };
-        if !env.group_lists.group_list_map.contains_key(group_list_id) {
+        if !env.group_lists.group_list_map.contains(group_list_id) {
             return default;
         }
         GroupNum::enumerate(env, *group_list_id).collect()

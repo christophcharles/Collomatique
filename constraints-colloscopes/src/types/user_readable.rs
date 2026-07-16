@@ -759,13 +759,8 @@ fn slot_name(
     let subject = env
         .slots
         .find_slot_subject_and_position(slot)
-        .and_then(|(subj_id, _)| {
-            env.subjects
-                .ordered_subject_list
-                .iter()
-                .find(|(id, _)| *id == subj_id)
-                .map(|(_, s)| s.parameters.name.as_str())
-        });
+        .and_then(|(subj_id, _)| env.subjects.find_subject(subj_id))
+        .map(|s| s.parameters.name.as_str());
     match (subject, slot_data) {
         (Some(subj), Some(data)) => format!("{} ({})", subj, data.start_time),
         (Some(subj), None) => subj.to_string(),
