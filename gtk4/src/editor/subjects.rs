@@ -196,7 +196,11 @@ impl Component for Subjects {
                 sender
                     .output(SubjectsUpdateOp::UpdatePeriodStatus(
                         id,
-                        self.periods.ordered_period_list[period_num].0,
+                        self.periods
+                            .ordered_period_list
+                            .get_at(period_num)
+                            .expect("valid period index")
+                            .0,
                         status,
                     ))
                     .unwrap();

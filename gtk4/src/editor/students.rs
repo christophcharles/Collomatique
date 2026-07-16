@@ -217,9 +217,14 @@ impl Component for Students {
                     Some(1) => StudentFilter::NoSubjectLinked,
                     Some(x) => {
                         let index = x - 2;
-                        assert!(index < self.periods.ordered_period_list.len());
 
-                        StudentFilter::Period(self.periods.ordered_period_list[index].0)
+                        StudentFilter::Period(
+                            self.periods
+                                .ordered_period_list
+                                .get_at(index)
+                                .expect("index within bounds")
+                                .0,
+                        )
                     }
                 };
                 self.update_current_list();

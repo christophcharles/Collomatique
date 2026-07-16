@@ -256,8 +256,12 @@ impl SimpleComponent for Dialog {
                 self.student_data.desc.email = email_opt;
             }
             DialogInput::UpdatePeriodStatus(period_num, new_status) => {
-                assert!(period_num < self.periods.ordered_period_list.len());
-                let period_id = self.periods.ordered_period_list[period_num].0;
+                let period_id = self
+                    .periods
+                    .ordered_period_list
+                    .get_at(period_num)
+                    .expect("period_num within bounds")
+                    .0;
 
                 if new_status {
                     self.student_data.excluded_periods.remove(&period_id);

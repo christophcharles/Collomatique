@@ -250,7 +250,12 @@ impl Component for GroupLists {
                     .expect("Group list ID should be valid")
                     .clone();
                 // Pass all students - exclusion is now handled in the prefill dialog
-                let filtered_students = self.students.student_map.to_map();
+                let filtered_students = self
+                    .students
+                    .student_map
+                    .iter()
+                    .map(|(id, student)| (id, student.clone()))
+                    .collect();
                 self.prefill_group_list_id = Some(group_list_id);
                 self.prefill_dialog
                     .sender()
@@ -351,7 +356,12 @@ impl GroupLists {
                             (period == *id).then_some((subject, *group_list))
                         })
                         .collect(),
-                    group_lists: self.group_lists.group_list_map.to_map(),
+                    group_lists: self
+                        .group_lists
+                        .group_list_map
+                        .iter()
+                        .map(|(id, gl)| (id, gl.clone()))
+                        .collect(),
                 };
 
                 *acc += desc.len();

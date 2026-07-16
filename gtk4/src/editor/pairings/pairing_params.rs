@@ -125,7 +125,7 @@ impl Dialog {
             .enumerate()
             .filter_map(|(i, pd)| {
                 if !pd.enabled {
-                    Some(self.periods.ordered_period_list[i].0)
+                    self.periods.ordered_period_list.get_at(i).map(|(id, _)| id)
                 } else {
                     None
                 }

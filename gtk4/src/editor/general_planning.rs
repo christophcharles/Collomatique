@@ -302,11 +302,11 @@ impl Component for GeneralPlanning {
                 .unwrap(),
             GeneralPlanningInput::EditPeriodClicked(period_id) => {
                 self.week_selection_reason = WeekCountSelectionReason::Edit(period_id);
-                let pos = self
+                let current_week_count = self
                     .periods
-                    .find_period_position(period_id)
-                    .expect("valid position");
-                let current_week_count = self.periods.ordered_period_list[pos].1.len();
+                    .find_period(period_id)
+                    .expect("valid period")
+                    .len();
                 self.period_duration_dialog
                     .sender()
                     .send(period_duration::DialogInput::Show(current_week_count))
@@ -314,11 +314,11 @@ impl Component for GeneralPlanning {
             }
             GeneralPlanningInput::CutPeriodClicked(period_id) => {
                 self.week_selection_reason = WeekCountSelectionReason::Cut(period_id);
-                let pos = self
+                let current_week_count = self
                     .periods
-                    .find_period_position(period_id)
-                    .expect("valid position");
-                let current_week_count = self.periods.ordered_period_list[pos].1.len();
+                    .find_period(period_id)
+                    .expect("valid period")
+                    .len();
                 self.period_cut_dialog
                     .sender()
                     .send(period_cut::DialogInput::Show(current_week_count))
