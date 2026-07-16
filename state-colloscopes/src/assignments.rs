@@ -94,30 +94,20 @@ impl crate::Data {
                     return Err(AssignmentError::InvalidPeriodId(*period_id));
                 }
 
-                if self
-                    .inner_data
-                    .params
-                    .subjects
-                    .find_subject_position(*subject_id)
-                    .is_none()
-                {
-                    return Err(AssignmentError::InvalidSubjectId(*subject_id));
-                }
-
-                // Dense key set: a missing `(period, subject)` row means the
-                // subject does not run on the period.
-                let Some(assigned_students) = self
-                    .inner_data
-                    .params
-                    .assignments
-                    .map
-                    .get_mut(&(*period_id, *subject_id))
+                let Some(subject) = self.inner_data.params.subjects.find_subject(*subject_id)
                 else {
+                    return Err(AssignmentError::InvalidSubjectId(*subject_id));
+                };
+
+                // "Subject runs on period" is a property of the subject's
+                // excluded-period set, not of the assignments key set: consult
+                // it directly rather than probing for a `(period, subject)` row.
+                if subject.excluded_periods.contains(period_id) {
                     return Err(AssignmentError::SubjectDoesNotRunOnPeriod(
                         *subject_id,
                         *period_id,
                     ));
-                };
+                }
 
                 let Some(student_desc) =
                     self.inner_data.params.students.student_map.get(student_id)
@@ -131,6 +121,17 @@ impl crate::Data {
                         *period_id,
                     ));
                 }
+
+                // The dense key set still guarantees a row for every
+                // non-excluded `(period, subject)` pair (phase 1a makes this
+                // sparse); until then the row is present by construction.
+                let assigned_students = self
+                    .inner_data
+                    .params
+                    .assignments
+                    .map
+                    .get_mut(&(*period_id, *subject_id))
+                    .expect("dense assignments must hold a row for a non-excluded subject");
 
                 let previous_status = assigned_students.contains(student_id);
 

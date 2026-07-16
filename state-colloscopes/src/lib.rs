@@ -171,11 +171,6 @@ impl InnerData {
 
         self.params.check_invariants()?;
         self.colloscope.validate_against_params(&self.params)?;
-        /*for (colloscope_id, colloscope) in &self.colloscopes.colloscope_map {
-            colloscope
-                .check_invariants(&self.main_params)
-                .map_err(|x| InnerDataError::ColloscopeError(*colloscope_id, x))?;
-        }*/
 
         Ok(())
     }
@@ -257,21 +252,6 @@ pub enum Error {
     ExportConfig(#[from] ExportConfigError),
     #[error(transparent)]
     GlobalUpdate(#[from] InnerDataError),
-}
-
-/// Errors for IDs
-#[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum FromDataError {
-    #[error(transparent)]
-    IdError(#[from] tools::IdError),
-    #[error("Invalid ID")]
-    InvalidId,
-    #[error("Inconsistent assignments")]
-    InconsistentAssignments,
-    #[error("Error in slots data")]
-    InconsistentSlots,
-    #[error("Inconsistent group lists")]
-    InconsistentGroupLists,
 }
 
 /// Errors for IDs

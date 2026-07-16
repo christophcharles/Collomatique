@@ -250,12 +250,13 @@ impl FactoryComponent for PeriodEntry {
                 self.update_view_wrapper(sender);
             }
             PeriodEntryInput::UpdateStatus(student_id, subject_id, new_status) => {
+                // A subject with nobody assigned has no row in the (sparse)
+                // per-period map; an absent row simply means "not assigned".
                 let current_status = self
                     .data
                     .period_assignments
                     .get(&subject_id)
-                    .expect("Subject id should be valid at this point")
-                    .contains(&student_id);
+                    .is_some_and(|students| students.contains(&student_id));
 
                 if current_status == new_status {
                     return;
