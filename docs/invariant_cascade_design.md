@@ -1,7 +1,9 @@
 # Invariant checking & cascade resolution — design + plan of action
 
 **Status:** direction agreed, plan of action drafted (July 15 2026, branch `consolidate_state`).
-This doc started as an exploration after phase C of `table_registry_plan.md` shipped; it now
+This doc started as an exploration after phase C of the table-registry plan shipped (item 2's
+detailed plan, since delivered in full and retired; pinned at
+`git show 77695338:docs/table_registry_plan.md`); it now
 records the agreed design *direction* and a step-by-step plan. Per the house rule of
 `state_consolidation_plan.md` §6, **each step below still gets its own detailed session plan
 (and user sign-off) before implementation** — this doc fixes the direction, the ordering, and
@@ -11,15 +13,16 @@ It supersedes how `docs/state_consolidation_plan.md` **item 3** (invariant conso
 **item 5** (params↔colloscope synchronization) were going to be tackled, and reuses/retires
 parts of the phase-C reference registry. §9 details the impact on the existing plans.
 
-Read `docs/state_consolidation_plan.md` and `docs/table_registry_plan.md` first — this builds
-on their inventory (28 ID-based relationships, the triplicated checks, the dense mirrors).
+Read `docs/state_consolidation_plan.md` first — this builds on the retired table-registry
+plan's inventory (28 ID-based relationships, the triplicated checks, the dense mirrors),
+inlined below as Appendix A.
 
 ---
 
 ## 1. The problem this addresses
 
 Every referential/consistency rule is currently expressed **three times**
-(`table_registry_plan.md` §1): candidate validation before an op, delete-blocking scans in the
+(retired table-registry plan §1): candidate validation before an op, delete-blocking scans in the
 `Remove`/`Update` paths, and the whole-model `check_invariants`. They drift; the drift produced
 real bugs (the whole `found_bugs.rs` family). The registry's item-3 plan was to *reroute all
 three families through one declared registry*. This design does a different collapse:
@@ -269,8 +272,9 @@ beyond consumer ergonomics.
   reincarnated as the precise-`InvariantError` variant set. Hold the deletion until gtk4's needs
   are known — a UI "who references X?" display may still want the reverse lookups,
   independently of the cascade.
-- **Phases D/E of `table_registry_plan.md`** (consumer migration to the read API, `Deref`
-  removal) — **orthogonal and unaffected**; they can proceed in parallel with any step here.
+- **Phases D/E of the table-registry plan** (consumer migration to the read API, `Deref`
+  removal) — **completed July 16 2026** (`47a3a5ac`…`4543bb46`): consumers migrated, the
+  compat layer deleted; the internal table representation is now free to change.
 
 ---
 
@@ -309,8 +313,8 @@ structural leftovers not encapsulated per §6c. It returns **all** broken invari
 canonical (`Ord`) order.
 
 **Step 3 — completeness audit.** Survey the old `check_invariants` *and* the
-`validate_*_internal` candidate checks (the side-constraint inventory of
-`table_registry_plan.md` §3.3 is the checklist) for anything the new checker misses; resolve
+`validate_*_internal` candidate checks (the side-constraint inventory of Appendix A.2 is the
+checklist) for anything the new checker misses; resolve
 the stale `lib.rs:172` block. At the end of this step the new checker is ground truth.
 
 **Step 4 — differential fuzz.** A way to build arbitrary (including invalid) `InnerData`:
@@ -343,7 +347,7 @@ an op-list rendering layer replaces the warning texts.
   to *demote* the whole-model check to debug assertions and keep per-op typed preconditions;
   this design does the opposite (the whole-model check becomes the sole enforcement, the
   preconditions retire). The extended scope note ("reroute the triplicated checks through the
-  item-2 registry") and the **§6 hand-off notes of `table_registry_plan.md`** (transcribing
+  item-2 registry") and the **§6 hand-off notes of the retired table-registry plan** (transcribing
   per-op check orders, site→typed-error mappings for delete-blocking) are superseded with it —
   there is nothing left to reroute; two of the three families are deleted.
 - **`state_consolidation_plan.md` §6 item 5 — dissolved** by step 1d + the cascade: with a
@@ -353,9 +357,9 @@ an op-list rendering layer replaces the warning texts.
   interacts.** The resolution map wants elementary ops that can express "remove/clear this one
   reference" conveniently; step-1 reshapes re-cut the slot/week/colloscope op surfaces anyway.
   Granularity uniformization can ride along per step or stay a later pass.
-- **`table_registry_plan.md` phase C artifacts** — `Join` kept; `References`/`for_each_ref`
+- **Table-registry-plan phase C artifacts** — `Join` kept; `References`/`for_each_ref`
   recast as the step-2 sweep engine; `RefSite`/`references_to_*` likely retired (§7, pending a
-  gtk4 claim); `Lookup`/`resolve`/`all_ids` unaffected. Phases D/E proceed independently.
+  gtk4 claim); `Lookup`/`resolve`/`all_ids` unaffected. Phases D/E completed July 16 2026.
 - **`ops/` — step 7 is the promised remaster.** Until then, decision 6 of the registry plan
   (touch `ops/` minimally) stands. Supporting evidence for computed-over-hand-written
   consequences: a suspected dormant drift bug in `general_planning.rs`
@@ -400,3 +404,99 @@ Open (settled in the relevant step's session plan, not here):
 - the `WeekDesc` container shape and the re-cut week op surface — step 1b;
 - the `Ord` used for the canonical cascade pick (derive order on the invariant enum is the
   natural candidate) — step 6.
+
+---
+
+## Appendix A — inventories inherited from the retired table-registry plan
+
+Copied (July 16 2026) from §3.2/§3.3 of the retired `docs/table_registry_plan.md` (item 2's
+detailed plan, delivered in full; the whole document is pinned at
+`git show 77695338:docs/table_registry_plan.md`). Step 2 uses A.1 as the existence-sweep
+target set; step 3 uses A.1 + A.2 as the completeness-audit checklist. File/line references
+are against the tree at commit `de8ed888` (July 13 2026) and have rotted since — the file +
+function names are the stable part. The "block"/"twin" error columns describe the *old*
+architecture this design replaces; they document exactly what the new checker must cover.
+
+### A.1 The relationship inventory (28 ID-based relationships)
+
+Every relationship below is currently RESTRICT-blocked with a typed error. "Block" = the
+delete-blocking scan; "twin" = the whole-model consistency check. Dense-mirror keys block only
+when their payload is non-trivial.
+
+**→ Period** (blocks in `apply_period` Remove, `periods.rs:302-435`):
+
+| # | Referencing site | Cardinality | Block error | Twin |
+|---|---|---|---|---|
+| 1 | `Subject.excluded_periods` | `BTreeSet<PeriodId>` | `PeriodIsReferencedBySubject` (`periods.rs:338`) | `InvalidSubject` via `validate_subject_internal` (`colloscope_params.rs:231`) |
+| 2 | `Student.excluded_periods` | `BTreeSet<PeriodId>` | `PeriodIsReferencedByStudent` (`:347`) | `InvalidStudent` (`:343`) |
+| 3 | `PairingRule.excluded_periods` | `BTreeSet<PeriodId>` | `PeriodIsReferencedByPairingRule` (`:356`) | `InvalidPairingRule` (`:737`) |
+| 4 | `SlotPairingRule.excluded_periods` | `BTreeSet<PeriodId>` | `PeriodIsReferencedBySlotPairingRule` (`:364`) | `InvalidSlotPairingRule` (`:804`) |
+| 5 | `assignments.map` key `(period, _)` (dense) | composite key | `PeriodStillHasNonTrivialAssignments` | `InvalidPeriodIdInAssignements` |
+| 6 | `subjects_associations` key `(period, _)` (sparse) | composite key | `PeriodStillHasNonTrivialGroupListAssociation` | `WrongPeriodCountInSubjectAssociationsForGroupLists` (now fires on an invalid period in a row) |
+| 7 | `colloscope.period_map` key (dense) | map key | `NotEmptyPeriodInColloscope` (`:312`) | `ColloscopeError::WrongPeriodCountInColloscopeData`/`InvalidPeriodId` (`colloscopes.rs:85`) |
+| 8 | `WeekPattern.weeks` length coupling | `Vec<bool>` length | `NonTrivialWeekPattern` (`:327`) | `InvalidWeekPattern` (`:895`) |
+
+**→ Subject** (blocks in `apply_subject` Remove/Update, `subjects.rs:412-638`):
+
+| # | Referencing site | Cardinality | Block error | Twin |
+|---|---|---|---|---|
+| 9 | `Teacher.subjects` | `BTreeSet<SubjectId>` | `SubjectStillHasAssociatedTeachers` (`subjects.rs:448`) | `InvalidTeacher` (`:305`) |
+| 10 | `slots.ordering` key (dense) — slots themselves carry `Slot.subject_id` as a regular `#[fk]` | dense-mirror key | `SubjectStillHasAssociatedSlots` | `WrongSubjectCountInSlots` |
+| 11 | `Incompatibility.subject_id` | single | `SubjectStillHasAssociatedIncompats` (`:457`) | `InvalidIncompat` (`:522`) |
+| 12 | `subjects_associations[p]` inner key | map key | `SubjectStillHasAssociatedGroupList` (`:430`) | `InvalidSubjectIdInSubjectAssociations` (`:653`) |
+| 13 | `balancing.subjects` key | map key | `SubjectStillHasBalancingOptions` (`:418`) | `InvalidSubjectIdInBalancing` (`:707`) |
+| 14 | `PairingRule.{antecedent,consequent}.subject_id` | 2 × single | `SubjectIsReferencedByPairingRule` (`:422`) | `InvalidPairingRule` (`:731`) |
+| 15 | `assignments…subject_map` key (dense) | map key | `SubjectStillHasNonTrivialAssignments` (`:466`) | `InvalidSubjectIdInAssignments` (`:399`) |
+| 16 | colloscope slots of the subject | indirect | **Update-only** `SubjectStillHasNonEmptySlotInColloscope` (`:619`) | `ColloscopeError` slot validation (`colloscopes.rs:273`) |
+
+**→ Teacher / → WeekPattern / → Slot**:
+
+| # | Referencing site | Cardinality | Block error | Twin |
+|---|---|---|---|---|
+| 17 | `Slot.teacher_id` | single | `TeacherStillHasAssociatedSlots(TeacherId, SlotId)` (`teachers.rs:96`); **Update-only** `TeacherStillHasAssociatedSlotsInSubject` (`:123`) | `InvalidSlot` via `validate_slot_internal` (`colloscope_params.rs:431`) |
+| 18 | `Slot.week_pattern` | `Option` | `WeekPatternStillHasAssociatedSlots` (`week_patterns.rs:167`) | `InvalidSlot` (`:440`) |
+| 19 | `Incompatibility.week_pattern_id` | `Option` | `WeekPatternStillHasAssociatedIncompat` (`:179`) | `InvalidIncompat` (`:525`) |
+| 20 | `SlotPairingRule.{antecedent,consequent}.slot_id` | 2 × single | `SlotIsReferencedBySlotPairingRule` (`slots.rs:312`) | `InvalidSlotPairingRule` (`:792`) |
+| 21 | `colloscope…slot_map` key (dense) | map key | `NotEmptySlotInColloscope` (`slots.rs:302`) | `ColloscopeError::WrongSlotCountInPeriodInColloscopeData`/`InvalidSlotId` (`colloscopes.rs:267`) |
+
+**→ Student** (blocks in `apply_student` Remove/Update, `students.rs:101-188`):
+
+| # | Referencing site | Cardinality | Block error | Twin |
+|---|---|---|---|---|
+| 22 | `assignments…subject_map` value sets | `BTreeSet<StudentId>` | `StudentStillHasNonTrivialAssignments` (`students.rs:133`) | `InvalidStudentIdInAssignments`/`AssignedStudentNotPresentForPeriod` (`:406`) |
+| 23 | `GroupListFilling::Prefilled{groups[].students}` | set, in enum variant | `StudentIsStillReferencedByPrefilledGroupList` (`:125`) | `InvalidGroupList` (`:596`) |
+| 24 | `GroupListFilling::Automatic{excluded_students}` | set, in enum variant | `StudentIsStillExcludedByGroupList` (`:116`) | `InvalidGroupList` (`:603`) |
+| 25 | `settings.students` key | map key | `StudentStillHasSettings` (`:150`) | `InvalidStudentIdInSettings` (`:680`) |
+| 26 | `colloscope.group_lists[gl].groups_for_students` key | map key | `StudentIsReferencedInColloscopeGroupList` (`:107`) | `ColloscopeError::InvalidStudentId` (`colloscopes.rs:575`) |
+
+**→ GroupList**:
+
+| # | Referencing site | Cardinality | Block error | Twin |
+|---|---|---|---|---|
+| 27 | `subjects_associations[p][s]` value | single | `RemainingAssociatedSubjects` (`group_lists.rs:397`) | `InvalidGroupListIdInSubjectAssociations` (`:648`) |
+| 28 | `colloscope.group_lists` key (dense, non-prefilled only) | map key | `NotEmptyGroupListInColloscope` (`group_lists.rs:385`) | `ColloscopeError::InvalidGroupListId`/`PrefilledGroupListInColloscope`/`MissingNonPrefilledGroupList` (`colloscopes.rs:97`) |
+
+Nothing references `IncompatId`, `PairingRuleId`, or `SlotPairingRuleId`.
+
+### A.2 Index-based and structural checks (outside the reference registry)
+
+These are *value/shape* checks, not ID-existence checks; they were hand-coded under the old
+architecture and each must find its home (tier or encapsulation) under this design:
+
+- **Group-number bounds** (indices, not ids): `ColloscopeInterrogation.assigned_groups` and
+  `groups_for_students` values vs the associated group list's `group_names.len()`
+  (`ColloscopeError::InvalidGroupNumInInterrogation` / `InvalidGroupNumForStudentInGroupList`,
+  `check_interrogations_group_bound` in `group_lists.rs:287`).
+- **Structural counts** of the dense mirrors: `WrongSubjectCountInAssignments`,
+  `WrongSubjectCountInSlots`, `WrongPeriodCountInSubjectAssociationsForGroupLists`, the
+  colloscope shape/count/week-structure checks, `BadWeekPatternLength`. (The step-1 reshapes
+  eliminate most of these.)
+- **Pair-level predicates**: `SameSubjectInBothParts`, `SameSlotInBothParts`,
+  `SlotsNotInSameSubject`.
+- **Side-constraints attached to references** (the retired SQL schema encoded these by
+  pointing FKs at `subject_interrogation_params` instead of `subjects`): "referenced subject
+  must have interrogations" (`TeacherError::SubjectHasNoInterrogation`,
+  `BalancingForSubjectWithoutInterrogations`, …), "teacher must teach the slot's subject"
+  (`TeacherDoesNotTeachInSubject`), "subject must run on the period"
+  (`SubjectAssociationForSubjectNotRunningOnPeriod`). These are the tier-3 convergence
+  residue of §6.

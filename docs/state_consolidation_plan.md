@@ -50,7 +50,8 @@ reads via pyclass mirrors of `InnerData` types), `constraints-colloscopes`
    failures surface as a misleading `ProbablyIllformedEntry` because the custom
    `EntryContent::deserialize` swallows the underlying serde error. Only `#[serde(default)]`
    on late-added fields provides any compatibility.
-2. **Invariant double duty**: each per-entity predicate exists twice
+2. **Invariant double duty** *(being addressed — see `docs/invariant_cascade_design.md`)*:
+   each per-entity predicate exists twice
    (`validate_*_internal` for typed per-op errors, `check_*_data_consistency` discarding
    detail into the ~26-variant `InvariantError`); every referential relationship is
    hand-coded twice (remove path + consistency pass); duplicate-ID scanning exists in three
@@ -60,7 +61,8 @@ reads via pyclass mirrors of `InnerData` types), `constraints-colloscopes`
 3. **apply/build_rev duplication** *(resolved — Phase 2 item 1)*: was two parallel 15-way method
    families (~1,900 loc) that had to agree, with the inverse builders almost entirely untested.
    `apply` now computes and returns the inverse itself; `build_rev_with_current_state` is gone.
-4. **Write fan-out from the params↔colloscope mirror**: e.g. adding a slot must insert an
+4. **Write fan-out from the params↔colloscope mirror** *(dissolves at step 1d of
+   `docs/invariant_cascade_design.md`)*: e.g. adding a slot must insert an
    empty `ColloscopeSlot` into every colloscope period; period ops span ~330 lines. Every
    structural op mutates two parallel representations by hand.
 5. **Inconsistent op granularity**: whole-struct `Update`s (Settings, Balancing, entities)
@@ -300,15 +302,19 @@ before implementation.** Ordered by leverage:
    canary on the undo/redo replay path checks the recomputed inverse against the stored one.
    The one guard that lived only in `build_rev` (`Colloscope::UpdateGroupList`'s
    colloscope-entry-existence check) was transplanted into the fused method.
-2. **`Table<Id, T>` + declare-once relationship registry** — **detailed plan agreed
-   (July 2026): see `docs/table_registry_plan.md`**, which supersedes this sketch; its phase A
-   (generic containers + derives + join machinery) completed July 13 2026, phase B (container
-   adoption) is next. Headline
-   decisions: proc-macro + generic `Table`/`OrderedTable`/registry runtime live in `state/`
-   (+ new `collomatique-state-derive` crate) for reuse (rooms side-project); consumers migrate
-   in four steps (Deref-compat containers → SQL-like read API → per-crate migration → remove
-   Deref); check-rerouting through the registry is handed off to item 3; `ops/` gets mechanical
-   read fixes only (slated for its own remaster). Original sketch kept below for context.
+2. **`Table<Id, T>` + declare-once relationship registry** — **DONE (July 16 2026)**. All
+   five phases of the detailed plan delivered (the plan doc is retired; pinned at
+   `git show 77695338:docs/table_registry_plan.md`, its inventories inlined as Appendix A of
+   `docs/invariant_cascade_design.md`): generic `Table`/`OrderedTable` in `state/` + the
+   `EntityId`/`References`/`Join` derives (new `collomatique-state-derive` crate, reusable by
+   the rooms side-project); the `RefSite` walker + `references_to_*` reverse lookups; the
+   SQL-like read API (`Lookup`, `lookup`/`resolve`, `all_ids`, `Joined*` views); all consumers
+   migrated off the `Deref` compat layer, then the layer deleted — the internal table
+   representation is now free to change. The ★ D+E milestone (500-seed property reference +
+   the three contract scripts) ran clean. Check-rerouting through the registry was handed off
+   to item 3 and is now superseded with it by the invariant-cascade design (see item 3);
+   `ops/` got mechanical read fixes only (slated for its own remaster, cascade step 7).
+   Original sketch kept below for context.
    "FK" = foreign key, the SQL term for a declared reference ("slots hold a `TeacherId`").
    Today every such relationship is hand-coded at least twice (delete-blocking scan in the
    `Remove` path + matching consistency pass). The proposal: one generic table type replacing
@@ -323,22 +329,34 @@ before implementation.** Ordered by leverage:
    SQL schema's `REFERENCES ... ON DELETE RESTRICT` brought in-memory.
    *Lighter fallback* if this feels over-engineered when detailed: keep hand-written checks
    but merge the two per-entity predicate families so each rule exists exactly once.
-3. **Invariant consolidation**: keep per-op precondition checks (typed errors); demote the
+3. **Invariant consolidation** — **SUPERSEDED, direction reversed** (July 15 2026) by
+   `docs/invariant_cascade_design.md`, now the live roadmap: `check_invariants` becomes the
+   *sole* enforcement — each elementary op is apply → check → rollback-on-failure, returning
+   precise coordinate-bearing errors — and the per-op typed preconditions retire (the exact
+   opposite of the demotion sketched below). The extended-scope note ("reroute the triplicated
+   checks through the item-2 registry") and the registry plan's §6 hand-off notes are
+   superseded with it: two of the three check families are deleted, not rerouted.
+   *Original sketch (historical):* keep per-op precondition checks (typed errors); demote the
    whole-model `check_invariants()` after every op to `debug_assertions` and the phase-0
    property tests; full checks remain only at trust boundaries (file load, `GlobalUpdate`).
    Collapse `InvariantError`'s duplicated variants onto the per-entity error enums.
-   *Extended scope (decided July 2026 with item 2's plan)*: this item also reroutes the
-   triplicated referential checks (candidate validation / delete-blocking / consistency)
-   through the item-2 registry — see `docs/table_registry_plan.md` §6 for the hand-off notes.
 4. **Uniform op granularity**: every entity gets `Add / Remove / Update(whole entity)`
    (+ position ops where user-visible order exists, + association ops where relational).
    Collapse `ExportConfigOp`'s 11 per-field variants into one `Update`. Elementary ops only
    need to be *reversible and replayable*; user-facing granularity already lives in `ops/`
-   descriptions.
-5. **Params↔colloscope synchronization**: keep the dual representation (different access
+   descriptions. *Note (July 2026)*: independent of, but interacting with, the
+   invariant-cascade design (its §9) — the resolution map wants elementary ops that can
+   express "remove/clear this one reference" conveniently, and the cascade's step-1 reshapes
+   re-cut the slot/week/colloscope op surfaces anyway; granularity uniformization can ride
+   along per step or stay a later pass.
+5. **Params↔colloscope synchronization** — **DISSOLVED** (July 15 2026) by the
+   invariant-cascade design (step 1d + the cascade): the colloscope goes sparse, so there is
+   no fan-out left to centralize — cleanup becomes cascade resolution. The spec-2 format was
+   deliberately shaped for exactly this re-keying and does not move.
+   *Original sketch (historical):* keep the dual representation (different access
    patterns) but centralize the fan-out (candidate: the registry owns "structural param ops
    propagate to colloscope"), and consider keying interrogations by week index instead of
-   positional `Vec<Option<_>>`. The spec-2 format is already shaped so this changes no files.
+   positional `Vec<Option<_>>`.
 6. **Split the `lib.rs` god-file** — **DONE** (commits `29974361` error enums, `7210ead5`
    `apply_*` methods, plus `NewId`→`ids.rs`). Done ahead of items 2-5 because it needs no
    `InnerData` change (those are blocked on the legacy-file migration): each per-entity
@@ -402,9 +420,13 @@ When in doubt, ask the user to run the real scripts/files rather than guessing.
 
 ## 9. Open points
 
-- Phase 2 item 2 (`Table` + relationship registry) — **validated and in progress**; the
-  detailed multi-session plan is `docs/table_registry_plan.md` (July 2026). Its §6 records the
-  design notes item 3 needs for rerouting the triplicated checks through the registry.
-  Phase A (generic containers, `EntityId`/`References`/`Join` derives, join machinery)
-  completed July 13 2026 (`c2973c76`, `cb409f44`, `66bcc1c9`); phase B (container adoption)
-  is next.
+- Phase 2 item 2 (`Table` + relationship registry) — **DONE (July 16 2026)**; see §6 item 2.
+  The detailed plan doc is retired (pinned at `git show 77695338:docs/table_registry_plan.md`);
+  the inventories it carried live on as Appendix A of `docs/invariant_cascade_design.md`.
+- The live roadmap for the remaining phase-2 work is **`docs/invariant_cascade_design.md`**
+  (agreed July 15 2026), a 7-step plan: reshape the dense copies (1a assignments sparse,
+  1b `WeekId`, 1c slots no-reshape, 1d colloscope sparse) → precise checker alongside the old
+  one → completeness audit → differential fuzz → switch elementary ops to
+  apply/check/restore → the cascade → the `ops/` remaster. It supersedes item 3 (direction
+  reversed) and dissolves item 5; item 4 can ride along its reshapes. Next concrete work: the
+  step-1 session plans, starting with 1a.
