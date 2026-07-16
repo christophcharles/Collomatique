@@ -74,13 +74,7 @@ impl crate::Data {
     ) -> std::result::Result<AnnotatedTeacherOp, TeacherError> {
         match teacher_op {
             AnnotatedTeacherOp::Add(new_id, teacher) => {
-                if self
-                    .inner_data
-                    .params
-                    .teachers
-                    .teacher_map
-                    .contains_key(new_id)
-                {
+                if self.inner_data.params.teachers.teacher_map.contains(new_id) {
                     return Err(TeacherError::TeacherIdAlreadyExists(*new_id));
                 }
                 self.inner_data.params.validate_teacher(teacher)?;
@@ -94,7 +88,7 @@ impl crate::Data {
                 Ok(AnnotatedTeacherOp::Remove(*new_id))
             }
             AnnotatedTeacherOp::Remove(id) => {
-                if !self.inner_data.params.teachers.teacher_map.contains_key(id) {
+                if !self.inner_data.params.teachers.teacher_map.contains(id) {
                     return Err(TeacherError::InvalidTeacherId(*id));
                 }
 

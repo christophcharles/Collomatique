@@ -324,10 +324,23 @@ impl ColloscopeSlot {
         let Some(period_pos) = params.periods.find_period_position(period_id) else {
             panic!("Period ID should be valid");
         };
-        let period = &params.periods.ordered_period_list[period_pos].1;
+        let period = params
+            .periods
+            .ordered_period_list
+            .get_at(period_pos)
+            .expect("period_pos comes from find_period_position")
+            .1;
 
         let first_week: usize = (0..period_pos)
-            .map(|i| params.periods.ordered_period_list[i].1.len())
+            .map(|i| {
+                params
+                    .periods
+                    .ordered_period_list
+                    .get_at(i)
+                    .expect("i < period_pos")
+                    .1
+                    .len()
+            })
             .sum();
 
         let (subject_id, slot) = params
@@ -372,10 +385,23 @@ impl ColloscopeSlot {
         let Some(period_pos) = params.periods.find_period_position(period_id) else {
             return Err(ColloscopeError::InvalidPeriodId(period_id));
         };
-        let period = &params.periods.ordered_period_list[period_pos].1;
+        let period = params
+            .periods
+            .ordered_period_list
+            .get_at(period_pos)
+            .expect("period_pos comes from find_period_position")
+            .1;
 
         let first_week_num: usize = (0..period_pos)
-            .map(|i| params.periods.ordered_period_list[i].1.len())
+            .map(|i| {
+                params
+                    .periods
+                    .ordered_period_list
+                    .get_at(i)
+                    .expect("i < period_pos")
+                    .1
+                    .len()
+            })
             .sum();
 
         let Some(orig_slot) = params.slots.find_slot(slot_id) else {
@@ -561,7 +587,7 @@ impl ColloscopeGroupList {
                 ));
             }
 
-            if !students.student_map.contains_key(student_id) {
+            if !students.student_map.contains(student_id) {
                 return Err(ColloscopeError::InvalidStudentId(*student_id));
             }
 

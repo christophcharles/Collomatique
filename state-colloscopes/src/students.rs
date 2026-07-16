@@ -84,13 +84,7 @@ impl crate::Data {
     ) -> std::result::Result<AnnotatedStudentOp, StudentError> {
         match student_op {
             AnnotatedStudentOp::Add(new_id, student) => {
-                if self
-                    .inner_data
-                    .params
-                    .students
-                    .student_map
-                    .contains_key(new_id)
-                {
+                if self.inner_data.params.students.student_map.contains(new_id) {
                     return Err(StudentError::StudentIdAlreadyExists(*new_id));
                 }
                 self.inner_data.params.validate_student(student)?;
@@ -148,7 +142,7 @@ impl crate::Data {
                     }
                 }
 
-                if self.inner_data.params.settings.students.contains_key(id) {
+                if self.inner_data.params.settings.students.contains(id) {
                     return Err(StudentError::StudentStillHasSettings(*id));
                 }
 

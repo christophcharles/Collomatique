@@ -99,7 +99,7 @@ impl crate::Data {
                     .params
                     .pairings
                     .pairing_rule_map
-                    .contains_key(new_id)
+                    .contains(new_id)
                 {
                     return Err(PairingError::PairingRuleIdAlreadyExists(*new_id));
                 }

@@ -102,9 +102,7 @@ impl Periods {
 
     /// Finds a period by id
     pub fn find_period(&self, id: PeriodId) -> Option<&Vec<WeekDesc>> {
-        let pos = self.find_period_position(id)?;
-
-        Some(&self.ordered_period_list[pos].1)
+        self.ordered_period_list.get(&id)
     }
 
     /// Finds the first week number and the length of a period
@@ -306,7 +304,13 @@ impl crate::Data {
                     return Err(PeriodError::NotEmptyPeriodInColloscope(*period_id));
                 }
 
-                let week_count = self.inner_data.params.periods.ordered_period_list[position]
+                let week_count = self
+                    .inner_data
+                    .params
+                    .periods
+                    .ordered_period_list
+                    .get_at(position)
+                    .expect("position comes from find_period_position")
                     .1
                     .len();
 
@@ -387,8 +391,15 @@ impl crate::Data {
                     ));
                 }
 
-                let previous_id = (position > 0)
-                    .then(|| self.inner_data.params.periods.ordered_period_list[position - 1].0);
+                let previous_id = (position > 0).then(|| {
+                    self.inner_data
+                        .params
+                        .periods
+                        .ordered_period_list
+                        .get_at(position - 1)
+                        .expect("position > 0 checked")
+                        .0
+                });
 
                 let (_, old_desc) = self
                     .inner_data
@@ -451,7 +462,14 @@ impl crate::Data {
                     return Err(PeriodError::InvalidPeriodId(*period_id));
                 };
 
-                let period = &self.inner_data.params.periods.ordered_period_list[position].1;
+                let period = self
+                    .inner_data
+                    .params
+                    .periods
+                    .ordered_period_list
+                    .get_at(position)
+                    .expect("position comes from find_period_position_and_first_week")
+                    .1;
                 let old_length = period.len();
                 if desc.len() < old_length {
                     for (week_pattern_id, week_pattern) in

@@ -89,7 +89,7 @@ impl crate::Data {
                     .params
                     .slot_pairings
                     .slot_pairing_rule_map
-                    .contains_key(new_id)
+                    .contains(new_id)
                 {
                     return Err(SlotPairingError::SlotPairingRuleIdAlreadyExists(*new_id));
                 }

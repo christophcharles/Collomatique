@@ -81,7 +81,7 @@ impl crate::Data {
                     .params
                     .incompats
                     .incompat_map
-                    .contains_key(new_id)
+                    .contains(new_id)
                 {
                     return Err(IncompatError::IncompatIdAlreadyExists(*new_id));
                 }

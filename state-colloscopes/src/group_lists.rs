@@ -364,7 +364,7 @@ impl crate::Data {
                     .params
                     .group_lists
                     .group_list_map
-                    .contains_key(new_id)
+                    .contains(new_id)
                 {
                     return Err(GroupListError::GroupListIdAlreadyExists(*new_id));
                 };

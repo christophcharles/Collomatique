@@ -137,7 +137,7 @@ impl crate::Data {
                     .params
                     .week_patterns
                     .week_pattern_map
-                    .contains_key(new_id)
+                    .contains(new_id)
                 {
                     return Err(WeekPatternError::WeekPatternIdAlreadyExists(*new_id));
                 }
@@ -158,7 +158,7 @@ impl crate::Data {
                     .params
                     .week_patterns
                     .week_pattern_map
-                    .contains_key(id)
+                    .contains(id)
                 {
                     return Err(WeekPatternError::InvalidWeekPatternId(*id));
                 }

@@ -86,7 +86,7 @@ impl Parameters {
     pub fn validate_student_id(&self, id: u64) -> Option<StudentId> {
         let student_id = unsafe { StudentId::new(id) };
 
-        if !self.students.student_map.contains_key(&student_id) {
+        if !self.students.student_map.contains(&student_id) {
             return None;
         }
 
@@ -107,7 +107,7 @@ impl Parameters {
     /// Promotes an u64 to a [TeacherId] if it is valid
     pub fn validate_teacher_id(&self, id: u64) -> Option<TeacherId> {
         let temp_teacher_id = unsafe { TeacherId::new(id) };
-        if self.teachers.teacher_map.contains_key(&temp_teacher_id) {
+        if self.teachers.teacher_map.contains(&temp_teacher_id) {
             return Some(temp_teacher_id);
         }
 
@@ -120,7 +120,7 @@ impl Parameters {
         if self
             .week_patterns
             .week_pattern_map
-            .contains_key(&temp_week_pattern_id)
+            .contains(&temp_week_pattern_id)
         {
             return Some(temp_week_pattern_id);
         }
@@ -141,7 +141,7 @@ impl Parameters {
     /// Promotes an u64 to a [IncompatId] if it is valid
     pub fn validate_incompat_id(&self, id: u64) -> Option<IncompatId> {
         let temp_incompat_id = unsafe { IncompatId::new(id) };
-        if self.incompats.incompat_map.contains_key(&temp_incompat_id) {
+        if self.incompats.incompat_map.contains(&temp_incompat_id) {
             return Some(temp_incompat_id);
         }
 
@@ -154,7 +154,7 @@ impl Parameters {
         if self
             .group_lists
             .group_list_map
-            .contains_key(&temp_group_list_id)
+            .contains(&temp_group_list_id)
         {
             return Some(temp_group_list_id);
         }
@@ -706,7 +706,7 @@ impl Parameters {
                 }
                 for group in groups {
                     for student_id in &group.students {
-                        if !students.student_map.contains_key(student_id) {
+                        if !students.student_map.contains(student_id) {
                             return Err(GroupListError::InvalidStudentId(*student_id));
                         }
                     }
@@ -714,7 +714,7 @@ impl Parameters {
             }
             group_lists::GroupListFilling::Automatic { excluded_students } => {
                 for student_id in excluded_students {
-                    if !students.student_map.contains_key(student_id) {
+                    if !students.student_map.contains(student_id) {
                         return Err(GroupListError::InvalidStudentId(*student_id));
                     }
                 }
@@ -795,7 +795,7 @@ impl Parameters {
         settings: &settings::Settings,
     ) -> Result<(), SettingsError> {
         for student_id in settings.students.keys() {
-            if !self.students.student_map.contains_key(&student_id) {
+            if !self.students.student_map.contains(&student_id) {
                 return Err(SettingsError::InvalidStudentId(student_id));
             }
         }
@@ -875,7 +875,7 @@ impl Parameters {
     /// Promotes an u64 to a [PairingRuleId] if it is valid
     pub fn validate_pairing_rule_id(&self, id: u64) -> Option<PairingRuleId> {
         let temp_id = unsafe { PairingRuleId::new(id) };
-        if self.pairings.pairing_rule_map.contains_key(&temp_id) {
+        if self.pairings.pairing_rule_map.contains(&temp_id) {
             return Some(temp_id);
         }
 
@@ -943,7 +943,7 @@ impl Parameters {
     /// Promotes an u64 to a [SlotPairingRuleId] if it is valid
     pub fn validate_slot_pairing_rule_id(&self, id: u64) -> Option<SlotPairingRuleId> {
         let id = unsafe { SlotPairingRuleId::new(id) };
-        if self.slot_pairings.slot_pairing_rule_map.contains_key(&id) {
+        if self.slot_pairings.slot_pairing_rule_map.contains(&id) {
             Some(id)
         } else {
             None

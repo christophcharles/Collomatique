@@ -248,9 +248,7 @@ impl Subjects {
 
     /// Finds a subject by id
     pub fn find_subject(&self, id: SubjectId) -> Option<&Subject> {
-        let pos = self.find_subject_position(id)?;
-
-        Some(&self.ordered_subject_list[pos].1)
+        self.ordered_subject_list.get(&id)
     }
 }
 
@@ -405,7 +403,7 @@ impl crate::Data {
                     return Err(SubjectError::InvalidSubjectId(*id));
                 };
 
-                if self.inner_data.params.balancing.subjects.contains_key(id) {
+                if self.inner_data.params.balancing.subjects.contains(id) {
                     return Err(SubjectError::SubjectStillHasBalancingOptions(*id));
                 }
 
@@ -455,7 +453,13 @@ impl crate::Data {
                     }
                 }
 
-                let params = &self.inner_data.params.subjects.ordered_subject_list[position].1;
+                let (_, params) = self
+                    .inner_data
+                    .params
+                    .subjects
+                    .ordered_subject_list
+                    .get_at(position)
+                    .expect("position comes from find_subject_position");
                 for (period_id, _period) in
                     self.inner_data.params.periods.ordered_period_list.iter()
                 {
@@ -477,8 +481,15 @@ impl crate::Data {
                     }
                 }
 
-                let previous_id = (position > 0)
-                    .then(|| self.inner_data.params.subjects.ordered_subject_list[position - 1].0);
+                let previous_id = (position > 0).then(|| {
+                    self.inner_data
+                        .params
+                        .subjects
+                        .ordered_subject_list
+                        .get_at(position - 1)
+                        .expect("position > 0 checked")
+                        .0
+                });
 
                 let (_, params) = self
                     .inner_data
@@ -510,14 +521,20 @@ impl crate::Data {
                     return Err(SubjectError::InvalidSubjectId(*id));
                 };
 
-                let old_params = self.inner_data.params.subjects.ordered_subject_list[position]
+                let old_params = self
+                    .inner_data
+                    .params
+                    .subjects
+                    .ordered_subject_list
+                    .get_at(position)
+                    .expect("position comes from find_subject_position")
                     .1
                     .clone();
 
                 if old_params.parameters.interrogation_parameters.is_some()
                     && new_params.parameters.interrogation_parameters.is_none()
                 {
-                    if self.inner_data.params.balancing.subjects.contains_key(id) {
+                    if self.inner_data.params.balancing.subjects.contains(id) {
                         return Err(SubjectError::SubjectStillHasBalancingOptions(*id));
                     }
 
