@@ -630,20 +630,30 @@ a plain std-lib collection receiver — colloscope-side `BTreeMap`s (`colloscope
 `groups_for_students`), a `serde` block object, an xlsx local map, or a std slice `.to_vec()`.
 Zero positional ordered indexing and zero `to_map()` remain outside `state/src/tables.rs`.
 
-### Phase E — remove the compat layer (consumer step (d))
+### Phase E — remove the compat layer (consumer step (d)) — **DONE 2026-07-16 (`4543bb46`)**
 
-E1 was folded into phase D commit 1, so phase E is now a single deletion commit: delete the
-two `Deref` impls (`Table → BTreeMap`, `OrderedTable → [(I,T)]`) plus `to_map()`/`to_vec()`
-from `state/src/tables.rs` and fix any residual compile fallout (expected: none — the census
-above proves completeness; the compile itself is the final proof). From here the internal
-representation is free to change (e.g. `OrderedTable` to map + order list) without touching
-consumers. Final milestone: 500-seed property run + contract scripts.
+Single deletion commit: removed the two `Deref` impls (`Table → BTreeMap`,
+`OrderedTable → [(I,T)]`), the `to_map()`/`to_vec()` copy helpers, and their two unit tests
+from `state/src/tables.rs`, plus the doc sentences that justified the inherent
+`keys`/`iter`/`IntoIterator` methods by reference to the now-gone Deref shadowing.
+
+The workspace build (with tests) surfaced five residual Deref users the phase-D census had
+missed — Table indexing `group_list_map[&id]` in the property-ops generator (5 sites) and one
+`ordered_subject_list.first()` in the gtk4 pairings editor — migrated to
+`get(&id).expect(...)` / `get_at(0)` in the same commit. Deref removal is compile-only
+(inherent methods already shadowed every overlapping name), so the clean build is proof no
+runtime behavior changed, and the census hole is now closed.
+
+From here the internal representation is free to change (e.g. `OrderedTable` to a map + order
+list) without touching consumers.
 
 Phases B and C are independent enough that C1 can start before B is fully done if a session
 prefers; D depends on C3; E depends on all of D.
 
-★ **Phase-D milestone, run by the user**: 500-seed slow property reference + the three
-contract scripts (`extra-scripts/import.py`, `scripts/import_pronote_web_2026_05_06.py`,
+★ **Phase-D+E milestone, run by the user**: one run covers both phases (Deref deletion is a
+compile-only effect, so it cannot change runtime behavior the phase-D milestone already
+exercises): 500-seed slow property reference + the three contract scripts
+(`extra-scripts/import.py`, `scripts/import_pronote_web_2026_05_06.py`,
 `scripts/examples/custom_export_xlsx.py`).
 
 ---
