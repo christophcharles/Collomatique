@@ -13,3 +13,5 @@ ordered-float.workspace = true
 
 [dev-dependencies]
 collomatique-storage = { path = "../storage" }
+collomatique-state = { path = "../state" }
+collomatique-testgen-colloscopes = { path = "../testgen-colloscopes" }

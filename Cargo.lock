@@ -335,8 +335,10 @@ version = "0.1.0"
 dependencies = [
  "collomatique-ilp",
  "collomatique-ilp-modeler",
+ "collomatique-state",
  "collomatique-state-colloscopes",
  "collomatique-storage",
+ "collomatique-testgen-colloscopes",
  "collomatique-time",
  "ordered-float",
 ]
