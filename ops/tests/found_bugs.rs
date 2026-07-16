@@ -1,0 +1,186 @@
+//! Regression tests for bugs found in the `collomatique-ops` crate.
+//!
+//! Each test pins one bug deterministically. Following the test-first
+//! workflow, every test is committed *before* the corresponding fix and
+//! was verified to fail against the unfixed code.
+
+use collomatique_ops::{
+    GeneralPlanningUpdateOp, GeneralPlanningUpdateWarning, OpCategory, UpdateOp, UpdateWarning,
+};
+use collomatique_state::{AppState, traits::Manager};
+use collomatique_state_colloscopes::{
+    ColloscopeOp, Data, GroupListOp, NewId, Op, PeriodOp, SlotOp, Subject,
+    SubjectInterrogationParameters, SubjectOp, SubjectParameters, SubjectPeriodicity, TeacherOp,
+    colloscopes::ColloscopeInterrogation, group_lists::GroupListParameters, periods::WeekDesc,
+    slots::Slot, teachers::Teacher,
+};
+use std::collections::BTreeSet;
+use std::num::NonZeroU32;
+
+type Desc = (OpCategory, String);
+
+fn desc(text: &str) -> Desc {
+    (OpCategory::None, text.to_string())
+}
+
+/// Shrinking a period must auto-clean the colloscope interrogations that
+/// fall on the weeks being removed. The composite
+/// `GeneralPlanningUpdateOp::UpdatePeriodWeekCount` op relies on
+/// `get_next_cleaning_op` to empty those cells *before* the underlying
+/// `PeriodOp::Update` shortens the period. Before the fix, the
+/// colloscope-scan loop iterated over `old_week_count..week_count`, an
+/// always-empty range when shrinking (`week_count < old_week_count`), so
+/// the cleaning op never fired: the shrink then hit
+/// `NotCompatibleSlotInColloscope` and panicked
+/// (`Unexpected error for UpdatePeriodWeekCount!`).
+#[test]
+fn shrinking_a_period_cleans_colloscope_on_removed_weeks() {
+    let mut app_state = AppState::<_, Desc>::new(Data::new());
+
+    // A three-week period; we will later shrink it down to two weeks and
+    // put a non-empty interrogation on the third (doomed) week.
+    let Ok(Some(NewId::PeriodId(period_id))) = app_state.apply(
+        Op::Period(PeriodOp::AddFront(vec![
+            WeekDesc::new(true),
+            WeekDesc::new(true),
+            WeekDesc::new(true),
+        ])),
+        desc("Add period"),
+    ) else {
+        panic!("Unexpected result after adding the period");
+    };
+
+    let Ok(Some(NewId::SubjectId(subject_id))) = app_state.apply(
+        Op::Subject(SubjectOp::AddAfter(
+            None,
+            Subject {
+                parameters: SubjectParameters {
+                    name: "Math".into(),
+                    interrogation_parameters: Some(SubjectInterrogationParameters {
+                        students_per_group: NonZeroU32::new(2).unwrap()
+                            ..=NonZeroU32::new(3).unwrap(),
+                        groups_per_interrogation: NonZeroU32::new(1).unwrap()
+                            ..=NonZeroU32::new(1).unwrap(),
+                        duration: collomatique_time::NonZeroMinutes::new(60).unwrap(),
+                        take_duration_into_account: true,
+                        periodicity: SubjectPeriodicity::ExactlyPeriodic {
+                            periodicity_in_weeks: NonZeroU32::new(2).unwrap(),
+                        },
+                    }),
+                },
+                excluded_periods: BTreeSet::new(),
+            },
+        )),
+        desc("Add subject"),
+    ) else {
+        panic!("Unexpected result after adding the subject");
+    };
+
+    let Ok(Some(NewId::TeacherId(teacher_id))) = app_state.apply(
+        Op::Teacher(TeacherOp::Add(Teacher {
+            desc: Default::default(),
+            subjects: BTreeSet::from([subject_id]),
+        })),
+        desc("Add teacher"),
+    ) else {
+        panic!("Unexpected result after adding the teacher");
+    };
+
+    let Ok(Some(NewId::SlotId(slot_id))) = app_state.apply(
+        Op::Slot(SlotOp::AddAfter(
+            None,
+            Slot {
+                subject_id,
+                teacher_id,
+                start_time: collomatique_time::SlotStart {
+                    weekday: collomatique_time::Weekday(chrono::Weekday::Mon),
+                    start_time: collomatique_time::WholeMinuteTime::new(
+                        chrono::NaiveTime::from_hms_opt(8, 0, 0).unwrap(),
+                    )
+                    .unwrap(),
+                },
+                extra_info: String::new(),
+                week_pattern: None,
+                cost: 0,
+            },
+        )),
+        desc("Add slot"),
+    ) else {
+        panic!("Unexpected result after adding the slot");
+    };
+
+    // A group list associated with the subject so that group number 0 is
+    // a valid assignment in an interrogation.
+    let Ok(Some(NewId::GroupListId(group_list_id))) = app_state.apply(
+        Op::GroupList(GroupListOp::Add(GroupListParameters::default())),
+        desc("Add group list"),
+    ) else {
+        panic!("Unexpected result after adding the group list");
+    };
+    let Ok(None) = app_state.apply(
+        Op::GroupList(GroupListOp::AssignToSubject(
+            period_id,
+            subject_id,
+            Some(group_list_id),
+        )),
+        desc("Assign group list to subject"),
+    ) else {
+        panic!("Unexpected result after assigning the group list");
+    };
+
+    // A non-empty interrogation on the last (third) week — the one that
+    // shrinking to two weeks will remove.
+    let Ok(None) = app_state.apply(
+        Op::Colloscope(ColloscopeOp::UpdateInterrogation(
+            period_id,
+            slot_id,
+            2,
+            ColloscopeInterrogation {
+                assigned_groups: BTreeSet::from([0]),
+            },
+        )),
+        desc("Put an interrogation on the last week"),
+    ) else {
+        panic!("Unexpected result after placing the interrogation");
+    };
+
+    // Shrink the period from three weeks to two. The interrogation on the
+    // removed week must be auto-cleaned, not turned into a hard failure.
+    let outcome =
+        UpdateOp::GeneralPlanning(GeneralPlanningUpdateOp::UpdatePeriodWeekCount(period_id, 2))
+            .dry_apply(&app_state)
+            .expect(
+                "shrinking a period past a non-empty interrogation must auto-clean it, not fail",
+            );
+
+    // The cleaning cascade fired and reported the colloscope loss.
+    assert!(
+        outcome
+            .rec_apply_result
+            .warnings
+            .iter()
+            .any(|(warning, _)| matches!(
+                warning,
+                UpdateWarning::GeneralPlanning(
+                    GeneralPlanningUpdateWarning::LoosePeriodDataInColloscope(p)
+                ) if *p == period_id
+            )),
+        "shrinking a period must emit a colloscope-loss cleaning warning \
+         for the removed week; got {:?}",
+        outcome.rec_apply_result.warnings,
+    );
+
+    // The shrink actually went through: the single period is now two weeks
+    // long (its only surviving weeks).
+    assert_eq!(
+        outcome
+            .new_state
+            .get_data()
+            .get_inner_data()
+            .params
+            .periods
+            .count_weeks(),
+        2,
+        "the period should have been shrunk to two weeks",
+    );
+}
