@@ -76,16 +76,14 @@ impl<I: Key, T> Table<I, T> {
 
     /// Iterates over the IDs in the table, in ID order
     ///
-    /// Defined inherently so it shadows the `Deref` [`BTreeMap::keys`], yielding
-    /// owned IDs (all IDs are `Copy`) rather than references.
+    /// Yields owned IDs (all IDs are `Copy`) rather than references.
     pub fn keys(&self) -> impl Iterator<Item = I> + '_ {
         self.inner.keys().copied()
     }
 
     /// Iterates over the `(id, value)` entries in the table, in ID order
     ///
-    /// Defined inherently so it shadows the `Deref` [`BTreeMap::iter`], yielding
-    /// an owned ID with each value rather than a reference pair.
+    /// Yields an owned ID with each value rather than a reference pair.
     pub fn iter(&self) -> impl Iterator<Item = (I, &T)> {
         self.inner.iter().map(|(&id, value)| (id, value))
     }
@@ -138,18 +136,6 @@ impl<I: Key, T> Table<I, T> {
     }
 }
 
-impl<I: Key, T: Clone> Table<I, T> {
-    /// Copies the table into a plain `BTreeMap`
-    ///
-    /// Compatibility-window helper for consumers that store their own
-    /// `BTreeMap` copy of table data. Same lifecycle as the [`Deref`](std::ops::Deref)
-    /// impl: scheduled for removal once consumers move to join patterns —
-    /// do not use in new code.
-    pub fn to_map(&self) -> BTreeMap<I, T> {
-        self.inner.clone()
-    }
-}
-
 impl<I: Key, T> From<BTreeMap<I, T>> for Table<I, T> {
     fn from(inner: BTreeMap<I, T>) -> Self {
         Table { inner }
@@ -167,24 +153,13 @@ impl<I: Key, T> FromIterator<(I, T)> for Table<I, T> {
 /// Consuming iterator over the `(id, value)` entries, in ID order.
 ///
 /// This is the dual of [`FromIterator`]: it drains the table without exposing
-/// the backend representation, so it is part of the stable API (unlike the
-/// `Deref` and `&Table` iteration compatibility shims).
+/// the backend representation.
 impl<I: Key, T> IntoIterator for Table<I, T> {
     type Item = (I, T);
     type IntoIter = std::collections::btree_map::IntoIter<I, T>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.inner.into_iter()
-    }
-}
-
-/// Compatibility window only: lets existing call sites keep using the map API
-/// during the migration. Scheduled for removal — do not use in new code.
-impl<I: Key, T> std::ops::Deref for Table<I, T> {
-    type Target = BTreeMap<I, T>;
-
-    fn deref(&self) -> &BTreeMap<I, T> {
-        &self.inner
     }
 }
 
@@ -250,16 +225,14 @@ impl<I: OrderedKey, T> OrderedTable<I, T> {
 
     /// Iterates over the IDs in the table, in table order
     ///
-    /// Defined inherently so it shadows the `Deref` slice API, yielding owned
-    /// IDs (all IDs are `Copy`).
+    /// Yields owned IDs (all IDs are `Copy`).
     pub fn keys(&self) -> impl Iterator<Item = I> + '_ {
         self.inner.iter().map(|(id, _)| *id)
     }
 
     /// Iterates over the `(id, value)` entries in the table, in table order
     ///
-    /// Defined inherently so it shadows the `Deref` slice [`slice::iter`],
-    /// yielding an owned ID with each value rather than a reference to the
+    /// Yields an owned ID with each value rather than a reference to the
     /// backing `(id, value)` pair.
     pub fn iter(&self) -> impl Iterator<Item = (I, &T)> {
         self.inner.iter().map(|(id, value)| (*id, value))
@@ -341,36 +314,13 @@ impl<I: OrderedKey, T> OrderedTable<I, T> {
 ///
 /// This is the dual of the [`TryFrom<Vec<(I, T)>>`](OrderedTable::try_from)
 /// constructor: it drains the table without exposing the backend
-/// representation, so it is part of the stable API (unlike the `Deref` and
-/// `&OrderedTable` iteration compatibility shims).
+/// representation.
 impl<I: OrderedKey, T> IntoIterator for OrderedTable<I, T> {
     type Item = (I, T);
     type IntoIter = std::vec::IntoIter<(I, T)>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.inner.into_iter()
-    }
-}
-
-impl<I: OrderedKey, T: Clone> OrderedTable<I, T> {
-    /// Copies the table into a plain `Vec<(I, T)>`, in table order
-    ///
-    /// Compatibility-window helper for consumers that store their own
-    /// `Vec` copy of ordered table data. Same lifecycle as the
-    /// [`Deref`](std::ops::Deref) impl: scheduled for removal once consumers
-    /// move to join patterns — do not use in new code.
-    pub fn to_vec(&self) -> Vec<(I, T)> {
-        self.inner.clone()
-    }
-}
-
-/// Compatibility window only: lets existing call sites keep using the slice API
-/// during the migration. Scheduled for removal — do not use in new code.
-impl<I: OrderedKey, T> std::ops::Deref for OrderedTable<I, T> {
-    type Target = [(I, T)];
-
-    fn deref(&self) -> &[(I, T)] {
-        &self.inner
     }
 }
 
@@ -431,20 +381,6 @@ mod tests {
         assert_eq!(previous, Some("two".to_string()));
         assert_eq!(table.get(&ToyId(2)), Some(&"TWO".to_string()));
         assert_eq!(table.len(), 3);
-    }
-
-    #[test]
-    fn table_to_map_copies_backing_store() {
-        let (table, map) = table_fixture();
-
-        assert_eq!(table.to_map(), map);
-    }
-
-    #[test]
-    fn ordered_table_to_vec_copies_entries_in_order() {
-        let (table, entries) = ordered_fixture();
-
-        assert_eq!(table.to_vec(), entries);
     }
 
     #[test]

@@ -181,8 +181,8 @@ impl Component for Pairings {
                 let first_subject = self
                     .subjects
                     .ordered_subject_list
-                    .first()
-                    .map(|(id, _)| *id);
+                    .get_at(0)
+                    .map(|(id, _)| id);
                 let second_subject = self
                     .subjects
                     .ordered_subject_list

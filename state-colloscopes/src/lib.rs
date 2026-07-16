@@ -14,8 +14,10 @@ use std::collections::BTreeSet;
 /// Internal re-export of the generic table containers.
 ///
 /// Tables are an implementation detail of this crate: consumers read them
-/// through the `Deref` compatibility layer and copy plain `BTreeMap`/`Vec`
-/// when they need their own copy. Kept `pub(crate)` so the path does not leak.
+/// through the inherent read API (`get`/`contains`/`iter`/`keys`/`values`/
+/// `get_at`/…) and build their own copy with an explicit
+/// `.iter().map(…).collect()` into a plain `BTreeMap`/`Vec` when they need one.
+/// Kept `pub(crate)` so the path does not leak.
 pub(crate) use collomatique_state::{OrderedTable, Table};
 
 pub mod ids;

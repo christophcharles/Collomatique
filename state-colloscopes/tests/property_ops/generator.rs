@@ -644,7 +644,12 @@ fn gen_group_list(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invali
             0 if !pools.group_list_ids.is_empty() => {
                 // Prefilled groups whose count does not match group_names
                 let group_list_id = pick(rng, &pools.group_list_ids);
-                let group_names_len = inner.params.group_lists.group_list_map[&group_list_id]
+                let group_names_len = inner
+                    .params
+                    .group_lists
+                    .group_list_map
+                    .get(&group_list_id)
+                    .expect("group list id from pool")
                     .params
                     .group_names
                     .len();
@@ -695,7 +700,12 @@ fn gen_group_list(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invali
             let group_list_id = pick(rng, &pools.group_list_ids);
             // Keep the group count stable for prefilled lists so the
             // filling stays consistent with the new parameters
-            let current = &inner.params.group_lists.group_list_map[&group_list_id];
+            let current = inner
+                .params
+                .group_lists
+                .group_list_map
+                .get(&group_list_id)
+                .expect("group list id from pool");
             let group_count = match &current.filling {
                 GroupListFilling::Prefilled { groups } => groups.len(),
                 GroupListFilling::Automatic { .. } => rng.random_range(2..=5),
@@ -707,7 +717,12 @@ fn gen_group_list(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invali
         }
         2 => {
             let group_list_id = pick(rng, &pools.group_list_ids);
-            let group_names_len = inner.params.group_lists.group_list_map[&group_list_id]
+            let group_names_len = inner
+                .params
+                .group_lists
+                .group_list_map
+                .get(&group_list_id)
+                .expect("group list id from pool")
                 .params
                 .group_names
                 .len();
@@ -901,7 +916,12 @@ fn gen_colloscope(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invali
 
     if use_group_list {
         let group_list_id = pick(rng, &pools.colloscope_group_list_ids);
-        let group_list = &inner.params.group_lists.group_list_map[&group_list_id];
+        let group_list = inner
+            .params
+            .group_lists
+            .group_list_map
+            .get(&group_list_id)
+            .expect("group list id from pool");
         let group_count = group_list.params.group_names.len() as u32;
         let allowed_students: Vec<StudentId> = pools
             .student_ids
@@ -943,7 +963,12 @@ fn gen_colloscope(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invali
         .subjects_associations
         .get(&(*period_id, subject_id))
         .map(|group_list_id| {
-            inner.params.group_lists.group_list_map[group_list_id]
+            inner
+                .params
+                .group_lists
+                .group_list_map
+                .get(group_list_id)
+                .expect("association references a live group list")
                 .params
                 .group_names
                 .len() as u32
