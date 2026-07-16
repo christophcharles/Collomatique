@@ -586,34 +586,65 @@ the three contract scripts, run by the user.
   Per-commit status detail in §4.3. **★ phase-C milestone**: user runs the 500-seed property
   reference + the three contract scripts before phase D.
 
-### Phase D — consumer migration (consumer step (c))
+### Phase D — consumer migration (consumer step (c)) — DONE (July 16 2026)
 
-One crate (or slice) per commit; each replaces raw field access with the SQL-like API and
-drops reliance on the `Deref` layer within its scope:
+Delivered in five commits. A workspace-wide census (every site verified against source)
+found phase B's method shadowing had already done most of the work: **storage/, xlsx/, and
+python/ have zero `Deref`-reliant sites** — every read already goes through inherent methods,
+`Slots` accessors, or owning `into_iter()`. The doc's original D1/D2(xlsx)/D6 collapsed to
+nothing, so the plan was rescoped:
 
-- **D1**: `storage/` encode (`encode/spec2.rs` ~13 readers) + decode (`decode/spec2.rs` ~15
-  `reconstruct_*` — constructors from the format's `KeyedVec` rows into `Table`/`OrderedTable`;
-  the decode-then-`from_inner_data`-validates split stays). Byte-stability tests prove the
-  on-disk format did not move.
-- **D2**: `constraints-colloscopes` (the ordered-period week-offset walk keeps its explicit
-  order via `OrderedTable` iteration) + `xlsx/`.
-- **D3**: `ops/` — **mechanical read adjustments only** (decision 6): swap field reads for the
-  new API where the `Deref` removal will require it, nothing else. No cascade restructuring.
-- **D4, D5**: `gtk4/`, sliced (editor pages grouped by the ~27 files; two sessions expected).
-- **D6** ★: `python/` glue + deliberate read-API changes (decision 7), with the three contract
-  scripts updated in the same commit. Acceptance: the user runs `extra-scripts/import.py`,
-  `scripts/import_pronote_web_2026_05_06.py`, `scripts/examples/custom_export_xlsx.py`.
+- Scope held to **contained, mechanical** changes: `Deref`-independence + strict 1:1
+  simplifications. No broad join adoption; `ops/` stayed reads-only (decision 6).
+- **D6 dropped**: nothing forced a deliberate Python read-API change. The three contract
+  scripts still run once at the milestone (below).
+- Phase E's in-crate sweep (ex-E1) was folded into commit 1, making phase E a pure deletion.
+- **Layering rule (user)**: owning/cloning `Table`s or exposing `Table` types outside
+  `state/`/`state-colloscopes/` is an anti-pattern. Consumer-owned snapshots stay `BTreeMap`,
+  built with an explicit `.iter().map(|(k, v)| (k, v.clone())).collect()` — never
+  `Table::clone()`/`to_map()`.
+
+Translation patterns used throughout: `contains_key` → inherent `contains`; keyed access via
+`get`/`find_*`; positional `list[pos]` → `get_at(pos).expect(...)` (panic-preserving where
+`pos` provably came from a `find_*_position` just above) or `.map(...)` where the context
+already wants an `Option`; owned snapshot via explicit `iter().map().collect()` (not `to_map()`).
+
+- **Commit 1** (`47a3a5ac`) — `state-colloscopes` in-crate sweep: 15 `contains_key` → `contains`
+  on `Table` receivers; `find_period`/`find_subject` reduced to a one-line `OrderedTable::get`
+  delegate. Colloscope-side plain-`BTreeMap` receivers left untouched.
+- **Commit 2** (`da67af3f`) — `constraints-colloscopes`: one `contains_key` → `contains`; one
+  hand linear scan → `subjects.find_subject(...)`. (storage/xlsx confirmed no-op.)
+- **Commit 3** (`37cea5e7`) — `ops/`: 11 `contains_key` → `contains`, 13 positional
+  `ordered_period_list[pos]` → `get_at(...).expect(...)`, one `.last()` → `.iter().last()`,
+  one `to_map()` snapshot → explicit `BTreeMap` collect. **Census correction**: the plan
+  under-counted — `general_planning.rs:918` `.last()` was an OrderedTable `Deref` site absent
+  from the enumeration; found by re-grep and migrated.
+- **Commit 4** (`91911701`) — `gtk4/`: 7 positional-index sites (two collapsing a
+  `find_period_position`+`[pos].1` pair into `find_period(...).len()`) + 2 `to_map()`
+  snapshots → explicit `BTreeMap` collect. Re-grep confirmed the plan's enumeration was
+  complete here.
+- **Commit 5** — this doc update.
+
+Completeness check (this commit): every remaining `contains_key`/`to_vec()` workspace-wide is
+a plain std-lib collection receiver — colloscope-side `BTreeMap`s (`colloscope.group_lists`,
+`groups_for_students`), a `serde` block object, an xlsx local map, or a std slice `.to_vec()`.
+Zero positional ordered indexing and zero `to_map()` remain outside `state/src/tables.rs`.
 
 ### Phase E — remove the compat layer (consumer step (d))
 
-- **E1**: deprecate the `Deref` impls (`#[deprecated]` on a shim if needed) and sweep remaining
-  stragglers workspace-wide.
-- **E2** ★: delete the `Deref` impls and any BTreeMap-shaped helpers. From here the internal
-  representation is free to change (e.g. `OrderedTable` to map + order list) without touching
-  consumers. Final milestone: 500-seed property run + contract scripts.
+E1 was folded into phase D commit 1, so phase E is now a single deletion commit: delete the
+two `Deref` impls (`Table → BTreeMap`, `OrderedTable → [(I,T)]`) plus `to_map()`/`to_vec()`
+from `state/src/tables.rs` and fix any residual compile fallout (expected: none — the census
+above proves completeness; the compile itself is the final proof). From here the internal
+representation is free to change (e.g. `OrderedTable` to map + order list) without touching
+consumers. Final milestone: 500-seed property run + contract scripts.
 
 Phases B and C are independent enough that C1 can start before B is fully done if a session
 prefers; D depends on C3; E depends on all of D.
+
+★ **Phase-D milestone, run by the user**: 500-seed slow property reference + the three
+contract scripts (`extra-scripts/import.py`, `scripts/import_pronote_web_2026_05_06.py`,
+`scripts/examples/custom_export_xlsx.py`).
 
 ---
 
