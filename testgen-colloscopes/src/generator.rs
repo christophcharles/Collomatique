@@ -24,8 +24,8 @@ use collomatique_state_colloscopes::{
     students::Student,
 };
 
-use super::synth;
-use super::synth::pick;
+use crate::synth;
+use crate::synth::pick;
 
 /// All op categories, used for coverage tracking
 pub const CATEGORIES: [&str; 16] = [

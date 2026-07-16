@@ -12,25 +12,17 @@ use std::collections::{BTreeMap, BTreeSet};
 use collomatique_state::{AppState, traits::Manager};
 use collomatique_state_colloscopes::{Data, NewId, Op, PeriodOp, StudentOp, SubjectOp, TeacherOp};
 
-use super::generator::CATEGORIES;
-use super::synth;
+use crate::generator::CATEGORIES;
+use crate::synth;
 
-/// Single hardcoded configuration used by every property on every
-/// `cargo test` run (user decision: no env variables, no `#[ignore]`
-/// tiers). 100 seeds was verified to still catch every bug found by the
-/// original 500-seed configuration; the 500-seed version is kept as the
-/// slow reference for occasional milestone checks.
+/// Configuration for one property run: how many seeds, how many ops per
+/// seed, and what fraction of generated ops should deliberately break a
+/// constraint. Each consuming test declares its own `RunConfig` constant.
 pub struct RunConfig {
     pub seeds: u64,
     pub ops_per_run: usize,
     pub invalid_fraction: f64,
 }
-
-pub const CONFIG: RunConfig = RunConfig {
-    seeds: 100,
-    ops_per_run: 1000,
-    invalid_fraction: 0.15,
-};
 
 /// Log of the operations generated during one run, for failure replay
 #[derive(Default)]

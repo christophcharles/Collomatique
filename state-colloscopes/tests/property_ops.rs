@@ -9,20 +9,25 @@
 //! On failure, the seed and the full op log are printed: re-running the
 //! same test binary reproduces the exact same sequence.
 
-mod property_ops {
-    pub mod generator;
-    pub mod harness;
-    pub mod synth;
-}
-
-use property_ops::{generator, harness};
+use collomatique_testgen_colloscopes::rand::Rng;
+use collomatique_testgen_colloscopes::{generator, harness};
 
 use collomatique_state::AppSession;
 use collomatique_state::traits::Manager;
 use collomatique_state_colloscopes::{Data, InnerData};
-use rand::Rng;
 
-use harness::CONFIG;
+use harness::RunConfig;
+
+/// Single hardcoded configuration used by every property on every
+/// `cargo test` run (user decision: no env variables, no `#[ignore]`
+/// tiers). 100 seeds was verified to still catch every bug found by the
+/// original 500-seed configuration; the 500-seed version is kept as the
+/// slow reference for occasional milestone checks.
+const CONFIG: RunConfig = RunConfig {
+    seeds: 100,
+    ops_per_run: 1000,
+    invalid_fraction: 0.15,
+};
 
 /// Generates one op, applies it on any manager, records the outcome
 macro_rules! gen_and_apply {

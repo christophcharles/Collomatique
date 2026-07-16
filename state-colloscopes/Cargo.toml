@@ -13,5 +13,4 @@ chrono = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 
 [dev-dependencies]
-rand = "0.9"
-rand_chacha = "0.9"
+collomatique-testgen-colloscopes = { path = "../testgen-colloscopes" }

@@ -532,10 +532,9 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "collomatique-state",
+ "collomatique-testgen-colloscopes",
  "collomatique-time",
  "non-empty-string",
- "rand 0.9.2",
- "rand_chacha",
  "serde",
  "thiserror",
 ]
@@ -598,6 +597,19 @@ dependencies = [
  "portable-pty",
  "thiserror",
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "collomatique-testgen-colloscopes"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "collomatique-state",
+ "collomatique-state-colloscopes",
+ "collomatique-time",
+ "non-empty-string",
+ "rand 0.9.2",
+ "rand_chacha",
 ]
 
 [[package]]
