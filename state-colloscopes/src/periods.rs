@@ -7,20 +7,29 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::OrderedTable;
+use collomatique_state::{Join, References};
+
 use crate::colloscopes::{ColloscopeInterrogation, ColloscopePeriod};
 use crate::ids::{
-    PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId, SubjectId, WeekId, WeekPatternId,
+    NewId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId, SubjectId, WeekId,
+    WeekPatternId,
 };
 use crate::ops::{AnnotatedPeriodOp, AnnotatedWeekOp};
+use crate::{OrderedTable, Table};
 
 /// Description of the periods
 ///
-/// The period order and each period's weeks live in `ordered_period_list`
-/// (private): consumers read through the accessor surface below rather than
-/// touching the container directly, so its payload shape can change without
-/// rippling through every call site. All mutation stays inside this module
-/// (`apply_period`).
+/// The period order lives in `ordered_period_list` and each week is a standalone
+/// [Week] entity in `week_map` (both private): consumers read through the
+/// accessor surface below rather than touching the containers directly, so the
+/// backend shape can change without rippling through every call site.
+///
+/// The two structures must stay consistent — every week id in the ordering
+/// exists in `week_map` and names its owning period, and no `week_map` entry is
+/// left un-ordered — an invariant checked in
+/// `Parameters::check_periods_data_consistency`. All mutation stays inside this
+/// module and routes the week structures through the compound helpers below so
+/// no call site can desynchronize them.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Periods {
     /// Start date for the colloscope
@@ -29,23 +38,75 @@ pub struct Periods {
     /// the eventual pretty output
     pub first_week: Option<collomatique_time::WeekStart>,
 
-    /// Ordered list of periods
+    /// Ordered list of periods, each with its ordered week ids
     ///
-    /// This field gives the relative order of the different
-    /// periods identified by their ids
+    /// This field gives the relative order of the different periods identified
+    /// by their ids, and for each period the order of its weeks (by id). The
+    /// week data itself lives in `week_map`.
+    ordered_period_list: OrderedTable<PeriodId, Vec<WeekId>>,
+
+    /// Every week, keyed by its id
     ///
-    /// For each period, we get also a list of weeks. Each entry is a
-    /// `(WeekId, WeekDesc)` pair: the week's identity (carried inline in this
-    /// transitional shape) plus whether an interrogation happens on it and an
-    /// optional annotation.
-    ordered_period_list: OrderedTable<PeriodId, Vec<(WeekId, WeekDesc)>>,
+    /// Each week carries its owning period as a foreign key; the ordering above
+    /// groups those same week ids under that period.
+    week_map: Table<WeekId, Week>,
 }
 
-/// Error returned when building [Periods] from rows with a duplicated period id
+/// Error returned when building [Periods] from rows with a duplicated id
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Error)]
-#[error("duplicated period id {0:?}")]
-pub struct DuplicatedPeriodIdError(pub PeriodId);
+pub enum PeriodRowsError {
+    /// A period id appears more than once
+    #[error("duplicated period id {0:?}")]
+    DuplicatedPeriodId(PeriodId),
+    /// A week id appears more than once (across all periods)
+    #[error("duplicated week id {0:?}")]
+    DuplicatedWeekId(WeekId),
+}
 
+/// Description of a single week
+///
+/// This is the stored week entity: it carries its owning period as a foreign
+/// key plus whether an interrogation happens on it and an optional annotation.
+/// The period-less, id-less [WeekDesc] is the matching op-payload / DTO form.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References, Join)]
+#[join(error = NewId)]
+pub struct Week {
+    /// Period this week belongs to
+    ///
+    /// This is authoritative: the week is grouped under this period in the
+    /// ordering sidecar.
+    #[fk(name = period)]
+    pub period_id: PeriodId,
+    /// Whether an interrogation happens on this week
+    pub interrogations: bool,
+    /// Optional annotation (e.g. "Rentrée", "Vacances")
+    pub annotation: Option<non_empty_string::NonEmptyString>,
+}
+
+impl Week {
+    /// Builds a week entity from its owning period and a description.
+    pub(crate) fn from_desc(period_id: PeriodId, desc: WeekDesc) -> Week {
+        Week {
+            period_id,
+            interrogations: desc.interrogations,
+            annotation: desc.annotation,
+        }
+    }
+
+    /// The period-less, id-less description of this week (op-payload / DTO form).
+    pub fn desc(&self) -> WeekDesc {
+        WeekDesc {
+            interrogations: self.interrogations,
+            annotation: self.annotation.clone(),
+        }
+    }
+}
+
+/// Period-less, id-less description of a week
+///
+/// This is the op-payload / DTO counterpart of the stored [Week] entity: it
+/// carries only the mutable payload (whether an interrogation happens and the
+/// annotation), used by the week ops, gtk4 dialogs and python glue.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WeekDesc {
     pub interrogations: bool,
@@ -75,26 +136,44 @@ impl Periods {
     ///
     /// `rows` provides the periods in display order, each with its ordered
     /// weeks (identity paired with description). Returns an error if a period
-    /// id appears more than once.
+    /// id or a week id appears more than once — otherwise the two backend
+    /// structures would silently desynchronize.
     pub fn from_period_rows(
         first_week: Option<collomatique_time::WeekStart>,
         rows: Vec<(PeriodId, Vec<(WeekId, WeekDesc)>)>,
-    ) -> Result<Self, DuplicatedPeriodIdError> {
-        let ordered_period_list =
-            rows.try_into()
-                .map_err(|collomatique_state::tables::DuplicatedIdError(id)| {
-                    DuplicatedPeriodIdError(id)
-                })?;
+    ) -> Result<Self, PeriodRowsError> {
+        let mut week_map = Table::new();
+        let mut ordering_rows = Vec::with_capacity(rows.len());
+        for (period_id, weeks) in rows {
+            let mut order = Vec::with_capacity(weeks.len());
+            for (week_id, desc) in weeks {
+                if week_map
+                    .insert(week_id, Week::from_desc(period_id, desc))
+                    .is_some()
+                {
+                    return Err(PeriodRowsError::DuplicatedWeekId(week_id));
+                }
+                order.push(week_id);
+            }
+            ordering_rows.push((period_id, order));
+        }
+        let ordered_period_list = ordering_rows.try_into().map_err(
+            |collomatique_state::tables::DuplicatedIdError(id)| {
+                PeriodRowsError::DuplicatedPeriodId(id)
+            },
+        )?;
         Ok(Periods {
             first_week,
             ordered_period_list,
+            week_map,
         })
     }
 
     // ---- Read surface ----
     //
     // These methods are the sanctioned way to read the periods. Consumers go
-    // through them rather than the private `ordered_period_list` field.
+    // through them rather than the private `ordered_period_list` / `week_map`
+    // fields.
 
     /// Period ids in display order.
     pub fn period_ids(&self) -> impl Iterator<Item = PeriodId> + '_ {
@@ -120,13 +199,17 @@ impl Periods {
     /// period-then-position order, each with its identity. `walk().enumerate()`
     /// gives the global week index — this replaces every hand-rolled
     /// accumulate-`len()` loop.
-    pub fn walk(&self) -> impl Iterator<Item = (PeriodId, WeekId, &WeekDesc)> + '_ {
+    pub fn walk(&self) -> impl Iterator<Item = (PeriodId, WeekId, &Week)> + '_ {
         self.ordered_period_list
             .iter()
-            .flat_map(|(period_id, weeks)| {
-                weeks
-                    .iter()
-                    .map(move |(week_id, desc)| (period_id, *week_id, desc))
+            .flat_map(move |(period_id, order)| {
+                order.iter().map(move |week_id| {
+                    let week = self
+                        .week_map
+                        .get(week_id)
+                        .expect("ordering id should be present in week_map");
+                    (period_id, *week_id, week)
+                })
             })
     }
 
@@ -134,39 +217,47 @@ impl Periods {
     pub fn week_ids(&self) -> impl Iterator<Item = WeekId> + '_ {
         self.ordered_period_list
             .iter()
-            .flat_map(|(_period_id, weeks)| weeks.iter().map(|(week_id, _desc)| *week_id))
+            .flat_map(|(_period_id, order)| order.iter().copied())
     }
 
     /// Weeks of one period, in order; `None` if the period id is invalid.
-    pub fn weeks_of(&self, id: PeriodId) -> Option<impl Iterator<Item = &WeekDesc> + '_> {
-        Some(
-            self.ordered_period_list
-                .get(&id)?
-                .iter()
-                .map(|(_week_id, desc)| desc),
-        )
+    pub fn weeks_of(&self, id: PeriodId) -> Option<impl Iterator<Item = &Week> + '_> {
+        let order = self.ordered_period_list.get(&id)?;
+        Some(order.iter().map(move |week_id| {
+            self.week_map
+                .get(week_id)
+                .expect("ordering id should be present in week_map")
+        }))
     }
 
-    /// Owned copy of a period's weeks — descriptions only, ids stripped
-    /// (op-payload building in `ops/` and gtk4); `None` if the period id is
-    /// invalid.
+    /// Owned copy of a period's weeks — descriptions only, ids and owning period
+    /// stripped (op-payload building in `ops/` and gtk4); `None` if the period
+    /// id is invalid.
     pub fn weeks_vec_of(&self, id: PeriodId) -> Option<Vec<WeekDesc>> {
+        let order = self.ordered_period_list.get(&id)?;
         Some(
-            self.ordered_period_list
-                .get(&id)?
+            order
                 .iter()
-                .map(|(_week_id, desc)| desc.clone())
+                .map(|week_id| {
+                    self.week_map
+                        .get(week_id)
+                        .expect("ordering id should be present in week_map")
+                        .desc()
+                })
                 .collect(),
         )
     }
 
     /// Number of weeks of one period; `None` if the period id is invalid.
     pub fn week_count_of(&self, id: PeriodId) -> Option<usize> {
-        self.ordered_period_list.get(&id).map(|weeks| weeks.len())
+        self.ordered_period_list.get(&id).map(|order| order.len())
     }
 
     pub fn count_weeks(&self) -> usize {
-        self.ordered_period_list.iter().map(|x| x.1.len()).sum()
+        self.ordered_period_list
+            .iter()
+            .map(|(_period_id, order)| order.len())
+            .sum()
     }
 
     /// Finds the position of a period by id
@@ -178,11 +269,11 @@ impl Periods {
     pub fn find_period_position_and_first_week(&self, id: PeriodId) -> Option<(usize, usize)> {
         let mut first_week = 0usize;
 
-        for (pos, (period_id, desc)) in self.ordered_period_list.iter().enumerate() {
+        for (pos, (period_id, order)) in self.ordered_period_list.iter().enumerate() {
             if period_id == id {
                 return Some((pos, first_week));
             }
-            first_week += desc.len();
+            first_week += order.len();
         }
 
         None
@@ -196,8 +287,8 @@ impl Periods {
     ) -> Option<(usize, usize)> {
         let mut total_weeks = 0usize;
 
-        for (pos, (period_id, desc)) in self.ordered_period_list.iter().enumerate() {
-            total_weeks += desc.len();
+        for (pos, (period_id, order)) in self.ordered_period_list.iter().enumerate() {
+            total_weeks += order.len();
             if period_id == id {
                 return Some((pos, total_weeks));
             }
@@ -206,46 +297,35 @@ impl Periods {
         None
     }
 
-    /// Finds a period by id, returning its weeks (identity paired with
-    /// description).
-    pub fn find_period(&self, id: PeriodId) -> Option<&Vec<(WeekId, WeekDesc)>> {
+    /// Finds a period by id, returning its ordered week ids.
+    pub fn find_period(&self, id: PeriodId) -> Option<&Vec<WeekId>> {
         self.ordered_period_list.get(&id)
     }
 
-    /// Finds a week by id, returning its period and description.
-    ///
-    /// Transitional linear scan (week ids live inline in the period rows).
-    pub fn find_week(&self, id: WeekId) -> Option<(PeriodId, &WeekDesc)> {
-        self.ordered_period_list
-            .iter()
-            .find_map(|(period_id, weeks)| {
-                weeks
-                    .iter()
-                    .find(|(week_id, _)| *week_id == id)
-                    .map(|(_, desc)| (period_id, desc))
-            })
+    /// Finds a week by id, returning the stored [Week] entity (owning period
+    /// available through [`Week::period_id`]). `None` if the week id is invalid.
+    pub fn find_week(&self, id: WeekId) -> Option<&Week> {
+        self.week_map.get(&id)
     }
 
     /// Locates a week by id: its owning period and its position within that
     /// period. `None` if the week id is invalid.
     pub fn week_position(&self, id: WeekId) -> Option<(PeriodId, usize)> {
-        self.ordered_period_list
+        let period_id = self.week_map.get(&id)?.period_id;
+        let pos = self
+            .ordered_period_list
+            .get(&period_id)
+            .expect("week's period should have an ordering row")
             .iter()
-            .find_map(|(period_id, weeks)| {
-                weeks
-                    .iter()
-                    .position(|(week_id, _)| *week_id == id)
-                    .map(|pos| (period_id, pos))
-            })
+            .position(|week_id| *week_id == id)
+            .expect("week should appear in its period's ordering");
+        Some((period_id, pos))
     }
 
     /// The id of the week at position `pos` within `period`; `None` if the
     /// period id is invalid or the position is out of range.
     pub fn week_id_at(&self, period: PeriodId, pos: usize) -> Option<WeekId> {
-        self.ordered_period_list
-            .get(&period)?
-            .get(pos)
-            .map(|(week_id, _)| *week_id)
+        self.ordered_period_list.get(&period)?.get(pos).copied()
     }
 
     /// The global week position of a week (its index in `walk()` order);
@@ -258,14 +338,119 @@ impl Periods {
     pub fn get_first_week_and_length_for_period(&self, id: PeriodId) -> Option<(usize, usize)> {
         let mut first_week = 0usize;
 
-        for (period_id, desc) in self.ordered_period_list.iter() {
+        for (period_id, order) in self.ordered_period_list.iter() {
             if period_id == id {
-                return Some((first_week, desc.len()));
+                return Some((first_week, order.len()));
             }
-            first_week += desc.len();
+            first_week += order.len();
         }
 
         None
+    }
+
+    // ---- Internal accessors (checker / reference registry) ----
+
+    /// USED INTERNALLY
+    ///
+    /// Iterator over every `(week id, week)` entry, in id order, straight from
+    /// the week table (independent of the ordering sidecar, so it is safe on
+    /// potentially inconsistent data during invariant checking and drives the
+    /// reference registry, which walks weeks in id order).
+    pub(crate) fn week_entries(&self) -> impl Iterator<Item = (WeekId, &Week)> {
+        self.week_map.iter()
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// Raw view of the ordering sidecar (period → ordered week ids), for the
+    /// consistency invariant check.
+    pub(crate) fn ordering_entries(&self) -> impl Iterator<Item = (PeriodId, &[WeekId])> {
+        self.ordered_period_list
+            .iter()
+            .map(|(id, order)| (id, order.as_slice()))
+    }
+
+    // ---- Compound week mutators ----
+    //
+    // Every week mutation goes through one of these so `ordered_period_list`
+    // and `week_map` can never desynchronize.
+
+    /// Inserts a week into `period_id`'s ordering at `pos` and into `week_map`.
+    pub(crate) fn insert_week_at(
+        &mut self,
+        week_id: WeekId,
+        period_id: PeriodId,
+        pos: usize,
+        desc: WeekDesc,
+    ) {
+        self.ordered_period_list
+            .get_mut(&period_id)
+            .expect("period id should be valid")
+            .insert(pos, week_id);
+        self.week_map
+            .insert(week_id, Week::from_desc(period_id, desc));
+    }
+
+    /// Removes a week, returning its former period, position and description.
+    pub(crate) fn remove_week_entry(&mut self, week_id: WeekId) -> (PeriodId, usize, WeekDesc) {
+        let week = self.week_map.remove(&week_id).expect("week should exist");
+        let order = self
+            .ordered_period_list
+            .get_mut(&week.period_id)
+            .expect("week's period should have an ordering row");
+        let pos = order
+            .iter()
+            .position(|id| *id == week_id)
+            .expect("week should appear in its period's ordering");
+        order.remove(pos);
+        (week.period_id, pos, week.desc())
+    }
+
+    /// Moves a week to `dest_pos` in `dest_period`, returning its former
+    /// `(period, position)`. The week keeps its id and description; only its
+    /// owning period and its slot in the ordering change.
+    pub(crate) fn move_week_entry(
+        &mut self,
+        week_id: WeekId,
+        dest_period: PeriodId,
+        dest_pos: usize,
+    ) -> (PeriodId, usize) {
+        let src_period = self
+            .week_map
+            .get(&week_id)
+            .expect("week should exist")
+            .period_id;
+        let src_pos = {
+            let order = self
+                .ordered_period_list
+                .get_mut(&src_period)
+                .expect("week's period should have an ordering row");
+            let pos = order
+                .iter()
+                .position(|id| *id == week_id)
+                .expect("week should appear in its period's ordering");
+            order.remove(pos);
+            pos
+        };
+        self.ordered_period_list
+            .get_mut(&dest_period)
+            .expect("destination period should be valid")
+            .insert(dest_pos, week_id);
+        self.week_map
+            .get_mut(&week_id)
+            .expect("week should exist")
+            .period_id = dest_period;
+        (src_period, src_pos)
+    }
+
+    /// Replaces a week's description (owning period unchanged), returning the
+    /// previous description.
+    pub(crate) fn replace_week_desc(&mut self, week_id: WeekId, desc: WeekDesc) -> WeekDesc {
+        let week = self.week_map.get_mut(&week_id).expect("week should exist");
+        let old = week.desc();
+        week.interrogations = desc.interrogations;
+        week.annotation = desc.annotation;
+        old
     }
 }
 
@@ -441,11 +626,8 @@ impl crate::Data {
                     .inner_data
                     .params
                     .periods
-                    .ordered_period_list
-                    .get_at(position)
-                    .expect("position comes from find_period_position")
-                    .1
-                    .len();
+                    .week_count_of(*period_id)
+                    .expect("period id comes from find_period_position");
                 if week_count != 0 {
                     return Err(PeriodError::PeriodStillHasWeeks(*period_id));
                 }
@@ -579,12 +761,12 @@ impl crate::Data {
     ///
     /// Apply week operations.
     ///
-    /// Weeks live inline in the period rows in this transitional stage, so
-    /// this is where the pattern-bit and colloscope-cell bookkeeping that used
-    /// to ride on the whole-period `PeriodOp::Update` now happens for a single
-    /// week. Both maintenance layers are temporary: the pattern splicing dies
-    /// with the week-pattern reshape (B2) and the colloscope cell splicing
-    /// with the colloscope reshape (1d).
+    /// Weeks are standalone [Week] entities, but their bits still ride on two
+    /// transitional maintenance layers: the week-pattern bit vectors and the
+    /// colloscope cell vectors, both indexed positionally by week. This is
+    /// where that bookkeeping happens for a single week. Both layers are
+    /// temporary: the pattern splicing dies with the week-pattern reshape (B2)
+    /// and the colloscope cell splicing with the colloscope reshape (1d).
     pub(crate) fn apply_week(
         &mut self,
         week_op: &AnnotatedWeekOp,
@@ -623,13 +805,7 @@ impl crate::Data {
         per_pos: usize,
         desc: &WeekDesc,
     ) -> Result<(), WeekError> {
-        if self
-            .inner_data
-            .params
-            .periods
-            .week_position(week_id)
-            .is_some()
-        {
+        if self.inner_data.params.periods.find_week(week_id).is_some() {
             return Err(WeekError::WeekIdAlreadyExists(week_id));
         }
 
@@ -656,10 +832,7 @@ impl crate::Data {
         self.inner_data
             .params
             .periods
-            .ordered_period_list
-            .get_mut(&period_id)
-            .expect("period id validated above")
-            .insert(per_pos, (week_id, desc.clone()));
+            .insert_week_at(week_id, period_id, per_pos, desc.clone());
 
         for week_pattern in self
             .inner_data
@@ -748,14 +921,8 @@ impl crate::Data {
             None
         };
 
-        let (_removed_id, removed_desc) = self
-            .inner_data
-            .params
-            .periods
-            .ordered_period_list
-            .get_mut(&period_id)
-            .expect("period id from week_position is valid")
-            .remove(per_pos);
+        let (_removed_period, _removed_pos, removed_desc) =
+            self.inner_data.params.periods.remove_week_entry(week_id);
 
         for week_pattern in self
             .inner_data
@@ -815,11 +982,11 @@ impl crate::Data {
             .weeks_of(period_id)
             .expect("period id from week_position is valid")
             .enumerate()
-            .map(|(i, desc)| {
+            .map(|(i, week)| {
                 if i == per_pos {
                     new_desc.clone()
                 } else {
-                    desc.clone()
+                    week.desc()
                 }
             })
             .collect();
@@ -849,17 +1016,11 @@ impl crate::Data {
             }
         }
 
-        let old_desc = std::mem::replace(
-            &mut self
-                .inner_data
-                .params
-                .periods
-                .ordered_period_list
-                .get_mut(&period_id)
-                .expect("period id from week_position is valid")[per_pos]
-                .1,
-            new_desc.clone(),
-        );
+        let old_desc = self
+            .inner_data
+            .params
+            .periods
+            .replace_week_desc(week_id, new_desc.clone());
 
         let slot_ids: Vec<_> = self
             .inner_data
@@ -930,15 +1091,6 @@ impl crate::Data {
             dest_first
         };
         let dest_global = dest_first_post + dest_pos;
-
-        let desc = self
-            .inner_data
-            .params
-            .periods
-            .find_week(week_id)
-            .expect("week id validated above")
-            .1
-            .clone();
 
         // Source cells (captured before mutating), keyed by slot.
         let src_cells: BTreeMap<SlotId, Option<ColloscopeInterrogation>> = self
@@ -1011,14 +1163,11 @@ impl crate::Data {
 
         // --- Mutations ---
 
-        // 1. Detach the week entry from the source period.
+        // 1. Move the week entry (ordering slot + owning period).
         self.inner_data
             .params
             .periods
-            .ordered_period_list
-            .get_mut(&src_period)
-            .expect("src period is valid")
-            .remove(src_pos);
+            .move_week_entry(week_id, dest_period, dest_pos);
 
         // 2. Move each pattern bit to the destination position.
         for week_pattern in self
@@ -1044,16 +1193,7 @@ impl crate::Data {
             collo_slot.interrogations.remove(src_pos);
         }
 
-        // 4. Splice the week entry into the destination period.
-        self.inner_data
-            .params
-            .periods
-            .ordered_period_list
-            .get_mut(&dest_period)
-            .expect("dest period is valid")
-            .insert(dest_pos, (week_id, desc));
-
-        // 5. Insert one colloscope cell per destination slot. A traveling cell
+        // 4. Insert one colloscope cell per destination slot. A traveling cell
         //    keeps its content; a slot only present at the destination gets a
         //    fresh cell reflecting the merged activity at the new week.
         let dest_slot_ids: Vec<SlotId> = self

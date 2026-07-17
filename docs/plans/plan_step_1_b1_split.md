@@ -663,6 +663,41 @@ hogwarts pristine, and a user-run gtk4 smoke (edit weeks/periods, cut/merge with
 colloscope, undo/redo, save/reload) + the 3 contract scripts. (The design doc puts the ★
 milestone at 1d, but commit 5 closes the riskiest reshape of 1b — cheap insurance now.)
 
+**Deviations landed (vs the sketch above):**
+
+- **`weeks_of` kept its single-ref item shape** `impl Iterator<Item = &Week>` (the sketch
+  floated `(WeekId, &Week)`). Per S3 the field-name compatibility of `Week` makes the
+  `&WeekDesc → &Week` swap invisible at every field-access call site, so no consumer needed
+  the id here; adding it would have been a gratuitous signature break. `walk()` does carry
+  the id — `(PeriodId, WeekId, &Week)` — as planned.
+- **`from_period_rows` reports a single `PeriodRowsError` enum** (`DuplicatedPeriodId` /
+  `DuplicatedWeekId`) rather than a bare `DuplicatedWeekIdError`, since the one constructor
+  must funnel both duplicate kinds through one return type. The old `DuplicatedPeriodIdError`
+  struct is gone (decode maps any variant to `DecodeError::DuplicatedID` with `|_|`, its only
+  caller). Cross-table id collisions (week id == some other id) stay the job of
+  `check_no_duplicate_ids`, exactly as before.
+- **`find_period` stayed `pub`** (returns `&Vec<WeekId>` now): a `read_api` integration test
+  asserts `resolve(period) == find_period(period)` by pointer, and integration tests can't
+  see `pub(crate)`. `Lookup<PeriodId>::Entity` is `Vec<WeekId>` and both resolve to the same
+  ordering row, so the pointer-equality pin holds unchanged.
+- **`WeekPeriodFk` is walked first** (step 1 of `walk_params_refs`), matching the `Parameters`
+  field order (`periods` is the first family) and the module-doc numbering, which shifted the
+  dense-mirror/colloscope steps to 13/14. `refs_registry.rs` gained the two `WeekPeriodFk`
+  sites at the front of `c.period` / `references_to_period(p0|p1)`.
+- **Compound mutators cover weeks only** (`insert_week_at` / `remove_week_entry` /
+  `move_week_entry` / `replace_week_desc`): period add/remove touch just the ordering table
+  (never `week_map`, since a removed period is week-empty), so they cannot desync the pair and
+  keep their direct same-module field access.
+- **`week_ids()` iterates the ordering** (walk order, panic-free — it reads `WeekId`s straight
+  from the ordering rows without a `week_map` lookup), while `week_entries()` iterates
+  `week_map` (id order) for the refs walk and the consistency check — mirroring the slots
+  `slot_ids` / `slot_entries` split.
+- **Mirror invariant is `InvariantError::InvalidWeek`** via `check_periods_data_consistency`
+  (ordering ⇄ `week_map`, owning-period match, no orphans), wired right after the duplicate-id
+  check in `check_invariants`.
+- The 500-seed sweep ran clean locally (299s); the committed `property_ops` config stays at
+  100 seeds (unchanged). gtk4 smoke + 3 contract scripts remain user-run.
+
 ---
 
 ## What comes after (unchanged from plan_step_1.md)

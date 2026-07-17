@@ -9,24 +9,25 @@
 //! [InnerData::walk_refs], which composes the family, dense-mirror and colloscope
 //! walks below):
 //!
-//! 1. subjects (`OrderedTable` order) — `excluded_periods` (set order)
-//! 2. teachers (id order) — `subjects`
-//! 3. students (id order) — `excluded_periods`
-//! 4. slots (`slot_map` id order) — `subject_id`, `teacher_id`, `week_pattern`
-//! 5. incompats (id order) — `subject_id`, `week_pattern_id`
-//! 6. pairings (id order) — `antecedent`, `consequent`, `excluded_periods`
-//! 7. slot pairings (id order) — `antecedent`, `consequent`, `excluded_periods`
-//! 8. group lists (id order) — filling students
-//! 9. `settings.students` keys
-//! 10. `balancing.subjects` keys
-//! 11. week-pattern length coupling: week patterns (id order) × periods (table order)
-//! 12. dense mirrors, in this order:
+//! 1. weeks (`week_map` id order) — `period_id`
+//! 2. subjects (`OrderedTable` order) — `excluded_periods` (set order)
+//! 3. teachers (id order) — `subjects`
+//! 4. students (id order) — `excluded_periods`
+//! 5. slots (`slot_map` id order) — `subject_id`, `teacher_id`, `week_pattern`
+//! 6. incompats (id order) — `subject_id`, `week_pattern_id`
+//! 7. pairings (id order) — `antecedent`, `consequent`, `excluded_periods`
+//! 8. slot pairings (id order) — `antecedent`, `consequent`, `excluded_periods`
+//! 9. group lists (id order) — filling students
+//! 10. `settings.students` keys
+//! 11. `balancing.subjects` keys
+//! 12. week-pattern length coupling: week patterns (id order) × periods (table order)
+//! 13. dense mirrors, in this order:
 //!     a. `assignments.map` (per entry: key site to period then subject, then the
 //!        assigned students), in `(period, subject)` key order
 //!     b. `group_lists.subjects_associations` (per entry: period, subject, group
 //!        list), in `(period, subject)` key order
 //!     c. `slots.ordering` keys → subject, in subject-id order
-//! 13. colloscope: `period_map` entries (period key site, then that period's
+//! 14. colloscope: `period_map` entries (period key site, then that period's
 //!     `slot_map` key sites), then `group_lists` entries (group-list key site,
 //!     then that list's `groups_for_students` keys → student)
 //!
@@ -46,7 +47,7 @@ use crate::colloscopes::Colloscope;
 use crate::group_lists::GroupListFilling;
 use crate::ids::{
     GroupListId, IncompatId, NewId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId,
-    SubjectId, TeacherId, WeekPatternId,
+    SubjectId, TeacherId, WeekId, WeekPatternId,
 };
 
 /// One place a reference to an entity lives.
@@ -57,6 +58,8 @@ use crate::ids::{
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RefSite {
     // --- entity fields ---
+    /// `Week::period_id` → the period the week belongs to
+    WeekPeriodFk(WeekId),
     /// `Subject::excluded_periods` → a period
     SubjectExcludedPeriods(SubjectId),
     /// `Student::excluded_periods` → a period
@@ -162,11 +165,12 @@ pub trait RefVisitor {
 }
 
 /// Walks the reference sites that live directly in [Parameters] entity families
-/// (steps 1–11 of the module walk order), in the fixed documented order.
+/// (steps 1–12 of the module walk order), in the fixed documented order.
 ///
 /// The dense-mirror and colloscope sites are walked separately;
 /// [InnerData::walk_refs] composes all three.
 pub(crate) fn walk_params_refs(params: &Parameters, v: &mut impl RefVisitor) {
+    walk_weeks(params, v);
     walk_subjects(params, v);
     walk_teachers(params, v);
     walk_students(params, v);
@@ -186,6 +190,15 @@ pub(crate) fn walk_params_refs(params: &Parameters, v: &mut impl RefVisitor) {
 // inventory), so the `match` on `NewId` is exhaustive over the kinds that entity
 // can reference; every other arm is `unreachable!`. `for_each_ref` visits fields
 // in declaration order, which is exactly the documented within-entity walk order.
+
+fn walk_weeks(params: &Parameters, v: &mut impl RefVisitor) {
+    for (week_id, week) in params.periods.week_entries() {
+        week.for_each_ref(&mut |id: NewId| match id {
+            NewId::PeriodId(p) => v.period_ref(p, RefSite::WeekPeriodFk(week_id)),
+            _ => unreachable!("Week only references its period"),
+        });
+    }
+}
 
 fn walk_subjects(params: &Parameters, v: &mut impl RefVisitor) {
     for (subject_id, subject) in params.subjects.ordered_subject_list.iter() {
@@ -318,7 +331,7 @@ fn walk_week_pattern_coupling(params: &Parameters, v: &mut impl RefVisitor) {
     }
 }
 
-/// Walks the sparse assignments mirror (step 12a): each stored `(period,
+/// Walks the sparse assignments mirror (step 13a): each stored `(period,
 /// subject)` row references *both* a period and a subject, then each assigned
 /// student. Rows are canonical-absent, so a walked row is always non-trivial.
 fn walk_assignments(params: &Parameters, v: &mut impl RefVisitor) {
@@ -336,7 +349,7 @@ fn walk_assignments(params: &Parameters, v: &mut impl RefVisitor) {
     }
 }
 
-/// Walks the subject/group-list association mirror (step 12b): each entry
+/// Walks the subject/group-list association mirror (step 13b): each entry
 /// references a period, a subject and a group list at once.
 fn walk_associations(params: &Parameters, v: &mut impl RefVisitor) {
     for ((period, subject), group_list) in params.group_lists.subjects_associations.iter() {
@@ -351,7 +364,7 @@ fn walk_associations(params: &Parameters, v: &mut impl RefVisitor) {
     }
 }
 
-/// Walks the slots ordering mirror keys (step 12c): each key references a subject.
+/// Walks the slots ordering mirror keys (step 13c): each key references a subject.
 fn walk_slots_ordering_keys(params: &Parameters, v: &mut impl RefVisitor) {
     for (subject_id, row) in params.slots.ordering_entries() {
         v.subject_ref(
@@ -363,7 +376,7 @@ fn walk_slots_ordering_keys(params: &Parameters, v: &mut impl RefVisitor) {
     }
 }
 
-/// Walks the colloscope (step 13): period keys (then their slot keys), then
+/// Walks the colloscope (step 14): period keys (then their slot keys), then
 /// group-list keys (then their placed students).
 fn walk_colloscope(colloscope: &Colloscope, v: &mut impl RefVisitor) {
     for (period_id, collo_period) in colloscope.period_map.iter() {
@@ -398,8 +411,8 @@ fn walk_colloscope(colloscope: &Colloscope, v: &mut impl RefVisitor) {
 
 impl InnerData {
     /// Walks every reference in the document, in the documented fixed order (see
-    /// the module docs): first the [Parameters] entity families (steps 1–11),
-    /// then the dense mirrors (step 12), then the colloscope (step 13).
+    /// the module docs): first the [Parameters] entity families (steps 1–12),
+    /// then the dense mirrors (step 13), then the colloscope (step 14).
     pub fn walk_refs(&self, v: &mut impl RefVisitor) {
         walk_params_refs(&self.params, v);
         walk_assignments(&self.params, v);

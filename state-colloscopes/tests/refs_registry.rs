@@ -139,7 +139,7 @@ fn walk_covers_every_site_in_order() {
         NewId::PeriodId,
         "add period 0"
     );
-    let _w0 = apply_new!(
+    let w0 = apply_new!(
         Op::Week(WeekOp::AddFront(p0, WeekDesc::new(true))),
         NewId::WeekId,
         "add week to period 0"
@@ -149,7 +149,7 @@ fn walk_covers_every_site_in_order() {
         NewId::PeriodId,
         "add period 1"
     );
-    let _w1 = apply_new!(
+    let w1 = apply_new!(
         Op::Week(WeekOp::AddFront(p1, WeekDesc::new(true))),
         NewId::WeekId,
         "add week to period 1"
@@ -394,6 +394,9 @@ fn walk_covers_every_site_in_order() {
     assert_eq!(
         c.period,
         vec![
+            // week → period FK (week_map id order: w0 then w1)
+            (p0, RefSite::WeekPeriodFk(w0)),
+            (p1, RefSite::WeekPeriodFk(w1)),
             // families
             (p1, RefSite::SubjectExcludedPeriods(math)),
             (p1, RefSite::StudentExcludedPeriods(st1)),
@@ -511,6 +514,7 @@ fn walk_covers_every_site_in_order() {
     assert_eq!(
         inner.references_to_period(p0),
         vec![
+            RefSite::WeekPeriodFk(w0),
             RefSite::WeekPatternLengthCoupling {
                 week_pattern: wp,
                 non_trivial: false,
@@ -523,6 +527,7 @@ fn walk_covers_every_site_in_order() {
     assert_eq!(
         inner.references_to_period(p1),
         vec![
+            RefSite::WeekPeriodFk(w1),
             RefSite::SubjectExcludedPeriods(math),
             RefSite::StudentExcludedPeriods(st1),
             RefSite::PairingRuleExcludedPeriods(pairing),

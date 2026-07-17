@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::group_lists::GroupList;
 use crate::incompats::Incompatibility;
 use crate::pairings::PairingRule;
-use crate::periods::WeekDesc;
+use crate::periods::Week;
 use crate::slot_pairings::SlotPairingRule;
 use crate::slots::Slot;
 use crate::students::Student;
@@ -38,21 +38,17 @@ pub struct StudentId(u64);
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, EntityId,
 )]
-#[entity(Vec<(WeekId, WeekDesc)>)]
+#[entity(Vec<WeekId>)]
 pub struct PeriodId(u64);
 
 /// This type represents an ID for a week
 ///
-/// Every week gets a unique ID. IDs then identify weeks internally.
-///
-/// Weeks are not yet a standalone entity (their ids live inline in the period
-/// rows and nothing outside the periods submodule references them); the
-/// `#[entity(WeekDesc)]` attribute is transitional and is re-targeted to a
-/// dedicated `Week` entity once the backend split lands.
+/// Every week gets a unique ID. IDs then identify weeks internally, resolving
+/// to the standalone [Week] entity stored in the periods submodule.
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, EntityId,
 )]
-#[entity(WeekDesc)]
+#[entity(Week)]
 pub struct WeekId(u64);
 
 /// This type represents an ID for a subject

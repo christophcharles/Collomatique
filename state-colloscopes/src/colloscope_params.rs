@@ -168,9 +168,16 @@ impl Parameters {
 // rebuild. These are the context impls the `Join` derives resolve against.
 
 impl Lookup<PeriodId> for Parameters {
-    type Entity = Vec<(WeekId, periods::WeekDesc)>;
-    fn lookup(&self, id: PeriodId) -> Option<&Vec<(WeekId, periods::WeekDesc)>> {
+    type Entity = Vec<WeekId>;
+    fn lookup(&self, id: PeriodId) -> Option<&Vec<WeekId>> {
         self.periods.find_period(id)
+    }
+}
+
+impl Lookup<WeekId> for Parameters {
+    type Entity = periods::Week;
+    fn lookup(&self, id: WeekId) -> Option<&periods::Week> {
+        self.periods.find_week(id)
     }
 }
 
@@ -1065,6 +1072,40 @@ impl Parameters {
 
     /// USED INTERNALLY
     ///
+    /// Checks the periods backend consistency: the ordering sidecar and the
+    /// week table must mirror each other. Every week id in the ordering exists
+    /// in the week table, names its owning period and appears exactly once; and
+    /// no week table entry is left un-ordered (no orphan weeks). `find_week` is
+    /// used (not `weeks_of`) so a desynchronized ordering yields a clean error
+    /// rather than panicking.
+    fn check_periods_data_consistency(&self) -> Result<(), InvariantError> {
+        let mut ordered_ids = BTreeSet::new();
+        for (period_id, order) in self.periods.ordering_entries() {
+            for week_id in order {
+                let Some(week) = self.periods.find_week(*week_id) else {
+                    return Err(InvariantError::InvalidWeek);
+                };
+                if week.period_id != period_id {
+                    return Err(InvariantError::InvalidWeek);
+                }
+                if !ordered_ids.insert(*week_id) {
+                    return Err(InvariantError::InvalidWeek);
+                }
+            }
+        }
+
+        // No orphan weeks: every week in the table is covered by the ordering.
+        for (week_id, _week) in self.periods.week_entries() {
+            if !ordered_ids.contains(&week_id) {
+                return Err(InvariantError::InvalidWeek);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// USED INTERNALLY
+    ///
     /// Checks that there are no duplicate ids in this specific colloscope params
     fn check_no_duplicate_ids(&self) -> bool {
         let mut ids_so_far = BTreeSet::new();
@@ -1085,6 +1126,8 @@ impl Parameters {
         if !self.check_no_duplicate_ids() {
             return Err(InvariantError::DuplicatedId);
         }
+
+        self.check_periods_data_consistency()?;
 
         let period_ids = self.build_period_ids();
         let week_pattern_ids = self.build_week_pattern_ids();
@@ -1135,6 +1178,8 @@ pub enum InvariantError {
     AssignmentForSubjectNotRunningOnPeriod,
     #[error("empty assignment row (non-canonical)")]
     EmptyAssignmentRow,
+    #[error("week table and ordering are inconsistent")]
+    InvalidWeek,
     #[error("slots ordering row for a subject without interrogations")]
     SlotsForSubjectWithoutInterrogations,
     #[error("empty slots ordering row (non-canonical)")]
