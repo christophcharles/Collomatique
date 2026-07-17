@@ -13,7 +13,7 @@ use collomatique_state_colloscopes::{
     AssignmentOp, BalancingOp, ColloscopeOp, Data, GroupListOp, IncompatOp, NewId, Op, PairingOp,
     PeriodOp, RefSite, RefVisitor, SettingsOp, SlotOp, SlotPairingOp, StudentOp, Subject,
     SubjectInterrogationParameters, SubjectOp, SubjectParameters, SubjectPeriodicity, TeacherOp,
-    WeekPatternOp,
+    WeekOp, WeekPatternOp,
     balancing::{Balancing, BalancingOptions},
     colloscopes::{ColloscopeGroupList, ColloscopeInterrogation},
     group_lists::{GroupListFilling, GroupListParameters, PrefilledGroup},
@@ -135,14 +135,24 @@ fn walk_covers_every_site_in_order() {
 
     // Two one-week periods.
     let p0 = apply_new!(
-        Op::Period(PeriodOp::AddFront(vec![WeekDesc::new(true)])),
+        Op::Period(PeriodOp::AddFront),
         NewId::PeriodId,
         "add period 0"
     );
+    let _w0 = apply_new!(
+        Op::Week(WeekOp::AddFront(p0, WeekDesc::new(true))),
+        NewId::WeekId,
+        "add week to period 0"
+    );
     let p1 = apply_new!(
-        Op::Period(PeriodOp::AddAfter(p0, vec![WeekDesc::new(true)])),
+        Op::Period(PeriodOp::AddAfter(p0)),
         NewId::PeriodId,
         "add period 1"
+    );
+    let _w1 = apply_new!(
+        Op::Week(WeekOp::AddFront(p1, WeekDesc::new(true))),
+        NewId::WeekId,
+        "add week to period 1"
     );
 
     // A week pattern that is trivial on p0 (week kept) but non-trivial on p1

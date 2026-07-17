@@ -10,7 +10,9 @@ use rand_chacha::ChaCha8Rng;
 use std::collections::{BTreeMap, BTreeSet};
 
 use collomatique_state::{AppState, traits::Manager};
-use collomatique_state_colloscopes::{Data, NewId, Op, PeriodOp, StudentOp, SubjectOp, TeacherOp};
+use collomatique_state_colloscopes::{
+    Data, NewId, Op, PeriodOp, StudentOp, SubjectOp, TeacherOp, WeekOp, ids::WeekId,
+};
 
 use crate::generator::CATEGORIES;
 use crate::synth;
@@ -148,19 +150,33 @@ pub fn bootstrap(rng: &mut ChaCha8Rng) -> (AppState<Data, String>, Vec<Data>) {
         new_id
     };
 
-    // Periods
+    // Periods (created empty, then their weeks spliced in one at a time —
+    // periods no longer carry a week payload).
     let mut period_ids = vec![];
     for _ in 0..rng.random_range(1..=3) {
-        let desc = synth::week_desc_vec(rng);
         let op = match period_ids.last() {
-            Some(&last) => PeriodOp::AddAfter(last, desc),
-            None => PeriodOp::AddFront(desc),
+            Some(&last) => PeriodOp::AddAfter(last),
+            None => PeriodOp::AddFront,
         };
         let Some(NewId::PeriodId(id)) = apply(&mut state, &mut snapshots, Op::Period(op), "period")
         else {
             panic!("bootstrap: adding a period should return a period id");
         };
         period_ids.push(id);
+
+        let mut prev_week: Option<WeekId> = None;
+        for desc in synth::week_desc_vec(rng) {
+            let op = match prev_week {
+                Some(week) => WeekOp::AddAfter(week, desc),
+                None => WeekOp::AddFront(id, desc),
+            };
+            let Some(NewId::WeekId(week_id)) =
+                apply(&mut state, &mut snapshots, Op::Week(op), "week")
+            else {
+                panic!("bootstrap: adding a week should return a week id");
+            };
+            prev_week = Some(week_id);
+        }
     }
 
     // Students (no period exclusions during bootstrap: keep it simple)

@@ -572,6 +572,36 @@ pub enum AnnotatedPeriodOp {
 Gates: standard. The 100-seed harness re-validates that period ops + week ops compose
 (generator emits both).
 
+**Deviations landed (vs the sketch above):**
+
+- **Test-fixture churn was much wider than "emission sites already conform".** Many
+  tests used `PeriodOp::AddFront(vec![…])` / `AddAfter(id, vec![…])` as a
+  period-with-weeks convenience, so nine test files needed conversion, not just the
+  ops/gtk4 emission sites. Each got a small local `add_period` / `add_active_period`
+  helper (create empty period, then splice weeks via the `WeekOp` family) to keep the
+  conversions readable. Byte-neutral: `encode(&Data)` serializes only the resulting
+  `Data` (never the op history, never week ids), so replacing one `AddFront(N weeks)`
+  with an empty period + N `WeekOp`s leaves the serialized bytes unchanged.
+- **`weeks_vec_of` KEPT** — still used by gtk4 dialogs, ops (`week_patterns`,
+  `general_planning`, `slots`) and python glue to build `Vec<WeekDesc>` payloads.
+- **`synth::week_desc_vec` KEPT** — the property harness bootstrap still uses it to
+  populate a new period's weeks (now via `WeekOp::AddFront`/`AddAfter`).
+- **`PeriodError::NotEmptyPeriodInColloscope` KEPT** as a defensive guard sitting just
+  after the new `PeriodStillHasWeeks` check; only `NonTrivialWeekPattern` and
+  `NotCompatibleSlotInColloscope` were deleted (both were unreferenced once the `Update`
+  arm and the Remove pattern-splice loop were gone). No gtk4/python `match` renders
+  `PeriodError` variants (it is `#[from]`-derived into `Error::Period`), so no sweep was
+  needed there.
+- **`period_consistency_in_subjects.rs` needed a semantic rework, not a mechanical one:**
+  its first two tests exercised `PeriodOp::Remove` on a period that had weeks — now
+  rejected by the week-empty precondition before any reference guard runs. They now build
+  a week-empty second period so the subject-reference guard is what fires (test 1) / is
+  the only remaining blocker (test 2). Its third test replaced the retired
+  `PeriodOp::Update`-shrink with `WeekOp::Remove` of the last week.
+- **`AddAfter` no longer needs `find_period_position_and_total_number_of_weeks`** (it fed
+  the deleted pattern-splice); it now resolves the insert index with
+  `find_period_position`.
+
 ---
 
 ## Commit 5 — backend swap: `week_map` + ordering sidecar (`Week` entity is born)

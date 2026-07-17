@@ -304,13 +304,9 @@ pub enum PeriodError {
     #[error("period id ({0:?}) is not empty in colloscope")]
     NotEmptyPeriodInColloscope(PeriodId),
 
-    /// A week pattern is not trivial on the period to be cut
-    #[error("week pattern {1:?} is not trivial for the period {0:?}")]
-    NonTrivialWeekPattern(PeriodId, WeekPatternId),
-
-    /// The slot in colloscope is incompatible with the new period
-    #[error("slot {0:?} in colloscope is not compatible with the new period")]
-    NotCompatibleSlotInColloscope(SlotId),
+    /// The period still has weeks and cannot be removed
+    #[error("period id ({0:?}) still has weeks and cannot be removed")]
+    PeriodStillHasWeeks(PeriodId),
 
     /// The period is referenced by a pairing rule
     #[error("period id ({0:?}) is referenced by pairing rule {1:?}")]
@@ -367,7 +363,7 @@ impl crate::Data {
                 );
                 Ok(AnnotatedPeriodOp::ChangeStartDate(old_date))
             }
-            AnnotatedPeriodOp::AddFront(period_id, desc) => {
+            AnnotatedPeriodOp::AddFront(period_id) => {
                 if self
                     .inner_data
                     .params
@@ -378,31 +374,23 @@ impl crate::Data {
                     return Err(PeriodError::PeriodIdAlreadyExists(*period_id));
                 }
 
+                // Periods are created week-less: no pattern bits to splice, no
+                // assignments and no associations (so neither sparse junction
+                // table gets a row), and an empty colloscope period. Weeks are
+                // added afterwards through the WeekOp family.
                 self.inner_data
                     .params
                     .periods
                     .ordered_period_list
-                    .insert_at(0, *period_id, desc.clone())
+                    .insert_at(0, *period_id, Vec::new())
                     .expect("period id absence checked above");
-                // A fresh period carries no assignments and no associations,
-                // so neither (sparse) junction table gets a row until content
-                // is added.
-                for week_pattern in self
-                    .inner_data
-                    .params
-                    .week_patterns
-                    .week_pattern_map
-                    .values_mut()
-                {
-                    week_pattern.add_weeks(0, desc.len());
-                }
                 self.inner_data.colloscope.period_map.insert(
                     *period_id,
                     ColloscopePeriod::new_empty_from_params(&self.inner_data.params, *period_id),
                 );
                 Ok(AnnotatedPeriodOp::Remove(*period_id))
             }
-            AnnotatedPeriodOp::AddAfter(period_id, after_id, desc) => {
+            AnnotatedPeriodOp::AddAfter(period_id, after_id) => {
                 if self
                     .inner_data
                     .params
@@ -413,33 +401,22 @@ impl crate::Data {
                     return Err(PeriodError::PeriodIdAlreadyExists(*period_id));
                 }
 
-                let Some((position, new_first_week)) = self
+                let Some(position) = self
                     .inner_data
                     .params
                     .periods
-                    .find_period_position_and_total_number_of_weeks(*after_id)
+                    .find_period_position(*after_id)
                 else {
                     return Err(PeriodError::InvalidPeriodId(*after_id));
                 };
 
+                // Created week-less (see `AddFront` above).
                 self.inner_data
                     .params
                     .periods
                     .ordered_period_list
-                    .insert_at(position + 1, *period_id, desc.clone())
+                    .insert_at(position + 1, *period_id, Vec::new())
                     .expect("period id absence checked above");
-                // A fresh period carries no assignments and no associations,
-                // so neither (sparse) junction table gets a row until content
-                // is added.
-                for week_pattern in self
-                    .inner_data
-                    .params
-                    .week_patterns
-                    .week_pattern_map
-                    .values_mut()
-                {
-                    week_pattern.add_weeks(new_first_week, desc.len());
-                }
                 self.inner_data.colloscope.period_map.insert(
                     *period_id,
                     ColloscopePeriod::new_empty_from_params(&self.inner_data.params, *period_id),
@@ -447,14 +424,31 @@ impl crate::Data {
                 Ok(AnnotatedPeriodOp::Remove(*period_id))
             }
             AnnotatedPeriodOp::Remove(period_id) => {
-                let Some((position, first_week)) = self
+                let Some(position) = self
                     .inner_data
                     .params
                     .periods
-                    .find_period_position_and_first_week(*period_id)
+                    .find_period_position(*period_id)
                 else {
                     return Err(PeriodError::InvalidPeriodId(*period_id));
                 };
+
+                // A period must be emptied (via WeekOp::Remove) before it can be
+                // removed: `apply_week` is the only writer of week data, so
+                // period removal never has to unwind pattern bits or colloscope
+                // cells — a week-empty period has none.
+                let week_count = self
+                    .inner_data
+                    .params
+                    .periods
+                    .ordered_period_list
+                    .get_at(position)
+                    .expect("position comes from find_period_position")
+                    .1
+                    .len();
+                if week_count != 0 {
+                    return Err(PeriodError::PeriodStillHasWeeks(*period_id));
+                }
 
                 let colloscope_period = self
                     .inner_data
@@ -465,27 +459,6 @@ impl crate::Data {
 
                 if !colloscope_period.is_empty() {
                     return Err(PeriodError::NotEmptyPeriodInColloscope(*period_id));
-                }
-
-                let week_count = self
-                    .inner_data
-                    .params
-                    .periods
-                    .ordered_period_list
-                    .get_at(position)
-                    .expect("position comes from find_period_position")
-                    .1
-                    .len();
-
-                for (week_pattern_id, week_pattern) in
-                    self.inner_data.params.week_patterns.week_pattern_map.iter()
-                {
-                    if !week_pattern.can_remove_weeks(first_week, week_count) {
-                        return Err(PeriodError::NonTrivialWeekPattern(
-                            *period_id,
-                            week_pattern_id,
-                        ));
-                    }
                 }
 
                 for (subject_id, subject) in
@@ -565,8 +538,7 @@ impl crate::Data {
                         .0
                 });
 
-                let (_, old_desc) = self
-                    .inner_data
+                self.inner_data
                     .params
                     .periods
                     .ordered_period_list
@@ -574,7 +546,8 @@ impl crate::Data {
                 // Drop this period's rows from the associations table (none
                 // remain once the emptiness check passes, but stay consistent
                 // regardless). Assignment rows are already gone: the guard
-                // above rejects the removal while any survive.
+                // above rejects the removal while any survive. No week-pattern
+                // bits to unwind either: a week-empty period contributes none.
                 let association_keys: Vec<_> = self
                     .inner_data
                     .params
@@ -590,138 +563,12 @@ impl crate::Data {
                         .subjects_associations
                         .remove(&key);
                 }
-                for week_pattern in self
-                    .inner_data
-                    .params
-                    .week_patterns
-                    .week_pattern_map
-                    .values_mut()
-                {
-                    week_pattern.remove_weeks(first_week, week_count);
-                }
                 self.inner_data.colloscope.period_map.remove(period_id);
 
                 Ok(match previous_id {
-                    None => AnnotatedPeriodOp::AddFront(*period_id, old_desc),
-                    Some(prev) => AnnotatedPeriodOp::AddAfter(*period_id, prev, old_desc),
+                    None => AnnotatedPeriodOp::AddFront(*period_id),
+                    Some(prev) => AnnotatedPeriodOp::AddAfter(*period_id, prev),
                 })
-            }
-            AnnotatedPeriodOp::Update(period_id, new_weeks) => {
-                let Some((position, first_week)) = self
-                    .inner_data
-                    .params
-                    .periods
-                    .find_period_position_and_first_week(*period_id)
-                else {
-                    return Err(PeriodError::InvalidPeriodId(*period_id));
-                };
-
-                let old_length = self
-                    .inner_data
-                    .params
-                    .periods
-                    .ordered_period_list
-                    .get_at(position)
-                    .expect("position comes from find_period_position_and_first_week")
-                    .1
-                    .len();
-                let new_length = new_weeks.len();
-
-                // The annotated payload's ids become the result verbatim.
-                // Week identity is deliberately *not* preserved across a period
-                // `Update` (annotation cannot see the current data, so it issues
-                // a fresh id per position). This keeps `apply` a pure function
-                // of the op — undo/redo reproduce the exact same ids — which the
-                // history replay check relies on. It is harmless because nothing
-                // references week ids in this transitional stage, and the op is
-                // retired before they become load-bearing.
-                //
-                // Description-only view for the positional week-pattern /
-                // colloscope maintenance helpers.
-                let new_descs: Vec<WeekDesc> =
-                    new_weeks.iter().map(|(_id, desc)| desc.clone()).collect();
-
-                if new_length < old_length {
-                    for (week_pattern_id, week_pattern) in
-                        self.inner_data.params.week_patterns.week_pattern_map.iter()
-                    {
-                        if !week_pattern
-                            .can_remove_weeks(first_week + new_length, old_length - new_length)
-                        {
-                            return Err(PeriodError::NonTrivialWeekPattern(
-                                *period_id,
-                                week_pattern_id,
-                            ));
-                        }
-                    }
-                }
-                let colloscope_period = self
-                    .inner_data
-                    .colloscope
-                    .period_map
-                    .get(period_id)
-                    .expect("Period ID should be valid at this point");
-                for (slot_id, collo_slot) in &colloscope_period.slot_map {
-                    let slot = self
-                        .inner_data
-                        .params
-                        .slots
-                        .find_slot(*slot_id)
-                        .expect("Slot ID should be valid");
-                    let new_pattern = slot.build_pattern_for_new_period(
-                        &new_descs,
-                        first_week,
-                        &self.inner_data.params.week_patterns,
-                    );
-
-                    if !collo_slot.check_empty_on_removed_weeks(&new_pattern) {
-                        return Err(PeriodError::NotCompatibleSlotInColloscope(*slot_id));
-                    }
-                }
-
-                let old_weeks_owned = self
-                    .inner_data
-                    .params
-                    .periods
-                    .ordered_period_list
-                    .replace_value_at(position, new_weeks.clone());
-                if new_length > old_length {
-                    let first_week_to_add = first_week + old_length;
-                    for week_pattern in self
-                        .inner_data
-                        .params
-                        .week_patterns
-                        .week_pattern_map
-                        .values_mut()
-                    {
-                        week_pattern.add_weeks(first_week_to_add, new_length - old_length);
-                    }
-                } else if new_length < old_length {
-                    let first_week_to_remove = first_week + new_length;
-                    for week_pattern in self
-                        .inner_data
-                        .params
-                        .week_patterns
-                        .week_pattern_map
-                        .values_mut()
-                    {
-                        week_pattern.remove_weeks(first_week_to_remove, old_length - new_length);
-                    }
-                }
-                let slot_ids: Vec<_> = self
-                    .inner_data
-                    .params
-                    .slots
-                    .all_slots()
-                    .map(|(slot_id, _slot)| *slot_id)
-                    .collect();
-                for slot_id in slot_ids {
-                    self.inner_data
-                        .colloscope
-                        .update_slot_to_match_week_pattern(slot_id, &self.inner_data.params);
-                }
-
-                Ok(AnnotatedPeriodOp::Update(*period_id, old_weeks_owned))
             }
         }
     }

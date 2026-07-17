@@ -14,8 +14,8 @@ use collomatique_state::{AppState, traits::Manager};
 use collomatique_state_colloscopes::{
     ColloscopeOp, Data, GroupListOp, NewId, Op, PeriodOp, SlotOp, Subject,
     SubjectInterrogationParameters, SubjectOp, SubjectParameters, SubjectPeriodicity, TeacherOp,
-    WeekPatternOp, colloscopes::ColloscopeInterrogation, group_lists::GroupListParameters,
-    periods::WeekDesc, slots::Slot, teachers::Teacher, week_patterns::WeekPattern,
+    WeekOp, WeekPatternOp, colloscopes::ColloscopeInterrogation, group_lists::GroupListParameters,
+    ids::PeriodId, periods::WeekDesc, slots::Slot, teachers::Teacher, week_patterns::WeekPattern,
 };
 use std::collections::BTreeSet;
 use std::num::NonZeroU32;
@@ -26,6 +26,27 @@ fn desc(text: &str) -> Desc {
     (OpCategory::None, text.to_string())
 }
 
+/// Creates a front period with `weeks` trivially-active weeks, spliced in one
+/// at a time via the `WeekOp` family — periods are created empty.
+fn add_active_period(app: &mut AppState<Data, Desc>, weeks: usize) -> PeriodId {
+    let period = match app.apply(Op::Period(PeriodOp::AddFront), desc("Add period")) {
+        Ok(Some(NewId::PeriodId(id))) => id,
+        other => panic!("adding a period should return a period id, got {other:?}"),
+    };
+    let mut prev = None;
+    for _ in 0..weeks {
+        let op = match prev {
+            None => WeekOp::AddFront(period, WeekDesc::new(true)),
+            Some(w) => WeekOp::AddAfter(w, WeekDesc::new(true)),
+        };
+        match app.apply(Op::Week(op), desc("Add week")) {
+            Ok(Some(NewId::WeekId(w))) => prev = Some(w),
+            other => panic!("adding a week should return a week id, got {other:?}"),
+        }
+    }
+    period
+}
+
 /// Cutting a period preserves the tail's content: a filled colloscope cell and
 /// a non-trivial week-pattern bit both survive into the new period.
 #[test]
@@ -34,17 +55,7 @@ fn cutting_a_period_preserves_tail_colloscope_and_pattern() {
 
     // A four-week period; we will cut after two weeks, so weeks 2 and 3 form
     // the tail that must carry its content into the new period.
-    let Ok(Some(NewId::PeriodId(period_id))) = app_state.apply(
-        Op::Period(PeriodOp::AddFront(vec![
-            WeekDesc::new(true),
-            WeekDesc::new(true),
-            WeekDesc::new(true),
-            WeekDesc::new(true),
-        ])),
-        desc("Add period"),
-    ) else {
-        panic!("Unexpected result after adding the period");
-    };
+    let period_id = add_active_period(&mut app_state, 4);
 
     let Ok(Some(NewId::SubjectId(subject_id))) = app_state.apply(
         Op::Subject(SubjectOp::AddAfter(

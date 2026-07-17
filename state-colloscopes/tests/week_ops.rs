@@ -61,6 +61,35 @@ fn make_slot(subject_id: SubjectId, teacher_id: TeacherId) -> Slot {
     }
 }
 
+/// Creates a period (at the front, or after `after`) carrying `weeks`, one
+/// spliced in at a time via the `WeekOp` family — periods are created empty.
+fn add_period(
+    app: &mut AppState<Data, String>,
+    after: Option<PeriodId>,
+    weeks: Vec<WeekDesc>,
+) -> PeriodId {
+    let period_op = match after {
+        None => PeriodOp::AddFront,
+        Some(a) => PeriodOp::AddAfter(a),
+    };
+    let period = match app.apply(Op::Period(period_op), "Add period".into()) {
+        Ok(Some(NewId::PeriodId(id))) => id,
+        other => panic!("adding a period should return a period id, got {other:?}"),
+    };
+    let mut prev: Option<WeekId> = None;
+    for desc in weeks {
+        let week_op = match prev {
+            None => WeekOp::AddFront(period, desc),
+            Some(w) => WeekOp::AddAfter(w, desc),
+        };
+        match app.apply(Op::Week(week_op), "Add week".into()) {
+            Ok(Some(NewId::WeekId(w))) => prev = Some(w),
+            other => panic!("adding a week should return a week id, got {other:?}"),
+        }
+    }
+    period
+}
+
 fn week_ids_of(app: &AppState<Data, String>, period: PeriodId) -> Vec<WeekId> {
     let params = &app.get_data().get_inner_data().params;
     let count = params.periods.week_count_of(period).expect("valid period");
@@ -100,16 +129,15 @@ fn cell_at(
 fn remove_week_blocked_by_non_trivial_pattern() {
     let mut app = AppState::<_, String>::new(Data::new());
 
-    let Ok(Some(NewId::PeriodId(period))) = app.apply(
-        Op::Period(PeriodOp::AddFront(vec![
+    let period = add_period(
+        &mut app,
+        None,
+        vec![
             WeekDesc::new(true),
             WeekDesc::new(true),
             WeekDesc::new(true),
-        ])),
-        "Add period".into(),
-    ) else {
-        panic!("adding a period should return a period id");
-    };
+        ],
+    );
 
     // A pattern that skips the middle week.
     let Ok(Some(NewId::WeekPatternId(_))) = app.apply(
@@ -151,16 +179,15 @@ fn remove_week_blocked_by_non_trivial_pattern() {
 fn remove_week_then_undo_restores_identity() {
     let mut app = AppState::<_, String>::new(Data::new());
 
-    let Ok(Some(NewId::PeriodId(period))) = app.apply(
-        Op::Period(PeriodOp::AddFront(vec![
+    let period = add_period(
+        &mut app,
+        None,
+        vec![
             WeekDesc::new(true),
             WeekDesc::new(true),
             WeekDesc::new(true),
-        ])),
-        "Add period".into(),
-    ) else {
-        panic!("adding a period should return a period id");
-    };
+        ],
+    );
 
     let weeks = week_ids_of(&app, period);
     let middle = weeks[1];
@@ -191,15 +218,11 @@ fn remove_week_then_undo_restores_identity() {
 fn update_week_to_inactive_blocked_by_filled_cell() {
     let mut app = AppState::<_, String>::new(Data::new());
 
-    let Ok(Some(NewId::PeriodId(period))) = app.apply(
-        Op::Period(PeriodOp::AddFront(vec![
-            WeekDesc::new(true),
-            WeekDesc::new(true),
-        ])),
-        "Add period".into(),
-    ) else {
-        panic!("adding a period should return a period id");
-    };
+    let period = add_period(
+        &mut app,
+        None,
+        vec![WeekDesc::new(true), WeekDesc::new(true)],
+    );
     let Ok(Some(NewId::SubjectId(subject))) = app.apply(
         Op::Subject(SubjectOp::AddAfter(
             None,
@@ -290,24 +313,16 @@ fn update_week_to_inactive_blocked_by_filled_cell() {
 fn move_week_preserves_filled_cell() {
     let mut app = AppState::<_, String>::new(Data::new());
 
-    let Ok(Some(NewId::PeriodId(period_a))) = app.apply(
-        Op::Period(PeriodOp::AddFront(vec![
-            WeekDesc::new(true),
-            WeekDesc::new(true),
-        ])),
-        "Add period A".into(),
-    ) else {
-        panic!("adding period A should return a period id");
-    };
-    let Ok(Some(NewId::PeriodId(period_b))) = app.apply(
-        Op::Period(PeriodOp::AddAfter(
-            period_a,
-            vec![WeekDesc::new(true), WeekDesc::new(true)],
-        )),
-        "Add period B".into(),
-    ) else {
-        panic!("adding period B should return a period id");
-    };
+    let period_a = add_period(
+        &mut app,
+        None,
+        vec![WeekDesc::new(true), WeekDesc::new(true)],
+    );
+    let period_b = add_period(
+        &mut app,
+        Some(period_a),
+        vec![WeekDesc::new(true), WeekDesc::new(true)],
+    );
     // Subject runs on both periods.
     let Ok(Some(NewId::SubjectId(subject))) = app.apply(
         Op::Subject(SubjectOp::AddAfter(
@@ -417,24 +432,16 @@ fn move_week_preserves_filled_cell() {
 fn move_week_blocked_when_destination_lacks_slot() {
     let mut app = AppState::<_, String>::new(Data::new());
 
-    let Ok(Some(NewId::PeriodId(period_a))) = app.apply(
-        Op::Period(PeriodOp::AddFront(vec![
-            WeekDesc::new(true),
-            WeekDesc::new(true),
-        ])),
-        "Add period A".into(),
-    ) else {
-        panic!("adding period A should return a period id");
-    };
-    let Ok(Some(NewId::PeriodId(period_b))) = app.apply(
-        Op::Period(PeriodOp::AddAfter(
-            period_a,
-            vec![WeekDesc::new(true), WeekDesc::new(true)],
-        )),
-        "Add period B".into(),
-    ) else {
-        panic!("adding period B should return a period id");
-    };
+    let period_a = add_period(
+        &mut app,
+        None,
+        vec![WeekDesc::new(true), WeekDesc::new(true)],
+    );
+    let period_b = add_period(
+        &mut app,
+        Some(period_a),
+        vec![WeekDesc::new(true), WeekDesc::new(true)],
+    );
     // Subject runs on A only (excluded from B), so B has no slot for it.
     let Ok(Some(NewId::SubjectId(subject))) = app.apply(
         Op::Subject(SubjectOp::AddAfter(

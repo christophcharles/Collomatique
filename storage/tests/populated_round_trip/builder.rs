@@ -13,11 +13,12 @@ use collomatique_state_colloscopes::{
     AssignmentOp, BalancingOp, ColloscopeOp, Data, ExportConfigOp, GroupListOp, IncompatOp, NewId,
     Op, PairingOp, PeriodOp, PersonWithContact, SettingsOp, SlotOp, SlotPairingOp, StudentOp,
     Subject, SubjectInterrogationParameters, SubjectOp, SubjectParameters, SubjectPeriodicity,
-    TeacherOp, WeekPatternOp,
+    TeacherOp, WeekOp, WeekPatternOp,
     balancing::{Balancing, BalancingOptions},
     colloscopes::{ColloscopeGroupList, ColloscopeInterrogation},
     export_config,
     group_lists::{GroupListFilling, GroupListParameters, PrefilledGroup},
+    ids::{PeriodId, WeekId},
     incompats::Incompatibility,
     pairings::{PairingRule, RulePart},
     periods::WeekDesc,
@@ -94,6 +95,38 @@ macro_rules! apply_new_id {
     }};
 }
 
+/// Creates a period (front, or after `after`) carrying `weeks`, one spliced in
+/// at a time via the `WeekOp` family — periods are created empty.
+fn add_period(
+    state: &mut AppState<Data, String>,
+    after: Option<PeriodId>,
+    weeks: Vec<WeekDesc>,
+) -> PeriodId {
+    let period = match after {
+        None => apply_new_id!(
+            state,
+            Op::Period(PeriodOp::AddFront),
+            "add period",
+            PeriodId
+        ),
+        Some(a) => apply_new_id!(
+            state,
+            Op::Period(PeriodOp::AddAfter(a)),
+            "add period",
+            PeriodId
+        ),
+    };
+    let mut prev: Option<WeekId> = None;
+    for desc in weeks {
+        let op = match prev {
+            None => WeekOp::AddFront(period, desc),
+            Some(w) => WeekOp::AddAfter(w, desc),
+        };
+        prev = Some(apply_new_id!(state, Op::Week(op), "add week", WeekId));
+    }
+    period
+}
+
 /// Builds a document where every serialized section is non-trivially populated
 pub fn build_rich_data() -> Data {
     let mut state = AppState::<_, String>::new(Data::new());
@@ -107,35 +140,30 @@ pub fn build_rich_data() -> Data {
         )))),
         "start date",
     );
-    let period1 = apply_new_id!(
+    let period1 = add_period(
         &mut state,
-        Op::Period(PeriodOp::AddFront(vec![
+        None,
+        vec![
             WeekDesc {
                 interrogations: true,
                 annotation: Some(non_empty("Rentrée")),
             },
             WeekDesc::new(true),
             WeekDesc::new(false),
-        ])),
-        "first period",
-        PeriodId
+        ],
     );
-    let period2 = apply_new_id!(
+    let period2 = add_period(
         &mut state,
-        Op::Period(PeriodOp::AddAfter(
-            period1,
-            vec![
-                WeekDesc::new(true),
-                WeekDesc::new(true),
-                WeekDesc {
-                    interrogations: false,
-                    annotation: Some(non_empty("Vacances")),
-                },
-                WeekDesc::new(true),
-            ],
-        )),
-        "second period",
-        PeriodId
+        Some(period1),
+        vec![
+            WeekDesc::new(true),
+            WeekDesc::new(true),
+            WeekDesc {
+                interrogations: false,
+                annotation: Some(non_empty("Vacances")),
+            },
+            WeekDesc::new(true),
+        ],
     );
 
     // Students: with and without contact info, one excluded from a period

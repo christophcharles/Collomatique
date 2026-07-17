@@ -322,18 +322,18 @@ fn gen_period(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
         let op = if rng.random_bool(0.5) {
             PeriodOp::Remove(unsafe { PeriodId::new(dangling(rng)) })
         } else {
-            PeriodOp::Update(
-                unsafe { PeriodId::new(dangling(rng)) },
-                synth::week_desc_vec(rng),
-            )
+            PeriodOp::AddAfter(unsafe { PeriodId::new(dangling(rng)) })
         };
         return Op::Period(op);
     }
     let n = pools.period_ids.len();
     let add_w = if n < 4 { 4 } else { 1 };
-    let update_w = if n > 0 { 3 } else { 0 };
     let remove_w = if n > 0 { 2 } else { 0 };
-    let op = match weighted(rng, &[2, add_w, update_w, remove_w]) {
+    // Periods are created empty (weeks are spliced in by the WeekOp family,
+    // driven by `gen_week`); `PeriodOp::Remove` now needs a week-empty period,
+    // so it will often bounce off `PeriodStillHasWeeks` — a legitimate error
+    // the harness tolerates like any other.
+    let op = match weighted(rng, &[2, add_w, remove_w]) {
         0 => PeriodOp::ChangeStartDate(if rng.random_bool(0.7) {
             Some(synth::week_start(rng))
         } else {
@@ -341,12 +341,11 @@ fn gen_period(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
         }),
         1 => {
             if pools.period_ids.is_empty() || rng.random_bool(0.3) {
-                PeriodOp::AddFront(synth::week_desc_vec(rng))
+                PeriodOp::AddFront
             } else {
-                PeriodOp::AddAfter(pick(rng, &pools.period_ids), synth::week_desc_vec(rng))
+                PeriodOp::AddAfter(pick(rng, &pools.period_ids))
             }
         }
-        2 => PeriodOp::Update(pick(rng, &pools.period_ids), synth::week_desc_vec(rng)),
         _ => PeriodOp::Remove(pick(rng, &pools.period_ids)),
     };
     Op::Period(op)

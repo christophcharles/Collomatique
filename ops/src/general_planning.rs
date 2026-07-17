@@ -915,10 +915,8 @@ impl GeneralPlanningUpdateOp {
                                 .period_ids()
                                 .last()
                             {
-                                Some(id) => {
-                                    collomatique_state_colloscopes::PeriodOp::AddAfter(id, vec![])
-                                }
-                                None => collomatique_state_colloscopes::PeriodOp::AddFront(vec![]),
+                                Some(id) => collomatique_state_colloscopes::PeriodOp::AddAfter(id),
+                                None => collomatique_state_colloscopes::PeriodOp::AddFront,
                             },
                         ),
                         self.get_desc(),
@@ -1110,7 +1108,7 @@ impl GeneralPlanningUpdateOp {
                 let result = data
                     .apply(
                         collomatique_state_colloscopes::Op::Period(
-                            collomatique_state_colloscopes::PeriodOp::AddAfter(*period_id, vec![]),
+                            collomatique_state_colloscopes::PeriodOp::AddAfter(*period_id),
                         ),
                         self.get_desc(),
                     )

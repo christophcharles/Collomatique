@@ -10,9 +10,10 @@ use collomatique_state::{AppState, traits::Manager};
 use collomatique_state_colloscopes::{
     ColloscopeOp, Data, Error, GroupListError, GroupListOp, NewId, Op, PeriodOp, SettingsOp,
     SlotOp, StudentOp, Subject, SubjectInterrogationParameters, SubjectOp, SubjectParameters,
-    SubjectPeriodicity, TeacherOp,
+    SubjectPeriodicity, TeacherOp, WeekOp,
     colloscopes::{ColloscopeGroupList, ColloscopeInterrogation},
     group_lists::{GroupListFilling, GroupListParameters, PrefilledGroup},
+    ids::PeriodId,
     periods::WeekDesc,
     settings::{Limits, Settings},
     slots::{Slot, SlotError},
@@ -21,6 +22,27 @@ use collomatique_state_colloscopes::{
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU32;
+
+/// Creates a front period with `weeks` trivially-active weeks, spliced in one
+/// at a time via the `WeekOp` family — periods are created empty.
+fn add_active_period(app: &mut AppState<Data, String>, weeks: usize) -> PeriodId {
+    let period = match app.apply(Op::Period(PeriodOp::AddFront), "Add period".into()) {
+        Ok(Some(NewId::PeriodId(id))) => id,
+        other => panic!("adding a period should return a period id, got {other:?}"),
+    };
+    let mut prev = None;
+    for _ in 0..weeks {
+        let op = match prev {
+            None => WeekOp::AddFront(period, WeekDesc::new(true)),
+            Some(w) => WeekOp::AddAfter(w, WeekDesc::new(true)),
+        };
+        match app.apply(Op::Week(op), "Add week".into()) {
+            Ok(Some(NewId::WeekId(w))) => prev = Some(w),
+            other => panic!("adding a week should return a week id, got {other:?}"),
+        }
+    }
+    period
+}
 
 /// `StudentOp::Remove` must refuse to remove a student that still has
 /// per-student settings, exactly like the existing guards for group
@@ -159,15 +181,7 @@ fn set_filling_excluding_placed_student_is_rejected() {
 fn update_shrinking_group_names_below_assigned_group_is_rejected() {
     let mut app_state = AppState::<_, String>::new(Data::new());
 
-    let Ok(Some(NewId::PeriodId(period_id))) = app_state.apply(
-        Op::Period(PeriodOp::AddFront(vec![
-            WeekDesc::new(true),
-            WeekDesc::new(true),
-        ])),
-        "Add period".into(),
-    ) else {
-        panic!("Unexpected result after adding the period");
-    };
+    let period_id = add_active_period(&mut app_state, 2);
 
     let Ok(Some(NewId::SubjectId(subject_id))) = app_state.apply(
         Op::Subject(SubjectOp::AddAfter(
@@ -356,15 +370,7 @@ fn remove_prefilled_group_list_round_trips_on_reverse() {
 fn assign_to_subject_with_dangling_group_list_id_errors() {
     let mut app_state = AppState::<_, String>::new(Data::new());
 
-    let Ok(Some(NewId::PeriodId(period_id))) = app_state.apply(
-        Op::Period(PeriodOp::AddFront(vec![
-            WeekDesc::new(true),
-            WeekDesc::new(true),
-        ])),
-        "Add period".into(),
-    ) else {
-        panic!("Unexpected result after adding the period");
-    };
+    let period_id = add_active_period(&mut app_state, 2);
 
     let Ok(Some(NewId::SubjectId(subject_id))) = app_state.apply(
         Op::Subject(SubjectOp::AddAfter(
@@ -432,15 +438,7 @@ fn assign_to_subject_with_dangling_group_list_id_errors() {
 fn slot_update_changing_subject_is_rejected() {
     let mut app_state = AppState::<_, String>::new(Data::new());
 
-    let Ok(Some(NewId::PeriodId(_period_id))) = app_state.apply(
-        Op::Period(PeriodOp::AddFront(vec![
-            WeekDesc::new(true),
-            WeekDesc::new(true),
-        ])),
-        "Add period".into(),
-    ) else {
-        panic!("Unexpected result after adding the period");
-    };
+    let _period_id = add_active_period(&mut app_state, 2);
 
     let interrogation_subject = |name: &str| Subject {
         parameters: SubjectParameters {

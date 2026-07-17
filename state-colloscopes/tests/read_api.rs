@@ -13,7 +13,7 @@ use collomatique_state::{AppState, Join, traits::Manager};
 use collomatique_state_colloscopes::{
     Data, GroupListOp, IncompatOp, JoinedRulePart, NewId, Op, PairingOp, PeriodOp, SlotOp,
     SlotPairingOp, StudentOp, Subject, SubjectInterrogationParameters, SubjectOp,
-    SubjectParameters, SubjectPeriodicity, TeacherOp, WeekPatternOp,
+    SubjectParameters, SubjectPeriodicity, TeacherOp, WeekOp, WeekPatternOp,
     group_lists::GroupListParameters,
     ids::{
         GroupListId, Id, IncompatId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId,
@@ -108,9 +108,14 @@ fn build_document(app: &mut AppState<Data, String>) -> Built {
 
     // One one-week period → total week count is 1.
     let period = apply_new!(
-        Op::Period(PeriodOp::AddFront(vec![WeekDesc::new(true)])),
+        Op::Period(PeriodOp::AddFront),
         NewId::PeriodId,
         "add period"
+    );
+    let _week = apply_new!(
+        Op::Week(WeekOp::AddFront(period, WeekDesc::new(true))),
+        NewId::WeekId,
+        "add week"
     );
     // Week pattern length must match the total week count.
     let week_pattern = apply_new!(
