@@ -1362,7 +1362,8 @@ impl CollomatiqueFile {
     }
 
     fn get_colloscope(self_: PyRef<'_, Self>) -> colloscopes::Colloscope {
-        self_.file.get_inner_data().colloscope.into()
+        let inner = self_.file.get_inner_data();
+        colloscopes::Colloscope::from_mem(&inner.colloscope, &inner.params)
     }
 }
 

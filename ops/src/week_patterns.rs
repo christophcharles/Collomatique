@@ -184,84 +184,50 @@ impl WeekPatternsUpdateOp {
         match self {
             Self::AddNewWeekPattern(_) => None,
             Self::UpdateWeekPattern(week_pattern_id, new_week_pattern) => {
-                let Some(old_week_pattern) = data
-                    .get_data()
-                    .get_inner_data()
+                let inner = data.get_data().get_inner_data();
+                if inner
                     .params
                     .week_patterns
                     .week_pattern_map
                     .get(week_pattern_id)
-                else {
+                    .is_none()
+                {
                     return None;
-                };
-                let old_excluded = old_week_pattern.excluded_weeks.clone();
-                let new_excluded = new_week_pattern.excluded_weeks.clone();
+                }
+                let new_excluded = &new_week_pattern.excluded_weeks;
 
-                for (slot_id, slot) in data.get_data().get_inner_data().params.slots.all_slots() {
+                // For every slot on this pattern, a non-empty colloscope row on a
+                // week the new exclusion set newly disables must be cleared. A row
+                // only exists on a week the slot is currently active on, so
+                // "active before" is implicit; only "excluded after" needs
+                // checking.
+                for (slot_id, slot) in inner.params.slots.all_slots() {
                     if slot.week_pattern != Some(*week_pattern_id) {
                         continue;
                     }
-
-                    let period_ids: Vec<_> = data
-                        .get_data()
-                        .get_inner_data()
-                        .params
-                        .periods
-                        .period_ids()
-                        .collect();
-                    for period_id in period_ids {
-                        let period = data
-                            .get_data()
-                            .get_inner_data()
+                    for (week_id, _groups) in inner
+                        .colloscope
+                        .interrogations_for_slot(&inner.params.periods, *slot_id)
+                    {
+                        if !new_excluded.contains(&week_id) {
+                            continue;
+                        }
+                        let (period_id, week_in_period) = inner
                             .params
                             .periods
-                            .weeks_vec_of(period_id)
-                            .expect("period id from period_ids is valid");
-                        let period_id = &period_id;
-                        let collo_period = data
-                            .get_data()
-                            .get_inner_data()
-                            .colloscope
-                            .period_map
-                            .get(period_id)
-                            .expect("Period ID should appear in colloscope");
-                        let Some(collo_slot) = collo_period.slot_map.get(slot_id) else {
-                            continue;
-                        };
-                        for week_in_period in 0..period.len() {
-                            // If the week is disabled at the period level then it is already disabled in colloscope
-                            if !period[week_in_period].interrogations {
-                                continue;
-                            }
-
-                            let week_id = data
-                                .get_data()
-                                .get_inner_data()
-                                .params
-                                .periods
-                                .week_id_at(*period_id, week_in_period)
-                                .expect("position within the period is valid");
-                            // Active (not excluded) before, excluded after.
-                            let old_status = !old_excluded.contains(&week_id);
-                            let new_status = !new_excluded.contains(&week_id);
-                            if old_status && !new_status {
-                                let interrogation = collo_slot.interrogations[week_in_period].as_ref().expect("There should be an interrogation as the week used to be enabled");
-
-                                if !interrogation.is_empty() {
-                                    return Some(CleaningOp {
-                                            warning: WeekPatternsUpdateWarning::LooseColloscopeDataForSlot(
-                                                *slot_id,
-                                            ),
-                                            op: UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
-                                                *period_id,
-                                                *slot_id,
-                                                week_in_period,
-                                                collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
-                                            )),
-                                        });
-                                }
-                            }
-                        }
+                            .week_position(week_id)
+                            .expect("week id from a live colloscope row is valid");
+                        return Some(CleaningOp {
+                            warning: WeekPatternsUpdateWarning::LooseColloscopeDataForSlot(*slot_id),
+                            op: UpdateOp::Colloscope(
+                                ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+                                    period_id,
+                                    *slot_id,
+                                    week_in_period,
+                                    collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
+                                ),
+                            ),
+                        });
                     }
                 }
 

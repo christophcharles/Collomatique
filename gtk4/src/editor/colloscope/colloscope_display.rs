@@ -15,13 +15,13 @@ pub enum DisplayInput {
         collomatique_state_colloscopes::teachers::Teachers,
         collomatique_state_colloscopes::students::Students,
         collomatique_state_colloscopes::group_lists::GroupLists,
+        collomatique_state_colloscopes::week_patterns::WeekPatterns,
         collomatique_state_colloscopes::colloscopes::Colloscope,
     ),
 
     InterrogationClicked(
         collomatique_state_colloscopes::SlotId,
-        collomatique_state_colloscopes::PeriodId,
-        usize,
+        collomatique_state_colloscopes::WeekId,
     ),
 }
 
@@ -29,8 +29,7 @@ pub enum DisplayInput {
 pub enum DisplayOutput {
     InterrogationClicked(
         collomatique_state_colloscopes::SlotId,
-        collomatique_state_colloscopes::PeriodId,
-        usize,
+        collomatique_state_colloscopes::WeekId,
     ),
 }
 
@@ -49,6 +48,7 @@ pub struct Display {
     teachers: collomatique_state_colloscopes::teachers::Teachers,
     students: collomatique_state_colloscopes::students::Students,
     group_lists: collomatique_state_colloscopes::group_lists::GroupLists,
+    week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatterns,
     colloscope: collomatique_state_colloscopes::colloscopes::Colloscope,
 
     issue: Option<DisplayIssue>,
@@ -134,6 +134,7 @@ impl Component for Display {
             teachers: collomatique_state_colloscopes::teachers::Teachers::default(),
             students: collomatique_state_colloscopes::students::Students::default(),
             group_lists: collomatique_state_colloscopes::group_lists::GroupLists::default(),
+            week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatterns::default(),
             colloscope: collomatique_state_colloscopes::colloscopes::Colloscope::default(),
             issue: None,
             column_view,
@@ -155,6 +156,7 @@ impl Component for Display {
                 teachers,
                 students,
                 group_lists,
+                week_patterns,
                 colloscope,
             ) => {
                 self.periods = periods;
@@ -163,6 +165,7 @@ impl Component for Display {
                 self.teachers = teachers;
                 self.students = students;
                 self.group_lists = group_lists;
+                self.week_patterns = week_patterns;
                 self.colloscope = colloscope;
 
                 self.update_display_issue();
@@ -170,13 +173,9 @@ impl Component for Display {
                 self.update_view_wrapper(sender);
                 self.build_columns();
             }
-            DisplayInput::InterrogationClicked(slot_id, period_id, week_in_period) => {
+            DisplayInput::InterrogationClicked(slot_id, week_id) => {
                 sender
-                    .output(DisplayOutput::InterrogationClicked(
-                        slot_id,
-                        period_id,
-                        week_in_period,
-                    ))
+                    .output(DisplayOutput::InterrogationClicked(slot_id, week_id))
                     .unwrap();
             }
         }
@@ -222,8 +221,13 @@ impl Display {
             .collect();
         for (period_id, period_len) in period_specs {
             for week_in_period in 0..period_len {
+                let week_id = self
+                    .periods
+                    .week_id_at(period_id, week_in_period)
+                    .expect("position within the period is valid");
                 self.column_view.append_column(WeekColumn {
                     period_id,
+                    week_id,
                     period_first_week,
                     week_in_period,
                 });
@@ -249,64 +253,80 @@ impl Display {
                         .periods
                         .week_count_of(period_id)
                         .expect("period id from period_ids is valid");
-                    let period_id = &period_id;
-                    let collo_period = self
-                        .colloscope
-                        .period_map
-                        .get(period_id)
-                        .expect("Period ID should be valid");
 
-                    let Some(collo_slot) = collo_period.slot_map.get(slot_id) else {
+                    // The slot runs in this period iff its subject does — not
+                    // excluded and has interrogations. Otherwise every cell is
+                    // impossible (the old dense skeleton had no slot entry here).
+                    let subject_runs = !subject.excluded_periods.contains(&period_id)
+                        && subject.parameters.interrogation_parameters.is_some();
+                    if !subject_runs {
                         period_map.insert(
-                            *period_id,
+                            period_id,
                             SlotPeriodData {
                                 has_group_list: false,
                                 slots: vec![None; period_len],
                             },
                         );
                         continue;
-                    };
+                    }
 
                     let group_list_id = self
                         .group_lists
                         .subjects_associations
-                        .get(&(*period_id, *subject_id));
+                        .get(&(period_id, *subject_id));
 
                     let group_list = match group_list_id {
                         Some(id) => self.group_lists.group_list_map.get(id),
                         None => None,
                     };
 
+                    let slots = (0..period_len)
+                        .map(|week_in_period| {
+                            let week_id = self
+                                .periods
+                                .week_id_at(period_id, week_in_period)
+                                .expect("position within the period is valid");
+                            // Impossible week (pattern-excluded or no interrogations)
+                            // → no cell, matching the old dense `None`.
+                            if !self.week_patterns.is_week_active(
+                                &self.periods,
+                                week_id,
+                                slot.week_pattern,
+                            ) {
+                                return None;
+                            }
+                            let assigned = self
+                                .colloscope
+                                .interrogation(&self.periods, *slot_id, week_id)
+                                .cloned()
+                                .unwrap_or_default();
+                            Some(
+                                assigned
+                                    .iter()
+                                    .map(|num| {
+                                        (
+                                            *num,
+                                            match group_list {
+                                                Some(list) => list
+                                                    .params
+                                                    .group_names
+                                                    .get(*num as usize)
+                                                    .cloned()
+                                                    .flatten(),
+                                                None => None,
+                                            },
+                                        )
+                                    })
+                                    .collect(),
+                            )
+                        })
+                        .collect();
+
                     period_map.insert(
-                        *period_id,
+                        period_id,
                         SlotPeriodData {
                             has_group_list: group_list.is_some(),
-                            slots: collo_slot
-                                .interrogations
-                                .iter()
-                                .map(|interrogation_opt| {
-                                    interrogation_opt.as_ref().map(|interrogation| {
-                                        interrogation
-                                            .assigned_groups
-                                            .iter()
-                                            .map(|num| {
-                                                (
-                                                    *num,
-                                                    match group_list {
-                                                        Some(list) => list
-                                                            .params
-                                                            .group_names
-                                                            .get(*num as usize)
-                                                            .cloned()
-                                                            .flatten(),
-                                                        None => None,
-                                                    },
-                                                )
-                                            })
-                                            .collect()
-                                    })
-                                })
-                                .collect(),
+                            slots,
                         },
                     );
                 }
@@ -441,6 +461,7 @@ impl LabelColumn for DateTimeColumn {
 #[derive(Debug, Clone)]
 struct WeekColumn {
     period_id: collomatique_state_colloscopes::PeriodId,
+    week_id: collomatique_state_colloscopes::WeekId,
     period_first_week: usize,
     week_in_period: usize,
 }
@@ -496,15 +517,12 @@ impl RelmColumn for WeekColumn {
                 let sender = item.sender.clone();
                 let slot_id = item.data.slot_id;
                 let period_id = self.period_id;
+                let week_id = self.week_id;
                 let week_in_period = self.week_in_period;
                 item.handler_ids.insert(
                     (period_id, week_in_period),
                     root.connect_clicked(move |_widget| {
-                        sender.input(DisplayInput::InterrogationClicked(
-                            slot_id,
-                            period_id,
-                            week_in_period,
-                        ));
+                        sender.input(DisplayInput::InterrogationClicked(slot_id, week_id));
                     }),
                 );
             }

@@ -50,8 +50,7 @@ pub enum ColloscopeInput {
 
     EditInterrogation(
         collomatique_state_colloscopes::SlotId,
-        collomatique_state_colloscopes::PeriodId,
-        usize,
+        collomatique_state_colloscopes::WeekId,
     ),
     InterrogationAccepted(collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation),
 
@@ -174,8 +173,7 @@ pub struct Colloscope {
     edited_group_list: Option<collomatique_state_colloscopes::GroupListId>,
     edited_interrogation: Option<(
         collomatique_state_colloscopes::SlotId,
-        collomatique_state_colloscopes::PeriodId,
-        usize,
+        collomatique_state_colloscopes::WeekId,
     )>,
 
     // The instant of the last `Update` signal, used to debounce recomputation.
@@ -463,7 +461,12 @@ impl Component for Colloscope {
                 set_orientation: gtk::Orientation::Vertical,
                 set_margin_all: 5,
                 #[watch]
-                set_visible: !model.colloscope.group_lists.is_empty(),
+                set_visible: model
+                    .params
+                    .group_lists
+                    .group_list_map
+                    .iter()
+                    .any(|(_id, group_list)| !group_list.is_prefilled()),
                 gtk::Box {
                     set_hexpand: true,
                     set_orientation: gtk::Orientation::Vertical,
@@ -535,11 +538,9 @@ impl Component for Colloscope {
         let colloscope_display = colloscope_display::Display::builder().launch(()).forward(
             sender.input_sender(),
             |msg| match msg {
-                colloscope_display::DisplayOutput::InterrogationClicked(
-                    slot_id,
-                    period_id,
-                    week_in_period,
-                ) => ColloscopeInput::EditInterrogation(slot_id, period_id, week_in_period),
+                colloscope_display::DisplayOutput::InterrogationClicked(slot_id, week_id) => {
+                    ColloscopeInput::EditInterrogation(slot_id, week_id)
+                }
             },
         );
 
@@ -644,10 +645,14 @@ impl Component for Colloscope {
                             .cloned()
                             .expect("Group list ID should be valid"),
                         self.colloscope
-                            .group_lists
-                            .get(&group_list_id)
+                            .group_list(group_list_id)
                             .cloned()
-                            .expect("Group list ID should be valid"),
+                            .map(|groups_for_students| {
+                                collomatique_state_colloscopes::colloscopes::ColloscopeGroupList {
+                                    groups_for_students,
+                                }
+                            })
+                            .unwrap_or_default(),
                     ))
                     .unwrap();
             }
@@ -665,9 +670,18 @@ impl Component for Colloscope {
                     ))
                     .unwrap();
             }
-            ColloscopeInput::EditInterrogation(slot_id, period_id, week_in_period) => {
-                self.edited_interrogation = Some((slot_id, period_id, week_in_period));
+            ColloscopeInput::EditInterrogation(slot_id, week_id) => {
+                // The edit is only meaningful on a possible interrogation cell.
+                if !self.params.is_interrogation_possible(slot_id, week_id) {
+                    return;
+                }
+                self.edited_interrogation = Some((slot_id, week_id));
 
+                let (period_id, _pos) = self
+                    .params
+                    .periods
+                    .week_position(week_id)
+                    .expect("week id should be valid");
                 let (subject_id, _pos) = self
                     .params
                     .slots
@@ -687,22 +701,14 @@ impl Component for Colloscope {
                     .expect("Group list ID should be valid")
                     .clone();
 
-                let collo_period = self
-                    .colloscope
-                    .period_map
-                    .get(&period_id)
-                    .expect("Period ID should be valid");
-                let collo_slot = collo_period
-                    .slot_map
-                    .get(&slot_id)
-                    .expect("Slot ID should be valid for this period");
-                let interrogation_opt = collo_slot
-                    .interrogations
-                    .get(week_in_period)
-                    .expect("Week number should be valid");
-                let interrogation = interrogation_opt
-                    .clone()
-                    .expect("There should be an interrogation to edit!");
+                let interrogation =
+                    collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation {
+                        assigned_groups: self
+                            .colloscope
+                            .interrogation(&self.params.periods, slot_id, week_id)
+                            .cloned()
+                            .unwrap_or_default(),
+                    };
 
                 self.interrogation_dialog
                     .sender()
@@ -713,10 +719,17 @@ impl Component for Colloscope {
                     .unwrap();
             }
             ColloscopeInput::InterrogationAccepted(interrogation) => {
-                let (slot_id, period_id, week_in_period) = self
+                let (slot_id, week_id) = self
                     .edited_interrogation
                     .take()
                     .expect("Interrogation information should have been stored for edition");
+                // The elementary op is still positional in D0; translate the
+                // week id back to its (period, position) coordinate at op build.
+                let (period_id, week_in_period) = self
+                    .params
+                    .periods
+                    .week_position(week_id)
+                    .expect("week id should be valid");
                 sender
                     .output(ColloscopeOutput::UpdateOp(
                         ColloscopeUpdateOp::UpdateColloscopeInterrogation(
@@ -1100,6 +1113,7 @@ impl Colloscope {
                 self.params.teachers.clone(),
                 self.params.students.clone(),
                 self.params.group_lists.clone(),
+                self.params.week_patterns.clone(),
                 self.colloscope.clone(),
             ))
             .unwrap();

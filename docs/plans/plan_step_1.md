@@ -361,18 +361,48 @@ impl Parameters {
 
 ## Phase 5 — 1d: colloscope sparse (3 commits, D0/D1/D2 — the phase-D/E migration pattern)
 
-### Commit D0 — prep on the old shape
+### Commit D0 — prep on the old shape — **DONE**
 
-Add the read/write surface consumers will use, implemented against the *current* dense
-shape, and move consumers onto it:
-- `Colloscope::interrogation(&self, slot: SlotId, week: WeekId) -> Option<&BTreeSet<u32>>`,
-  `interrogations_for_slot(slot)`, `iter()` (row iterator), `group_list(GroupListId)`,
-  plus `is_empty`-style predicates re-expressed on the surface.
-- Re-cut `ops/`'s ~16 dense walk sites (6 files, heaviest `general_planning.rs`,
-  `group_lists.rs`), gtk4's 2 colloscope view files, and `constraints-colloscopes`
-  `convert.rs:8-70/:105-127` onto these accessors (using `WeekId` from 1b). After D0, no
-  consumer outside `state-colloscopes` + storage touches `period_map`/`slot_map`/
-  `interrogations` directly.
+Added the read/write surface consumers use, implemented against the *current* dense shape,
+and moved every consumer onto it. Delivered:
+- Surface on `Colloscope` (`state-colloscopes/src/colloscopes.rs`): `interrogation(&self,
+  periods, slot, week) -> Option<&BTreeSet<u32>>`, `interrogations_for_slot(periods, slot)`,
+  `iter(periods)` (row iterator), `group_list(id)`, `group_lists_iter()`, and the upsert
+  writers `set_interrogation` / `set_group_list` (panic on impossible coords, cleared row on
+  empty payload). Canonical sparse view: `None`/missing/`Some(empty)` cells all read absent.
+  The `&Periods` argument is transitional — D1 drops it. New tests in
+  `tests/colloscope_surface.rs` (5).
+- Possibility predicates (permanent): `WeekPatterns::is_week_active(periods, week, pattern)`
+  (homed on `WeekPatterns` so gtk4's piece-clones can call it; `Parameters::is_week_active`
+  now delegates) and `Parameters::is_interrogation_possible(slot, week)` — the single oracle
+  for the dense skeleton's Some-cell rule, reused by every re-derivation.
+- Re-cut all ~18 `ops/` dense-walk sites (7 files, heaviest `general_planning.rs`,
+  `group_lists.rs`), translating `WeekId → (period, position)` only at op-payload emission
+  (op shapes unchanged in D0). `Erase*` composites now skip no-op sub-ops (intended micro
+  change).
+- Re-cut `constraints-colloscopes/convert.rs` (`build_config`/`build_complete_config`
+  zero-fill re-derived from params; `build_colloscope` accumulates D1's row shape then
+  commits through the writers), and gtk4's colloscope view (`colloscope_display.rs` gains a
+  `WeekPatterns` clone + `WeekId` columns + params-derived possibility; `editor/colloscope.rs`
+  re-keys `EditInterrogation` to `(SlotId, WeekId)`, translating back to positional at op
+  build; group-list dialog sources via `group_list(id)`).
+
+**Scope pulled forward** (user-confirmed): D0 also moved the **python glue** and the
+**testgen generator** onto the surface, so those items no longer belong to D1/D2 (see the
+struck-through notes there):
+- `python/src/glue/colloscopes.rs`: the `From<mem::Colloscope>` chain became
+  `Colloscope::from_mem(&mem::Colloscope, &Parameters)` — a computed dense pyclass built from
+  params + surface, byte-for-byte identical (this was **D2's python dense-view item**).
+- `testgen-colloscopes/src/generator.rs`: `colloscope_targets` /
+  `colloscope_group_list_ids` derived from params (`is_interrogation_possible`, non-prefilled
+  lists) instead of the skeleton (this was **D1's generator re-target**).
+
+After D0, no consumer outside `state-colloscopes` + storage touches
+`period_map`/`slot_map`/`interrogations`/`colloscope.group_lists` directly. Verified: clean
+`cargo build --workspace`, full `cargo test --workspace` green (property_ops 100-seed random
+walk, storage 127 byte-stability tests, new surface tests), no `Cargo.lock` change.
+**OUTSTANDING user-run gate**: gtk4 colloscope smoke (grid renders identically, cell
+edit/erase, undo/redo) + `custom_export_xlsx.py` unchanged output.
 
 ### Commit D1 — the swap
 
@@ -420,10 +450,10 @@ for ((slot_id, week_id), groups) in self.interrogations.iter() {
   boundary errors); encode `build_colloscope` (`encode/spec2.rs:542-606`) iterates rows,
   projecting `WeekId` → global index. Byte-stable; `derived_key_sets_are_completed`
   colloscope arm re-pinned to sparse.
-- **Property harness**: generator re-targets interrogation ops from params
+- **Property harness**: ~~generator re-targets interrogation ops from params
   (periods × slots × active weeks via `is_week_active`), not the skeleton
-  (`generator.rs:147-166`); oracle is the re-cut validate. found_bugs cell tests
-  (`:84-151`, `:158-301`) keep scenarios; upsert semantics removes their skeleton
+  (`generator.rs:147-166`)~~ *(landed in D0)*; oracle is the re-cut validate. found_bugs
+  cell tests (`:84-151`, `:158-301`) keep scenarios; upsert semantics removes their skeleton
   dependence.
 
 ### Commit D2 — cleanup sweep
@@ -431,10 +461,11 @@ for ((slot_id, week_id), groups) in self.interrogations.iter() {
 Dead helpers, dead error variants (`WrongPeriodCountInColloscopeData`,
 `WrongSlotCountInPeriodInColloscopeData`, `WrongInterrogationCountForSlot…`,
 `InterrogationOnNonInterrogationWeek`/`Missing…` — superseded by the new row vocabulary),
-doc comments, and the **python glue dense view** (decision 6): a computed
-`Colloscope`-shaped pyclass built from params + rows + `is_week_active` (~50 lines,
-`python/src/glue/colloscopes.rs`), keeping `period_map`/`slot_map`/`interrogations`
-pyclass shapes byte-for-byte so `custom_export_xlsx.py` runs unchanged.
+and doc comments. ~~The **python glue dense view** (decision 6): a computed
+`Colloscope`-shaped pyclass built from params + rows + `is_week_active`,
+`python/src/glue/colloscopes.rs`, keeping `period_map`/`slot_map`/`interrogations` pyclass
+shapes byte-for-byte so `custom_export_xlsx.py` runs unchanged~~ *(landed in D0 as
+`Colloscope::from_mem`)*.
 
 **Milestone gate ★** (= end of step 1): 500-seed harness, byte-stability + hogwarts,
 user runs 3 contract scripts + gtk4 smoke.

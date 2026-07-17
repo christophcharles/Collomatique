@@ -141,26 +141,33 @@ impl Pools {
             .iter()
             .flat_map(|(_, slots): &(_, Vec<SlotId>)| slots.iter().copied())
             .collect();
-        let colloscope_targets: Vec<_> = inner
-            .colloscope
-            .period_map
-            .iter()
-            .flat_map(|(period_id, period)| {
-                period.slot_map.iter().filter_map(|(slot_id, slot)| {
-                    let weeks: Vec<usize> = slot
-                        .interrogations
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(i, opt)| opt.as_ref().map(|_| i))
-                        .collect();
-                    if weeks.is_empty() {
-                        None
-                    } else {
-                        Some((*period_id, *slot_id, weeks))
-                    }
-                })
-            })
-            .collect();
+        // Possible interrogation cells, re-derived from the parameters: for each
+        // period × slot, the positional week indices where an interrogation can
+        // happen (`is_interrogation_possible` mirrors the dense skeleton's
+        // Some-cell rule). A slot whose subject does not run on a period yields
+        // no possible weeks and is dropped, matching the old skeleton walk.
+        let mut colloscope_targets: Vec<(PeriodId, SlotId, Vec<usize>)> = Vec::new();
+        for period_id in params.periods.period_ids() {
+            let week_ids = params
+                .periods
+                .find_period(period_id)
+                .expect("period id from period_ids is valid")
+                .clone();
+            for (slot_id, _slot) in params.slots.all_slots() {
+                let weeks: Vec<usize> = week_ids
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, &week_id)| {
+                        params
+                            .is_interrogation_possible(*slot_id, week_id)
+                            .then_some(i)
+                    })
+                    .collect();
+                if !weeks.is_empty() {
+                    colloscope_targets.push((period_id, *slot_id, weeks));
+                }
+            }
+        }
 
         Pools {
             period_ids,
@@ -177,7 +184,13 @@ impl Pools {
             group_list_ids: params.group_lists.group_list_map.keys().collect(),
             pairing_rule_ids: params.pairings.pairing_rule_map.keys().collect(),
             slot_pairing_rule_ids: params.slot_pairings.slot_pairing_rule_map.keys().collect(),
-            colloscope_group_list_ids: inner.colloscope.group_lists.keys().copied().collect(),
+            colloscope_group_list_ids: params
+                .group_lists
+                .group_list_map
+                .iter()
+                .filter(|(_id, group_list)| !group_list.is_prefilled())
+                .map(|(id, _)| id)
+                .collect(),
             colloscope_targets,
         }
     }

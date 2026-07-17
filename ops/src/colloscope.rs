@@ -185,44 +185,57 @@ impl ColloscopeUpdateOp {
                 Ok(())
             }
             Self::EraseColloscope => {
-                let current = data.get_data().get_inner_data().colloscope.clone();
-                for (period_id, period) in current.period_map.iter() {
-                    for (slot_id, slot) in period.slot_map.iter() {
-                        for (week_in_period, interrogation) in
-                            slot.interrogations.iter().enumerate()
-                        {
-                            if interrogation.is_none() {
-                                continue;
-                            }
-                            let result = data
-                                .apply(
-                                    collomatique_state_colloscopes::Op::Colloscope(
-                                        collomatique_state_colloscopes::ColloscopeOp::UpdateInterrogation(
-                                            *period_id,
-                                            *slot_id,
-                                            week_in_period,
-                                            ColloscopeInterrogation::default(),
-                                        ),
-                                    ),
-                                    self.get_desc(),
-                                )
-                                .expect("No error possible for erasing");
+                // Only non-empty rows need clearing; the surface yields exactly
+                // those. Row coordinates are collected up front so the mutable
+                // `data.apply` loop does not overlap the shared read borrow.
+                let inner = data.get_data().get_inner_data();
+                let coords: Vec<_> = inner
+                    .colloscope
+                    .iter(&inner.params.periods)
+                    .map(|((slot_id, week_id), _groups)| {
+                        let (period_id, week_in_period) = inner
+                            .params
+                            .periods
+                            .week_position(week_id)
+                            .expect("week id from a live colloscope row is valid");
+                        (period_id, slot_id, week_in_period)
+                    })
+                    .collect();
+                for (period_id, slot_id, week_in_period) in coords {
+                    let result = data
+                        .apply(
+                            collomatique_state_colloscopes::Op::Colloscope(
+                                collomatique_state_colloscopes::ColloscopeOp::UpdateInterrogation(
+                                    period_id,
+                                    slot_id,
+                                    week_in_period,
+                                    ColloscopeInterrogation::default(),
+                                ),
+                            ),
+                            self.get_desc(),
+                        )
+                        .expect("No error possible for erasing");
 
-                            assert!(result.is_none());
-                        }
-                    }
+                    assert!(result.is_none());
                 }
 
                 Ok(())
             }
             Self::EraseGroupLists => {
-                let current = data.get_data().get_inner_data().colloscope.clone();
-                for (group_list_id, _group_list) in current.group_lists.iter() {
+                // Only non-empty group lists need clearing.
+                let group_list_ids: Vec<_> = data
+                    .get_data()
+                    .get_inner_data()
+                    .colloscope
+                    .group_lists_iter()
+                    .map(|(group_list_id, _placements)| group_list_id)
+                    .collect();
+                for group_list_id in group_list_ids {
                     let result = data
                         .apply(
                             collomatique_state_colloscopes::Op::Colloscope(
                                 collomatique_state_colloscopes::ColloscopeOp::UpdateGroupList(
-                                    *group_list_id,
+                                    group_list_id,
                                     ColloscopeGroupList::default(),
                                 ),
                             ),

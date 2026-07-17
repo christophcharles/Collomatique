@@ -164,31 +164,18 @@ impl SlotsUpdateOp {
         match self {
             SlotsUpdateOp::AddNewSlot(_desc, _slot) => None,
             SlotsUpdateOp::UpdateSlot(slot_id, slot) => {
-                let Some(old_slot) = data
+                if data
                     .get_data()
                     .get_inner_data()
                     .params
                     .slots
                     .find_slot(*slot_id)
-                else {
+                    .is_none()
+                {
                     return None;
-                };
-                let old_week_pattern_id = old_slot.week_pattern;
+                }
                 let new_week_pattern_id = slot.week_pattern;
 
-                let old_excluded = match old_week_pattern_id {
-                    Some(id) => data
-                        .get_data()
-                        .get_inner_data()
-                        .params
-                        .week_patterns
-                        .week_pattern_map
-                        .get(&id)
-                        .expect("Week pattern ID should be valid")
-                        .excluded_weeks
-                        .clone(),
-                    None => std::collections::BTreeSet::new(),
-                };
                 let new_excluded = match new_week_pattern_id {
                     Some(id) => {
                         let Some(wp) = data
@@ -206,101 +193,62 @@ impl SlotsUpdateOp {
                     None => std::collections::BTreeSet::new(),
                 };
 
-                let period_ids: Vec<_> = data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .periods
-                    .period_ids()
-                    .collect();
-                for period_id in period_ids {
-                    let period = data
-                        .get_data()
-                        .get_inner_data()
+                // A non-empty colloscope row on a week the new pattern newly
+                // excludes must be cleared first. A row only exists on a week the
+                // slot is currently active on (period interrogations on ∧ not
+                // excluded by the old pattern), so "active before" is implicit;
+                // only "excluded after" needs checking.
+                let inner = data.get_data().get_inner_data();
+                for (week_id, _groups) in inner
+                    .colloscope
+                    .interrogations_for_slot(&inner.params.periods, *slot_id)
+                {
+                    if !new_excluded.contains(&week_id) {
+                        continue;
+                    }
+                    let (period_id, week_in_period) = inner
                         .params
                         .periods
-                        .weeks_vec_of(period_id)
-                        .expect("period id from period_ids is valid");
-                    let period_id = &period_id;
-                    let collo_period = data
-                        .get_data()
-                        .get_inner_data()
-                        .colloscope
-                        .period_map
-                        .get(period_id)
-                        .expect("Period ID should appear in colloscope");
-                    let Some(collo_slot) = collo_period.slot_map.get(slot_id) else {
-                        continue;
-                    };
-                    for week_in_period in 0..period.len() {
-                        // If the week is disabled at the period level then it is already disabled in colloscope
-                        if !period[week_in_period].interrogations {
-                            continue;
-                        }
-
-                        let week_id = data
-                            .get_data()
-                            .get_inner_data()
-                            .params
-                            .periods
-                            .week_id_at(*period_id, week_in_period)
-                            .expect("position within the period is valid");
-                        // Active (not excluded) before, excluded after.
-                        let old_status = !old_excluded.contains(&week_id);
-                        let new_status = !new_excluded.contains(&week_id);
-                        if old_status && !new_status {
-                            let interrogation = collo_slot.interrogations[week_in_period]
-                                .as_ref()
-                                .expect(
-                                "There should be an interrogation as the week used to be enabled",
-                            );
-
-                            if !interrogation.is_empty() {
-                                return Some(CleaningOp {
-                                    warning: SlotsUpdateWarning::LooseColloscopeDataForSlot(
-                                        *slot_id,
-                                    ),
-                                    op: UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
-                                        *period_id,
-                                        *slot_id,
-                                        week_in_period,
-                                        collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
-                                    )),
-                                });
-                            }
-                        }
-                    }
+                        .week_position(week_id)
+                        .expect("week id from a live colloscope row is valid");
+                    return Some(CleaningOp {
+                        warning: SlotsUpdateWarning::LooseColloscopeDataForSlot(*slot_id),
+                        op: UpdateOp::Colloscope(
+                            ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+                                period_id,
+                                *slot_id,
+                                week_in_period,
+                                collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
+                            ),
+                        ),
+                    });
                 }
 
                 None
             }
             SlotsUpdateOp::DeleteSlot(slot_id) => {
-                for (period_id, collo_period) in
-                    &data.get_data().get_inner_data().colloscope.period_map
+                let inner = data.get_data().get_inner_data();
+                if let Some((week_id, _groups)) = inner
+                    .colloscope
+                    .interrogations_for_slot(&inner.params.periods, *slot_id)
+                    .next()
                 {
-                    let Some(collo_slot) = collo_period.slot_map.get(slot_id) else {
-                        continue;
-                    };
-
-                    for week in 0..collo_slot.interrogations.len() {
-                        let Some(interrogation) = &collo_slot.interrogations[week] else {
-                            continue;
-                        };
-
-                        if !interrogation.is_empty() {
-                            return Some(CleaningOp {
-                                warning: SlotsUpdateWarning::LooseColloscopeDataForSlot(
-                                    *slot_id,
-                                ),
-                                op: UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
-                                    *period_id,
-                                    *slot_id,
-                                    week,
-                                    collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
-                                )),
-                            });
-                        }
-                    }
+                    let (period_id, week_in_period) = inner
+                        .params
+                        .periods
+                        .week_position(week_id)
+                        .expect("week id from a live colloscope row is valid");
+                    return Some(CleaningOp {
+                        warning: SlotsUpdateWarning::LooseColloscopeDataForSlot(*slot_id),
+                        op: UpdateOp::Colloscope(
+                            ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+                                period_id,
+                                *slot_id,
+                                week_in_period,
+                                collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
+                            ),
+                        ),
+                    });
                 }
 
                 for (rule_id, rule) in data

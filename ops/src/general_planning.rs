@@ -342,49 +342,50 @@ impl GeneralPlanningUpdateOp {
                     return None;
                 }
 
-                let colloscope_period = data
-                    .get_data()
-                    .get_inner_data()
-                    .colloscope
-                    .period_map
-                    .get(period_id)
-                    .expect("Period ID should be valid at this point");
-
-                if !colloscope_period.is_empty() {
-                    for (slot_id, collo_slot) in &colloscope_period.slot_map {
-                        for week in *week_count..old_week_count {
-                            if let Some(interrogation) = &collo_slot.interrogations[week]
-                                && !interrogation.is_empty()
-                            {
-                                return Some(CleaningOp {
-                                        warning: GeneralPlanningUpdateWarning::LoosePeriodDataInColloscope(*period_id),
-                                        op: UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
-                                            *period_id,
-                                            *slot_id,
-                                            week,
-                                            collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
-                                        )),
-                                    });
-                            }
-                        }
-                    }
-                }
+                let inner = data.get_data().get_inner_data();
 
                 // Week ids of the shrunk-off tail (per-period positions
-                // `week_count..old_week_count`). A pattern excluding any of them
-                // would block the elementary week removals, so it must be
-                // cleaned (its exclusions on those weeks dropped) first.
+                // `week_count..old_week_count`). A non-empty colloscope cell on
+                // any of them, or a pattern excluding any of them, must be
+                // cleaned first (the former loses data, the latter would block
+                // the elementary week removals).
                 let removed_week_ids: Vec<collomatique_state_colloscopes::WeekId> = (*week_count
                     ..old_week_count)
                     .map(|pos| {
-                        data.get_data()
-                            .get_inner_data()
+                        inner
                             .params
                             .periods
                             .week_id_at(*period_id, pos)
                             .expect("position within the period is valid")
                     })
                     .collect();
+                let removed_week_set: std::collections::BTreeSet<
+                    collomatique_state_colloscopes::WeekId,
+                > = removed_week_ids.iter().copied().collect();
+
+                for ((slot_id, week_id), _groups) in inner.colloscope.iter(&inner.params.periods) {
+                    if !removed_week_set.contains(&week_id) {
+                        continue;
+                    }
+                    let (_period, week_in_period) = inner
+                        .params
+                        .periods
+                        .week_position(week_id)
+                        .expect("week id from a live colloscope row is valid");
+                    return Some(CleaningOp {
+                        warning: GeneralPlanningUpdateWarning::LoosePeriodDataInColloscope(
+                            *period_id,
+                        ),
+                        op: UpdateOp::Colloscope(
+                            ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+                                *period_id,
+                                slot_id,
+                                week_in_period,
+                                collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
+                            ),
+                        ),
+                    });
+                }
 
                 for (week_pattern_id, week_pattern) in data
                     .get_data()
@@ -425,35 +426,28 @@ impl GeneralPlanningUpdateOp {
                     return None;
                 }
 
-                let Some(colloscope_period) = data
-                    .get_data()
-                    .get_inner_data()
-                    .colloscope
-                    .period_map
-                    .get(period_id)
-                else {
+                let inner = data.get_data().get_inner_data();
+                let Some(week_id) = inner.params.periods.week_id_at(*period_id, *week) else {
                     return None;
                 };
 
-                if !colloscope_period.is_empty() {
-                    for (slot_id, collo_slot) in &colloscope_period.slot_map {
-                        let Some(interrogation_opt) = collo_slot.interrogations.get(*week) else {
-                            return None;
-                        };
-                        if let Some(interrogation) = interrogation_opt
-                            && !interrogation.is_empty()
-                        {
-                            return Some(CleaningOp {
-                                    warning: GeneralPlanningUpdateWarning::LoosePeriodDataInColloscope(*period_id),
-                                    op: UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
-                                        *period_id,
-                                        *slot_id,
-                                        *week,
-                                        collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
-                                    )),
-                                });
-                        }
+                for ((slot_id, row_week), _groups) in inner.colloscope.iter(&inner.params.periods) {
+                    if row_week != week_id {
+                        continue;
                     }
+                    return Some(CleaningOp {
+                        warning: GeneralPlanningUpdateWarning::LoosePeriodDataInColloscope(
+                            *period_id,
+                        ),
+                        op: UpdateOp::Colloscope(
+                            ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+                                *period_id,
+                                slot_id,
+                                *week,
+                                collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
+                            ),
+                        ),
+                    });
                 }
 
                 None
@@ -471,35 +465,33 @@ impl GeneralPlanningUpdateOp {
                     return None;
                 };
 
-                let colloscope_period = data
-                    .get_data()
-                    .get_inner_data()
-                    .colloscope
-                    .period_map
-                    .get(period_id)
-                    .expect("Period ID should be valid at this point");
+                let removed_week_set: std::collections::BTreeSet<
+                    collomatique_state_colloscopes::WeekId,
+                > = removed_week_ids.iter().copied().collect();
+                let inner = data.get_data().get_inner_data();
 
-                if !colloscope_period.is_empty() {
-                    for (slot_id, collo_slot) in &colloscope_period.slot_map {
-                        for week in 0..collo_slot.interrogations.len() {
-                            let interrogation_opt = &collo_slot.interrogations[week];
-                            let Some(interrogation) = interrogation_opt else {
-                                continue;
-                            };
-                            if interrogation.is_empty() {
-                                continue;
-                            }
-                            return Some(CleaningOp {
-                                warning: GeneralPlanningUpdateWarning::LoosePeriodDataInColloscope(*period_id),
-                                op: UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
-                                    *period_id,
-                                    *slot_id,
-                                    week,
-                                    collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
-                                )),
-                            });
-                        }
+                for ((slot_id, week_id), _groups) in inner.colloscope.iter(&inner.params.periods) {
+                    if !removed_week_set.contains(&week_id) {
+                        continue;
                     }
+                    let (_period, week_in_period) = inner
+                        .params
+                        .periods
+                        .week_position(week_id)
+                        .expect("week id from a live colloscope row is valid");
+                    return Some(CleaningOp {
+                        warning: GeneralPlanningUpdateWarning::LoosePeriodDataInColloscope(
+                            *period_id,
+                        ),
+                        op: UpdateOp::Colloscope(
+                            ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+                                *period_id,
+                                slot_id,
+                                week_in_period,
+                                collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
+                            ),
+                        ),
+                    });
                 }
 
                 for (week_pattern_id, week_pattern) in data

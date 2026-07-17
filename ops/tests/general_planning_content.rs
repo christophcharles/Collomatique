@@ -231,24 +231,21 @@ fn cutting_a_period_preserves_tail_colloscope_and_pattern() {
     );
 
     // The filled cell moved into the new period at local week 0.
-    let moved_cell = app_state
-        .get_data()
-        .get_inner_data()
-        .colloscope
-        .period_map
-        .get(&new_period_id)
-        .expect("new period exists in the colloscope")
-        .slot_map
-        .get(&slot_id)
-        .expect("the slot runs in the new period")
-        .interrogations[0]
-        .clone()
-        .expect("the moved week keeps an active cell");
-    assert_eq!(
-        moved_cell.assigned_groups,
-        BTreeSet::from([0]),
-        "the interrogation content must travel into the new period",
-    );
+    {
+        let inner = app_state.get_data().get_inner_data();
+        let moved_week = inner
+            .params
+            .periods
+            .week_id_at(new_period_id, 0)
+            .expect("the new period has a first week");
+        assert_eq!(
+            inner
+                .colloscope
+                .interrogation(&inner.params.periods, slot_id, moved_week),
+            Some(&BTreeSet::from([0])),
+            "the interrogation content must travel into the new period",
+        );
+    }
 
     // Merging the new period back into the original recombines the weeks and
     // still carries the week-pattern bits. (The colloscope content is dropped

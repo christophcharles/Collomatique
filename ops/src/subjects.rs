@@ -483,53 +483,42 @@ impl SubjectsUpdateOp {
                         .interrogation_parameters
                         .is_some()
                     {
-                        let Some(colloscope_period) = data
-                            .get_data()
-                            .get_inner_data()
-                            .colloscope
-                            .period_map
-                            .get(period_id)
-                        else {
-                            return None;
-                        };
-
-                        let subject_slots = data
-                            .get_data()
-                            .get_inner_data()
+                        let inner = data.get_data().get_inner_data();
+                        let subject_slots: Vec<_> = inner
                             .params
                             .slots
                             .slots_for_subject(*subject_id)
-                            .expect("Subject should have slots at this point");
+                            .expect("Subject should have slots at this point")
+                            .map(|(slot_id, _slot)| *slot_id)
+                            .collect();
 
-                        for (slot_id, _slot) in subject_slots {
-                            let collo_slot = colloscope_period
-                                .slot_map
-                                .get(slot_id)
-                                .expect("Slot should appear in colloscope at this point");
-
-                            if !collo_slot.is_empty() {
-                                for week in 0..collo_slot.interrogations.len() {
-                                    let Some(interrogation) = &collo_slot.interrogations[week]
-                                    else {
-                                        continue;
-                                    };
-                                    if !interrogation.is_empty() {
-                                        return Some(CleaningOp {
-                                            warning: SubjectsUpdateWarning::LooseColloscopeSlotsForPeriod(
-                                                *subject_id,
-                                                *period_id,
-                                            ),
-                                            op: UpdateOp::Colloscope(
-                                                ColloscopeUpdateOp::UpdateColloscopeInterrogation(
-                                                    *period_id,
-                                                    *slot_id,
-                                                    week,
-                                                    collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
-                                                ),
-                                            ),
-                                        });
-                                    }
+                        for slot_id in subject_slots {
+                            for (week_id, _groups) in inner
+                                .colloscope
+                                .interrogations_for_slot(&inner.params.periods, slot_id)
+                            {
+                                let (row_period, week_in_period) = inner
+                                    .params
+                                    .periods
+                                    .week_position(week_id)
+                                    .expect("week id from a live colloscope row is valid");
+                                if row_period != *period_id {
+                                    continue;
                                 }
+                                return Some(CleaningOp {
+                                    warning: SubjectsUpdateWarning::LooseColloscopeSlotsForPeriod(
+                                        *subject_id,
+                                        *period_id,
+                                    ),
+                                    op: UpdateOp::Colloscope(
+                                        ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+                                            *period_id,
+                                            slot_id,
+                                            week_in_period,
+                                            collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
+                                        ),
+                                    ),
+                                });
                             }
                         }
                     }

@@ -37,6 +37,33 @@ pub struct WeekPattern {
     pub excluded_weeks: BTreeSet<WeekId>,
 }
 
+impl WeekPatterns {
+    /// The single definition of "a slot can carry an interrogation on `week`":
+    /// the week runs interrogations and is not excluded by the given pattern (or
+    /// there is no pattern). Homed here so consumers holding only a `Periods` +
+    /// `WeekPatterns` pair — e.g. the gtk4 colloscope grid — can call it;
+    /// [`super::colloscope_params::Parameters::is_week_active`] delegates to it.
+    ///
+    /// Returns `false` for a dangling week id; a dangling pattern id is treated
+    /// as "no exclusion". Both are bugs on validated data.
+    pub fn is_week_active(
+        &self,
+        periods: &super::periods::Periods,
+        week: WeekId,
+        pattern: Option<WeekPatternId>,
+    ) -> bool {
+        let Some(week_desc) = periods.find_week(week) else {
+            return false;
+        };
+        week_desc.interrogations
+            && pattern.is_none_or(|p| {
+                self.week_pattern_map
+                    .get(&p)
+                    .is_none_or(|wp| !wp.excluded_weeks.contains(&week))
+            })
+    }
+}
+
 /// Errors for week pattern operations
 ///
 /// These errors can be returned when trying to modify [crate::Data] with a week pattern op.

@@ -371,92 +371,78 @@ impl GroupListsUpdateOp {
                 };
 
                 if !old_group_list.is_prefilled() {
-                    let collo_group_list = data
+                    if let Some(placements) = data
                         .get_data()
                         .get_inner_data()
                         .colloscope
-                        .group_lists
-                        .get(group_list_id)
-                        .expect("Group list ID should be valid");
-                    for (student_id, group) in &collo_group_list.groups_for_students {
-                        // Check if student is assigned to a group that no longer exists
-                        if (*group as usize) >= params.group_names.len() {
-                            let mut new_collo_group_list = collo_group_list.clone();
-                            new_collo_group_list.groups_for_students.remove(student_id);
-                            return Some(CleaningOp {
-                                warning: GroupListsUpdateWarning::LooseStudentGroupInColloscope(
-                                    *group_list_id,
-                                    *student_id,
-                                ),
-                                op: UpdateOp::Colloscope(
-                                    ColloscopeUpdateOp::UpdateColloscopeGroupList(
+                        .group_list(*group_list_id)
+                    {
+                        for (student_id, group) in placements {
+                            // Check if student is assigned to a group that no longer exists
+                            if (*group as usize) >= params.group_names.len() {
+                                let mut new_placements = placements.clone();
+                                new_placements.remove(student_id);
+                                return Some(CleaningOp {
+                                    warning: GroupListsUpdateWarning::LooseStudentGroupInColloscope(
                                         *group_list_id,
-                                        new_collo_group_list,
+                                        *student_id,
                                     ),
-                                ),
-                            });
+                                    op: UpdateOp::Colloscope(
+                                        ColloscopeUpdateOp::UpdateColloscopeGroupList(
+                                            *group_list_id,
+                                            collomatique_state_colloscopes::colloscopes::ColloscopeGroupList {
+                                                groups_for_students: new_placements,
+                                            },
+                                        ),
+                                    ),
+                                });
+                            }
                         }
                     }
                 }
 
-                for (period_id, collo_period) in
-                    &data.get_data().get_inner_data().colloscope.period_map
+                let inner = data.get_data().get_inner_data();
+                for ((assoc_period, subject_id), associated_group_list) in
+                    inner.params.group_lists.subjects_associations.iter()
                 {
-                    for ((assoc_period, subject_id), associated_group_list) in data
-                        .get_data()
-                        .get_inner_data()
-                        .params
-                        .group_lists
-                        .subjects_associations
-                        .iter()
-                    {
-                        if assoc_period != *period_id || *associated_group_list != *group_list_id {
-                            continue;
-                        }
-                        let subject_id = &subject_id;
-
-                        let subject_slots = data
-                            .get_data()
-                            .get_inner_data()
-                            .params
-                            .slots
-                            .slots_for_subject(*subject_id)
-                            .expect("Subject ID should be valid");
-                        for (slot_id, _slot) in subject_slots {
-                            let collo_slot = collo_period
-                                .slot_map
-                                .get(slot_id)
-                                .expect("Slot ID should be valid");
-                            for week in 0..collo_slot.interrogations.len() {
-                                let interrogation_opt = &collo_slot.interrogations[week];
-                                let Some(interrogation) = interrogation_opt else {
-                                    continue;
-                                };
-                                if interrogation.is_empty() {
-                                    continue;
-                                }
-
-                                let mut new_assigned_groups = interrogation.assigned_groups.clone();
-                                for group in &interrogation.assigned_groups {
-                                    if (*group as usize) < params.group_names.len() {
-                                        continue;
-                                    }
-                                    new_assigned_groups.remove(group);
-                                }
-                                if new_assigned_groups.len() != interrogation.assigned_groups.len()
-                                {
-                                    return Some(CleaningOp {
-                                        warning: GroupListsUpdateWarning::LooseGroupsInInterrogationsInColloscope(*subject_id, *period_id),
-                                        op: UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
-                                            *period_id,
-                                            *slot_id,
-                                            week,
-                                            collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation {
-                                                assigned_groups: new_assigned_groups,
-                                            },
-                                        )),
-                                    });
-                                }
+                    if *associated_group_list != *group_list_id {
+                        continue;
+                    }
+                    let Some(subject_slots) = inner.params.slots.slots_for_subject(subject_id)
+                    else {
+                        continue;
+                    };
+                    let slot_ids: Vec<_> = subject_slots.map(|(slot_id, _slot)| *slot_id).collect();
+                    for slot_id in slot_ids {
+                        for (week_id, groups) in inner
+                            .colloscope
+                            .interrogations_for_slot(&inner.params.periods, slot_id)
+                        {
+                            let (row_period, week_in_period) = inner
+                                .params
+                                .periods
+                                .week_position(week_id)
+                                .expect("week id from a live colloscope row is valid");
+                            if row_period != assoc_period {
+                                continue;
+                            }
+                            let new_assigned_groups: std::collections::BTreeSet<u32> = groups
+                                .iter()
+                                .copied()
+                                .filter(|group| (*group as usize) < params.group_names.len())
+                                .collect();
+                            if new_assigned_groups.len() != groups.len() {
+                                return Some(CleaningOp {
+                                    warning: GroupListsUpdateWarning::LooseGroupsInInterrogationsInColloscope(subject_id, assoc_period),
+                                    op: UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+                                        assoc_period,
+                                        slot_id,
+                                        week_in_period,
+                                        collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation {
+                                            assigned_groups: new_assigned_groups,
+                                        },
+                                    )),
+                                });
                             }
                         }
                     }
@@ -515,53 +501,40 @@ impl GroupListsUpdateOp {
                     return None;
                 };
 
-                for (period_id, collo_period) in
-                    &data.get_data().get_inner_data().colloscope.period_map
+                let inner = data.get_data().get_inner_data();
+                for ((assoc_period, subject_id), associated_group_list) in
+                    inner.params.group_lists.subjects_associations.iter()
                 {
-                    for ((assoc_period, subject_id), associated_group_list) in data
-                        .get_data()
-                        .get_inner_data()
-                        .params
-                        .group_lists
-                        .subjects_associations
-                        .iter()
-                    {
-                        if assoc_period != *period_id || *associated_group_list != *group_list_id {
-                            continue;
-                        }
-                        let subject_id = &subject_id;
-
-                        let subject_slots = data
-                            .get_data()
-                            .get_inner_data()
-                            .params
-                            .slots
-                            .slots_for_subject(*subject_id)
-                            .expect("Subject ID should be valid");
-                        for (slot_id, _slot) in subject_slots {
-                            let collo_slot = collo_period
-                                .slot_map
-                                .get(slot_id)
-                                .expect("Slot ID should be valid");
-                            for week in 0..collo_slot.interrogations.len() {
-                                let interrogation_opt = &collo_slot.interrogations[week];
-                                let Some(interrogation) = interrogation_opt else {
-                                    continue;
-                                };
-                                if interrogation.is_empty() {
-                                    continue;
-                                }
-
-                                return Some(CleaningOp {
-                                    warning: GroupListsUpdateWarning::LooseInterrogationsInColloscope(*subject_id, *period_id),
-                                    op: UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
-                                        *period_id,
-                                        *slot_id,
-                                        week,
-                                        collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
-                                    )),
-                                });
+                    if *associated_group_list != *group_list_id {
+                        continue;
+                    }
+                    let Some(subject_slots) = inner.params.slots.slots_for_subject(subject_id)
+                    else {
+                        continue;
+                    };
+                    let slot_ids: Vec<_> = subject_slots.map(|(slot_id, _slot)| *slot_id).collect();
+                    for slot_id in slot_ids {
+                        for (week_id, _groups) in inner
+                            .colloscope
+                            .interrogations_for_slot(&inner.params.periods, slot_id)
+                        {
+                            let (row_period, week_in_period) = inner
+                                .params
+                                .periods
+                                .week_position(week_id)
+                                .expect("week id from a live colloscope row is valid");
+                            if row_period != assoc_period {
+                                continue;
                             }
+                            return Some(CleaningOp {
+                                warning: GroupListsUpdateWarning::LooseInterrogationsInColloscope(subject_id, assoc_period),
+                                op: UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+                                    assoc_period,
+                                    slot_id,
+                                    week_in_period,
+                                    collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
+                                )),
+                            });
                         }
                     }
                 }
@@ -587,14 +560,13 @@ impl GroupListsUpdateOp {
                 }
 
                 if !old_group_list.is_prefilled() {
-                    let collo_group_list = data
+                    if data
                         .get_data()
                         .get_inner_data()
                         .colloscope
-                        .group_lists
-                        .get(group_list_id)
-                        .expect("Group list ID should be valid at this point");
-                    if !collo_group_list.is_empty() {
+                        .group_list(*group_list_id)
+                        .is_some()
+                    {
                         return Some(CleaningOp {
                             warning: GroupListsUpdateWarning::LooseGroupListInColloscope(*group_list_id),
                             op: UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeGroupList(
@@ -658,50 +630,47 @@ impl GroupListsUpdateOp {
                 } = filling
                     && !group_list.is_prefilled()
                 {
-                    let collo_group_list = data
+                    if let Some(placements) = data
                         .get_data()
                         .get_inner_data()
                         .colloscope
-                        .group_lists
-                        .get(group_list_id)
-                        .expect("Non-prefilled group list should have colloscope entry");
-
-                    for student_id in collo_group_list.groups_for_students.keys() {
-                        if excluded_students.contains(student_id) {
-                            let mut new_collo_group_list = collo_group_list.clone();
-                            new_collo_group_list.groups_for_students.remove(student_id);
-                            return Some(CleaningOp {
-                                warning: GroupListsUpdateWarning::LooseStudentGroupInColloscope(
-                                    *group_list_id,
-                                    *student_id,
-                                ),
-                                op: UpdateOp::Colloscope(
-                                    ColloscopeUpdateOp::UpdateColloscopeGroupList(
+                        .group_list(*group_list_id)
+                    {
+                        for student_id in placements.keys() {
+                            if excluded_students.contains(student_id) {
+                                let mut new_placements = placements.clone();
+                                new_placements.remove(student_id);
+                                return Some(CleaningOp {
+                                    warning: GroupListsUpdateWarning::LooseStudentGroupInColloscope(
                                         *group_list_id,
-                                        new_collo_group_list,
+                                        *student_id,
                                     ),
-                                ),
-                            });
+                                    op: UpdateOp::Colloscope(
+                                        ColloscopeUpdateOp::UpdateColloscopeGroupList(
+                                            *group_list_id,
+                                            collomatique_state_colloscopes::colloscopes::ColloscopeGroupList {
+                                                groups_for_students: new_placements,
+                                            },
+                                        ),
+                                    ),
+                                });
+                            }
                         }
                     }
                 }
 
                 // Clean colloscope when transitioning from non-prefilled to prefilled
                 if !group_list.is_prefilled() && filling.is_prefilled() {
-                    let collo_group_list = data
+                    // Emit a warning for the first student that needs removal.
+                    if let Some(placements) = data
                         .get_data()
                         .get_inner_data()
                         .colloscope
-                        .group_lists
-                        .get(group_list_id)
-                        .expect("Non-prefilled group list should have colloscope entry");
-
-                    // Emit warning for each student that needs removal
-                    if let Some((student_id, _)) =
-                        collo_group_list.groups_for_students.iter().next()
+                        .group_list(*group_list_id)
+                        && let Some((student_id, _)) = placements.iter().next()
                     {
-                        let mut new_collo_group_list = collo_group_list.clone();
-                        new_collo_group_list.groups_for_students.remove(student_id);
+                        let mut new_placements = placements.clone();
+                        new_placements.remove(student_id);
                         return Some(CleaningOp {
                             warning: GroupListsUpdateWarning::LooseStudentGroupInColloscope(
                                 *group_list_id,
@@ -710,7 +679,9 @@ impl GroupListsUpdateOp {
                             op: UpdateOp::Colloscope(
                                 ColloscopeUpdateOp::UpdateColloscopeGroupList(
                                     *group_list_id,
-                                    new_collo_group_list,
+                                    collomatique_state_colloscopes::colloscopes::ColloscopeGroupList {
+                                        groups_for_students: new_placements,
+                                    },
                                 ),
                             ),
                         });
@@ -720,24 +691,9 @@ impl GroupListsUpdateOp {
                 None
             }
             GroupListsUpdateOp::AssignGroupListToSubject(period_id, subject_id, group_list_id) => {
-                let Some(collo_period) = data
-                    .get_data()
-                    .get_inner_data()
-                    .colloscope
-                    .period_map
-                    .get(period_id)
-                else {
-                    return None;
-                };
+                let inner = data.get_data().get_inner_data();
                 let new_group_list = match group_list_id {
-                    Some(id) => match data
-                        .get_data()
-                        .get_inner_data()
-                        .params
-                        .group_lists
-                        .group_list_map
-                        .get(id)
-                    {
+                    Some(id) => match inner.params.group_lists.group_list_map.get(id) {
                         Some(group_list) => Some(group_list),
                         None => return None,
                     },
@@ -748,43 +704,36 @@ impl GroupListsUpdateOp {
                     None => 0,
                 };
 
-                let Some(subject_slots) = data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .slots
-                    .slots_for_subject(*subject_id)
-                else {
+                let Some(subject_slots) = inner.params.slots.slots_for_subject(*subject_id) else {
                     return None;
                 };
+                let slot_ids: Vec<_> = subject_slots.map(|(slot_id, _slot)| *slot_id).collect();
 
-                for (slot_id, _slot) in subject_slots {
-                    let Some(collo_slot) = collo_period.slot_map.get(slot_id) else {
-                        return None;
-                    };
-                    for week in 0..collo_slot.interrogations.len() {
-                        let interrogation_opt = &collo_slot.interrogations[week];
-                        let Some(interrogation) = interrogation_opt else {
-                            continue;
-                        };
-                        if interrogation.is_empty() {
+                for slot_id in slot_ids {
+                    for (week_id, groups) in inner
+                        .colloscope
+                        .interrogations_for_slot(&inner.params.periods, slot_id)
+                    {
+                        let (row_period, week_in_period) = inner
+                            .params
+                            .periods
+                            .week_position(week_id)
+                            .expect("week id from a live colloscope row is valid");
+                        if row_period != *period_id {
                             continue;
                         }
-
-                        let mut new_assigned_groups = interrogation.assigned_groups.clone();
-                        for group in &interrogation.assigned_groups {
-                            if *group < first_forbidden_group_number {
-                                continue;
-                            }
-                            new_assigned_groups.remove(group);
-                        }
-                        if new_assigned_groups.len() != interrogation.assigned_groups.len() {
+                        let new_assigned_groups: std::collections::BTreeSet<u32> = groups
+                            .iter()
+                            .copied()
+                            .filter(|group| *group < first_forbidden_group_number)
+                            .collect();
+                        if new_assigned_groups.len() != groups.len() {
                             return Some(CleaningOp {
                                 warning: GroupListsUpdateWarning::LooseGroupsInInterrogationsInColloscope(*subject_id, *period_id),
                                 op: UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
                                     *period_id,
-                                    *slot_id,
-                                    week,
+                                    slot_id,
+                                    week_in_period,
                                     collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation {
                                         assigned_groups: new_assigned_groups,
                                     },
@@ -797,13 +746,8 @@ impl GroupListsUpdateOp {
                 None
             }
             GroupListsUpdateOp::DuplicatePreviousPeriod(period_id) => {
-                let Some(position) = data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .periods
-                    .find_period_position(*period_id)
-                else {
+                let inner = data.get_data().get_inner_data();
+                let Some(position) = inner.params.periods.find_period_position(*period_id) else {
                     return None;
                 };
 
@@ -811,16 +755,12 @@ impl GroupListsUpdateOp {
                     return None;
                 }
 
-                let previous_period_id = data
-                    .get_data()
-                    .get_inner_data()
+                let previous_period_id = inner
                     .params
                     .periods
                     .period_id_at(position - 1)
                     .expect("position > 0 checked above");
-                let previous_period_assignments: std::collections::BTreeMap<_, _> = data
-                    .get_data()
-                    .get_inner_data()
+                let previous_period_assignments: std::collections::BTreeMap<_, _> = inner
                     .params
                     .group_lists
                     .subjects_associations
@@ -830,25 +770,7 @@ impl GroupListsUpdateOp {
                     })
                     .collect();
 
-                let Some(collo_period) = data
-                    .get_data()
-                    .get_inner_data()
-                    .colloscope
-                    .period_map
-                    .get(period_id)
-                else {
-                    return None;
-                };
-
-                for (subject_id, subject) in data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .subjects
-                    .ordered_subject_list
-                    .iter()
-                {
-                    let subject_id = &subject_id;
+                for (subject_id, subject) in inner.params.subjects.ordered_subject_list.iter() {
                     if subject.excluded_periods.contains(period_id) {
                         continue;
                     }
@@ -859,16 +781,9 @@ impl GroupListsUpdateOp {
                         continue;
                     }
 
-                    let group_list_id = previous_period_assignments.get(subject_id);
+                    let group_list_id = previous_period_assignments.get(&subject_id);
                     let new_group_list = match group_list_id {
-                        Some(id) => match data
-                            .get_data()
-                            .get_inner_data()
-                            .params
-                            .group_lists
-                            .group_list_map
-                            .get(id)
-                        {
+                        Some(id) => match inner.params.group_lists.group_list_map.get(id) {
                             Some(group_list) => Some(group_list),
                             None => return None,
                         },
@@ -879,43 +794,37 @@ impl GroupListsUpdateOp {
                         None => 0,
                     };
 
-                    let Some(subject_slots) = data
-                        .get_data()
-                        .get_inner_data()
-                        .params
-                        .slots
-                        .slots_for_subject(*subject_id)
+                    let Some(subject_slots) = inner.params.slots.slots_for_subject(subject_id)
                     else {
                         return None;
                     };
+                    let slot_ids: Vec<_> = subject_slots.map(|(slot_id, _slot)| *slot_id).collect();
 
-                    for (slot_id, _slot) in subject_slots {
-                        let Some(collo_slot) = collo_period.slot_map.get(slot_id) else {
-                            return None;
-                        };
-                        for week in 0..collo_slot.interrogations.len() {
-                            let interrogation_opt = &collo_slot.interrogations[week];
-                            let Some(interrogation) = interrogation_opt else {
-                                continue;
-                            };
-                            if interrogation.is_empty() {
+                    for slot_id in slot_ids {
+                        for (week_id, groups) in inner
+                            .colloscope
+                            .interrogations_for_slot(&inner.params.periods, slot_id)
+                        {
+                            let (row_period, week_in_period) = inner
+                                .params
+                                .periods
+                                .week_position(week_id)
+                                .expect("week id from a live colloscope row is valid");
+                            if row_period != *period_id {
                                 continue;
                             }
-
-                            let mut new_assigned_groups = interrogation.assigned_groups.clone();
-                            for group in &interrogation.assigned_groups {
-                                if *group < first_forbidden_group_number {
-                                    continue;
-                                }
-                                new_assigned_groups.remove(group);
-                            }
-                            if new_assigned_groups.len() != interrogation.assigned_groups.len() {
+                            let new_assigned_groups: std::collections::BTreeSet<u32> = groups
+                                .iter()
+                                .copied()
+                                .filter(|group| *group < first_forbidden_group_number)
+                                .collect();
+                            if new_assigned_groups.len() != groups.len() {
                                 return Some(CleaningOp {
-                                    warning: GroupListsUpdateWarning::LooseGroupsInInterrogationsInColloscope(*subject_id, *period_id),
+                                    warning: GroupListsUpdateWarning::LooseGroupsInInterrogationsInColloscope(subject_id, *period_id),
                                     op: UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
                                         *period_id,
-                                        *slot_id,
-                                        week,
+                                        slot_id,
+                                        week_in_period,
                                         collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation {
                                             assigned_groups: new_assigned_groups,
                                         },

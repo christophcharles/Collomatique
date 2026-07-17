@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::ids::{GroupListId, PeriodId, SlotId, StudentId};
+use crate::ids::{GroupListId, PeriodId, SlotId, StudentId, WeekId};
 use crate::ops::AnnotatedColloscopeOp;
 
 /// Description of a colloscope
@@ -73,6 +73,162 @@ impl Colloscope {
             period_map,
             group_lists,
         }
+    }
+}
+
+/// Sparse read/write surface (canonical view: a cell is a "row" iff it holds a
+/// non-empty group set / non-empty placement map).
+///
+/// This is the shape 1d converts the storage to; here it is implemented against
+/// the dense skeleton. The `&Periods` argument is transitional — it translates
+/// `WeekId` to the positional coordinate the dense representation still uses —
+/// and 1d deletes it from every signature. `None` cells, missing cells and
+/// `Some(empty)` cells all read as absent.
+impl Colloscope {
+    /// The assigned groups on `(slot, week)`, or `None` when the cell is empty,
+    /// impossible or the coordinates dangle.
+    pub fn interrogation(
+        &self,
+        periods: &super::periods::Periods,
+        slot: SlotId,
+        week: WeekId,
+    ) -> Option<&BTreeSet<u32>> {
+        let (period_id, pos) = periods.week_position(week)?;
+        let collo_slot = self.period_map.get(&period_id)?.slot_map.get(&slot)?;
+        let interrogation = collo_slot.interrogations.get(pos)?.as_ref()?;
+        if interrogation.assigned_groups.is_empty() {
+            return None;
+        }
+        Some(&interrogation.assigned_groups)
+    }
+
+    /// Non-empty rows for one slot, each with its week. Order unspecified.
+    pub fn interrogations_for_slot<'a>(
+        &'a self,
+        periods: &'a super::periods::Periods,
+        slot: SlotId,
+    ) -> impl Iterator<Item = (WeekId, &'a BTreeSet<u32>)> + 'a {
+        self.period_map.iter().flat_map(move |(period_id, period)| {
+            let period_id = *period_id;
+            period
+                .slot_map
+                .get(&slot)
+                .into_iter()
+                .flat_map(move |collo_slot| {
+                    collo_slot
+                        .interrogations
+                        .iter()
+                        .enumerate()
+                        .filter_map(move |(pos, cell)| {
+                            let interrogation = cell.as_ref()?;
+                            if interrogation.assigned_groups.is_empty() {
+                                return None;
+                            }
+                            let week_id = periods
+                                .week_id_at(period_id, pos)
+                                .expect("cell position within period is valid");
+                            Some((week_id, &interrogation.assigned_groups))
+                        })
+                })
+        })
+    }
+
+    /// Every non-empty interrogation row, keyed by `(slot, week)`. Iteration
+    /// order is unspecified (currently period → slot → week).
+    pub fn iter<'a>(
+        &'a self,
+        periods: &'a super::periods::Periods,
+    ) -> impl Iterator<Item = ((SlotId, WeekId), &'a BTreeSet<u32>)> + 'a {
+        self.period_map.iter().flat_map(move |(period_id, period)| {
+            let period_id = *period_id;
+            period
+                .slot_map
+                .iter()
+                .flat_map(move |(slot_id, collo_slot)| {
+                    let slot_id = *slot_id;
+                    collo_slot
+                        .interrogations
+                        .iter()
+                        .enumerate()
+                        .filter_map(move |(pos, cell)| {
+                            let interrogation = cell.as_ref()?;
+                            if interrogation.assigned_groups.is_empty() {
+                                return None;
+                            }
+                            let week_id = periods
+                                .week_id_at(period_id, pos)
+                                .expect("cell position within period is valid");
+                            Some(((slot_id, week_id), &interrogation.assigned_groups))
+                        })
+                })
+        })
+    }
+
+    /// The placements for a group list, or `None` when the list is empty or
+    /// absent.
+    pub fn group_list(&self, id: GroupListId) -> Option<&BTreeMap<StudentId, u32>> {
+        let list = self.group_lists.get(&id)?;
+        if list.groups_for_students.is_empty() {
+            return None;
+        }
+        Some(&list.groups_for_students)
+    }
+
+    /// Every non-empty group list, keyed by its id.
+    pub fn group_lists_iter(
+        &self,
+    ) -> impl Iterator<Item = (GroupListId, &BTreeMap<StudentId, u32>)> {
+        self.group_lists.iter().filter_map(|(id, list)| {
+            if list.groups_for_students.is_empty() {
+                None
+            } else {
+                Some((*id, &list.groups_for_students))
+            }
+        })
+    }
+
+    /// Sets the assigned groups on `(slot, week)`. An empty set clears the row.
+    ///
+    /// Panics on impossible coordinates (dangling week, absent period/slot, or a
+    /// `None`/impossible cell) — the precondition is
+    /// [`super::colloscope_params::Parameters::is_interrogation_possible`], the
+    /// same contract as `resolve`. 1d makes this a plain table upsert.
+    pub fn set_interrogation(
+        &mut self,
+        periods: &super::periods::Periods,
+        slot: SlotId,
+        week: WeekId,
+        groups: BTreeSet<u32>,
+    ) {
+        let (period_id, pos) = periods
+            .week_position(week)
+            .expect("set_interrogation: week id must be valid");
+        let collo_slot = self
+            .period_map
+            .get_mut(&period_id)
+            .expect("set_interrogation: period must be present in colloscope")
+            .slot_map
+            .get_mut(&slot)
+            .expect("set_interrogation: slot must be present in the period");
+        let interrogation = collo_slot
+            .interrogations
+            .get_mut(pos)
+            .expect("set_interrogation: week position must be within the period")
+            .as_mut()
+            .expect("set_interrogation: interrogation must be possible on this week");
+        interrogation.assigned_groups = groups;
+    }
+
+    /// Sets the placements for a group list. An empty map clears it.
+    ///
+    /// Panics when the list is absent from the colloscope (unknown or
+    /// prefilled). 1d makes this a plain table upsert.
+    pub fn set_group_list(&mut self, id: GroupListId, placements: BTreeMap<StudentId, u32>) {
+        let list = self
+            .group_lists
+            .get_mut(&id)
+            .expect("set_group_list: group list must be present in colloscope");
+        list.groups_for_students = placements;
     }
 }
 

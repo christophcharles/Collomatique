@@ -215,24 +215,26 @@ impl StudentsUpdateOp {
                     return None;
                 };
 
-                for (group_list_id, collo_group_list) in
-                    &data.get_data().get_inner_data().colloscope.group_lists
+                for (group_list_id, placements) in data
+                    .get_data()
+                    .get_inner_data()
+                    .colloscope
+                    .group_lists_iter()
                 {
-                    if collo_group_list
-                        .groups_for_students
-                        .contains_key(student_id)
-                    {
-                        let mut new_collo_group_list = collo_group_list.clone();
-                        new_collo_group_list.groups_for_students.remove(student_id);
+                    if placements.contains_key(student_id) {
+                        let mut new_placements = placements.clone();
+                        new_placements.remove(student_id);
                         return Some(CleaningOp {
                             warning: StudentsUpdateWarning::LooseStudentInColloscopeGroup(
                                 *student_id,
-                                *group_list_id,
+                                group_list_id,
                             ),
                             op: UpdateOp::Colloscope(
                                 ColloscopeUpdateOp::UpdateColloscopeGroupList(
-                                    *group_list_id,
-                                    new_collo_group_list,
+                                    group_list_id,
+                                    collomatique_state_colloscopes::colloscopes::ColloscopeGroupList {
+                                        groups_for_students: new_placements,
+                                    },
                                 ),
                             ),
                         });

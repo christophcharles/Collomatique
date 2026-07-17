@@ -44,9 +44,36 @@ impl Parameters {
     /// (or the slot has no pattern). Shared by the colloscope, the constraints
     /// layer and the Python glue.
     pub fn is_week_active(&self, week_id: WeekId, pattern: Option<WeekPatternId>) -> bool {
-        let week = self.resolve(week_id);
-        week.interrogations
-            && pattern.is_none_or(|p| !self.resolve(p).excluded_weeks.contains(&week_id))
+        self.week_patterns
+            .is_week_active(&self.periods, week_id, pattern)
+    }
+
+    /// The single definition of "slot `slot` can carry an interrogation on week
+    /// `week`": the slot's subject runs interrogations, is not excluded on that
+    /// week's period, and the week is active for the slot's pattern.
+    ///
+    /// This mirrors exactly the dense skeleton's Some-cell rule
+    /// (`ColloscopePeriod::new_empty_from_params` +
+    /// `ColloscopeSlot::new_empty_from_params`): on validated data the predicate
+    /// is true iff the dense cell exists and is `Some`. It is the possibility
+    /// oracle behind the sparse colloscope surface and its consumers.
+    pub fn is_interrogation_possible(&self, slot: SlotId, week: WeekId) -> bool {
+        let Some((period_id, _pos)) = self.periods.week_position(week) else {
+            return false;
+        };
+        let Some((subject_id, slot_desc)) = self.slots.find_slot_with_subject(slot) else {
+            return false;
+        };
+        let Some(subject) = self.subjects.find_subject(subject_id) else {
+            return false;
+        };
+        if subject.parameters.interrogation_parameters.is_none() {
+            return false;
+        }
+        if subject.excluded_periods.contains(&period_id) {
+            return false;
+        }
+        self.is_week_active(week, slot_desc.week_pattern)
     }
 
     /// Positional merged activity of an exclusion set, in global walk order:
