@@ -8,7 +8,6 @@ use thiserror::Error;
 use collomatique_state::{Join, References};
 
 use crate::Table;
-use crate::colloscopes;
 use crate::ids::{NewId, PeriodId, SlotId, SlotPairingRuleId, SubjectId, TeacherId, WeekPatternId};
 use crate::ops::AnnotatedSlotOp;
 
@@ -72,32 +71,6 @@ pub struct Slot {
     /// But a positive cost can be chosen to avoid a slot.
     /// A negative cost would rather favor a given slot
     pub cost: i32,
-}
-
-impl Slot {
-    /// Builds the merged (interrogation ∧ pattern) activity for a period whose
-    /// descriptions are `new_period_desc`, given the slot's pattern raw activity
-    /// bits over the whole schedule (`active_bits`, global walk order, true =
-    /// not excluded) and the period's global `first_week` offset.
-    ///
-    /// Transitional: consumed by the colloscope maintenance that 1d deletes.
-    pub(crate) fn build_pattern_for_new_period(
-        &self,
-        new_period_desc: &[super::periods::WeekDesc],
-        first_week: usize,
-        active_bits: &[bool],
-    ) -> Vec<bool> {
-        let mut base_pattern: Vec<_> = new_period_desc.iter().map(|x| x.interrogations).collect();
-
-        for (i, base_status) in base_pattern.iter_mut().enumerate() {
-            let week_pattern_status = active_bits.get(first_week + i).copied().unwrap_or(true);
-            if !week_pattern_status {
-                *base_status = false;
-            }
-        }
-
-        base_pattern
-    }
 }
 
 impl Slots {
@@ -447,26 +420,8 @@ impl crate::Data {
                     .slots
                     .insert_slot_at(*new_id, slot.clone(), position);
 
-                let subject = self
-                    .inner_data
-                    .params
-                    .subjects
-                    .find_subject(subject_id)
-                    .expect("Subject ID should be valid at this point");
-                for (period_id, period) in &mut self.inner_data.colloscope.period_map {
-                    if subject.excluded_periods.contains(period_id) {
-                        continue;
-                    }
-
-                    period.slot_map.insert(
-                        *new_id,
-                        colloscopes::ColloscopeSlot::new_empty_from_params(
-                            &self.inner_data.params,
-                            *period_id,
-                            *new_id,
-                        ),
-                    );
-                }
+                // A fresh slot has no colloscope rows (keyed by `(slot, week)`,
+                // an absent row is an empty cell), so nothing is seeded.
 
                 Ok(AnnotatedSlotOp::Remove(*new_id))
             }
@@ -547,10 +502,8 @@ impl crate::Data {
                     None
                 };
                 let (_old_pos, old_slot) = self.inner_data.params.slots.remove_slot(*id);
-                for collo_period in self.inner_data.colloscope.period_map.values_mut() {
-                    // The slot might not be in period but this won't raise an error
-                    collo_period.slot_map.remove(id);
-                }
+                // The removal guard above already rejected the op if any
+                // colloscope row referenced this slot, so no rows remain to drop.
 
                 Ok(AnnotatedSlotOp::AddAfter(*id, previous_id, old_slot))
             }
@@ -574,19 +527,26 @@ impl crate::Data {
                 }
 
                 self.inner_data.params.validate_slot(new_slot)?;
-                let pattern = self
+
+                // If the new week pattern would silence a week that currently
+                // holds a colloscope row for this slot, the row would strand an
+                // interrogation on an inactive week. Reject before mutating.
+                // Rows key on the week id, so nothing else needs to move.
+                for (week, _groups) in self
                     .inner_data
-                    .params
-                    .get_merged_pattern(new_slot.week_pattern);
-                if !self.inner_data.colloscope.check_empty_on_removed_weeks(
-                    *slot_id,
-                    &self.inner_data.params.periods,
-                    &pattern[..],
-                ) {
-                    return Err(SlotError::NotCompatibleSlotInColloscope(
-                        *slot_id,
-                        new_slot.week_pattern,
-                    ));
+                    .colloscope
+                    .interrogations_for_slot(&self.inner_data.params.periods, *slot_id)
+                {
+                    if !self
+                        .inner_data
+                        .params
+                        .is_week_active(week, new_slot.week_pattern)
+                    {
+                        return Err(SlotError::NotCompatibleSlotInColloscope(
+                            *slot_id,
+                            new_slot.week_pattern,
+                        ));
+                    }
                 }
 
                 let old_slot = self
@@ -594,11 +554,6 @@ impl crate::Data {
                     .params
                     .slots
                     .replace_slot(*slot_id, new_slot.clone());
-                self.inner_data.colloscope.update_slot_for_week_pattern(
-                    *slot_id,
-                    &self.inner_data.params.periods,
-                    &pattern[..],
-                );
 
                 Ok(AnnotatedSlotOp::Update(*slot_id, old_slot))
             }

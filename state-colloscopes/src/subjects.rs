@@ -9,7 +9,6 @@ use thiserror::Error;
 use collomatique_state::{Join, References};
 
 use crate::OrderedTable;
-use crate::colloscopes;
 use crate::ids::{
     GroupListId, IncompatId, NewId, PairingRuleId, PeriodId, SlotId, SubjectId, TeacherId,
 };
@@ -616,54 +615,12 @@ impl crate::Data {
                 // first slot does that lazily); losing interrogations requires
                 // no slots (guarded above), so no row exists to drop.
 
-                // Let's update the colloscope.
-                // However, if there are no interrogations, then we don't have slots to update
-                if new_params.parameters.interrogation_parameters.is_some() {
-                    // Snapshot the slot ids so the params borrow does not overlap the
-                    // mutable colloscope borrow below.
-                    let slot_ids: Vec<SlotId> = self
-                        .inner_data
-                        .params
-                        .slots
-                        .slots_for_subject(*id)
-                        .into_iter()
-                        .flatten()
-                        .map(|(slot_id, _slot)| *slot_id)
-                        .collect();
-
-                    for (period_id, collo_period) in &mut self.inner_data.colloscope.period_map {
-                        // Only change in period status should be considered
-                        if old_params.excluded_periods.contains(period_id)
-                            == new_params.excluded_periods.contains(period_id)
-                        {
-                            continue;
-                        }
-
-                        if old_params.excluded_periods.contains(period_id) {
-                            // The period was excluded but is not anymore
-                            for slot_id in &slot_ids {
-                                collo_period.slot_map.insert(
-                                    *slot_id,
-                                    colloscopes::ColloscopeSlot::new_empty_from_params(
-                                        &self.inner_data.params,
-                                        *period_id,
-                                        *slot_id,
-                                    ),
-                                );
-                            }
-                        } else {
-                            // The period was included but will now be excluded
-                            for slot_id in &slot_ids {
-                                collo_period.slot_map.remove(slot_id);
-                            }
-                        }
-                    }
-                }
-
-                // Sparse assignments need no fan-out on an exclusion change: a
-                // newly-included period starts with no row, and a newly-excluded
-                // period has none either (the guard above rejects the update
-                // while any survive).
+                // The colloscope needs no fan-out on an exclusion change either.
+                // Its rows key on `(slot, week)`: a newly-included period starts
+                // with no rows (an absent row is an empty cell, and future writes
+                // are gated on `is_interrogation_possible`), and a newly-excluded
+                // period has none (the guard above rejects the update while any
+                // survive). Sparse assignments are handled the same way.
 
                 Ok(AnnotatedSubjectOp::Update(*id, old_params))
             }

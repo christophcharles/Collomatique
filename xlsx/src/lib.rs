@@ -280,11 +280,9 @@ pub(crate) fn non_empty_group_lists_by_name(
         .group_list_map
         .iter()
         .filter(|(gl_id, gl)| {
-            let has_automatic_students = data
-                .colloscope
-                .group_lists
-                .get(gl_id)
-                .is_some_and(|cgl| !cgl.groups_for_students.is_empty());
+            // Sparse surface: `group_list` yields `Some` only for a non-empty
+            // placement row.
+            let has_automatic_students = data.colloscope.group_list(*gl_id).is_some();
             let has_prefilled_students = gl.filling.iter_students().next().is_some();
             has_automatic_students || has_prefilled_students
         })

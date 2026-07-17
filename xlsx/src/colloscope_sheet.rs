@@ -341,12 +341,6 @@ pub fn build(
                     .get(&(pl.period_id, *subject_id))
                     .and_then(|gl_id| group_names_map.get(gl_id));
 
-                let colloscope_slot = data
-                    .colloscope
-                    .period_map
-                    .get(&pl.period_id)
-                    .and_then(|period| period.slot_map.get(slot_id));
-
                 for w in 0..pl.num_weeks {
                     let col = pl.col_start + w as u16;
                     let (left_b, right_b) = period_border(w, pl.num_weeks);
@@ -358,12 +352,17 @@ pub fn build(
                         week_bg(pl.period_id, w, row_bg),
                     );
 
-                    let cell_text = colloscope_slot
-                        .and_then(|slot| slot.interrogations.get(w))
-                        .and_then(|interrogation| interrogation.as_ref())
-                        .map(|interrogation| {
-                            interrogation
-                                .assigned_groups
+                    // Sparse colloscope surface: translate the positional week
+                    // to its id and read the (slot, week) row (absent = empty).
+                    let cell_text = params
+                        .periods
+                        .week_id_at(pl.period_id, w)
+                        .and_then(|week_id| {
+                            data.colloscope
+                                .interrogation(&params.periods, *slot_id, week_id)
+                        })
+                        .map(|assigned_groups| {
+                            assigned_groups
                                 .iter()
                                 .map(|&g| {
                                     let g = g as i64;

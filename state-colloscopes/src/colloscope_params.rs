@@ -75,65 +75,6 @@ impl Parameters {
         }
         self.is_week_active(week, slot_desc.week_pattern)
     }
-
-    /// Positional merged activity of an exclusion set, in global walk order:
-    /// per week, active iff it runs interrogations and is not excluded.
-    ///
-    /// Transitional shape retained for the colloscope maintenance that 1d
-    /// deletes; new code should prefer [`Self::is_week_active`].
-    pub(crate) fn merge_excluded(&self, excluded: &BTreeSet<WeekId>) -> Vec<bool> {
-        self.periods
-            .walk()
-            .map(|(_period_id, week_id, week_desc)| {
-                week_desc.interrogations && !excluded.contains(&week_id)
-            })
-            .collect()
-    }
-
-    pub(crate) fn get_merged_pattern(
-        &self,
-        week_pattern_id_opt: Option<WeekPatternId>,
-    ) -> Vec<bool> {
-        let empty = BTreeSet::new();
-        let excluded = match week_pattern_id_opt {
-            Some(week_pattern_id) => {
-                &self
-                    .week_patterns
-                    .week_pattern_map
-                    .get(&week_pattern_id)
-                    .expect("Week pattern id must be valid for get_merged_pattern")
-                    .excluded_weeks
-            }
-            None => &empty,
-        };
-        self.merge_excluded(excluded)
-    }
-
-    /// Positional *raw* activity of a pattern (true = not excluded), in global
-    /// walk order, ignoring per-week interrogation flags.
-    ///
-    /// Transitional: consumed by the colloscope maintenance that 1d deletes.
-    pub(crate) fn week_pattern_active_bits(
-        &self,
-        week_pattern_id_opt: Option<WeekPatternId>,
-    ) -> Vec<bool> {
-        let empty = BTreeSet::new();
-        let excluded = match week_pattern_id_opt {
-            Some(week_pattern_id) => {
-                &self
-                    .week_patterns
-                    .week_pattern_map
-                    .get(&week_pattern_id)
-                    .expect("Week pattern id must be valid for week_pattern_active_bits")
-                    .excluded_weeks
-            }
-            None => &empty,
-        };
-        self.periods
-            .walk()
-            .map(|(_period_id, week_id, _week_desc)| !excluded.contains(&week_id))
-            .collect()
-    }
 }
 
 impl Parameters {

@@ -174,48 +174,53 @@ impl crate::Data {
                 self.inner_data
                     .params
                     .validate_week_pattern(new_week_pattern)?;
-                let new_merged_pattern = self
+
+                if !self
                     .inner_data
                     .params
-                    .merge_excluded(&new_week_pattern.excluded_weeks);
+                    .week_patterns
+                    .week_pattern_map
+                    .contains(id)
+                {
+                    return Err(WeekPatternError::InvalidWeekPatternId(*id));
+                }
 
-                let Some(current_week_pattern) = self
+                // Guard: for every slot bound to this pattern, no colloscope row
+                // may sit on a week the new pattern would silence — that would
+                // strand an interrogation on an inactive week. A week is active
+                // under the new pattern iff it runs interrogations and is not in
+                // the new exclusion set. Rows key on the week id, so nothing else
+                // needs to move; reject before mutating.
+                for (slot_id, slot) in self.inner_data.params.slots.all_slots() {
+                    if slot.week_pattern != Some(*id) {
+                        continue;
+                    }
+                    for (week, _groups) in self
+                        .inner_data
+                        .colloscope
+                        .interrogations_for_slot(&self.inner_data.params.periods, *slot_id)
+                    {
+                        let week_runs = self
+                            .inner_data
+                            .params
+                            .periods
+                            .find_week(week)
+                            .is_some_and(|w| w.interrogations);
+                        if !week_runs || new_week_pattern.excluded_weeks.contains(&week) {
+                            return Err(WeekPatternError::NotCompatibleSlotInColloscope(*slot_id));
+                        }
+                    }
+                }
+
+                let current_week_pattern = self
                     .inner_data
                     .params
                     .week_patterns
                     .week_pattern_map
                     .get_mut(id)
-                else {
-                    return Err(WeekPatternError::InvalidWeekPatternId(*id));
-                };
-
-                for (slot_id, slot) in self.inner_data.params.slots.all_slots() {
-                    if slot.week_pattern != Some(*id) {
-                        continue;
-                    }
-
-                    if !self.inner_data.colloscope.check_empty_on_removed_weeks(
-                        *slot_id,
-                        &self.inner_data.params.periods,
-                        &new_merged_pattern,
-                    ) {
-                        return Err(WeekPatternError::NotCompatibleSlotInColloscope(*slot_id));
-                    }
-                }
-
+                    .expect("week pattern id checked above");
                 let old_week_pattern =
                     std::mem::replace(current_week_pattern, new_week_pattern.clone());
-                for (slot_id, slot) in self.inner_data.params.slots.all_slots() {
-                    if slot.week_pattern != Some(*id) {
-                        continue;
-                    }
-
-                    self.inner_data.colloscope.update_slot_for_week_pattern(
-                        *slot_id,
-                        &self.inner_data.params.periods,
-                        &new_merged_pattern,
-                    );
-                }
 
                 Ok(AnnotatedWeekPatternOp::Update(*id, old_week_pattern))
             }

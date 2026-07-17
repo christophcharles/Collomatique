@@ -381,14 +381,9 @@ impl crate::Data {
                     .group_list_map
                     .insert(*new_id, new_group_list);
 
-                // Only non-prefilled group lists have a colloscope entry
-                // (mirrors the Remove logic)
-                if !filling.is_prefilled() {
-                    self.inner_data
-                        .colloscope
-                        .group_lists
-                        .insert(*new_id, colloscopes::ColloscopeGroupList::new_empty());
-                }
+                // No colloscope row is seeded: a group list's placements are a
+                // sparse table row created lazily on the first non-empty write
+                // (an absent row is an empty placement map).
 
                 Ok(AnnotatedGroupListOp::Remove(*new_id))
             }
@@ -398,7 +393,6 @@ impl crate::Data {
                 else {
                     return Err(GroupListError::InvalidGroupListId(*id));
                 };
-                let was_prefilled = old_group_list.is_prefilled();
 
                 // Check filling is empty before removal
                 match &old_group_list.filling {
@@ -438,9 +432,8 @@ impl crate::Data {
                     .group_list_map
                     .remove(id)
                     .expect("Group list ID was checked above");
-                if !was_prefilled {
-                    self.inner_data.colloscope.group_lists.remove(id);
-                }
+                // The removal guard above rejected the op while any placement
+                // row survived, so there is no colloscope row to drop.
 
                 Ok(AnnotatedGroupListOp::Add(
                     *id,
@@ -582,9 +575,9 @@ impl crate::Data {
                 let will_be_prefilled = filling.is_prefilled();
 
                 if !was_prefilled && will_be_prefilled {
-                    // Transitioning to prefilled: check colloscope is empty, then
-                    // remove entry. Canonical-absent surface: a present row means
-                    // non-empty placements.
+                    // Transitioning to prefilled: the colloscope must hold no
+                    // placements. Canonical-absent surface: a present row means
+                    // non-empty placements (and an absent row needs no cleanup).
                     if self
                         .inner_data
                         .colloscope
@@ -595,13 +588,9 @@ impl crate::Data {
                             *group_list_id,
                         ));
                     }
-                    self.inner_data.colloscope.group_lists.remove(group_list_id);
                 } else if was_prefilled && !will_be_prefilled {
-                    // Transitioning from prefilled: add empty colloscope entry
-                    self.inner_data.colloscope.group_lists.insert(
-                        *group_list_id,
-                        colloscopes::ColloscopeGroupList::new_empty(),
-                    );
+                    // Transitioning from prefilled: nothing to seed — the empty
+                    // placement map is simply an absent sparse row.
                 } else if !was_prefilled
                     && !will_be_prefilled
                     && let Some(placements) = self.inner_data.colloscope.group_list(*group_list_id)

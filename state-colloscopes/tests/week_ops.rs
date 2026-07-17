@@ -15,7 +15,6 @@ use collomatique_state_colloscopes::{
     ColloscopeOp, Data, Error, GroupListOp, NewId, Op, PeriodOp, SlotOp, Subject,
     SubjectInterrogationParameters, SubjectOp, SubjectParameters, SubjectPeriodicity, TeacherOp,
     WeekError, WeekOp, WeekPatternOp,
-    colloscopes::ColloscopeInterrogation,
     group_lists::GroupListParameters,
     ids::{PeriodId, SlotId, SubjectId, TeacherId, WeekId},
     periods::WeekDesc,
@@ -103,23 +102,25 @@ fn week_ids_of(app: &AppState<Data, String>, period: PeriodId) -> Vec<WeekId> {
         .collect()
 }
 
+/// The assigned groups on the colloscope cell at `(slot, week-at-pos)`, read
+/// through the sparse surface (`None` = empty/absent).
 fn cell_at(
     app: &AppState<Data, String>,
     period: PeriodId,
     slot: SlotId,
     pos: usize,
-) -> Option<ColloscopeInterrogation> {
-    app.get_data()
-        .get_inner_data()
+) -> Option<BTreeSet<u32>> {
+    let data = app.get_data();
+    let inner = data.get_inner_data();
+    let week_id = inner
+        .params
+        .periods
+        .week_id_at(period, pos)
+        .expect("valid position");
+    inner
         .colloscope
-        .period_map
-        .get(&period)
-        .expect("valid period")
-        .slot_map
-        .get(&slot)
-        .expect("valid slot")
-        .interrogations[pos]
-        .clone()
+        .interrogation(&inner.params.periods, slot, week_id)
+        .cloned()
 }
 
 /// `WeekOp::Remove` must refuse to drop a week that a week pattern marks
@@ -412,9 +413,7 @@ fn move_week_preserves_filled_cell() {
     );
     assert_eq!(
         cell_at(&app, period_b, slot, 0),
-        Some(ColloscopeInterrogation {
-            assigned_groups: BTreeSet::from([1]),
-        }),
+        Some(BTreeSet::from([1])),
         "the filled cell must travel with the week",
     );
     // The source no longer holds the week.

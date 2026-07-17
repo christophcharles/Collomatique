@@ -33,8 +33,8 @@ pub fn build(
 
     // 2. Students per group (both automatic and prefilled sources)
     let mut members: Vec<(i64, StudentId)> = Vec::new();
-    if let Some(colloscope_group_list) = data.colloscope.group_lists.get(&gl_id) {
-        for (student_id, group_number) in &colloscope_group_list.groups_for_students {
+    if let Some(placements) = data.colloscope.group_list(gl_id) {
+        for (student_id, group_number) in placements {
             members.push((*group_number as i64, *student_id));
         }
     }

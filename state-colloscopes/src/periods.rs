@@ -2,14 +2,11 @@
 //!
 //! This module defines the relevant types to describes the periods
 
-use std::collections::{BTreeMap, BTreeSet};
-
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use collomatique_state::{Join, References};
 
-use crate::colloscopes::{ColloscopeInterrogation, ColloscopePeriod};
 use crate::ids::{
     NewId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId, SubjectId, WeekId,
     WeekPatternId,
@@ -561,18 +558,14 @@ impl crate::Data {
 
                 // Periods are created week-less: no pattern bits to splice, no
                 // assignments and no associations (so neither sparse junction
-                // table gets a row), and an empty colloscope period. Weeks are
-                // added afterwards through the WeekOp family.
+                // table gets a row), and no colloscope rows. Weeks are added
+                // afterwards through the WeekOp family.
                 self.inner_data
                     .params
                     .periods
                     .ordered_period_list
                     .insert_at(0, *period_id, Vec::new())
                     .expect("period id absence checked above");
-                self.inner_data.colloscope.period_map.insert(
-                    *period_id,
-                    ColloscopePeriod::new_empty_from_params(&self.inner_data.params, *period_id),
-                );
                 Ok(AnnotatedPeriodOp::Remove(*period_id))
             }
             AnnotatedPeriodOp::AddAfter(period_id, after_id) => {
@@ -602,10 +595,6 @@ impl crate::Data {
                     .ordered_period_list
                     .insert_at(position + 1, *period_id, Vec::new())
                     .expect("period id absence checked above");
-                self.inner_data.colloscope.period_map.insert(
-                    *period_id,
-                    ColloscopePeriod::new_empty_from_params(&self.inner_data.params, *period_id),
-                );
                 Ok(AnnotatedPeriodOp::Remove(*period_id))
             }
             AnnotatedPeriodOp::Remove(period_id) => {
@@ -754,7 +743,6 @@ impl crate::Data {
                         .subjects_associations
                         .remove(&key);
                 }
-                self.inner_data.colloscope.period_map.remove(period_id);
 
                 Ok(match previous_id {
                     None => AnnotatedPeriodOp::AddFront(*period_id),
@@ -770,12 +758,11 @@ impl crate::Data {
     ///
     /// Apply week operations.
     ///
-    /// Weeks are standalone [Week] entities, but their bits still ride on two
-    /// transitional maintenance layers: the week-pattern bit vectors and the
-    /// colloscope cell vectors, both indexed positionally by week. This is
-    /// where that bookkeeping happens for a single week. Both layers are
-    /// temporary: the pattern splicing dies with the week-pattern reshape (B2)
-    /// and the colloscope cell splicing with the colloscope reshape (1d).
+    /// Weeks are standalone [Week] entities. Week patterns key their exclusions
+    /// by week id and the colloscope keys its rows by `(slot, week)`, so neither
+    /// needs positional maintenance when a week is spliced in or out — the only
+    /// bookkeeping left is the guards that reject an op which would strand a
+    /// colloscope row on an inactive week.
     pub(crate) fn apply_week(
         &mut self,
         week_op: &AnnotatedWeekOp,
@@ -805,9 +792,8 @@ impl crate::Data {
     /// Splices a week into `period_id` at per-period position `per_pos`.
     ///
     /// The new week's id belongs to no pattern's exclusion set, so patterns
-    /// need no maintenance. One colloscope cell per slot of the period is
-    /// created (active iff the week carries interrogations, since a fresh week
-    /// is excluded by nobody).
+    /// need no maintenance; and the colloscope keys rows by `(slot, week)`, so a
+    /// fresh week simply has no rows yet (an absent row is an empty cell).
     fn add_week(
         &mut self,
         week_id: WeekId,
@@ -831,25 +817,6 @@ impl crate::Data {
             .params
             .periods
             .insert_week_at(week_id, period_id, per_pos, desc.clone());
-
-        // The new week is excluded by no pattern, so its merged activity for
-        // any slot reduces to `desc.interrogations`.
-        let cell = if desc.interrogations {
-            Some(ColloscopeInterrogation::default())
-        } else {
-            None
-        };
-        for collo_slot in self
-            .inner_data
-            .colloscope
-            .period_map
-            .get_mut(&period_id)
-            .expect("period id validated above")
-            .slot_map
-            .values_mut()
-        {
-            collo_slot.interrogations.insert(per_pos, cell.clone());
-        }
 
         Ok(())
     }
@@ -898,18 +865,6 @@ impl crate::Data {
         let (_removed_period, _removed_pos, removed_desc) =
             self.inner_data.params.periods.remove_week_entry(week_id);
 
-        for collo_slot in self
-            .inner_data
-            .colloscope
-            .period_map
-            .get_mut(&period_id)
-            .expect("period id from week_position is valid")
-            .slot_map
-            .values_mut()
-        {
-            collo_slot.interrogations.remove(per_pos);
-        }
-
         Ok(match prev_week_id {
             None => AnnotatedWeekOp::AddFront(week_id, period_id, removed_desc),
             Some(prev) => AnnotatedWeekOp::AddAfter(week_id, prev, removed_desc),
@@ -918,67 +873,38 @@ impl crate::Data {
 
     /// Updates a week's description (status / annotation) in place.
     ///
-    /// The week count is unchanged, so no pattern bits move; only a
-    /// `true → false` interrogation flip can silence a colloscope cell, which
-    /// is rejected when that cell is non-empty (same guard the whole-period
-    /// update uses).
+    /// The week keeps its id and position, so colloscope rows (keyed by
+    /// `(slot, week)`) stay put. Only a `true → false` interrogation flip can
+    /// invalidate a row — it would strand an interrogation on a now-inactive
+    /// week — which is rejected before mutating.
     fn update_week(
         &mut self,
         week_id: WeekId,
         new_desc: &WeekDesc,
     ) -> Result<AnnotatedWeekOp, WeekError> {
-        let Some((period_id, per_pos)) = self.inner_data.params.periods.week_position(week_id)
-        else {
-            return Err(WeekError::InvalidWeekId(week_id));
-        };
-        let (_pos, first_week) = self
+        if self
             .inner_data
             .params
             .periods
-            .find_period_position_and_first_week(period_id)
-            .expect("period id from week_position is valid");
-
-        // The period's would-be week descriptions with this week replaced.
-        let new_descs: Vec<WeekDesc> = self
-            .inner_data
-            .params
-            .periods
-            .weeks_of(period_id)
-            .expect("period id from week_position is valid")
-            .enumerate()
-            .map(|(i, week)| {
-                if i == per_pos {
-                    new_desc.clone()
-                } else {
-                    week.desc()
-                }
-            })
-            .collect();
-
-        for (slot_id, collo_slot) in self
-            .inner_data
-            .colloscope
-            .period_map
-            .get(&period_id)
-            .expect("period id from week_position is valid")
-            .slot_map
-            .iter()
+            .week_position(week_id)
+            .is_none()
         {
-            let slot = self
+            return Err(WeekError::InvalidWeekId(week_id));
+        }
+
+        // Silencing the week (interrogations flipping off) would leave any
+        // colloscope row on it stranded on an inactive week. Reject before
+        // mutating. A `false → true` flip only activates weeks, so it can never
+        // invalidate an existing row.
+        if !new_desc.interrogations
+            && let Some(slot_id) = self
                 .inner_data
-                .params
-                .slots
-                .find_slot(*slot_id)
-                .expect("slot id from colloscope is valid");
-            let active_bits = self
-                .inner_data
-                .params
-                .week_pattern_active_bits(slot.week_pattern);
-            let new_pattern =
-                slot.build_pattern_for_new_period(&new_descs, first_week, &active_bits);
-            if !collo_slot.check_empty_on_removed_weeks(&new_pattern) {
-                return Err(WeekError::NotCompatibleSlotInColloscope(week_id, *slot_id));
-            }
+                .colloscope
+                .iter(&self.inner_data.params.periods)
+                .find(|((_slot, week), _groups)| *week == week_id)
+                .map(|((slot, _week), _groups)| slot)
+        {
+            return Err(WeekError::NotCompatibleSlotInColloscope(week_id, slot_id));
         }
 
         let old_desc = self
@@ -987,29 +913,17 @@ impl crate::Data {
             .periods
             .replace_week_desc(week_id, new_desc.clone());
 
-        let slot_ids: Vec<_> = self
-            .inner_data
-            .params
-            .slots
-            .all_slots()
-            .map(|(slot_id, _slot)| *slot_id)
-            .collect();
-        for slot_id in slot_ids {
-            self.inner_data
-                .colloscope
-                .update_slot_to_match_week_pattern(slot_id, &self.inner_data.params);
-        }
-
         Ok(AnnotatedWeekOp::Update(week_id, old_desc))
     }
 
     /// Moves a week to `dest_pos` in `dest_period`, carrying its content.
     ///
-    /// The week's pattern bits travel positionally (no triviality guard — no
-    /// information is lost) and its colloscope cells travel where the slot
-    /// exists on both sides. A non-empty cell may only travel to a slot the
-    /// destination period runs, and only if its groups fit the destination
-    /// association bounds.
+    /// The week keeps its id, so its pattern exclusions and its colloscope rows
+    /// (keyed by `(slot, week)`) travel with it automatically — nothing is
+    /// re-spliced. The one thing that can change is the destination period: a
+    /// non-empty row may only land in a period that runs the slot's subject, and
+    /// only if its groups fit the destination association bound. Both are
+    /// checked before mutating so an invalid move is rejected cleanly.
     fn move_week(
         &mut self,
         week_id: WeekId,
@@ -1020,21 +934,15 @@ impl crate::Data {
         else {
             return Err(WeekError::InvalidWeekId(week_id));
         };
-        let (_src_ppos, src_first) = self
+        if self
             .inner_data
             .params
             .periods
-            .find_period_position_and_first_week(src_period)
-            .expect("src period from week_position is valid");
-        let Some((_dest_ppos, dest_first)) = self
-            .inner_data
-            .params
-            .periods
-            .find_period_position_and_first_week(dest_period)
-        else {
+            .week_count_of(dest_period)
+            .is_none()
+        {
             return Err(WeekError::InvalidPeriodId(dest_period));
-        };
-        let src_global = src_first + src_pos;
+        }
 
         // Destination length once the week is detached from its current spot.
         let dest_len_post = self
@@ -1048,70 +956,36 @@ impl crate::Data {
             return Err(WeekError::InvalidPosition(dest_period, dest_pos));
         }
 
-        // Detached global numbering: removing `src_global` shifts everything
-        // after it down by one.
-        let dest_first_post = if src_global < dest_first {
-            dest_first - 1
-        } else {
-            dest_first
-        };
-        let dest_global = dest_first_post + dest_pos;
-
-        // Source cells (captured before mutating), keyed by slot.
-        let src_cells: BTreeMap<SlotId, Option<ColloscopeInterrogation>> = self
-            .inner_data
-            .colloscope
-            .period_map
-            .get(&src_period)
-            .expect("src period is valid")
-            .slot_map
-            .iter()
-            .map(|(slot_id, collo_slot)| {
-                (
-                    *slot_id,
-                    collo_slot
-                        .interrogations
-                        .get(src_pos)
-                        .expect("cell exists for every week of the period")
-                        .clone(),
-                )
-            })
-            .collect();
-
-        // Guard: any non-empty source cell must be able to travel.
-        let dest_collo_slots: BTreeSet<SlotId> = self
-            .inner_data
-            .colloscope
-            .period_map
-            .get(&dest_period)
-            .expect("dest period is valid")
-            .slot_map
-            .keys()
-            .copied()
-            .collect();
-        for (slot_id, cell) in &src_cells {
-            let Some(interrogation) = cell else { continue };
-            if interrogation.is_empty() {
+        // Guard: every colloscope row on the moving week must be able to live in
+        // the destination period. The week's activity for a slot is unchanged
+        // (pattern exclusion and the week's interrogation flag both key on the
+        // preserved id), so only the destination period matters — the slot's
+        // subject must run there and the assigned groups must fit the
+        // destination association bound.
+        let params = &self.inner_data.params;
+        for ((slot_id, week), groups) in self.inner_data.colloscope.iter(&params.periods) {
+            if week != week_id {
                 continue;
             }
-            if !dest_collo_slots.contains(slot_id) {
-                return Err(WeekError::NotCompatibleSlotInColloscope(week_id, *slot_id));
-            }
-            let (subject_id, _pos) = self
-                .inner_data
-                .params
+            let (subject_id, _pos) = params
                 .slots
-                .find_slot_subject_and_position(*slot_id)
+                .find_slot_subject_and_position(slot_id)
                 .expect("slot id from colloscope is valid");
-            let bound = self
-                .inner_data
-                .params
+            let subject = params
+                .subjects
+                .find_subject(subject_id)
+                .expect("subject id from a live slot is valid");
+            if subject.parameters.interrogation_parameters.is_none()
+                || subject.excluded_periods.contains(&dest_period)
+            {
+                return Err(WeekError::NotCompatibleSlotInColloscope(week_id, slot_id));
+            }
+            let bound = params
                 .group_lists
                 .subjects_associations
                 .get(&(dest_period, subject_id))
                 .map(|group_list_id| {
-                    self.inner_data
-                        .params
+                    params
                         .group_lists
                         .group_list_map
                         .get(group_list_id)
@@ -1121,77 +995,18 @@ impl crate::Data {
                         .len() as u32
                 })
                 .unwrap_or(0);
-            if interrogation.assigned_groups.iter().any(|g| *g >= bound) {
-                return Err(WeekError::NotCompatibleSlotInColloscope(week_id, *slot_id));
+            if groups.iter().any(|g| *g >= bound) {
+                return Err(WeekError::NotCompatibleSlotInColloscope(week_id, slot_id));
             }
         }
 
-        // --- Mutations ---
-
-        // 1. Move the week entry (ordering slot + owning period).
+        // Move the week entry (ordering slot + owning period). Patterns and the
+        // colloscope need no maintenance: both key on the week id, which the
+        // move preserves, so every exclusion and every row travels with it.
         self.inner_data
             .params
             .periods
             .move_week_entry(week_id, dest_period, dest_pos);
-
-        // 2. Patterns need no maintenance: exclusion is keyed by the week id,
-        //    which is unchanged by the move — membership travels with the id.
-
-        // 3. Detach the source cells.
-        for collo_slot in self
-            .inner_data
-            .colloscope
-            .period_map
-            .get_mut(&src_period)
-            .expect("src period is valid")
-            .slot_map
-            .values_mut()
-        {
-            collo_slot.interrogations.remove(src_pos);
-        }
-
-        // 4. Insert one colloscope cell per destination slot. A traveling cell
-        //    keeps its content; a slot only present at the destination gets a
-        //    fresh cell reflecting the merged activity at the new week.
-        let dest_slot_ids: Vec<SlotId> = self
-            .inner_data
-            .colloscope
-            .period_map
-            .get(&dest_period)
-            .expect("dest period is valid")
-            .slot_map
-            .keys()
-            .copied()
-            .collect();
-        for slot_id in dest_slot_ids {
-            let week_pattern_id = self
-                .inner_data
-                .params
-                .slots
-                .find_slot(slot_id)
-                .expect("slot id from colloscope is valid")
-                .week_pattern;
-            let merged = self.inner_data.params.get_merged_pattern(week_pattern_id);
-            let cell = if merged[dest_global] {
-                src_cells
-                    .get(&slot_id)
-                    .cloned()
-                    .flatten()
-                    .or_else(|| Some(ColloscopeInterrogation::default()))
-            } else {
-                None
-            };
-            self.inner_data
-                .colloscope
-                .period_map
-                .get_mut(&dest_period)
-                .expect("dest period is valid")
-                .slot_map
-                .get_mut(&slot_id)
-                .expect("slot id from dest_slot_ids")
-                .interrogations
-                .insert(dest_pos, cell);
-        }
 
         Ok(AnnotatedWeekOp::Move(week_id, src_period, src_pos))
     }

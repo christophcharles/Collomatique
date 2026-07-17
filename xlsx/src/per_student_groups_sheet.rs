@@ -20,9 +20,9 @@ fn automatic_student_groups(
     data: &InnerData,
     student_groups: &mut HashMap<(GroupListId, StudentId), i64>,
 ) {
-    for (gl_id, group_list) in &data.colloscope.group_lists {
-        for (student_id, group_number) in &group_list.groups_for_students {
-            student_groups.insert((*gl_id, *student_id), *group_number as i64);
+    for (gl_id, placements) in data.colloscope.group_lists_iter() {
+        for (student_id, group_number) in placements {
+            student_groups.insert((gl_id, *student_id), *group_number as i64);
         }
     }
 }
@@ -56,18 +56,16 @@ fn query_all(data: &InnerData) -> GroupListsAndMembers {
 fn query_automatic(data: &InnerData) -> GroupListsAndMembers {
     let mut group_lists: Vec<(GroupListId, String)> = data
         .colloscope
-        .group_lists
-        .iter()
-        .filter(|(_gl_id, group_list)| !group_list.groups_for_students.is_empty())
-        .map(|(gl_id, _group_list)| {
+        .group_lists_iter()
+        .map(|(gl_id, _placements)| {
             let name = data
                 .params
                 .group_lists
                 .group_list_map
-                .get(gl_id)
+                .get(&gl_id)
                 .map(|gl| gl.params.name.clone())
                 .unwrap_or_default();
-            (*gl_id, name)
+            (gl_id, name)
         })
         .collect();
     group_lists.sort_by(|a, b| a.1.cmp(&b.1));
