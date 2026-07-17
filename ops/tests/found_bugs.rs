@@ -5,7 +5,8 @@
 //! was verified to fail against the unfixed code.
 
 use collomatique_ops::{
-    GeneralPlanningUpdateOp, GeneralPlanningUpdateWarning, OpCategory, UpdateOp, UpdateWarning,
+    GeneralPlanningUpdateOp, GeneralPlanningUpdateWarning, OpCategory, SubjectsUpdateOp, UpdateOp,
+    UpdateWarning,
 };
 use collomatique_state::{AppState, traits::Manager};
 use collomatique_state_colloscopes::{
@@ -195,4 +196,96 @@ fn shrinking_a_period_cleans_colloscope_on_removed_weeks() {
         2,
         "the period should have been shrunk to two weeks",
     );
+}
+
+/// Interrogation parameters for a subject that has no slots and no other
+/// references — the minimal shape that reaches the ops-level slot cleaning
+/// scans without any earlier (teacher / group-list / assignment) cleaning op
+/// firing first.
+fn lone_interrogation_parameters(name: &str) -> SubjectParameters {
+    SubjectParameters {
+        name: name.into(),
+        interrogation_parameters: Some(SubjectInterrogationParameters {
+            students_per_group: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+            groups_per_interrogation: NonZeroU32::new(1).unwrap()..=NonZeroU32::new(1).unwrap(),
+            duration: collomatique_time::NonZeroMinutes::new(60).unwrap(),
+            take_duration_into_account: true,
+            periodicity: SubjectPeriodicity::ExactlyPeriodic {
+                periodicity_in_weeks: NonZeroU32::new(2).unwrap(),
+            },
+        }),
+    }
+}
+
+/// Removing the interrogation parameters from a subject that has *no slots*
+/// must not panic. Since commit b681cdac made the slots ordering sparse, a
+/// subject with interrogations but zero slots has no ordering row, so
+/// `slots_for_subject` returns `None`. The `UpdateSubject` cleaning scan
+/// (`SubjectsUpdateOp::get_next_cleaning_op`) unwrapped that `None` with a
+/// stale `.expect("Subject should have associated slots at this point")`,
+/// panicking. The import script hits exactly this shape (interrogation
+/// subjects created before any slot).
+#[test]
+fn removing_interrogations_from_zero_slot_subject_does_not_panic() {
+    let mut app_state = AppState::<_, Desc>::new(Data::new());
+
+    let period_id = add_active_period(&mut app_state, 2);
+    let _ = period_id;
+
+    let Ok(Some(NewId::SubjectId(subject_id))) = app_state.apply(
+        Op::Subject(SubjectOp::AddAfter(
+            None,
+            Subject {
+                parameters: lone_interrogation_parameters("Math"),
+                excluded_periods: BTreeSet::new(),
+            },
+        )),
+        desc("Add subject"),
+    ) else {
+        panic!("Unexpected result after adding the subject");
+    };
+
+    // Drop the interrogation parameters. No slots, no teacher, no group-list
+    // association exist, so the cleaning cascade must fall through to the slot
+    // scan and find nothing — not panic.
+    let mut new_params = lone_interrogation_parameters("Math");
+    new_params.interrogation_parameters = None;
+
+    UpdateOp::Subjects(SubjectsUpdateOp::UpdateSubject(subject_id, new_params))
+        .dry_apply(&app_state)
+        .expect("removing interrogations from a zero-slot subject must succeed, not panic");
+}
+
+/// Excluding a zero-slot interrogation subject from a period must not panic.
+/// The `UpdatePeriodStatus` cleaning scan guards on
+/// `interrogation_parameters.is_some()` and then walked `slots_for_subject`
+/// with a stale `.expect("Subject should have slots at this point")` — which
+/// panics under the sparse ordering when the subject has no slots.
+#[test]
+fn excluding_zero_slot_subject_from_period_does_not_panic() {
+    let mut app_state = AppState::<_, Desc>::new(Data::new());
+
+    let period_id = add_active_period(&mut app_state, 2);
+
+    let Ok(Some(NewId::SubjectId(subject_id))) = app_state.apply(
+        Op::Subject(SubjectOp::AddAfter(
+            None,
+            Subject {
+                parameters: lone_interrogation_parameters("Math"),
+                excluded_periods: BTreeSet::new(),
+            },
+        )),
+        desc("Add subject"),
+    ) else {
+        panic!("Unexpected result after adding the subject");
+    };
+
+    // Exclude the subject from the period (new_status = false). No students
+    // are assigned, so the scan reaches the interrogation-slot walk, which
+    // must find no slots — not panic.
+    UpdateOp::Subjects(SubjectsUpdateOp::UpdatePeriodStatus(
+        subject_id, period_id, false,
+    ))
+    .dry_apply(&app_state)
+    .expect("excluding a zero-slot subject from a period must succeed, not panic");
 }
