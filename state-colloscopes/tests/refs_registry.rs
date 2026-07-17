@@ -16,7 +16,7 @@ use collomatique_state_colloscopes::{
     WeekOp, WeekPatternOp,
     balancing::{Balancing, BalancingOptions},
     group_lists::{GroupListFilling, GroupListParameters, PrefilledGroup},
-    ids::{GroupListId, PeriodId, SlotId, StudentId, SubjectId, TeacherId, WeekPatternId},
+    ids::{GroupListId, PeriodId, SlotId, StudentId, SubjectId, TeacherId, WeekId, WeekPatternId},
     incompats::Incompatibility,
     pairings::{PairingRule, RulePart},
     periods::WeekDesc,
@@ -34,6 +34,7 @@ use std::num::NonZeroU32;
 #[derive(Default)]
 struct Collect {
     period: Vec<(PeriodId, RefSite)>,
+    week: Vec<(WeekId, RefSite)>,
     subject: Vec<(SubjectId, RefSite)>,
     teacher: Vec<(TeacherId, RefSite)>,
     student: Vec<(StudentId, RefSite)>,
@@ -45,6 +46,9 @@ struct Collect {
 impl RefVisitor for Collect {
     fn period_ref(&mut self, t: PeriodId, s: RefSite) {
         self.period.push((t, s));
+    }
+    fn week_ref(&mut self, t: WeekId, s: RefSite) {
+        self.week.push((t, s));
     }
     fn subject_ref(&mut self, t: SubjectId, s: RefSite) {
         self.subject.push((t, s));
@@ -373,17 +377,15 @@ fn walk_covers_every_site_in_order() {
         subject: math,
         group_list: gl_auto,
     };
-    let collo_p0 = RefSite::ColloscopePeriodKey { non_trivial: true };
-    let collo_p1 = RefSite::ColloscopePeriodKey { non_trivial: false };
-    let collo_slot1 = RefSite::ColloscopeSlotKey {
-        period: p0,
-        non_trivial: true,
+    // Row vocabulary: the single non-empty interrogation row is (slot1, w0); it
+    // references both a slot and a week. slot2 and week w1 carry no row.
+    let collo_int = RefSite::ColloscopeInterrogation {
+        slot: slot1,
+        week: w0,
     };
-    let collo_slot2 = RefSite::ColloscopeSlotKey {
-        period: p0,
-        non_trivial: false,
+    let collo_gl = RefSite::ColloscopeGroupListKey {
+        group_list: gl_auto,
     };
-    let collo_gl = RefSite::ColloscopeGroupListKey { non_trivial: true };
 
     assert_eq!(
         c.period,
@@ -414,11 +416,14 @@ fn walk_covers_every_site_in_order() {
             (p0, assign_p0_math),
             // association mirror
             (p0, association),
-            // colloscope
-            (p0, collo_p0),
-            (p1, collo_p1),
+            // colloscope: rows key on (slot, week), so periods are no longer
+            // directly referenced by the colloscope.
         ],
     );
+
+    // The colloscope references weeks through its interrogation rows: the only
+    // non-empty row is (slot1, w0), so just w0 is referenced.
+    assert_eq!(c.week, vec![(w0, collo_int)]);
 
     assert_eq!(
         c.subject,
@@ -486,9 +491,8 @@ fn walk_covers_every_site_in_order() {
             // families
             (slot1, RefSite::SlotPairingRulePart(slot_pairing)),
             (slot2, RefSite::SlotPairingRulePart(slot_pairing)),
-            // colloscope
-            (slot1, collo_slot1),
-            (slot2, collo_slot2),
+            // colloscope: only slot1 carries an interrogation row; slot2 is empty.
+            (slot1, collo_int),
         ],
     );
 
@@ -515,7 +519,6 @@ fn walk_covers_every_site_in_order() {
             },
             assign_p0_math,
             association,
-            collo_p0,
         ],
     );
     assert_eq!(
@@ -530,9 +533,12 @@ fn walk_covers_every_site_in_order() {
                 week_pattern: wp,
                 non_trivial: true,
             },
-            collo_p1,
         ],
     );
+
+    // Weeks are now ref targets: w0 carries the interrogation row, w1 none.
+    assert_eq!(inner.references_to_week(w0), vec![collo_int]);
+    assert_eq!(inner.references_to_week(w1), vec![]);
 
     assert_eq!(
         inner.references_to_subject(math),
@@ -589,11 +595,11 @@ fn walk_covers_every_site_in_order() {
 
     assert_eq!(
         inner.references_to_slot(slot1),
-        vec![RefSite::SlotPairingRulePart(slot_pairing), collo_slot1],
+        vec![RefSite::SlotPairingRulePart(slot_pairing), collo_int],
     );
     assert_eq!(
         inner.references_to_slot(slot2),
-        vec![RefSite::SlotPairingRulePart(slot_pairing), collo_slot2],
+        vec![RefSite::SlotPairingRulePart(slot_pairing)],
     );
 
     assert_eq!(

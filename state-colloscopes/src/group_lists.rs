@@ -321,29 +321,27 @@ impl crate::Data {
         subject_id: SubjectId,
         first_forbidden_group_number: u32,
     ) -> std::result::Result<(), GroupListError> {
-        let collo_period = self
-            .inner_data
-            .colloscope
-            .period_map
-            .get(&period_id)
-            .expect("Period ID should be valid at this point");
         let Some(subject_slots) = self.inner_data.params.slots.slots_for_subject(subject_id) else {
             // No slots: no interrogation can reference a group number
             return Ok(());
         };
+        let periods = &self.inner_data.params.periods;
         for (slot_id, _slot) in subject_slots {
-            let collo_slot = collo_period
-                .slot_map
-                .get(slot_id)
-                .expect("Subject should run on given period");
-
-            for interrogation in collo_slot.interrogations.iter().flatten() {
-                for group in &interrogation.assigned_groups {
-                    if *group >= first_forbidden_group_number {
-                        return Err(GroupListError::InvalidGroupInSubjectSlotInColloscope(
-                            subject_id, period_id, *slot_id,
-                        ));
-                    }
+            for (week, assigned_groups) in self
+                .inner_data
+                .colloscope
+                .interrogations_for_slot(periods, *slot_id)
+            {
+                if periods.week_position(week).map(|(p, _pos)| p) != Some(period_id) {
+                    continue;
+                }
+                if assigned_groups
+                    .iter()
+                    .any(|group| *group >= first_forbidden_group_number)
+                {
+                    return Err(GroupListError::InvalidGroupInSubjectSlotInColloscope(
+                        subject_id, period_id, *slot_id,
+                    ));
                 }
             }
         }
@@ -413,13 +411,9 @@ impl crate::Data {
                         if !excluded_students.is_empty() {
                             return Err(GroupListError::RemainingFilling);
                         }
-                        let collo_group_list = self
-                            .inner_data
-                            .colloscope
-                            .group_lists
-                            .get(id)
-                            .expect("Non-prefilled group list should have colloscope entry");
-                        if !collo_group_list.is_empty() {
+                        // Canonical-absent surface: a non-empty placement row
+                        // blocks removal.
+                        if self.inner_data.colloscope.group_list(*id).is_some() {
                             return Err(GroupListError::NotEmptyGroupListInColloscope(*id));
                         }
                     }
@@ -465,27 +459,23 @@ impl crate::Data {
                     return Err(GroupListError::InvalidGroupListId(*group_list_id));
                 };
 
-                // Only validate colloscope entry for non-prefilled group lists
-                if !old_group_list.is_prefilled() {
-                    let collo_group_list = self
-                        .inner_data
-                        .colloscope
-                        .group_lists
-                        .get(group_list_id)
-                        .expect("Non-prefilled group list should have colloscope entry");
-                    if collo_group_list
-                        .validate_against_params(
-                            *group_list_id,
-                            new_params,
-                            &old_group_list.filling,
-                            &self.inner_data.params.students,
-                        )
-                        .is_err()
-                    {
-                        return Err(GroupListError::NotCompatibleGroupListInColloscope(
-                            *group_list_id,
-                        ));
-                    }
+                // Only validate colloscope placements for non-prefilled group
+                // lists. Canonical-absent surface: an empty (or absent) list is
+                // trivially compatible.
+                if !old_group_list.is_prefilled()
+                    && let Some(placements) = self.inner_data.colloscope.group_list(*group_list_id)
+                    && colloscopes::validate_group_list_placements(
+                        *group_list_id,
+                        placements,
+                        new_params,
+                        &old_group_list.filling,
+                        &self.inner_data.params.students,
+                    )
+                    .is_err()
+                {
+                    return Err(GroupListError::NotCompatibleGroupListInColloscope(
+                        *group_list_id,
+                    ));
                 }
 
                 // The interrogations of every subject associated with this
@@ -592,14 +582,15 @@ impl crate::Data {
                 let will_be_prefilled = filling.is_prefilled();
 
                 if !was_prefilled && will_be_prefilled {
-                    // Transitioning to prefilled: check colloscope is empty, then remove entry
-                    let collo_group_list = self
+                    // Transitioning to prefilled: check colloscope is empty, then
+                    // remove entry. Canonical-absent surface: a present row means
+                    // non-empty placements.
+                    if self
                         .inner_data
                         .colloscope
-                        .group_lists
-                        .get(group_list_id)
-                        .expect("Non-prefilled group list should have colloscope entry");
-                    if !collo_group_list.groups_for_students.is_empty() {
+                        .group_list(*group_list_id)
+                        .is_some()
+                    {
                         return Err(GroupListError::NonEmptyColloscopeGroupListWhenPrefilling(
                             *group_list_id,
                         ));
@@ -611,23 +602,21 @@ impl crate::Data {
                         *group_list_id,
                         colloscopes::ColloscopeGroupList::new_empty(),
                     );
-                } else if !was_prefilled && !will_be_prefilled {
-                    // Staying automatic: the colloscope entry persists, so the
-                    // new exclusions must be compatible with the placed students
-                    let collo_group_list = self
-                        .inner_data
-                        .colloscope
-                        .group_lists
-                        .get(group_list_id)
-                        .expect("Non-prefilled group list should have colloscope entry");
-                    if collo_group_list
-                        .validate_against_params(
-                            *group_list_id,
-                            &old_group_list.params,
-                            filling,
-                            &self.inner_data.params.students,
-                        )
-                        .is_err()
+                } else if !was_prefilled
+                    && !will_be_prefilled
+                    && let Some(placements) = self.inner_data.colloscope.group_list(*group_list_id)
+                {
+                    // Staying automatic: the colloscope placements persist, so
+                    // the new exclusions must be compatible with the placed
+                    // students.
+                    if colloscopes::validate_group_list_placements(
+                        *group_list_id,
+                        placements,
+                        &old_group_list.params,
+                        filling,
+                        &self.inner_data.params.students,
+                    )
+                    .is_err()
                     {
                         return Err(GroupListError::NotCompatibleGroupListInColloscope(
                             *group_list_id,

@@ -504,14 +504,22 @@ impl crate::Data {
                     return Err(SlotError::InvalidSlotId(*id));
                 };
 
-                for (period_id, collo_period) in &self.inner_data.colloscope.period_map {
-                    let Some(collo_slot) = collo_period.slot_map.get(id) else {
-                        continue;
-                    };
-
-                    if !collo_slot.is_empty() {
-                        return Err(SlotError::NotEmptySlotInColloscope(*id, *period_id));
-                    }
+                // Canonical-absent surface: a slot blocks removal iff it holds
+                // any interrogation row. Report the period of the first such row.
+                if let Some(period_id) = self
+                    .inner_data
+                    .colloscope
+                    .interrogations_for_slot(&self.inner_data.params.periods, *id)
+                    .next()
+                    .and_then(|(week, _groups)| {
+                        self.inner_data
+                            .params
+                            .periods
+                            .week_position(week)
+                            .map(|(period_id, _pos)| period_id)
+                    })
+                {
+                    return Err(SlotError::NotEmptySlotInColloscope(*id, period_id));
                 }
 
                 for (rule_id, rule) in self

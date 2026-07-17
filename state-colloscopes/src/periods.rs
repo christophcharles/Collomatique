@@ -632,14 +632,23 @@ impl crate::Data {
                     return Err(PeriodError::PeriodStillHasWeeks(*period_id));
                 }
 
-                let colloscope_period = self
+                // Canonical-absent surface: any interrogation row on a week of
+                // this period blocks removal. Vacuous once `PeriodStillHasWeeks`
+                // passes (a week-empty period has no rows), but kept as
+                // belt-and-suspenders.
+                let has_colloscope_row = self
                     .inner_data
                     .colloscope
-                    .period_map
-                    .get(period_id)
-                    .expect("Period ID should be valid at this point");
-
-                if !colloscope_period.is_empty() {
+                    .iter(&self.inner_data.params.periods)
+                    .any(|((_slot_id, week), _groups)| {
+                        self.inner_data
+                            .params
+                            .periods
+                            .week_position(week)
+                            .map(|(p, _pos)| p)
+                            == Some(*period_id)
+                    });
+                if has_colloscope_row {
                     return Err(PeriodError::NotEmptyPeriodInColloscope(*period_id));
                 }
 
@@ -864,24 +873,16 @@ impl crate::Data {
             }
         }
 
-        for (slot_id, collo_slot) in self
+        // Canonical-absent surface: any interrogation row on this week (for any
+        // slot) blocks removal. Report the first such slot in surface order.
+        if let Some(slot_id) = self
             .inner_data
             .colloscope
-            .period_map
-            .get(&period_id)
-            .expect("period id from week_position is valid")
-            .slot_map
-            .iter()
+            .iter(&self.inner_data.params.periods)
+            .find(|((_slot_id, week), _groups)| *week == week_id)
+            .map(|((slot_id, _week), _groups)| slot_id)
         {
-            let cell_empty = collo_slot
-                .interrogations
-                .get(per_pos)
-                .expect("cell exists for every week of the period")
-                .as_ref()
-                .is_none_or(|interrogation| interrogation.is_empty());
-            if !cell_empty {
-                return Err(WeekError::NotCompatibleSlotInColloscope(week_id, *slot_id));
-            }
+            return Err(WeekError::NotCompatibleSlotInColloscope(week_id, slot_id));
         }
 
         // Compute the reverse op before mutating.

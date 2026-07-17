@@ -103,11 +103,13 @@ impl crate::Data {
                     return Err(StudentError::InvalidStudentId(*id));
                 };
 
-                for (group_list_id, group_list) in &self.inner_data.colloscope.group_lists {
-                    if group_list.groups_for_students.contains_key(id) {
+                for (group_list_id, groups_for_students) in
+                    self.inner_data.colloscope.group_lists_iter()
+                {
+                    if groups_for_students.contains_key(id) {
                         return Err(StudentError::StudentIsReferencedInColloscopeGroupList(
                             *id,
-                            *group_list_id,
+                            group_list_id,
                         ));
                     }
                 }

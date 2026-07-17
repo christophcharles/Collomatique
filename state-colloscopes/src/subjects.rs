@@ -582,21 +582,23 @@ impl crate::Data {
                         ));
                     }
 
-                    // Check if there are non-empty slots in colloscope for the subject
+                    // Check if there are non-empty slots in colloscope for the
+                    // subject on the newly-excluded period. Canonical-absent
+                    // surface: a slot blocks the exclusion iff it holds an
+                    // interrogation row on a week of this period.
                     if let Some(subject_slots) = self.inner_data.params.slots.slots_for_subject(*id)
                     {
-                        let colloscope_period = self
-                            .inner_data
-                            .colloscope
-                            .period_map
-                            .get(&period_id)
-                            .expect("Period ID should be valid at this point");
-
+                        let periods = &self.inner_data.params.periods;
                         for (slot_id, _slot) in subject_slots {
-                            let Some(collo_slot) = colloscope_period.slot_map.get(slot_id) else {
-                                continue;
-                            };
-                            if !collo_slot.is_empty() {
+                            let has_row = self
+                                .inner_data
+                                .colloscope
+                                .interrogations_for_slot(periods, *slot_id)
+                                .any(|(week, _groups)| {
+                                    periods.week_position(week).map(|(p, _pos)| p)
+                                        == Some(period_id)
+                                });
+                            if has_row {
                                 return Err(SubjectError::SubjectStillHasNonEmptySlotInColloscope(
                                     *id, *slot_id,
                                 ));

@@ -27,9 +27,10 @@
 //!     b. `group_lists.subjects_associations` (per entry: period, subject, group
 //!        list), in `(period, subject)` key order
 //!     c. `slots.ordering` keys → subject, in subject-id order
-//! 14. colloscope: `period_map` entries (period key site, then that period's
-//!     `slot_map` key sites), then `group_lists` entries (group-list key site,
-//!     then that list's `groups_for_students` keys → student)
+//! 14. colloscope: interrogation rows keyed `(slot, week)` — each emits a slot
+//!     key site then a week key site, in surface order (period → slot → week) —
+//!     then `group_lists` rows (group-list key site, then that list's placed
+//!     students → student)
 //!
 //! ## Documented exclusions
 //!
@@ -128,15 +129,13 @@ pub enum RefSite {
     /// `non_trivial` is always `true`.
     SlotsOrderingKey { non_trivial: bool },
     // --- colloscope ---
-    /// A `colloscope.period_map` key — references a period. `non_trivial`
-    /// mirrors `!ColloscopePeriod::is_empty()`.
-    ColloscopePeriodKey { non_trivial: bool },
-    /// A `ColloscopePeriod::slot_map` key — references a slot. `non_trivial`
-    /// mirrors `!ColloscopeSlot::is_empty()`.
-    ColloscopeSlotKey { period: PeriodId, non_trivial: bool },
-    /// A `colloscope.group_lists` key — references a group list. `non_trivial`
-    /// mirrors `!ColloscopeGroupList::is_empty()`.
-    ColloscopeGroupListKey { non_trivial: bool },
+    /// A colloscope interrogation row keyed `(slot, week)` — references *both* a
+    /// slot and a week at once. Rows are canonical-absent (a row exists iff it
+    /// holds an assigned group), so a walked row is always non-trivial.
+    ColloscopeInterrogation { slot: SlotId, week: WeekId },
+    /// A colloscope group-list row — references its group list. Rows are
+    /// canonical-absent (a row exists iff it holds a placement).
+    ColloscopeGroupListKey { group_list: GroupListId },
     /// A student placed in a colloscope group list
     ColloscopeGroupListStudent(GroupListId),
 }
@@ -150,6 +149,8 @@ pub enum RefSite {
 pub trait RefVisitor {
     /// A reference to `target` (a period) lives at `site`.
     fn period_ref(&mut self, _target: PeriodId, _site: RefSite) {}
+    /// A reference to `target` (a week) lives at `site`.
+    fn week_ref(&mut self, _target: WeekId, _site: RefSite) {}
     /// A reference to `target` (a subject) lives at `site`.
     fn subject_ref(&mut self, _target: SubjectId, _site: RefSite) {}
     /// A reference to `target` (a teacher) lives at `site`.
@@ -370,35 +371,27 @@ fn walk_slots_ordering_keys(params: &Parameters, v: &mut impl RefVisitor) {
     }
 }
 
-/// Walks the colloscope (step 14): period keys (then their slot keys), then
-/// group-list keys (then their placed students).
-fn walk_colloscope(colloscope: &Colloscope, v: &mut impl RefVisitor) {
-    for (period_id, collo_period) in colloscope.period_map.iter() {
-        v.period_ref(
-            *period_id,
-            RefSite::ColloscopePeriodKey {
-                non_trivial: !collo_period.is_empty(),
-            },
-        );
-        for (slot_id, collo_slot) in collo_period.slot_map.iter() {
-            v.slot_ref(
-                *slot_id,
-                RefSite::ColloscopeSlotKey {
-                    period: *period_id,
-                    non_trivial: !collo_slot.is_empty(),
-                },
-            );
-        }
+/// Walks the colloscope (step 14): each interrogation row references both a
+/// slot and a week (two-sided, like the assignments mirror), then each
+/// group-list row references its list and every placed student. Rows are
+/// canonical-absent, so a walked row is always non-trivial.
+fn walk_colloscope(
+    colloscope: &Colloscope,
+    periods: &super::periods::Periods,
+    v: &mut impl RefVisitor,
+) {
+    for ((slot_id, week_id), _assigned_groups) in colloscope.iter(periods) {
+        let site = RefSite::ColloscopeInterrogation {
+            slot: slot_id,
+            week: week_id,
+        };
+        v.slot_ref(slot_id, site);
+        v.week_ref(week_id, site);
     }
-    for (gl_id, collo_gl) in colloscope.group_lists.iter() {
-        v.group_list_ref(
-            *gl_id,
-            RefSite::ColloscopeGroupListKey {
-                non_trivial: !collo_gl.is_empty(),
-            },
-        );
-        for student_id in collo_gl.groups_for_students.keys() {
-            v.student_ref(*student_id, RefSite::ColloscopeGroupListStudent(*gl_id));
+    for (gl_id, groups_for_students) in colloscope.group_lists_iter() {
+        v.group_list_ref(gl_id, RefSite::ColloscopeGroupListKey { group_list: gl_id });
+        for student_id in groups_for_students.keys() {
+            v.student_ref(*student_id, RefSite::ColloscopeGroupListStudent(gl_id));
         }
     }
 }
@@ -412,7 +405,7 @@ impl InnerData {
         walk_assignments(&self.params, v);
         walk_associations(&self.params, v);
         walk_slots_ordering_keys(&self.params, v);
-        walk_colloscope(&self.colloscope, v);
+        walk_colloscope(&self.colloscope, &self.params.periods, v);
     }
 }
 
@@ -447,6 +440,10 @@ impl InnerData {
     references_to_impl!(
         /// Every reference site targeting the given period, in walk order.
         references_to_period, PeriodId, period_ref
+    );
+    references_to_impl!(
+        /// Every reference site targeting the given week, in walk order.
+        references_to_week, WeekId, week_ref
     );
     references_to_impl!(
         /// Every reference site targeting the given subject, in walk order.

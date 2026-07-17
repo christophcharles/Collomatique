@@ -716,31 +716,50 @@ impl ColloscopeGroupList {
         group_list_filling: &super::group_lists::GroupListFilling,
         students: &super::students::Students,
     ) -> Result<(), ColloscopeError> {
-        let first_forbidden_value = group_list_params.group_names.len() as u32;
-        let excluded_students = group_list_filling.excluded_students();
+        validate_group_list_placements(
+            group_list_id,
+            &self.groups_for_students,
+            group_list_params,
+            group_list_filling,
+            students,
+        )
+    }
+}
 
-        for (student_id, group_num) in &self.groups_for_students {
-            if excluded_students.contains(student_id) {
-                return Err(ColloscopeError::ExcludedStudentInGroupList(
-                    group_list_id,
-                    *student_id,
-                ));
-            }
+/// Validates a raw student→group placement map for one group list against its
+/// params, filling and the students table. Operates on the sparse surface value
+/// (`Colloscope::group_list`) so the check survives the dense→table swap.
+pub(crate) fn validate_group_list_placements(
+    group_list_id: GroupListId,
+    groups_for_students: &BTreeMap<StudentId, u32>,
+    group_list_params: &super::group_lists::GroupListParameters,
+    group_list_filling: &super::group_lists::GroupListFilling,
+    students: &super::students::Students,
+) -> Result<(), ColloscopeError> {
+    let first_forbidden_value = group_list_params.group_names.len() as u32;
+    let excluded_students = group_list_filling.excluded_students();
 
-            if !students.student_map.contains(student_id) {
-                return Err(ColloscopeError::InvalidStudentId(*student_id));
-            }
-
-            if *group_num >= first_forbidden_value {
-                return Err(ColloscopeError::InvalidGroupNumForStudentInGroupList(
-                    group_list_id,
-                    *student_id,
-                ));
-            }
+    for (student_id, group_num) in groups_for_students {
+        if excluded_students.contains(student_id) {
+            return Err(ColloscopeError::ExcludedStudentInGroupList(
+                group_list_id,
+                *student_id,
+            ));
         }
 
-        Ok(())
+        if !students.student_map.contains(student_id) {
+            return Err(ColloscopeError::InvalidStudentId(*student_id));
+        }
+
+        if *group_num >= first_forbidden_value {
+            return Err(ColloscopeError::InvalidGroupNumForStudentInGroupList(
+                group_list_id,
+                *student_id,
+            ));
+        }
     }
+
+    Ok(())
 }
 
 /// Errors for colloscopes operations
