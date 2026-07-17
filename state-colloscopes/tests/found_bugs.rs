@@ -11,7 +11,6 @@ use collomatique_state_colloscopes::{
     ColloscopeOp, Data, Error, GroupListError, GroupListOp, NewId, Op, PeriodOp, SettingsOp,
     SlotOp, StudentOp, Subject, SubjectInterrogationParameters, SubjectOp, SubjectParameters,
     SubjectPeriodicity, TeacherOp, WeekOp,
-    colloscopes::{ColloscopeGroupList, ColloscopeInterrogation},
     group_lists::{GroupListFilling, GroupListParameters, PrefilledGroup},
     ids::PeriodId,
     periods::WeekDesc,
@@ -130,11 +129,9 @@ fn set_filling_excluding_placed_student_is_rejected() {
 
     // Place the first student in group 0 of the colloscope entry
     let Ok(None) = app_state.apply(
-        Op::Colloscope(ColloscopeOp::UpdateGroupList(
+        Op::Colloscope(ColloscopeOp::SetGroupList(
             group_list_id,
-            ColloscopeGroupList {
-                groups_for_students: BTreeMap::from([(placed_student, 0)]),
-            },
+            BTreeMap::from([(placed_student, 0)]),
         )),
         "Place student in colloscope".into(),
     ) else {
@@ -265,14 +262,18 @@ fn update_shrinking_group_names_below_assigned_group_is_rejected() {
     };
 
     // Assign group number 2 in an interrogation of the slot
+    let week0 = app_state
+        .get_data()
+        .get_inner_data()
+        .params
+        .periods
+        .week_id_at(period_id, 0)
+        .expect("period has a first week");
     let Ok(None) = app_state.apply(
-        Op::Colloscope(ColloscopeOp::UpdateInterrogation(
-            period_id,
+        Op::Colloscope(ColloscopeOp::SetInterrogation(
             slot_id,
-            0,
-            ColloscopeInterrogation {
-                assigned_groups: BTreeSet::from([2]),
-            },
+            week0,
+            BTreeSet::from([2]),
         )),
         "Assign group 2 in interrogation".into(),
     ) else {

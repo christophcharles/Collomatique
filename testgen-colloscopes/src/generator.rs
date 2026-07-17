@@ -15,7 +15,6 @@ use collomatique_state_colloscopes::{
     AssignmentOp, BalancingOp, ColloscopeOp, ExportConfigOp, GroupListOp, IncompatOp, InnerData,
     Op, PairingOp, PeriodOp, SettingsOp, SlotOp, SlotPairingOp, StudentOp, SubjectOp, TeacherOp,
     WeekOp, WeekPatternOp,
-    colloscopes::{ColloscopeGroupList, ColloscopeInterrogation},
     group_lists::GroupListFilling,
     ids::{
         GroupListId, Id, IncompatId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId,
@@ -994,11 +993,9 @@ fn gen_colloscope(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invali
         if invalid {
             groups_for_students.insert(unsafe { StudentId::new(dangling(rng)) }, 0);
         }
-        return Op::Colloscope(ColloscopeOp::UpdateGroupList(
+        return Op::Colloscope(ColloscopeOp::SetGroupList(
             group_list_id,
-            ColloscopeGroupList {
-                groups_for_students,
-            },
+            groups_for_students,
         ));
     }
 
@@ -1040,11 +1037,15 @@ fn gen_colloscope(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invali
         }
     }
 
-    Op::Colloscope(ColloscopeOp::UpdateInterrogation(
-        *period_id,
+    let week_id = inner
+        .params
+        .periods
+        .week_id_at(*period_id, week_in_period)
+        .expect("position within the period is valid");
+    Op::Colloscope(ColloscopeOp::SetInterrogation(
         *slot_id,
-        week_in_period,
-        ColloscopeInterrogation { assigned_groups },
+        week_id,
+        assigned_groups,
     ))
 }
 

@@ -272,13 +272,10 @@ fn update_week_to_inactive_blocked_by_filled_cell() {
     let weeks = week_ids_of(&app, period);
     // Fill the cell of the first week.
     let Ok(None) = app.apply(
-        Op::Colloscope(ColloscopeOp::UpdateInterrogation(
-            period,
+        Op::Colloscope(ColloscopeOp::SetInterrogation(
             slot,
-            0,
-            ColloscopeInterrogation {
-                assigned_groups: BTreeSet::from([1]),
-            },
+            weeks[0],
+            BTreeSet::from([1]),
         )),
         "Fill interrogation".into(),
     ) else {
@@ -385,13 +382,10 @@ fn move_week_preserves_filled_cell() {
     let moved = weeks_a[1];
     // Fill the cell of the moved week.
     let Ok(None) = app.apply(
-        Op::Colloscope(ColloscopeOp::UpdateInterrogation(
-            period_a,
+        Op::Colloscope(ColloscopeOp::SetInterrogation(
             slot,
-            1,
-            ColloscopeInterrogation {
-                assigned_groups: BTreeSet::from([1]),
-            },
+            moved,
+            BTreeSet::from([1]),
         )),
         "Fill interrogation".into(),
     ) else {
@@ -492,13 +486,10 @@ fn move_week_blocked_when_destination_lacks_slot() {
     let weeks_a = week_ids_of(&app, period_a);
     let moved = weeks_a[0];
     let Ok(None) = app.apply(
-        Op::Colloscope(ColloscopeOp::UpdateInterrogation(
-            period_a,
+        Op::Colloscope(ColloscopeOp::SetInterrogation(
             slot,
-            0,
-            ColloscopeInterrogation {
-                assigned_groups: BTreeSet::from([0]),
-            },
+            moved,
+            BTreeSet::from([0]),
         )),
         "Fill interrogation".into(),
     ) else {

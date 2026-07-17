@@ -367,21 +367,15 @@ impl GeneralPlanningUpdateOp {
                     if !removed_week_set.contains(&week_id) {
                         continue;
                     }
-                    let (_period, week_in_period) = inner
-                        .params
-                        .periods
-                        .week_position(week_id)
-                        .expect("week id from a live colloscope row is valid");
                     return Some(CleaningOp {
                         warning: GeneralPlanningUpdateWarning::LoosePeriodDataInColloscope(
                             *period_id,
                         ),
                         op: UpdateOp::Colloscope(
                             ColloscopeUpdateOp::UpdateColloscopeInterrogation(
-                                *period_id,
                                 slot_id,
-                                week_in_period,
-                                collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
+                                week_id,
+                                std::collections::BTreeSet::new(),
                             ),
                         ),
                     });
@@ -441,10 +435,9 @@ impl GeneralPlanningUpdateOp {
                         ),
                         op: UpdateOp::Colloscope(
                             ColloscopeUpdateOp::UpdateColloscopeInterrogation(
-                                *period_id,
                                 slot_id,
-                                *week,
-                                collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
+                                week_id,
+                                std::collections::BTreeSet::new(),
                             ),
                         ),
                     });
@@ -474,21 +467,15 @@ impl GeneralPlanningUpdateOp {
                     if !removed_week_set.contains(&week_id) {
                         continue;
                     }
-                    let (_period, week_in_period) = inner
-                        .params
-                        .periods
-                        .week_position(week_id)
-                        .expect("week id from a live colloscope row is valid");
                     return Some(CleaningOp {
                         warning: GeneralPlanningUpdateWarning::LoosePeriodDataInColloscope(
                             *period_id,
                         ),
                         op: UpdateOp::Colloscope(
                             ColloscopeUpdateOp::UpdateColloscopeInterrogation(
-                                *period_id,
                                 slot_id,
-                                week_in_period,
-                                collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
+                                week_id,
+                                std::collections::BTreeSet::new(),
                             ),
                         ),
                     });

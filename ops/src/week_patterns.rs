@@ -212,19 +212,15 @@ impl WeekPatternsUpdateOp {
                         if !new_excluded.contains(&week_id) {
                             continue;
                         }
-                        let (period_id, week_in_period) = inner
-                            .params
-                            .periods
-                            .week_position(week_id)
-                            .expect("week id from a live colloscope row is valid");
                         return Some(CleaningOp {
-                            warning: WeekPatternsUpdateWarning::LooseColloscopeDataForSlot(*slot_id),
+                            warning: WeekPatternsUpdateWarning::LooseColloscopeDataForSlot(
+                                *slot_id,
+                            ),
                             op: UpdateOp::Colloscope(
                                 ColloscopeUpdateOp::UpdateColloscopeInterrogation(
-                                    period_id,
                                     *slot_id,
-                                    week_in_period,
-                                    collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
+                                    week_id,
+                                    std::collections::BTreeSet::new(),
                                 ),
                             ),
                         });

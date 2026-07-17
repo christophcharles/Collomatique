@@ -1,4 +1,4 @@
-use collomatique_state_colloscopes::colloscopes::{ColloscopeGroupList, ColloscopeInterrogation};
+use std::collections::{BTreeMap, BTreeSet};
 
 use super::*;
 
@@ -20,13 +20,12 @@ impl ColloscopeUpdateWarning {
 pub enum ColloscopeUpdateOp {
     UpdateColloscopeGroupList(
         collomatique_state_colloscopes::GroupListId,
-        collomatique_state_colloscopes::colloscopes::ColloscopeGroupList,
+        BTreeMap<collomatique_state_colloscopes::StudentId, u32>,
     ),
     UpdateColloscopeInterrogation(
-        collomatique_state_colloscopes::PeriodId,
         collomatique_state_colloscopes::SlotId,
-        usize,
-        collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation,
+        collomatique_state_colloscopes::WeekId,
+        BTreeSet<u32>,
     ),
     EraseColloscope,
     EraseGroupLists,
@@ -60,23 +59,24 @@ pub enum UpdateColloscopeGroupListError {
 
 #[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum UpdateColloscopeInterrogationError {
-    #[error("invalid period id ({0:?})")]
-    InvalidPeriodId(collomatique_state_colloscopes::PeriodId),
+    #[error("invalid week id ({0:?})")]
+    InvalidWeekId(collomatique_state_colloscopes::WeekId),
     #[error("invalid slot id ({0:?})")]
     InvalidSlotId(collomatique_state_colloscopes::SlotId),
-    #[error("invalid week number {1} in period {0:?}")]
-    InvalidWeekNumberInPeriod(collomatique_state_colloscopes::PeriodId, usize),
-    #[error("Interrogation on non-interrogation week")]
-    InterrogationOnNonInterrogationWeek(
-        collomatique_state_colloscopes::PeriodId,
+    #[error("slot {0:?} does not run on the period of week {1:?}")]
+    SlotNotRunningOnPeriod(
         collomatique_state_colloscopes::SlotId,
-        usize,
+        collomatique_state_colloscopes::WeekId,
+    ),
+    #[error("interrogation on inactive week {1:?} for slot {0:?}")]
+    InterrogationOnInactiveWeek(
+        collomatique_state_colloscopes::SlotId,
+        collomatique_state_colloscopes::WeekId,
     ),
     #[error("Invalid group number in interrogation")]
     InvalidGroupNumInInterrogation(
-        collomatique_state_colloscopes::PeriodId,
         collomatique_state_colloscopes::SlotId,
-        usize,
+        collomatique_state_colloscopes::WeekId,
     ),
 }
 
@@ -97,13 +97,13 @@ impl ColloscopeUpdateOp {
         data: &mut T,
     ) -> Result<(), ColloscopeUpdateError> {
         match self {
-            Self::UpdateColloscopeGroupList(group_list_id, group_list) => {
+            Self::UpdateColloscopeGroupList(group_list_id, placements) => {
                 let result = data
                     .apply(
                         collomatique_state_colloscopes::Op::Colloscope(
-                            collomatique_state_colloscopes::ColloscopeOp::UpdateGroupList(
+                            collomatique_state_colloscopes::ColloscopeOp::SetGroupList(
                                 *group_list_id,
-                                group_list.clone(),
+                                placements.clone(),
                             )
                         ),
                         self.get_desc()
@@ -137,20 +137,14 @@ impl ColloscopeUpdateOp {
 
                 Ok(())
             }
-            Self::UpdateColloscopeInterrogation(
-                period_id,
-                slot_id,
-                week_in_period,
-                interrogation,
-            ) => {
+            Self::UpdateColloscopeInterrogation(slot_id, week_id, assigned_groups) => {
                 let result = data
                     .apply(
                         collomatique_state_colloscopes::Op::Colloscope(
-                            collomatique_state_colloscopes::ColloscopeOp::UpdateInterrogation(
-                                *period_id,
+                            collomatique_state_colloscopes::ColloscopeOp::SetInterrogation(
                                 *slot_id,
-                                *week_in_period,
-                                interrogation.clone(),
+                                *week_id,
+                                assigned_groups.clone(),
                             ),
                         ),
                         self.get_desc(),
@@ -158,22 +152,22 @@ impl ColloscopeUpdateOp {
                     .map_err(|e| {
                         if let collomatique_state_colloscopes::Error::Colloscope(ce) = e {
                             match ce {
-                                collomatique_state_colloscopes::ColloscopeError::InvalidPeriodId(period_id) => {
-                                    UpdateColloscopeInterrogationError::InvalidPeriodId(period_id)
+                                collomatique_state_colloscopes::ColloscopeError::InvalidWeekId(week_id) => {
+                                    UpdateColloscopeInterrogationError::InvalidWeekId(week_id)
                                 }
                                 collomatique_state_colloscopes::ColloscopeError::InvalidSlotId(slot_id) => {
                                     UpdateColloscopeInterrogationError::InvalidSlotId(slot_id)
                                 }
-                                collomatique_state_colloscopes::ColloscopeError::InvalidWeekNumberInPeriod(period_id, week_num) => {
-                                    UpdateColloscopeInterrogationError::InvalidWeekNumberInPeriod(period_id, week_num)
+                                collomatique_state_colloscopes::ColloscopeError::SlotNotRunningOnPeriod(slot_id, week_id) => {
+                                    UpdateColloscopeInterrogationError::SlotNotRunningOnPeriod(slot_id, week_id)
                                 }
-                                collomatique_state_colloscopes::ColloscopeError::NoInterrogationOnWeek(period_id, slot_id, week_num) => {
-                                    UpdateColloscopeInterrogationError::InterrogationOnNonInterrogationWeek(period_id, slot_id, week_num)
+                                collomatique_state_colloscopes::ColloscopeError::InterrogationOnInactiveWeek(slot_id, week_id) => {
+                                    UpdateColloscopeInterrogationError::InterrogationOnInactiveWeek(slot_id, week_id)
                                 }
-                                collomatique_state_colloscopes::ColloscopeError::InvalidGroupNumInInterrogation(period_id, slot_id, week_num) => {
-                                    UpdateColloscopeInterrogationError::InvalidGroupNumInInterrogation(period_id, slot_id, week_num)
+                                collomatique_state_colloscopes::ColloscopeError::InvalidGroupNumInInterrogation(..) => {
+                                    UpdateColloscopeInterrogationError::InvalidGroupNumInInterrogation(*slot_id, *week_id)
                                 }
-                                _ => panic!("Unexpected error on ColloscopeOp::UpdateInterrogation: {:?}", ce),
+                                _ => panic!("Unexpected error on ColloscopeOp::SetInterrogation: {:?}", ce),
                             }
                         } else {
                             panic!("Unexpected error during UpdateColloscopeInterrogation: {:?}", e);
@@ -192,24 +186,16 @@ impl ColloscopeUpdateOp {
                 let coords: Vec<_> = inner
                     .colloscope
                     .iter(&inner.params.periods)
-                    .map(|((slot_id, week_id), _groups)| {
-                        let (period_id, week_in_period) = inner
-                            .params
-                            .periods
-                            .week_position(week_id)
-                            .expect("week id from a live colloscope row is valid");
-                        (period_id, slot_id, week_in_period)
-                    })
+                    .map(|((slot_id, week_id), _groups)| (slot_id, week_id))
                     .collect();
-                for (period_id, slot_id, week_in_period) in coords {
+                for (slot_id, week_id) in coords {
                     let result = data
                         .apply(
                             collomatique_state_colloscopes::Op::Colloscope(
-                                collomatique_state_colloscopes::ColloscopeOp::UpdateInterrogation(
-                                    period_id,
+                                collomatique_state_colloscopes::ColloscopeOp::SetInterrogation(
                                     slot_id,
-                                    week_in_period,
-                                    ColloscopeInterrogation::default(),
+                                    week_id,
+                                    BTreeSet::new(),
                                 ),
                             ),
                             self.get_desc(),
@@ -234,9 +220,9 @@ impl ColloscopeUpdateOp {
                     let result = data
                         .apply(
                             collomatique_state_colloscopes::Op::Colloscope(
-                                collomatique_state_colloscopes::ColloscopeOp::UpdateGroupList(
+                                collomatique_state_colloscopes::ColloscopeOp::SetGroupList(
                                     group_list_id,
-                                    ColloscopeGroupList::default(),
+                                    BTreeMap::new(),
                                 ),
                             ),
                             self.get_desc(),
@@ -255,10 +241,10 @@ impl ColloscopeUpdateOp {
         (
             OpCategory::Colloscope,
             match self {
-                ColloscopeUpdateOp::UpdateColloscopeGroupList(_id, _list) => {
+                ColloscopeUpdateOp::UpdateColloscopeGroupList(_id, _placements) => {
                     "Mettre à jour une liste de groupe du colloscope".into()
                 }
-                ColloscopeUpdateOp::UpdateColloscopeInterrogation(_id, _slot, _week, _int) => {
+                ColloscopeUpdateOp::UpdateColloscopeInterrogation(_slot, _week, _groups) => {
                     "Mettre à jour une interrogation du colloscope".into()
                 }
                 ColloscopeUpdateOp::EraseColloscope => "Effacer le colloscope".into(),

@@ -232,9 +232,7 @@ impl StudentsUpdateOp {
                             op: UpdateOp::Colloscope(
                                 ColloscopeUpdateOp::UpdateColloscopeGroupList(
                                     group_list_id,
-                                    collomatique_state_colloscopes::colloscopes::ColloscopeGroupList {
-                                        groups_for_students: new_placements,
-                                    },
+                                    new_placements,
                                 ),
                             ),
                         });

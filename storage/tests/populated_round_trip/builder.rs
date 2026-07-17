@@ -15,7 +15,6 @@ use collomatique_state_colloscopes::{
     Subject, SubjectInterrogationParameters, SubjectOp, SubjectParameters, SubjectPeriodicity,
     TeacherOp, WeekOp, WeekPatternOp,
     balancing::{Balancing, BalancingOptions},
-    colloscopes::{ColloscopeGroupList, ColloscopeInterrogation},
     export_config,
     group_lists::{GroupListFilling, GroupListParameters, PrefilledGroup},
     ids::{PeriodId, WeekId},
@@ -675,49 +674,52 @@ pub fn build_rich_data() -> Data {
     );
 
     // Colloscope: fill the automatic group list and a few interrogations
+    let week0_p1 = state
+        .get_data()
+        .get_inner_data()
+        .params
+        .periods
+        .week_id_at(period1, 0)
+        .expect("period1 has a first week");
+    let week1_p1 = state
+        .get_data()
+        .get_inner_data()
+        .params
+        .periods
+        .week_id_at(period1, 1)
+        .expect("period1 has a second week");
     apply(
         &mut state,
-        Op::Colloscope(ColloscopeOp::UpdateGroupList(
+        Op::Colloscope(ColloscopeOp::SetGroupList(
             group_list_physics,
-            ColloscopeGroupList {
-                groups_for_students: BTreeMap::from([(student1, 0), (student2, 1), (student3, 2)]),
-            },
+            BTreeMap::from([(student1, 0), (student2, 1), (student3, 2)]),
         )),
         "colloscope group list",
     );
     apply(
         &mut state,
-        Op::Colloscope(ColloscopeOp::UpdateInterrogation(
-            period1,
+        Op::Colloscope(ColloscopeOp::SetInterrogation(
             slot_maths1,
-            0,
-            ColloscopeInterrogation {
-                assigned_groups: BTreeSet::from([0]),
-            },
+            week0_p1,
+            BTreeSet::from([0]),
         )),
         "interrogation maths 1",
     );
     apply(
         &mut state,
-        Op::Colloscope(ColloscopeOp::UpdateInterrogation(
-            period1,
+        Op::Colloscope(ColloscopeOp::SetInterrogation(
             slot_maths2,
-            0,
-            ColloscopeInterrogation {
-                assigned_groups: BTreeSet::from([1]),
-            },
+            week0_p1,
+            BTreeSet::from([1]),
         )),
         "interrogation maths 2",
     );
     apply(
         &mut state,
-        Op::Colloscope(ColloscopeOp::UpdateInterrogation(
-            period1,
+        Op::Colloscope(ColloscopeOp::SetInterrogation(
             slot_physics,
-            1,
-            ColloscopeInterrogation {
-                assigned_groups: BTreeSet::from([0, 2]),
-            },
+            week1_p1,
+            BTreeSet::from([0, 2]),
         )),
         "interrogation physics",
     );

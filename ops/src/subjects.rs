@@ -501,7 +501,7 @@ impl SubjectsUpdateOp {
                                 .colloscope
                                 .interrogations_for_slot(&inner.params.periods, slot_id)
                             {
-                                let (row_period, week_in_period) = inner
+                                let (row_period, _pos) = inner
                                     .params
                                     .periods
                                     .week_position(week_id)
@@ -516,10 +516,9 @@ impl SubjectsUpdateOp {
                                     ),
                                     op: UpdateOp::Colloscope(
                                         ColloscopeUpdateOp::UpdateColloscopeInterrogation(
-                                            *period_id,
                                             slot_id,
-                                            week_in_period,
-                                            collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
+                                            week_id,
+                                            std::collections::BTreeSet::new(),
                                         ),
                                     ),
                                 });

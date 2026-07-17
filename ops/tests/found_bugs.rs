@@ -12,8 +12,8 @@ use collomatique_state::{AppState, traits::Manager};
 use collomatique_state_colloscopes::{
     ColloscopeOp, Data, GroupListOp, NewId, Op, PeriodOp, SlotOp, Subject,
     SubjectInterrogationParameters, SubjectOp, SubjectParameters, SubjectPeriodicity, TeacherOp,
-    WeekOp, colloscopes::ColloscopeInterrogation, group_lists::GroupListParameters, ids::PeriodId,
-    periods::WeekDesc, slots::Slot, teachers::Teacher,
+    WeekOp, group_lists::GroupListParameters, ids::PeriodId, periods::WeekDesc, slots::Slot,
+    teachers::Teacher,
 };
 use std::collections::BTreeSet;
 use std::num::NonZeroU32;
@@ -143,14 +143,18 @@ fn shrinking_a_period_cleans_colloscope_on_removed_weeks() {
 
     // A non-empty interrogation on the last (third) week — the one that
     // shrinking to two weeks will remove.
+    let week2 = app_state
+        .get_data()
+        .get_inner_data()
+        .params
+        .periods
+        .week_id_at(period_id, 2)
+        .expect("period has a third week");
     let Ok(None) = app_state.apply(
-        Op::Colloscope(ColloscopeOp::UpdateInterrogation(
-            period_id,
+        Op::Colloscope(ColloscopeOp::SetInterrogation(
             slot_id,
-            2,
-            ColloscopeInterrogation {
-                assigned_groups: BTreeSet::from([0]),
-            },
+            week2,
+            BTreeSet::from([0]),
         )),
         desc("Put an interrogation on the last week"),
     ) else {

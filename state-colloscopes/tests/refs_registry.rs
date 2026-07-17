@@ -15,7 +15,6 @@ use collomatique_state_colloscopes::{
     SubjectInterrogationParameters, SubjectOp, SubjectParameters, SubjectPeriodicity, TeacherOp,
     WeekOp, WeekPatternOp,
     balancing::{Balancing, BalancingOptions},
-    colloscopes::{ColloscopeGroupList, ColloscopeInterrogation},
     group_lists::{GroupListFilling, GroupListParameters, PrefilledGroup},
     ids::{GroupListId, PeriodId, SlotId, StudentId, SubjectId, TeacherId, WeekPatternId},
     incompats::Incompatibility,
@@ -341,11 +340,9 @@ fn walk_covers_every_site_in_order() {
 
     // Place st2 in the colloscope's automatic group list → the list is non-empty.
     apply_none!(
-        Op::Colloscope(ColloscopeOp::UpdateGroupList(
+        Op::Colloscope(ColloscopeOp::SetGroupList(
             gl_auto,
-            ColloscopeGroupList {
-                groups_for_students: BTreeMap::from([(st2, 0)]),
-            },
+            BTreeMap::from([(st2, 0)]),
         )),
         "fill colloscope group list"
     );
@@ -353,13 +350,10 @@ fn walk_covers_every_site_in_order() {
     // Assign group 0 to slot1's interrogation on p0 week 0 → that period and slot
     // become non-trivial in the colloscope; p1 and slot2 stay empty.
     apply_none!(
-        Op::Colloscope(ColloscopeOp::UpdateInterrogation(
-            p0,
+        Op::Colloscope(ColloscopeOp::SetInterrogation(
             slot1,
-            0,
-            ColloscopeInterrogation {
-                assigned_groups: BTreeSet::from([0]),
-            },
+            w0,
+            BTreeSet::from([0]),
         )),
         "assign group to interrogation"
     );

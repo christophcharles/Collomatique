@@ -273,15 +273,10 @@ pub enum BalancingOp {
 /// colloscopes we can do on a [Data]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ColloscopeOp {
-    /// Update a group list
-    UpdateGroupList(GroupListId, colloscopes::ColloscopeGroupList),
-    /// Update an interrogation
-    UpdateInterrogation(
-        PeriodId,
-        SlotId,
-        usize,
-        colloscopes::ColloscopeInterrogation,
-    ),
+    /// Set the group placements of a group list (empty map clears it)
+    SetGroupList(GroupListId, std::collections::BTreeMap<StudentId, u32>),
+    /// Set the assigned groups on `(slot, week)` (empty set clears the row)
+    SetInterrogation(SlotId, WeekId, std::collections::BTreeSet<u32>),
 }
 
 /// Export configuration operation enumeration
@@ -722,15 +717,10 @@ pub enum AnnotatedBalancingOp {
 /// See [collomatique_state::history] for a complete discussion of the problem.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AnnotatedColloscopeOp {
-    /// Update a group list
-    UpdateGroupList(GroupListId, colloscopes::ColloscopeGroupList),
-    /// Update an interrogation
-    UpdateInterrogation(
-        PeriodId,
-        SlotId,
-        usize,
-        colloscopes::ColloscopeInterrogation,
-    ),
+    /// Set the group placements of a group list (empty map clears it)
+    SetGroupList(GroupListId, std::collections::BTreeMap<StudentId, u32>),
+    /// Set the assigned groups on `(slot, week)` (empty set clears the row)
+    SetInterrogation(SlotId, WeekId, std::collections::BTreeSet<u32>),
 }
 
 /// Export configuration annotated operation enumeration
@@ -1149,20 +1139,12 @@ impl AnnotatedColloscopeOp {
     /// Annotates the subcategory of operations [ColloscopeOp].
     fn annotate(colloscope_op: ColloscopeOp) -> AnnotatedColloscopeOp {
         match colloscope_op {
-            ColloscopeOp::UpdateGroupList(group_list_id, group_list) => {
-                AnnotatedColloscopeOp::UpdateGroupList(group_list_id, group_list)
+            ColloscopeOp::SetGroupList(group_list_id, placements) => {
+                AnnotatedColloscopeOp::SetGroupList(group_list_id, placements)
             }
-            ColloscopeOp::UpdateInterrogation(
-                period_id,
-                slot_id,
-                week_in_period,
-                interrogation,
-            ) => AnnotatedColloscopeOp::UpdateInterrogation(
-                period_id,
-                slot_id,
-                week_in_period,
-                interrogation,
-            ),
+            ColloscopeOp::SetInterrogation(slot_id, week_id, assigned_groups) => {
+                AnnotatedColloscopeOp::SetInterrogation(slot_id, week_id, assigned_groups)
+            }
         }
     }
 }

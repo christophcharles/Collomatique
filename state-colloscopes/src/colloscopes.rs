@@ -802,6 +802,19 @@ pub enum ColloscopeError {
 
     #[error("Non-prefilled group list {0:?} is missing from colloscope")]
     MissingNonPrefilledGroupList(GroupListId),
+
+    /// The week id in a colloscope op does not resolve to any period
+    #[error("invalid week id ({0:?})")]
+    InvalidWeekId(WeekId),
+
+    /// The slot's subject does not run interrogations on the week's period
+    #[error("slot {0:?} does not run on the period of week {1:?}")]
+    SlotNotRunningOnPeriod(SlotId, WeekId),
+
+    /// The week is inactive for the slot (excluded by pattern or not an
+    /// interrogation week)
+    #[error("interrogation on inactive week {1:?} for slot {0:?}")]
+    InterrogationOnInactiveWeek(SlotId, WeekId),
 }
 
 impl crate::Data {
@@ -813,7 +826,7 @@ impl crate::Data {
         colloscope_op: &AnnotatedColloscopeOp,
     ) -> std::result::Result<AnnotatedColloscopeOp, ColloscopeError> {
         match colloscope_op {
-            AnnotatedColloscopeOp::UpdateGroupList(group_list_id, group_list) => {
+            AnnotatedColloscopeOp::SetGroupList(group_list_id, placements) => {
                 let Some(params_group_list) = self
                     .inner_data
                     .params
@@ -824,79 +837,115 @@ impl crate::Data {
                     return Err(ColloscopeError::InvalidGroupListId(*group_list_id));
                 };
 
-                group_list.validate_against_params(
+                // Prefilled group lists have a params entry but no colloscope
+                // row: the op targets them by mistake. Rejecting via the params
+                // `is_prefilled` flag (rather than the dense map's absence) keeps
+                // this check meaningful once the dense skeleton is gone.
+                if params_group_list.is_prefilled() {
+                    return Err(ColloscopeError::InvalidGroupListId(*group_list_id));
+                }
+
+                // Same validation the dense wrapper ran, against the raw payload.
+                let candidate = ColloscopeGroupList {
+                    groups_for_students: placements.clone(),
+                };
+                candidate.validate_against_params(
                     *group_list_id,
                     &params_group_list.params,
                     &params_group_list.filling,
                     &self.inner_data.params.students,
                 )?;
 
-                // Prefilled group lists have a params entry but no colloscope
-                // entry: the op must be rejected, not insert one.
-                if !self
+                // Read the prior placements for the reverse op, then write. A
+                // non-prefilled list always has a (possibly empty) dense row.
+                let old_placements = self
                     .inner_data
                     .colloscope
-                    .group_lists
-                    .contains_key(group_list_id)
-                {
-                    return Err(ColloscopeError::InvalidGroupListId(*group_list_id));
-                }
-
-                let old_group_list = self
-                    .inner_data
+                    .group_list(*group_list_id)
+                    .cloned()
+                    .unwrap_or_default();
+                self.inner_data
                     .colloscope
-                    .group_lists
-                    .insert(*group_list_id, group_list.clone())
-                    .expect("Entry presence was checked above");
+                    .set_group_list(*group_list_id, placements.clone());
 
-                Ok(AnnotatedColloscopeOp::UpdateGroupList(
+                Ok(AnnotatedColloscopeOp::SetGroupList(
                     *group_list_id,
-                    old_group_list,
+                    old_placements,
                 ))
             }
-            AnnotatedColloscopeOp::UpdateInterrogation(
-                period_id,
-                slot_id,
-                week_in_period,
-                new_interrogation,
-            ) => {
-                new_interrogation.validate_against_params(
-                    *period_id,
-                    *slot_id,
-                    *week_in_period,
-                    &self.inner_data.params,
-                )?;
+            AnnotatedColloscopeOp::SetInterrogation(slot_id, week_id, assigned_groups) => {
+                let params = &self.inner_data.params;
 
-                let Some(period) = self.inner_data.colloscope.period_map.get_mut(period_id) else {
-                    return Err(ColloscopeError::InvalidPeriodId(*period_id));
+                // Resolve the week to its (period, position) coordinate.
+                let Some((period_id, pos)) = params.periods.week_position(*week_id) else {
+                    return Err(ColloscopeError::InvalidWeekId(*week_id));
                 };
 
-                let Some(slot) = period.slot_map.get_mut(slot_id) else {
+                // The slot must exist and its subject must run interrogations on
+                // this period.
+                let Some((subject_id, slot)) = params.slots.find_slot_with_subject(*slot_id) else {
                     return Err(ColloscopeError::InvalidSlotId(*slot_id));
                 };
+                let subject = params
+                    .subjects
+                    .find_subject(subject_id)
+                    .expect("subject id from a live slot is valid");
+                if subject.parameters.interrogation_parameters.is_none()
+                    || subject.excluded_periods.contains(&period_id)
+                {
+                    return Err(ColloscopeError::SlotNotRunningOnPeriod(*slot_id, *week_id));
+                }
 
-                let Some(interrogation_opt) = slot.interrogations.get_mut(*week_in_period) else {
-                    return Err(ColloscopeError::InvalidWeekNumberInPeriod(
-                        *period_id,
-                        *week_in_period,
+                // The week must be active for the slot's pattern.
+                if !params.is_week_active(*week_id, slot.week_pattern) {
+                    return Err(ColloscopeError::InterrogationOnInactiveWeek(
+                        *slot_id, *week_id,
                     ));
-                };
+                }
 
-                let Some(interrogation) = interrogation_opt else {
-                    return Err(ColloscopeError::NoInterrogationOnWeek(
-                        *period_id,
-                        *slot_id,
-                        *week_in_period,
-                    ));
-                };
+                // Group numbers are bounded by the group list associated to the
+                // slot's subject on this period (no association => no valid group).
+                let first_forbidden_value: u32 = params
+                    .group_lists
+                    .subjects_associations
+                    .get(&(period_id, subject_id))
+                    .map(|group_list_id| {
+                        params
+                            .group_lists
+                            .group_list_map
+                            .get(group_list_id)
+                            .expect("association references a live group list")
+                            .params
+                            .group_names
+                            .len() as u32
+                    })
+                    .unwrap_or(0);
+                for group_num in assigned_groups {
+                    if *group_num >= first_forbidden_value {
+                        return Err(ColloscopeError::InvalidGroupNumInInterrogation(
+                            period_id, *slot_id, pos,
+                        ));
+                    }
+                }
 
-                let old_interrogation = std::mem::replace(interrogation, new_interrogation.clone());
-
-                Ok(AnnotatedColloscopeOp::UpdateInterrogation(
-                    *period_id,
+                // Read the prior groups for the reverse op, then write. The
+                // checks above guarantee the coordinate is a possible cell, so
+                // the surface setter cannot panic.
+                let old_groups = self
+                    .inner_data
+                    .colloscope
+                    .interrogation(&self.inner_data.params.periods, *slot_id, *week_id)
+                    .cloned()
+                    .unwrap_or_default();
+                self.inner_data.colloscope.set_interrogation(
+                    &self.inner_data.params.periods,
                     *slot_id,
-                    *week_in_period,
-                    old_interrogation,
+                    *week_id,
+                    assigned_groups.clone(),
+                );
+
+                Ok(AnnotatedColloscopeOp::SetInterrogation(
+                    *slot_id, *week_id, old_groups,
                 ))
             }
         }

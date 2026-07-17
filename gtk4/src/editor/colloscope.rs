@@ -665,7 +665,7 @@ impl Component for Colloscope {
                     .output(ColloscopeOutput::UpdateOp(
                         ColloscopeUpdateOp::UpdateColloscopeGroupList(
                             group_list_id,
-                            collo_group_list,
+                            collo_group_list.groups_for_students,
                         ),
                     ))
                     .unwrap();
@@ -723,20 +723,12 @@ impl Component for Colloscope {
                     .edited_interrogation
                     .take()
                     .expect("Interrogation information should have been stored for edition");
-                // The elementary op is still positional in D0; translate the
-                // week id back to its (period, position) coordinate at op build.
-                let (period_id, week_in_period) = self
-                    .params
-                    .periods
-                    .week_position(week_id)
-                    .expect("week id should be valid");
                 sender
                     .output(ColloscopeOutput::UpdateOp(
                         ColloscopeUpdateOp::UpdateColloscopeInterrogation(
-                            period_id,
                             slot_id,
-                            week_in_period,
-                            interrogation,
+                            week_id,
+                            interrogation.assigned_groups,
                         ),
                     ))
                     .unwrap();

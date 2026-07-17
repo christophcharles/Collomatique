@@ -390,9 +390,7 @@ impl GroupListsUpdateOp {
                                     op: UpdateOp::Colloscope(
                                         ColloscopeUpdateOp::UpdateColloscopeGroupList(
                                             *group_list_id,
-                                            collomatique_state_colloscopes::colloscopes::ColloscopeGroupList {
-                                                groups_for_students: new_placements,
-                                            },
+                                            new_placements,
                                         ),
                                     ),
                                 });
@@ -418,7 +416,7 @@ impl GroupListsUpdateOp {
                             .colloscope
                             .interrogations_for_slot(&inner.params.periods, slot_id)
                         {
-                            let (row_period, week_in_period) = inner
+                            let (row_period, _pos) = inner
                                 .params
                                 .periods
                                 .week_position(week_id)
@@ -435,12 +433,9 @@ impl GroupListsUpdateOp {
                                 return Some(CleaningOp {
                                     warning: GroupListsUpdateWarning::LooseGroupsInInterrogationsInColloscope(subject_id, assoc_period),
                                     op: UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
-                                        assoc_period,
                                         slot_id,
-                                        week_in_period,
-                                        collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation {
-                                            assigned_groups: new_assigned_groups,
-                                        },
+                                        week_id,
+                                        new_assigned_groups,
                                     )),
                                 });
                             }
@@ -518,7 +513,7 @@ impl GroupListsUpdateOp {
                             .colloscope
                             .interrogations_for_slot(&inner.params.periods, slot_id)
                         {
-                            let (row_period, week_in_period) = inner
+                            let (row_period, _pos) = inner
                                 .params
                                 .periods
                                 .week_position(week_id)
@@ -527,13 +522,17 @@ impl GroupListsUpdateOp {
                                 continue;
                             }
                             return Some(CleaningOp {
-                                warning: GroupListsUpdateWarning::LooseInterrogationsInColloscope(subject_id, assoc_period),
-                                op: UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+                                warning: GroupListsUpdateWarning::LooseInterrogationsInColloscope(
+                                    subject_id,
                                     assoc_period,
-                                    slot_id,
-                                    week_in_period,
-                                    collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
-                                )),
+                                ),
+                                op: UpdateOp::Colloscope(
+                                    ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+                                        slot_id,
+                                        week_id,
+                                        std::collections::BTreeSet::new(),
+                                    ),
+                                ),
                             });
                         }
                     }
@@ -568,11 +567,15 @@ impl GroupListsUpdateOp {
                         .is_some()
                     {
                         return Some(CleaningOp {
-                            warning: GroupListsUpdateWarning::LooseGroupListInColloscope(*group_list_id),
-                            op: UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeGroupList(
+                            warning: GroupListsUpdateWarning::LooseGroupListInColloscope(
                                 *group_list_id,
-                                collomatique_state_colloscopes::colloscopes::ColloscopeGroupList::default(),
-                            )),
+                            ),
+                            op: UpdateOp::Colloscope(
+                                ColloscopeUpdateOp::UpdateColloscopeGroupList(
+                                    *group_list_id,
+                                    std::collections::BTreeMap::new(),
+                                ),
+                            ),
                         });
                     }
                 } else {
@@ -648,9 +651,7 @@ impl GroupListsUpdateOp {
                                     op: UpdateOp::Colloscope(
                                         ColloscopeUpdateOp::UpdateColloscopeGroupList(
                                             *group_list_id,
-                                            collomatique_state_colloscopes::colloscopes::ColloscopeGroupList {
-                                                groups_for_students: new_placements,
-                                            },
+                                            new_placements,
                                         ),
                                     ),
                                 });
@@ -679,9 +680,7 @@ impl GroupListsUpdateOp {
                             op: UpdateOp::Colloscope(
                                 ColloscopeUpdateOp::UpdateColloscopeGroupList(
                                     *group_list_id,
-                                    collomatique_state_colloscopes::colloscopes::ColloscopeGroupList {
-                                        groups_for_students: new_placements,
-                                    },
+                                    new_placements,
                                 ),
                             ),
                         });
@@ -714,7 +713,7 @@ impl GroupListsUpdateOp {
                         .colloscope
                         .interrogations_for_slot(&inner.params.periods, slot_id)
                     {
-                        let (row_period, week_in_period) = inner
+                        let (row_period, _pos) = inner
                             .params
                             .periods
                             .week_position(week_id)
@@ -729,15 +728,18 @@ impl GroupListsUpdateOp {
                             .collect();
                         if new_assigned_groups.len() != groups.len() {
                             return Some(CleaningOp {
-                                warning: GroupListsUpdateWarning::LooseGroupsInInterrogationsInColloscope(*subject_id, *period_id),
-                                op: UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
-                                    *period_id,
-                                    slot_id,
-                                    week_in_period,
-                                    collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation {
-                                        assigned_groups: new_assigned_groups,
-                                    },
-                                )),
+                                warning:
+                                    GroupListsUpdateWarning::LooseGroupsInInterrogationsInColloscope(
+                                        *subject_id,
+                                        *period_id,
+                                    ),
+                                op: UpdateOp::Colloscope(
+                                    ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+                                        slot_id,
+                                        week_id,
+                                        new_assigned_groups,
+                                    ),
+                                ),
                             });
                         }
                     }
@@ -805,7 +807,7 @@ impl GroupListsUpdateOp {
                             .colloscope
                             .interrogations_for_slot(&inner.params.periods, slot_id)
                         {
-                            let (row_period, week_in_period) = inner
+                            let (row_period, _pos) = inner
                                 .params
                                 .periods
                                 .week_position(week_id)
@@ -822,12 +824,9 @@ impl GroupListsUpdateOp {
                                 return Some(CleaningOp {
                                     warning: GroupListsUpdateWarning::LooseGroupsInInterrogationsInColloscope(subject_id, *period_id),
                                     op: UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
-                                        *period_id,
                                         slot_id,
-                                        week_in_period,
-                                        collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation {
-                                            assigned_groups: new_assigned_groups,
-                                        },
+                                        week_id,
+                                        new_assigned_groups,
                                     )),
                                 });
                             }
