@@ -93,14 +93,16 @@ pub fn build(
     let mut period_layout = Vec::new();
     let mut col_offset: u16 = cols.count;
     let mut accumulated_weeks: usize = 0;
-    for (period_index, (period_id, weeks)) in params
+    for (period_index, period_id) in params
         .periods
-        .ordered_period_list
-        .iter()
-        .filter(|(_period_id, weeks)| !weeks.is_empty())
+        .period_ids()
+        .filter(|&id| params.periods.week_count_of(id).unwrap_or(0) != 0)
         .enumerate()
     {
-        let nw = weeks.len();
+        let nw = params
+            .periods
+            .week_count_of(period_id)
+            .expect("period id from period_ids is valid");
         period_layout.push(PeriodLayout {
             period_id,
             col_start: col_offset,
@@ -125,8 +127,13 @@ pub fn build(
     let mut no_interrog_weeks: HashSet<(PeriodId, usize)> = HashSet::new();
     // Annotations — collected early so we can use them for week background colors
     let mut annotations: HashMap<(PeriodId, usize), String> = HashMap::new();
-    for (period_id, weeks) in params.periods.ordered_period_list.iter() {
-        for (week_index, week) in weeks.iter().enumerate() {
+    for period_id in params.periods.period_ids() {
+        for (week_index, week) in params
+            .periods
+            .weeks_of(period_id)
+            .expect("period id from period_ids is valid")
+            .enumerate()
+        {
             if !week.interrogations {
                 no_interrog_weeks.insert((period_id, week_index));
             }

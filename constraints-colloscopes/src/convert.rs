@@ -29,7 +29,11 @@ pub fn build_config(env: &Parameters, colloscope: &Colloscope) -> ConfigData<Var
     }
 
     let mut first_week_in_period = 0usize;
-    for (period_id, period_desc) in env.periods.ordered_period_list.iter() {
+    for period_id in env.periods.period_ids() {
+        let period_len = env
+            .periods
+            .week_count_of(period_id)
+            .expect("period id from period_ids is valid");
         let period_id = &period_id;
         let period = colloscope
             .period_map
@@ -64,7 +68,7 @@ pub fn build_config(env: &Parameters, colloscope: &Colloscope) -> ConfigData<Var
             }
         }
 
-        first_week_in_period += period_desc.len();
+        first_week_in_period += period_len;
     }
 
     config_data
@@ -99,7 +103,11 @@ pub fn build_complete_config(env: &Parameters, colloscope: &Colloscope) -> Confi
     }
 
     let mut first_week_in_period = 0usize;
-    for (period_id, period_desc) in env.periods.ordered_period_list.iter() {
+    for period_id in env.periods.period_ids() {
+        let period_len = env
+            .periods
+            .week_count_of(period_id)
+            .expect("period id from period_ids is valid");
         let period_id = &period_id;
         let period = colloscope
             .period_map
@@ -148,7 +156,7 @@ pub fn build_complete_config(env: &Parameters, colloscope: &Colloscope) -> Confi
             }
         }
 
-        first_week_in_period += period_desc.len();
+        first_week_in_period += period_len;
     }
 
     config_data

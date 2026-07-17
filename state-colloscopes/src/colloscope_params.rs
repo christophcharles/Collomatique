@@ -40,16 +40,12 @@ pub struct Parameters {
 
 impl Parameters {
     pub(crate) fn merge_pattern(&self, pattern: &[bool]) -> Vec<bool> {
-        let mut current_week = 0usize;
         let mut output = Vec::new();
-        for (_period_id, period_desc) in self.periods.ordered_period_list.iter() {
-            for week_desk in period_desc {
-                if !week_desk.interrogations {
-                    output.push(false);
-                } else {
-                    output.push(pattern[current_week]);
-                }
-                current_week += 1;
+        for (current_week, (_period_id, week_desk)) in self.periods.walk().enumerate() {
+            if !week_desk.interrogations {
+                output.push(false);
+            } else {
+                output.push(pattern[current_week]);
             }
         }
         output
@@ -73,7 +69,7 @@ impl Parameters {
 impl Parameters {
     /// Promotes an u64 to a [PeriodId] if it is valid
     pub fn validate_period_id(&self, id: u64) -> Option<PeriodId> {
-        for (period_id, _) in self.periods.ordered_period_list.iter() {
+        for period_id in self.periods.period_ids() {
             if period_id.inner() == id {
                 return Some(period_id);
             }
@@ -284,7 +280,7 @@ impl Parameters {
             .student_map
             .keys()
             .map(NewId::from)
-            .chain(self.periods.ordered_period_list.keys().map(NewId::from))
+            .chain(self.periods.period_ids().map(NewId::from))
             .chain(self.subjects.ordered_subject_list.keys().map(NewId::from))
             .chain(self.teachers.teacher_map.keys().map(NewId::from))
             .chain(self.week_patterns.week_pattern_map.keys().map(NewId::from))
@@ -927,12 +923,7 @@ impl Parameters {
         rule: &slot_pairings::SlotPairingRule,
     ) -> Result<(), SlotPairingError> {
         let slot_subject_map = self.build_slot_subject_map();
-        let period_ids: BTreeSet<PeriodId> = self
-            .periods
-            .ordered_period_list
-            .iter()
-            .map(|(id, _)| id)
-            .collect();
+        let period_ids: BTreeSet<PeriodId> = self.periods.period_ids().collect();
         Self::validate_slot_pairing_rule_internal(rule, &slot_subject_map, &period_ids)
     }
 
@@ -1016,12 +1007,7 @@ impl Parameters {
         &self,
         week_pattern: &week_patterns::WeekPattern,
     ) -> Result<(), WeekPatternError> {
-        let total_week_count: usize = self
-            .periods
-            .ordered_period_list
-            .iter()
-            .map(|(_period_id, desc)| desc.len())
-            .sum();
+        let total_week_count: usize = self.periods.count_weeks();
 
         Self::validate_week_pattern_internal(week_pattern, total_week_count)
     }
@@ -1048,7 +1034,7 @@ impl Parameters {
     /// This is useful to check that references are valid
     fn build_period_ids(&self) -> BTreeSet<PeriodId> {
         let mut ids = BTreeSet::new();
-        for (id, _) in self.periods.ordered_period_list.iter() {
+        for id in self.periods.period_ids() {
             ids.insert(id);
         }
         ids
@@ -1102,12 +1088,7 @@ impl Parameters {
         let period_ids = self.build_period_ids();
         let week_pattern_ids = self.build_week_pattern_ids();
         let subject_ids = self.build_subject_ids();
-        let total_week_count = self
-            .periods
-            .ordered_period_list
-            .iter()
-            .map(|(_period_id, desc)| desc.len())
-            .sum();
+        let total_week_count = self.periods.count_weeks();
 
         self.check_subjects_data_consistency(&period_ids)?;
         self.check_teachers_data_consistency()?;

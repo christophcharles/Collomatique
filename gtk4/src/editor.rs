@@ -563,10 +563,8 @@ impl EditorPanel {
             .get_inner_data()
             .params
             .periods
-            .ordered_period_list
-            .iter()
-            .flat_map(|(_, weeks)| weeks.iter())
-            .filter_map(|w| w.annotation.as_ref().map(|a| a.to_string()))
+            .walk()
+            .filter_map(|(_, w)| w.annotation.as_ref().map(|a| a.to_string()))
             .collect();
         self.export_panel
             .sender()

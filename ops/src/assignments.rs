@@ -179,10 +179,8 @@ impl AssignmentsUpdateOp {
                     .get_inner_data()
                     .params
                     .periods
-                    .ordered_period_list
-                    .get_at(position - 1)
-                    .expect("position > 0 checked above")
-                    .0;
+                    .period_id_at(position - 1)
+                    .expect("position > 0 checked above");
                 let current_subjects: Vec<_> = data
                     .get_data()
                     .get_inner_data()

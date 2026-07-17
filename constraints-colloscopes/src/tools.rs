@@ -19,8 +19,12 @@ pub fn group_list_for_slot(
 
 pub fn week_to_period_id(params: &Parameters, week: usize) -> Option<(PeriodId, usize)> {
     let mut current_week = 0usize;
-    for (period_id, period_desc) in params.periods.ordered_period_list.iter() {
-        let next_period_week = current_week + period_desc.len();
+    for period_id in params.periods.period_ids() {
+        let period_len = params
+            .periods
+            .week_count_of(period_id)
+            .expect("period id from period_ids is valid");
+        let next_period_week = current_week + period_len;
         if week >= current_week && week < next_period_week {
             return Some((period_id, week - current_week));
         }
@@ -79,21 +83,16 @@ pub fn extract_week_pattern(
         None => vec![true; params.periods.count_weeks()],
     };
 
-    let mut current_first_week = 0usize;
-    for (_period_id, period_desc) in params.periods.ordered_period_list.iter() {
-        for (num, week_desc) in period_desc.iter().enumerate() {
-            if !week_desc.interrogations {
-                output.push(false);
-                continue;
-            }
-
-            let week_num = current_first_week + num;
-            let week_status = week_pattern
-                .get(week_num)
-                .expect("Week number should be valid");
-            output.push(*week_status);
+    for (week_num, (_period_id, week_desc)) in params.periods.walk().enumerate() {
+        if !week_desc.interrogations {
+            output.push(false);
+            continue;
         }
-        current_first_week += period_desc.len();
+
+        let week_status = week_pattern
+            .get(week_num)
+            .expect("Week number should be valid");
+        output.push(*week_status);
     }
 
     output

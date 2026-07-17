@@ -220,6 +220,15 @@ All inside the existing encapsulation boundary:
 
 ### Commit B1 — weeks become entities; patterns stay `Vec<bool>` for one more commit
 
+> **SUPERSEDED (July 17 2026).** B1 turned out far too wide to land as one commit
+> (it reshapes `Periods`, re-cuts the op family, rewrites every positional week
+> walk across 8 crates, and adds transitional colloscope/pattern maintenance all
+> at once). It has been split into **six contained commits (0–5)**, each green and
+> byte-stable and either wide-but-shallow or deep-but-narrow. See
+> [`plan_step_1_b1_split.md`](plan_step_1_b1_split.md) for the detailed plan. The
+> B1 sketch below is retained for historical context only; the split doc is
+> authoritative. B2 (below) is unchanged and follows commit 5.
+
 **New types** (`state-colloscopes/src/periods.rs`, `ids.rs`):
 
 ```rust

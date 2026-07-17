@@ -151,7 +151,7 @@ impl SimpleComponent for Dialog {
                             set_margin_all: 5,
                             set_hexpand: true,
                             #[watch]
-                            set_visible: !model.periods.ordered_period_list.is_empty(),
+                            set_visible: !model.periods.is_empty(),
                         },
                     },
                 },
@@ -200,16 +200,19 @@ impl SimpleComponent for Dialog {
 
                 let transformed_data: Vec<_> = self
                     .periods
-                    .ordered_period_list
-                    .iter()
-                    .scan(0usize, |current_week, (id, period_data)| {
+                    .period_ids()
+                    .scan(0usize, |current_week, id| {
+                        let week_count = self
+                            .periods
+                            .week_count_of(id)
+                            .expect("period id from period_ids is valid");
                         let new_period = PeriodData {
                             global_first_week: self.periods.first_week.clone(),
                             first_week_num: *current_week,
-                            week_count: period_data.len(),
+                            week_count,
                             enable: !self.student_data.excluded_periods.contains(&id),
                         };
-                        *current_week += period_data.len();
+                        *current_week += week_count;
                         Some(new_period)
                     })
                     .collect();
@@ -258,10 +261,8 @@ impl SimpleComponent for Dialog {
             DialogInput::UpdatePeriodStatus(period_num, new_status) => {
                 let period_id = self
                     .periods
-                    .ordered_period_list
-                    .get_at(period_num)
-                    .expect("period_num within bounds")
-                    .0;
+                    .period_id_at(period_num)
+                    .expect("period_num within bounds");
 
                 if new_status {
                     self.student_data.excluded_periods.remove(&period_id);

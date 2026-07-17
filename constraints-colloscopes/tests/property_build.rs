@@ -43,14 +43,14 @@ const BUILD_STRIDE: usize = 5;
 /// Synthesize a random [`SolveConfig`] against the given parameters.
 ///
 /// Mirrors the id-iteration patterns of [`SolveConfig::sanitize`]: periods come
-/// from `ordered_period_list`, group lists from `group_list_map` with prefilled
+/// from `Periods::period_ids`, group lists from `group_list_map` with prefilled
 /// ones skipped (the same contract `sanitize` enforces). A random subset of
 /// each carries explicit data; the rest fall back to the build's own defaults.
 fn gen_solve_config(rng: &mut ChaCha8Rng, params: &Parameters) -> SolveConfig {
     let mut config = SolveConfig::default();
 
     config.periods.clear();
-    for (id, _weeks) in params.periods.ordered_period_list.iter() {
+    for id in params.periods.period_ids() {
         if rng.random_bool(0.5) {
             config.periods.insert(
                 id,

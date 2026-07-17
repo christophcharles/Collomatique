@@ -816,10 +816,8 @@ impl GroupListsUpdateOp {
                     .get_inner_data()
                     .params
                     .periods
-                    .ordered_period_list
-                    .get_at(position - 1)
-                    .expect("position > 0 checked above")
-                    .0;
+                    .period_id_at(position - 1)
+                    .expect("position > 0 checked above");
                 let previous_period_assignments: std::collections::BTreeMap<_, _> = data
                     .get_data()
                     .get_inner_data()
@@ -1183,10 +1181,8 @@ impl GroupListsUpdateOp {
                     .get_inner_data()
                     .params
                     .periods
-                    .ordered_period_list
-                    .get_at(position - 1)
-                    .expect("position > 0 checked above")
-                    .0;
+                    .period_id_at(position - 1)
+                    .expect("position > 0 checked above");
                 let previous_period_assignments: std::collections::BTreeMap<_, _> = data
                     .get_data()
                     .get_inner_data()

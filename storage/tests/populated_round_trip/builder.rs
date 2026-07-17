@@ -787,14 +787,12 @@ fn check_all_sections_populated(data: &Data) {
     let params = &inner.params;
 
     assert!(params.periods.first_week.is_some());
-    assert!(params.periods.ordered_period_list.len() >= 2);
+    assert!(params.periods.period_count() >= 2);
     assert!(
         params
             .periods
-            .ordered_period_list
-            .iter()
-            .flat_map(|(_id, weeks)| weeks)
-            .any(|week| week.annotation.is_some())
+            .walk()
+            .any(|(_id, week)| week.annotation.is_some())
     );
 
     assert!(params.students.student_map.len() >= 4);

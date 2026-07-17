@@ -204,14 +204,21 @@ impl WeekPatternsUpdateOp {
                     }
 
                     let mut first_week_in_period = 0usize;
-                    for (period_id, period) in data
+                    let period_ids: Vec<_> = data
                         .get_data()
                         .get_inner_data()
                         .params
                         .periods
-                        .ordered_period_list
-                        .iter()
-                    {
+                        .period_ids()
+                        .collect();
+                    for period_id in period_ids {
+                        let period = data
+                            .get_data()
+                            .get_inner_data()
+                            .params
+                            .periods
+                            .weeks_vec_of(period_id)
+                            .expect("period id from period_ids is valid");
                         let period_id = &period_id;
                         let collo_period = data
                             .get_data()

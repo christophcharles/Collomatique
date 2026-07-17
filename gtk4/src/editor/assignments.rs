@@ -57,7 +57,7 @@ impl Component for Assignments {
                 gtk::Label {
                     set_margin_top: 10,
                     #[watch]
-                    set_visible: model.periods.ordered_period_list.is_empty(),
+                    set_visible: model.periods.is_empty(),
                     set_halign: gtk::Align::Start,
                     set_label: "<big><b>Aucune période à afficher</b></big>",
                     set_use_markup: true,
@@ -149,12 +149,15 @@ impl Assignments {
     fn update_period_factory(&mut self) {
         let new_data = self
             .periods
-            .ordered_period_list
-            .iter()
-            .scan(0usize, |acc, (id, desc)| {
+            .period_ids()
+            .scan(0usize, |acc, id| {
+                let period_len = self
+                    .periods
+                    .week_count_of(id)
+                    .expect("period id from period_ids is valid");
                 let id = &id;
                 let current_first_week = *acc;
-                *acc += desc.len();
+                *acc += period_len;
 
                 let filtered_subjects = self
                     .subjects
@@ -195,7 +198,7 @@ impl Assignments {
                     period_id: *id,
                     global_first_week: self.periods.first_week.clone(),
                     first_week_num: current_first_week,
-                    week_count: desc.len(),
+                    week_count: period_len,
                     filtered_subjects,
                     filtered_students,
                     period_assignments: self

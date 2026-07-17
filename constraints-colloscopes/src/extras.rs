@@ -205,16 +205,12 @@ pub(crate) fn weeks_for_week_pattern(
 ) -> Vec<GlobalWeek> {
     let week_pattern = crate::tools::extract_week_pattern(env, week_pattern_id);
     let mut output = Vec::new();
-    let mut global_week = 0usize;
-    for (period_id, period_desc) in env.periods.ordered_period_list.iter() {
-        for week_desc in period_desc {
-            if week_desc.interrogations
-                && *week_pattern.get(global_week).unwrap_or(&true)
-                && !excluded_periods.contains(&period_id)
-            {
-                output.push(GlobalWeek(global_week));
-            }
-            global_week += 1;
+    for (global_week, (period_id, week_desc)) in env.periods.walk().enumerate() {
+        if week_desc.interrogations
+            && *week_pattern.get(global_week).unwrap_or(&true)
+            && !excluded_periods.contains(&period_id)
+        {
+            output.push(GlobalWeek(global_week));
         }
     }
     output

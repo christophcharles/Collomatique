@@ -10,13 +10,9 @@ use std::num::NonZeroU32;
 
 fn all_interrogation_weeks(env: &VarEnv) -> Vec<(GlobalWeek, PeriodId)> {
     let mut result = Vec::new();
-    let mut global_week = 0;
-    for (period_id, period_desc) in env.periods.ordered_period_list.iter() {
-        for week_desc in period_desc {
-            if week_desc.interrogations {
-                result.push((GlobalWeek(global_week), period_id));
-            }
-            global_week += 1;
+    for (global_week, (period_id, week_desc)) in env.periods.walk().enumerate() {
+        if week_desc.interrogations {
+            result.push((GlobalWeek(global_week), period_id));
         }
     }
     result

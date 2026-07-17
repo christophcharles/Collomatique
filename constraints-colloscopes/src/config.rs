@@ -135,9 +135,8 @@ impl SolveConfig {
     pub fn sanitize(self, params: &Parameters) -> Self {
         let new_periods: BTreeMap<_, _> = params
             .periods
-            .ordered_period_list
-            .iter()
-            .map(|(id, _)| {
+            .period_ids()
+            .map(|id| {
                 (
                     id,
                     match self.periods.get(&id) {

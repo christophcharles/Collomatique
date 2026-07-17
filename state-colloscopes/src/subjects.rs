@@ -543,9 +543,7 @@ impl crate::Data {
                     }
                 }
 
-                for (period_id, _period) in
-                    self.inner_data.params.periods.ordered_period_list.iter()
-                {
+                for period_id in self.inner_data.params.periods.period_ids() {
                     // If the period was excluded before, there is no structure to check
                     // and if the period is not excluded now, the structure will be fine anyway
                     if old_params.excluded_periods.contains(&period_id)

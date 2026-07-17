@@ -321,10 +321,13 @@ impl GroupLists {
     fn update_period_entries(&mut self) {
         let periods_vec: Vec<_> = self
             .periods
-            .ordered_period_list
-            .iter()
+            .period_ids()
             .enumerate()
-            .scan(0usize, |acc, (num, (id, desc))| {
+            .scan(0usize, |acc, (num, id)| {
+                let period_len = self
+                    .periods
+                    .week_count_of(id)
+                    .expect("period id from period_ids is valid");
                 let id = &id;
                 let out = associations_display::PeriodEntryData {
                     period_id: *id,
@@ -333,7 +336,7 @@ impl GroupLists {
                         &self.periods.first_week,
                         num,
                         *acc,
-                        desc.len(),
+                        period_len,
                     ),
                     subjects: self
                         .subjects
@@ -364,7 +367,7 @@ impl GroupLists {
                         .collect(),
                 };
 
-                *acc += desc.len();
+                *acc += period_len;
 
                 Some(out)
             })

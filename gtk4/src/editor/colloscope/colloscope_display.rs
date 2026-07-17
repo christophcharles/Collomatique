@@ -185,7 +185,7 @@ impl Component for Display {
 
 impl Display {
     fn update_display_issue(&mut self) {
-        self.issue = if self.periods.ordered_period_list.is_empty() {
+        self.issue = if self.periods.is_empty() {
             Some(DisplayIssue::NoPeriods)
         } else if self.periods.count_weeks() == 0 {
             Some(DisplayIssue::NoWeeks)
@@ -208,15 +208,27 @@ impl Display {
         self.column_view.append_column(DateTimeColumn {});
 
         let mut period_first_week = 0usize;
-        for (period_id, period_desc) in self.periods.ordered_period_list.iter() {
-            for week_in_period in 0..period_desc.len() {
+        let period_specs: Vec<_> = self
+            .periods
+            .period_ids()
+            .map(|period_id| {
+                (
+                    period_id,
+                    self.periods
+                        .week_count_of(period_id)
+                        .expect("period id from period_ids is valid"),
+                )
+            })
+            .collect();
+        for (period_id, period_len) in period_specs {
+            for week_in_period in 0..period_len {
                 self.column_view.append_column(WeekColumn {
                     period_id,
                     period_first_week,
                     week_in_period,
                 });
             }
-            period_first_week += period_desc.len();
+            period_first_week += period_len;
         }
     }
 
@@ -232,7 +244,11 @@ impl Display {
             for (slot_id, slot) in subject_slots {
                 let mut period_map = BTreeMap::new();
 
-                for (period_id, period) in self.periods.ordered_period_list.iter() {
+                for period_id in self.periods.period_ids() {
+                    let period_len = self
+                        .periods
+                        .week_count_of(period_id)
+                        .expect("period id from period_ids is valid");
                     let period_id = &period_id;
                     let collo_period = self
                         .colloscope
@@ -245,7 +261,7 @@ impl Display {
                             *period_id,
                             SlotPeriodData {
                                 has_group_list: false,
-                                slots: vec![None; period.len()],
+                                slots: vec![None; period_len],
                             },
                         );
                         continue;

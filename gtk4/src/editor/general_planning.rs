@@ -68,11 +68,9 @@ impl GeneralPlanning {
 
     fn count_interrogation_weeks(&self) -> usize {
         let mut count = 0usize;
-        for (_id, desc) in self.periods.ordered_period_list.iter() {
-            for v in desc {
-                if v.interrogations {
-                    count += 1;
-                }
+        for (_id, v) in self.periods.walk() {
+            if v.interrogations {
+                count += 1;
             }
         }
         count
@@ -143,7 +141,7 @@ impl Component for GeneralPlanning {
                     set_margin_top: 20,
                     set_spacing: 30,
                     #[watch]
-                    set_visible: !model.periods.ordered_period_list.is_empty(),
+                    set_visible: !model.periods.is_empty(),
                 },
                 gtk::Button {
                     set_margin_top: 10,
@@ -239,15 +237,18 @@ impl Component for GeneralPlanning {
 
                 let new_data = self
                     .periods
-                    .ordered_period_list
-                    .iter()
-                    .scan(0usize, |acc, (id, desc)| {
+                    .period_ids()
+                    .scan(0usize, |acc, id| {
+                        let desc = self
+                            .periods
+                            .weeks_vec_of(id)
+                            .expect("period id from period_ids is valid");
                         let current_first_week = *acc;
                         *acc += desc.len();
                         Some(periods_display::EntryData {
                             global_first_week: self.periods.first_week.clone(),
                             first_week_num: current_first_week,
-                            desc: desc.clone(),
+                            desc,
                             period_id: id,
                         })
                     })
@@ -302,11 +303,8 @@ impl Component for GeneralPlanning {
                 .unwrap(),
             GeneralPlanningInput::EditPeriodClicked(period_id) => {
                 self.week_selection_reason = WeekCountSelectionReason::Edit(period_id);
-                let current_week_count = self
-                    .periods
-                    .find_period(period_id)
-                    .expect("valid period")
-                    .len();
+                let current_week_count =
+                    self.periods.week_count_of(period_id).expect("valid period");
                 self.period_duration_dialog
                     .sender()
                     .send(period_duration::DialogInput::Show(current_week_count))
@@ -314,11 +312,8 @@ impl Component for GeneralPlanning {
             }
             GeneralPlanningInput::CutPeriodClicked(period_id) => {
                 self.week_selection_reason = WeekCountSelectionReason::Cut(period_id);
-                let current_week_count = self
-                    .periods
-                    .find_period(period_id)
-                    .expect("valid period")
-                    .len();
+                let current_week_count =
+                    self.periods.week_count_of(period_id).expect("valid period");
                 self.period_cut_dialog
                     .sender()
                     .send(period_cut::DialogInput::Show(current_week_count))
@@ -339,9 +334,9 @@ impl Component for GeneralPlanning {
                 self.week_being_annotated = Some((period_id, week_num));
                 let current_annotation = self
                     .periods
-                    .find_period(period_id)
+                    .weeks_of(period_id)
                     .expect("Period ID should be valid")
-                    .get(week_num)
+                    .nth(week_num)
                     .expect("Week number should be valid")
                     .annotation
                     .clone()

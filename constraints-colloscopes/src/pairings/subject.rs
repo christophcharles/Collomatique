@@ -27,26 +27,35 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         let mut soft_output = MyBundle::new();
 
         let mut global_week_offset = 0usize;
-        for (period_id, period_desc) in env.periods.ordered_period_list.iter() {
+        for period_id in env.periods.period_ids() {
+            let period_len = env
+                .periods
+                .week_count_of(period_id)
+                .expect("period id from period_ids is valid");
             let period_id = &period_id;
             if rule.excluded_periods.contains(period_id)
                 || ant_subj.excluded_periods.contains(period_id)
                 || con_subj.excluded_periods.contains(period_id)
             {
-                global_week_offset += period_desc.len();
+                global_week_offset += period_len;
                 continue;
             }
 
             let ant_enrolled = env.assignments.students(*period_id, ant_subject);
             let con_enrolled = env.assignments.students(*period_id, con_subject);
             let (Some(ant_set), Some(con_set)) = (ant_enrolled, con_enrolled) else {
-                global_week_offset += period_desc.len();
+                global_week_offset += period_len;
                 continue;
             };
 
             let both_students: Vec<StudentId> = ant_set.intersection(con_set).copied().collect();
 
-            for (local_idx, week_desc) in period_desc.iter().enumerate() {
+            for (local_idx, week_desc) in env
+                .periods
+                .weeks_of(*period_id)
+                .expect("period id from period_ids is valid")
+                .enumerate()
+            {
                 if !week_desc.interrogations {
                     continue;
                 }
@@ -104,7 +113,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                 }
             }
 
-            global_week_offset += period_desc.len();
+            global_week_offset += period_len;
         }
 
         output = output

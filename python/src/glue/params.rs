@@ -48,7 +48,7 @@ impl TryFrom<collomatique_state_colloscopes::colloscope_params::Parameters> for 
         // nested map with one (possibly empty) entry per period. Seed the
         // outer maps from the full period list to keep that shape.
         let all_period_ids: Vec<collomatique_state_colloscopes::PeriodId> =
-            value.periods.ordered_period_list.keys().collect();
+            value.periods.period_ids().collect();
         // The sparse core only stores non-empty assignment rows, but the
         // Python-visible shape is dense (one entry per period × non-excluded
         // subject). Snapshot each subject's excluded-period set so the dense
@@ -76,11 +76,16 @@ impl TryFrom<collomatique_state_colloscopes::colloscope_params::Parameters> for 
         Ok(Parameters {
             periods: value
                 .periods
-                .ordered_period_list
-                .into_iter()
-                .map(|(period_id, weeks_status)| Period {
+                .period_ids()
+                .map(|period_id| Period {
                     id: period_id.into(),
-                    weeks_status: weeks_status.into_iter().map(|x| x.into()).collect(),
+                    weeks_status: value
+                        .periods
+                        .weeks_vec_of(period_id)
+                        .expect("period id from period_ids is valid")
+                        .into_iter()
+                        .map(|x| x.into())
+                        .collect(),
                 })
                 .collect(),
             periods_first_week: value.periods.first_week.map(|week| week.into()),

@@ -92,10 +92,9 @@ impl Dialog {
 
         self.period_data = self
             .periods
-            .ordered_period_list
-            .iter()
+            .period_ids()
             .enumerate()
-            .map(|(i, (period_id, _desc))| {
+            .map(|(i, period_id)| {
                 let period_id = &period_id;
                 let subject_excluded = self.subject_excluded_periods.contains(period_id);
                 PeriodData {
@@ -124,7 +123,7 @@ impl Dialog {
             .enumerate()
             .filter_map(|(i, pd)| {
                 if !pd.enabled {
-                    self.periods.ordered_period_list.get_at(i).map(|(id, _)| id)
+                    self.periods.period_id_at(i)
                 } else {
                     None
                 }

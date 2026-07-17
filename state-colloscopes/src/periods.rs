@@ -13,6 +13,12 @@ use crate::ids::{
 use crate::ops::AnnotatedPeriodOp;
 
 /// Description of the periods
+///
+/// The period order and each period's weeks live in `ordered_period_list`
+/// (private): consumers read through the accessor surface below rather than
+/// touching the container directly, so its payload shape can change without
+/// rippling through every call site. All mutation stays inside this module
+/// (`apply_period`).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Periods {
     /// Start date for the colloscope
@@ -26,12 +32,16 @@ pub struct Periods {
     /// This field gives the relative order of the different
     /// periods identified by their ids
     ///
-    /// For each period, we get also a list of boolean
-    /// Each boolean represents a week. If it is true
-    /// there is an interrogation on the given week
-    /// otherwise there isn't.
-    pub ordered_period_list: OrderedTable<PeriodId, Vec<WeekDesc>>,
+    /// For each period, we get also a list of [WeekDesc].
+    /// Each entry represents a week: whether an interrogation happens on it
+    /// and an optional annotation.
+    ordered_period_list: OrderedTable<PeriodId, Vec<WeekDesc>>,
 }
+
+/// Error returned when building [Periods] from rows with a duplicated period id
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Error)]
+#[error("duplicated period id {0:?}")]
+pub struct DuplicatedPeriodIdError(pub PeriodId);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WeekDesc {
@@ -58,6 +68,75 @@ impl WeekDesc {
 }
 
 impl Periods {
+    /// Builds a [Periods] from period rows (used by storage decode).
+    ///
+    /// `rows` provides the periods in display order, each with its ordered
+    /// weeks. Returns an error if a period id appears more than once.
+    pub fn from_period_rows(
+        first_week: Option<collomatique_time::WeekStart>,
+        rows: Vec<(PeriodId, Vec<WeekDesc>)>,
+    ) -> Result<Self, DuplicatedPeriodIdError> {
+        let ordered_period_list =
+            rows.try_into()
+                .map_err(|collomatique_state::tables::DuplicatedIdError(id)| {
+                    DuplicatedPeriodIdError(id)
+                })?;
+        Ok(Periods {
+            first_week,
+            ordered_period_list,
+        })
+    }
+
+    // ---- Read surface ----
+    //
+    // These methods are the sanctioned way to read the periods. Consumers go
+    // through them rather than the private `ordered_period_list` field.
+
+    /// Period ids in display order.
+    pub fn period_ids(&self) -> impl Iterator<Item = PeriodId> + '_ {
+        self.ordered_period_list.keys()
+    }
+
+    /// Number of periods.
+    pub fn period_count(&self) -> usize {
+        self.ordered_period_list.len()
+    }
+
+    /// Whether there are no periods at all.
+    pub fn is_empty(&self) -> bool {
+        self.ordered_period_list.is_empty()
+    }
+
+    /// The period id at the given display position, if any.
+    pub fn period_id_at(&self, pos: usize) -> Option<PeriodId> {
+        self.ordered_period_list.get_at(pos).map(|(id, _)| id)
+    }
+
+    /// The canonical global week order: every week of every period, in
+    /// period-then-position order. `walk().enumerate()` gives the global week
+    /// index — this replaces every hand-rolled accumulate-`len()` loop.
+    pub fn walk(&self) -> impl Iterator<Item = (PeriodId, &WeekDesc)> + '_ {
+        self.ordered_period_list
+            .iter()
+            .flat_map(|(period_id, weeks)| weeks.iter().map(move |desc| (period_id, desc)))
+    }
+
+    /// Weeks of one period, in order; `None` if the period id is invalid.
+    pub fn weeks_of(&self, id: PeriodId) -> Option<impl Iterator<Item = &WeekDesc> + '_> {
+        Some(self.ordered_period_list.get(&id)?.iter())
+    }
+
+    /// Owned copy of a period's weeks (op-payload building in `ops/` and gtk4);
+    /// `None` if the period id is invalid.
+    pub fn weeks_vec_of(&self, id: PeriodId) -> Option<Vec<WeekDesc>> {
+        Some(self.ordered_period_list.get(&id)?.clone())
+    }
+
+    /// Number of weeks of one period; `None` if the period id is invalid.
+    pub fn week_count_of(&self, id: PeriodId) -> Option<usize> {
+        self.ordered_period_list.get(&id).map(|weeks| weeks.len())
+    }
+
     pub fn count_weeks(&self) -> usize {
         self.ordered_period_list.iter().map(|x| x.1.len()).sum()
     }

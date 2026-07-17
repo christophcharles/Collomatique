@@ -293,9 +293,13 @@ fn walk_week_pattern_coupling(params: &Parameters, v: &mut impl RefVisitor) {
     // `Periods::find_period_position_and_first_week`.
     let mut spans = Vec::new();
     let mut first_week = 0usize;
-    for (period_id, weeks) in params.periods.ordered_period_list.iter() {
-        spans.push((period_id, first_week, weeks.len()));
-        first_week += weeks.len();
+    for period_id in params.periods.period_ids() {
+        let week_count = params
+            .periods
+            .week_count_of(period_id)
+            .expect("period id from period_ids is valid");
+        spans.push((period_id, first_week, week_count));
+        first_week += week_count;
     }
     for (wp_id, wp) in params.week_patterns.week_pattern_map.iter() {
         for &(period_id, first_week, week_count) in &spans {

@@ -261,7 +261,10 @@ fn reconstruct(blocks: Blocks) -> Result<InnerData, DecodeError> {
 fn reconstruct_periods(
     block: format::general_planning::GeneralPlanning,
 ) -> Result<mem::periods::Periods, DecodeError> {
-    let ordered_period_list = block
+    let first_week = block.first_week.map(|date| {
+        collomatique_time::WeekStart::new(date.date()).expect("Format week start date is a Monday")
+    });
+    let rows = block
         .periods
         .into_iter()
         .map(|period| {
@@ -277,17 +280,9 @@ fn reconstruct_periods(
                     .collect(),
             )
         })
-        .collect::<Vec<_>>()
-        .try_into()
-        .map_err(|_| DecodeError::DuplicatedID)?;
+        .collect::<Vec<_>>();
 
-    Ok(mem::periods::Periods {
-        first_week: block.first_week.map(|date| {
-            collomatique_time::WeekStart::new(date.date())
-                .expect("Format week start date is a Monday")
-        }),
-        ordered_period_list,
-    })
+    mem::periods::Periods::from_period_rows(first_week, rows).map_err(|_| DecodeError::DuplicatedID)
 }
 
 fn reconstruct_subjects(
@@ -719,8 +714,12 @@ fn reconstruct_colloscope(
 
     // Global week index -> (period, week position within the period)
     let mut week_table = Vec::new();
-    for (period_id, desc) in params.periods.ordered_period_list.iter() {
-        for week_in_period in 0..desc.len() {
+    for period_id in params.periods.period_ids() {
+        let week_count = params
+            .periods
+            .week_count_of(period_id)
+            .expect("period id from period_ids is valid");
+        for week_in_period in 0..week_count {
             week_table.push((period_id, week_in_period));
         }
     }

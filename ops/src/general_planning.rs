@@ -321,7 +321,7 @@ impl GeneralPlanningUpdateOp {
             GeneralPlanningUpdateOp::UpdateFirstWeek(_) => None,
             GeneralPlanningUpdateOp::AddNewPeriod(_) => None,
             GeneralPlanningUpdateOp::UpdatePeriodWeekCount(period_id, week_count) => {
-                let Some((pos, first_week)) = data
+                let Some((_pos, first_week)) = data
                     .get_data()
                     .get_inner_data()
                     .params
@@ -330,15 +330,13 @@ impl GeneralPlanningUpdateOp {
                 else {
                     return None;
                 };
-                let (_, period) = data
+                let old_week_count = data
                     .get_data()
                     .get_inner_data()
                     .params
                     .periods
-                    .ordered_period_list
-                    .get_at(pos)
-                    .expect("pos comes from find_period_position_and_first_week");
-                let old_week_count = period.len();
+                    .week_count_of(*period_id)
+                    .expect("period id is valid");
 
                 if *week_count >= old_week_count {
                     return None;
@@ -444,7 +442,7 @@ impl GeneralPlanningUpdateOp {
             }
             GeneralPlanningUpdateOp::UpdateWeekAnnotation(_, _, _) => None,
             GeneralPlanningUpdateOp::DeletePeriod(period_id) => {
-                let Some((pos, first_week)) = data
+                let Some((_pos, first_week)) = data
                     .get_data()
                     .get_inner_data()
                     .params
@@ -453,15 +451,13 @@ impl GeneralPlanningUpdateOp {
                 else {
                     return None;
                 };
-                let (_, period) = data
+                let week_count = data
                     .get_data()
                     .get_inner_data()
                     .params
                     .periods
-                    .ordered_period_list
-                    .get_at(pos)
-                    .expect("pos comes from find_period_position_and_first_week");
-                let week_count = period.len();
+                    .week_count_of(*period_id)
+                    .expect("period id is valid");
 
                 let colloscope_period = data
                     .get_data()
@@ -680,10 +676,8 @@ impl GeneralPlanningUpdateOp {
                     .get_inner_data()
                     .params
                     .periods
-                    .ordered_period_list
-                    .get_at(pos - 1)
-                    .expect("pos > 0 checked above")
-                    .0;
+                    .period_id_at(pos - 1)
+                    .expect("pos > 0 checked above");
 
                 for (subject_id, subject) in data
                     .get_data()
@@ -918,11 +912,10 @@ impl GeneralPlanningUpdateOp {
                                 .get_inner_data()
                                 .params
                                 .periods
-                                .ordered_period_list
-                                .iter()
+                                .period_ids()
                                 .last()
                             {
-                                Some((id, _)) => {
+                                Some(id) => {
                                     collomatique_state_colloscopes::PeriodOp::AddAfter(id, new_desc)
                                 }
                                 None => {
@@ -939,23 +932,13 @@ impl GeneralPlanningUpdateOp {
                 }
             }
             GeneralPlanningUpdateOp::UpdatePeriodWeekCount(period_id, week_count) => {
-                let pos = data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .periods
-                    .find_period_position(*period_id)
-                    .ok_or(UpdatePeriodWeekCountError::InvalidPeriodId(*period_id))?;
                 let mut desc = data
                     .get_data()
                     .get_inner_data()
                     .params
                     .periods
-                    .ordered_period_list
-                    .get_at(pos)
-                    .expect("pos comes from find_period_position")
-                    .1
-                    .clone();
+                    .weeks_vec_of(*period_id)
+                    .ok_or(UpdatePeriodWeekCountError::InvalidPeriodId(*period_id))?;
 
                 desc.resize(
                     *week_count,
@@ -1005,23 +988,13 @@ impl GeneralPlanningUpdateOp {
                 Ok(None)
             }
             GeneralPlanningUpdateOp::CutPeriod(period_id, new_week_count) => {
-                let pos = data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .periods
-                    .find_period_position(*period_id)
-                    .ok_or(CutPeriodError::InvalidPeriodId(*period_id))?;
                 let mut desc = data
                     .get_data()
                     .get_inner_data()
                     .params
                     .periods
-                    .ordered_period_list
-                    .get_at(pos)
-                    .expect("pos comes from find_period_position")
-                    .1
-                    .clone();
+                    .weeks_vec_of(*period_id)
+                    .ok_or(CutPeriodError::InvalidPeriodId(*period_id))?;
 
                 if *new_week_count > desc.len() {
                     Err(CutPeriodError::RemainingWeekCountTooBig(
@@ -1207,32 +1180,24 @@ impl GeneralPlanningUpdateOp {
                     .get_inner_data()
                     .params
                     .periods
-                    .ordered_period_list
-                    .get_at(pos - 1)
-                    .expect("pos > 0 checked above")
-                    .0;
+                    .period_id_at(pos - 1)
+                    .expect("pos > 0 checked above");
 
                 let mut prev_desc = data
                     .get_data()
                     .get_inner_data()
                     .params
                     .periods
-                    .ordered_period_list
-                    .get_at(pos - 1)
-                    .expect("pos > 0 checked above")
-                    .1
-                    .clone();
+                    .weeks_vec_of(previous_id)
+                    .expect("previous period id is valid");
                 let old_previous_week_count = prev_desc.len();
                 let desc = data
                     .get_data()
                     .get_inner_data()
                     .params
                     .periods
-                    .ordered_period_list
-                    .get_at(pos)
-                    .expect("pos comes from find_period_position")
-                    .1
-                    .clone();
+                    .weeks_vec_of(*period_id)
+                    .expect("period id is valid");
 
                 prev_desc.extend(desc);
 
@@ -1277,23 +1242,13 @@ impl GeneralPlanningUpdateOp {
                 Ok(None)
             }
             GeneralPlanningUpdateOp::UpdateWeekStatus(period_id, week_num, state) => {
-                let pos = data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .periods
-                    .find_period_position(*period_id)
-                    .ok_or(UpdateWeekStatusError::InvalidPeriodId(*period_id))?;
                 let mut desc = data
                     .get_data()
                     .get_inner_data()
                     .params
                     .periods
-                    .ordered_period_list
-                    .get_at(pos)
-                    .expect("pos comes from find_period_position")
-                    .1
-                    .clone();
+                    .weeks_vec_of(*period_id)
+                    .ok_or(UpdateWeekStatusError::InvalidPeriodId(*period_id))?;
 
                 if *week_num >= desc.len() {
                     Err(UpdateWeekStatusError::InvalidWeekNumber(
@@ -1318,23 +1273,13 @@ impl GeneralPlanningUpdateOp {
                 Ok(None)
             }
             GeneralPlanningUpdateOp::UpdateWeekAnnotation(period_id, week_num, annotation) => {
-                let pos = data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .periods
-                    .find_period_position(*period_id)
-                    .ok_or(UpdateWeekAnnotationError::InvalidPeriodId(*period_id))?;
                 let mut desc = data
                     .get_data()
                     .get_inner_data()
                     .params
                     .periods
-                    .ordered_period_list
-                    .get_at(pos)
-                    .expect("pos comes from find_period_position")
-                    .1
-                    .clone();
+                    .weeks_vec_of(*period_id)
+                    .ok_or(UpdateWeekAnnotationError::InvalidPeriodId(*period_id))?;
 
                 if *week_num >= desc.len() {
                     Err(UpdateWeekAnnotationError::InvalidWeekNumber(

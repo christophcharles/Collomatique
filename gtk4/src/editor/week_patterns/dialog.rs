@@ -338,8 +338,8 @@ impl SimpleComponent for Dialog {
 impl Dialog {
     fn build_status_in_periods(&self) -> Vec<collomatique_state_colloscopes::periods::WeekDesc> {
         let mut output = vec![];
-        for (_id, period) in self.periods.ordered_period_list.iter() {
-            output.extend(period.iter().cloned());
+        for (_id, week) in self.periods.walk() {
+            output.push(week.clone());
         }
         output
     }
@@ -347,9 +347,12 @@ impl Dialog {
     fn update_factory(&mut self) {
         let new_data = self
             .periods
-            .ordered_period_list
-            .iter()
-            .scan(0usize, |acc, (_id, desc)| {
+            .period_ids()
+            .scan(0usize, |acc, id| {
+                let desc = self
+                    .periods
+                    .weeks_vec_of(id)
+                    .expect("period id from period_ids is valid");
                 let current_first_week = *acc;
                 *acc += desc.len();
                 Some(PeriodData {

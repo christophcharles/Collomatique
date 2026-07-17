@@ -97,12 +97,7 @@ struct Pools {
 impl Pools {
     fn extract(inner: &InnerData) -> Pools {
         let params = &inner.params;
-        let period_ids: Vec<_> = params
-            .periods
-            .ordered_period_list
-            .iter()
-            .map(|(id, _)| id)
-            .collect();
+        let period_ids: Vec<_> = params.periods.period_ids().collect();
         let subject_ids: Vec<_> = params
             .subjects
             .ordered_subject_list

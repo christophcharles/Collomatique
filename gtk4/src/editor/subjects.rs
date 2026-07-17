@@ -145,10 +145,12 @@ impl Component for Subjects {
                             global_first_week: self.periods.first_week.clone(),
                             periods: self
                                 .periods
-                                .ordered_period_list
-                                .iter()
-                                .map(|(id, period_desc)| subjects_display::PeriodData {
-                                    week_count: period_desc.len(),
+                                .period_ids()
+                                .map(|id| subjects_display::PeriodData {
+                                    week_count: self
+                                        .periods
+                                        .week_count_of(id)
+                                        .expect("period id from period_ids is valid"),
                                     status: !desc.excluded_periods.contains(&id),
                                 })
                                 .collect(),
@@ -197,10 +199,8 @@ impl Component for Subjects {
                     .output(SubjectsUpdateOp::UpdatePeriodStatus(
                         id,
                         self.periods
-                            .ordered_period_list
-                            .get_at(period_num)
-                            .expect("valid period index")
-                            .0,
+                            .period_id_at(period_num)
+                            .expect("valid period index"),
                         status,
                     ))
                     .unwrap();

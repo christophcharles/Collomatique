@@ -220,10 +220,8 @@ impl Component for Students {
 
                         StudentFilter::Period(
                             self.periods
-                                .ordered_period_list
-                                .get_at(index)
-                                .expect("index within bounds")
-                                .0,
+                                .period_id_at(index)
+                                .expect("index within bounds"),
                         )
                     }
                 };
@@ -262,16 +260,20 @@ impl Students {
         let mut list = vec!["Toutes les périodes".into(), "Aucune période".into()];
 
         let mut first_week_num = 0usize;
-        for (index, (_id, period)) in self.periods.ordered_period_list.iter().enumerate() {
+        for (index, period_id) in self.periods.period_ids().enumerate() {
+            let period_len = self
+                .periods
+                .week_count_of(period_id)
+                .expect("period id from period_ids is valid");
             list.push(super::generate_week_succession_title(
                 "La période",
                 &self.periods.first_week,
                 index,
                 first_week_num,
-                period.len(),
+                period_len,
             ));
 
-            first_week_num += period.len();
+            first_week_num += period_len;
         }
 
         let num = match self.current_filter {
@@ -302,7 +304,7 @@ impl Students {
             let keep_student = match self.current_filter {
                 StudentFilter::NoFilter => true,
                 StudentFilter::NoSubjectLinked => {
-                    student.excluded_periods.len() == self.periods.ordered_period_list.len()
+                    student.excluded_periods.len() == self.periods.period_count()
                 }
                 StudentFilter::Period(period_id) => !student.excluded_periods.contains(&period_id),
             };

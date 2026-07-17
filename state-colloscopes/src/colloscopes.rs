@@ -60,9 +60,8 @@ impl Colloscope {
 
         let period_map = params
             .periods
-            .ordered_period_list
-            .iter()
-            .map(|(period_id, _period)| {
+            .period_ids()
+            .map(|period_id| {
                 (
                     period_id,
                     ColloscopePeriod::new_empty_from_params(params, period_id),
@@ -82,12 +81,12 @@ impl Colloscope {
         &self,
         params: &super::colloscope_params::Parameters,
     ) -> Result<(), ColloscopeError> {
-        if self.period_map.len() != params.periods.ordered_period_list.len() {
+        if self.period_map.len() != params.periods.period_count() {
             return Err(ColloscopeError::WrongPeriodCountInColloscopeData);
         }
 
         for (period_id, period) in &self.period_map {
-            if params.periods.find_period(*period_id).is_none() {
+            if params.periods.week_count_of(*period_id).is_none() {
                 return Err(ColloscopeError::InvalidPeriodId(*period_id));
             }
             period.validate_against_params(*period_id, params)?;
@@ -129,8 +128,11 @@ impl Colloscope {
         pattern: &[bool],
     ) -> bool {
         let mut current_first_week = 0usize;
-        for (period_id, period_desc) in periods.ordered_period_list.iter() {
-            let last_week = current_first_week + period_desc.len();
+        for period_id in periods.period_ids() {
+            let period_len = periods
+                .week_count_of(period_id)
+                .expect("Period id from period_ids is valid");
+            let last_week = current_first_week + period_len;
             if pattern.len() < last_week {
                 return false;
             }
@@ -145,7 +147,7 @@ impl Colloscope {
                 return false;
             }
 
-            current_first_week += period_desc.len();
+            current_first_week += period_len;
         }
         if current_first_week != pattern.len() {
             return false;
@@ -174,8 +176,11 @@ impl Colloscope {
         pattern: &[bool],
     ) {
         let mut current_first_week = 0usize;
-        for (period_id, period_desc) in periods.ordered_period_list.iter() {
-            let last_week = current_first_week + period_desc.len();
+        for period_id in periods.period_ids() {
+            let period_len = periods
+                .week_count_of(period_id)
+                .expect("Period id from period_ids is valid");
+            let last_week = current_first_week + period_len;
             assert!(pattern.len() >= last_week);
 
             let collo_period = self
@@ -186,7 +191,7 @@ impl Colloscope {
                 collo_slot.update_slot_for_week_pattern(&pattern[current_first_week..last_week]);
             }
 
-            current_first_week += period_desc.len();
+            current_first_week += period_len;
         }
         assert!(current_first_week == pattern.len());
     }
@@ -322,27 +327,16 @@ impl ColloscopeSlot {
         period_id: PeriodId,
         slot_id: SlotId,
     ) -> Self {
-        let Some(period_pos) = params.periods.find_period_position(period_id) else {
+        let Some((_period_pos, first_week)) = params
+            .periods
+            .find_period_position_and_first_week(period_id)
+        else {
             panic!("Period ID should be valid");
         };
-        let period = params
+        let period_len = params
             .periods
-            .ordered_period_list
-            .get_at(period_pos)
-            .expect("period_pos comes from find_period_position")
-            .1;
-
-        let first_week: usize = (0..period_pos)
-            .map(|i| {
-                params
-                    .periods
-                    .ordered_period_list
-                    .get_at(i)
-                    .expect("i < period_pos")
-                    .1
-                    .len()
-            })
-            .sum();
+            .week_count_of(period_id)
+            .expect("Period ID should be valid");
 
         let (subject_id, slot) = params
             .slots
@@ -364,7 +358,7 @@ impl ColloscopeSlot {
         let mut interrogations = vec![];
 
         let week_pattern = params.get_merged_pattern(slot.week_pattern);
-        for i in 0..period.len() {
+        for i in 0..period_len {
             let current_week = first_week + i;
             let is_week_active = week_pattern[current_week];
             interrogations.push(if is_week_active {
@@ -383,33 +377,22 @@ impl ColloscopeSlot {
         slot_id: SlotId,
         params: &super::colloscope_params::Parameters,
     ) -> Result<(), ColloscopeError> {
-        let Some(period_pos) = params.periods.find_period_position(period_id) else {
+        let Some((_period_pos, first_week_num)) = params
+            .periods
+            .find_period_position_and_first_week(period_id)
+        else {
             return Err(ColloscopeError::InvalidPeriodId(period_id));
         };
-        let period = params
+        let period_len = params
             .periods
-            .ordered_period_list
-            .get_at(period_pos)
-            .expect("period_pos comes from find_period_position")
-            .1;
-
-        let first_week_num: usize = (0..period_pos)
-            .map(|i| {
-                params
-                    .periods
-                    .ordered_period_list
-                    .get_at(i)
-                    .expect("i < period_pos")
-                    .1
-                    .len()
-            })
-            .sum();
+            .week_count_of(period_id)
+            .expect("period id is valid at this point");
 
         let Some(orig_slot) = params.slots.find_slot(slot_id) else {
             return Err(ColloscopeError::InvalidSlotId(slot_id));
         };
 
-        if period.len() != self.interrogations.len() {
+        if period_len != self.interrogations.len() {
             return Err(
                 ColloscopeError::WrongInterrogationCountForSlotInPeriodInColloscopeData(
                     period_id, slot_id,

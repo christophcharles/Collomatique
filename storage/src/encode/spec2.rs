@@ -154,12 +154,13 @@ fn build_general_planning(
         }),
         periods: params
             .periods
-            .ordered_period_list
-            .iter()
-            .map(|(period_id, weeks)| format::general_planning::Period {
+            .period_ids()
+            .map(|period_id| format::general_planning::Period {
                 id: period_id.inner(),
-                weeks: weeks
-                    .iter()
+                weeks: params
+                    .periods
+                    .weeks_of(period_id)
+                    .expect("period id from period_ids is valid")
                     .map(|week| format::general_planning::Week {
                         interrogations: week.interrogations,
                         annotation: week.annotation.clone(),
@@ -547,7 +548,7 @@ fn build_colloscope(inner: &mem::InnerData) -> format::colloscope::Colloscope {
     // and then sorted by their (slot_id, week) key.
     let mut interrogation_rows = Vec::new();
     let mut first_week = 0usize;
-    for (period_id, desc) in inner.params.periods.ordered_period_list.iter() {
+    for period_id in inner.params.periods.period_ids() {
         let period = inner
             .colloscope
             .period_map
@@ -573,7 +574,11 @@ fn build_colloscope(inner: &mem::InnerData) -> format::colloscope::Colloscope {
                 });
             }
         }
-        first_week += desc.len();
+        first_week += inner
+            .params
+            .periods
+            .week_count_of(period_id)
+            .expect("period id from period_ids is valid");
     }
     interrogation_rows.sort_by_key(|row| (row.slot_id, row.week));
 

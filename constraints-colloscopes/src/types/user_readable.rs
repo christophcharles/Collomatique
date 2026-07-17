@@ -745,8 +745,7 @@ fn period_position(
     period: PeriodId,
 ) -> usize {
     env.periods
-        .ordered_period_list
-        .position_of(&period)
+        .find_period_position(period)
         .map(|p| p + 1)
         .unwrap_or(0)
 }

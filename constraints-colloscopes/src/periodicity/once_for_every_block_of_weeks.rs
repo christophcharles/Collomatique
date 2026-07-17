@@ -35,20 +35,25 @@ pub(super) fn build(env: &VarEnv, mut bundle: MyBundle) -> MyBundle {
 
         // Per-period block constraints
         let mut global_week_offset = 0usize;
-        for (period_id, period_desc) in env.periods.ordered_period_list.iter() {
+        for period_id in env.periods.period_ids() {
+            let period_len = env
+                .periods
+                .week_count_of(period_id)
+                .expect("period id from period_ids is valid");
             let period_id = &period_id;
             let first_global_week = GlobalWeek(global_week_offset);
-            let last_global_week =
-                GlobalWeek(global_week_offset + period_desc.len().saturating_sub(1));
+            let last_global_week = GlobalWeek(global_week_offset + period_len.saturating_sub(1));
 
-            let active_weeks_in_period: Vec<GlobalWeek> = period_desc
-                .iter()
+            let active_weeks_in_period: Vec<GlobalWeek> = env
+                .periods
+                .weeks_of(*period_id)
+                .expect("period id from period_ids is valid")
                 .enumerate()
                 .filter(|(_, wd)| wd.interrogations)
                 .map(|(i, _)| GlobalWeek(global_week_offset + i))
                 .collect();
 
-            global_week_offset += period_desc.len();
+            global_week_offset += period_len;
 
             if subject.excluded_periods.contains(period_id) {
                 continue;

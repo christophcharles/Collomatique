@@ -29,10 +29,14 @@ fn compute_period_runs(
     let mut current_active_weeks = Vec::new();
     let mut global_week = 0usize;
 
-    for (period_id, period_desc) in env.periods.ordered_period_list.iter() {
+    for period_id in env.periods.period_ids() {
+        let period_len = env
+            .periods
+            .week_count_of(period_id)
+            .expect("period id from period_ids is valid");
         let period_id = &period_id;
         let first_of_period = GlobalWeek(global_week);
-        let last_of_period = GlobalWeek(global_week + period_desc.len().saturating_sub(1));
+        let last_of_period = GlobalWeek(global_week + period_len.saturating_sub(1));
 
         let is_active = !excluded_periods.contains(period_id)
             && env
@@ -45,7 +49,11 @@ fn compute_period_runs(
                 current_first = Some(first_of_period);
             }
             current_last = last_of_period;
-            for week_desc in period_desc {
+            for week_desc in env
+                .periods
+                .weeks_of(*period_id)
+                .expect("period id from period_ids is valid")
+            {
                 if week_desc.interrogations {
                     current_active_weeks.push(GlobalWeek(global_week));
                 }
@@ -59,7 +67,7 @@ fn compute_period_runs(
                     active_weeks: std::mem::take(&mut current_active_weeks),
                 });
             }
-            global_week += period_desc.len();
+            global_week += period_len;
         }
     }
     if let Some(first) = current_first {
