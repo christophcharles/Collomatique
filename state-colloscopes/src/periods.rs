@@ -2,15 +2,17 @@
 //!
 //! This module defines the relevant types to describes the periods
 
+use std::collections::{BTreeMap, BTreeSet};
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::OrderedTable;
-use crate::colloscopes::ColloscopePeriod;
+use crate::colloscopes::{ColloscopeInterrogation, ColloscopePeriod};
 use crate::ids::{
     PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId, SubjectId, WeekId, WeekPatternId,
 };
-use crate::ops::AnnotatedPeriodOp;
+use crate::ops::{AnnotatedPeriodOp, AnnotatedWeekOp};
 
 /// Description of the periods
 ///
@@ -210,6 +212,48 @@ impl Periods {
         self.ordered_period_list.get(&id)
     }
 
+    /// Finds a week by id, returning its period and description.
+    ///
+    /// Transitional linear scan (week ids live inline in the period rows).
+    pub fn find_week(&self, id: WeekId) -> Option<(PeriodId, &WeekDesc)> {
+        self.ordered_period_list
+            .iter()
+            .find_map(|(period_id, weeks)| {
+                weeks
+                    .iter()
+                    .find(|(week_id, _)| *week_id == id)
+                    .map(|(_, desc)| (period_id, desc))
+            })
+    }
+
+    /// Locates a week by id: its owning period and its position within that
+    /// period. `None` if the week id is invalid.
+    pub fn week_position(&self, id: WeekId) -> Option<(PeriodId, usize)> {
+        self.ordered_period_list
+            .iter()
+            .find_map(|(period_id, weeks)| {
+                weeks
+                    .iter()
+                    .position(|(week_id, _)| *week_id == id)
+                    .map(|pos| (period_id, pos))
+            })
+    }
+
+    /// The id of the week at position `pos` within `period`; `None` if the
+    /// period id is invalid or the position is out of range.
+    pub fn week_id_at(&self, period: PeriodId, pos: usize) -> Option<WeekId> {
+        self.ordered_period_list
+            .get(&period)?
+            .get(pos)
+            .map(|(week_id, _)| *week_id)
+    }
+
+    /// The global week position of a week (its index in `walk()` order);
+    /// `None` if the week id is invalid.
+    pub fn global_week_position(&self, id: WeekId) -> Option<usize> {
+        self.walk().position(|(_, week_id, _)| week_id == id)
+    }
+
     /// Finds the first week number and the length of a period
     pub fn get_first_week_and_length_for_period(&self, id: PeriodId) -> Option<(usize, usize)> {
         let mut first_week = 0usize;
@@ -275,6 +319,36 @@ pub enum PeriodError {
     /// The period is referenced by a slot pairing rule
     #[error("period id ({0:?}) is referenced by slot pairing rule {1:?}")]
     PeriodIsReferencedBySlotPairingRule(PeriodId, SlotPairingRuleId),
+}
+
+/// Errors for week operations
+///
+/// These errors can be returned when trying to modify [crate::Data] with a week op.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum WeekError {
+    /// A period id is invalid
+    #[error("invalid period id ({0:?})")]
+    InvalidPeriodId(PeriodId),
+
+    /// A week id is invalid
+    #[error("invalid week id ({0:?})")]
+    InvalidWeekId(WeekId),
+
+    /// The week id already exists
+    #[error("week id ({0:?}) already exists")]
+    WeekIdAlreadyExists(WeekId),
+
+    /// The target position is out of range for the destination period
+    #[error("invalid position ({1}) in period ({0:?})")]
+    InvalidPosition(PeriodId, usize),
+
+    /// A week pattern is not trivial on the week to be removed
+    #[error("week pattern {1:?} is not trivial on week {0:?}")]
+    NonTrivialWeekPattern(WeekId, WeekPatternId),
+
+    /// A slot in the colloscope blocks the operation on the week
+    #[error("slot {1:?} in colloscope blocks the operation on week {0:?}")]
+    NotCompatibleSlotInColloscope(WeekId, SlotId),
 }
 
 impl crate::Data {
@@ -650,5 +724,531 @@ impl crate::Data {
                 Ok(AnnotatedPeriodOp::Update(*period_id, old_weeks_owned))
             }
         }
+    }
+}
+
+impl crate::Data {
+    /// Used internally
+    ///
+    /// Apply week operations.
+    ///
+    /// Weeks live inline in the period rows in this transitional stage, so
+    /// this is where the pattern-bit and colloscope-cell bookkeeping that used
+    /// to ride on the whole-period `PeriodOp::Update` now happens for a single
+    /// week. Both maintenance layers are temporary: the pattern splicing dies
+    /// with the week-pattern reshape (B2) and the colloscope cell splicing
+    /// with the colloscope reshape (1d).
+    pub(crate) fn apply_week(
+        &mut self,
+        week_op: &AnnotatedWeekOp,
+    ) -> std::result::Result<AnnotatedWeekOp, WeekError> {
+        match week_op {
+            AnnotatedWeekOp::AddFront(week_id, period_id, desc) => {
+                self.add_week(*week_id, *period_id, 0, desc)?;
+                Ok(AnnotatedWeekOp::Remove(*week_id))
+            }
+            AnnotatedWeekOp::AddAfter(week_id, after_id, desc) => {
+                let Some((period_id, after_pos)) =
+                    self.inner_data.params.periods.week_position(*after_id)
+                else {
+                    return Err(WeekError::InvalidWeekId(*after_id));
+                };
+                self.add_week(*week_id, period_id, after_pos + 1, desc)?;
+                Ok(AnnotatedWeekOp::Remove(*week_id))
+            }
+            AnnotatedWeekOp::Remove(week_id) => self.remove_week(*week_id),
+            AnnotatedWeekOp::Update(week_id, desc) => self.update_week(*week_id, desc),
+            AnnotatedWeekOp::Move(week_id, dest_period, dest_pos) => {
+                self.move_week(*week_id, *dest_period, *dest_pos)
+            }
+        }
+    }
+
+    /// Splices a week into `period_id` at per-period position `per_pos`.
+    ///
+    /// A `true` bit is inserted at the new global week in every week pattern
+    /// and one colloscope cell per slot of the period is created (active iff
+    /// the week carries interrogations, since every pattern is trivial here).
+    fn add_week(
+        &mut self,
+        week_id: WeekId,
+        period_id: PeriodId,
+        per_pos: usize,
+        desc: &WeekDesc,
+    ) -> Result<(), WeekError> {
+        if self
+            .inner_data
+            .params
+            .periods
+            .week_position(week_id)
+            .is_some()
+        {
+            return Err(WeekError::WeekIdAlreadyExists(week_id));
+        }
+
+        let Some((_pos, first_week)) = self
+            .inner_data
+            .params
+            .periods
+            .find_period_position_and_first_week(period_id)
+        else {
+            return Err(WeekError::InvalidPeriodId(period_id));
+        };
+        let period_len = self
+            .inner_data
+            .params
+            .periods
+            .week_count_of(period_id)
+            .expect("period id validated above");
+        if per_pos > period_len {
+            return Err(WeekError::InvalidPosition(period_id, per_pos));
+        }
+
+        let global_pos = first_week + per_pos;
+
+        self.inner_data
+            .params
+            .periods
+            .ordered_period_list
+            .get_mut(&period_id)
+            .expect("period id validated above")
+            .insert(per_pos, (week_id, desc.clone()));
+
+        for week_pattern in self
+            .inner_data
+            .params
+            .week_patterns
+            .week_pattern_map
+            .values_mut()
+        {
+            week_pattern.add_weeks(global_pos, 1);
+        }
+
+        // Every pattern bit at `global_pos` is `true` by construction, so the
+        // merged activity of the new week reduces to `desc.interrogations`.
+        let cell = if desc.interrogations {
+            Some(ColloscopeInterrogation::default())
+        } else {
+            None
+        };
+        for collo_slot in self
+            .inner_data
+            .colloscope
+            .period_map
+            .get_mut(&period_id)
+            .expect("period id validated above")
+            .slot_map
+            .values_mut()
+        {
+            collo_slot.interrogations.insert(per_pos, cell.clone());
+        }
+
+        Ok(())
+    }
+
+    /// Removes an existing week.
+    ///
+    /// Requires every week pattern to be trivial (`true`) at the week (so undo
+    /// restores it exactly) and every colloscope cell to be empty. The reverse
+    /// re-adds the week at the same spot with the same id.
+    fn remove_week(&mut self, week_id: WeekId) -> Result<AnnotatedWeekOp, WeekError> {
+        let Some((period_id, per_pos)) = self.inner_data.params.periods.week_position(week_id)
+        else {
+            return Err(WeekError::InvalidWeekId(week_id));
+        };
+        let global_pos = self
+            .inner_data
+            .params
+            .periods
+            .global_week_position(week_id)
+            .expect("week id validated above");
+
+        for (week_pattern_id, week_pattern) in
+            self.inner_data.params.week_patterns.week_pattern_map.iter()
+        {
+            if !week_pattern.can_remove_weeks(global_pos, 1) {
+                return Err(WeekError::NonTrivialWeekPattern(week_id, week_pattern_id));
+            }
+        }
+
+        for (slot_id, collo_slot) in self
+            .inner_data
+            .colloscope
+            .period_map
+            .get(&period_id)
+            .expect("period id from week_position is valid")
+            .slot_map
+            .iter()
+        {
+            let cell_empty = collo_slot
+                .interrogations
+                .get(per_pos)
+                .expect("cell exists for every week of the period")
+                .as_ref()
+                .is_none_or(|interrogation| interrogation.is_empty());
+            if !cell_empty {
+                return Err(WeekError::NotCompatibleSlotInColloscope(week_id, *slot_id));
+            }
+        }
+
+        // Compute the reverse op before mutating.
+        let prev_week_id = if per_pos > 0 {
+            self.inner_data
+                .params
+                .periods
+                .week_id_at(period_id, per_pos - 1)
+        } else {
+            None
+        };
+
+        let (_removed_id, removed_desc) = self
+            .inner_data
+            .params
+            .periods
+            .ordered_period_list
+            .get_mut(&period_id)
+            .expect("period id from week_position is valid")
+            .remove(per_pos);
+
+        for week_pattern in self
+            .inner_data
+            .params
+            .week_patterns
+            .week_pattern_map
+            .values_mut()
+        {
+            week_pattern.remove_weeks(global_pos, 1);
+        }
+
+        for collo_slot in self
+            .inner_data
+            .colloscope
+            .period_map
+            .get_mut(&period_id)
+            .expect("period id from week_position is valid")
+            .slot_map
+            .values_mut()
+        {
+            collo_slot.interrogations.remove(per_pos);
+        }
+
+        Ok(match prev_week_id {
+            None => AnnotatedWeekOp::AddFront(week_id, period_id, removed_desc),
+            Some(prev) => AnnotatedWeekOp::AddAfter(week_id, prev, removed_desc),
+        })
+    }
+
+    /// Updates a week's description (status / annotation) in place.
+    ///
+    /// The week count is unchanged, so no pattern bits move; only a
+    /// `true → false` interrogation flip can silence a colloscope cell, which
+    /// is rejected when that cell is non-empty (same guard the whole-period
+    /// update uses).
+    fn update_week(
+        &mut self,
+        week_id: WeekId,
+        new_desc: &WeekDesc,
+    ) -> Result<AnnotatedWeekOp, WeekError> {
+        let Some((period_id, per_pos)) = self.inner_data.params.periods.week_position(week_id)
+        else {
+            return Err(WeekError::InvalidWeekId(week_id));
+        };
+        let (_pos, first_week) = self
+            .inner_data
+            .params
+            .periods
+            .find_period_position_and_first_week(period_id)
+            .expect("period id from week_position is valid");
+
+        // The period's would-be week descriptions with this week replaced.
+        let new_descs: Vec<WeekDesc> = self
+            .inner_data
+            .params
+            .periods
+            .weeks_of(period_id)
+            .expect("period id from week_position is valid")
+            .enumerate()
+            .map(|(i, desc)| {
+                if i == per_pos {
+                    new_desc.clone()
+                } else {
+                    desc.clone()
+                }
+            })
+            .collect();
+
+        for (slot_id, collo_slot) in self
+            .inner_data
+            .colloscope
+            .period_map
+            .get(&period_id)
+            .expect("period id from week_position is valid")
+            .slot_map
+            .iter()
+        {
+            let slot = self
+                .inner_data
+                .params
+                .slots
+                .find_slot(*slot_id)
+                .expect("slot id from colloscope is valid");
+            let new_pattern = slot.build_pattern_for_new_period(
+                &new_descs,
+                first_week,
+                &self.inner_data.params.week_patterns,
+            );
+            if !collo_slot.check_empty_on_removed_weeks(&new_pattern) {
+                return Err(WeekError::NotCompatibleSlotInColloscope(week_id, *slot_id));
+            }
+        }
+
+        let old_desc = std::mem::replace(
+            &mut self
+                .inner_data
+                .params
+                .periods
+                .ordered_period_list
+                .get_mut(&period_id)
+                .expect("period id from week_position is valid")[per_pos]
+                .1,
+            new_desc.clone(),
+        );
+
+        let slot_ids: Vec<_> = self
+            .inner_data
+            .params
+            .slots
+            .all_slots()
+            .map(|(slot_id, _slot)| *slot_id)
+            .collect();
+        for slot_id in slot_ids {
+            self.inner_data
+                .colloscope
+                .update_slot_to_match_week_pattern(slot_id, &self.inner_data.params);
+        }
+
+        Ok(AnnotatedWeekOp::Update(week_id, old_desc))
+    }
+
+    /// Moves a week to `dest_pos` in `dest_period`, carrying its content.
+    ///
+    /// The week's pattern bits travel positionally (no triviality guard — no
+    /// information is lost) and its colloscope cells travel where the slot
+    /// exists on both sides. A non-empty cell may only travel to a slot the
+    /// destination period runs, and only if its groups fit the destination
+    /// association bounds.
+    fn move_week(
+        &mut self,
+        week_id: WeekId,
+        dest_period: PeriodId,
+        dest_pos: usize,
+    ) -> Result<AnnotatedWeekOp, WeekError> {
+        let Some((src_period, src_pos)) = self.inner_data.params.periods.week_position(week_id)
+        else {
+            return Err(WeekError::InvalidWeekId(week_id));
+        };
+        let (_src_ppos, src_first) = self
+            .inner_data
+            .params
+            .periods
+            .find_period_position_and_first_week(src_period)
+            .expect("src period from week_position is valid");
+        let Some((_dest_ppos, dest_first)) = self
+            .inner_data
+            .params
+            .periods
+            .find_period_position_and_first_week(dest_period)
+        else {
+            return Err(WeekError::InvalidPeriodId(dest_period));
+        };
+        let src_global = src_first + src_pos;
+
+        // Destination length once the week is detached from its current spot.
+        let dest_len_post = self
+            .inner_data
+            .params
+            .periods
+            .week_count_of(dest_period)
+            .expect("dest period validated above")
+            - if dest_period == src_period { 1 } else { 0 };
+        if dest_pos > dest_len_post {
+            return Err(WeekError::InvalidPosition(dest_period, dest_pos));
+        }
+
+        // Detached global numbering: removing `src_global` shifts everything
+        // after it down by one.
+        let dest_first_post = if src_global < dest_first {
+            dest_first - 1
+        } else {
+            dest_first
+        };
+        let dest_global = dest_first_post + dest_pos;
+
+        let desc = self
+            .inner_data
+            .params
+            .periods
+            .find_week(week_id)
+            .expect("week id validated above")
+            .1
+            .clone();
+
+        // Source cells (captured before mutating), keyed by slot.
+        let src_cells: BTreeMap<SlotId, Option<ColloscopeInterrogation>> = self
+            .inner_data
+            .colloscope
+            .period_map
+            .get(&src_period)
+            .expect("src period is valid")
+            .slot_map
+            .iter()
+            .map(|(slot_id, collo_slot)| {
+                (
+                    *slot_id,
+                    collo_slot
+                        .interrogations
+                        .get(src_pos)
+                        .expect("cell exists for every week of the period")
+                        .clone(),
+                )
+            })
+            .collect();
+
+        // Guard: any non-empty source cell must be able to travel.
+        let dest_collo_slots: BTreeSet<SlotId> = self
+            .inner_data
+            .colloscope
+            .period_map
+            .get(&dest_period)
+            .expect("dest period is valid")
+            .slot_map
+            .keys()
+            .copied()
+            .collect();
+        for (slot_id, cell) in &src_cells {
+            let Some(interrogation) = cell else { continue };
+            if interrogation.is_empty() {
+                continue;
+            }
+            if !dest_collo_slots.contains(slot_id) {
+                return Err(WeekError::NotCompatibleSlotInColloscope(week_id, *slot_id));
+            }
+            let (subject_id, _pos) = self
+                .inner_data
+                .params
+                .slots
+                .find_slot_subject_and_position(*slot_id)
+                .expect("slot id from colloscope is valid");
+            let bound = self
+                .inner_data
+                .params
+                .group_lists
+                .subjects_associations
+                .get(&(dest_period, subject_id))
+                .map(|group_list_id| {
+                    self.inner_data
+                        .params
+                        .group_lists
+                        .group_list_map
+                        .get(group_list_id)
+                        .expect("association references a live group list")
+                        .params
+                        .group_names
+                        .len() as u32
+                })
+                .unwrap_or(0);
+            if interrogation.assigned_groups.iter().any(|g| *g >= bound) {
+                return Err(WeekError::NotCompatibleSlotInColloscope(week_id, *slot_id));
+            }
+        }
+
+        // --- Mutations ---
+
+        // 1. Detach the week entry from the source period.
+        self.inner_data
+            .params
+            .periods
+            .ordered_period_list
+            .get_mut(&src_period)
+            .expect("src period is valid")
+            .remove(src_pos);
+
+        // 2. Move each pattern bit to the destination position.
+        for week_pattern in self
+            .inner_data
+            .params
+            .week_patterns
+            .week_pattern_map
+            .values_mut()
+        {
+            week_pattern.move_week(src_global, dest_global);
+        }
+
+        // 3. Detach the source cells.
+        for collo_slot in self
+            .inner_data
+            .colloscope
+            .period_map
+            .get_mut(&src_period)
+            .expect("src period is valid")
+            .slot_map
+            .values_mut()
+        {
+            collo_slot.interrogations.remove(src_pos);
+        }
+
+        // 4. Splice the week entry into the destination period.
+        self.inner_data
+            .params
+            .periods
+            .ordered_period_list
+            .get_mut(&dest_period)
+            .expect("dest period is valid")
+            .insert(dest_pos, (week_id, desc));
+
+        // 5. Insert one colloscope cell per destination slot. A traveling cell
+        //    keeps its content; a slot only present at the destination gets a
+        //    fresh cell reflecting the merged activity at the new week.
+        let dest_slot_ids: Vec<SlotId> = self
+            .inner_data
+            .colloscope
+            .period_map
+            .get(&dest_period)
+            .expect("dest period is valid")
+            .slot_map
+            .keys()
+            .copied()
+            .collect();
+        for slot_id in dest_slot_ids {
+            let week_pattern_id = self
+                .inner_data
+                .params
+                .slots
+                .find_slot(slot_id)
+                .expect("slot id from colloscope is valid")
+                .week_pattern;
+            let merged = self.inner_data.params.get_merged_pattern(week_pattern_id);
+            let cell = if merged[dest_global] {
+                src_cells
+                    .get(&slot_id)
+                    .cloned()
+                    .flatten()
+                    .or_else(|| Some(ColloscopeInterrogation::default()))
+            } else {
+                None
+            };
+            self.inner_data
+                .colloscope
+                .period_map
+                .get_mut(&dest_period)
+                .expect("dest period is valid")
+                .slot_map
+                .get_mut(&slot_id)
+                .expect("slot id from dest_slot_ids")
+                .interrogations
+                .insert(dest_pos, cell);
+        }
+
+        Ok(AnnotatedWeekOp::Move(week_id, src_period, src_pos))
     }
 }

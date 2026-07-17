@@ -79,6 +79,14 @@ pub fn student(rng: &mut ChaCha8Rng, period_ids: &[PeriodId]) -> Student {
     }
 }
 
+pub fn week_desc(rng: &mut ChaCha8Rng) -> WeekDesc {
+    let mut desc = WeekDesc::new(rng.random_bool(0.85));
+    if rng.random_bool(0.1) {
+        desc.annotation = Some(non_empty("week note".to_string()));
+    }
+    desc
+}
+
 pub fn week_desc_vec(rng: &mut ChaCha8Rng) -> Vec<WeekDesc> {
     let len = rng.random_range(3..=6);
     (0..len)

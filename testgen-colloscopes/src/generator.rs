@@ -14,12 +14,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use collomatique_state_colloscopes::{
     AssignmentOp, BalancingOp, ColloscopeOp, ExportConfigOp, GroupListOp, IncompatOp, InnerData,
     Op, PairingOp, PeriodOp, SettingsOp, SlotOp, SlotPairingOp, StudentOp, SubjectOp, TeacherOp,
-    WeekPatternOp,
+    WeekOp, WeekPatternOp,
     colloscopes::{ColloscopeGroupList, ColloscopeInterrogation},
     group_lists::GroupListFilling,
     ids::{
         GroupListId, Id, IncompatId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId,
-        SubjectId, TeacherId, WeekPatternId,
+        SubjectId, TeacherId, WeekId, WeekPatternId,
     },
     students::Student,
 };
@@ -28,9 +28,10 @@ use crate::synth;
 use crate::synth::pick;
 
 /// All op categories, used for coverage tracking
-pub const CATEGORIES: [&str; 16] = [
+pub const CATEGORIES: [&str; 17] = [
     "student",
     "period",
+    "week",
     "subject",
     "teacher",
     "assignment",
@@ -74,6 +75,7 @@ fn weighted(rng: &mut ChaCha8Rng, weights: &[u32]) -> usize {
 /// Id pools extracted from the current state
 struct Pools {
     period_ids: Vec<PeriodId>,
+    week_ids: Vec<WeekId>,
     total_weeks: usize,
     student_ids: Vec<StudentId>,
     subject_ids: Vec<SubjectId>,
@@ -98,6 +100,7 @@ impl Pools {
     fn extract(inner: &InnerData) -> Pools {
         let params = &inner.params;
         let period_ids: Vec<_> = params.periods.period_ids().collect();
+        let week_ids: Vec<_> = params.periods.week_ids().collect();
         let subject_ids: Vec<_> = params
             .subjects
             .ordered_subject_list
@@ -163,6 +166,7 @@ impl Pools {
         Pools {
             total_weeks: params.periods.count_weeks(),
             period_ids,
+            week_ids,
             student_ids: params.students.student_map.keys().collect(),
             subject_ids,
             interrogation_subject_ids,
@@ -222,6 +226,7 @@ pub fn gen_op(
     let eligible: Vec<(&'static str, u32)> = [
         ("student", 8u32),
         ("period", 5),
+        ("week", 6),
         ("subject", 8),
         ("teacher", 6),
         ("assignment", 8),
@@ -239,6 +244,9 @@ pub fn gen_op(
     ]
     .into_iter()
     .filter(|(name, _)| match *name {
+        // AddFront needs a period; every other week op needs an existing week
+        // (there always is one when a period exists — periods are non-empty).
+        "week" => !pools.period_ids.is_empty(),
         "assignment" => {
             !pools.period_ids.is_empty()
                 && !pools.student_ids.is_empty()
@@ -261,6 +269,7 @@ pub fn gen_op(
     let op = match category {
         "student" => gen_student(rng, &pools, invalid),
         "period" => gen_period(rng, &pools, invalid),
+        "week" => gen_week(rng, &pools, invalid),
         "subject" => gen_subject(rng, inner, &pools, invalid),
         "teacher" => gen_teacher(rng, &pools, invalid),
         "assignment" => gen_assignment(rng, inner, &pools, invalid),
@@ -341,6 +350,42 @@ fn gen_period(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
         _ => PeriodOp::Remove(pick(rng, &pools.period_ids)),
     };
     Op::Period(op)
+}
+
+fn gen_week(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
+    if invalid {
+        let op = match rng.random_range(0..3) {
+            0 => WeekOp::AddFront(
+                unsafe { PeriodId::new(dangling(rng)) },
+                synth::week_desc(rng),
+            ),
+            1 => WeekOp::Remove(unsafe { WeekId::new(dangling(rng)) }),
+            _ => WeekOp::Move(
+                unsafe { WeekId::new(dangling(rng)) },
+                pick(rng, &pools.period_ids),
+                rng.random_range(0..3),
+            ),
+        };
+        return Op::Week(op);
+    }
+    let has_weeks = !pools.week_ids.is_empty();
+    let add_front_w = 4u32;
+    let add_after_w = if has_weeks { 4 } else { 0 };
+    let update_w = if has_weeks { 3 } else { 0 };
+    let move_w = if has_weeks { 2 } else { 0 };
+    let remove_w = if has_weeks { 2 } else { 0 };
+    let op = match weighted(rng, &[add_front_w, add_after_w, update_w, move_w, remove_w]) {
+        0 => WeekOp::AddFront(pick(rng, &pools.period_ids), synth::week_desc(rng)),
+        1 => WeekOp::AddAfter(pick(rng, &pools.week_ids), synth::week_desc(rng)),
+        2 => WeekOp::Update(pick(rng, &pools.week_ids), synth::week_desc(rng)),
+        3 => WeekOp::Move(
+            pick(rng, &pools.week_ids),
+            pick(rng, &pools.period_ids),
+            rng.random_range(0..3),
+        ),
+        _ => WeekOp::Remove(pick(rng, &pools.week_ids)),
+    };
+    Op::Week(op)
 }
 
 fn gen_subject(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invalid: bool) -> Op {

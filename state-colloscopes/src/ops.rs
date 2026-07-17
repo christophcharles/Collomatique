@@ -20,6 +20,8 @@ pub enum Op {
     Student(StudentOp),
     /// Operation on periods
     Period(PeriodOp),
+    /// Operation on weeks
+    Week(WeekOp),
     /// Operation on the subjects
     Subject(SubjectOp),
     /// Operation on the teachers
@@ -82,6 +84,28 @@ pub enum PeriodOp {
     Remove(PeriodId),
     /// Update an existing period
     Update(PeriodId, Vec<periods::WeekDesc>),
+}
+
+/// Week operation enumeration
+///
+/// This is the list of all possible operations related to individual weeks
+/// (as opposed to whole periods) we can do on a [Data]. Weeks live inside
+/// periods; these ops splice a single week in or out, edit it, or move it
+/// (possibly to another period), carrying its content.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WeekOp {
+    /// Add a week at the front of a period
+    AddFront(PeriodId, periods::WeekDesc),
+    /// Add a week right after an existing week
+    AddAfter(WeekId, periods::WeekDesc),
+    /// Remove an existing week
+    Remove(WeekId),
+    /// Update the status/annotation of an existing week
+    Update(WeekId, periods::WeekDesc),
+    /// Move a week to a position (same or different period), preserving its id
+    /// and its content. The position is interpreted after the week is
+    /// detached from its current spot.
+    Move(WeekId, PeriodId, usize),
 }
 
 /// Subject operation enumeration
@@ -288,6 +312,8 @@ pub enum AnnotatedOp {
     Student(AnnotatedStudentOp),
     /// Operation on the periods
     Period(AnnotatedPeriodOp),
+    /// Operation on the weeks
+    Week(AnnotatedWeekOp),
     /// Operation on the subjects
     Subject(AnnotatedSubjectOp),
     /// Operation on the teachers
@@ -327,6 +353,12 @@ impl From<AnnotatedStudentOp> for AnnotatedOp {
 impl From<AnnotatedPeriodOp> for AnnotatedOp {
     fn from(value: AnnotatedPeriodOp) -> Self {
         AnnotatedOp::Period(value)
+    }
+}
+
+impl From<AnnotatedWeekOp> for AnnotatedOp {
+    fn from(value: AnnotatedWeekOp) -> Self {
+        AnnotatedOp::Week(value)
     }
 }
 
@@ -455,6 +487,30 @@ pub enum AnnotatedPeriodOp {
     /// load-bearing. Writing verbatim keeps `apply` a pure involution, which
     /// the history replay check requires.
     Update(PeriodId, Vec<(WeekId, periods::WeekDesc)>),
+}
+
+/// Week annotated operation enumeration
+///
+/// Compared to [WeekOp], this is a annotated operation,
+/// meaning the operation has been annotated to contain
+/// all the necessary data to make it *reproducible*.
+///
+/// See [collomatique_state::history] for a complete discussion of the problem.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AnnotatedWeekOp {
+    /// Add a week at the front of a period
+    /// First parameter is the week id for the new week
+    AddFront(WeekId, PeriodId, periods::WeekDesc),
+    /// Add a week right after an existing week
+    /// First parameter is the week id for the new week
+    AddAfter(WeekId, WeekId, periods::WeekDesc),
+    /// Remove an existing week
+    Remove(WeekId),
+    /// Update the status/annotation of an existing week
+    Update(WeekId, periods::WeekDesc),
+    /// Move a week to a position (same or different period), preserving its id
+    /// and its content
+    Move(WeekId, PeriodId, usize),
 }
 
 /// Subject annotated operation enumeration
@@ -726,6 +782,10 @@ impl AnnotatedOp {
                 let (op, id) = AnnotatedPeriodOp::annotate(period_op, id_issuer);
                 (op.into(), id.map(|x| x.into()))
             }
+            Op::Week(week_op) => {
+                let (op, id) = AnnotatedWeekOp::annotate(week_op, id_issuer);
+                (op.into(), id.map(|x| x.into()))
+            }
             Op::Subject(subject_op) => {
                 let (op, id) = AnnotatedSubjectOp::annotate(subject_op, id_issuer);
                 (op.into(), id.map(|x| x.into()))
@@ -854,6 +914,35 @@ impl AnnotatedPeriodOp {
                 // them verbatim.
                 let weeks = annotate_weeks(desc, id_issuer);
                 (AnnotatedPeriodOp::Update(period_id, weeks), None)
+            }
+        }
+    }
+}
+
+impl AnnotatedWeekOp {
+    /// Used internally
+    ///
+    /// Annotates the subcategory of operations [WeekOp].
+    fn annotate(week_op: WeekOp, id_issuer: &mut IdIssuer) -> (AnnotatedWeekOp, Option<WeekId>) {
+        match week_op {
+            WeekOp::AddFront(period_id, desc) => {
+                let new_id = id_issuer.get_week_id();
+                (
+                    AnnotatedWeekOp::AddFront(new_id, period_id, desc),
+                    Some(new_id),
+                )
+            }
+            WeekOp::AddAfter(after_id, desc) => {
+                let new_id = id_issuer.get_week_id();
+                (
+                    AnnotatedWeekOp::AddAfter(new_id, after_id, desc),
+                    Some(new_id),
+                )
+            }
+            WeekOp::Remove(week_id) => (AnnotatedWeekOp::Remove(week_id), None),
+            WeekOp::Update(week_id, desc) => (AnnotatedWeekOp::Update(week_id, desc), None),
+            WeekOp::Move(week_id, period_id, pos) => {
+                (AnnotatedWeekOp::Move(week_id, period_id, pos), None)
             }
         }
     }

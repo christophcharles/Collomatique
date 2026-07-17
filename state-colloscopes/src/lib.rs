@@ -31,7 +31,7 @@ pub mod ops;
 pub use ops::{
     AnnotatedOp, AssignmentOp, BalancingOp, ColloscopeOp, ExportConfigOp, GroupListOp, IncompatOp,
     Op, PairingOp, PeriodOp, SettingsOp, SlotOp, SlotPairingOp, StudentOp, SubjectOp, TeacherOp,
-    WeekPatternOp,
+    WeekOp, WeekPatternOp,
 };
 pub use subjects::{
     Subject, SubjectInterrogationParameters, SubjectParameters, SubjectPeriodicity,
@@ -65,6 +65,7 @@ pub use group_lists::GroupListError;
 pub use incompats::IncompatError;
 pub use pairings::PairingError;
 pub use periods::PeriodError;
+pub use periods::WeekError;
 pub use settings::SettingsError;
 pub use slot_pairings::SlotPairingError;
 pub use slots::SlotError;
@@ -225,6 +226,8 @@ pub enum Error {
     #[error(transparent)]
     Period(#[from] PeriodError),
     #[error(transparent)]
+    Week(#[from] WeekError),
+    #[error(transparent)]
     Subject(#[from] SubjectError),
     #[error(transparent)]
     Teacher(#[from] TeacherError),
@@ -283,6 +286,7 @@ impl InMemoryData for Data {
                 AnnotatedOp::Student(self.apply_student(student_op)?)
             }
             AnnotatedOp::Period(period_op) => AnnotatedOp::Period(self.apply_period(period_op)?),
+            AnnotatedOp::Week(week_op) => AnnotatedOp::Week(self.apply_week(week_op)?),
             AnnotatedOp::Subject(subject_op) => {
                 AnnotatedOp::Subject(self.apply_subject(subject_op)?)
             }

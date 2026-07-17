@@ -208,6 +208,21 @@ impl<I: OrderedKey, T> OrderedTable<I, T> {
             .map(|(_, value)| value)
     }
 
+    /// Returns a mutable reference to the value of the entry with the given
+    /// ID, if any
+    ///
+    /// Only the value is exposed: the key (and hence the table order) cannot
+    /// be changed through this handle.
+    ///
+    /// This is a state-layer-internal mutator: consumer code should treat
+    /// tables as read-only.
+    pub fn get_mut(&mut self, id: &I) -> Option<&mut T> {
+        self.inner
+            .iter_mut()
+            .find(|(entry_id, _)| entry_id == id)
+            .map(|(_, value)| value)
+    }
+
     /// Returns `true` if the table contains an entry with the given ID
     pub fn contains(&self, id: &I) -> bool {
         self.inner.iter().any(|(entry_id, _)| entry_id == id)

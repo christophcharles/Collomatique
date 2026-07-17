@@ -433,6 +433,21 @@ This is ~250 lines of transitional maintenance; it leans on the existing helpers
 
 Gates: standard (workspace tests, 100 seeds, byte-stability — untouched by this commit).
 
+**Deviations landed (vs the sketch above):**
+- Two small primitives were added rather than open-coding their effect inline:
+  `OrderedTable::get_mut` (state crate — mutable access to a period's inline week
+  vec; value-only, cannot disturb key order) and `WeekPattern::move_week(from, to)`
+  (relocates an arbitrary bit, which is exactly the pattern splice `WeekOp::Move`
+  needs — `add_weeks`/`remove_weeks` only handle trivial `true` bits).
+- `gen_week` takes `(rng, pools, invalid)` (no `inner`): the live pools already
+  carry everything it needs (`period_ids`, `week_ids`). Its invalid arm covers a
+  dangling period (`AddFront`), a dangling week (`Remove`) and a dangling-week
+  `Move`; positions are drawn small so most valid-branch ops land, and an
+  occasional out-of-range `Move` exercises `InvalidPosition` as a rejected outcome.
+- **No error-display sweep was needed**: the top-level `Error` is consumed via
+  `if let Error::X(..)` sites, never an exhaustive `match`, so the new `Error::Week`
+  arm compiles everywhere untouched; nothing produces a `WeekError` yet anyway.
+
 ---
 
 ## Commit 3 — composite ops emit week ops; cut/merge preserve content

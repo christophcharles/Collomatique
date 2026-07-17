@@ -76,6 +76,20 @@ impl WeekPattern {
         self.weeks.splice(first_week..last_week, vec![]);
     }
 
+    /// Relocates the bit at `from` so it ends up at `to`, carrying its value.
+    ///
+    /// `to` is interpreted in the vector *after* the bit at `from` has been
+    /// removed. Unlike [add_weeks](Self::add_weeks) / [remove_weeks](Self::remove_weeks),
+    /// which splice trivial `true` bits, this preserves an arbitrary bit —
+    /// which is what lets a week move across periods without losing its
+    /// pattern status.
+    pub fn move_week(&mut self, from: usize, to: usize) {
+        assert!(self.weeks.len() > from);
+        let bit = self.weeks.remove(from);
+        assert!(self.weeks.len() >= to);
+        self.weeks.insert(to, bit);
+    }
+
     pub fn can_remove_weeks(&self, first_week: usize, week_count: usize) -> bool {
         assert!(self.weeks.len() > first_week);
 
