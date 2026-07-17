@@ -803,30 +803,26 @@ fn reconstruct_colloscope(
     block: format::colloscope::Colloscope,
     params: &mem::colloscope_params::Parameters,
 ) -> Result<mem::colloscopes::Colloscope, DecodeError> {
-    // The whole key structure is derived (spec §4.15): the skeleton —
-    // one entry per period, per slot running on it, with a Some/None
-    // cell per week from the merged pattern, plus one group-list entry
-    // per automatic group list — is rebuilt from the parameters, and
-    // the sparse rows are placed onto it.
+    // The whole key structure is derived (spec §4.15): rows are placed
+    // through the sparse colloscope surface, whose canonical form drops
+    // empty cells. The trust-boundary checks that the dense skeleton used
+    // to embody are re-expressed against the parameters — `find_slot` and
+    // `is_interrogation_possible`, which by contract reproduce the dense
+    // "cell is `Some`" rule exactly — and against the group-list params.
     let mut colloscope = mem::colloscopes::Colloscope::new_empty_from_params(params);
 
-    // Global week index -> (period, week position within the period)
-    let mut week_table = Vec::new();
-    for period_id in params.periods.period_ids() {
-        let week_count = params
-            .periods
-            .week_count_of(period_id)
-            .expect("period id from period_ids is valid");
-        for week_in_period in 0..week_count {
-            week_table.push((period_id, week_in_period));
-        }
-    }
+    // Global week index -> week id, in walk order (S11).
+    let week_table: Vec<WeekId> = params
+        .periods
+        .walk()
+        .map(|(_period_id, week_id, _week)| week_id)
+        .collect();
 
     for row in block.interrogations.into_inner() {
-        let cell = usize::try_from(row.week)
+        let week_id = usize::try_from(row.week)
             .ok()
             .and_then(|week| week_table.get(week).copied());
-        let Some((period_id, week_in_period)) = cell else {
+        let Some(week_id) = week_id else {
             // Week out of range
             return Err(DecodeError::InvalidInterrogationCell {
                 slot_id: row.slot_id,
@@ -839,45 +835,44 @@ fn reconstruct_colloscope(
             return Err(DecodeError::UnknownSlotInColloscope(row.slot_id));
         }
 
-        let period = colloscope
-            .period_map
-            .get_mut(&period_id)
-            .expect("Every period has an entry in the colloscope skeleton");
-        let Some(slot) = period.slot_map.get_mut(&slot_id) else {
-            // The slot exists but its subject does not run on the
-            // period containing the week: the cell does not exist
+        if !params.is_interrogation_possible(slot_id, week_id) {
+            // The slot's subject does not run on the week's period, or the
+            // week is inactive for the slot's pattern: the cell does not
+            // exist (mirrors the old dense "slot absent from the period" and
+            // "cell is `None`" rejections, folded into one predicate).
             return Err(DecodeError::InvalidInterrogationCell {
                 slot_id: row.slot_id,
                 week: row.week,
             });
-        };
-        let Some(interrogation) = &mut slot.interrogations[week_in_period] else {
-            // Inactive week: the week's interrogations flag or the
-            // slot's week pattern is off
-            return Err(DecodeError::InvalidInterrogationCell {
-                slot_id: row.slot_id,
-                week: row.week,
-            });
-        };
-        interrogation.assigned_groups = row.assigned_groups.into_inner().into_iter().collect();
+        }
+
+        let assigned_groups: BTreeSet<u32> = row.assigned_groups.into_inner().into_iter().collect();
+        if !assigned_groups.is_empty() {
+            colloscope.set_interrogation(&params.periods, slot_id, week_id, assigned_groups);
+        }
     }
 
     for row in block.group_lists.into_inner() {
-        let Some(group_list) = colloscope
+        let group_list_id = id::<GroupListId>(row.group_list_id);
+        let known_non_prefilled = params
             .group_lists
-            .get_mut(&id::<GroupListId>(row.group_list_id))
-        else {
-            // Unknown id, or a prefilled list (whose composition lives
-            // in the GroupLists block): the skeleton has entries for
-            // exactly the automatic group lists
+            .group_list_map
+            .get(&group_list_id)
+            .is_some_and(|group_list| !group_list.is_prefilled());
+        if !known_non_prefilled {
+            // Unknown id, or a prefilled list (whose composition lives in the
+            // GroupLists block): only automatic group lists carry placements.
             return Err(DecodeError::InvalidColloscopeGroupList(row.group_list_id));
-        };
-        group_list.groups_for_students = row
+        }
+        let placements: BTreeMap<StudentId, u32> = row
             .students
             .into_inner()
             .into_iter()
             .map(|placement| (id::<StudentId>(placement.student_id), placement.group))
             .collect();
+        if !placements.is_empty() {
+            colloscope.set_group_list(group_list_id, placements);
+        }
     }
 
     Ok(colloscope)

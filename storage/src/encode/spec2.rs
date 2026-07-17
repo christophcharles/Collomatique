@@ -553,56 +553,41 @@ fn build_balancing(params: &mem::colloscope_params::Parameters) -> format::balan
 fn build_colloscope(inner: &mem::InnerData) -> format::colloscope::Colloscope {
     // The colloscope key structure is derived, so only non-neutral
     // cells are written: interrogations with assigned groups, group
-    // lists with placed students. Interrogation cells are found by
-    // walking the periods in order (to compute global week indices)
-    // and then sorted by their (slot_id, week) key.
-    let mut interrogation_rows = Vec::new();
-    let mut first_week = 0usize;
-    for period_id in inner.params.periods.period_ids() {
-        let period = inner
-            .colloscope
-            .period_map
-            .get(&period_id)
-            .expect("Every period has an entry in the colloscope");
-        for (slot_id, slot) in &period.slot_map {
-            for (week_in_period, cell) in slot.interrogations.iter().enumerate() {
-                let Some(interrogation) = cell else {
-                    continue;
-                };
-                if interrogation.assigned_groups.is_empty() {
-                    continue;
-                }
-                let week = u32::try_from(first_week + week_in_period)
-                    .expect("Global week indices fit in u32");
-                interrogation_rows.push(format::colloscope::Interrogation {
-                    slot_id: slot_id.inner(),
-                    week,
-                    assigned_groups: format::keyed::UniqueVec::new(
-                        interrogation.assigned_groups.iter().copied().collect(),
-                    )
-                    .expect("Group numbers from a set are distinct"),
-                });
+    // lists with placed students. The sparse surface yields exactly the
+    // non-empty rows; interrogation rows carry `WeekId`s, projected back
+    // to global week indices and sorted by their (slot_id, week) key.
+    let params = &inner.params;
+    let mut interrogation_rows: Vec<_> = inner
+        .colloscope
+        .iter(&params.periods)
+        .map(|((slot_id, week_id), assigned_groups)| {
+            let week = u32::try_from(
+                params
+                    .periods
+                    .global_week_position(week_id)
+                    .expect("colloscope week id is valid"),
+            )
+            .expect("Global week indices fit in u32");
+            format::colloscope::Interrogation {
+                slot_id: slot_id.inner(),
+                week,
+                assigned_groups: format::keyed::UniqueVec::new(
+                    assigned_groups.iter().copied().collect(),
+                )
+                .expect("Group numbers from a set are distinct"),
             }
-        }
-        first_week += inner
-            .params
-            .periods
-            .week_count_of(period_id)
-            .expect("period id from period_ids is valid");
-    }
+        })
+        .collect();
     interrogation_rows.sort_by_key(|row| (row.slot_id, row.week));
 
     let group_list_rows = inner
         .colloscope
-        .group_lists
-        .iter()
-        .filter(|(_group_list_id, group_list)| !group_list.groups_for_students.is_empty())
+        .group_lists_iter()
         .map(
-            |(group_list_id, group_list)| format::colloscope::FilledGroupList {
+            |(group_list_id, groups_for_students)| format::colloscope::FilledGroupList {
                 group_list_id: group_list_id.inner(),
                 students: keyed(
-                    group_list
-                        .groups_for_students
+                    groups_for_students
                         .iter()
                         .map(|(student_id, group)| format::colloscope::StudentPlacement {
                             student_id: student_id.inner(),
