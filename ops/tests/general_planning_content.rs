@@ -243,9 +243,7 @@ fn cutting_a_period_preserves_tail_colloscope_and_pattern() {
             .week_id_at(new_period_id, 0)
             .expect("the new period has a first week");
         assert_eq!(
-            inner
-                .colloscope
-                .interrogation(&inner.params.periods, slot_id, moved_week),
+            inner.colloscope.interrogation(slot_id, moved_week),
             Some(&BTreeSet::from([0])),
             "the interrogation content must travel into the new period",
         );

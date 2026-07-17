@@ -185,7 +185,7 @@ impl ColloscopeUpdateOp {
                 let inner = data.get_data().get_inner_data();
                 let coords: Vec<_> = inner
                     .colloscope
-                    .iter(&inner.params.periods)
+                    .iter()
                     .map(|((slot_id, week_id), _groups)| (slot_id, week_id))
                     .collect();
                 for (slot_id, week_id) in coords {

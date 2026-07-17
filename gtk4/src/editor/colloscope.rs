@@ -698,7 +698,7 @@ impl Component for Colloscope {
 
                 let assigned_groups = self
                     .colloscope
-                    .interrogation(&self.params.periods, slot_id, week_id)
+                    .interrogation(slot_id, week_id)
                     .cloned()
                     .unwrap_or_default();
 

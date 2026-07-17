@@ -559,7 +559,7 @@ fn build_colloscope(inner: &mem::InnerData) -> format::colloscope::Colloscope {
     let params = &inner.params;
     let mut interrogation_rows: Vec<_> = inner
         .colloscope
-        .iter(&params.periods)
+        .iter()
         .map(|((slot_id, week_id), assigned_groups)| {
             let week = u32::try_from(
                 params

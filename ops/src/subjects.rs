@@ -497,9 +497,8 @@ impl SubjectsUpdateOp {
                             .collect();
 
                         for slot_id in subject_slots {
-                            for (week_id, _groups) in inner
-                                .colloscope
-                                .interrogations_for_slot(&inner.params.periods, slot_id)
+                            for (week_id, _groups) in
+                                inner.colloscope.interrogations_for_slot(slot_id)
                             {
                                 let (row_period, _pos) = inner
                                     .params

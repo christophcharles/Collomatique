@@ -24,7 +24,7 @@ pub fn build_config(env: &Parameters, colloscope: &Colloscope) -> ConfigData<Var
         }
     }
 
-    for ((slot_id, week_id), assigned_groups) in colloscope.iter(&env.periods) {
+    for ((slot_id, week_id), assigned_groups) in colloscope.iter() {
         let (period_id, _pos) = env
             .periods
             .week_position(week_id)
@@ -121,7 +121,7 @@ pub fn build_complete_config(env: &Parameters, colloscope: &Colloscope) -> Confi
                     .periods
                     .global_week_position(week_id)
                     .expect("week id is valid");
-                let assigned = colloscope.interrogation(&env.periods, *slot_id, week_id);
+                let assigned = colloscope.interrogation(*slot_id, week_id);
 
                 for group_num in 0..group_list.params.group_names.len() {
                     if assigned.is_some_and(|groups| groups.contains(&(group_num as u32))) {
@@ -197,7 +197,7 @@ pub fn build_colloscope(env: &Parameters, config_data: &ConfigData<Var>) -> Opti
     }
 
     for ((slot_id, week_id), groups) in interrogations {
-        colloscope.set_interrogation(&env.periods, slot_id, week_id, groups);
+        colloscope.set_interrogation(slot_id, week_id, groups);
     }
     for (group_list_id, placements) in group_lists {
         colloscope.set_group_list(group_list_id, placements);

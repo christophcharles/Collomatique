@@ -205,10 +205,7 @@ impl WeekPatternsUpdateOp {
                     if slot.week_pattern != Some(*week_pattern_id) {
                         continue;
                     }
-                    for (week_id, _groups) in inner
-                        .colloscope
-                        .interrogations_for_slot(&inner.params.periods, *slot_id)
-                    {
+                    for (week_id, _groups) in inner.colloscope.interrogations_for_slot(*slot_id) {
                         if !new_excluded.contains(&week_id) {
                             continue;
                         }

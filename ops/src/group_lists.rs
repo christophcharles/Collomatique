@@ -412,10 +412,7 @@ impl GroupListsUpdateOp {
                     };
                     let slot_ids: Vec<_> = subject_slots.map(|(slot_id, _slot)| *slot_id).collect();
                     for slot_id in slot_ids {
-                        for (week_id, groups) in inner
-                            .colloscope
-                            .interrogations_for_slot(&inner.params.periods, slot_id)
-                        {
+                        for (week_id, groups) in inner.colloscope.interrogations_for_slot(slot_id) {
                             let (row_period, _pos) = inner
                                 .params
                                 .periods
@@ -509,9 +506,7 @@ impl GroupListsUpdateOp {
                     };
                     let slot_ids: Vec<_> = subject_slots.map(|(slot_id, _slot)| *slot_id).collect();
                     for slot_id in slot_ids {
-                        for (week_id, _groups) in inner
-                            .colloscope
-                            .interrogations_for_slot(&inner.params.periods, slot_id)
+                        for (week_id, _groups) in inner.colloscope.interrogations_for_slot(slot_id)
                         {
                             let (row_period, _pos) = inner
                                 .params
@@ -709,10 +704,7 @@ impl GroupListsUpdateOp {
                 let slot_ids: Vec<_> = subject_slots.map(|(slot_id, _slot)| *slot_id).collect();
 
                 for slot_id in slot_ids {
-                    for (week_id, groups) in inner
-                        .colloscope
-                        .interrogations_for_slot(&inner.params.periods, slot_id)
-                    {
+                    for (week_id, groups) in inner.colloscope.interrogations_for_slot(slot_id) {
                         let (row_period, _pos) = inner
                             .params
                             .periods
@@ -803,10 +795,7 @@ impl GroupListsUpdateOp {
                     let slot_ids: Vec<_> = subject_slots.map(|(slot_id, _slot)| *slot_id).collect();
 
                     for slot_id in slot_ids {
-                        for (week_id, groups) in inner
-                            .colloscope
-                            .interrogations_for_slot(&inner.params.periods, slot_id)
-                        {
+                        for (week_id, groups) in inner.colloscope.interrogations_for_slot(slot_id) {
                             let (row_period, _pos) = inner
                                 .params
                                 .periods

@@ -195,10 +195,8 @@ impl crate::Data {
                     if slot.week_pattern != Some(*id) {
                         continue;
                     }
-                    for (week, _groups) in self
-                        .inner_data
-                        .colloscope
-                        .interrogations_for_slot(&self.inner_data.params.periods, *slot_id)
+                    for (week, _groups) in
+                        self.inner_data.colloscope.interrogations_for_slot(*slot_id)
                     {
                         let week_runs = self
                             .inner_data

@@ -848,7 +848,7 @@ fn reconstruct_colloscope(
 
         let assigned_groups: BTreeSet<u32> = row.assigned_groups.into_inner().into_iter().collect();
         if !assigned_groups.is_empty() {
-            colloscope.set_interrogation(&params.periods, slot_id, week_id, assigned_groups);
+            colloscope.set_interrogation(slot_id, week_id, assigned_groups);
         }
     }
 

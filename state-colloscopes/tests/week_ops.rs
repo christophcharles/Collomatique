@@ -117,10 +117,7 @@ fn cell_at(
         .periods
         .week_id_at(period, pos)
         .expect("valid position");
-    inner
-        .colloscope
-        .interrogation(&inner.params.periods, slot, week_id)
-        .cloned()
+    inner.colloscope.interrogation(slot, week_id).cloned()
 }
 
 /// `WeekOp::Remove` must refuse to drop a week that a week pattern marks

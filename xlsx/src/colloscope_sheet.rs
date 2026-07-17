@@ -357,10 +357,7 @@ pub fn build(
                     let cell_text = params
                         .periods
                         .week_id_at(pl.period_id, w)
-                        .and_then(|week_id| {
-                            data.colloscope
-                                .interrogation(&params.periods, *slot_id, week_id)
-                        })
+                        .and_then(|week_id| data.colloscope.interrogation(*slot_id, week_id))
                         .map(|assigned_groups| {
                             assigned_groups
                                 .iter()

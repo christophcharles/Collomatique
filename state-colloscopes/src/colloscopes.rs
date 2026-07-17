@@ -57,21 +57,15 @@ impl Colloscope {
 impl Colloscope {
     /// The assigned groups on `(slot, week)`, or `None` when the cell is empty
     /// or absent.
-    pub fn interrogation(
-        &self,
-        _periods: &super::periods::Periods,
-        slot: SlotId,
-        week: WeekId,
-    ) -> Option<&BTreeSet<u32>> {
+    pub fn interrogation(&self, slot: SlotId, week: WeekId) -> Option<&BTreeSet<u32>> {
         self.interrogations.get(&(slot, week))
     }
 
     /// Non-empty rows for one slot, each with its week. Order unspecified.
-    pub fn interrogations_for_slot<'a>(
-        &'a self,
-        _periods: &'a super::periods::Periods,
+    pub fn interrogations_for_slot(
+        &self,
         slot: SlotId,
-    ) -> impl Iterator<Item = (WeekId, &'a BTreeSet<u32>)> + 'a {
+    ) -> impl Iterator<Item = (WeekId, &BTreeSet<u32>)> {
         self.interrogations
             .iter()
             .filter_map(move |((s, w), groups)| (s == slot).then_some((w, groups)))
@@ -79,10 +73,7 @@ impl Colloscope {
 
     /// Every non-empty interrogation row, keyed by `(slot, week)`. Iteration
     /// order is unspecified (currently `(slot, week)` id order).
-    pub fn iter<'a>(
-        &'a self,
-        _periods: &'a super::periods::Periods,
-    ) -> impl Iterator<Item = ((SlotId, WeekId), &'a BTreeSet<u32>)> + 'a {
+    pub fn iter(&self) -> impl Iterator<Item = ((SlotId, WeekId), &BTreeSet<u32>)> {
         self.interrogations.iter()
     }
 
@@ -101,13 +92,7 @@ impl Colloscope {
 
     /// Sets the assigned groups on `(slot, week)`. An empty set clears the row
     /// (canonical form). Never panics — this is a plain table upsert.
-    pub fn set_interrogation(
-        &mut self,
-        _periods: &super::periods::Periods,
-        slot: SlotId,
-        week: WeekId,
-        groups: BTreeSet<u32>,
-    ) {
+    pub fn set_interrogation(&mut self, slot: SlotId, week: WeekId, groups: BTreeSet<u32>) {
         if groups.is_empty() {
             self.interrogations.remove(&(slot, week));
         } else {
@@ -435,11 +420,10 @@ impl crate::Data {
                 let old_groups = self
                     .inner_data
                     .colloscope
-                    .interrogation(&self.inner_data.params.periods, *slot_id, *week_id)
+                    .interrogation(*slot_id, *week_id)
                     .cloned()
                     .unwrap_or_default();
                 self.inner_data.colloscope.set_interrogation(
-                    &self.inner_data.params.periods,
                     *slot_id,
                     *week_id,
                     assigned_groups.clone(),

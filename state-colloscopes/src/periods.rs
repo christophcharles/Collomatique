@@ -625,18 +625,18 @@ impl crate::Data {
                 // this period blocks removal. Vacuous once `PeriodStillHasWeeks`
                 // passes (a week-empty period has no rows), but kept as
                 // belt-and-suspenders.
-                let has_colloscope_row = self
-                    .inner_data
-                    .colloscope
-                    .iter(&self.inner_data.params.periods)
-                    .any(|((_slot_id, week), _groups)| {
-                        self.inner_data
-                            .params
-                            .periods
-                            .week_position(week)
-                            .map(|(p, _pos)| p)
-                            == Some(*period_id)
-                    });
+                let has_colloscope_row =
+                    self.inner_data
+                        .colloscope
+                        .iter()
+                        .any(|((_slot_id, week), _groups)| {
+                            self.inner_data
+                                .params
+                                .periods
+                                .week_position(week)
+                                .map(|(p, _pos)| p)
+                                == Some(*period_id)
+                        });
                 if has_colloscope_row {
                     return Err(PeriodError::NotEmptyPeriodInColloscope(*period_id));
                 }
@@ -845,7 +845,7 @@ impl crate::Data {
         if let Some(slot_id) = self
             .inner_data
             .colloscope
-            .iter(&self.inner_data.params.periods)
+            .iter()
             .find(|((_slot_id, week), _groups)| *week == week_id)
             .map(|((slot_id, _week), _groups)| slot_id)
         {
@@ -900,7 +900,7 @@ impl crate::Data {
             && let Some(slot_id) = self
                 .inner_data
                 .colloscope
-                .iter(&self.inner_data.params.periods)
+                .iter()
                 .find(|((_slot, week), _groups)| *week == week_id)
                 .map(|((slot, _week), _groups)| slot)
         {
@@ -963,7 +963,7 @@ impl crate::Data {
         // subject must run there and the assigned groups must fit the
         // destination association bound.
         let params = &self.inner_data.params;
-        for ((slot_id, week), groups) in self.inner_data.colloscope.iter(&params.periods) {
+        for ((slot_id, week), groups) in self.inner_data.colloscope.iter() {
             if week != week_id {
                 continue;
             }

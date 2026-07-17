@@ -297,7 +297,7 @@ impl Display {
                             }
                             let assigned = self
                                 .colloscope
-                                .interrogation(&self.periods, *slot_id, week_id)
+                                .interrogation(*slot_id, week_id)
                                 .cloned()
                                 .unwrap_or_default();
                             Some(

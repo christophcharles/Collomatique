@@ -464,7 +464,7 @@ impl crate::Data {
                 if let Some(period_id) = self
                     .inner_data
                     .colloscope
-                    .interrogations_for_slot(&self.inner_data.params.periods, *id)
+                    .interrogations_for_slot(*id)
                     .next()
                     .and_then(|(week, _groups)| {
                         self.inner_data
@@ -532,10 +532,7 @@ impl crate::Data {
                 // holds a colloscope row for this slot, the row would strand an
                 // interrogation on an inactive week. Reject before mutating.
                 // Rows key on the week id, so nothing else needs to move.
-                for (week, _groups) in self
-                    .inner_data
-                    .colloscope
-                    .interrogations_for_slot(&self.inner_data.params.periods, *slot_id)
+                for (week, _groups) in self.inner_data.colloscope.interrogations_for_slot(*slot_id)
                 {
                     if !self
                         .inner_data

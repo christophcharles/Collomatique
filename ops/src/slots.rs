@@ -199,10 +199,7 @@ impl SlotsUpdateOp {
                 // excluded by the old pattern), so "active before" is implicit;
                 // only "excluded after" needs checking.
                 let inner = data.get_data().get_inner_data();
-                for (week_id, _groups) in inner
-                    .colloscope
-                    .interrogations_for_slot(&inner.params.periods, *slot_id)
-                {
+                for (week_id, _groups) in inner.colloscope.interrogations_for_slot(*slot_id) {
                     if !new_excluded.contains(&week_id) {
                         continue;
                     }
@@ -222,10 +219,8 @@ impl SlotsUpdateOp {
             }
             SlotsUpdateOp::DeleteSlot(slot_id) => {
                 let inner = data.get_data().get_inner_data();
-                if let Some((week_id, _groups)) = inner
-                    .colloscope
-                    .interrogations_for_slot(&inner.params.periods, *slot_id)
-                    .next()
+                if let Some((week_id, _groups)) =
+                    inner.colloscope.interrogations_for_slot(*slot_id).next()
                 {
                     return Some(CleaningOp {
                         warning: SlotsUpdateWarning::LooseColloscopeDataForSlot(*slot_id),

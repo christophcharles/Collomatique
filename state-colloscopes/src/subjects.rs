@@ -592,7 +592,7 @@ impl crate::Data {
                             let has_row = self
                                 .inner_data
                                 .colloscope
-                                .interrogations_for_slot(periods, *slot_id)
+                                .interrogations_for_slot(*slot_id)
                                 .any(|(week, _groups)| {
                                     periods.week_position(week).map(|(p, _pos)| p)
                                         == Some(period_id)

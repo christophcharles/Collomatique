@@ -64,7 +64,7 @@ impl Colloscope {
                             .map(|&week_id| {
                                 if params.is_interrogation_possible(*slot_id, week_id) {
                                     let assigned_groups = colloscope
-                                        .interrogation(&params.periods, *slot_id, week_id)
+                                        .interrogation(*slot_id, week_id)
                                         .cloned()
                                         .unwrap_or_default();
                                     Some(ColloscopeInterrogation { assigned_groups })

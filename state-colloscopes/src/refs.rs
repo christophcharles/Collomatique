@@ -390,12 +390,8 @@ fn walk_slots_ordering_keys(params: &Parameters, v: &mut impl RefVisitor) {
 /// slot and a week (two-sided, like the assignments mirror), then each
 /// group-list row references its list and every placed student. Rows are
 /// canonical-absent, so a walked row is always non-trivial.
-fn walk_colloscope(
-    colloscope: &Colloscope,
-    periods: &super::periods::Periods,
-    v: &mut impl RefVisitor,
-) {
-    for ((slot_id, week_id), _assigned_groups) in colloscope.iter(periods) {
+fn walk_colloscope(colloscope: &Colloscope, v: &mut impl RefVisitor) {
+    for ((slot_id, week_id), _assigned_groups) in colloscope.iter() {
         let site = RefSite::ColloscopeInterrogation {
             slot: slot_id,
             week: week_id,
@@ -420,7 +416,7 @@ impl InnerData {
         walk_assignments(&self.params, v);
         walk_associations(&self.params, v);
         walk_slots_ordering_keys(&self.params, v);
-        walk_colloscope(&self.colloscope, &self.params.periods, v);
+        walk_colloscope(&self.colloscope, v);
     }
 }
 

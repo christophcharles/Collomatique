@@ -363,7 +363,7 @@ impl GeneralPlanningUpdateOp {
                     collomatique_state_colloscopes::WeekId,
                 > = removed_week_ids.iter().copied().collect();
 
-                for ((slot_id, week_id), _groups) in inner.colloscope.iter(&inner.params.periods) {
+                for ((slot_id, week_id), _groups) in inner.colloscope.iter() {
                     if !removed_week_set.contains(&week_id) {
                         continue;
                     }
@@ -425,7 +425,7 @@ impl GeneralPlanningUpdateOp {
                     return None;
                 };
 
-                for ((slot_id, row_week), _groups) in inner.colloscope.iter(&inner.params.periods) {
+                for ((slot_id, row_week), _groups) in inner.colloscope.iter() {
                     if row_week != week_id {
                         continue;
                     }
@@ -463,7 +463,7 @@ impl GeneralPlanningUpdateOp {
                 > = removed_week_ids.iter().copied().collect();
                 let inner = data.get_data().get_inner_data();
 
-                for ((slot_id, week_id), _groups) in inner.colloscope.iter(&inner.params.periods) {
+                for ((slot_id, week_id), _groups) in inner.colloscope.iter() {
                     if !removed_week_set.contains(&week_id) {
                         continue;
                     }

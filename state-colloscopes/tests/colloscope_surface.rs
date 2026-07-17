@@ -253,13 +253,9 @@ fn empty_colloscope_reads_as_no_rows() {
     let collo = Colloscope::new_empty_from_params(&params);
 
     // Every possible cell is `Some(empty)`; none is a row.
-    assert_eq!(collo.iter(&params.periods).count(), 0);
+    assert_eq!(collo.iter().count(), 0);
     assert_eq!(collo.group_lists_iter().count(), 0);
-    assert!(
-        collo
-            .interrogation(&params.periods, ids.math_slot, ids.w1a)
-            .is_none()
-    );
+    assert!(collo.interrogation(ids.math_slot, ids.w1a).is_none());
     assert!(collo.group_list(ids.group_list).is_none());
 }
 
@@ -272,39 +268,29 @@ fn set_interrogation_round_trips_and_maps_week_id() {
 
     // A week in period 2 sits at a non-zero global offset — this exercises the
     // WeekId → (period, position) translation, not just index 0.
-    collo.set_interrogation(&params.periods, ids.math_slot, ids.w2a, BTreeSet::from([0]));
+    collo.set_interrogation(ids.math_slot, ids.w2a, BTreeSet::from([0]));
 
     assert_eq!(
-        collo.interrogation(&params.periods, ids.math_slot, ids.w2a),
+        collo.interrogation(ids.math_slot, ids.w2a),
         Some(&BTreeSet::from([0]))
     );
     // The other weeks stay absent.
-    assert!(
-        collo
-            .interrogation(&params.periods, ids.math_slot, ids.w1a)
-            .is_none()
-    );
+    assert!(collo.interrogation(ids.math_slot, ids.w1a).is_none());
 
     // `iter` yields exactly the one row, correctly keyed.
-    let rows: Vec<_> = collo.iter(&params.periods).collect();
+    let rows: Vec<_> = collo.iter().collect();
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].0, (ids.math_slot, ids.w2a));
     assert_eq!(rows[0].1, &BTreeSet::from([0]));
 
     // `interrogations_for_slot` agrees.
-    let slot_rows: Vec<_> = collo
-        .interrogations_for_slot(&params.periods, ids.math_slot)
-        .collect();
+    let slot_rows: Vec<_> = collo.interrogations_for_slot(ids.math_slot).collect();
     assert_eq!(slot_rows, vec![(ids.w2a, &BTreeSet::from([0]))]);
 
     // Writing an empty set clears the row.
-    collo.set_interrogation(&params.periods, ids.math_slot, ids.w2a, BTreeSet::new());
-    assert!(
-        collo
-            .interrogation(&params.periods, ids.math_slot, ids.w2a)
-            .is_none()
-    );
-    assert_eq!(collo.iter(&params.periods).count(), 0);
+    collo.set_interrogation(ids.math_slot, ids.w2a, BTreeSet::new());
+    assert!(collo.interrogation(ids.math_slot, ids.w2a).is_none());
+    assert_eq!(collo.iter().count(), 0);
 }
 
 #[test]
