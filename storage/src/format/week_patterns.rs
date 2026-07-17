@@ -14,9 +14,10 @@ pub type WeekPatterns = KeyedVec<WeekPattern>;
 pub struct WeekPattern {
     pub id: u64,
     pub name: String,
-    /// Positional: `weeks[w]` = pattern active on global week `w`.
-    /// Must have exactly one element per week of the schedule (a
-    /// referential constraint, checked at a later layer).
+    /// Positional: `weeks[w]` = pattern active on global week `w`. Well-formed
+    /// files carry exactly one element per week of the schedule (as produced by
+    /// the encoder); decode maps each bit to its week in global order, so any
+    /// surplus bits are ignored and missing ones default to active.
     pub weeks: Vec<bool>,
 }
 

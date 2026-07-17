@@ -13,7 +13,12 @@ pub struct Dialog {
     hidden: bool,
     should_redraw: bool,
     periods: collomatique_state_colloscopes::periods::Periods,
-    week_pattern: collomatique_state_colloscopes::week_patterns::WeekPattern,
+    /// The pattern's name being edited.
+    name: String,
+    /// The pattern edited positionally: one bit per week in global walk order,
+    /// `true` = active (not excluded). Converted to/from the sparse core
+    /// `WeekPattern` (its `excluded_weeks` set) at the `Show`/`Accept` boundary.
+    weeks: Vec<bool>,
     period_entries: FactoryVecDeque<PeriodEntry>,
 }
 
@@ -89,7 +94,7 @@ impl SimpleComponent for Dialog {
                                 set_hexpand: true,
                                 set_title: "Nom du modèle",
                                 #[track(model.should_redraw)]
-                                set_text: &model.week_pattern.name,
+                                set_text: &model.name,
                                 connect_text_notify[sender] => move |widget| {
                                     let text : String = widget.text().into();
                                     sender.input(DialogInput::UpdateName(text));
@@ -162,10 +167,6 @@ impl SimpleComponent for Dialog {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let periods = collomatique_state_colloscopes::periods::Periods::default();
-        let week_pattern = collomatique_state_colloscopes::week_patterns::WeekPattern {
-            name: "Placeholder".into(),
-            weeks: vec![],
-        };
 
         let period_entries = FactoryVecDeque::builder()
             .launch(gtk::Box::default())
@@ -179,7 +180,8 @@ impl SimpleComponent for Dialog {
             hidden: true,
             should_redraw: false,
             periods,
-            week_pattern,
+            name: "Placeholder".into(),
+            weeks: vec![],
             period_entries,
         };
 
@@ -210,8 +212,16 @@ impl SimpleComponent for Dialog {
             DialogInput::Show(periods, week_pattern) => {
                 self.hidden = false;
                 self.should_redraw = true;
+                // Project the sparse core pattern into positional bits, in the
+                // global walk order the UI is indexed by.
+                self.weeks = periods
+                    .walk()
+                    .map(|(_period_id, week_id, _week)| {
+                        !week_pattern.excluded_weeks.contains(&week_id)
+                    })
+                    .collect();
+                self.name = week_pattern.name;
                 self.periods = periods;
-                self.week_pattern = week_pattern;
 
                 self.update_factory();
             }
@@ -220,37 +230,41 @@ impl SimpleComponent for Dialog {
             }
             DialogInput::Accept => {
                 self.hidden = true;
-                sender
-                    .output(DialogOutput::Accepted(self.week_pattern.clone()))
-                    .unwrap();
+                // Fold the positional bits back into the sparse exclusion set.
+                let excluded_weeks = self
+                    .periods
+                    .walk()
+                    .zip(self.weeks.iter())
+                    .filter_map(|((_period_id, week_id, _week), active)| {
+                        (!*active).then_some(week_id)
+                    })
+                    .collect();
+                let week_pattern = collomatique_state_colloscopes::week_patterns::WeekPattern {
+                    name: self.name.clone(),
+                    excluded_weeks,
+                };
+                sender.output(DialogOutput::Accepted(week_pattern)).unwrap();
             }
             DialogInput::UpdateName(new_name) => {
-                if self.week_pattern.name == new_name {
+                if self.name == new_name {
                     return;
                 }
-                self.week_pattern.name = new_name;
+                self.name = new_name;
             }
             DialogInput::UpdateStatusInPattern(week_num, new_status) => {
-                if self
-                    .week_pattern
-                    .weeks
-                    .get(week_num)
-                    .cloned()
-                    .unwrap_or(true)
-                    == new_status
-                {
+                if self.weeks.get(week_num).cloned().unwrap_or(true) == new_status {
                     return;
                 }
-                self.week_pattern.weeks[week_num] = new_status;
+                self.weeks[week_num] = new_status;
             }
             DialogInput::AllWeeksClicked => {
-                for status in &mut self.week_pattern.weeks {
+                for status in &mut self.weeks {
                     *status = true;
                 }
                 self.update_factory();
             }
             DialogInput::NoWeeksClicked => {
-                for status in &mut self.week_pattern.weeks {
+                for status in &mut self.weeks {
                     *status = false;
                 }
                 self.update_factory();
@@ -262,7 +276,7 @@ impl SimpleComponent for Dialog {
                 let first_week_number = global_first_week.monday().iso_week().week();
 
                 let mut next_status = (first_week_number % 2) == 0;
-                for status in &mut self.week_pattern.weeks {
+                for status in &mut self.weeks {
                     *status = next_status;
                     next_status = !next_status;
                 }
@@ -276,7 +290,7 @@ impl SimpleComponent for Dialog {
                 let first_week_number = global_first_week.monday().iso_week().week();
 
                 let mut next_status = (first_week_number % 2) == 1;
-                for status in &mut self.week_pattern.weeks {
+                for status in &mut self.weeks {
                     *status = next_status;
                     next_status = !next_status;
                 }
@@ -287,12 +301,7 @@ impl SimpleComponent for Dialog {
                 let mut next_status = false;
 
                 let status_in_periods = self.build_status_in_periods();
-                for (status, week_desc) in self
-                    .week_pattern
-                    .weeks
-                    .iter_mut()
-                    .zip(status_in_periods.iter())
-                {
+                for (status, week_desc) in self.weeks.iter_mut().zip(status_in_periods.iter()) {
                     if week_desc.interrogations {
                         *status = next_status;
                         next_status = !next_status;
@@ -307,12 +316,7 @@ impl SimpleComponent for Dialog {
                 let mut next_status = true;
 
                 let status_in_periods = self.build_status_in_periods();
-                for (status, week_desc) in self
-                    .week_pattern
-                    .weeks
-                    .iter_mut()
-                    .zip(status_in_periods.iter())
-                {
+                for (status, week_desc) in self.weeks.iter_mut().zip(status_in_periods.iter()) {
                     if week_desc.interrogations {
                         *status = next_status;
                         next_status = !next_status;
@@ -362,7 +366,6 @@ impl Dialog {
                     weeks_in_pattern: (current_first_week..(current_first_week + desc.len()))
                         .map(|index| {
                             *self
-                                .week_pattern
                                 .weeks
                                 .get(index)
                                 .expect("Week pattern should be large enough at this point")

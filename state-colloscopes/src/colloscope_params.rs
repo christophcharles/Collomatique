@@ -39,30 +39,73 @@ pub struct Parameters {
 }
 
 impl Parameters {
-    pub(crate) fn merge_pattern(&self, pattern: &[bool]) -> Vec<bool> {
-        let mut output = Vec::new();
-        for (current_week, (_period_id, _week_id, week_desk)) in self.periods.walk().enumerate() {
-            if !week_desk.interrogations {
-                output.push(false);
-            } else {
-                output.push(pattern[current_week]);
-            }
-        }
-        output
+    /// The single definition of "a slot can carry an interrogation on `week_id`":
+    /// the week runs interrogations and is not excluded by the slot's pattern
+    /// (or the slot has no pattern). Shared by the colloscope, the constraints
+    /// layer and the Python glue.
+    pub fn is_week_active(&self, week_id: WeekId, pattern: Option<WeekPatternId>) -> bool {
+        let week = self.resolve(week_id);
+        week.interrogations
+            && pattern.is_none_or(|p| !self.resolve(p).excluded_weeks.contains(&week_id))
+    }
+
+    /// Positional merged activity of an exclusion set, in global walk order:
+    /// per week, active iff it runs interrogations and is not excluded.
+    ///
+    /// Transitional shape retained for the colloscope maintenance that 1d
+    /// deletes; new code should prefer [`Self::is_week_active`].
+    pub(crate) fn merge_excluded(&self, excluded: &BTreeSet<WeekId>) -> Vec<bool> {
+        self.periods
+            .walk()
+            .map(|(_period_id, week_id, week_desc)| {
+                week_desc.interrogations && !excluded.contains(&week_id)
+            })
+            .collect()
     }
 
     pub(crate) fn get_merged_pattern(
         &self,
         week_pattern_id_opt: Option<WeekPatternId>,
     ) -> Vec<bool> {
-        let pattern = match week_pattern_id_opt {
-            Some(week_pattern_id) => self.week_patterns.get_pattern(week_pattern_id),
-            None => {
-                vec![true; self.periods.count_weeks()]
+        let empty = BTreeSet::new();
+        let excluded = match week_pattern_id_opt {
+            Some(week_pattern_id) => {
+                &self
+                    .week_patterns
+                    .week_pattern_map
+                    .get(&week_pattern_id)
+                    .expect("Week pattern id must be valid for get_merged_pattern")
+                    .excluded_weeks
             }
+            None => &empty,
         };
+        self.merge_excluded(excluded)
+    }
 
-        self.merge_pattern(&pattern)
+    /// Positional *raw* activity of a pattern (true = not excluded), in global
+    /// walk order, ignoring per-week interrogation flags.
+    ///
+    /// Transitional: consumed by the colloscope maintenance that 1d deletes.
+    pub(crate) fn week_pattern_active_bits(
+        &self,
+        week_pattern_id_opt: Option<WeekPatternId>,
+    ) -> Vec<bool> {
+        let empty = BTreeSet::new();
+        let excluded = match week_pattern_id_opt {
+            Some(week_pattern_id) => {
+                &self
+                    .week_patterns
+                    .week_pattern_map
+                    .get(&week_pattern_id)
+                    .expect("Week pattern id must be valid for week_pattern_active_bits")
+                    .excluded_weeks
+            }
+            None => &empty,
+        };
+        self.periods
+            .walk()
+            .map(|(_period_id, week_id, _week_desc)| !excluded.contains(&week_id))
+            .collect()
     }
 }
 
@@ -996,13 +1039,17 @@ impl Parameters {
 
     /// USED INTERNALLY
     ///
-    /// used to check week patterns
-    fn validate_week_pattern_internal(
+    /// Validates a week pattern before committing an op: every excluded week
+    /// must reference a real week (the length invariant of the positional era
+    /// is gone — a pattern is now a sparse exception set).
+    pub(crate) fn validate_week_pattern(
+        &self,
         week_pattern: &week_patterns::WeekPattern,
-        total_week_count: usize,
     ) -> Result<(), WeekPatternError> {
-        if week_pattern.weeks.len() != total_week_count {
-            return Err(WeekPatternError::BadWeekPatternLength);
+        for &week_id in &week_pattern.excluded_weeks {
+            if self.periods.find_week(week_id).is_none() {
+                return Err(WeekPatternError::WeekPatternExcludesInvalidWeek(week_id));
+            }
         }
 
         Ok(())
@@ -1010,26 +1057,13 @@ impl Parameters {
 
     /// USED INTERNALLY
     ///
-    /// used to check settings before commiting a settings op
-    pub(crate) fn validate_week_pattern(
-        &self,
-        week_pattern: &week_patterns::WeekPattern,
-    ) -> Result<(), WeekPatternError> {
-        let total_week_count: usize = self.periods.count_weeks();
-
-        Self::validate_week_pattern_internal(week_pattern, total_week_count)
-    }
-
-    /// USED INTERNALLY
-    ///
     /// checks all the invariants in rules data
-    fn check_week_pattern_data_consistency(
-        &self,
-        total_week_count: usize,
-    ) -> Result<(), InvariantError> {
+    fn check_week_pattern_data_consistency(&self) -> Result<(), InvariantError> {
         for week_pattern in self.week_patterns.week_pattern_map.values() {
-            if Self::validate_week_pattern_internal(week_pattern, total_week_count).is_err() {
-                return Err(InvariantError::InvalidWeekPattern);
+            for &week_id in &week_pattern.excluded_weeks {
+                if self.periods.find_week(week_id).is_none() {
+                    return Err(InvariantError::InvalidWeekPattern);
+                }
             }
         }
         Ok(())
@@ -1132,7 +1166,6 @@ impl Parameters {
         let period_ids = self.build_period_ids();
         let week_pattern_ids = self.build_week_pattern_ids();
         let subject_ids = self.build_subject_ids();
-        let total_week_count = self.periods.count_weeks();
 
         self.check_subjects_data_consistency(&period_ids)?;
         self.check_teachers_data_consistency()?;
@@ -1146,7 +1179,7 @@ impl Parameters {
         self.check_group_lists_data_consistency()?;
         self.check_settings_data_consistency()?;
         self.check_balancing_data_consistency()?;
-        self.check_week_pattern_data_consistency(total_week_count)?;
+        self.check_week_pattern_data_consistency()?;
 
         Ok(())
     }

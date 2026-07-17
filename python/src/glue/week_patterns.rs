@@ -64,20 +64,36 @@ impl WeekPattern {
     }
 }
 
-impl From<collomatique_state_colloscopes::week_patterns::WeekPattern> for WeekPattern {
-    fn from(value: collomatique_state_colloscopes::week_patterns::WeekPattern) -> Self {
+impl WeekPattern {
+    /// Projects the sparse core pattern to the dense positional pyclass view,
+    /// given the schedule's week ids in global walk order.
+    pub fn from_mem(
+        value: collomatique_state_colloscopes::week_patterns::WeekPattern,
+        week_ids: &[collomatique_state_colloscopes::WeekId],
+    ) -> Self {
         WeekPattern {
             name: value.name,
-            weeks: value.weeks,
+            weeks: week_ids
+                .iter()
+                .map(|week_id| !value.excluded_weeks.contains(week_id))
+                .collect(),
         }
     }
-}
 
-impl From<WeekPattern> for collomatique_state_colloscopes::week_patterns::WeekPattern {
-    fn from(value: WeekPattern) -> Self {
+    /// Folds the dense positional pyclass view back into the sparse core
+    /// exclusion set, given the schedule's week ids in global walk order.
+    pub fn into_mem(
+        self,
+        week_ids: &[collomatique_state_colloscopes::WeekId],
+    ) -> collomatique_state_colloscopes::week_patterns::WeekPattern {
+        let excluded_weeks = week_ids
+            .iter()
+            .zip(self.weeks)
+            .filter_map(|(&week_id, active)| (!active).then_some(week_id))
+            .collect();
         collomatique_state_colloscopes::week_patterns::WeekPattern {
-            name: value.name,
-            weeks: value.weeks,
+            name: self.name,
+            excluded_weeks,
         }
     }
 }

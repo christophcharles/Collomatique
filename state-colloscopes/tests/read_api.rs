@@ -117,11 +117,11 @@ fn build_document(app: &mut AppState<Data, String>) -> Built {
         NewId::WeekId,
         "add week"
     );
-    // Week pattern length must match the total week count.
+    // Trivial pattern: excludes no week.
     let week_pattern = apply_new!(
         Op::WeekPattern(WeekPatternOp::Add(WeekPattern {
             name: "WP".into(),
-            weeks: vec![true],
+            excluded_weeks: Default::default(),
         })),
         NewId::WeekPatternId,
         "add week pattern"

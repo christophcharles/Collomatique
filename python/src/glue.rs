@@ -815,18 +815,24 @@ impl CollomatiqueFile {
         self_: PyRef<'_, Self>,
         week_pattern: week_patterns::WeekPattern,
     ) -> PyResult<WeekPatternId> {
+        let week_ids = self_.file.week_ids_in_order();
         let result = self_
             .file
             .apply_update(collomatique_ops::UpdateOp::WeekPatterns(
-                collomatique_ops::WeekPatternsUpdateOp::AddNewWeekPattern(week_pattern.into()),
+                collomatique_ops::WeekPatternsUpdateOp::AddNewWeekPattern(
+                    week_pattern.into_mem(&week_ids),
+                ),
             ));
 
         match result {
             Ok(Some(collomatique_state_colloscopes::NewId::WeekPatternId(id))) => Ok(id.into()),
             Err(UpdateError::WeekPatterns(WeekPatternsUpdateError::AddNewWeekPattern(e))) => {
                 match e {
-                    AddNewWeekPatternError::BadWeekCountInWeekPattern => {
-                        Err(PyValueError::new_err("Bad week count in week pattern"))
+                    AddNewWeekPatternError::WeekPatternExcludesInvalidWeek(week_id) => {
+                        Err(PyValueError::new_err(format!(
+                            "Invalid week {:?} in week pattern",
+                            week_id
+                        )))
                     }
                 }
             }
@@ -839,12 +845,13 @@ impl CollomatiqueFile {
         id: WeekPatternId,
         new_week_pattern: week_patterns::WeekPattern,
     ) -> PyResult<()> {
+        let week_ids = self_.file.week_ids_in_order();
         let result = self_
             .file
             .apply_update(collomatique_ops::UpdateOp::WeekPatterns(
                 collomatique_ops::WeekPatternsUpdateOp::UpdateWeekPattern(
                     id.into(),
-                    new_week_pattern.into(),
+                    new_week_pattern.into_mem(&week_ids),
                 ),
             ));
 
@@ -855,8 +862,11 @@ impl CollomatiqueFile {
                     UpdateWeekPatternError::InvalidWeekPatternId(id) => Err(PyValueError::new_err(
                         format!("Invalid week pattern id {:?}", id),
                     )),
-                    UpdateWeekPatternError::BadWeekCountInWeekPattern => {
-                        Err(PyValueError::new_err("Bad week count in week pattern"))
+                    UpdateWeekPatternError::WeekPatternExcludesInvalidWeek(week_id) => {
+                        Err(PyValueError::new_err(format!(
+                            "Invalid week {:?} in week pattern",
+                            week_id
+                        )))
                     }
                 }
             }
@@ -1381,5 +1391,20 @@ impl InternalFile {
         use collomatique_state::traits::Manager;
         let state = self.state.lock().unwrap();
         state.get_data().get_inner_data().clone()
+    }
+
+    /// The schedule's week ids in global walk order — the coordinate system the
+    /// dense positional pyclass `WeekPattern` view is indexed by.
+    fn week_ids_in_order(&self) -> Vec<collomatique_state_colloscopes::WeekId> {
+        use collomatique_state::traits::Manager;
+        let state = self.state.lock().unwrap();
+        state
+            .get_data()
+            .get_inner_data()
+            .params
+            .periods
+            .walk()
+            .map(|(_period_id, week_id, _week)| week_id)
+            .collect()
     }
 }

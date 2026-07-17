@@ -139,18 +139,19 @@ fn remove_week_blocked_by_non_trivial_pattern() {
         ],
     );
 
+    let weeks = week_ids_of(&app, period);
+
     // A pattern that skips the middle week.
     let Ok(Some(NewId::WeekPatternId(_))) = app.apply(
         Op::WeekPattern(WeekPatternOp::Add(WeekPattern {
             name: "skip middle".into(),
-            weeks: vec![true, false, true],
+            excluded_weeks: std::collections::BTreeSet::from([weeks[1]]),
         })),
         "Add week pattern".into(),
     ) else {
         panic!("adding a week pattern should return a week pattern id");
     };
 
-    let weeks = week_ids_of(&app, period);
     let result = app.apply(
         Op::Week(WeekOp::Remove(weeks[1])),
         "Remove middle week".into(),

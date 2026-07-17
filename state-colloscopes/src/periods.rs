@@ -795,9 +795,10 @@ impl crate::Data {
 
     /// Splices a week into `period_id` at per-period position `per_pos`.
     ///
-    /// A `true` bit is inserted at the new global week in every week pattern
-    /// and one colloscope cell per slot of the period is created (active iff
-    /// the week carries interrogations, since every pattern is trivial here).
+    /// The new week's id belongs to no pattern's exclusion set, so patterns
+    /// need no maintenance. One colloscope cell per slot of the period is
+    /// created (active iff the week carries interrogations, since a fresh week
+    /// is excluded by nobody).
     fn add_week(
         &mut self,
         week_id: WeekId,
@@ -809,43 +810,21 @@ impl crate::Data {
             return Err(WeekError::WeekIdAlreadyExists(week_id));
         }
 
-        let Some((_pos, first_week)) = self
-            .inner_data
-            .params
-            .periods
-            .find_period_position_and_first_week(period_id)
-        else {
-            return Err(WeekError::InvalidPeriodId(period_id));
+        let period_len = match self.inner_data.params.periods.week_count_of(period_id) {
+            Some(len) => len,
+            None => return Err(WeekError::InvalidPeriodId(period_id)),
         };
-        let period_len = self
-            .inner_data
-            .params
-            .periods
-            .week_count_of(period_id)
-            .expect("period id validated above");
         if per_pos > period_len {
             return Err(WeekError::InvalidPosition(period_id, per_pos));
         }
-
-        let global_pos = first_week + per_pos;
 
         self.inner_data
             .params
             .periods
             .insert_week_at(week_id, period_id, per_pos, desc.clone());
 
-        for week_pattern in self
-            .inner_data
-            .params
-            .week_patterns
-            .week_pattern_map
-            .values_mut()
-        {
-            week_pattern.add_weeks(global_pos, 1);
-        }
-
-        // Every pattern bit at `global_pos` is `true` by construction, so the
-        // merged activity of the new week reduces to `desc.interrogations`.
+        // The new week is excluded by no pattern, so its merged activity for
+        // any slot reduces to `desc.interrogations`.
         let cell = if desc.interrogations {
             Some(ColloscopeInterrogation::default())
         } else {
@@ -868,25 +847,19 @@ impl crate::Data {
 
     /// Removes an existing week.
     ///
-    /// Requires every week pattern to be trivial (`true`) at the week (so undo
-    /// restores it exactly) and every colloscope cell to be empty. The reverse
+    /// Requires no week pattern to exclude the week (so undo restores its
+    /// membership exactly) and every colloscope cell to be empty. The reverse
     /// re-adds the week at the same spot with the same id.
     fn remove_week(&mut self, week_id: WeekId) -> Result<AnnotatedWeekOp, WeekError> {
         let Some((period_id, per_pos)) = self.inner_data.params.periods.week_position(week_id)
         else {
             return Err(WeekError::InvalidWeekId(week_id));
         };
-        let global_pos = self
-            .inner_data
-            .params
-            .periods
-            .global_week_position(week_id)
-            .expect("week id validated above");
 
         for (week_pattern_id, week_pattern) in
             self.inner_data.params.week_patterns.week_pattern_map.iter()
         {
-            if !week_pattern.can_remove_weeks(global_pos, 1) {
+            if week_pattern.excluded_weeks.contains(&week_id) {
                 return Err(WeekError::NonTrivialWeekPattern(week_id, week_pattern_id));
             }
         }
@@ -923,16 +896,6 @@ impl crate::Data {
 
         let (_removed_period, _removed_pos, removed_desc) =
             self.inner_data.params.periods.remove_week_entry(week_id);
-
-        for week_pattern in self
-            .inner_data
-            .params
-            .week_patterns
-            .week_pattern_map
-            .values_mut()
-        {
-            week_pattern.remove_weeks(global_pos, 1);
-        }
 
         for collo_slot in self
             .inner_data
@@ -1006,11 +969,12 @@ impl crate::Data {
                 .slots
                 .find_slot(*slot_id)
                 .expect("slot id from colloscope is valid");
-            let new_pattern = slot.build_pattern_for_new_period(
-                &new_descs,
-                first_week,
-                &self.inner_data.params.week_patterns,
-            );
+            let active_bits = self
+                .inner_data
+                .params
+                .week_pattern_active_bits(slot.week_pattern);
+            let new_pattern =
+                slot.build_pattern_for_new_period(&new_descs, first_week, &active_bits);
             if !collo_slot.check_empty_on_removed_weeks(&new_pattern) {
                 return Err(WeekError::NotCompatibleSlotInColloscope(week_id, *slot_id));
             }
@@ -1169,16 +1133,8 @@ impl crate::Data {
             .periods
             .move_week_entry(week_id, dest_period, dest_pos);
 
-        // 2. Move each pattern bit to the destination position.
-        for week_pattern in self
-            .inner_data
-            .params
-            .week_patterns
-            .week_pattern_map
-            .values_mut()
-        {
-            week_pattern.move_week(src_global, dest_global);
-        }
+        // 2. Patterns need no maintenance: exclusion is keyed by the week id,
+        //    which is unchanged by the move — membership travels with the id.
 
         // 3. Detach the source cells.
         for collo_slot in self

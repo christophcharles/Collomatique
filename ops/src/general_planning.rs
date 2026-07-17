@@ -321,7 +321,7 @@ impl GeneralPlanningUpdateOp {
             GeneralPlanningUpdateOp::UpdateFirstWeek(_) => None,
             GeneralPlanningUpdateOp::AddNewPeriod(_) => None,
             GeneralPlanningUpdateOp::UpdatePeriodWeekCount(period_id, week_count) => {
-                let Some((_pos, first_week)) = data
+                let Some((_pos, _first_week)) = data
                     .get_data()
                     .get_inner_data()
                     .params
@@ -370,8 +370,21 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
-                let first_week_to_remove = first_week + *week_count;
-                let weeks_to_remove = old_week_count - *week_count;
+                // Week ids of the shrunk-off tail (per-period positions
+                // `week_count..old_week_count`). A pattern excluding any of them
+                // would block the elementary week removals, so it must be
+                // cleaned (its exclusions on those weeks dropped) first.
+                let removed_week_ids: Vec<collomatique_state_colloscopes::WeekId> = (*week_count
+                    ..old_week_count)
+                    .map(|pos| {
+                        data.get_data()
+                            .get_inner_data()
+                            .params
+                            .periods
+                            .week_id_at(*period_id, pos)
+                            .expect("position within the period is valid")
+                    })
+                    .collect();
 
                 for (week_pattern_id, week_pattern) in data
                     .get_data()
@@ -382,9 +395,14 @@ impl GeneralPlanningUpdateOp {
                     .iter()
                 {
                     let week_pattern_id = &week_pattern_id;
-                    if !week_pattern.can_remove_weeks(first_week_to_remove, weeks_to_remove) {
+                    if removed_week_ids
+                        .iter()
+                        .any(|w| week_pattern.excluded_weeks.contains(w))
+                    {
                         let mut new_week_patten = week_pattern.clone();
-                        new_week_patten.clean_weeks(first_week_to_remove, weeks_to_remove);
+                        for w in &removed_week_ids {
+                            new_week_patten.excluded_weeks.remove(w);
+                        }
 
                         return Some(CleaningOp {
                             warning: GeneralPlanningUpdateWarning::LooseWeekPatternDataForPeriod(
@@ -442,22 +460,16 @@ impl GeneralPlanningUpdateOp {
             }
             GeneralPlanningUpdateOp::UpdateWeekAnnotation(_, _, _) => None,
             GeneralPlanningUpdateOp::DeletePeriod(period_id) => {
-                let Some((_pos, first_week)) = data
+                let Some(removed_week_ids) = data
                     .get_data()
                     .get_inner_data()
                     .params
                     .periods
-                    .find_period_position_and_first_week(*period_id)
+                    .find_period(*period_id)
+                    .map(|weeks| weeks.clone())
                 else {
                     return None;
                 };
-                let week_count = data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .periods
-                    .week_count_of(*period_id)
-                    .expect("period id is valid");
 
                 let colloscope_period = data
                     .get_data()
@@ -499,9 +511,14 @@ impl GeneralPlanningUpdateOp {
                     .iter()
                 {
                     let week_pattern_id = &week_pattern_id;
-                    if !week_pattern.can_remove_weeks(first_week, week_count) {
+                    if removed_week_ids
+                        .iter()
+                        .any(|w| week_pattern.excluded_weeks.contains(w))
+                    {
                         let mut new_week_patten = week_pattern.clone();
-                        new_week_patten.clean_weeks(first_week, week_count);
+                        for w in &removed_week_ids {
+                            new_week_patten.excluded_weeks.remove(w);
+                        }
 
                         return Some(CleaningOp {
                             warning: GeneralPlanningUpdateWarning::LooseWeekPatternDataForPeriod(

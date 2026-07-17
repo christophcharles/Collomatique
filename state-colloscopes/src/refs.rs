@@ -95,10 +95,10 @@ pub enum RefSite {
     SettingsStudentKey,
     /// `balancing.subjects` has a per-subject entry keyed by a subject
     BalancingSubjectKey,
-    /// Every week pattern spans every period (its length is coupled to the total
-    /// number of weeks). `non_trivial` mirrors the delete-blocking predicate:
-    /// `true` when removing this period's weeks from the pattern would change it
-    /// (`!WeekPattern::can_remove_weeks`).
+    /// A week pattern references a period through the weeks it excludes.
+    /// `non_trivial` is `true` when the pattern excludes at least one of the
+    /// period's weeks (removing them — required before deleting the period — is
+    /// then blocked by the per-week `NonTrivialWeekPattern` guard).
     WeekPatternLengthCoupling {
         week_pattern: WeekPatternId,
         non_trivial: bool,
@@ -302,24 +302,18 @@ fn walk_balancing_keys(params: &Parameters, v: &mut impl RefVisitor) {
 }
 
 fn walk_week_pattern_coupling(params: &Parameters, v: &mut impl RefVisitor) {
-    // Cumulative first-week offset per period, in period order, matching
-    // `Periods::find_period_position_and_first_week`.
-    let mut spans = Vec::new();
-    let mut first_week = 0usize;
-    for period_id in params.periods.period_ids() {
-        let week_count = params
-            .periods
-            .week_count_of(period_id)
-            .expect("period id from period_ids is valid");
-        spans.push((period_id, first_week, week_count));
-        first_week += week_count;
-    }
     for (wp_id, wp) in params.week_patterns.week_pattern_map.iter() {
-        for &(period_id, first_week, week_count) in &spans {
-            // Removing zero weeks is always trivial (and `can_remove_weeks`
-            // would assert on an empty span); otherwise mirror the exact
-            // delete-blocking predicate (periods.rs Remove path).
-            let non_trivial = week_count != 0 && !wp.can_remove_weeks(first_week, week_count);
+        for period_id in params.periods.period_ids() {
+            // `non_trivial` when the pattern excludes at least one of this
+            // period's weeks. Deleting the period requires first removing its
+            // weeks, and each such removal is blocked by the per-week
+            // `NonTrivialWeekPattern` guard (periods.rs Remove path) — so this
+            // mirrors the transitive delete-blocking predicate.
+            let week_ids = params
+                .periods
+                .find_period(period_id)
+                .expect("period id from period_ids is valid");
+            let non_trivial = week_ids.iter().any(|w| wp.excluded_weeks.contains(w));
             v.period_ref(
                 period_id,
                 RefSite::WeekPatternLengthCoupling {

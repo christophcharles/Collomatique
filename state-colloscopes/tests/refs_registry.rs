@@ -156,11 +156,11 @@ fn walk_covers_every_site_in_order() {
     );
 
     // A week pattern that is trivial on p0 (week kept) but non-trivial on p1
-    // (week dropped) — exercises both `WeekPatternLengthCoupling` polarities.
+    // (week w1 excluded) — exercises both `WeekPatternLengthCoupling` polarities.
     let wp = apply_new!(
         Op::WeekPattern(WeekPatternOp::Add(WeekPattern {
             name: "WP".into(),
-            weeks: vec![true, false],
+            excluded_weeks: std::collections::BTreeSet::from([w1]),
         })),
         NewId::WeekPatternId,
         "add week pattern"

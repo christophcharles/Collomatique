@@ -289,7 +289,8 @@ fn reconstruct(blocks: Blocks) -> Result<InnerData, DecodeError> {
     let teachers = reconstruct_teachers(blocks.teachers.unwrap_or_default());
     let students = reconstruct_students(blocks.students.unwrap_or_default());
     let assignments = reconstruct_assignments(blocks.assignments.unwrap_or_default(), &periods)?;
-    let week_patterns = reconstruct_week_patterns(blocks.week_patterns.unwrap_or_default());
+    let week_patterns =
+        reconstruct_week_patterns(blocks.week_patterns.unwrap_or_default(), &periods);
     let slots = reconstruct_slots(blocks.slots.unwrap_or_default())?;
     let incompats = reconstruct_incompats(blocks.incompatibilities.unwrap_or_default())?;
     let group_lists = reconstruct_group_lists(
@@ -523,17 +524,31 @@ fn reconstruct_assignments(
 
 fn reconstruct_week_patterns(
     block: format::week_patterns::WeekPatterns,
+    periods: &mem::periods::Periods,
 ) -> mem::week_patterns::WeekPatterns {
+    // The frozen positional bitmask carries one bit per week in global walk
+    // order; a `false` bit excludes that week. Zipping against the walk order
+    // maps each bit back to its synthesized week id (and gracefully ignores any
+    // trailing bits past the schedule — such a file is rejected by layer 3).
+    let week_ids: Vec<WeekId> = periods
+        .walk()
+        .map(|(_period_id, week_id, _week)| week_id)
+        .collect();
     mem::week_patterns::WeekPatterns {
         week_pattern_map: block
             .into_inner()
             .into_iter()
             .map(|week_pattern| {
+                let excluded_weeks = week_ids
+                    .iter()
+                    .zip(week_pattern.weeks)
+                    .filter_map(|(&week_id, active)| (!active).then_some(week_id))
+                    .collect();
                 (
                     id::<WeekPatternId>(week_pattern.id),
                     mem::week_patterns::WeekPattern {
                         name: week_pattern.name,
-                        weeks: week_pattern.weeks,
+                        excluded_weeks,
                     },
                 )
             })

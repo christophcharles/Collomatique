@@ -70,30 +70,9 @@ pub fn extract_week_pattern(
     params: &Parameters,
     week_pattern_id: Option<WeekPatternId>,
 ) -> Vec<bool> {
-    let mut output = vec![];
-
-    let week_pattern = match week_pattern_id {
-        Some(id) => params
-            .week_patterns
-            .week_pattern_map
-            .get(&id)
-            .expect("WeekPatternId should be valid")
-            .weeks
-            .clone(),
-        None => vec![true; params.periods.count_weeks()],
-    };
-
-    for (week_num, (_period_id, _week_id, week_desc)) in params.periods.walk().enumerate() {
-        if !week_desc.interrogations {
-            output.push(false);
-            continue;
-        }
-
-        let week_status = week_pattern
-            .get(week_num)
-            .expect("Week number should be valid");
-        output.push(*week_status);
-    }
-
-    output
+    params
+        .periods
+        .walk()
+        .map(|(_period_id, week_id, _week_desc)| params.is_week_active(week_id, week_pattern_id))
+        .collect()
 }

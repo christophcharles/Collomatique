@@ -303,6 +303,13 @@ fn build_assignments(
 fn build_week_patterns(
     params: &mem::colloscope_params::Parameters,
 ) -> format::week_patterns::WeekPatterns {
+    // Project the sparse exclusion set back to the frozen positional bitmask:
+    // one bit per week in global walk order, `true` iff not excluded.
+    let week_ids: Vec<_> = params
+        .periods
+        .walk()
+        .map(|(_period_id, week_id, _week)| week_id)
+        .collect();
     keyed(
         params
             .week_patterns
@@ -312,7 +319,10 @@ fn build_week_patterns(
                 |(week_pattern_id, week_pattern)| format::week_patterns::WeekPattern {
                     id: week_pattern_id.inner(),
                     name: week_pattern.name.clone(),
-                    weeks: week_pattern.weeks.clone(),
+                    weeks: week_ids
+                        .iter()
+                        .map(|week_id| !week_pattern.excluded_weeks.contains(week_id))
+                        .collect(),
                 },
             )
             .collect(),

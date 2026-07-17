@@ -76,7 +76,6 @@ fn weighted(rng: &mut ChaCha8Rng, weights: &[u32]) -> usize {
 struct Pools {
     period_ids: Vec<PeriodId>,
     week_ids: Vec<WeekId>,
-    total_weeks: usize,
     student_ids: Vec<StudentId>,
     subject_ids: Vec<SubjectId>,
     interrogation_subject_ids: Vec<SubjectId>,
@@ -164,7 +163,6 @@ impl Pools {
             .collect();
 
         Pools {
-            total_weeks: params.periods.count_weeks(),
             period_ids,
             week_ids,
             student_ids: params.students.student_map.keys().collect(),
@@ -524,11 +522,17 @@ fn gen_assignment(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invali
 fn gen_week_pattern(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
     if invalid {
         let op = match rng.random_range(0..3) {
-            0 => WeekPatternOp::Add(synth::week_pattern_invalid_length(rng, pools.total_weeks)),
-            1 if !pools.week_pattern_ids.is_empty() => WeekPatternOp::Update(
-                pick(rng, &pools.week_pattern_ids),
-                synth::week_pattern_invalid_length(rng, pools.total_weeks),
-            ),
+            0 => {
+                let dangling_week = unsafe { WeekId::new(dangling(rng)) };
+                WeekPatternOp::Add(synth::week_pattern_excluding(rng, dangling_week))
+            }
+            1 if !pools.week_pattern_ids.is_empty() => {
+                let dangling_week = unsafe { WeekId::new(dangling(rng)) };
+                WeekPatternOp::Update(
+                    pick(rng, &pools.week_pattern_ids),
+                    synth::week_pattern_excluding(rng, dangling_week),
+                )
+            }
             _ => WeekPatternOp::Remove(unsafe { WeekPatternId::new(dangling(rng)) }),
         };
         return Op::WeekPattern(op);
@@ -538,10 +542,10 @@ fn gen_week_pattern(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
     let update_w = if n > 0 { 3 } else { 0 };
     let remove_w = if n > 0 { 2 } else { 0 };
     let op = match weighted(rng, &[add_w, update_w, remove_w]) {
-        0 => WeekPatternOp::Add(synth::week_pattern(rng, pools.total_weeks)),
+        0 => WeekPatternOp::Add(synth::week_pattern(rng, &pools.week_ids)),
         1 => WeekPatternOp::Update(
             pick(rng, &pools.week_pattern_ids),
-            synth::week_pattern(rng, pools.total_weeks),
+            synth::week_pattern(rng, &pools.week_ids),
         ),
         _ => WeekPatternOp::Remove(pick(rng, &pools.week_pattern_ids)),
     };

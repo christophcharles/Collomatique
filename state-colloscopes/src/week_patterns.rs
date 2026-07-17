@@ -2,11 +2,13 @@
 //!
 //! This module defines the relevant types to describes the week patterns
 
+use std::collections::BTreeSet;
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::Table;
-use crate::ids::{IncompatId, SlotId, WeekPatternId};
+use crate::ids::{IncompatId, SlotId, WeekId, WeekPatternId};
 use crate::ops::AnnotatedWeekPatternOp;
 
 /// Description of the week patterns
@@ -14,102 +16,25 @@ use crate::ops::AnnotatedWeekPatternOp;
 pub struct WeekPatterns {
     /// Week patterns
     ///
-    /// Each item associate to a single ID a sequence of weeks
+    /// Each item associates a single ID with the set of weeks it disables.
     pub week_pattern_map: Table<WeekPatternId, WeekPattern>,
 }
 
-impl WeekPatterns {
-    pub(crate) fn get_pattern(&self, week_pattern_id: WeekPatternId) -> Vec<bool> {
-        self.week_pattern_map
-            .get(&week_pattern_id)
-            .expect("Week pattern id must be valid for get_pattern")
-            .weeks
-            .clone()
-    }
-}
-
 /// Description of a week pattern
+///
+/// A pattern is stored as the *exception set* of the weeks it disables; every
+/// week not listed is active. This is the sparse dual of the historical
+/// positional bitmask.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WeekPattern {
     /// Name of the week pattern for identification
     pub name: String,
-    /// Weeks the interrogation happens on
+    /// Weeks the pattern *disables*. Absent = active (the trivial value).
     ///
-    /// If the Vec is shorter than the total amount of weeks
-    /// it is assumed the interrogation happens on all the
-    /// remaining weeks.
-    ///
-    /// If the Vec is longer, the extra weeks are ignored
-    /// They are kept in case some one expands again the number of weeks.
-    pub weeks: Vec<bool>,
-}
-
-impl WeekPattern {
-    pub fn add_weeks(&mut self, first_week: usize, week_count: usize) {
-        assert!(self.weeks.len() >= first_week);
-
-        self.weeks
-            .splice(first_week..first_week, vec![true; week_count]);
-    }
-
-    pub fn clean_weeks(&mut self, first_week: usize, week_count: usize) {
-        assert!(self.weeks.len() > first_week);
-
-        let last_week = first_week + week_count;
-        assert!(self.weeks.len() >= last_week);
-
-        for week in &mut self.weeks[first_week..last_week] {
-            *week = true;
-        }
-    }
-
-    pub fn remove_weeks(&mut self, first_week: usize, week_count: usize) {
-        // `first_week == len` is a valid boundary when removing zero weeks (an
-        // empty splice past the end), e.g. removing a completely emptied period
-        // that sits at the very end of the schedule.
-        assert!(self.weeks.len() >= first_week);
-
-        let last_week = first_week + week_count;
-        assert!(self.weeks.len() >= last_week);
-
-        for week in &self.weeks[first_week..last_week] {
-            assert!(*week);
-        }
-
-        self.weeks.splice(first_week..last_week, vec![]);
-    }
-
-    /// Relocates the bit at `from` so it ends up at `to`, carrying its value.
-    ///
-    /// `to` is interpreted in the vector *after* the bit at `from` has been
-    /// removed. Unlike [add_weeks](Self::add_weeks) / [remove_weeks](Self::remove_weeks),
-    /// which splice trivial `true` bits, this preserves an arbitrary bit —
-    /// which is what lets a week move across periods without losing its
-    /// pattern status.
-    pub fn move_week(&mut self, from: usize, to: usize) {
-        assert!(self.weeks.len() > from);
-        let bit = self.weeks.remove(from);
-        assert!(self.weeks.len() >= to);
-        self.weeks.insert(to, bit);
-    }
-
-    pub fn can_remove_weeks(&self, first_week: usize, week_count: usize) -> bool {
-        // `first_week == len` is a valid boundary when removing zero weeks (the
-        // empty range past the end), e.g. a completely emptied period sitting at
-        // the very end of the schedule.
-        assert!(self.weeks.len() >= first_week);
-
-        let last_week = first_week + week_count;
-        assert!(self.weeks.len() >= last_week);
-
-        for week in &self.weeks[first_week..last_week] {
-            if !*week {
-                return false;
-            }
-        }
-
-        true
-    }
+    /// May reference non-interrogation weeks: the bit is preserved regardless
+    /// of the week's `interrogations` flag (byte-stability, decision 12). The
+    /// merged activity of a week is `week.interrogations ∧ ¬excluded`.
+    pub excluded_weeks: BTreeSet<WeekId>,
 }
 
 /// Errors for week pattern operations
@@ -133,9 +58,9 @@ pub enum WeekPatternError {
     #[error("week pattern id ({0:?}) is referenced by an incompat ({1:?})")]
     WeekPatternStillHasAssociatedIncompat(WeekPatternId, IncompatId),
 
-    /// The week pattern does not have the right length
-    #[error("week pattern does not have the right length")]
-    BadWeekPatternLength,
+    /// The week pattern excludes a week that does not exist
+    #[error("week pattern excludes an invalid week ({0:?})")]
+    WeekPatternExcludesInvalidWeek(WeekId),
 
     /// The slot in colloscope is incompatible with the new week pattern
     #[error("slot {0:?} in colloscope is not compatible with the new week pattern")]
@@ -222,7 +147,7 @@ impl crate::Data {
                 let new_merged_pattern = self
                     .inner_data
                     .params
-                    .merge_pattern(&new_week_pattern.weeks);
+                    .merge_excluded(&new_week_pattern.excluded_weeks);
 
                 let Some(current_week_pattern) = self
                     .inner_data

@@ -56,6 +56,15 @@ fn cutting_a_period_preserves_tail_colloscope_and_pattern() {
     // A four-week period; we will cut after two weeks, so weeks 2 and 3 form
     // the tail that must carry its content into the new period.
     let period_id = add_active_period(&mut app_state, 4);
+    // The week at the tail (global position 3) the pattern will exclude; its id
+    // is preserved across cut/merge, so the exclusion set stays byte-identical.
+    let excluded_week = app_state
+        .get_data()
+        .get_inner_data()
+        .params
+        .periods
+        .week_id_at(period_id, 3)
+        .expect("the period has a fourth week");
 
     let Ok(Some(NewId::SubjectId(subject_id))) = app_state.apply(
         Op::Subject(SubjectOp::AddAfter(
@@ -133,14 +142,13 @@ fn cutting_a_period_preserves_tail_colloscope_and_pattern() {
         panic!("Unexpected result after assigning the group list");
     };
 
-    // A week pattern with a single non-trivial (false) bit on week 3 — the
-    // tail. It is not attached to any slot; we only track that `WeekOp::Move`
-    // carries its bit unchanged across the cut. Its length matches the total
-    // week count (four).
+    // A week pattern that excludes the tail week (global position 3). It is not
+    // attached to any slot; we only track that `WeekOp::Move` carries the
+    // exclusion unchanged across the cut (membership travels with the week id).
     let Ok(Some(NewId::WeekPatternId(week_pattern_id))) = app_state.apply(
         Op::WeekPattern(WeekPatternOp::Add(WeekPattern {
             name: "Impaire".into(),
-            weeks: vec![true, true, true, false],
+            excluded_weeks: BTreeSet::from([excluded_week]),
         })),
         desc("Add week pattern"),
     ) else {
@@ -170,9 +178,9 @@ fn cutting_a_period_preserves_tail_colloscope_and_pattern() {
         .week_pattern_map
         .get(&week_pattern_id)
         .expect("week pattern is live")
-        .weeks
+        .excluded_weeks
         .clone();
-    assert_eq!(pattern_before, vec![true, true, true, false]);
+    assert_eq!(pattern_before, BTreeSet::from([excluded_week]));
 
     // Cut the period after two weeks: weeks 2 and 3 move to a fresh period.
     let new_period_id =
@@ -206,8 +214,8 @@ fn cutting_a_period_preserves_tail_colloscope_and_pattern() {
         "the new period should hold the two tail weeks",
     );
 
-    // The week-pattern bits are unchanged (global positions are preserved by a
-    // cut): the false bit is still on the last global week.
+    // The week-pattern exclusion is unchanged (the week keeps its id across a
+    // cut): the excluded week is still excluded.
     assert_eq!(
         app_state
             .get_data()
@@ -217,9 +225,9 @@ fn cutting_a_period_preserves_tail_colloscope_and_pattern() {
             .week_pattern_map
             .get(&week_pattern_id)
             .expect("week pattern is still live")
-            .weeks,
-        vec![true, true, true, false],
-        "cutting a period must not disturb week-pattern bits",
+            .excluded_weeks,
+        BTreeSet::from([excluded_week]),
+        "cutting a period must not disturb week-pattern exclusions",
     );
 
     // The filled cell moved into the new period at local week 0.
@@ -283,8 +291,8 @@ fn cutting_a_period_preserves_tail_colloscope_and_pattern() {
             .week_pattern_map
             .get(&week_pattern_id)
             .expect("week pattern is still live")
-            .weeks,
-        vec![true, true, true, false],
-        "merging must not disturb week-pattern bits either",
+            .excluded_weeks,
+        BTreeSet::from([excluded_week]),
+        "merging must not disturb week-pattern exclusions either",
     );
 }

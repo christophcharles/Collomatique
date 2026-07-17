@@ -49,6 +49,14 @@ impl TryFrom<collomatique_state_colloscopes::colloscope_params::Parameters> for 
         // outer maps from the full period list to keep that shape.
         let all_period_ids: Vec<collomatique_state_colloscopes::PeriodId> =
             value.periods.period_ids().collect();
+        // The dense positional pyclass `WeekPattern` view is indexed by the
+        // schedule's week ids in global walk order; snapshot them before
+        // `value.periods` is consumed.
+        let week_ids: Vec<collomatique_state_colloscopes::WeekId> = value
+            .periods
+            .walk()
+            .map(|(_period_id, week_id, _week)| week_id)
+            .collect();
         // The sparse core only stores non-empty assignment rows, but the
         // Python-visible shape is dense (one entry per period × non-excluded
         // subject). Snapshot each subject's excluded-period set so the dense
@@ -149,10 +157,7 @@ impl TryFrom<collomatique_state_colloscopes::colloscope_params::Parameters> for 
                 .map(|(week_pattern_id, week_pattern)| {
                     (
                         week_pattern_id.into(),
-                        WeekPattern {
-                            name: week_pattern.name,
-                            weeks: week_pattern.weeks,
-                        },
+                        WeekPattern::from_mem(week_pattern, &week_ids),
                     )
                 })
                 .collect(),

@@ -75,24 +75,24 @@ pub struct Slot {
 }
 
 impl Slot {
+    /// Builds the merged (interrogation ∧ pattern) activity for a period whose
+    /// descriptions are `new_period_desc`, given the slot's pattern raw activity
+    /// bits over the whole schedule (`active_bits`, global walk order, true =
+    /// not excluded) and the period's global `first_week` offset.
+    ///
+    /// Transitional: consumed by the colloscope maintenance that 1d deletes.
     pub(crate) fn build_pattern_for_new_period(
         &self,
         new_period_desc: &[super::periods::WeekDesc],
         first_week: usize,
-        week_patterns: &super::week_patterns::WeekPatterns,
+        active_bits: &[bool],
     ) -> Vec<bool> {
         let mut base_pattern: Vec<_> = new_period_desc.iter().map(|x| x.interrogations).collect();
 
-        if let Some(week_pattern_id) = self.week_pattern {
-            let pattern = week_patterns.get_pattern(week_pattern_id);
-            for (i, base_status) in base_pattern.iter_mut().enumerate() {
-                let week_pattern_status = match pattern.get(first_week + i) {
-                    Some(val) => *val,
-                    None => true,
-                };
-                if !week_pattern_status {
-                    *base_status = false;
-                }
+        for (i, base_status) in base_pattern.iter_mut().enumerate() {
+            let week_pattern_status = active_bits.get(first_week + i).copied().unwrap_or(true);
+            if !week_pattern_status {
+                *base_status = false;
             }
         }
 

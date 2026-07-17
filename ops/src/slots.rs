@@ -176,13 +176,7 @@ impl SlotsUpdateOp {
                 let old_week_pattern_id = old_slot.week_pattern;
                 let new_week_pattern_id = slot.week_pattern;
 
-                let week_count = data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .periods
-                    .count_weeks();
-                let old_week_pattern = match old_week_pattern_id {
+                let old_excluded = match old_week_pattern_id {
                     Some(id) => data
                         .get_data()
                         .get_inner_data()
@@ -191,11 +185,11 @@ impl SlotsUpdateOp {
                         .week_pattern_map
                         .get(&id)
                         .expect("Week pattern ID should be valid")
-                        .weeks
+                        .excluded_weeks
                         .clone(),
-                    None => vec![true; week_count],
+                    None => std::collections::BTreeSet::new(),
                 };
-                let new_week_pattern = match new_week_pattern_id {
+                let new_excluded = match new_week_pattern_id {
                     Some(id) => {
                         let Some(wp) = data
                             .get_data()
@@ -207,12 +201,11 @@ impl SlotsUpdateOp {
                         else {
                             return None;
                         };
-                        wp.weeks.clone()
+                        wp.excluded_weeks.clone()
                     }
-                    None => vec![true; week_count],
+                    None => std::collections::BTreeSet::new(),
                 };
 
-                let mut first_week_in_period = 0usize;
                 let period_ids: Vec<_> = data
                     .get_data()
                     .get_inner_data()
@@ -245,9 +238,16 @@ impl SlotsUpdateOp {
                             continue;
                         }
 
-                        let current_week = first_week_in_period + week_in_period;
-                        let old_status = old_week_pattern[current_week];
-                        let new_status = new_week_pattern[current_week];
+                        let week_id = data
+                            .get_data()
+                            .get_inner_data()
+                            .params
+                            .periods
+                            .week_id_at(*period_id, week_in_period)
+                            .expect("position within the period is valid");
+                        // Active (not excluded) before, excluded after.
+                        let old_status = !old_excluded.contains(&week_id);
+                        let new_status = !new_excluded.contains(&week_id);
                         if old_status && !new_status {
                             let interrogation = collo_slot.interrogations[week_in_period]
                                 .as_ref()
@@ -270,8 +270,6 @@ impl SlotsUpdateOp {
                             }
                         }
                     }
-
-                    first_week_in_period += period.len();
                 }
 
                 None

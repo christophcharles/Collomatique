@@ -16,7 +16,7 @@ use collomatique_state_colloscopes::{
     balancing::{Balancing, BalancingOptions},
     export_config,
     group_lists::{GroupListFilling, GroupListParameters, PrefilledGroup},
-    ids::{PeriodId, SlotId, StudentId, SubjectId, TeacherId, WeekPatternId},
+    ids::{PeriodId, SlotId, StudentId, SubjectId, TeacherId, WeekId, WeekPatternId},
     incompats::Incompatibility,
     pairings::{PairingRule, RulePart},
     periods::WeekDesc,
@@ -191,20 +191,26 @@ pub fn teacher(rng: &mut ChaCha8Rng, interrogation_subject_ids: &[SubjectId]) ->
     }
 }
 
-pub fn week_pattern(rng: &mut ChaCha8Rng, total_weeks: usize) -> WeekPattern {
+pub fn week_pattern(rng: &mut ChaCha8Rng, week_ids: &[WeekId]) -> WeekPattern {
+    let mut excluded_weeks = BTreeSet::new();
+    for &week_id in week_ids {
+        if rng.random_bool(0.3) {
+            excluded_weeks.insert(week_id);
+        }
+    }
     WeekPattern {
         name: format!("Pattern{}", rng.random_range(0..100_000u32)),
-        weeks: (0..total_weeks).map(|_| rng.random_bool(0.7)).collect(),
+        excluded_weeks,
     }
 }
 
-pub fn week_pattern_invalid_length(rng: &mut ChaCha8Rng, total_weeks: usize) -> WeekPattern {
-    let wrong_len = if total_weeks > 0 && rng.random_bool(0.5) {
-        total_weeks - 1
-    } else {
-        total_weeks + 1
-    };
-    week_pattern(rng, wrong_len)
+/// A pattern that excludes a (presumably dangling) week — the invalid input
+/// used to exercise the dangling-`WeekId` invariant.
+pub fn week_pattern_excluding(rng: &mut ChaCha8Rng, week_id: WeekId) -> WeekPattern {
+    WeekPattern {
+        name: format!("Pattern{}", rng.random_range(0..100_000u32)),
+        excluded_weeks: BTreeSet::from([week_id]),
+    }
 }
 
 pub fn slot_start(rng: &mut ChaCha8Rng) -> SlotStart {

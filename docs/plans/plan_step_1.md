@@ -216,7 +216,7 @@ All inside the existing encapsulation boundary:
 
 ---
 
-## Phase 4 — 1b: `WeekId` (B1 **DONE** as six commits `2a0ec129`…`2de37eae`; B2 is next)
+## Phase 4 — 1b: `WeekId` (B1 **DONE** as six commits `2a0ec129`…`2de37eae`; B2 **DONE** as `fb1793eb`)
 
 ### Commit B1 — weeks become entities; patterns stay `Vec<bool>` for one more commit — **DONE**
 
@@ -287,7 +287,7 @@ All inside the existing encapsulation boundary:
   stays at 100 seeds). **Outstanding, user-run:** gtk4 smoke (edit weeks/periods,
   cut/merge with a filled colloscope, undo/redo, save/reload) + the 3 contract scripts.
 
-### Commit B2 — week patterns become the exception set
+### Commit B2 — week patterns become the exception set — **DONE**
 
 ```rust
 pub struct WeekPattern {
@@ -298,33 +298,64 @@ pub struct WeekPattern {
 }
 ```
 
-- **Delete**: `add_weeks`/`clean_weeks`/`remove_weeks`/`can_remove_weeks`/`move_week`
-  (`week_patterns.rs`; `move_week` was added in B1 commit 2 for `WeekOp::Move` and dies
-  here too), every lockstep-splice call in period/week ops, the length
-  invariant (`BadWeekPatternLength`, `validate_week_pattern_internal`,
-  `check_week_pattern_data_consistency` length check → replaced by a dangling-`WeekId`
-  sweep over `excluded_weeks`). Invariant #8 is gone.
+> **DONE (July 17 2026), one commit `fb1793eb`.** Landed as sketched, with the
+> refinements noted below. Full workspace suite green, property harness (100
+> seeds), byte-stability + `all_examples_load_pristine`, no `Cargo.lock` change.
+
+- **Deleted**: `add_weeks`/`clean_weeks`/`remove_weeks`/`can_remove_weeks`/`move_week`
+  (`week_patterns.rs`; `move_week` from B1 commit 2 died here too), every lockstep pattern
+  splice in `apply_week` (add/remove/move now do **no** pattern work — membership travels
+  with the week id) and in the ops-layer cleaning (`general_planning`/`slots`/
+  `week_patterns` now diff exclusion sets by `week_id_at`, no positional `.weeks[..]`),
+  and the length invariant (`BadWeekPatternLength`, `validate_week_pattern_internal`, the
+  `check_week_pattern_data_consistency` length arm) → replaced by a dangling-`WeekId`
+  sweep over `excluded_weeks` (new `WeekPatternError::WeekPatternExcludesInvalidWeek`;
+  the ops error variants `Add/UpdateNewWeekPatternError::BadWeekCountInWeekPattern` were
+  renamed `WeekPatternExcludesInvalidWeek`). Invariant #8 is gone.
 - `WeekOp::Remove` guard re-cut: blocked while any pattern excludes the week
-  (`NonTrivialWeekPattern`, same UX as today — the *bit* is the data being protected);
-  `Move` needs no pattern work at all (membership travels with the id).
-- `merge_pattern` collapses into the single shared helper that 1d and the glue also use:
+  (`NonTrivialWeekPattern`); `Move` needs no pattern work (membership travels with the id).
+- **`merge_pattern` did *not* fully collapse.** `Parameters::is_week_active` (below) is the
+  canonical per-week definition, used by `constraints::extract_week_pattern` and the glue.
+  But the transitional colloscope maintenance (deleted in 1d) still needs *positional*
+  `Vec<bool>`, so two producers were re-expressed on the exclusion set and survive one more
+  commit: `merge_excluded(&BTreeSet<WeekId>)` (interrogation ∧ ¬excluded) and
+  `week_pattern_active_bits(Option<WeekPatternId>)` (raw ¬excluded, fed to the reworked
+  `Slot::build_pattern_for_new_period(new_descs, first_week, active_bits)`).
 
 ```rust
 impl Parameters {
     /// One definition of "slot can have an interrogation on week".
     pub fn is_week_active(&self, week_id: WeekId, pattern: Option<WeekPatternId>) -> bool {
-        let week = self.periods.resolve(week_id);
+        let week = self.resolve(week_id); // Parameters: Lookup<WeekId> → Week (no periods.resolve)
         week.interrogations
             && pattern.is_none_or(|p| !self.resolve(p).excluded_weeks.contains(&week_id))
     }
 }
 ```
 
-- storage: encode = `walk()` emitting `!excluded.contains(id)` per position; decode =
-  insert ids for `false` bits. Round-trip identity on both bit values ⇒ byte-stable
-  (decision 12: no canonicalization against `interrogations`).
+- **refs.rs deviation (the sketch was silent here):** `RefSite::WeekPatternLengthCoupling`
+  stays **period-keyed** (a `period_ref`), with `non_trivial` recomputed as "the pattern
+  excludes at least one of this period's weeks" — mirrors the transitive delete guard
+  (deleting a period first removes its weeks, each blocked by the per-week
+  `NonTrivialWeekPattern`). Remodelling this to a genuine week-ref (`week_ref` visitor +
+  `references_to_week`) is deferred to the registry remaster (step 7), not B2. The
+  `refs_registry.rs` pin values are unchanged.
+- storage (format **frozen**): encode = `walk()` emitting `!excluded.contains(id)` per
+  position; decode zips the positional bits against the walk order, excluding weeks whose
+  bit is `false` (surplus bits ignored, missing = active). Byte-stable (decision 12: no
+  canonicalization against `interrogations`).
 - gtk4 pattern dialog + python `WeekPattern { weeks: Vec<bool> }` glue: complement at the
-  boundary via the same projection (pyclass shape unchanged).
+  boundary via the same projection (pyclass shape unchanged). The dialog now holds a
+  positional `Vec<bool>` internally, converting on `Show`/`Accept`; the glue gained
+  `WeekPattern::into_mem/from_mem(&[WeekId])` + `InternalFile::week_ids_in_order`.
+- **Transitional code still alive after B2** (all deleted in 1d): the colloscope cell
+  splices in `apply_week` (add/remove/update/move) and the positional producers
+  `merge_excluded` / `get_merged_pattern` / `week_pattern_active_bits` /
+  `build_pattern_for_new_period`, plus the `check_empty_on_removed_weeks` /
+  `update_slot_for_week_pattern` colloscope machinery they feed.
+- **Gates:** automated gates all green (see the DONE note). **Outstanding, user-run** (B2 is
+  a standing-gate commit, not a ★ milestone): gtk4 smoke (week-pattern dialog: edit bits,
+  the all/none/even/odd buttons, save/reload, undo/redo) + the 3 contract scripts.
 
 ---
 

@@ -156,16 +156,16 @@ pub enum WeekPatternsUpdateError {
 
 #[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum AddNewWeekPatternError {
-    #[error("Week pattern has the wrong number of weeks")]
-    BadWeekCountInWeekPattern,
+    #[error("Week pattern excludes an invalid week {0:?}")]
+    WeekPatternExcludesInvalidWeek(collomatique_state_colloscopes::WeekId),
 }
 
 #[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum UpdateWeekPatternError {
     #[error("Week pattern ID {0:?} is invalid")]
     InvalidWeekPatternId(collomatique_state_colloscopes::WeekPatternId),
-    #[error("Week pattern has the wrong number of weeks")]
-    BadWeekCountInWeekPattern,
+    #[error("Week pattern excludes an invalid week {0:?}")]
+    WeekPatternExcludesInvalidWeek(collomatique_state_colloscopes::WeekId),
 }
 
 #[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
@@ -194,16 +194,14 @@ impl WeekPatternsUpdateOp {
                 else {
                     return None;
                 };
-                if old_week_pattern.weeks.len() != new_week_pattern.weeks.len() {
-                    return None;
-                }
+                let old_excluded = old_week_pattern.excluded_weeks.clone();
+                let new_excluded = new_week_pattern.excluded_weeks.clone();
 
                 for (slot_id, slot) in data.get_data().get_inner_data().params.slots.all_slots() {
                     if slot.week_pattern != Some(*week_pattern_id) {
                         continue;
                     }
 
-                    let mut first_week_in_period = 0usize;
                     let period_ids: Vec<_> = data
                         .get_data()
                         .get_inner_data()
@@ -236,9 +234,16 @@ impl WeekPatternsUpdateOp {
                                 continue;
                             }
 
-                            let current_week = first_week_in_period + week_in_period;
-                            let old_status = old_week_pattern.weeks[current_week];
-                            let new_status = new_week_pattern.weeks[current_week];
+                            let week_id = data
+                                .get_data()
+                                .get_inner_data()
+                                .params
+                                .periods
+                                .week_id_at(*period_id, week_in_period)
+                                .expect("position within the period is valid");
+                            // Active (not excluded) before, excluded after.
+                            let old_status = !old_excluded.contains(&week_id);
+                            let new_status = !new_excluded.contains(&week_id);
                             if old_status && !new_status {
                                 let interrogation = collo_slot.interrogations[week_in_period].as_ref().expect("There should be an interrogation as the week used to be enabled");
 
@@ -257,8 +262,6 @@ impl WeekPatternsUpdateOp {
                                 }
                             }
                         }
-
-                        first_week_in_period += period.len();
                     }
                 }
 
@@ -321,8 +324,8 @@ impl WeekPatternsUpdateOp {
                             collomatique_state_colloscopes::Error::WeekPattern(
                                 wpe
                             ) => match wpe {
-                                collomatique_state_colloscopes::WeekPatternError::BadWeekPatternLength => {
-                                    AddNewWeekPatternError::BadWeekCountInWeekPattern
+                                collomatique_state_colloscopes::WeekPatternError::WeekPatternExcludesInvalidWeek(week_id) => {
+                                    AddNewWeekPatternError::WeekPatternExcludesInvalidWeek(week_id)
                                 }
                                 _ => panic!(
                                     "Unexpected week pattern error during AddNewWeekPattern: {:?}",
@@ -354,8 +357,8 @@ impl WeekPatternsUpdateOp {
                             match wpe {
                                 collomatique_state_colloscopes::WeekPatternError::InvalidWeekPatternId(id) =>
                                     UpdateWeekPatternError::InvalidWeekPatternId(id),
-                                collomatique_state_colloscopes::WeekPatternError::BadWeekPatternLength => {
-                                    UpdateWeekPatternError::BadWeekCountInWeekPattern
+                                collomatique_state_colloscopes::WeekPatternError::WeekPatternExcludesInvalidWeek(week_id) => {
+                                    UpdateWeekPatternError::WeekPatternExcludesInvalidWeek(week_id)
                                 }
                                 _ => panic!(
                                     "Unexpected week pattern error during UpdateWeekPattern: {:?}",

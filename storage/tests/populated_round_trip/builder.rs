@@ -383,12 +383,23 @@ pub fn build_rich_data() -> Data {
         "deassign 7",
     );
 
-    // Week patterns (must span the 7 weeks of the two periods)
+    // Week patterns over the 7 weeks of the two periods. Snapshot the week ids
+    // in walk order so the fortnight pattern can exclude the even-index weeks.
+    let week_ids: Vec<WeekId> = state
+        .get_data()
+        .get_inner_data()
+        .params
+        .periods
+        .walk()
+        .map(|(_period_id, week_id, _week)| week_id)
+        .collect();
     let pattern_fortnight = apply_new_id!(
         &mut state,
         Op::WeekPattern(WeekPatternOp::Add(WeekPattern {
             name: "Quinzaine A".to_string(),
-            weeks: vec![true, false, true, false, true, false, true],
+            // Excludes global weeks 1, 3, 5 (the `false` bits of the old
+            // positional `[true, false, true, false, true, false, true]`).
+            excluded_weeks: BTreeSet::from([week_ids[1], week_ids[3], week_ids[5]]),
         })),
         "week pattern fortnight",
         WeekPatternId
@@ -397,7 +408,7 @@ pub fn build_rich_data() -> Data {
         &mut state,
         Op::WeekPattern(WeekPatternOp::Add(WeekPattern {
             name: "Toutes les semaines".to_string(),
-            weeks: vec![true; 7],
+            excluded_weeks: BTreeSet::new(),
         })),
         "week pattern all",
         WeekPatternId
