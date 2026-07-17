@@ -167,49 +167,51 @@ impl Component for SlotPairings {
                 self.slot_pairings = slot_pairings;
                 self.periods = periods;
 
-                let new_data: Vec<_> =
-                    self.subjects
-                        .ordered_subject_list
-                        .iter()
-                        .filter_map(|(id, desc)| {
-                            let id = &id;
-                            desc.parameters.interrogation_parameters.as_ref()?;
+                let new_data: Vec<_> = self
+                    .subjects
+                    .ordered_subject_list
+                    .iter()
+                    .filter_map(|(id, desc)| {
+                        let id = &id;
+                        desc.parameters.interrogation_parameters.as_ref()?;
 
-                            let subject_slots = self.slots.slots_vec_for_subject(*id).expect(
-                                "Subject should appear in slots if it can have interrogations",
-                            );
+                        // Sparse slots ordering: a subject with interrogations
+                        // but no slots yet has no row; render it with an empty
+                        // slot list (matching the pre-sparse dense behavior).
+                        let subject_slots =
+                            self.slots.slots_vec_for_subject(*id).unwrap_or_default();
 
-                            // Collect slot pairing rules for this subject
-                            let rules: Vec<_> = self
-                                .slot_pairings
-                                .slot_pairing_rule_map
-                                .iter()
-                                .filter(|(_rule_id, rule)| {
-                                    // Check if antecedent slot belongs to this subject
-                                    subject_slots
-                                        .iter()
-                                        .any(|(slot_id, _)| *slot_id == rule.antecedent.slot_id)
-                                })
-                                .map(|(rule_id, rule)| (rule_id, rule.clone()))
-                                .collect();
-
-                            // Build slot descriptions for this subject
-                            let slot_descriptions: Vec<_> = subject_slots
-                                .iter()
-                                .map(|(slot_id, slot)| {
-                                    (*slot_id, Self::build_slot_description(slot, &self.teachers))
-                                })
-                                .collect();
-
-                            Some(slot_pairings_display::EntryData {
-                                subject_id: *id,
-                                subject_name: desc.parameters.name.clone(),
-                                rules,
-                                slot_descriptions,
-                                periods: self.periods.clone(),
+                        // Collect slot pairing rules for this subject
+                        let rules: Vec<_> = self
+                            .slot_pairings
+                            .slot_pairing_rule_map
+                            .iter()
+                            .filter(|(_rule_id, rule)| {
+                                // Check if antecedent slot belongs to this subject
+                                subject_slots
+                                    .iter()
+                                    .any(|(slot_id, _)| *slot_id == rule.antecedent.slot_id)
                             })
+                            .map(|(rule_id, rule)| (rule_id, rule.clone()))
+                            .collect();
+
+                        // Build slot descriptions for this subject
+                        let slot_descriptions: Vec<_> = subject_slots
+                            .iter()
+                            .map(|(slot_id, slot)| {
+                                (*slot_id, Self::build_slot_description(slot, &self.teachers))
+                            })
+                            .collect();
+
+                        Some(slot_pairings_display::EntryData {
+                            subject_id: *id,
+                            subject_name: desc.parameters.name.clone(),
+                            rules,
+                            slot_descriptions,
+                            periods: self.periods.clone(),
                         })
-                        .collect();
+                    })
+                    .collect();
 
                 crate::tools::factories::update_vec_deque(
                     &mut self.subjects_list,

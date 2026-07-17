@@ -405,18 +405,19 @@ impl SubjectsUpdateOp {
                         }
                     }
 
-                    if let Some((slot_id, _slot)) = data
+                    // Sparse slots ordering: a subject with interrogations but
+                    // no slots yet has no row, so `first_slot_id_for_subject`
+                    // returns `None` (no cleaning needed) rather than panicking.
+                    if let Some(slot_id) = data
                         .get_data()
                         .get_inner_data()
                         .params
                         .slots
-                        .slots_for_subject(*subject_id)
-                        .expect("Subject should have associated slots at this point")
-                        .next()
+                        .first_slot_id_for_subject(*subject_id)
                     {
                         return Some(CleaningOp {
                             warning: SubjectsUpdateWarning::LooseInterrogationSlots(*subject_id),
-                            op: UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(*slot_id)),
+                            op: UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(slot_id)),
                         });
                     }
 
@@ -484,11 +485,14 @@ impl SubjectsUpdateOp {
                         .is_some()
                     {
                         let inner = data.get_data().get_inner_data();
+                        // Sparse slots ordering: a zero-slot subject has no row,
+                        // so flatten `None` to an empty list instead of panicking.
                         let subject_slots: Vec<_> = inner
                             .params
                             .slots
                             .slots_for_subject(*subject_id)
-                            .expect("Subject should have slots at this point")
+                            .into_iter()
+                            .flatten()
                             .map(|(slot_id, _slot)| *slot_id)
                             .collect();
 
