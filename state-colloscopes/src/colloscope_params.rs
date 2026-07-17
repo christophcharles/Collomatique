@@ -4,7 +4,7 @@
 
 use crate::ids::{
     GroupListId, IncompatId, NewId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId,
-    SubjectId, TeacherId, WeekPatternId,
+    SubjectId, TeacherId, WeekId, WeekPatternId,
 };
 
 use super::*;
@@ -41,7 +41,7 @@ pub struct Parameters {
 impl Parameters {
     pub(crate) fn merge_pattern(&self, pattern: &[bool]) -> Vec<bool> {
         let mut output = Vec::new();
-        for (current_week, (_period_id, week_desk)) in self.periods.walk().enumerate() {
+        for (current_week, (_period_id, _week_id, week_desk)) in self.periods.walk().enumerate() {
             if !week_desk.interrogations {
                 output.push(false);
             } else {
@@ -168,8 +168,8 @@ impl Parameters {
 // rebuild. These are the context impls the `Join` derives resolve against.
 
 impl Lookup<PeriodId> for Parameters {
-    type Entity = Vec<periods::WeekDesc>;
-    fn lookup(&self, id: PeriodId) -> Option<&Vec<periods::WeekDesc>> {
+    type Entity = Vec<(WeekId, periods::WeekDesc)>;
+    fn lookup(&self, id: PeriodId) -> Option<&Vec<(WeekId, periods::WeekDesc)>> {
         self.periods.find_period(id)
     }
 }
@@ -281,6 +281,7 @@ impl Parameters {
             .keys()
             .map(NewId::from)
             .chain(self.periods.period_ids().map(NewId::from))
+            .chain(self.periods.week_ids().map(NewId::from))
             .chain(self.subjects.ordered_subject_list.keys().map(NewId::from))
             .chain(self.teachers.teacher_map.keys().map(NewId::from))
             .chain(self.week_patterns.week_pattern_map.keys().map(NewId::from))

@@ -38,8 +38,22 @@ pub struct StudentId(u64);
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, EntityId,
 )]
-#[entity(Vec<WeekDesc>)]
+#[entity(Vec<(WeekId, WeekDesc)>)]
 pub struct PeriodId(u64);
+
+/// This type represents an ID for a week
+///
+/// Every week gets a unique ID. IDs then identify weeks internally.
+///
+/// Weeks are not yet a standalone entity (their ids live inline in the period
+/// rows and nothing outside the periods submodule references them); the
+/// `#[entity(WeekDesc)]` attribute is transitional and is re-targeted to a
+/// dedicated `Week` entity once the backend split lands.
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, EntityId,
+)]
+#[entity(WeekDesc)]
+pub struct WeekId(u64);
 
 /// This type represents an ID for a subject
 ///
@@ -158,6 +172,11 @@ impl IdIssuer {
         PeriodId(self.helper.get_new_id().inner())
     }
 
+    /// Get a new unused ID for a week
+    pub fn get_week_id(&mut self) -> WeekId {
+        WeekId(self.helper.get_new_id().inner())
+    }
+
     /// Get a new unused ID for a subject
     pub fn get_subject_id(&mut self) -> SubjectId {
         SubjectId(self.helper.get_new_id().inner())
@@ -204,6 +223,7 @@ impl IdIssuer {
 pub enum NewId {
     StudentId(StudentId),
     PeriodId(PeriodId),
+    WeekId(WeekId),
     SubjectId(SubjectId),
     TeacherId(TeacherId),
     WeekPatternId(WeekPatternId),
@@ -225,6 +245,7 @@ impl NewId {
         match *self {
             NewId::StudentId(id) => id.inner(),
             NewId::PeriodId(id) => id.inner(),
+            NewId::WeekId(id) => id.inner(),
             NewId::SubjectId(id) => id.inner(),
             NewId::TeacherId(id) => id.inner(),
             NewId::WeekPatternId(id) => id.inner(),
@@ -246,6 +267,12 @@ impl From<StudentId> for NewId {
 impl From<PeriodId> for NewId {
     fn from(value: PeriodId) -> Self {
         NewId::PeriodId(value)
+    }
+}
+
+impl From<WeekId> for NewId {
+    fn from(value: WeekId) -> Self {
+        NewId::WeekId(value)
     }
 }
 

@@ -211,9 +211,25 @@ pub fn global_week_position(&self, id: WeekId) -> Option<usize> { … }
 
 `from_period_rows` re-signed per **S12**: rows become
 `Vec<(PeriodId, Vec<(WeekId, WeekDesc)>)>` (decode is the only caller).
-`find_period` (pub(crate)) now returns `&Vec<(WeekId, WeekDesc)>`; the `Lookup<PeriodId>`
-impl and `ids.rs:41` `#[entity(…)]` follow suit (nothing calls `.lookup()` with a
-`PeriodId` directly — verified — only `Join` derives resolve against it).
+`find_period` (kept **pub** since commit 0, for the `read_api` pointer-identity oracle)
+now returns `&Vec<(WeekId, WeekDesc)>`; the `Lookup<PeriodId>` impl and `ids.rs`
+`#[entity(…)]` follow suit (nothing calls `.lookup()` with a `PeriodId` directly —
+verified — only `Join` derives resolve against it).
+
+**Deviations landed (vs the sketch above), to keep commit 1 minimal:**
+
+- **`weeks_of` keeps yielding `&WeekDesc`** (ids stripped), *not* `(WeekId, &WeekDesc)`.
+  Its ~7 consumers (constraints, storage encode, gtk4, xlsx) only read the description,
+  so leaving the item type unchanged means they are **untouched** this commit. `walk()`
+  is still promoted to the 3-tuple (S3) — it is the global iterator where the id is
+  worth carrying, and its ~5 accumulate-loop consumers each gain one `_`. Commit 5 stays
+  invisible either way (`&WeekDesc` → `&Week` is field-compatible; the tuple shape is not
+  what the consumers destructure). A dedicated period-scoped id iterator is added when
+  commit 3 first needs it, rather than overloading `weeks_of`.
+- **The id-centric reads (`find_week`/`week_position`/`week_id_at`/`global_week_position`)
+  are deferred to the commit that first uses them** (commit 2's `apply_week`). Only
+  `week_ids()` (feeding `all_ids`) is added now, since §1.3 needs it. Shipping unused
+  `pub` reads early is harmless but adds-when-used keeps each commit's surface honest.
 
 ### 1.3 Ids join the global id space (`lib.rs` / `colloscope_params.rs`)
 

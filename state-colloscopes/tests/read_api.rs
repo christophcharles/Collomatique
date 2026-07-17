@@ -432,13 +432,21 @@ fn all_ids_lists_every_table_in_canonical_order() {
     let ids = build_document(&mut app);
     let params = &app.get_data().get_inner_data().params;
 
-    // `all_ids` is the single declared enumeration of the ten tables. The order
-    // is fixed: students, periods, subjects (in OrderedTable order: Math then
-    // Physics), teachers, week patterns, slots (id order: slot then slot2),
-    // incompats, group lists, pairing rules, slot pairing rules.
+    // `all_ids` is the single declared enumeration of the tables. The order is
+    // fixed: students, periods, weeks (each period's weeks, in walk order),
+    // subjects (in OrderedTable order: Math then Physics), teachers, week
+    // patterns, slots (id order: slot then slot2), incompats, group lists,
+    // pairing rules, slot pairing rules. The document's single period holds one
+    // week.
+    let week = params
+        .periods
+        .week_ids()
+        .next()
+        .expect("the period has one week");
     let expected = vec![
         NewId::StudentId(ids.student),
         NewId::PeriodId(ids.period),
+        NewId::from(week),
         NewId::SubjectId(ids.subject),
         NewId::SubjectId(ids.phys),
         NewId::TeacherId(ids.teacher),

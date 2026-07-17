@@ -8,7 +8,7 @@ use thiserror::Error;
 use crate::OrderedTable;
 use crate::colloscopes::ColloscopePeriod;
 use crate::ids::{
-    PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId, SubjectId, WeekPatternId,
+    PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId, SubjectId, WeekId, WeekPatternId,
 };
 use crate::ops::AnnotatedPeriodOp;
 
@@ -32,10 +32,11 @@ pub struct Periods {
     /// This field gives the relative order of the different
     /// periods identified by their ids
     ///
-    /// For each period, we get also a list of [WeekDesc].
-    /// Each entry represents a week: whether an interrogation happens on it
-    /// and an optional annotation.
-    ordered_period_list: OrderedTable<PeriodId, Vec<WeekDesc>>,
+    /// For each period, we get also a list of weeks. Each entry is a
+    /// `(WeekId, WeekDesc)` pair: the week's identity (carried inline in this
+    /// transitional shape) plus whether an interrogation happens on it and an
+    /// optional annotation.
+    ordered_period_list: OrderedTable<PeriodId, Vec<(WeekId, WeekDesc)>>,
 }
 
 /// Error returned when building [Periods] from rows with a duplicated period id
@@ -71,10 +72,11 @@ impl Periods {
     /// Builds a [Periods] from period rows (used by storage decode).
     ///
     /// `rows` provides the periods in display order, each with its ordered
-    /// weeks. Returns an error if a period id appears more than once.
+    /// weeks (identity paired with description). Returns an error if a period
+    /// id appears more than once.
     pub fn from_period_rows(
         first_week: Option<collomatique_time::WeekStart>,
-        rows: Vec<(PeriodId, Vec<WeekDesc>)>,
+        rows: Vec<(PeriodId, Vec<(WeekId, WeekDesc)>)>,
     ) -> Result<Self, DuplicatedPeriodIdError> {
         let ordered_period_list =
             rows.try_into()
@@ -113,23 +115,47 @@ impl Periods {
     }
 
     /// The canonical global week order: every week of every period, in
-    /// period-then-position order. `walk().enumerate()` gives the global week
-    /// index — this replaces every hand-rolled accumulate-`len()` loop.
-    pub fn walk(&self) -> impl Iterator<Item = (PeriodId, &WeekDesc)> + '_ {
+    /// period-then-position order, each with its identity. `walk().enumerate()`
+    /// gives the global week index — this replaces every hand-rolled
+    /// accumulate-`len()` loop.
+    pub fn walk(&self) -> impl Iterator<Item = (PeriodId, WeekId, &WeekDesc)> + '_ {
         self.ordered_period_list
             .iter()
-            .flat_map(|(period_id, weeks)| weeks.iter().map(move |desc| (period_id, desc)))
+            .flat_map(|(period_id, weeks)| {
+                weeks
+                    .iter()
+                    .map(move |(week_id, desc)| (period_id, *week_id, desc))
+            })
+    }
+
+    /// All week ids, in global week order.
+    pub fn week_ids(&self) -> impl Iterator<Item = WeekId> + '_ {
+        self.ordered_period_list
+            .iter()
+            .flat_map(|(_period_id, weeks)| weeks.iter().map(|(week_id, _desc)| *week_id))
     }
 
     /// Weeks of one period, in order; `None` if the period id is invalid.
     pub fn weeks_of(&self, id: PeriodId) -> Option<impl Iterator<Item = &WeekDesc> + '_> {
-        Some(self.ordered_period_list.get(&id)?.iter())
+        Some(
+            self.ordered_period_list
+                .get(&id)?
+                .iter()
+                .map(|(_week_id, desc)| desc),
+        )
     }
 
-    /// Owned copy of a period's weeks (op-payload building in `ops/` and gtk4);
-    /// `None` if the period id is invalid.
+    /// Owned copy of a period's weeks — descriptions only, ids stripped
+    /// (op-payload building in `ops/` and gtk4); `None` if the period id is
+    /// invalid.
     pub fn weeks_vec_of(&self, id: PeriodId) -> Option<Vec<WeekDesc>> {
-        Some(self.ordered_period_list.get(&id)?.clone())
+        Some(
+            self.ordered_period_list
+                .get(&id)?
+                .iter()
+                .map(|(_week_id, desc)| desc.clone())
+                .collect(),
+        )
     }
 
     /// Number of weeks of one period; `None` if the period id is invalid.
@@ -178,8 +204,9 @@ impl Periods {
         None
     }
 
-    /// Finds a period by id
-    pub fn find_period(&self, id: PeriodId) -> Option<&Vec<WeekDesc>> {
+    /// Finds a period by id, returning its weeks (identity paired with
+    /// description).
+    pub fn find_period(&self, id: PeriodId) -> Option<&Vec<(WeekId, WeekDesc)>> {
         self.ordered_period_list.get(&id)
     }
 
@@ -505,7 +532,7 @@ impl crate::Data {
                     Some(prev) => AnnotatedPeriodOp::AddAfter(*period_id, prev, old_desc),
                 })
             }
-            AnnotatedPeriodOp::Update(period_id, desc) => {
+            AnnotatedPeriodOp::Update(period_id, new_weeks) => {
                 let Some((position, first_week)) = self
                     .inner_data
                     .params
@@ -515,21 +542,37 @@ impl crate::Data {
                     return Err(PeriodError::InvalidPeriodId(*period_id));
                 };
 
-                let period = self
+                let old_length = self
                     .inner_data
                     .params
                     .periods
                     .ordered_period_list
                     .get_at(position)
                     .expect("position comes from find_period_position_and_first_week")
-                    .1;
-                let old_length = period.len();
-                if desc.len() < old_length {
+                    .1
+                    .len();
+                let new_length = new_weeks.len();
+
+                // The annotated payload's ids become the result verbatim.
+                // Week identity is deliberately *not* preserved across a period
+                // `Update` (annotation cannot see the current data, so it issues
+                // a fresh id per position). This keeps `apply` a pure function
+                // of the op — undo/redo reproduce the exact same ids — which the
+                // history replay check relies on. It is harmless because nothing
+                // references week ids in this transitional stage, and the op is
+                // retired before they become load-bearing.
+                //
+                // Description-only view for the positional week-pattern /
+                // colloscope maintenance helpers.
+                let new_descs: Vec<WeekDesc> =
+                    new_weeks.iter().map(|(_id, desc)| desc.clone()).collect();
+
+                if new_length < old_length {
                     for (week_pattern_id, week_pattern) in
                         self.inner_data.params.week_patterns.week_pattern_map.iter()
                     {
                         if !week_pattern
-                            .can_remove_weeks(first_week + desc.len(), old_length - desc.len())
+                            .can_remove_weeks(first_week + new_length, old_length - new_length)
                         {
                             return Err(PeriodError::NonTrivialWeekPattern(
                                 *period_id,
@@ -552,7 +595,7 @@ impl crate::Data {
                         .find_slot(*slot_id)
                         .expect("Slot ID should be valid");
                     let new_pattern = slot.build_pattern_for_new_period(
-                        desc,
+                        &new_descs,
                         first_week,
                         &self.inner_data.params.week_patterns,
                     );
@@ -562,13 +605,13 @@ impl crate::Data {
                     }
                 }
 
-                let old_desc = self
+                let old_weeks_owned = self
                     .inner_data
                     .params
                     .periods
                     .ordered_period_list
-                    .replace_value_at(position, desc.clone());
-                if desc.len() > old_length {
+                    .replace_value_at(position, new_weeks.clone());
+                if new_length > old_length {
                     let first_week_to_add = first_week + old_length;
                     for week_pattern in self
                         .inner_data
@@ -577,10 +620,10 @@ impl crate::Data {
                         .week_pattern_map
                         .values_mut()
                     {
-                        week_pattern.add_weeks(first_week_to_add, desc.len() - old_length);
+                        week_pattern.add_weeks(first_week_to_add, new_length - old_length);
                     }
-                } else if desc.len() < old_length {
-                    let first_week_to_remove = first_week + desc.len();
+                } else if new_length < old_length {
+                    let first_week_to_remove = first_week + new_length;
                     for week_pattern in self
                         .inner_data
                         .params
@@ -588,7 +631,7 @@ impl crate::Data {
                         .week_pattern_map
                         .values_mut()
                     {
-                        week_pattern.remove_weeks(first_week_to_remove, old_length - desc.len());
+                        week_pattern.remove_weeks(first_week_to_remove, old_length - new_length);
                     }
                 }
                 let slot_ids: Vec<_> = self
@@ -604,7 +647,7 @@ impl crate::Data {
                         .update_slot_to_match_week_pattern(slot_id, &self.inner_data.params);
                 }
 
-                Ok(AnnotatedPeriodOp::Update(*period_id, old_desc))
+                Ok(AnnotatedPeriodOp::Update(*period_id, old_weeks_owned))
             }
         }
     }

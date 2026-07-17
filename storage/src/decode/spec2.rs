@@ -25,7 +25,7 @@ use collomatique_state_colloscopes as mem;
 use mem::ids::Id;
 use mem::{
     Data, GroupListId, InnerData, InnerDataError, InvariantError, PairingRuleId, PeriodId, SlotId,
-    SlotPairingRuleId, StudentId, SubjectId, TeacherId, WeekPatternId,
+    SlotPairingRuleId, StudentId, SubjectId, TeacherId, WeekId, WeekPatternId,
 };
 
 /// Every spec-2 block name declares these canonical envelope values
@@ -209,8 +209,82 @@ fn soft_flag(flag: format::scalars::SoftFlag) -> mem::soft_param::SoftParam<()> 
     }
 }
 
+/// Highest entity id defined anywhere in the document.
+///
+/// Week ids are never serialized (the file stores weeks positionally), so
+/// decode synthesizes them; they must be assigned above every id the file
+/// *does* define. In a valid file every reference id is also a defining id, so
+/// scanning the defining ids of each block bounds the whole id space; a file
+/// whose references exceed that bound is dangling and rejected by layer 3
+/// regardless. Returns 0 for a document that defines no ids (weeks then start
+/// at 1, which cannot collide with anything).
+fn max_used_id(blocks: &Blocks) -> u64 {
+    let mut max = 0u64;
+    if let Some(b) = &blocks.general_planning {
+        for period in &b.periods {
+            max = max.max(period.id);
+        }
+    }
+    if let Some(b) = &blocks.subjects {
+        for subject in b.iter() {
+            max = max.max(subject.id);
+        }
+    }
+    if let Some(b) = &blocks.teachers {
+        for teacher in b.iter() {
+            max = max.max(teacher.id);
+        }
+    }
+    if let Some(b) = &blocks.students {
+        for student in b.iter() {
+            max = max.max(student.id);
+        }
+    }
+    if let Some(b) = &blocks.week_patterns {
+        for week_pattern in b.iter() {
+            max = max.max(week_pattern.id);
+        }
+    }
+    if let Some(b) = &blocks.slots {
+        for subject_slots in b.iter() {
+            for slot in &subject_slots.slots {
+                max = max.max(slot.id);
+            }
+        }
+    }
+    if let Some(b) = &blocks.incompatibilities {
+        for incompat in b.iter() {
+            max = max.max(incompat.id);
+        }
+    }
+    if let Some(b) = &blocks.group_lists {
+        for group_list in b.iter() {
+            max = max.max(group_list.id);
+        }
+    }
+    if let Some(b) = &blocks.pairings {
+        for pairing in b.iter() {
+            max = max.max(pairing.id);
+        }
+    }
+    if let Some(b) = &blocks.slot_pairings {
+        for slot_pairing in b.iter() {
+            max = max.max(slot_pairing.id);
+        }
+    }
+    max
+}
+
 fn reconstruct(blocks: Blocks) -> Result<InnerData, DecodeError> {
-    let periods = reconstruct_periods(blocks.general_planning.unwrap_or_default())?;
+    // Week ids are synthesized above every id the file defines (S11).
+    // `saturating_add` keeps synthesis panic-free when the file carries an
+    // out-of-range id near `u64::MAX`; such an id is rejected by layer 3
+    // regardless (the synthesized weeks never reach it).
+    let mut next_week_id = max_used_id(&blocks).saturating_add(1);
+    let periods = reconstruct_periods(
+        blocks.general_planning.unwrap_or_default(),
+        &mut next_week_id,
+    )?;
     let subjects = reconstruct_subjects(blocks.subjects.unwrap_or_default())?;
     let teachers = reconstruct_teachers(blocks.teachers.unwrap_or_default());
     let students = reconstruct_students(blocks.students.unwrap_or_default());
@@ -260,6 +334,7 @@ fn reconstruct(blocks: Blocks) -> Result<InnerData, DecodeError> {
 
 fn reconstruct_periods(
     block: format::general_planning::GeneralPlanning,
+    next_week_id: &mut u64,
 ) -> Result<mem::periods::Periods, DecodeError> {
     let first_week = block.first_week.map(|date| {
         collomatique_time::WeekStart::new(date.date()).expect("Format week start date is a Monday")
@@ -273,9 +348,17 @@ fn reconstruct_periods(
                 period
                     .weeks
                     .into_iter()
-                    .map(|week| mem::periods::WeekDesc {
-                        interrogations: week.interrogations,
-                        annotation: week.annotation,
+                    .map(|week| {
+                        // Synthesize the week's id in walk order (S11).
+                        let week_id = id::<WeekId>(*next_week_id);
+                        *next_week_id = next_week_id.saturating_add(1);
+                        (
+                            week_id,
+                            mem::periods::WeekDesc {
+                                interrogations: week.interrogations,
+                                annotation: week.annotation,
+                            },
+                        )
                     })
                     .collect(),
             )

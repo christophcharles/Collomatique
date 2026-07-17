@@ -338,7 +338,7 @@ impl SimpleComponent for Dialog {
 impl Dialog {
     fn build_status_in_periods(&self) -> Vec<collomatique_state_colloscopes::periods::WeekDesc> {
         let mut output = vec![];
-        for (_id, week) in self.periods.walk() {
+        for (_id, _week_id, week) in self.periods.walk() {
             output.push(week.clone());
         }
         output

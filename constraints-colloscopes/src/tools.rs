@@ -83,7 +83,7 @@ pub fn extract_week_pattern(
         None => vec![true; params.periods.count_weeks()],
     };
 
-    for (week_num, (_period_id, week_desc)) in params.periods.walk().enumerate() {
+    for (week_num, (_period_id, _week_id, week_desc)) in params.periods.walk().enumerate() {
         if !week_desc.interrogations {
             output.push(false);
             continue;

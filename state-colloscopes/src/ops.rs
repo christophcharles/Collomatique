@@ -437,14 +437,24 @@ pub enum AnnotatedPeriodOp {
     /// Set the start of periods on a specific week
     ChangeStartDate(Option<collomatique_time::WeekStart>),
     /// Add a new period at the beginning
-    AddFront(PeriodId, Vec<periods::WeekDesc>),
+    ///
+    /// Each week carries the id it is created with (annotation issues them),
+    /// so replay/undo reproduce the exact same week identities.
+    AddFront(PeriodId, Vec<(WeekId, periods::WeekDesc)>),
     /// Add a period after an existing period
     /// First parameter is the period id for the new period
-    AddAfter(PeriodId, PeriodId, Vec<periods::WeekDesc>),
+    AddAfter(PeriodId, PeriodId, Vec<(WeekId, periods::WeekDesc)>),
     /// Remove an existing period
     Remove(PeriodId),
     /// Update an existing period
-    Update(PeriodId, Vec<periods::WeekDesc>),
+    ///
+    /// Annotation issues a fresh week id for every position (it cannot see the
+    /// current data); `apply_period` writes the payload verbatim. Week identity
+    /// is thus not preserved across a period update — harmless while nothing
+    /// references week ids, and this op is retired before they become
+    /// load-bearing. Writing verbatim keeps `apply` a pure involution, which
+    /// the history replay check requires.
+    Update(PeriodId, Vec<(WeekId, periods::WeekDesc)>),
 }
 
 /// Subject annotated operation enumeration
@@ -802,6 +812,18 @@ impl AnnotatedStudentOp {
     }
 }
 
+/// Pairs each week description with a freshly-issued [WeekId], preserving
+/// order. Used when annotating the period ops that create or replace weeks.
+fn annotate_weeks(
+    descs: Vec<periods::WeekDesc>,
+    id_issuer: &mut IdIssuer,
+) -> Vec<(WeekId, periods::WeekDesc)> {
+    descs
+        .into_iter()
+        .map(|desc| (id_issuer.get_week_id(), desc))
+        .collect()
+}
+
 impl AnnotatedPeriodOp {
     /// Used internally
     ///
@@ -814,17 +836,25 @@ impl AnnotatedPeriodOp {
             PeriodOp::ChangeStartDate(date) => (AnnotatedPeriodOp::ChangeStartDate(date), None),
             PeriodOp::AddFront(desc) => {
                 let new_id = id_issuer.get_period_id();
-                (AnnotatedPeriodOp::AddFront(new_id, desc), Some(new_id))
+                let weeks = annotate_weeks(desc, id_issuer);
+                (AnnotatedPeriodOp::AddFront(new_id, weeks), Some(new_id))
             }
             PeriodOp::AddAfter(after_id, desc) => {
                 let new_id = id_issuer.get_period_id();
+                let weeks = annotate_weeks(desc, id_issuer);
                 (
-                    AnnotatedPeriodOp::AddAfter(new_id, after_id, desc),
+                    AnnotatedPeriodOp::AddAfter(new_id, after_id, weeks),
                     Some(new_id),
                 )
             }
             PeriodOp::Remove(period_id) => (AnnotatedPeriodOp::Remove(period_id), None),
-            PeriodOp::Update(period_id, desc) => (AnnotatedPeriodOp::Update(period_id, desc), None),
+            PeriodOp::Update(period_id, desc) => {
+                // A fresh id per position (annotation cannot see the current
+                // data, so it cannot reuse existing ids); `apply_period` writes
+                // them verbatim.
+                let weeks = annotate_weeks(desc, id_issuer);
+                (AnnotatedPeriodOp::Update(period_id, weeks), None)
+            }
         }
     }
 }

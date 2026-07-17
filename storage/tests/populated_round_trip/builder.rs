@@ -792,7 +792,7 @@ fn check_all_sections_populated(data: &Data) {
         params
             .periods
             .walk()
-            .any(|(_id, week)| week.annotation.is_some())
+            .any(|(_id, _week_id, week)| week.annotation.is_some())
     );
 
     assert!(params.students.student_map.len() >= 4);

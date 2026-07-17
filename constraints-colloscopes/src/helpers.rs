@@ -55,7 +55,7 @@ pub(crate) fn enrolled_students_for_subject(
 
 pub(crate) fn all_active_global_weeks(env: &VarEnv) -> Vec<GlobalWeek> {
     let mut result = Vec::new();
-    for (global_week, (_period_id, week_desc)) in env.periods.walk().enumerate() {
+    for (global_week, (_period_id, _week_id, week_desc)) in env.periods.walk().enumerate() {
         if week_desc.interrogations {
             result.push(GlobalWeek(global_week));
         }

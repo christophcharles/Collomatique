@@ -68,7 +68,7 @@ impl GeneralPlanning {
 
     fn count_interrogation_weeks(&self) -> usize {
         let mut count = 0usize;
-        for (_id, v) in self.periods.walk() {
+        for (_id, _week_id, v) in self.periods.walk() {
             if v.interrogations {
                 count += 1;
             }

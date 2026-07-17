@@ -25,7 +25,7 @@ use ids::Id;
 use ids::IdIssuer;
 pub use ids::{
     GroupListId, IncompatId, NewId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId,
-    SubjectId, TeacherId, WeekPatternId,
+    SubjectId, TeacherId, WeekId, WeekPatternId,
 };
 pub mod ops;
 pub use ops::{

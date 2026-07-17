@@ -564,7 +564,7 @@ impl EditorPanel {
             .params
             .periods
             .walk()
-            .filter_map(|(_, w)| w.annotation.as_ref().map(|a| a.to_string()))
+            .filter_map(|(_, _, w)| w.annotation.as_ref().map(|a| a.to_string()))
             .collect();
         self.export_panel
             .sender()
