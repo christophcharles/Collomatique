@@ -7,6 +7,8 @@ use std::collections::BTreeSet;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use collomatique_state::References;
+
 use crate::Table;
 use crate::ids::{IncompatId, SlotId, WeekId, WeekPatternId};
 use crate::ops::AnnotatedWeekPatternOp;
@@ -25,7 +27,7 @@ pub struct WeekPatterns {
 /// A pattern is stored as the *exception set* of the weeks it disables; every
 /// week not listed is active. This is the sparse dual of the historical
 /// positional bitmask.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References)]
 pub struct WeekPattern {
     /// Name of the week pattern for identification
     pub name: String,
@@ -34,6 +36,7 @@ pub struct WeekPattern {
     /// May reference non-interrogation weeks: the bit is preserved regardless
     /// of the week's `interrogations` flag (byte-stability, decision 12). The
     /// merged activity of a week is `week.interrogations ∧ ¬excluded`.
+    #[fk]
     pub excluded_weeks: BTreeSet<WeekId>,
 }
 

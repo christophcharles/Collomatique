@@ -20,14 +20,15 @@
 //! 9. group lists (id order) — filling students
 //! 10. `settings.students` keys
 //! 11. `balancing.subjects` keys
-//! 12. week-pattern length coupling: week patterns (id order) × periods (table order)
-//! 13. dense mirrors, in this order:
+//! 12. week patterns (id order) — `excluded_weeks` → weeks (set order)
+//! 13. week-pattern length coupling: week patterns (id order) × periods (table order)
+//! 14. dense mirrors, in this order:
 //!     a. `assignments.map` (per entry: key site to period then subject, then the
 //!        assigned students), in `(period, subject)` key order
 //!     b. `group_lists.subjects_associations` (per entry: period, subject, group
 //!        list), in `(period, subject)` key order
 //!     c. `slots.ordering` keys → subject, in subject-id order
-//! 14. colloscope: interrogation rows keyed `(slot, week)` — each emits a slot
+//! 15. colloscope: interrogation rows keyed `(slot, week)` — each emits a slot
 //!     key site then a week key site, in surface order (period → slot → week) —
 //!     then `group_lists` rows (group-list key site, then that list's placed
 //!     students → student)
@@ -96,6 +97,10 @@ pub enum RefSite {
     SettingsStudentKey,
     /// `balancing.subjects` has a per-subject entry keyed by a subject
     BalancingSubjectKey,
+    /// `WeekPattern::excluded_weeks` → a week the pattern disables. This is the
+    /// direct reference the per-week `NonTrivialWeekPattern` guard enforces on
+    /// week removal.
+    WeekPatternExcludedWeek(WeekPatternId),
     /// A week pattern references a period through the weeks it excludes.
     /// `non_trivial` is `true` when the pattern excludes at least one of the
     /// period's weeks (removing them — required before deleting the period — is
@@ -182,6 +187,7 @@ pub(crate) fn walk_params_refs(params: &Parameters, v: &mut impl RefVisitor) {
     walk_group_lists(params, v);
     walk_settings_keys(params, v);
     walk_balancing_keys(params, v);
+    walk_week_patterns(params, v);
     walk_week_pattern_coupling(params, v);
 }
 
@@ -299,6 +305,15 @@ fn walk_settings_keys(params: &Parameters, v: &mut impl RefVisitor) {
 fn walk_balancing_keys(params: &Parameters, v: &mut impl RefVisitor) {
     for subject_id in params.balancing.subjects.keys() {
         v.subject_ref(subject_id, RefSite::BalancingSubjectKey);
+    }
+}
+
+fn walk_week_patterns(params: &Parameters, v: &mut impl RefVisitor) {
+    for (wp_id, wp) in params.week_patterns.week_pattern_map.iter() {
+        wp.for_each_ref(&mut |id: NewId| match id {
+            NewId::WeekId(w) => v.week_ref(w, RefSite::WeekPatternExcludedWeek(wp_id)),
+            _ => unreachable!("Week pattern only references the weeks it excludes"),
+        });
     }
 }
 

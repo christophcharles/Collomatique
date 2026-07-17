@@ -421,9 +421,12 @@ fn walk_covers_every_site_in_order() {
         ],
     );
 
-    // The colloscope references weeks through its interrogation rows: the only
-    // non-empty row is (slot1, w0), so just w0 is referenced.
-    assert_eq!(c.week, vec![(w0, collo_int)]);
+    // Weeks are referenced by week-pattern exclusions (step 12: wp excludes w1)
+    // and by colloscope interrogation rows (step 15: the (slot1, w0) row).
+    assert_eq!(
+        c.week,
+        vec![(w1, RefSite::WeekPatternExcludedWeek(wp)), (w0, collo_int),],
+    );
 
     assert_eq!(
         c.subject,
@@ -538,7 +541,10 @@ fn walk_covers_every_site_in_order() {
 
     // Weeks are now ref targets: w0 carries the interrogation row, w1 none.
     assert_eq!(inner.references_to_week(w0), vec![collo_int]);
-    assert_eq!(inner.references_to_week(w1), vec![]);
+    assert_eq!(
+        inner.references_to_week(w1),
+        vec![RefSite::WeekPatternExcludedWeek(wp)],
+    );
 
     assert_eq!(
         inner.references_to_subject(math),
