@@ -145,7 +145,7 @@ pub fn build_complete_config(env: &Parameters, colloscope: &Colloscope) -> Confi
 }
 
 pub fn build_colloscope(env: &Parameters, config_data: &ConfigData<Var>) -> Option<Colloscope> {
-    let mut colloscope = Colloscope::new_empty_from_params(env);
+    let mut colloscope = Colloscope::default();
 
     // Global week index → week id (canonical walk order).
     let week_ids: Vec<WeekId> = env

@@ -359,7 +359,7 @@ impl Parameters {
 
 ---
 
-## Phase 5 — 1d: colloscope sparse (3 commits, D0/D1/D2 — the phase-D/E migration pattern)
+## Phase 5 — 1d: colloscope sparse (D0 **DONE**; D1 **DONE** as six commits, last `0d5cc34b`; D2 **DONE**, one commit)
 
 ### Commit D0 — prep on the old shape — **DONE**
 
@@ -404,7 +404,7 @@ walk, storage 127 byte-stability tests, new surface tests), no `Cargo.lock` chan
 **OUTSTANDING user-run gate**: gtk4 colloscope smoke (grid renders identically, cell
 edit/erase, undo/redo) + `custom_export_xlsx.py` unchanged output.
 
-### Commit D1 — the swap
+### Commit D1 — the swap — **DONE** (six commits, last `0d5cc34b`)
 
 ```rust
 pub struct Colloscope {
@@ -456,7 +456,25 @@ for ((slot_id, week_id), groups) in self.interrogations.iter() {
   cell tests (`:84-151`, `:158-301`) keep scenarios; upsert semantics removes their skeleton
   dependence.
 
-### Commit D2 — cleanup sweep
+### Commit D2 — cleanup sweep — **DONE** (one commit)
+
+> **DONE (July 18 2026), one commit** (no split: ~5 files, all edits mechanical and
+> mutually independent, no transitional state, no byte/behaviour change). Delivered:
+> - Deleted the **10 dead `ColloscopeError` variants** the sparse swap orphaned
+>   (`InvalidPeriodId`, the four `Wrong…Count…` variants,
+>   `InterrogationOnNonInterrogationWeek`/`MissingInterrogationOnInterrogationWeek`,
+>   `InvalidWeekNumberInPeriod`, `NoInterrogationOnWeek`, `MissingNonPrefilledGroupList`).
+>   Their only consumer, `ops/src/colloscope.rs`, matches on live variants with `_ =>`
+>   wildcards, so deletion touched no consumer code.
+> - Re-cut the last positional payload: `InvalidGroupNumInInterrogation(PeriodId, SlotId,
+>   usize)` → `(SlotId, WeekId)` (row vocabulary); dropped the now-unused `PeriodId`
+>   import.
+> - Deleted `Colloscope::new_empty_from_params` (a `Self::default()` shim); its callers
+>   (decode, convert, 3 surface tests) now use `Colloscope::default()`.
+> - Scrubbed the now-false doc comments (the `&Periods`-transitional surface block; the
+>   decode "colloscope skeleton builder"/"interrogation skeleton" comments — the early
+>   `check_invariants` call is kept, error ordering is behaviour, and reworded to its true
+>   trust-boundary reason).
 
 Dead helpers, dead error variants (`WrongPeriodCountInColloscopeData`,
 `WrongSlotCountInPeriodInColloscopeData`, `WrongInterrogationCountForSlot…`,

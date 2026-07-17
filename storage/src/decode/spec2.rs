@@ -10,7 +10,7 @@
 //! 2. [reconstruct]: rebuild the in-memory
 //!    [InnerData](collomatique_state_colloscopes::InnerData) from the
 //!    blocks, completing everything the file deliberately omits (absent
-//!    blocks, derived key sets, the colloscope interrogation skeleton).
+//!    blocks, derived key sets).
 //! 3. [Data::from_inner_data]: the invariant layer — the single trust
 //!    boundary. The decoder inserts referentially-suspect rows anyway
 //!    whenever this layer rejects them with a precise error.
@@ -318,9 +318,10 @@ fn reconstruct(blocks: Blocks) -> Result<InnerData, DecodeError> {
         balancing,
     };
 
-    // The colloscope skeleton builder panics on parameters that violate
-    // the invariants, so they must be checked first. This anticipates
-    // (part of) layer 3 with the same errors.
+    // Colloscope reconstruction's trust-boundary checks assume the params are
+    // invariant-clean (they re-express the dense "cell is `Some`" rule against
+    // them), so the params are validated first. This anticipates (part of)
+    // layer 3 with the same errors, fixing the error ordering.
     params.check_invariants().map_err(InnerDataError::from)?;
 
     let colloscope = reconstruct_colloscope(blocks.colloscope.unwrap_or_default(), &params)?;
@@ -809,7 +810,7 @@ fn reconstruct_colloscope(
     // to embody are re-expressed against the parameters — `find_slot` and
     // `is_interrogation_possible`, which by contract reproduce the dense
     // "cell is `Some`" rule exactly — and against the group-list params.
-    let mut colloscope = mem::colloscopes::Colloscope::new_empty_from_params(params);
+    let mut colloscope = mem::colloscopes::Colloscope::default();
 
     // Global week index -> week id, in walk order (S11).
     let week_table: Vec<WeekId> = params

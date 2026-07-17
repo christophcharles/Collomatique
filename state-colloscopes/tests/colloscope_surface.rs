@@ -249,10 +249,9 @@ fn build_document(app: &mut AppState<Data, String>) -> Built {
 fn empty_colloscope_reads_as_no_rows() {
     let mut app = AppState::<_, String>::new(Data::new());
     let ids = build_document(&mut app);
-    let params = app.get_data().get_inner_data().params.clone();
-    let collo = Colloscope::new_empty_from_params(&params);
+    let collo = Colloscope::default();
 
-    // Every possible cell is `Some(empty)`; none is a row.
+    // A fresh colloscope holds no rows.
     assert_eq!(collo.iter().count(), 0);
     assert_eq!(collo.group_lists_iter().count(), 0);
     assert!(collo.interrogation(ids.math_slot, ids.w1a).is_none());
@@ -263,8 +262,7 @@ fn empty_colloscope_reads_as_no_rows() {
 fn set_interrogation_round_trips_and_maps_week_id() {
     let mut app = AppState::<_, String>::new(Data::new());
     let ids = build_document(&mut app);
-    let params = app.get_data().get_inner_data().params.clone();
-    let mut collo = Colloscope::new_empty_from_params(&params);
+    let mut collo = Colloscope::default();
 
     // A week in period 2 sits at a non-zero global offset — this exercises the
     // WeekId → (period, position) translation, not just index 0.
@@ -297,8 +295,7 @@ fn set_interrogation_round_trips_and_maps_week_id() {
 fn set_group_list_round_trips_and_clears() {
     let mut app = AppState::<_, String>::new(Data::new());
     let ids = build_document(&mut app);
-    let params = app.get_data().get_inner_data().params.clone();
-    let mut collo = Colloscope::new_empty_from_params(&params);
+    let mut collo = Colloscope::default();
 
     let placements = BTreeMap::from([(ids.student, 0u32)]);
     collo.set_group_list(ids.group_list, placements.clone());

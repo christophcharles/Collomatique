@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use thiserror::Error;
 
 use crate::Table;
-use crate::ids::{GroupListId, PeriodId, SlotId, StudentId, WeekId};
+use crate::ids::{GroupListId, SlotId, StudentId, WeekId};
 use crate::ops::AnnotatedColloscopeOp;
 
 /// Description of a colloscope
@@ -35,25 +35,14 @@ impl Colloscope {
     pub fn are_group_lists_empty(&self) -> bool {
         self.group_lists.is_empty()
     }
-
-    /// Builds an empty colloscope compatible with the given parameters.
-    ///
-    /// The sparse tables start empty: group-list membership is enforced by
-    /// params checks at write/validate time, not by pre-seeded rows, so the
-    /// parameters are no longer consulted. The argument is retained for source
-    /// compatibility with the callers 1d has not yet been reworked to drop it.
-    pub fn new_empty_from_params(_params: &super::colloscope_params::Parameters) -> Self {
-        Self::default()
-    }
 }
 
 /// Sparse read/write surface (canonical view: a cell is a "row" iff it holds a
 /// non-empty group set / non-empty placement map).
 ///
-/// Now that the storage is the two sparse tables, these are thin accessors. The
-/// `&Periods` argument is transitional — it is unused and 1d deletes it from
-/// every signature. `None`/absent cells and empty sets/maps all read as absent;
-/// the writers keep that canonical form (an empty write clears the row).
+/// These are thin accessors over the two sparse tables. `None`/absent cells and
+/// empty sets/maps all read as absent; the writers keep that canonical form (an
+/// empty write clears the row).
 impl Colloscope {
     /// The assigned groups on `(slot, week)`, or `None` when the cell is empty
     /// or absent.
@@ -125,7 +114,7 @@ impl Colloscope {
         // association bound. Rows are canonically non-empty, so an empty group
         // set validates vacuously.
         for ((slot_id, week_id), assigned_groups) in self.interrogations.iter() {
-            let Some((period_id, pos)) = params.periods.week_position(week_id) else {
+            let Some((period_id, _)) = params.periods.week_position(week_id) else {
                 return Err(ColloscopeError::InvalidWeekId(week_id));
             };
 
@@ -166,7 +155,7 @@ impl Colloscope {
             for group_num in assigned_groups {
                 if *group_num >= first_forbidden_value {
                     return Err(ColloscopeError::InvalidGroupNumInInterrogation(
-                        period_id, slot_id, pos,
+                        slot_id, week_id,
                     ));
                 }
             }
@@ -243,10 +232,6 @@ pub enum ColloscopeError {
     #[error("invalid student id ({0:?})")]
     InvalidStudentId(StudentId),
 
-    /// Period original id is invalid
-    #[error("invalid period id ({0:?})")]
-    InvalidPeriodId(PeriodId),
-
     /// Slot original id is invalid
     #[error("invalid slot id ({0:?})")]
     InvalidSlotId(SlotId),
@@ -255,26 +240,10 @@ pub enum ColloscopeError {
     #[error("invalid group list id ({0:?})")]
     InvalidGroupListId(GroupListId),
 
-    #[error("Wrong period count")]
-    WrongPeriodCountInColloscopeData,
-
-    #[error("Wrong group list count")]
-    WrongGroupListCountInColloscopeData,
-
-    #[error("Wrong slot count in period")]
-    WrongSlotCountInPeriodInColloscopeData(PeriodId),
-
-    #[error("Wrong interrogation count for slot in period")]
-    WrongInterrogationCountForSlotInPeriodInColloscopeData(PeriodId, SlotId),
-
-    #[error("Interrogation on non-interrogation week")]
-    InterrogationOnNonInterrogationWeek(PeriodId, SlotId, usize),
-
-    #[error("Missing interrogation on interrogation week")]
-    MissingInterrogationOnInterrogationWeek(PeriodId, SlotId, usize),
-
-    #[error("Invalid group number in interrogation")]
-    InvalidGroupNumInInterrogation(PeriodId, SlotId, usize),
+    /// A group number in an interrogation row is out of range for the slot's
+    /// `(period, subject)` group-list association
+    #[error("invalid group number in interrogation on slot {0:?}, week {1:?}")]
+    InvalidGroupNumInInterrogation(SlotId, WeekId),
 
     #[error("excluded student in group list")]
     ExcludedStudentInGroupList(GroupListId, StudentId),
@@ -282,17 +251,8 @@ pub enum ColloscopeError {
     #[error("Invalid group number for student")]
     InvalidGroupNumForStudentInGroupList(GroupListId, StudentId),
 
-    #[error("Invalid week number in period")]
-    InvalidWeekNumberInPeriod(PeriodId, usize),
-
-    #[error("No interrogation for the given week in period and slot")]
-    NoInterrogationOnWeek(PeriodId, SlotId, usize),
-
     #[error("Prefilled group list {0:?} should not be in colloscope")]
     PrefilledGroupListInColloscope(GroupListId),
-
-    #[error("Non-prefilled group list {0:?} is missing from colloscope")]
-    MissingNonPrefilledGroupList(GroupListId),
 
     /// The week id in a colloscope op does not resolve to any period
     #[error("invalid week id ({0:?})")]
@@ -365,7 +325,7 @@ impl crate::Data {
                 let params = &self.inner_data.params;
 
                 // Resolve the week to its (period, position) coordinate.
-                let Some((period_id, pos)) = params.periods.week_position(*week_id) else {
+                let Some((period_id, _)) = params.periods.week_position(*week_id) else {
                     return Err(ColloscopeError::InvalidWeekId(*week_id));
                 };
 
@@ -411,7 +371,7 @@ impl crate::Data {
                 for group_num in assigned_groups {
                     if *group_num >= first_forbidden_value {
                         return Err(ColloscopeError::InvalidGroupNumInInterrogation(
-                            period_id, *slot_id, pos,
+                            *slot_id, *week_id,
                         ));
                     }
                 }
