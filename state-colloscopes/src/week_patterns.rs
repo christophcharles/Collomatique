@@ -64,7 +64,10 @@ impl WeekPattern {
     }
 
     pub fn remove_weeks(&mut self, first_week: usize, week_count: usize) {
-        assert!(self.weeks.len() > first_week);
+        // `first_week == len` is a valid boundary when removing zero weeks (an
+        // empty splice past the end), e.g. removing a completely emptied period
+        // that sits at the very end of the schedule.
+        assert!(self.weeks.len() >= first_week);
 
         let last_week = first_week + week_count;
         assert!(self.weeks.len() >= last_week);
@@ -91,7 +94,10 @@ impl WeekPattern {
     }
 
     pub fn can_remove_weeks(&self, first_week: usize, week_count: usize) -> bool {
-        assert!(self.weeks.len() > first_week);
+        // `first_week == len` is a valid boundary when removing zero weeks (the
+        // empty range past the end), e.g. a completely emptied period sitting at
+        // the very end of the schedule.
+        assert!(self.weeks.len() >= first_week);
 
         let last_week = first_week + week_count;
         assert!(self.weeks.len() >= last_week);

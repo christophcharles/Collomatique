@@ -500,6 +500,34 @@ the period through the composite op, assert the cell and the bit landed in the n
 
 Gates: standard + the new regression tests; gtk4 compiles untouched (enum unchanged).
 
+**Deviations landed (vs the sketch above):**
+
+- **`WeekPattern::clean_weeks` is NOT deleted.** The sketch claimed
+  `save_then_clean_end_of_period` was its only caller, but it is still used by
+  the surviving cleaning machinery (`get_next_cleaning_op` for
+  `UpdatePeriodWeekCount` shrink and `DeletePeriod`). Only `save_then_clean_end_of_period`
+  and `restore_end_of_period` were deleted; `clean_weeks` lives on until B2.
+- **Two `WeekPattern` asserts relaxed** (`can_remove_weeks` and `remove_weeks`:
+  `len > first_week` → `len >= first_week`). The new merge moves every week out
+  of the source *before* the recursive `DeletePeriod`, so that op now runs on an
+  **empty** period; when that period is the last one, `first_week == pattern len`
+  and removing zero weeks tripped the old `>` assert. `first_week == len` is a
+  valid boundary for a zero-count removal — this is a latent robustness fix (an
+  empty last period + `PeriodOp::Remove` could already reach it after commit 2).
+  Pinned by the cut/merge regression test's merge-back leg.
+- **Grow keeps the `Vec::resize` fill semantics.** `UpdatePeriodWeekCount` grow
+  emits `WeekOp::AddAfter` with a *clone of the last week's description* (not a
+  bare `WeekDesc::new(true)`), matching the shape the old whole-period update
+  produced.
+- **Merge drops the "Prolongement d'une période" intermediate desc** — the
+  intermediate `PeriodOp::Update` that carried it is gone; the week moves use the
+  merge op's own `get_desc()` (invisible in the committed history, which is one
+  op).
+- Regression test lives in a new file `ops/tests/general_planning_content.rs`
+  (cut preserves the tail's colloscope cell + week-pattern bit; merge-back keeps
+  the structure and the pattern bit — the colloscope-content loss on merge is
+  pre-existing, so only structural/pattern preservation is asserted there).
+
 ---
 
 ## Commit 4 — slim `PeriodOp`; delete the transitional period-op week machinery

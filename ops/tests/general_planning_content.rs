@@ -1,0 +1,279 @@
+//! Regression tests pinning the content-preservation contract of the
+//! composite general-planning ops after they were re-cut onto the `WeekOp`
+//! family (commit 3 of the WeekId split).
+//!
+//! Cutting a period must carry the tail weeks' colloscope cells *and*
+//! week-pattern bits into the new period — this is what lets a later step
+//! delete the `save_then_clean_end_of_period` / `restore_end_of_period` dance
+//! and rely on `WeekOp::Move` instead. The global week order is unchanged by a
+//! cut (the tail simply changes owner), so a week pattern is byte-identical
+//! across the cut and the moved colloscope cell reappears in the new period.
+
+use collomatique_ops::{GeneralPlanningUpdateOp, OpCategory, UpdateOp};
+use collomatique_state::{AppState, traits::Manager};
+use collomatique_state_colloscopes::{
+    ColloscopeOp, Data, GroupListOp, NewId, Op, PeriodOp, SlotOp, Subject,
+    SubjectInterrogationParameters, SubjectOp, SubjectParameters, SubjectPeriodicity, TeacherOp,
+    WeekPatternOp, colloscopes::ColloscopeInterrogation, group_lists::GroupListParameters,
+    periods::WeekDesc, slots::Slot, teachers::Teacher, week_patterns::WeekPattern,
+};
+use std::collections::BTreeSet;
+use std::num::NonZeroU32;
+
+type Desc = (OpCategory, String);
+
+fn desc(text: &str) -> Desc {
+    (OpCategory::None, text.to_string())
+}
+
+/// Cutting a period preserves the tail's content: a filled colloscope cell and
+/// a non-trivial week-pattern bit both survive into the new period.
+#[test]
+fn cutting_a_period_preserves_tail_colloscope_and_pattern() {
+    let mut app_state = AppState::<_, Desc>::new(Data::new());
+
+    // A four-week period; we will cut after two weeks, so weeks 2 and 3 form
+    // the tail that must carry its content into the new period.
+    let Ok(Some(NewId::PeriodId(period_id))) = app_state.apply(
+        Op::Period(PeriodOp::AddFront(vec![
+            WeekDesc::new(true),
+            WeekDesc::new(true),
+            WeekDesc::new(true),
+            WeekDesc::new(true),
+        ])),
+        desc("Add period"),
+    ) else {
+        panic!("Unexpected result after adding the period");
+    };
+
+    let Ok(Some(NewId::SubjectId(subject_id))) = app_state.apply(
+        Op::Subject(SubjectOp::AddAfter(
+            None,
+            Subject {
+                parameters: SubjectParameters {
+                    name: "Math".into(),
+                    interrogation_parameters: Some(SubjectInterrogationParameters {
+                        students_per_group: NonZeroU32::new(2).unwrap()
+                            ..=NonZeroU32::new(3).unwrap(),
+                        groups_per_interrogation: NonZeroU32::new(1).unwrap()
+                            ..=NonZeroU32::new(1).unwrap(),
+                        duration: collomatique_time::NonZeroMinutes::new(60).unwrap(),
+                        take_duration_into_account: true,
+                        periodicity: SubjectPeriodicity::ExactlyPeriodic {
+                            periodicity_in_weeks: NonZeroU32::new(1).unwrap(),
+                        },
+                    }),
+                },
+                excluded_periods: BTreeSet::new(),
+            },
+        )),
+        desc("Add subject"),
+    ) else {
+        panic!("Unexpected result after adding the subject");
+    };
+
+    let Ok(Some(NewId::TeacherId(teacher_id))) = app_state.apply(
+        Op::Teacher(TeacherOp::Add(Teacher {
+            desc: Default::default(),
+            subjects: BTreeSet::from([subject_id]),
+        })),
+        desc("Add teacher"),
+    ) else {
+        panic!("Unexpected result after adding the teacher");
+    };
+
+    let Ok(Some(NewId::SlotId(slot_id))) = app_state.apply(
+        Op::Slot(SlotOp::AddAfter(
+            None,
+            Slot {
+                subject_id,
+                teacher_id,
+                start_time: collomatique_time::SlotStart {
+                    weekday: collomatique_time::Weekday(chrono::Weekday::Mon),
+                    start_time: collomatique_time::WholeMinuteTime::new(
+                        chrono::NaiveTime::from_hms_opt(8, 0, 0).unwrap(),
+                    )
+                    .unwrap(),
+                },
+                extra_info: String::new(),
+                week_pattern: None,
+                cost: 0,
+            },
+        )),
+        desc("Add slot"),
+    ) else {
+        panic!("Unexpected result after adding the slot");
+    };
+
+    let Ok(Some(NewId::GroupListId(group_list_id))) = app_state.apply(
+        Op::GroupList(GroupListOp::Add(GroupListParameters::default())),
+        desc("Add group list"),
+    ) else {
+        panic!("Unexpected result after adding the group list");
+    };
+    let Ok(None) = app_state.apply(
+        Op::GroupList(GroupListOp::AssignToSubject(
+            period_id,
+            subject_id,
+            Some(group_list_id),
+        )),
+        desc("Assign group list to subject"),
+    ) else {
+        panic!("Unexpected result after assigning the group list");
+    };
+
+    // A week pattern with a single non-trivial (false) bit on week 3 — the
+    // tail. It is not attached to any slot; we only track that `WeekOp::Move`
+    // carries its bit unchanged across the cut. Its length matches the total
+    // week count (four).
+    let Ok(Some(NewId::WeekPatternId(week_pattern_id))) = app_state.apply(
+        Op::WeekPattern(WeekPatternOp::Add(WeekPattern {
+            name: "Impaire".into(),
+            weeks: vec![true, true, true, false],
+        })),
+        desc("Add week pattern"),
+    ) else {
+        panic!("Unexpected result after adding the week pattern");
+    };
+
+    // A non-empty interrogation on week 2 (the first tail week).
+    let Ok(None) = app_state.apply(
+        Op::Colloscope(ColloscopeOp::UpdateInterrogation(
+            period_id,
+            slot_id,
+            2,
+            ColloscopeInterrogation {
+                assigned_groups: BTreeSet::from([0]),
+            },
+        )),
+        desc("Put an interrogation on the third week"),
+    ) else {
+        panic!("Unexpected result after placing the interrogation");
+    };
+
+    let pattern_before = app_state
+        .get_data()
+        .get_inner_data()
+        .params
+        .week_patterns
+        .week_pattern_map
+        .get(&week_pattern_id)
+        .expect("week pattern is live")
+        .weeks
+        .clone();
+    assert_eq!(pattern_before, vec![true, true, true, false]);
+
+    // Cut the period after two weeks: weeks 2 and 3 move to a fresh period.
+    let new_period_id =
+        match UpdateOp::GeneralPlanning(GeneralPlanningUpdateOp::CutPeriod(period_id, 2))
+            .apply(&mut app_state)
+            .expect("cutting a period past filled content must preserve it, not fail")
+        {
+            Some(NewId::PeriodId(id)) => id,
+            other => panic!("Unexpected result after cutting the period: {:?}", other),
+        };
+
+    // The two periods now hold two weeks each.
+    assert_eq!(
+        app_state
+            .get_data()
+            .get_inner_data()
+            .params
+            .periods
+            .week_count_of(period_id),
+        Some(2),
+        "the original period should keep its first two weeks",
+    );
+    assert_eq!(
+        app_state
+            .get_data()
+            .get_inner_data()
+            .params
+            .periods
+            .week_count_of(new_period_id),
+        Some(2),
+        "the new period should hold the two tail weeks",
+    );
+
+    // The week-pattern bits are unchanged (global positions are preserved by a
+    // cut): the false bit is still on the last global week.
+    assert_eq!(
+        app_state
+            .get_data()
+            .get_inner_data()
+            .params
+            .week_patterns
+            .week_pattern_map
+            .get(&week_pattern_id)
+            .expect("week pattern is still live")
+            .weeks,
+        vec![true, true, true, false],
+        "cutting a period must not disturb week-pattern bits",
+    );
+
+    // The filled cell moved into the new period at local week 0.
+    let moved_cell = app_state
+        .get_data()
+        .get_inner_data()
+        .colloscope
+        .period_map
+        .get(&new_period_id)
+        .expect("new period exists in the colloscope")
+        .slot_map
+        .get(&slot_id)
+        .expect("the slot runs in the new period")
+        .interrogations[0]
+        .clone()
+        .expect("the moved week keeps an active cell");
+    assert_eq!(
+        moved_cell.assigned_groups,
+        BTreeSet::from([0]),
+        "the interrogation content must travel into the new period",
+    );
+
+    // Merging the new period back into the original recombines the weeks and
+    // still carries the week-pattern bits. (The colloscope content is dropped
+    // on merge — pre-existing behavior: merging unassigns the group list, which
+    // clears the cells — so we only assert the structural/pattern preservation
+    // here.)
+    let merge_result = UpdateOp::GeneralPlanning(GeneralPlanningUpdateOp::MergeWithPreviousPeriod(
+        new_period_id,
+    ))
+    .apply(&mut app_state)
+    .expect("merging the tail period back must succeed");
+    assert!(merge_result.is_none());
+
+    assert_eq!(
+        app_state
+            .get_data()
+            .get_inner_data()
+            .params
+            .periods
+            .period_count(),
+        1,
+        "the two periods should be merged back into one",
+    );
+    assert_eq!(
+        app_state
+            .get_data()
+            .get_inner_data()
+            .params
+            .periods
+            .week_count_of(period_id),
+        Some(4),
+        "the merged period should hold all four weeks again",
+    );
+    assert_eq!(
+        app_state
+            .get_data()
+            .get_inner_data()
+            .params
+            .week_patterns
+            .week_pattern_map
+            .get(&week_pattern_id)
+            .expect("week pattern is still live")
+            .weeks,
+        vec![true, true, true, false],
+        "merging must not disturb week-pattern bits either",
+    );
+}

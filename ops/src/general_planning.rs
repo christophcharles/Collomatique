@@ -902,8 +902,8 @@ impl GeneralPlanningUpdateOp {
                 Ok(None)
             }
             GeneralPlanningUpdateOp::AddNewPeriod(week_count) => {
-                let new_desc =
-                    vec![collomatique_state_colloscopes::periods::WeekDesc::new(true); *week_count];
+                // Create the period empty, then grow it one week at a time so
+                // the week ops are the sole authority on week data.
                 let result = data
                     .apply(
                         collomatique_state_colloscopes::Op::Period(
@@ -916,62 +916,163 @@ impl GeneralPlanningUpdateOp {
                                 .last()
                             {
                                 Some(id) => {
-                                    collomatique_state_colloscopes::PeriodOp::AddAfter(id, new_desc)
+                                    collomatique_state_colloscopes::PeriodOp::AddAfter(id, vec![])
                                 }
-                                None => {
-                                    collomatique_state_colloscopes::PeriodOp::AddFront(new_desc)
-                                }
+                                None => collomatique_state_colloscopes::PeriodOp::AddFront(vec![]),
                             },
                         ),
                         self.get_desc(),
                     )
                     .expect("Adding a period should never fail");
-                match result {
-                    Some(collomatique_state_colloscopes::NewId::PeriodId(id)) => Ok(Some(id)),
+                let new_id = match result {
+                    Some(collomatique_state_colloscopes::NewId::PeriodId(id)) => id,
                     _ => panic!("Unexpected result! {:?}", result),
+                };
+
+                let mut prev_week_id: Option<collomatique_state_colloscopes::WeekId> = None;
+                for _ in 0..*week_count {
+                    let week_desc = collomatique_state_colloscopes::periods::WeekDesc::new(true);
+                    let week_op = match prev_week_id {
+                        None => collomatique_state_colloscopes::WeekOp::AddFront(new_id, week_desc),
+                        Some(prev) => {
+                            collomatique_state_colloscopes::WeekOp::AddAfter(prev, week_desc)
+                        }
+                    };
+                    let result = data
+                        .apply(
+                            collomatique_state_colloscopes::Op::Week(week_op),
+                            self.get_desc(),
+                        )
+                        .expect("Adding a week to a fresh period should never fail");
+                    match result {
+                        Some(collomatique_state_colloscopes::NewId::WeekId(id)) => {
+                            prev_week_id = Some(id)
+                        }
+                        _ => panic!("Unexpected result! {:?}", result),
+                    }
                 }
+
+                Ok(Some(new_id))
             }
             GeneralPlanningUpdateOp::UpdatePeriodWeekCount(period_id, week_count) => {
-                let mut desc = data
+                let old_week_count = data
                     .get_data()
                     .get_inner_data()
                     .params
                     .periods
-                    .weeks_vec_of(*period_id)
+                    .week_count_of(*period_id)
                     .ok_or(UpdatePeriodWeekCountError::InvalidPeriodId(*period_id))?;
 
-                desc.resize(
-                    *week_count,
-                    desc.last()
+                if *week_count > old_week_count {
+                    // Grow: append weeks off the last one (front if the period
+                    // is empty), copying the last week's description — the shape
+                    // the old whole-period update produced via `Vec::resize`.
+                    let fill_desc = data
+                        .get_data()
+                        .get_inner_data()
+                        .params
+                        .periods
+                        .weeks_vec_of(*period_id)
+                        .expect("period id valid")
+                        .last()
                         .cloned()
-                        .unwrap_or(collomatique_state_colloscopes::periods::WeekDesc::new(true)),
-                );
+                        .unwrap_or(collomatique_state_colloscopes::periods::WeekDesc::new(true));
 
-                let result = match data.apply(
-                    collomatique_state_colloscopes::Op::Period(
-                        collomatique_state_colloscopes::PeriodOp::Update(*period_id, desc),
-                    ),
-                    self.get_desc(),
-                ) {
-                    Ok(r) => r,
-                    Err(collomatique_state_colloscopes::Error::Period(
-                        collomatique_state_colloscopes::PeriodError::InvalidPeriodId(_),
-                    )) => {
-                        panic!(
-                            "Period Id {:?} should be valid at this point but InvalidPeriodId received",
-                            *period_id
-                        )
+                    let mut prev_week_id = if old_week_count == 0 {
+                        None
+                    } else {
+                        data.get_data()
+                            .get_inner_data()
+                            .params
+                            .periods
+                            .week_id_at(*period_id, old_week_count - 1)
+                    };
+
+                    for _ in old_week_count..*week_count {
+                        let week_op = match prev_week_id {
+                            None => collomatique_state_colloscopes::WeekOp::AddFront(
+                                *period_id,
+                                fill_desc.clone(),
+                            ),
+                            Some(prev) => collomatique_state_colloscopes::WeekOp::AddAfter(
+                                prev,
+                                fill_desc.clone(),
+                            ),
+                        };
+                        let result = data
+                            .apply(
+                                collomatique_state_colloscopes::Op::Week(week_op),
+                                self.get_desc(),
+                            )
+                            .expect("Growing a period should never fail");
+                        match result {
+                            Some(collomatique_state_colloscopes::NewId::WeekId(id)) => {
+                                prev_week_id = Some(id)
+                            }
+                            _ => panic!("Unexpected result! {:?}", result),
+                        }
                     }
-                    Err(e) => {
-                        panic!("Unexpected error for UpdatePeriodWeekCount! {:?}", e);
+                } else if *week_count < old_week_count {
+                    // Shrink: the cleaning cascade has already emptied the
+                    // doomed weeks' colloscope cells and made their pattern bits
+                    // trivial, so removing them last-to-first cannot fail.
+                    for pos in (*week_count..old_week_count).rev() {
+                        let week_id = data
+                            .get_data()
+                            .get_inner_data()
+                            .params
+                            .periods
+                            .week_id_at(*period_id, pos)
+                            .expect("position in range");
+                        let result = data
+                            .apply(
+                                collomatique_state_colloscopes::Op::Week(
+                                    collomatique_state_colloscopes::WeekOp::Remove(week_id),
+                                ),
+                                self.get_desc(),
+                            )
+                            .expect("Cleaning made the removed weeks trivial");
+                        if result.is_some() {
+                            panic!("Unexpected result! {:?}", result);
+                        }
                     }
-                };
-                if result.is_some() {
-                    panic!("Unexpected result! {:?}", result);
                 }
+
                 Ok(None)
             }
             GeneralPlanningUpdateOp::DeletePeriod(period_id) => {
+                // Empty the period one week at a time — the cleaning cascade has
+                // already made every week trivial (empty cells, removable
+                // pattern bits) — then remove the now-empty period.
+                if let Some(week_count) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .periods
+                    .week_count_of(*period_id)
+                {
+                    for pos in (0..week_count).rev() {
+                        let week_id = data
+                            .get_data()
+                            .get_inner_data()
+                            .params
+                            .periods
+                            .week_id_at(*period_id, pos)
+                            .expect("position in range");
+                        let result = data
+                            .apply(
+                                collomatique_state_colloscopes::Op::Week(
+                                    collomatique_state_colloscopes::WeekOp::Remove(week_id),
+                                ),
+                                self.get_desc(),
+                            )
+                            .expect("Cleaning made every week of the period trivial");
+                        if result.is_some() {
+                            panic!("Unexpected result! {:?}", result);
+                        }
+                    }
+                }
+
                 let result = data
                     .apply(
                         collomatique_state_colloscopes::Op::Period(
@@ -988,32 +1089,28 @@ impl GeneralPlanningUpdateOp {
                 Ok(None)
             }
             GeneralPlanningUpdateOp::CutPeriod(period_id, new_week_count) => {
-                let mut desc = data
+                let old_week_count = data
                     .get_data()
                     .get_inner_data()
                     .params
                     .periods
-                    .weeks_vec_of(*period_id)
+                    .week_count_of(*period_id)
                     .ok_or(CutPeriodError::InvalidPeriodId(*period_id))?;
 
-                if *new_week_count > desc.len() {
+                if *new_week_count > old_week_count {
                     Err(CutPeriodError::RemainingWeekCountTooBig(
                         *new_week_count,
-                        desc.len(),
+                        old_week_count,
                     ))?;
                 }
 
-                let (saved_week_patterns, saved_colloscope_period) =
-                    self.save_then_clean_end_of_period(data, *period_id, *new_week_count)?;
-
-                let new_desc = desc.split_off(*new_week_count);
-
+                // Create the tail period empty; the tail weeks are moved into it
+                // below. Content (colloscope cells + week-pattern bits) travels
+                // with each week, so no save/clean/restore dance is needed.
                 let result = data
                     .apply(
                         collomatique_state_colloscopes::Op::Period(
-                            collomatique_state_colloscopes::PeriodOp::AddAfter(
-                                *period_id, new_desc,
-                            ),
+                            collomatique_state_colloscopes::PeriodOp::AddAfter(*period_id, vec![]),
                         ),
                         self.get_desc(),
                     )
@@ -1023,6 +1120,11 @@ impl GeneralPlanningUpdateOp {
                     _ => panic!("Unexpected result! {:?}", result),
                 };
 
+                // Propagate period-level references to the new period *before*
+                // moving weeks: `WeekOp::Move`'s guard needs the destination
+                // subject exclusions (which slots exist) and group-list
+                // associations (which group numbers fit) in place before a
+                // non-empty colloscope cell can travel.
                 let ordered_subject_list = data
                     .get_data()
                     .get_inner_data()
@@ -1136,27 +1238,35 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
-                // Shorten the first period
-                let result = data
-                    .apply(
-                        collomatique_state_colloscopes::Op::Period(
-                            collomatique_state_colloscopes::PeriodOp::Update(*period_id, desc),
-                        ),
-                        self.get_desc(),
-                    )
-                    .expect("At this point, period id should be valid");
-                if result.is_some() {
-                    panic!("Unexpected result! {:?}", result);
+                // Move the tail weeks into the new period, preserving order.
+                // Detaching each week from the source automatically shortens it;
+                // week ids are stable, so capture them before the first move.
+                let tail_week_ids: Vec<collomatique_state_colloscopes::WeekId> = (*new_week_count
+                    ..old_week_count)
+                    .map(|pos| {
+                        data.get_data()
+                            .get_inner_data()
+                            .params
+                            .periods
+                            .week_id_at(*period_id, pos)
+                            .expect("tail week exists")
+                    })
+                    .collect();
+                for (dest_pos, week_id) in tail_week_ids.into_iter().enumerate() {
+                    let result = data
+                        .apply(
+                            collomatique_state_colloscopes::Op::Week(
+                                collomatique_state_colloscopes::WeekOp::Move(
+                                    week_id, new_id, dest_pos,
+                                ),
+                            ),
+                            self.get_desc(),
+                        )
+                        .expect("Moving a tail week into the fresh period must succeed");
+                    if result.is_some() {
+                        panic!("Unexpected result! {:?}", result);
+                    }
                 }
-
-                self.restore_end_of_period(
-                    data,
-                    new_id,
-                    0,
-                    *new_week_count,
-                    saved_week_patterns,
-                    saved_colloscope_period,
-                )?;
 
                 Ok(Some(new_id))
             }
@@ -1172,9 +1282,6 @@ impl GeneralPlanningUpdateOp {
                     Err(MergeWithPreviousPeriodError::NoPreviousPeriodToMergeWith)?;
                 }
 
-                let (saved_week_patterns, saved_colloscope_period) =
-                    self.save_then_clean_end_of_period(data, *period_id, 0)?;
-
                 let previous_id = data
                     .get_data()
                     .get_inner_data()
@@ -1183,40 +1290,52 @@ impl GeneralPlanningUpdateOp {
                     .period_id_at(pos - 1)
                     .expect("pos > 0 checked above");
 
-                let mut prev_desc = data
+                // Append every week of this period to the end of the previous
+                // one, preserving order. Content travels with each week (the
+                // cleaning cascade has already reconciled exclusions,
+                // assignments and associations, emptying any colloscope cell it
+                // could not carry over). Detaching from the source shortens it;
+                // week ids are stable, so capture them before the first move.
+                let append_start = data
                     .get_data()
                     .get_inner_data()
                     .params
                     .periods
-                    .weeks_vec_of(previous_id)
+                    .week_count_of(previous_id)
                     .expect("previous period id is valid");
-                let old_previous_week_count = prev_desc.len();
-                let desc = data
+                let week_count = data
                     .get_data()
                     .get_inner_data()
                     .params
                     .periods
-                    .weeks_vec_of(*period_id)
+                    .week_count_of(*period_id)
                     .expect("period id is valid");
-
-                prev_desc.extend(desc);
-
-                let result = data
-                    .apply(
-                        collomatique_state_colloscopes::Op::Period(
-                            collomatique_state_colloscopes::PeriodOp::Update(
-                                previous_id,
-                                prev_desc,
+                let week_ids: Vec<collomatique_state_colloscopes::WeekId> = (0..week_count)
+                    .map(|pos| {
+                        data.get_data()
+                            .get_inner_data()
+                            .params
+                            .periods
+                            .week_id_at(*period_id, pos)
+                            .expect("week exists")
+                    })
+                    .collect();
+                for (offset, week_id) in week_ids.into_iter().enumerate() {
+                    let result = data
+                        .apply(
+                            collomatique_state_colloscopes::Op::Week(
+                                collomatique_state_colloscopes::WeekOp::Move(
+                                    week_id,
+                                    previous_id,
+                                    append_start + offset,
+                                ),
                             ),
-                        ),
-                        (
-                            OpCategory::GeneralPlanning,
-                            "Prolongement d'une période".to_string(),
-                        ),
-                    )
-                    .expect("At this point, period id should be valid");
-                if result.is_some() {
-                    panic!("Unexpected result! {:?}", result);
+                            self.get_desc(),
+                        )
+                        .expect("Merging a week into the previous period must succeed");
+                    if result.is_some() {
+                        panic!("Unexpected result! {:?}", result);
+                    }
                 }
 
                 let rec_result =
@@ -1230,19 +1349,10 @@ impl GeneralPlanningUpdateOp {
                     panic!("Unexpected result! {:?}", result);
                 }
 
-                self.restore_end_of_period(
-                    data,
-                    previous_id,
-                    old_previous_week_count,
-                    0,
-                    saved_week_patterns,
-                    saved_colloscope_period,
-                )?;
-
                 Ok(None)
             }
             GeneralPlanningUpdateOp::UpdateWeekStatus(period_id, week_num, state) => {
-                let mut desc = data
+                let desc = data
                     .get_data()
                     .get_inner_data()
                     .params
@@ -1257,12 +1367,20 @@ impl GeneralPlanningUpdateOp {
                     ))?;
                 }
 
-                desc[*week_num].interrogations = *state;
+                let week_id = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .periods
+                    .week_id_at(*period_id, *week_num)
+                    .expect("week number checked in range above");
+                let mut new_desc = desc[*week_num].clone();
+                new_desc.interrogations = *state;
 
                 let result = data
                     .apply(
-                        collomatique_state_colloscopes::Op::Period(
-                            collomatique_state_colloscopes::PeriodOp::Update(*period_id, desc),
+                        collomatique_state_colloscopes::Op::Week(
+                            collomatique_state_colloscopes::WeekOp::Update(week_id, new_desc),
                         ),
                         self.get_desc(),
                     )
@@ -1273,7 +1391,7 @@ impl GeneralPlanningUpdateOp {
                 Ok(None)
             }
             GeneralPlanningUpdateOp::UpdateWeekAnnotation(period_id, week_num, annotation) => {
-                let mut desc = data
+                let desc = data
                     .get_data()
                     .get_inner_data()
                     .params
@@ -1288,12 +1406,20 @@ impl GeneralPlanningUpdateOp {
                     ))?;
                 }
 
-                desc[*week_num].annotation = annotation.clone();
+                let week_id = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .periods
+                    .week_id_at(*period_id, *week_num)
+                    .expect("week number checked in range above");
+                let mut new_desc = desc[*week_num].clone();
+                new_desc.annotation = annotation.clone();
 
                 let result = data
                     .apply(
-                        collomatique_state_colloscopes::Op::Period(
-                            collomatique_state_colloscopes::PeriodOp::Update(*period_id, desc),
+                        collomatique_state_colloscopes::Op::Week(
+                            collomatique_state_colloscopes::WeekOp::Update(week_id, new_desc),
                         ),
                         self.get_desc(),
                     )
@@ -1304,170 +1430,6 @@ impl GeneralPlanningUpdateOp {
                 Ok(None)
             }
         }
-    }
-
-    fn save_then_clean_end_of_period<
-        T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
-    >(
-        &self,
-        data: &mut T,
-        period_id: collomatique_state_colloscopes::PeriodId,
-        first_week_to_clean: usize,
-    ) -> Result<
-        (
-            std::collections::BTreeMap<
-                collomatique_state_colloscopes::WeekPatternId,
-                collomatique_state_colloscopes::week_patterns::WeekPattern,
-            >,
-            collomatique_state_colloscopes::colloscopes::ColloscopePeriod,
-        ),
-        GeneralPlanningUpdateError,
-    > {
-        let saved_week_patterns: std::collections::BTreeMap<_, _> = data
-            .get_data()
-            .get_inner_data()
-            .params
-            .week_patterns
-            .week_pattern_map
-            .iter()
-            .map(|(id, wp)| (id, wp.clone()))
-            .collect();
-        let saved_colloscope_period = data
-            .get_data()
-            .get_inner_data()
-            .colloscope
-            .period_map
-            .get(&period_id)
-            .expect("Period ID should be valid at this point")
-            .clone();
-
-        let (first_week, week_count) = data
-            .get_data()
-            .get_inner_data()
-            .params
-            .periods
-            .get_first_week_and_length_for_period(period_id)
-            .expect("Period ID should be valid at this point");
-        if week_count <= first_week_to_clean {
-            // Nothing to clean
-            return Ok((saved_week_patterns, saved_colloscope_period));
-        }
-
-        // Clean the colloscope for the end of the period
-        if !saved_colloscope_period.is_empty() {
-            for (slot_id, collo_slot) in &saved_colloscope_period.slot_map {
-                for week in first_week_to_clean..collo_slot.interrogations.len() {
-                    let interrogation_opt = &collo_slot.interrogations[week];
-                    let Some(interrogation) = interrogation_opt else {
-                        continue;
-                    };
-                    if interrogation.is_empty() {
-                        continue;
-                    }
-                    let result = data
-                        .apply(
-                            collomatique_state_colloscopes::Op::Colloscope(
-                                collomatique_state_colloscopes::ColloscopeOp::UpdateInterrogation(
-                                    period_id, *slot_id, week,
-                                    collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
-                                ),
-                            ),
-                            self.get_desc(),
-                        )
-                        .expect("At this point, all IDS should be valid");
-                    assert!(result.is_none());
-                }
-            }
-        }
-
-        let first_week_to_remove = first_week + first_week_to_clean;
-        let weeks_to_remove = week_count - first_week_to_clean;
-
-        // Clean the week patterns for the end of the period
-        for (week_pattern_id, week_pattern) in &saved_week_patterns {
-            if !week_pattern.can_remove_weeks(first_week_to_remove, weeks_to_remove) {
-                let mut new_week_patten = week_pattern.clone();
-                new_week_patten.clean_weeks(first_week_to_remove, weeks_to_remove);
-
-                let result = data
-                    .apply(
-                        collomatique_state_colloscopes::Op::WeekPattern(
-                            collomatique_state_colloscopes::WeekPatternOp::Update(
-                                *week_pattern_id,
-                                new_week_patten,
-                            ),
-                        ),
-                        self.get_desc(),
-                    )
-                    .expect("At this point, all data should be valid");
-                assert!(result.is_none());
-            }
-        }
-
-        Ok((saved_week_patterns, saved_colloscope_period))
-    }
-
-    fn restore_end_of_period<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
-        &self,
-        data: &mut T,
-        period_id: collomatique_state_colloscopes::PeriodId,
-        first_week_in_new_period: usize,
-        first_week_in_old_period: usize,
-        saved_week_patterns: std::collections::BTreeMap<
-            collomatique_state_colloscopes::WeekPatternId,
-            collomatique_state_colloscopes::week_patterns::WeekPattern,
-        >,
-        saved_colloscope_period: collomatique_state_colloscopes::colloscopes::ColloscopePeriod,
-    ) -> Result<(), GeneralPlanningUpdateError> {
-        // Restore week patterns
-        for (week_pattern_id, week_pattern) in saved_week_patterns {
-            let result = data
-                .apply(
-                    collomatique_state_colloscopes::Op::WeekPattern(
-                        collomatique_state_colloscopes::WeekPatternOp::Update(
-                            week_pattern_id,
-                            week_pattern,
-                        ),
-                    ),
-                    self.get_desc(),
-                )
-                .expect("Week patterns should all be perfectly valid");
-            if result.is_some() {
-                panic!("Unexpected result! {:?}", result);
-            }
-        }
-
-        // Restore colloscope
-        for (slot_id, collo_slot) in saved_colloscope_period.slot_map {
-            for old_week in first_week_in_old_period..collo_slot.interrogations.len() {
-                let interrogiation_opt = &collo_slot.interrogations[old_week];
-                let Some(interrogation) = interrogiation_opt else {
-                    continue;
-                };
-                if interrogation.is_empty() {
-                    continue;
-                }
-                let new_week = old_week - first_week_in_old_period + first_week_in_new_period;
-                let result = data
-                    .apply(
-                        collomatique_state_colloscopes::Op::Colloscope(
-                            collomatique_state_colloscopes::ColloscopeOp::UpdateInterrogation(
-                                period_id,
-                                slot_id,
-                                new_week,
-                                interrogation.clone(),
-                            ),
-                        ),
-                        self.get_desc(),
-                    )
-                    .expect("Interrogations should all be perfectly valid");
-                if result.is_some() {
-                    panic!("Unexpected result! {:?}", result);
-                }
-            }
-        }
-
-        Ok(())
     }
 
     pub fn get_desc(&self) -> (OpCategory, String) {
