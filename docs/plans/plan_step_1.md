@@ -31,7 +31,7 @@ same change (here: mirrors preserved by computed views); `foo.rs + foo/` module 
 
 ---
 
-## Phase 0 — bugfix: `UpdatePeriodWeekCount` cleaning loop (2 commits)
+## Phase 0 — bugfix: `UpdatePeriodWeekCount` cleaning loop (2 commits) — **DONE** (`1418d4bf`, `f8e34128`)
 
 **Bug** (`ops/src/general_planning.rs:357`): inside `get_next_cleaning_op`, the shrink
 branch is only reachable when `*week_count < old_week_count` (guard at `:343`), yet the
@@ -66,7 +66,7 @@ plus re-run of the regression test and the ops crate suite. Nothing else rides a
 
 ---
 
-## Phase 1 — decoupling commit: consumers stop *relying* on denseness (1 commit)
+## Phase 1 — decoupling commit: consumers stop *relying* on denseness (1 commit) — **DONE** (`d3c56e9f`)
 
 Behavior-preserving conversions, only for sites that (i) survive the reshapes and (ii) have
 a params-side source of truth today. Sites whose job *is* the dense skeleton
@@ -100,7 +100,7 @@ Also in this commit (cheap riders): delete the stale multi-colloscope comment bl
 
 ---
 
-## Phase 2 — 1a: assignments sparse (1 commit)
+## Phase 2 — 1a: assignments sparse (1 commit) — **DONE** (`9f4471e2`)
 
 **Target:** same type, new contract — a `(period, subject)` row exists **iff** its student
 set is non-empty.
@@ -191,7 +191,7 @@ byte-stability suite; user runs the 3 contract scripts + gtk4 smoke.
 
 ---
 
-## Phase 3 — 1c: sparse slots `ordering` sidecar (1 commit)
+## Phase 3 — 1c: sparse slots `ordering` sidecar (1 commit) — **DONE** (`b681cdac`)
 
 **Target:** an `ordering` row exists iff the subject has ≥1 slot (no more empty-vec rows).
 All inside the existing encapsulation boundary:
@@ -216,108 +216,76 @@ All inside the existing encapsulation boundary:
 
 ---
 
-## Phase 4 — 1b: `WeekId` (2 commits, B1 + B2)
+## Phase 4 — 1b: `WeekId` (B1 **DONE** as six commits `2a0ec129`…`2de37eae`; B2 is next)
 
-### Commit B1 — weeks become entities; patterns stay `Vec<bool>` for one more commit
+### Commit B1 — weeks become entities; patterns stay `Vec<bool>` for one more commit — **DONE**
 
-> **SUPERSEDED (July 17 2026).** B1 turned out far too wide to land as one commit
-> (it reshapes `Periods`, re-cuts the op family, rewrites every positional week
-> walk across 8 crates, and adds transitional colloscope/pattern maintenance all
-> at once). It has been split into **six contained commits (0–5)**, each green and
-> byte-stable and either wide-but-shallow or deep-but-narrow. See
-> [`plan_step_1_b1_split.md`](plan_step_1_b1_split.md) for the detailed plan. The
-> B1 sketch below is retained for historical context only; the split doc is
-> authoritative. B2 (below) is unchanged and follows commit 5.
+> **DONE (July 17 2026), landed as six contained commits.** The one-commit B1 proved
+> far too wide, so it was split (each commit green, byte-stable, either
+> wide-but-shallow or deep-but-narrow). The full split plan — decisions ledger S1–S12
+> and per-commit deviation notes — is retired from the tree; pinned at
+> `git show 2de37eae:docs/plans/plan_step_1_b1_split.md`.
+>
+> | # | Commit | Content |
+> |---|--------|---------|
+> | 0 | `2a0ec129` | Read surface on `Periods` (old shape); `ordered_period_list` privatized; ~50 consumer sites across 8 crates moved onto it |
+> | 1 | `fac63ae0` | `WeekId` inline (`Vec<(WeekId, WeekDesc)>` payload); decode synthesis; week ids join `ids()`; undo/redo preserves ids |
+> | 2 | `efaf50cc` | `WeekOp` family + `apply_week` with transitional pattern/colloscope maintenance; testgen `gen_week`; targeted unit tests |
+> | 3 | `b0da5353` | Composite planning ops emit week ops; cut/merge preserve content; save/clean/restore machinery deleted |
+> | 4 | `67c539a1` | `PeriodOp` slimmed to empty-period ops (`Remove` requires week-empty); `apply_week` is the sole week writer |
+> | 5 | `2de37eae` | Backend swap: `week_map: Table<WeekId, Week>` + ordering sidecar; `Week` entity with `period_id` FK; mirror checker |
 
-**New types** (`state-colloscopes/src/periods.rs`, `ids.rs`):
+**Landed state — where it refines the original sketch, and what B2/1d build on:**
 
-```rust
-#[derive(..., EntityId)]
-#[entity(Week)]
-pub struct WeekId(u64);                      // NewId gains a Week variant;
-                                             // IdIssuer gains get_week_id()
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References, Join)]
-pub struct Week {
-    /// Period this week belongs to (authoritative; the ordering sidecar groups it here)
-    #[fk(name = period)]
-    pub period_id: PeriodId,
-    pub interrogations: bool,
-    pub annotation: Option<non_empty_string::NonEmptyString>,
-}
-
-pub struct Periods {
-    pub first_week: Option<collomatique_time::WeekStart>,
-    /// Period order + per-period week order (private, slots-style encapsulation)
-    ordered_period_list: OrderedTable<PeriodId, Vec<WeekId>>,
-    week_map: Table<WeekId, Week>,
-}
-```
-
-Mirror invariant (`week_map` keyset == ∪ ordering vecs; `week.period_id` == owning period)
-is encapsulated exactly like `Slots`: private fields, compound `pub(crate)` mutators
-(`insert_period_at`, `remove_period` (must be week-empty), `insert_week_at(period, pos,
-Week)`, `remove_week(WeekId)`, `move_week(WeekId, PeriodId, pos)`, `update_week`), a
-decode builder `from_period_rows(...) -> Result<Self, DuplicatedWeekIdError>`, and a read
-surface (`period_ids()`, `weeks_of(PeriodId) -> &[WeekId]`, `find_week`, `count_weeks`,
-`walk() -> impl Iterator<Item = (PeriodId, WeekId)>` — the canonical global order,
-replacing every hand-rolled accumulate-`len()` loop). New
-`check_periods_data_consistency` validates the mirror under the old architecture (same
-role `check_slots_data_consistency` plays for slots). `Lookup<WeekId> → Week`;
-`Lookup<PeriodId>` re-targets from `Vec<WeekDesc>` to `Vec<WeekId>`; `ids.rs:41`
-`#[entity(...)]` updated accordingly. `WeekDesc` survives only as the *op payload / glue
-DTO* `{ interrogations, annotation }` (no period FK), reused by `WeekOp` and the pyclass.
-
-**Op re-cut** (`ops.rs`, `periods.rs`):
-
-```rust
-pub enum PeriodOp   { AddFront, AddAfter(PeriodId), Remove(PeriodId) }   // created empty
-pub enum WeekOp {
-    AddFront(PeriodId, WeekDesc),        // annotate issues the WeekId
-    AddAfter(WeekId, WeekDesc),
-    Remove(WeekId),
-    Update(WeekId, WeekDesc),            // status/annotation change
-    Move(WeekId, PeriodId, usize),       // re-parent, preserving the id (decision 4)
-}
-```
-
-Transitional maintenance inside `apply_week` (dies in B2/1d respectively):
-- *patterns* (until B2): `AddFront/AddAfter` → `add_weeks(global_pos, 1)`; `Remove` →
-  guarded `can_remove_weeks` (`NonTrivialWeekPattern`) then `remove_weeks`; `Move` →
-  remove-at-old + insert-at-new **carrying the bool value** (semantics preview of B2).
-- *colloscope* (until 1d): splice one cell per affected slot vec at the week's per-period
-  position; `Remove`/`Move`-out guarded on cell emptiness as today; `Move` into a period
-  where the slot doesn't exist (subject excluded there) requires the moved cells empty —
-  same guard family. `Update(interrogations: false)` keeps today's
-  `check_empty_on_removed_weeks`-style guard.
-
-**Composite ops** (`ops/src/general_planning.rs:234-248` enum unchanged for gtk4's sake):
-`AddNewPeriod(n)` = `PeriodOp::Add` + n × `WeekOp::AddFront/AddAfter`;
-`UpdatePeriodWeekCount` = adds/removes tail weeks; `UpdateWeekStatus/Annotation` =
-`WeekOp::Update`; `CutPeriod(p, k)` = `PeriodOp::AddAfter(p)` + `Move` for each tail week
-(ids preserved — colloscope cells and pattern bits now *survive* a cut, deleting the
-save/clean machinery at `general_planning.rs:1387-1445`); `MergeWithPreviousPeriod` =
-`Move` every week + `PeriodOp::Remove`. The cleaning-op scans re-cut mechanically (they
-already iterate weeks; they now iterate `weeks_of(period)`).
-
-**Consumers re-cut in B1** (all mechanical; positional helpers replaced by `walk()`):
-- `Parameters::merge_pattern`/`get_merged_pattern` (`colloscope_params.rs:42-70`) and
-  `Slot::build_pattern_for_new_period` (`slots.rs:77-99`) — walk-based, same output.
-- Colloscope validate/resize helpers (`colloscopes.rs:125-192`, `319-484`) — index via
-  `weeks_of(period)` positions instead of accumulate-`len()`.
-- storage: decode reads positional `GeneralPlanning.periods[].weeks`, synthesizes
-  `WeekId`s in walk order (fresh ids above the file's max id, seeded into the `IdIssuer`
-  like every id); encode projects `walk()` back to positional rows. Colloscope
-  interrogation `week: u32` ↔ `WeekId` via the same walk (decode `week_table` at
-  `decode/spec2.rs:730-736` becomes `Vec<WeekId>`). **Bytes identical.**
-- constraints-colloscopes: `tools.rs:20-100`, `convert.rs`, `helpers.rs`, `extras.rs`
-  re-source their period/week walks from `walk()`/`weeks_of`; `GlobalWeek` and all
-  windowing logic untouched (decision 10). The `WeekId ↔ GlobalWeek` map is
-  `walk().enumerate()`.
-- gtk4 `general_planning`/`colloscope_display`/period displays: emit the same composite
-  ops; week rows carry `WeekId` alongside display position (mechanical).
-- python glue: `Period { id, weeks_status }` rebuilt from `weeks_of` + `week_map`
-  (pyclass shape unchanged); `count_weeks` etc. unchanged.
+- **Read surface (final):** `walk() -> impl Iterator<Item = (PeriodId, WeekId, &Week)>`
+  (the canonical global order; `walk().enumerate()` = global week index),
+  `weeks_of(PeriodId) -> Option<impl Iterator<Item = &Week>>` (descs only, no ids —
+  richer than the sketched `&[WeekId]`), `weeks_vec_of -> Option<Vec<WeekDesc>>`
+  (op-payload/UI building), `find_week(WeekId) -> Option<&Week>` (owning period via
+  `week.period_id`), `week_id_at(period, pos)`, `week_position`, `global_week_position`,
+  `period_ids()`, `week_count_of`. `find_period(PeriodId) -> Option<&Vec<WeekId>>` is
+  **pub** (pinned by the `read_api` pointer-identity test). `Lookup<WeekId> → Week`,
+  `Lookup<PeriodId> → Vec<WeekId>` as planned. `WeekDesc` survives as the FK-less
+  op-payload/glue DTO with `Week::desc()`/`Week::from_desc()` converters.
+- **`PeriodOp` kept `ChangeStartDate`** (period-adjacent, nowhere better to live);
+  final shape `{ ChangeStartDate, AddFront, AddAfter(PeriodId), Remove(PeriodId) }`
+  with `Remove` requiring week-empty (`PeriodError::PeriodStillHasWeeks`); the
+  `Update` arm is gone (and with it the annotate-can't-see-data id-preservation wart).
+- **`WeekOp::Move` carries content** (supersedes the sketch's "Move-out guarded on cell
+  emptiness"): pattern bits travel via the new `WeekPattern::move_week`, colloscope
+  cells travel verbatim; guards only where content *cannot* travel (dest period lacks
+  the slot, or group numbers exceed the dest association bounds). This is what allowed
+  deleting `save_then_clean_end_of_period`/`restore_end_of_period` outright — cut/merge
+  now preserve content by construction.
+- **`WeekOp::Remove` requires trivial state** (every pattern bit `true`, every cell
+  empty), so undo re-adds with the original id and restores the exact prior state.
+- **Mirror invariant:** `check_periods_data_consistency` (`InvariantError::InvalidWeek`)
+  wired right after the duplicate-id check; refs registry gained `RefSite::WeekPeriodFk`,
+  walked first in `walk_params_refs`.
+- **Storage:** decode pre-scans `max_used_id` over all 10 id-bearing format blocks, then
+  synthesizes week ids `max+1, max+2, …` in walk order; encode never writes week ids ⇒
+  bytes unconditionally identical. `populated_round_trip` compares **re-encoded bytes**,
+  not `InnerData` equality (decode-synthesized ids differ from ops-issued ones by
+  design). Colloscope decode's `week_table` stays positional
+  (`(PeriodId, week_in_period)` pairs off the surface) — becomes `WeekId`-keyed in 1d.
+- **gtk4 stayed positional** (composite `GeneralPlanningUpdateOp` unchanged, so week
+  rows carry no `WeekId` yet); `UpdateWeekStatus/Annotation` resolve ids internally via
+  `week_id_at(p, w)`.
+- **New tests pinning the contract downstream phases rely on:**
+  `state-colloscopes/tests/week_ops.rs` (move-preserves-content, both Move guards,
+  remove-blocked-by-pattern-bit, undo restores id, update-blocked-by-filled-cell);
+  `ops/tests/general_planning_content.rs` (cut preserves the tail's colloscope cell +
+  pattern bit; merge-back structure/pattern — **the contract B2/1d rely on**);
+  `state-colloscopes/tests/read_api.rs` (`resolve == find_period` by pointer).
+- **Transitional code and where it dies:** pattern splices in `apply_week`
+  (`add_weeks`/`can_remove_weeks`/`remove_weeks`/`move_week`) and `clean_weeks` in the
+  surviving ops-layer cleaning machinery → deleted by **B2**; colloscope cell splices in
+  `apply_week` → deleted by **1d**. `can_remove_weeks`/`remove_weeks` asserts were
+  relaxed to `len >= first_week` (zero-count removal on an empty last period is a valid
+  boundary — merge empties the source before `DeletePeriod`).
+- **Gates:** 500-seed harness ran clean after commit 5 (committed `property_ops` config
+  stays at 100 seeds). **Outstanding, user-run:** gtk4 smoke (edit weeks/periods,
+  cut/merge with a filled colloscope, undo/redo, save/reload) + the 3 contract scripts.
 
 ### Commit B2 — week patterns become the exception set
 
@@ -330,8 +298,9 @@ pub struct WeekPattern {
 }
 ```
 
-- **Delete**: `add_weeks`/`clean_weeks`/`remove_weeks`/`can_remove_weeks`
-  (`week_patterns.rs:48-92`), every lockstep-splice call in period/week ops, the length
+- **Delete**: `add_weeks`/`clean_weeks`/`remove_weeks`/`can_remove_weeks`/`move_week`
+  (`week_patterns.rs`; `move_week` was added in B1 commit 2 for `WeekOp::Move` and dies
+  here too), every lockstep-splice call in period/week ops, the length
   invariant (`BadWeekPatternLength`, `validate_week_pattern_internal`,
   `check_week_pattern_data_consistency` length check → replaced by a dangling-`WeekId`
   sweep over `excluded_weeks`). Invariant #8 is gone.
@@ -456,12 +425,9 @@ user runs 3 contract scripts + gtk4 smoke.
 
 ## Risks & watch items
 
-- **B1 is the widest commit** (op re-cut + every positional walk). Mitigation: `walk()`
-  centralizes the order; constraints-colloscopes regression fixtures
-  (`build_model_regression.rs` etc.) pin the solver-facing behavior.
-- **Transitional colloscope maintenance in B1** (splice-per-week-op) is throwaway code —
-  keep it minimal and lean on the existing `update_slot_for_week_pattern` helpers; 1d
-  deletes it weeks later.
+- ~~B1 width / transitional maintenance~~ *(resolved)*: B1 landed as six contained
+  commits (see Phase 4); the throwaway splice code sits in `apply_week` and is deleted
+  by B2 (patterns) / 1d (cells).
 - **Decode `WeekId` synthesis** must allocate above the file's max id before the
   `IdIssuer` scan — same pattern as every synthesized id today; the duplicate-id checker
   covers mistakes.
