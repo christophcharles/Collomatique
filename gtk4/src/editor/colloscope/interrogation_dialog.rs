@@ -9,7 +9,7 @@ use relm4::{adw, gtk};
 pub struct Dialog {
     hidden: bool,
     should_redraw: bool,
-    interrogation: collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation,
+    assigned_groups: std::collections::BTreeSet<u32>,
     group_list: collomatique_state_colloscopes::group_lists::GroupList,
 
     group_entries: FactoryVecDeque<GroupEntry>,
@@ -19,7 +19,7 @@ pub struct Dialog {
 pub enum DialogInput {
     Show(
         collomatique_state_colloscopes::group_lists::GroupList,
-        collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation,
+        std::collections::BTreeSet<u32>,
     ),
     Cancel,
     Accept,
@@ -29,7 +29,7 @@ pub enum DialogInput {
 
 #[derive(Debug)]
 pub enum DialogOutput {
-    Accepted(collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation),
+    Accepted(std::collections::BTreeSet<u32>),
 }
 
 #[relm4::component(pub)]
@@ -109,8 +109,7 @@ impl SimpleComponent for Dialog {
         let model = Dialog {
             hidden: true,
             should_redraw: false,
-            interrogation:
-                collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation::default(),
+            assigned_groups: std::collections::BTreeSet::new(),
             group_list: collomatique_state_colloscopes::group_lists::GroupList::default(),
             group_entries,
         };
@@ -124,11 +123,11 @@ impl SimpleComponent for Dialog {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         self.should_redraw = false;
         match msg {
-            DialogInput::Show(group_list, interrogation) => {
+            DialogInput::Show(group_list, assigned_groups) => {
                 self.hidden = false;
                 self.should_redraw = true;
                 self.group_list = group_list;
-                self.interrogation = interrogation;
+                self.assigned_groups = assigned_groups;
 
                 crate::tools::factories::update_vec_deque(
                     &mut self.group_entries,
@@ -141,7 +140,7 @@ impl SimpleComponent for Dialog {
                             .get(num as usize)
                             .cloned()
                             .flatten(),
-                        status: self.interrogation.assigned_groups.contains(&num),
+                        status: self.assigned_groups.contains(&num),
                     }),
                     GroupInput::UpdateData,
                 );
@@ -152,14 +151,14 @@ impl SimpleComponent for Dialog {
             DialogInput::Accept => {
                 self.hidden = true;
                 sender
-                    .output(DialogOutput::Accepted(self.interrogation.clone()))
+                    .output(DialogOutput::Accepted(self.assigned_groups.clone()))
                     .unwrap();
             }
             DialogInput::UpdateGroupStatus(group_num, new_status) => {
                 if new_status {
-                    self.interrogation.assigned_groups.insert(group_num);
+                    self.assigned_groups.insert(group_num);
                 } else {
-                    self.interrogation.assigned_groups.remove(&group_num);
+                    self.assigned_groups.remove(&group_num);
                 }
             }
         }

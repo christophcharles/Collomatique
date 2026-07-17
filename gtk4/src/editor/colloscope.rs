@@ -46,13 +46,13 @@ pub enum ColloscopeInput {
     ),
 
     EditGroupList(collomatique_state_colloscopes::GroupListId),
-    GroupListAccepted(collomatique_state_colloscopes::colloscopes::ColloscopeGroupList),
+    GroupListAccepted(std::collections::BTreeMap<collomatique_state_colloscopes::StudentId, u32>),
 
     EditInterrogation(
         collomatique_state_colloscopes::SlotId,
         collomatique_state_colloscopes::WeekId,
     ),
-    InterrogationAccepted(collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation),
+    InterrogationAccepted(std::collections::BTreeSet<u32>),
 
     SolveColloscopeClicked,
     ResetSolveConfig,
@@ -647,16 +647,11 @@ impl Component for Colloscope {
                         self.colloscope
                             .group_list(group_list_id)
                             .cloned()
-                            .map(|groups_for_students| {
-                                collomatique_state_colloscopes::colloscopes::ColloscopeGroupList {
-                                    groups_for_students,
-                                }
-                            })
                             .unwrap_or_default(),
                     ))
                     .unwrap();
             }
-            ColloscopeInput::GroupListAccepted(collo_group_list) => {
+            ColloscopeInput::GroupListAccepted(groups_for_students) => {
                 let group_list_id = self
                     .edited_group_list
                     .take()
@@ -665,7 +660,7 @@ impl Component for Colloscope {
                     .output(ColloscopeOutput::UpdateOp(
                         ColloscopeUpdateOp::UpdateColloscopeGroupList(
                             group_list_id,
-                            collo_group_list.groups_for_students,
+                            groups_for_students,
                         ),
                     ))
                     .unwrap();
@@ -701,24 +696,21 @@ impl Component for Colloscope {
                     .expect("Group list ID should be valid")
                     .clone();
 
-                let interrogation =
-                    collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation {
-                        assigned_groups: self
-                            .colloscope
-                            .interrogation(&self.params.periods, slot_id, week_id)
-                            .cloned()
-                            .unwrap_or_default(),
-                    };
+                let assigned_groups = self
+                    .colloscope
+                    .interrogation(&self.params.periods, slot_id, week_id)
+                    .cloned()
+                    .unwrap_or_default();
 
                 self.interrogation_dialog
                     .sender()
                     .send(interrogation_dialog::DialogInput::Show(
                         group_list,
-                        interrogation,
+                        assigned_groups,
                     ))
                     .unwrap();
             }
-            ColloscopeInput::InterrogationAccepted(interrogation) => {
+            ColloscopeInput::InterrogationAccepted(assigned_groups) => {
                 let (slot_id, week_id) = self
                     .edited_interrogation
                     .take()
@@ -728,7 +720,7 @@ impl Component for Colloscope {
                         ColloscopeUpdateOp::UpdateColloscopeInterrogation(
                             slot_id,
                             week_id,
-                            interrogation.assigned_groups,
+                            assigned_groups,
                         ),
                     ))
                     .unwrap();
@@ -1076,12 +1068,7 @@ impl Colloscope {
             .map(|(id, group_list)| group_lists_display::EntryData {
                 id,
                 group_list: group_list.clone(),
-                collo_group_list: self
-                    .colloscope
-                    .group_lists
-                    .get(&id)
-                    .expect("Non-prefilled group list should have colloscope entry")
-                    .clone(),
+                groups_for_students: self.colloscope.group_list(id).cloned().unwrap_or_default(),
                 total_student_count: self.params.students.student_map.len(),
             })
             .collect();

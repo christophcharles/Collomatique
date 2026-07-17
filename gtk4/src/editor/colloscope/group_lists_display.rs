@@ -9,7 +9,8 @@ use relm4::prelude::{DynamicIndex, FactoryComponent};
 pub struct EntryData {
     pub id: collomatique_state_colloscopes::GroupListId,
     pub group_list: collomatique_state_colloscopes::group_lists::GroupList,
-    pub collo_group_list: collomatique_state_colloscopes::colloscopes::ColloscopeGroupList,
+    pub groups_for_students:
+        std::collections::BTreeMap<collomatique_state_colloscopes::StudentId, u32>,
     pub total_student_count: usize,
 }
 
@@ -135,6 +136,6 @@ impl Entry {
     fn update_remaining_student_count(&mut self) {
         self.remaining_student_count = self.data.total_student_count
             - self.data.group_list.filling.excluded_students().len()
-            - self.data.collo_group_list.groups_for_students.len();
+            - self.data.groups_for_students.len();
     }
 }
