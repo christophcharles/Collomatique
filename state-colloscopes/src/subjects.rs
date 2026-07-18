@@ -279,18 +279,6 @@ pub enum SubjectError {
     #[error("Referenced period id {0:?} is invalid")]
     InvalidPeriodId(PeriodId),
 
-    /// Invalid parameters : students per group
-    #[error("Students per group range should allow at least one value")]
-    StudentsPerGroupRangeIsEmpty,
-
-    /// Invalid parameters : groups per interrogation
-    #[error("Groups per interrogations range should allow at least one value")]
-    GroupsPerInterrogationRangeIsEmpty,
-
-    /// Invalid parameters : week block has empty range for interrogation count
-    #[error("Interrogation count range should allow at least one value")]
-    InterrogationCountRangeIsEmpty,
-
     /// Some non-default assignments are still present for the subject
     #[error(
         "period id ({0:?}) has non-default assignments for subject id {1:?} and cannot be removed or updated"

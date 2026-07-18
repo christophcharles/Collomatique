@@ -8,18 +8,18 @@ use collomatique_rpc::{
 };
 
 use collomatique_ops::{
-    AddNewGroupListError, AddNewIncompatError, AddNewSlotError, AddNewStudentError,
-    AddNewSubjectError, AddNewTeacherError, AddNewWeekPatternError, AssignAllError, AssignError,
-    AssignGroupListToSubjectError, AssignmentsUpdateError, CutPeriodError, DeleteGroupListError,
-    DeleteIncompatError, DeletePeriodError, DeleteSlotError, DeleteStudentError,
-    DeleteSubjectError, DeleteTeacherError, DeleteWeekPatternError, DuplicatePreviousPeriodError,
-    GeneralPlanningUpdateError, GroupListsUpdateError, IncompatibilitiesUpdateError,
-    MergeWithPreviousPeriodError, MoveSlotDownError, MoveSlotUpError, MoveSubjectDownError,
-    MoveSubjectUpError, RemoveStudentLimitsError, SetFillingError, SettingsUpdateError,
-    SlotsUpdateError, StudentsUpdateError, SubjectsUpdateError, TeachersUpdateError,
-    UpdateGroupListError, UpdateIncompatError, UpdatePeriodStatusError, UpdatePeriodWeekCountError,
-    UpdateSlotError, UpdateStudentError, UpdateStudentLimitsError, UpdateSubjectError,
-    UpdateTeacherError, UpdateWeekAnnotationError, UpdateWeekPatternError, UpdateWeekStatusError,
+    AddNewIncompatError, AddNewSlotError, AddNewStudentError, AddNewTeacherError,
+    AddNewWeekPatternError, AssignAllError, AssignError, AssignGroupListToSubjectError,
+    AssignmentsUpdateError, CutPeriodError, DeleteGroupListError, DeleteIncompatError,
+    DeletePeriodError, DeleteSlotError, DeleteStudentError, DeleteSubjectError, DeleteTeacherError,
+    DeleteWeekPatternError, DuplicatePreviousPeriodError, GeneralPlanningUpdateError,
+    GroupListsUpdateError, IncompatibilitiesUpdateError, MergeWithPreviousPeriodError,
+    MoveSlotDownError, MoveSlotUpError, MoveSubjectDownError, MoveSubjectUpError,
+    RemoveStudentLimitsError, SetFillingError, SettingsUpdateError, SlotsUpdateError,
+    StudentsUpdateError, SubjectsUpdateError, TeachersUpdateError, UpdateGroupListError,
+    UpdateIncompatError, UpdatePeriodStatusError, UpdatePeriodWeekCountError, UpdateSlotError,
+    UpdateStudentError, UpdateStudentLimitsError, UpdateSubjectError, UpdateTeacherError,
+    UpdateWeekAnnotationError, UpdateWeekPatternError, UpdateWeekStatusError,
     WeekPatternsUpdateError,
 };
 use collomatique_ops::{DuplicatePreviousPeriodAssociationsError, UpdateError};
@@ -428,17 +428,6 @@ impl CollomatiqueFile {
 
         match result {
             Ok(Some(collomatique_state_colloscopes::NewId::SubjectId(id))) => Ok(id.into()),
-            Err(UpdateError::Subjects(SubjectsUpdateError::AddNewSubject(e))) => match e {
-                AddNewSubjectError::GroupsPerInterrogationRangeIsEmpty => Err(
-                    PyValueError::new_err("groups per interrogation range cannot be empty"),
-                ),
-                AddNewSubjectError::StudentsPerGroupRangeIsEmpty => Err(PyValueError::new_err(
-                    "students per group range cannot be empty",
-                )),
-                AddNewSubjectError::InterrogationCountRangeIsEmpty => Err(PyValueError::new_err(
-                    "interrogation count range cannot be empty",
-                )),
-            },
             _ => panic!("Unexpected result: {:?}", result),
         }
     }
@@ -460,19 +449,10 @@ impl CollomatiqueFile {
         match result {
             Ok(_) => Ok(()),
             Err(UpdateError::Subjects(SubjectsUpdateError::UpdateSubject(e))) => match e {
-                UpdateSubjectError::GroupsPerInterrogationRangeIsEmpty => Err(
-                    PyValueError::new_err("groups per interrogation range cannot be empty"),
-                ),
-                UpdateSubjectError::StudentsPerGroupRangeIsEmpty => Err(PyValueError::new_err(
-                    "students per group range cannot be empty",
-                )),
                 UpdateSubjectError::InvalidSubjectId(id) => Err(PyValueError::new_err(format!(
                     "Invalid subject id {:?}",
                     id
                 ))),
-                UpdateSubjectError::InterrogationCountRangeIsEmpty => Err(PyValueError::new_err(
-                    "interrogation count range cannot be empty",
-                )),
             },
             e => panic!("Unexpected result: {:?}", e),
         }
@@ -1138,11 +1118,6 @@ impl CollomatiqueFile {
 
         match result {
             Ok(Some(collomatique_state_colloscopes::NewId::GroupListId(id))) => Ok(id.into()),
-            Err(UpdateError::GroupLists(GroupListsUpdateError::AddNewGroupList(e))) => match e {
-                AddNewGroupListError::StudentsPerGroupRangeIsEmpty => {
-                    Err(PyValueError::new_err("Empty students per group range"))
-                }
-            },
             _ => panic!("Unexpected result: {:?}", result),
         }
     }
@@ -1167,9 +1142,6 @@ impl CollomatiqueFile {
                 UpdateGroupListError::InvalidGroupListId(id) => Err(PyValueError::new_err(
                     format!("Invalid group list id {:?}", id),
                 )),
-                UpdateGroupListError::StudentsPerGroupRangeIsEmpty => {
-                    Err(PyValueError::new_err("Empty students per group range"))
-                }
             },
             e => panic!("Unexpected result: {:?}", e),
         }

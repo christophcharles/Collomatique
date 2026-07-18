@@ -267,10 +267,6 @@ pub enum GroupListError {
     #[error("invalid subject id {0:?} for period {1:?}")]
     SubjectDoesNotRunOnPeriod(SubjectId, PeriodId),
 
-    /// students per group range is empty
-    #[error("students_per_group range is empty")]
-    StudentsPerGroupRangeIsEmpty,
-
     /// cannot remove group list as it still has a filling (prefilled or automatic with exclusions)
     #[error("Group list still has a filling and cannot be removed")]
     RemainingFilling,

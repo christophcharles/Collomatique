@@ -260,8 +260,6 @@ pub enum SubjectsUpdateOp {
 #[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum SubjectsUpdateError {
     #[error(transparent)]
-    AddNewSubject(#[from] AddNewSubjectError),
-    #[error(transparent)]
     UpdateSubject(#[from] UpdateSubjectError),
     #[error(transparent)]
     DeleteSubject(#[from] DeleteSubjectError),
@@ -274,25 +272,9 @@ pub enum SubjectsUpdateError {
 }
 
 #[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
-pub enum AddNewSubjectError {
-    #[error("Students per group range should allow at least one value")]
-    StudentsPerGroupRangeIsEmpty,
-    #[error("Groups per interrogations range should allow at least one value")]
-    GroupsPerInterrogationRangeIsEmpty,
-    #[error("Interrogation count range should allow at least one value")]
-    InterrogationCountRangeIsEmpty,
-}
-
-#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum UpdateSubjectError {
     #[error("Subject ID {0:?} is invalid")]
     InvalidSubjectId(collomatique_state_colloscopes::SubjectId),
-    #[error("Students per group range should allow at least one value")]
-    StudentsPerGroupRangeIsEmpty,
-    #[error("Groups per interrogations range should allow at least one value")]
-    GroupsPerInterrogationRangeIsEmpty,
-    #[error("Interrogation count range should allow at least one value")]
-    InterrogationCountRangeIsEmpty,
 }
 
 #[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
@@ -727,24 +709,23 @@ impl SubjectsUpdateOp {
                     .apply(
                         collomatique_state_colloscopes::Op::Subject(
                             collomatique_state_colloscopes::SubjectOp::AddAfter(
-                                data.get_data().get_inner_data().params.subjects.ordered_subject_list.iter().last().map(|(id, _)| id),
+                                data.get_data()
+                                    .get_inner_data()
+                                    .params
+                                    .subjects
+                                    .ordered_subject_list
+                                    .iter()
+                                    .last()
+                                    .map(|(id, _)| id),
                                 collomatique_state_colloscopes::Subject {
                                     parameters: params.clone(),
                                     excluded_periods: BTreeSet::new(),
-                                }
-                            )
+                                },
+                            ),
                         ),
-                        self.get_desc()
-                    ).map_err(|e| if let collomatique_state_colloscopes::Error::Subject(se) = e {
-                        match se {
-                            collomatique_state_colloscopes::SubjectError::GroupsPerInterrogationRangeIsEmpty => AddNewSubjectError::GroupsPerInterrogationRangeIsEmpty,
-                            collomatique_state_colloscopes::SubjectError::StudentsPerGroupRangeIsEmpty => AddNewSubjectError::StudentsPerGroupRangeIsEmpty,
-                            collomatique_state_colloscopes::SubjectError::InterrogationCountRangeIsEmpty => AddNewSubjectError::InterrogationCountRangeIsEmpty,
-                            _ => panic!("Unexpected subject error during AddNewSubject: {:?}", se),
-                        }
-                    } else {
-                        panic!("Unexpected error during AddNewSubject: {:?}", e);
-                    })?;
+                        self.get_desc(),
+                    )
+                    .expect("All data should be valid at this point");
                 let Some(collomatique_state_colloscopes::NewId::SubjectId(new_id)) = result else {
                     panic!("Unexpected result from SubjectOp::AddAfter");
                 };
@@ -769,21 +750,12 @@ impl SubjectsUpdateOp {
                                 collomatique_state_colloscopes::Subject {
                                     parameters: params.clone(),
                                     excluded_periods,
-                                }
-                            )
+                                },
+                            ),
                         ),
                         self.get_desc(),
-                    ).map_err(|e| if let collomatique_state_colloscopes::Error::Subject(se) = e {
-                        match se {
-                            collomatique_state_colloscopes::SubjectError::InvalidSubjectId(_id) => panic!("Subject ID should be valid at this point"),
-                            collomatique_state_colloscopes::SubjectError::GroupsPerInterrogationRangeIsEmpty => UpdateSubjectError::GroupsPerInterrogationRangeIsEmpty,
-                            collomatique_state_colloscopes::SubjectError::StudentsPerGroupRangeIsEmpty => UpdateSubjectError::StudentsPerGroupRangeIsEmpty,
-                            collomatique_state_colloscopes::SubjectError::InterrogationCountRangeIsEmpty => UpdateSubjectError::InterrogationCountRangeIsEmpty,
-                            _ => panic!("Unexpected subject error during UpdateSubject: {:?}", se),
-                        }
-                    } else {
-                        panic!("Unexpected error during UpdateSubject: {:?}", e);
-                    })?;
+                    )
+                    .expect("All data should be valid at this point");
 
                 assert!(result.is_none());
 

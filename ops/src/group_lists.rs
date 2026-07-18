@@ -281,8 +281,6 @@ pub enum GroupListsUpdateOp {
 #[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum GroupListsUpdateError {
     #[error(transparent)]
-    AddNewGroupList(#[from] AddNewGroupListError),
-    #[error(transparent)]
     UpdateGroupList(#[from] UpdateGroupListError),
     #[error(transparent)]
     DeleteGroupList(#[from] DeleteGroupListError),
@@ -295,17 +293,9 @@ pub enum GroupListsUpdateError {
 }
 
 #[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
-pub enum AddNewGroupListError {
-    #[error("students_per_group range is empty")]
-    StudentsPerGroupRangeIsEmpty,
-}
-
-#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum UpdateGroupListError {
     #[error("Group list id ({0:?}) is invalid")]
     InvalidGroupListId(collomatique_state_colloscopes::GroupListId),
-    #[error("students_per_group range is empty")]
-    StudentsPerGroupRangeIsEmpty,
 }
 
 #[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
@@ -836,10 +826,6 @@ impl GroupListsUpdateOp {
     ) -> Result<Option<collomatique_state_colloscopes::GroupListId>, GroupListsUpdateError> {
         match self {
             Self::AddNewGroupList(params) => {
-                if params.students_per_group.is_empty() {
-                    return Err(AddNewGroupListError::StudentsPerGroupRangeIsEmpty.into());
-                }
-
                 let result = data
                     .apply(
                         collomatique_state_colloscopes::Op::GroupList(
@@ -855,10 +841,6 @@ impl GroupListsUpdateOp {
                 Ok(Some(new_id))
             }
             Self::UpdateGroupList(group_list_id, params) => {
-                if params.students_per_group.is_empty() {
-                    return Err(UpdateGroupListError::StudentsPerGroupRangeIsEmpty.into());
-                }
-
                 if !data
                     .get_data()
                     .get_inner_data()

@@ -336,39 +336,6 @@ impl Parameters {
             }
         }
 
-        let Some(interrogation_parameters) = &subject.parameters.interrogation_parameters else {
-            return Ok(());
-        };
-
-        if interrogation_parameters.students_per_group.is_empty() {
-            return Err(SubjectError::StudentsPerGroupRangeIsEmpty);
-        }
-        if interrogation_parameters.groups_per_interrogation.is_empty() {
-            return Err(SubjectError::GroupsPerInterrogationRangeIsEmpty);
-        }
-
-        match &interrogation_parameters.periodicity {
-            SubjectPeriodicity::AmountForEveryArbitraryBlock {
-                blocks,
-                minimum_week_separation: _,
-            } => {
-                for block in blocks {
-                    if block.interrogation_count_in_block.is_empty() {
-                        return Err(SubjectError::InterrogationCountRangeIsEmpty);
-                    }
-                }
-            }
-            SubjectPeriodicity::AmountInYear {
-                interrogation_count_in_year,
-                minimum_week_separation: _,
-            } => {
-                if interrogation_count_in_year.is_empty() {
-                    return Err(SubjectError::InterrogationCountRangeIsEmpty);
-                }
-            }
-            _ => {}
-        }
-
         Ok(())
     }
 
@@ -686,18 +653,6 @@ impl Parameters {
 
     /// USED INTERNALLY
     ///
-    /// Checks that group list parameters are valid
-    fn validate_group_list_params_internal(
-        params: &group_lists::GroupListParameters,
-    ) -> Result<(), GroupListError> {
-        if params.students_per_group.is_empty() {
-            return Err(GroupListError::StudentsPerGroupRangeIsEmpty);
-        }
-        Ok(())
-    }
-
-    /// USED INTERNALLY
-    ///
     /// Checks that group list filling is valid
     fn validate_group_list_filling_internal(
         filling: &group_lists::GroupListFilling,
@@ -741,7 +696,6 @@ impl Parameters {
         group_list: &group_lists::GroupList,
         students: &students::Students,
     ) -> Result<(), GroupListError> {
-        Self::validate_group_list_params_internal(&group_list.params)?;
         Self::validate_group_list_filling_internal(
             &group_list.filling,
             students,
