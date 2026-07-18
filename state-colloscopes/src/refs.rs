@@ -39,6 +39,8 @@
 //!   slot → subject): handled later as a wrapper (item 3), not a reference site.
 //! - `slots.ordering` row *values*: a pure mirror of `slot_map` keys, covered by
 //!   the structural no-orphan/count checks.
+//! - `periods.ordered_period_list` row *values*: a pure mirror of `week_map` /
+//!   `Week::period_id`, covered by `check_periods_data_consistency`.
 //! - colloscope group *indices*: not ids.
 
 use collomatique_state::References;
