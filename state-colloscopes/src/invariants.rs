@@ -28,9 +28,14 @@
 //! both dangling and convergence-broken, `min()` picks the precise row-removal
 //! fix over the lossy one.
 //!
-//! The checker ([crate::InnerData]`::broken_invariants`) lives here too: the
-//! logic-error sweep (layer A, the `Err` path) and the dangling-reference sweep
-//! (layer B) are implemented; the convergence layer lands in a later stage.
+//! The checker ([crate::InnerData]`::broken_invariants`) lives here too, in
+//! three layers: the logic-error sweep (layer A, the `Err` path), the
+//! dangling-reference sweep (layer B) and the convergence sweep (layer C), the
+//! last two together forming the `Ok` payload. Layer C skips a predicate
+//! whenever an FK *lookup it needs to read data* fails (the matching layer-B
+//! [FixableInvariant::DanglingFk] already reports that dangle); an id used only
+//! as a compared value does not gate. Where the old first-error checker
+//! fail-fasts, layer C accumulates, so every broken row surfaces.
 
 use std::collections::BTreeSet;
 
@@ -179,16 +184,23 @@ impl crate::InnerData {
     /// legitimate elementary op can reach — and short-circuits: a logic error
     /// undermines the meaningfulness of the fixable sweep.
     ///
-    /// Coverage so far: the logic-error sweep (layer A, the `Err` path) and the
-    /// dangling-reference sweep (layer B, part of the `Ok` payload). The
-    /// convergence layer lands next; until then a clean logic-error sweep gives
-    /// an `Ok` holding only dangling references.
+    /// The three layers: the logic-error sweep (layer A, the `Err` path), the
+    /// dangling-reference sweep (layer B) and the convergence sweep (layer C).
+    /// Layers B and C together form the `Ok` payload; every layer-C predicate
+    /// skips a row whose data-reading lookup dangles (layer B already reports
+    /// that edge), so both layers coexist on the same state.
     pub fn broken_invariants(&self) -> Result<BTreeSet<FixableInvariant>, BTreeSet<LogicError>> {
         let logic_errors = self.logic_errors();
         if !logic_errors.is_empty() {
             return Err(logic_errors);
         }
-        Ok(self.dangling_refs())
+        let mut fixable = self.dangling_refs();
+        fixable.extend(
+            self.convergence_breaks()
+                .into_iter()
+                .map(FixableInvariant::Convergence),
+        );
+        Ok(fixable)
     }
 
     /// Layer A: every [LogicError] in the document — a state no legitimate
@@ -305,15 +317,233 @@ impl crate::InnerData {
         });
         dangling
     }
+
+    /// Layer C: every broken [Convergence] predicate — a check over *existing*
+    /// edges that legitimate ops can break indirectly (see [Convergence]).
+    ///
+    /// Every predicate skips (`continue`, or a guarded `if let`) when a lookup
+    /// it needs to *read data* fails: the matching [FixableInvariant::DanglingFk]
+    /// entry already reports that dangle, so layers B and C coexist. An id used
+    /// only as a *compared value* does not gate — e.g. the teacher-teaches check
+    /// runs even when the slot's subject id dangles. Unlike the old first-error
+    /// checker this sweep accumulates: every broken row (and every true
+    /// predicate on a row) is reported.
+    fn convergence_breaks(&self) -> BTreeSet<Convergence> {
+        let mut out = BTreeSet::new();
+        let params = &self.params;
+
+        // ---- Slots: teacher-teaches, subject-has-interrogations, day overflow.
+        // Mirrors `validate_slot_internal`. The teacher-teaches check gates only
+        // on the teacher resolving (the subject id is compared, not read); the
+        // overflow check gates on the subject *and* its interrogation parameters
+        // being present (the duration lives there — a `None` fires
+        // `SlotForSubjectWithoutInterrogations` instead).
+        for (slot_id, slot) in params.slots.slot_entries() {
+            if let Some(teacher) = params.teachers.teacher_map.get(&slot.teacher_id)
+                && !teacher.subjects.contains(&slot.subject_id)
+            {
+                out.insert(Convergence::SlotTeacherDoesNotTeachSubject(slot_id));
+            }
+            if let Some(subject) = params.subjects.find_subject(slot.subject_id) {
+                match &subject.parameters.interrogation_parameters {
+                    None => {
+                        out.insert(Convergence::SlotForSubjectWithoutInterrogations(slot_id));
+                    }
+                    Some(interrogation_params) => {
+                        if collomatique_time::SlotWithDuration::new(
+                            slot.start_time.clone(),
+                            interrogation_params.duration,
+                        )
+                        .is_none()
+                        {
+                            out.insert(Convergence::SlotOverflowsDay(slot_id));
+                        }
+                    }
+                }
+            }
+        }
+
+        // ---- Teachers: every subject a teacher teaches must run interrogations.
+        // Mirrors `validate_teacher_internal`.
+        for (teacher_id, teacher) in params.teachers.teacher_map.iter() {
+            for &subject_id in &teacher.subjects {
+                let Some(subject) = params.subjects.find_subject(subject_id) else {
+                    continue;
+                };
+                if subject.parameters.interrogation_parameters.is_none() {
+                    out.insert(Convergence::TeacherSubjectWithoutInterrogations(
+                        teacher_id, subject_id,
+                    ));
+                }
+            }
+        }
+
+        // ---- Assignments rows: the subject runs on the period, and every
+        // assigned student is present for it. Mirrors
+        // `check_assignments_data_consistency` (the empty-row case is layer A).
+        for (period_id, subject_id, students) in params.assignments.iter() {
+            if let Some(subject) = params.subjects.find_subject(subject_id)
+                && subject.excluded_periods.contains(&period_id)
+            {
+                out.insert(Convergence::AssignmentForSubjectNotRunningOnPeriod(
+                    period_id, subject_id,
+                ));
+            }
+            for student_id in students {
+                let Some(student) = params.students.student_map.get(student_id) else {
+                    continue;
+                };
+                if student.excluded_periods.contains(&period_id) {
+                    out.insert(Convergence::AssignedStudentNotPresentForPeriod {
+                        period: period_id,
+                        subject: subject_id,
+                        student: *student_id,
+                    });
+                }
+            }
+        }
+
+        // ---- Association rows: the subject runs interrogations and is not
+        // excluded on the period. Mirrors `check_group_lists_data_consistency`;
+        // both predicates accumulate (the old checker stops at the first).
+        for ((period_id, subject_id), _group_list_id) in
+            params.group_lists.subjects_associations.iter()
+        {
+            let Some(subject) = params.subjects.find_subject(subject_id) else {
+                continue;
+            };
+            if subject.parameters.interrogation_parameters.is_none() {
+                out.insert(Convergence::AssociationForSubjectWithoutInterrogations(
+                    period_id, subject_id,
+                ));
+            }
+            if subject.excluded_periods.contains(&period_id) {
+                out.insert(Convergence::AssociationForSubjectNotRunningOnPeriod(
+                    period_id, subject_id,
+                ));
+            }
+        }
+
+        // ---- Balancing keys: every override subject must run interrogations.
+        // Mirrors `validate_balancing`.
+        for subject_id in params.balancing.subjects.keys() {
+            let Some(subject) = params.subjects.find_subject(subject_id) else {
+                continue;
+            };
+            if subject.parameters.interrogation_parameters.is_none() {
+                out.insert(Convergence::BalancingForSubjectWithoutInterrogations(
+                    subject_id,
+                ));
+            }
+        }
+
+        // ---- Slot pairings: the two paired slots must be on the same subject
+        // (the same-slot degeneracy is layer A). Mirrors
+        // `validate_slot_pairing_rule_internal`. Gated on both slots resolving;
+        // the subject ids are only compared, so they do not gate.
+        for (rule_id, rule) in params.slot_pairings.slot_pairing_rule_map.iter() {
+            if let (Some((ant_subject, _)), Some((con_subject, _))) = (
+                params.slots.find_slot_with_subject(rule.antecedent.slot_id),
+                params.slots.find_slot_with_subject(rule.consequent.slot_id),
+            ) && ant_subject != con_subject
+            {
+                out.insert(Convergence::PairedSlotsNotInSameSubject(rule_id));
+            }
+        }
+
+        // ---- Colloscope interrogation rows. Mirrors `validate_against_params`:
+        // the slot's subject runs on the week's period, the week is active for
+        // the slot's pattern, and every group number fits the association bound.
+        for ((slot_id, week_id), groups) in self.colloscope.iter() {
+            let period = params.periods.week_position(week_id).map(|(p, _pos)| p);
+            let slot = params.slots.find_slot_with_subject(slot_id);
+
+            // Subject-excludes-period half of the old `SlotNotRunningOnPeriod`
+            // (the interrogations-off half is covered per-slot by
+            // `SlotForSubjectWithoutInterrogations`).
+            if let (Some(period_id), Some((subject_id, _))) = (period, slot)
+                && let Some(subject) = params.subjects.find_subject(subject_id)
+                && subject.excluded_periods.contains(&period_id)
+            {
+                out.insert(Convergence::InterrogationSlotNotRunningOnPeriod(
+                    slot_id, week_id,
+                ));
+            }
+
+            // A dangling week pattern counts as "no exclusion" (`is_week_active`),
+            // matching the old checker; layer B reports the dangle itself.
+            if period.is_some()
+                && let Some((_, slot_desc)) = slot
+                && !params.is_week_active(week_id, slot_desc.week_pattern)
+            {
+                out.insert(Convergence::InterrogationOnInactiveWeek(slot_id, week_id));
+            }
+
+            // Group-number bound. A missing association means bound 0 (old
+            // `.unwrap_or(0)`); an association to a *dangling* group list is
+            // skipped — the old code `.expect`s it live, we cannot.
+            if let (Some(period_id), Some((subject_id, _))) = (period, slot) {
+                let bound = match params
+                    .group_lists
+                    .subjects_associations
+                    .get(&(period_id, subject_id))
+                {
+                    None => Some(0u32),
+                    Some(group_list_id) => params
+                        .group_lists
+                        .group_list_map
+                        .get(group_list_id)
+                        .map(|gl| gl.params.group_names.len() as u32),
+                };
+                if let Some(bound) = bound
+                    && groups.iter().any(|&group_num| group_num >= bound)
+                {
+                    out.insert(Convergence::InterrogationGroupOutOfBounds(slot_id, week_id));
+                }
+            }
+        }
+
+        // ---- Colloscope group-list rows. Mirrors `validate_against_params` +
+        // `validate_group_list_placements`: the list must not be prefilled, and
+        // every placement must name a non-excluded student in an in-bounds group.
+        for (group_list_id, placements) in self.colloscope.group_lists_iter() {
+            let Some(group_list) = params.group_lists.group_list_map.get(&group_list_id) else {
+                continue;
+            };
+            if group_list.is_prefilled() {
+                out.insert(Convergence::ColloscopeGroupListPrefilled(group_list_id));
+            }
+            let excluded = group_list.filling.excluded_students();
+            let bound = group_list.params.group_names.len() as u32;
+            for (&student_id, &group_num) in placements {
+                if excluded.contains(&student_id) {
+                    out.insert(Convergence::ColloscopeStudentExcluded(
+                        group_list_id,
+                        student_id,
+                    ));
+                }
+                if group_num >= bound {
+                    out.insert(Convergence::ColloscopeStudentGroupOutOfBounds(
+                        group_list_id,
+                        student_id,
+                    ));
+                }
+            }
+        }
+
+        out
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::InnerData;
+    use crate::balancing::BalancingOptions;
     use crate::group_lists::{GroupList, GroupListFilling, GroupListParameters, PrefilledGroup};
     use crate::ids::Id;
     use crate::pairings::{PairingRule, RulePart};
+    use crate::periods::{Periods, WeekDesc};
     use crate::refs::{
         GroupListRefSite, PeriodRefSite, Reference, SlotRefSite, StudentRefSite, SubjectRefSite,
         TeacherRefSite, WeekPatternRefSite, WeekRefSite,
@@ -322,7 +552,7 @@ mod tests {
     use crate::slot_pairings::{SlotPairingRule, SlotRulePart};
     use crate::slots::{Slot, Slots};
     use crate::students::Student;
-    use crate::subjects::Subject;
+    use crate::subjects::{Subject, SubjectParameters};
     use crate::teachers::Teacher;
     use crate::week_patterns::WeekPattern;
     use collomatique_time::{SlotStart, WholeMinuteTime};
@@ -474,16 +704,21 @@ mod tests {
         let slot = unsafe { SlotId::new(2) };
         let teacher = unsafe { TeacherId::new(3) };
         let pattern = unsafe { WeekPatternId::new(4) };
-        // Register subject and teacher so only the week pattern dangles.
+        // Register subject and teacher so only the week pattern dangles. The
+        // teacher must teach the slot's subject, else layer C would also fire
+        // `SlotTeacherDoesNotTeachSubject`.
         data.params
             .subjects
             .ordered_subject_list
             .insert_at(0, subject, Subject::default())
             .unwrap();
-        data.params
-            .teachers
-            .teacher_map
-            .insert(teacher, Teacher::default());
+        data.params.teachers.teacher_map.insert(
+            teacher,
+            Teacher {
+                subjects: BTreeSet::from([subject]),
+                ..Default::default()
+            },
+        );
         let mut slot_desc = test_slot(subject, teacher);
         slot_desc.week_pattern = Some(pattern);
         data.params.slots = Slots::from_subject_rows([(subject, vec![(slot, slot_desc)])]).unwrap();
@@ -1128,5 +1363,913 @@ mod tests {
                 empty_subject
             )]))
         );
+    }
+
+    // ---- Layer C: convergence ----
+    //
+    // Each test forges a state that trips exactly the intended convergence
+    // predicate(s) and asserts exact set equality on the whole `Ok(...)`. Where a
+    // second entry is structurally unavoidable (any slot on an off subject also
+    // implicates its teacher entry; the colloscope fixture's association trips
+    // when its subject stops running), the two-element set is asserted with a
+    // comment. The discipline pins (21–26) corrupt a reference *and* the
+    // predicate behind it, showing layers B and C coexist and that a dangling
+    // data-reading lookup skips the predicate.
+
+    /// One period holding one week, built through the public constructor.
+    fn test_periods(period: PeriodId, week: WeekId, desc: WeekDesc) -> Periods {
+        Periods::from_period_rows(None, vec![(period, vec![(week, desc)])]).unwrap()
+    }
+
+    /// A subject with interrogations disabled (the default has them enabled).
+    fn subject_without_interrogations() -> Subject {
+        Subject {
+            parameters: SubjectParameters {
+                interrogation_parameters: None,
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+
+    /// An automatic (non-prefilled) group list with `n` unnamed groups and no
+    /// excluded students.
+    fn automatic_group_list(n: usize) -> GroupList {
+        GroupList {
+            params: GroupListParameters {
+                group_names: vec![None; n],
+                ..Default::default()
+            },
+            filling: GroupListFilling::Automatic {
+                excluded_students: BTreeSet::new(),
+            },
+        }
+    }
+
+    /// A copy of [test_slot] with the start time set to `h:m`.
+    fn slot_at(subject_id: SubjectId, teacher_id: TeacherId, h: u32, m: u32) -> Slot {
+        let mut slot = test_slot(subject_id, teacher_id);
+        slot.start_time.start_time =
+            WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(h, m, 0).unwrap()).unwrap();
+        slot
+    }
+
+    /// Ids of a fully valid one-of-everything colloscope state. Only the ids the
+    /// twist tests read are exposed; the group list and student are built into
+    /// `data` but never referenced by id.
+    struct ColloscopeFixture {
+        data: InnerData,
+        period: PeriodId,
+        week: WeekId,
+        subject: SubjectId,
+        teacher: TeacherId,
+        slot: SlotId,
+    }
+
+    /// A clean state with one period+week (active), one subject at position 0,
+    /// a teacher teaching it, one slot, an automatic 2-group list and the
+    /// `(period, subject)` association, plus one student. It holds no colloscope
+    /// rows: tests add rows / twist one aspect through the returned ids. All raw
+    /// ids are distinct so the duplicate-id logic-error check stays clean.
+    fn colloscope_fixture() -> ColloscopeFixture {
+        let period = unsafe { PeriodId::new(1) };
+        let week = unsafe { WeekId::new(2) };
+        let subject = unsafe { SubjectId::new(3) };
+        let teacher = unsafe { TeacherId::new(4) };
+        let slot = unsafe { SlotId::new(5) };
+        let group_list = unsafe { GroupListId::new(6) };
+        let student = unsafe { StudentId::new(7) };
+
+        let mut data = InnerData::default();
+        data.params.periods = test_periods(period, week, WeekDesc::default());
+        data.params
+            .subjects
+            .ordered_subject_list
+            .insert_at(0, subject, Subject::default())
+            .unwrap();
+        data.params.teachers.teacher_map.insert(
+            teacher,
+            Teacher {
+                subjects: BTreeSet::from([subject]),
+                ..Default::default()
+            },
+        );
+        data.params.slots =
+            Slots::from_subject_rows([(subject, vec![(slot, test_slot(subject, teacher))])])
+                .unwrap();
+        data.params
+            .group_lists
+            .group_list_map
+            .insert(group_list, automatic_group_list(2));
+        data.params
+            .group_lists
+            .subjects_associations
+            .insert((period, subject), group_list);
+        data.params
+            .students
+            .student_map
+            .insert(student, Student::default());
+
+        ColloscopeFixture {
+            data,
+            period,
+            week,
+            subject,
+            teacher,
+            slot,
+        }
+    }
+
+    #[test]
+    fn slot_teacher_does_not_teach_subject() {
+        let mut data = InnerData::default();
+        let subject = unsafe { SubjectId::new(1) };
+        let teacher = unsafe { TeacherId::new(2) };
+        let slot = unsafe { SlotId::new(3) };
+        data.params
+            .subjects
+            .ordered_subject_list
+            .insert_at(0, subject, Subject::default())
+            .unwrap();
+        // Teacher registered but teaching nothing.
+        data.params
+            .teachers
+            .teacher_map
+            .insert(teacher, Teacher::default());
+        data.params.slots =
+            Slots::from_subject_rows([(subject, vec![(slot, test_slot(subject, teacher))])])
+                .unwrap();
+        assert_eq!(
+            data.broken_invariants(),
+            Ok(BTreeSet::from([FixableInvariant::Convergence(
+                Convergence::SlotTeacherDoesNotTeachSubject(slot)
+            )]))
+        );
+    }
+
+    #[test]
+    fn teacher_subject_without_interrogations() {
+        let mut data = InnerData::default();
+        let subject = unsafe { SubjectId::new(1) };
+        let teacher = unsafe { TeacherId::new(2) };
+        data.params
+            .subjects
+            .ordered_subject_list
+            .insert_at(0, subject, subject_without_interrogations())
+            .unwrap();
+        data.params.teachers.teacher_map.insert(
+            teacher,
+            Teacher {
+                subjects: BTreeSet::from([subject]),
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            data.broken_invariants(),
+            Ok(BTreeSet::from([FixableInvariant::Convergence(
+                Convergence::TeacherSubjectWithoutInterrogations(teacher, subject)
+            )]))
+        );
+    }
+
+    #[test]
+    fn slot_for_subject_without_interrogations() {
+        let mut data = InnerData::default();
+        let subject = unsafe { SubjectId::new(1) };
+        let teacher = unsafe { TeacherId::new(2) };
+        let slot = unsafe { SlotId::new(3) };
+        data.params
+            .subjects
+            .ordered_subject_list
+            .insert_at(0, subject, subject_without_interrogations())
+            .unwrap();
+        data.params.teachers.teacher_map.insert(
+            teacher,
+            Teacher {
+                subjects: BTreeSet::from([subject]),
+                ..Default::default()
+            },
+        );
+        data.params.slots =
+            Slots::from_subject_rows([(subject, vec![(slot, test_slot(subject, teacher))])])
+                .unwrap();
+        // Two entries are unavoidable: a slot on an off subject implicates the
+        // teacher entry that teaches it as well as the per-slot check.
+        assert_eq!(
+            data.broken_invariants(),
+            Ok(BTreeSet::from([
+                FixableInvariant::Convergence(Convergence::TeacherSubjectWithoutInterrogations(
+                    teacher, subject
+                )),
+                FixableInvariant::Convergence(Convergence::SlotForSubjectWithoutInterrogations(
+                    slot
+                )),
+            ]))
+        );
+    }
+
+    #[test]
+    fn slot_overflows_day() {
+        let mut data = InnerData::default();
+        let subject = unsafe { SubjectId::new(1) };
+        let teacher = unsafe { TeacherId::new(2) };
+        let slot = unsafe { SlotId::new(3) };
+        data.params
+            .subjects
+            .ordered_subject_list
+            .insert_at(0, subject, Subject::default())
+            .unwrap();
+        data.params.teachers.teacher_map.insert(
+            teacher,
+            Teacher {
+                subjects: BTreeSet::from([subject]),
+                ..Default::default()
+            },
+        );
+        // 23:30 + the default 60-minute interrogation crosses midnight.
+        data.params.slots =
+            Slots::from_subject_rows([(subject, vec![(slot, slot_at(subject, teacher, 23, 30))])])
+                .unwrap();
+        assert_eq!(
+            data.broken_invariants(),
+            Ok(BTreeSet::from([FixableInvariant::Convergence(
+                Convergence::SlotOverflowsDay(slot)
+            )]))
+        );
+    }
+
+    #[test]
+    fn slot_ending_exactly_at_midnight_is_fine() {
+        let mut data = InnerData::default();
+        let subject = unsafe { SubjectId::new(1) };
+        let teacher = unsafe { TeacherId::new(2) };
+        let slot = unsafe { SlotId::new(3) };
+        data.params
+            .subjects
+            .ordered_subject_list
+            .insert_at(0, subject, Subject::default())
+            .unwrap();
+        data.params.teachers.teacher_map.insert(
+            teacher,
+            Teacher {
+                subjects: BTreeSet::from([subject]),
+                ..Default::default()
+            },
+        );
+        // 23:00 + 60 minutes ends exactly at midnight (the 86 400-second wrap).
+        data.params.slots =
+            Slots::from_subject_rows([(subject, vec![(slot, slot_at(subject, teacher, 23, 0))])])
+                .unwrap();
+        assert_eq!(data.broken_invariants(), Ok(BTreeSet::new()));
+    }
+
+    #[test]
+    fn assignment_for_subject_not_running_on_period() {
+        let mut data = InnerData::default();
+        let period = unsafe { PeriodId::new(1) };
+        let week = unsafe { WeekId::new(2) };
+        let subject = unsafe { SubjectId::new(3) };
+        let student = unsafe { StudentId::new(4) };
+        data.params.periods = test_periods(period, week, WeekDesc::default());
+        data.params
+            .subjects
+            .ordered_subject_list
+            .insert_at(
+                0,
+                subject,
+                Subject {
+                    excluded_periods: BTreeSet::from([period]),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        data.params
+            .students
+            .student_map
+            .insert(student, Student::default());
+        data.params
+            .assignments
+            .map
+            .insert((period, subject), BTreeSet::from([student]));
+        assert_eq!(
+            data.broken_invariants(),
+            Ok(BTreeSet::from([FixableInvariant::Convergence(
+                Convergence::AssignmentForSubjectNotRunningOnPeriod(period, subject)
+            )]))
+        );
+    }
+
+    #[test]
+    fn assigned_student_not_present_for_period() {
+        let mut data = InnerData::default();
+        let period = unsafe { PeriodId::new(1) };
+        let week = unsafe { WeekId::new(2) };
+        let subject = unsafe { SubjectId::new(3) };
+        let student = unsafe { StudentId::new(4) };
+        data.params.periods = test_periods(period, week, WeekDesc::default());
+        data.params
+            .subjects
+            .ordered_subject_list
+            .insert_at(0, subject, Subject::default())
+            .unwrap();
+        data.params.students.student_map.insert(
+            student,
+            Student {
+                excluded_periods: BTreeSet::from([period]),
+                ..Default::default()
+            },
+        );
+        data.params
+            .assignments
+            .map
+            .insert((period, subject), BTreeSet::from([student]));
+        assert_eq!(
+            data.broken_invariants(),
+            Ok(BTreeSet::from([FixableInvariant::Convergence(
+                Convergence::AssignedStudentNotPresentForPeriod {
+                    period,
+                    subject,
+                    student,
+                }
+            )]))
+        );
+    }
+
+    #[test]
+    fn association_for_subject_without_interrogations() {
+        let mut data = InnerData::default();
+        let period = unsafe { PeriodId::new(1) };
+        let week = unsafe { WeekId::new(2) };
+        let subject = unsafe { SubjectId::new(3) };
+        let group_list = unsafe { GroupListId::new(4) };
+        data.params.periods = test_periods(period, week, WeekDesc::default());
+        data.params
+            .subjects
+            .ordered_subject_list
+            .insert_at(0, subject, subject_without_interrogations())
+            .unwrap();
+        data.params
+            .group_lists
+            .group_list_map
+            .insert(group_list, automatic_group_list(2));
+        data.params
+            .group_lists
+            .subjects_associations
+            .insert((period, subject), group_list);
+        assert_eq!(
+            data.broken_invariants(),
+            Ok(BTreeSet::from([FixableInvariant::Convergence(
+                Convergence::AssociationForSubjectWithoutInterrogations(period, subject)
+            )]))
+        );
+    }
+
+    #[test]
+    fn association_for_subject_not_running_on_period() {
+        let mut data = InnerData::default();
+        let period = unsafe { PeriodId::new(1) };
+        let week = unsafe { WeekId::new(2) };
+        let subject = unsafe { SubjectId::new(3) };
+        let group_list = unsafe { GroupListId::new(4) };
+        data.params.periods = test_periods(period, week, WeekDesc::default());
+        data.params
+            .subjects
+            .ordered_subject_list
+            .insert_at(
+                0,
+                subject,
+                Subject {
+                    excluded_periods: BTreeSet::from([period]),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        data.params
+            .group_lists
+            .group_list_map
+            .insert(group_list, automatic_group_list(2));
+        data.params
+            .group_lists
+            .subjects_associations
+            .insert((period, subject), group_list);
+        assert_eq!(
+            data.broken_invariants(),
+            Ok(BTreeSet::from([FixableInvariant::Convergence(
+                Convergence::AssociationForSubjectNotRunningOnPeriod(period, subject)
+            )]))
+        );
+    }
+
+    #[test]
+    fn association_row_accumulates_both_breaks() {
+        // Off subject that *also* excludes the period: both association
+        // predicates fire (the old checker stops at the first).
+        let mut data = InnerData::default();
+        let period = unsafe { PeriodId::new(1) };
+        let week = unsafe { WeekId::new(2) };
+        let subject = unsafe { SubjectId::new(3) };
+        let group_list = unsafe { GroupListId::new(4) };
+        data.params.periods = test_periods(period, week, WeekDesc::default());
+        data.params
+            .subjects
+            .ordered_subject_list
+            .insert_at(
+                0,
+                subject,
+                Subject {
+                    parameters: SubjectParameters {
+                        interrogation_parameters: None,
+                        ..Default::default()
+                    },
+                    excluded_periods: BTreeSet::from([period]),
+                },
+            )
+            .unwrap();
+        data.params
+            .group_lists
+            .group_list_map
+            .insert(group_list, automatic_group_list(2));
+        data.params
+            .group_lists
+            .subjects_associations
+            .insert((period, subject), group_list);
+        assert_eq!(
+            data.broken_invariants(),
+            Ok(BTreeSet::from([
+                FixableInvariant::Convergence(
+                    Convergence::AssociationForSubjectWithoutInterrogations(period, subject)
+                ),
+                FixableInvariant::Convergence(
+                    Convergence::AssociationForSubjectNotRunningOnPeriod(period, subject)
+                ),
+            ]))
+        );
+    }
+
+    #[test]
+    fn balancing_for_subject_without_interrogations() {
+        let mut data = InnerData::default();
+        let subject = unsafe { SubjectId::new(1) };
+        data.params
+            .subjects
+            .ordered_subject_list
+            .insert_at(0, subject, subject_without_interrogations())
+            .unwrap();
+        data.params
+            .balancing
+            .subjects
+            .insert(subject, BalancingOptions::default());
+        assert_eq!(
+            data.broken_invariants(),
+            Ok(BTreeSet::from([FixableInvariant::Convergence(
+                Convergence::BalancingForSubjectWithoutInterrogations(subject)
+            )]))
+        );
+    }
+
+    #[test]
+    fn paired_slots_not_in_same_subject() {
+        let mut data = InnerData::default();
+        let subject_a = unsafe { SubjectId::new(1) };
+        let subject_b = unsafe { SubjectId::new(2) };
+        let teacher = unsafe { TeacherId::new(3) };
+        let slot_a = unsafe { SlotId::new(4) };
+        let slot_b = unsafe { SlotId::new(5) };
+        let rule = unsafe { SlotPairingRuleId::new(6) };
+        data.params
+            .subjects
+            .ordered_subject_list
+            .insert_at(0, subject_a, Subject::default())
+            .unwrap();
+        data.params
+            .subjects
+            .ordered_subject_list
+            .insert_at(1, subject_b, Subject::default())
+            .unwrap();
+        data.params.teachers.teacher_map.insert(
+            teacher,
+            Teacher {
+                subjects: BTreeSet::from([subject_a, subject_b]),
+                ..Default::default()
+            },
+        );
+        data.params.slots = Slots::from_subject_rows([
+            (subject_a, vec![(slot_a, test_slot(subject_a, teacher))]),
+            (subject_b, vec![(slot_b, test_slot(subject_b, teacher))]),
+        ])
+        .unwrap();
+        data.params.slot_pairings.slot_pairing_rule_map.insert(
+            rule,
+            SlotPairingRule {
+                antecedent: SlotRulePart {
+                    slot_id: slot_a,
+                    should_have: true,
+                },
+                consequent: SlotRulePart {
+                    slot_id: slot_b,
+                    should_have: false,
+                },
+                excluded_periods: BTreeSet::new(),
+                soft: false,
+            },
+        );
+        assert_eq!(
+            data.broken_invariants(),
+            Ok(BTreeSet::from([FixableInvariant::Convergence(
+                Convergence::PairedSlotsNotInSameSubject(rule)
+            )]))
+        );
+    }
+
+    #[test]
+    fn interrogation_slot_not_running_on_period() {
+        let mut fx = colloscope_fixture();
+        fx.data
+            .params
+            .subjects
+            .ordered_subject_list
+            .get_mut(&fx.subject)
+            .unwrap()
+            .excluded_periods
+            .insert(fx.period);
+        fx.data
+            .colloscope
+            .set_interrogation(fx.slot, fx.week, BTreeSet::from([0]));
+        // Excluding the period breaks both the interrogation row and the
+        // fixture's own association row.
+        assert_eq!(
+            fx.data.broken_invariants(),
+            Ok(BTreeSet::from([
+                FixableInvariant::Convergence(
+                    Convergence::AssociationForSubjectNotRunningOnPeriod(fx.period, fx.subject)
+                ),
+                FixableInvariant::Convergence(Convergence::InterrogationSlotNotRunningOnPeriod(
+                    fx.slot, fx.week
+                )),
+            ]))
+        );
+    }
+
+    #[test]
+    fn interrogation_on_inactive_week() {
+        let mut fx = colloscope_fixture();
+        fx.data.params.periods = test_periods(fx.period, fx.week, WeekDesc::new(false));
+        fx.data
+            .colloscope
+            .set_interrogation(fx.slot, fx.week, BTreeSet::from([0]));
+        assert_eq!(
+            fx.data.broken_invariants(),
+            Ok(BTreeSet::from([FixableInvariant::Convergence(
+                Convergence::InterrogationOnInactiveWeek(fx.slot, fx.week)
+            )]))
+        );
+    }
+
+    #[test]
+    fn interrogation_on_pattern_excluded_week() {
+        let mut fx = colloscope_fixture();
+        let pattern = unsafe { WeekPatternId::new(8) };
+        fx.data.params.week_patterns.week_pattern_map.insert(
+            pattern,
+            WeekPattern {
+                name: "P".into(),
+                excluded_weeks: BTreeSet::from([fx.week]),
+            },
+        );
+        let mut slot_desc = test_slot(fx.subject, fx.teacher);
+        slot_desc.week_pattern = Some(pattern);
+        fx.data.params.slots =
+            Slots::from_subject_rows([(fx.subject, vec![(fx.slot, slot_desc)])]).unwrap();
+        fx.data
+            .colloscope
+            .set_interrogation(fx.slot, fx.week, BTreeSet::from([0]));
+        assert_eq!(
+            fx.data.broken_invariants(),
+            Ok(BTreeSet::from([FixableInvariant::Convergence(
+                Convergence::InterrogationOnInactiveWeek(fx.slot, fx.week)
+            )]))
+        );
+    }
+
+    #[test]
+    fn interrogation_group_out_of_bounds() {
+        // Group list has 2 groups: group 2 is out of range.
+        let mut fx = colloscope_fixture();
+        fx.data
+            .colloscope
+            .set_interrogation(fx.slot, fx.week, BTreeSet::from([2]));
+        assert_eq!(
+            fx.data.broken_invariants(),
+            Ok(BTreeSet::from([FixableInvariant::Convergence(
+                Convergence::InterrogationGroupOutOfBounds(fx.slot, fx.week)
+            )]))
+        );
+
+        // Groups 0 and 1 are in range.
+        let mut fx = colloscope_fixture();
+        fx.data
+            .colloscope
+            .set_interrogation(fx.slot, fx.week, BTreeSet::from([0, 1]));
+        assert_eq!(fx.data.broken_invariants(), Ok(BTreeSet::new()));
+    }
+
+    #[test]
+    fn missing_association_means_bound_zero() {
+        // With no association the bound is 0, so even group 0 is out of range
+        // (replicating the old `.unwrap_or(0)`).
+        let mut fx = colloscope_fixture();
+        fx.data
+            .params
+            .group_lists
+            .subjects_associations
+            .remove(&(fx.period, fx.subject));
+        fx.data
+            .colloscope
+            .set_interrogation(fx.slot, fx.week, BTreeSet::from([0]));
+        assert_eq!(
+            fx.data.broken_invariants(),
+            Ok(BTreeSet::from([FixableInvariant::Convergence(
+                Convergence::InterrogationGroupOutOfBounds(fx.slot, fx.week)
+            )]))
+        );
+    }
+
+    #[test]
+    fn colloscope_group_list_prefilled() {
+        let mut data = InnerData::default();
+        let group_list = unsafe { GroupListId::new(1) };
+        let student = unsafe { StudentId::new(2) };
+        // A consistent prefilled list (one group, matching group name, no
+        // duplicated student) with a colloscope placement row.
+        data.params.group_lists.group_list_map.insert(
+            group_list,
+            GroupList {
+                params: GroupListParameters {
+                    group_names: vec![None],
+                    ..Default::default()
+                },
+                filling: GroupListFilling::Prefilled {
+                    groups: vec![PrefilledGroup::default()],
+                },
+            },
+        );
+        data.params
+            .students
+            .student_map
+            .insert(student, Student::default());
+        data.colloscope
+            .set_group_list(group_list, BTreeMap::from([(student, 0)]));
+        assert_eq!(
+            data.broken_invariants(),
+            Ok(BTreeSet::from([FixableInvariant::Convergence(
+                Convergence::ColloscopeGroupListPrefilled(group_list)
+            )]))
+        );
+    }
+
+    #[test]
+    fn colloscope_student_excluded() {
+        let mut data = InnerData::default();
+        let group_list = unsafe { GroupListId::new(1) };
+        let student = unsafe { StudentId::new(2) };
+        data.params.group_lists.group_list_map.insert(
+            group_list,
+            GroupList {
+                params: GroupListParameters {
+                    group_names: vec![None, None],
+                    ..Default::default()
+                },
+                filling: GroupListFilling::Automatic {
+                    excluded_students: BTreeSet::from([student]),
+                },
+            },
+        );
+        data.params
+            .students
+            .student_map
+            .insert(student, Student::default());
+        data.colloscope
+            .set_group_list(group_list, BTreeMap::from([(student, 0)]));
+        assert_eq!(
+            data.broken_invariants(),
+            Ok(BTreeSet::from([FixableInvariant::Convergence(
+                Convergence::ColloscopeStudentExcluded(group_list, student)
+            )]))
+        );
+    }
+
+    #[test]
+    fn colloscope_student_group_out_of_bounds() {
+        let mut data = InnerData::default();
+        let group_list = unsafe { GroupListId::new(1) };
+        let student = unsafe { StudentId::new(2) };
+        data.params
+            .group_lists
+            .group_list_map
+            .insert(group_list, automatic_group_list(2));
+        data.params
+            .students
+            .student_map
+            .insert(student, Student::default());
+        // 2 groups: group 5 is out of range.
+        data.colloscope
+            .set_group_list(group_list, BTreeMap::from([(student, 5)]));
+        assert_eq!(
+            data.broken_invariants(),
+            Ok(BTreeSet::from([FixableInvariant::Convergence(
+                Convergence::ColloscopeStudentGroupOutOfBounds(group_list, student)
+            )]))
+        );
+    }
+
+    #[test]
+    fn interrogation_checks_skip_when_slot_dangles() {
+        // Inactive week + a row on a *forged* slot id: the inactive-week and
+        // bounds checks all need the slot to resolve, so they skip — only the
+        // dangling slot surfaces.
+        let mut fx = colloscope_fixture();
+        fx.data.params.periods = test_periods(fx.period, fx.week, WeekDesc::new(false));
+        let forged_slot = unsafe { SlotId::new(99) };
+        fx.data
+            .colloscope
+            .set_interrogation(forged_slot, fx.week, BTreeSet::from([0]));
+        assert_eq!(
+            fx.data.broken_invariants(),
+            Ok(BTreeSet::from([FixableInvariant::DanglingFk(
+                Reference::Slot {
+                    target: forged_slot,
+                    site: SlotRefSite::ColloscopeInterrogation { week: fx.week },
+                }
+            )]))
+        );
+    }
+
+    #[test]
+    fn group_bounds_skip_when_association_group_list_dangles() {
+        // The association points at a forged group list: the bound is
+        // unresolvable, so the group-number check skips despite group 5 — only
+        // the dangling group list surfaces.
+        let mut fx = colloscope_fixture();
+        let forged_gl = unsafe { GroupListId::new(99) };
+        fx.data
+            .params
+            .group_lists
+            .subjects_associations
+            .insert((fx.period, fx.subject), forged_gl);
+        fx.data
+            .colloscope
+            .set_interrogation(fx.slot, fx.week, BTreeSet::from([5]));
+        assert_eq!(
+            fx.data.broken_invariants(),
+            Ok(BTreeSet::from([FixableInvariant::DanglingFk(
+                Reference::GroupList {
+                    target: forged_gl,
+                    site: GroupListRefSite::AssociationEntry {
+                        period: fx.period,
+                        subject: fx.subject,
+                    },
+                }
+            )]))
+        );
+    }
+
+    #[test]
+    fn dangling_week_pattern_is_not_an_inactive_week() {
+        // A dangling week pattern counts as "no exclusion", so the active week
+        // stays active and no inactive-week break fires — only the dangling
+        // pattern surfaces.
+        let mut fx = colloscope_fixture();
+        let forged_pattern = unsafe { WeekPatternId::new(99) };
+        let mut slot_desc = test_slot(fx.subject, fx.teacher);
+        slot_desc.week_pattern = Some(forged_pattern);
+        fx.data.params.slots =
+            Slots::from_subject_rows([(fx.subject, vec![(fx.slot, slot_desc)])]).unwrap();
+        fx.data
+            .colloscope
+            .set_interrogation(fx.slot, fx.week, BTreeSet::from([0]));
+        assert_eq!(
+            fx.data.broken_invariants(),
+            Ok(BTreeSet::from([FixableInvariant::DanglingFk(
+                Reference::WeekPattern {
+                    target: forged_pattern,
+                    site: WeekPatternRefSite::SlotWeekPattern(fx.slot),
+                }
+            )]))
+        );
+    }
+
+    #[test]
+    fn student_check_runs_when_assignment_subject_dangles() {
+        // The assignments key's subject dangles (layer B), but the per-student
+        // present-for-period check gates only on the *student*, which resolves —
+        // so both layers report on the same row.
+        let mut data = InnerData::default();
+        let period = unsafe { PeriodId::new(1) };
+        let week = unsafe { WeekId::new(2) };
+        let forged_subject = unsafe { SubjectId::new(3) };
+        let student = unsafe { StudentId::new(4) };
+        data.params.periods = test_periods(period, week, WeekDesc::default());
+        data.params.students.student_map.insert(
+            student,
+            Student {
+                excluded_periods: BTreeSet::from([period]),
+                ..Default::default()
+            },
+        );
+        data.params
+            .assignments
+            .map
+            .insert((period, forged_subject), BTreeSet::from([student]));
+        assert_eq!(
+            data.broken_invariants(),
+            Ok(BTreeSet::from([
+                FixableInvariant::DanglingFk(Reference::Subject {
+                    target: forged_subject,
+                    site: SubjectRefSite::AssignmentsKey { period },
+                }),
+                FixableInvariant::Convergence(Convergence::AssignedStudentNotPresentForPeriod {
+                    period,
+                    subject: forged_subject,
+                    student,
+                }),
+            ]))
+        );
+    }
+
+    #[test]
+    fn slot_teacher_check_runs_when_subject_dangles() {
+        // The slot's subject dangles (layer B), but the teacher-teaches check
+        // reads only the *teacher* and compares the subject id — so it still
+        // fires. Both layers report on the same slot.
+        let mut data = InnerData::default();
+        let forged_subject = unsafe { SubjectId::new(1) };
+        let teacher = unsafe { TeacherId::new(2) };
+        let slot = unsafe { SlotId::new(3) };
+        data.params
+            .teachers
+            .teacher_map
+            .insert(teacher, Teacher::default());
+        data.params.slots = Slots::from_subject_rows([(
+            forged_subject,
+            vec![(slot, test_slot(forged_subject, teacher))],
+        )])
+        .unwrap();
+        assert_eq!(
+            data.broken_invariants(),
+            Ok(BTreeSet::from([
+                FixableInvariant::DanglingFk(Reference::Subject {
+                    target: forged_subject,
+                    site: SubjectRefSite::SlotSubject(slot),
+                }),
+                FixableInvariant::Convergence(Convergence::SlotTeacherDoesNotTeachSubject(slot)),
+            ]))
+        );
+    }
+
+    #[test]
+    fn logic_error_short_circuits_convergence() {
+        // A convergence break (teacher not teaching its slot) plus a forged empty
+        // assignments row: the logic error flips the verdict to `Err` and the
+        // convergence sweep never runs.
+        let mut data = InnerData::default();
+        let subject = unsafe { SubjectId::new(1) };
+        let teacher = unsafe { TeacherId::new(2) };
+        let slot = unsafe { SlotId::new(3) };
+        data.params
+            .subjects
+            .ordered_subject_list
+            .insert_at(0, subject, Subject::default())
+            .unwrap();
+        data.params
+            .teachers
+            .teacher_map
+            .insert(teacher, Teacher::default());
+        data.params.slots =
+            Slots::from_subject_rows([(subject, vec![(slot, test_slot(subject, teacher))])])
+                .unwrap();
+        let empty_period = unsafe { PeriodId::new(4) };
+        let empty_subject = unsafe { SubjectId::new(5) };
+        data.params
+            .assignments
+            .map
+            .insert((empty_period, empty_subject), BTreeSet::new());
+        assert_eq!(
+            data.broken_invariants(),
+            Err(BTreeSet::from([LogicError::EmptyAssignmentsRow(
+                empty_period,
+                empty_subject
+            )]))
+        );
+    }
+
+    #[test]
+    fn colloscope_fixture_is_clean() {
+        // Guards every fixture-based test above: the bare fixture plus an
+        // in-bounds interrogation row has no broken invariants.
+        let mut fx = colloscope_fixture();
+        fx.data
+            .colloscope
+            .set_interrogation(fx.slot, fx.week, BTreeSet::from([0]));
+        assert_eq!(fx.data.broken_invariants(), Ok(BTreeSet::new()));
     }
 }
