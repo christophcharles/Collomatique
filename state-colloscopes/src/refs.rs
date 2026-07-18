@@ -81,7 +81,7 @@ use crate::ids::{
 /// One place a reference to a *period* lives. The payload is the referencing
 /// row's coordinates minus the period; site + the target period are the complete
 /// coordinates of the occurrence.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum PeriodRefSite {
     /// `Week::period_id` → the period the week belongs to
     WeekPeriodFk(WeekId),
@@ -103,7 +103,7 @@ pub enum PeriodRefSite {
 }
 
 /// One place a reference to a *week* lives.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum WeekRefSite {
     /// `WeekPattern::excluded_weeks` → a week the pattern disables. This is the
     /// direct reference the per-week `NonTrivialWeekPattern` guard enforces on
@@ -117,7 +117,7 @@ pub enum WeekRefSite {
 }
 
 /// One place a reference to a *subject* lives.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum SubjectRefSite {
     /// `Teacher::subjects` → a subject
     TeacherSubjects(TeacherId),
@@ -138,14 +138,14 @@ pub enum SubjectRefSite {
 }
 
 /// One place a reference to a *teacher* lives.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TeacherRefSite {
     /// `Slot::teacher_id` → a teacher
     SlotTeacher(SlotId),
 }
 
 /// One place a reference to a *student* lives.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum StudentRefSite {
     /// A prefilled group of the group list references a student
     GroupListPrefilledStudent(GroupListId),
@@ -164,7 +164,7 @@ pub enum StudentRefSite {
 }
 
 /// One place a reference to a *week pattern* lives.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum WeekPatternRefSite {
     /// `Slot::week_pattern` → a week pattern
     SlotWeekPattern(SlotId),
@@ -173,7 +173,7 @@ pub enum WeekPatternRefSite {
 }
 
 /// One place a reference to a *slot* lives.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum SlotRefSite {
     /// `SlotPairingRule::antecedent.slot_id` → a slot
     SlotPairingRuleAntecedent(SlotPairingRuleId),
@@ -186,7 +186,7 @@ pub enum SlotRefSite {
 }
 
 /// One place a reference to a *group list* lives.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum GroupListRefSite {
     /// The group-list *value* of a `group_lists.subjects_associations` entry —
     /// the value isn't part of the key, so locating it needs the full
@@ -205,7 +205,10 @@ pub enum GroupListRefSite {
 ///
 /// Kind-shaped — exactly one variant per target kind, no mixed variants. Site +
 /// target together are the complete coordinates of the id occurrence.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+///
+/// `Ord` is derived: kind declaration order first, then `target`, then `site` —
+/// the canonical order the invariant checker's `BTreeSet`s rely on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Reference {
     /// A reference to a period.
     Period {
