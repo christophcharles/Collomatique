@@ -1,19 +1,22 @@
-//! Pin tests for the reference registry ([`RefSite`] / [`RefVisitor`]).
+//! Pin tests for the reference registry (the per-kind `*RefSite` enums /
+//! [`RefVisitor`] / [`Reference`]).
 //!
 //! These lock the exact set and order of reference sites the walker emits for a
 //! document that exercises every relationship — entity families, dense mirrors
 //! and the colloscope. They are the phase-C spec: the derive-based reroute
 //! (commit 3) must keep them passing.
 //!
-//! Two things are pinned: the full ordered `walk_refs` output (per referenced
-//! kind), and each `references_to_*` reverse lookup on the interesting ids.
+//! Three things are pinned: the full ordered `walk_refs` output (per referenced
+//! kind), each `references_to_*` reverse lookup on the interesting ids, and the
+//! `for_each_reference` edge stream (faithful forwarding + cross-kind order).
 
 use collomatique_state::{AppState, traits::Manager};
 use collomatique_state_colloscopes::{
-    AssignmentOp, BalancingOp, ColloscopeOp, Data, GroupListOp, IncompatOp, NewId, Op, PairingOp,
-    PeriodOp, RefSite, RefVisitor, SettingsOp, SlotOp, SlotPairingOp, StudentOp, Subject,
-    SubjectInterrogationParameters, SubjectOp, SubjectParameters, SubjectPeriodicity, TeacherOp,
-    WeekOp, WeekPatternOp,
+    AssignmentOp, BalancingOp, ColloscopeOp, Data, GroupListOp, GroupListRefSite, IncompatOp,
+    NewId, Op, PairingOp, PeriodOp, PeriodRefSite, RefVisitor, Reference, SettingsOp, SlotOp,
+    SlotPairingOp, SlotRefSite, StudentOp, StudentRefSite, Subject, SubjectInterrogationParameters,
+    SubjectOp, SubjectParameters, SubjectPeriodicity, SubjectRefSite, TeacherOp, TeacherRefSite,
+    WeekOp, WeekPatternOp, WeekPatternRefSite, WeekRefSite,
     balancing::{Balancing, BalancingOptions},
     group_lists::{GroupListFilling, GroupListParameters, PrefilledGroup},
     ids::{GroupListId, PeriodId, SlotId, StudentId, SubjectId, TeacherId, WeekId, WeekPatternId},
@@ -33,39 +36,39 @@ use std::num::NonZeroU32;
 /// Collects every reference emitted by the walker, one vec per referenced kind.
 #[derive(Default)]
 struct Collect {
-    period: Vec<(PeriodId, RefSite)>,
-    week: Vec<(WeekId, RefSite)>,
-    subject: Vec<(SubjectId, RefSite)>,
-    teacher: Vec<(TeacherId, RefSite)>,
-    student: Vec<(StudentId, RefSite)>,
-    week_pattern: Vec<(WeekPatternId, RefSite)>,
-    slot: Vec<(SlotId, RefSite)>,
-    group_list: Vec<(GroupListId, RefSite)>,
+    period: Vec<(PeriodId, PeriodRefSite)>,
+    week: Vec<(WeekId, WeekRefSite)>,
+    subject: Vec<(SubjectId, SubjectRefSite)>,
+    teacher: Vec<(TeacherId, TeacherRefSite)>,
+    student: Vec<(StudentId, StudentRefSite)>,
+    week_pattern: Vec<(WeekPatternId, WeekPatternRefSite)>,
+    slot: Vec<(SlotId, SlotRefSite)>,
+    group_list: Vec<(GroupListId, GroupListRefSite)>,
 }
 
 impl RefVisitor for Collect {
-    fn period_ref(&mut self, t: PeriodId, s: RefSite) {
+    fn period_ref(&mut self, t: PeriodId, s: PeriodRefSite) {
         self.period.push((t, s));
     }
-    fn week_ref(&mut self, t: WeekId, s: RefSite) {
+    fn week_ref(&mut self, t: WeekId, s: WeekRefSite) {
         self.week.push((t, s));
     }
-    fn subject_ref(&mut self, t: SubjectId, s: RefSite) {
+    fn subject_ref(&mut self, t: SubjectId, s: SubjectRefSite) {
         self.subject.push((t, s));
     }
-    fn teacher_ref(&mut self, t: TeacherId, s: RefSite) {
+    fn teacher_ref(&mut self, t: TeacherId, s: TeacherRefSite) {
         self.teacher.push((t, s));
     }
-    fn student_ref(&mut self, t: StudentId, s: RefSite) {
+    fn student_ref(&mut self, t: StudentId, s: StudentRefSite) {
         self.student.push((t, s));
     }
-    fn week_pattern_ref(&mut self, t: WeekPatternId, s: RefSite) {
+    fn week_pattern_ref(&mut self, t: WeekPatternId, s: WeekPatternRefSite) {
         self.week_pattern.push((t, s));
     }
-    fn slot_ref(&mut self, t: SlotId, s: RefSite) {
+    fn slot_ref(&mut self, t: SlotId, s: SlotRefSite) {
         self.slot.push((t, s));
     }
-    fn group_list_ref(&mut self, t: GroupListId, s: RefSite) {
+    fn group_list_ref(&mut self, t: GroupListId, s: GroupListRefSite) {
         self.group_list.push((t, s));
     }
 }
@@ -367,71 +370,74 @@ fn walk_covers_every_site_in_order() {
     let mut c = Collect::default();
     app.get_data().get_inner_data().walk_refs(&mut c);
 
-    // Convenient site aliases for the mirror/colloscope entries.
-    let assign_p0_math = RefSite::AssignmentsKey {
+    // Convenient site aliases for the mirror/colloscope entries. Each site now
+    // carries only the *complement* of its target within the referencing row.
+    let assign_period_site = PeriodRefSite::AssignmentsKey { subject: math };
+    let assign_subject_site = SubjectRefSite::AssignmentsKey { period: p0 };
+    let assoc_period_site = PeriodRefSite::AssociationEntry { subject: math };
+    let assoc_subject_site = SubjectRefSite::AssociationEntry { period: p0 };
+    let assoc_group_list_site = GroupListRefSite::AssociationEntry {
         period: p0,
         subject: math,
-    };
-    let association = RefSite::AssociationEntry {
-        period: p0,
-        subject: math,
-        group_list: gl_auto,
     };
     // Row vocabulary: the single non-empty interrogation row is (slot1, w0); it
-    // references both a slot and a week. slot2 and week w1 carry no row.
-    let collo_int = RefSite::ColloscopeInterrogation {
-        slot: slot1,
-        week: w0,
-    };
-    let collo_gl = RefSite::ColloscopeGroupListKey {
-        group_list: gl_auto,
-    };
+    // references both a slot and a week, each site carrying the other component.
+    // slot2 and week w1 carry no row.
+    let collo_int_slot_site = SlotRefSite::ColloscopeInterrogation { week: w0 };
+    let collo_int_week_site = WeekRefSite::ColloscopeInterrogation { slot: slot1 };
+    let collo_gl_site = GroupListRefSite::ColloscopeGroupListKey;
 
     assert_eq!(
         c.period,
         vec![
             // week → period FK (week_map id order: w0 then w1)
-            (p0, RefSite::WeekPeriodFk(w0)),
-            (p1, RefSite::WeekPeriodFk(w1)),
+            (p0, PeriodRefSite::WeekPeriodFk(w0)),
+            (p1, PeriodRefSite::WeekPeriodFk(w1)),
             // families
-            (p1, RefSite::SubjectExcludedPeriods(math)),
-            (p1, RefSite::StudentExcludedPeriods(st1)),
-            (p1, RefSite::PairingRuleExcludedPeriods(pairing)),
-            (p1, RefSite::SlotPairingRuleExcludedPeriods(slot_pairing)),
+            (p1, PeriodRefSite::SubjectExcludedPeriods(math)),
+            (p1, PeriodRefSite::StudentExcludedPeriods(st1)),
+            (p1, PeriodRefSite::PairingRuleExcludedPeriods(pairing)),
+            (
+                p1,
+                PeriodRefSite::SlotPairingRuleExcludedPeriods(slot_pairing)
+            ),
             // (the pattern → period edge is transitive, not a site)
             // assignments mirror
-            (p0, assign_p0_math),
+            (p0, assign_period_site),
             // association mirror
-            (p0, association),
+            (p0, assoc_period_site),
             // colloscope: rows key on (slot, week), so periods are no longer
             // directly referenced by the colloscope.
         ],
     );
 
     // Weeks are referenced by week-pattern exclusions (step 12: wp excludes w1)
-    // and by colloscope interrogation rows (step 15: the (slot1, w0) row).
+    // and by colloscope interrogation rows (step 14: the (slot1, w0) row).
     assert_eq!(
         c.week,
-        vec![(w1, RefSite::WeekPatternExcludedWeek(wp)), (w0, collo_int),],
+        vec![
+            (w1, WeekRefSite::WeekPatternExcludedWeek(wp)),
+            (w0, collo_int_week_site),
+        ],
     );
 
     assert_eq!(
         c.subject,
         vec![
             // families
-            (math, RefSite::TeacherSubjects(teacher)),
-            (phys, RefSite::TeacherSubjects(teacher)),
-            (math, RefSite::SlotSubject(slot1)),
-            (math, RefSite::SlotSubject(slot2)),
-            (math, RefSite::IncompatSubject(incompat)),
+            (math, SubjectRefSite::TeacherSubjects(teacher)),
+            (phys, SubjectRefSite::TeacherSubjects(teacher)),
+            (math, SubjectRefSite::SlotSubject(slot1)),
+            (math, SubjectRefSite::SlotSubject(slot2)),
+            (math, SubjectRefSite::IncompatSubject(incompat)),
             // pairing: math is the antecedent, phys the consequent (distinct sites)
-            (math, RefSite::PairingRuleAntecedent(pairing)),
-            (phys, RefSite::PairingRuleConsequent(pairing)),
-            (phys, RefSite::BalancingSubjectKey),
+            (math, SubjectRefSite::PairingRuleAntecedent(pairing)),
+            (phys, SubjectRefSite::PairingRuleConsequent(pairing)),
+            (phys, SubjectRefSite::BalancingSubjectKey),
             // assignments mirror
-            (math, assign_p0_math),
+            (math, assign_subject_site),
             // association mirror
-            (math, association),
+            (math, assoc_subject_site),
             // (no ordering-key site: those keys mirror `SlotSubject` and are excluded)
         ],
     );
@@ -440,8 +446,8 @@ fn walk_covers_every_site_in_order() {
     assert_eq!(
         c.teacher,
         vec![
-            (teacher, RefSite::SlotTeacher(slot1)),
-            (teacher, RefSite::SlotTeacher(slot2)),
+            (teacher, TeacherRefSite::SlotTeacher(slot1)),
+            (teacher, TeacherRefSite::SlotTeacher(slot2)),
         ],
     );
 
@@ -449,19 +455,19 @@ fn walk_covers_every_site_in_order() {
         c.student,
         vec![
             // families
-            (st2, RefSite::GroupListPrefilledStudent(gl_pre)),
-            (st1, RefSite::GroupListExcludedStudent(gl_auto)),
-            (st2, RefSite::SettingsStudentKey),
+            (st2, StudentRefSite::GroupListPrefilledStudent(gl_pre)),
+            (st1, StudentRefSite::GroupListExcludedStudent(gl_auto)),
+            (st2, StudentRefSite::SettingsStudentKey),
             // assignments mirror
             (
                 st2,
-                RefSite::AssignmentsStudent {
+                StudentRefSite::AssignmentsStudent {
                     period: p0,
                     subject: math,
                 },
             ),
             // colloscope group list
-            (st2, RefSite::ColloscopeGroupListStudent(gl_auto)),
+            (st2, StudentRefSite::ColloscopeGroupListStudent(gl_auto)),
         ],
     );
 
@@ -469,8 +475,8 @@ fn walk_covers_every_site_in_order() {
     assert_eq!(
         c.week_pattern,
         vec![
-            (wp, RefSite::SlotWeekPattern(slot1)),
-            (wp, RefSite::IncompatWeekPattern(incompat)),
+            (wp, WeekPatternRefSite::SlotWeekPattern(slot1)),
+            (wp, WeekPatternRefSite::IncompatWeekPattern(incompat)),
         ],
     );
 
@@ -478,10 +484,10 @@ fn walk_covers_every_site_in_order() {
         c.slot,
         vec![
             // families: slot1 is the antecedent, slot2 the consequent (distinct sites)
-            (slot1, RefSite::SlotPairingRuleAntecedent(slot_pairing)),
-            (slot2, RefSite::SlotPairingRuleConsequent(slot_pairing)),
+            (slot1, SlotRefSite::SlotPairingRuleAntecedent(slot_pairing)),
+            (slot2, SlotRefSite::SlotPairingRuleConsequent(slot_pairing)),
             // colloscope: only slot1 carries an interrogation row; slot2 is empty.
-            (slot1, collo_int),
+            (slot1, collo_int_slot_site),
         ],
     );
 
@@ -489,9 +495,9 @@ fn walk_covers_every_site_in_order() {
         c.group_list,
         vec![
             // association mirror
-            (gl_auto, association),
+            (gl_auto, assoc_group_list_site),
             // colloscope
-            (gl_auto, collo_gl),
+            (gl_auto, collo_gl_site),
         ],
     );
 
@@ -500,91 +506,187 @@ fn walk_covers_every_site_in_order() {
 
     assert_eq!(
         inner.references_to_period(p0),
-        vec![RefSite::WeekPeriodFk(w0), assign_p0_math, association],
+        vec![
+            PeriodRefSite::WeekPeriodFk(w0),
+            assign_period_site,
+            assoc_period_site,
+        ],
     );
     assert_eq!(
         inner.references_to_period(p1),
         vec![
-            RefSite::WeekPeriodFk(w1),
-            RefSite::SubjectExcludedPeriods(math),
-            RefSite::StudentExcludedPeriods(st1),
-            RefSite::PairingRuleExcludedPeriods(pairing),
-            RefSite::SlotPairingRuleExcludedPeriods(slot_pairing),
+            PeriodRefSite::WeekPeriodFk(w1),
+            PeriodRefSite::SubjectExcludedPeriods(math),
+            PeriodRefSite::StudentExcludedPeriods(st1),
+            PeriodRefSite::PairingRuleExcludedPeriods(pairing),
+            PeriodRefSite::SlotPairingRuleExcludedPeriods(slot_pairing),
         ],
     );
 
     // Weeks are now ref targets: w0 carries the interrogation row, w1 none.
-    assert_eq!(inner.references_to_week(w0), vec![collo_int]);
+    assert_eq!(inner.references_to_week(w0), vec![collo_int_week_site]);
     assert_eq!(
         inner.references_to_week(w1),
-        vec![RefSite::WeekPatternExcludedWeek(wp)],
+        vec![WeekRefSite::WeekPatternExcludedWeek(wp)],
     );
 
     assert_eq!(
         inner.references_to_subject(math),
         vec![
-            RefSite::TeacherSubjects(teacher),
-            RefSite::SlotSubject(slot1),
-            RefSite::SlotSubject(slot2),
-            RefSite::IncompatSubject(incompat),
-            RefSite::PairingRuleAntecedent(pairing),
-            assign_p0_math,
-            association,
+            SubjectRefSite::TeacherSubjects(teacher),
+            SubjectRefSite::SlotSubject(slot1),
+            SubjectRefSite::SlotSubject(slot2),
+            SubjectRefSite::IncompatSubject(incompat),
+            SubjectRefSite::PairingRuleAntecedent(pairing),
+            assign_subject_site,
+            assoc_subject_site,
         ],
     );
     assert_eq!(
         inner.references_to_subject(phys),
         vec![
-            RefSite::TeacherSubjects(teacher),
-            RefSite::PairingRuleConsequent(pairing),
-            RefSite::BalancingSubjectKey,
+            SubjectRefSite::TeacherSubjects(teacher),
+            SubjectRefSite::PairingRuleConsequent(pairing),
+            SubjectRefSite::BalancingSubjectKey,
         ],
     );
 
     assert_eq!(
         inner.references_to_teacher(teacher),
-        vec![RefSite::SlotTeacher(slot1), RefSite::SlotTeacher(slot2),],
+        vec![
+            TeacherRefSite::SlotTeacher(slot1),
+            TeacherRefSite::SlotTeacher(slot2),
+        ],
     );
 
     assert_eq!(
         inner.references_to_student(st1),
-        vec![RefSite::GroupListExcludedStudent(gl_auto)],
+        vec![StudentRefSite::GroupListExcludedStudent(gl_auto)],
     );
     assert_eq!(
         inner.references_to_student(st2),
         vec![
-            RefSite::GroupListPrefilledStudent(gl_pre),
-            RefSite::SettingsStudentKey,
-            RefSite::AssignmentsStudent {
+            StudentRefSite::GroupListPrefilledStudent(gl_pre),
+            StudentRefSite::SettingsStudentKey,
+            StudentRefSite::AssignmentsStudent {
                 period: p0,
                 subject: math,
             },
-            RefSite::ColloscopeGroupListStudent(gl_auto),
+            StudentRefSite::ColloscopeGroupListStudent(gl_auto),
         ],
     );
 
     assert_eq!(
         inner.references_to_week_pattern(wp),
         vec![
-            RefSite::SlotWeekPattern(slot1),
-            RefSite::IncompatWeekPattern(incompat),
+            WeekPatternRefSite::SlotWeekPattern(slot1),
+            WeekPatternRefSite::IncompatWeekPattern(incompat),
         ],
     );
 
     assert_eq!(
         inner.references_to_slot(slot1),
-        vec![RefSite::SlotPairingRuleAntecedent(slot_pairing), collo_int],
+        vec![
+            SlotRefSite::SlotPairingRuleAntecedent(slot_pairing),
+            collo_int_slot_site,
+        ],
     );
     assert_eq!(
         inner.references_to_slot(slot2),
-        vec![RefSite::SlotPairingRuleConsequent(slot_pairing)],
+        vec![SlotRefSite::SlotPairingRuleConsequent(slot_pairing)],
     );
 
     assert_eq!(
         inner.references_to_group_list(gl_auto),
-        vec![association, collo_gl],
+        vec![assoc_group_list_site, collo_gl_site],
     );
     // The prefilled group list is never *referenced* (its students show up as
     // `GroupListPrefilledStudent` student refs, not group-list refs).
     assert_eq!(inner.references_to_group_list(gl_pre), vec![]);
+
+    // --- Edge stream (for_each_reference) consistency with the visitor walk ---
+    // The funnel must forward every callback faithfully and preserve cross-kind
+    // interleaving: projecting the flat stream per kind reproduces each `Collect`
+    // vector, and no edge is lost or duplicated across kinds.
+    let mut flat = Vec::new();
+    inner.for_each_reference(&mut |r| flat.push(r));
+
+    let flat_period: Vec<_> = flat
+        .iter()
+        .filter_map(|r| match *r {
+            Reference::Period { target, site } => Some((target, site)),
+            _ => None,
+        })
+        .collect();
+    let flat_week: Vec<_> = flat
+        .iter()
+        .filter_map(|r| match *r {
+            Reference::Week { target, site } => Some((target, site)),
+            _ => None,
+        })
+        .collect();
+    let flat_subject: Vec<_> = flat
+        .iter()
+        .filter_map(|r| match *r {
+            Reference::Subject { target, site } => Some((target, site)),
+            _ => None,
+        })
+        .collect();
+    let flat_teacher: Vec<_> = flat
+        .iter()
+        .filter_map(|r| match *r {
+            Reference::Teacher { target, site } => Some((target, site)),
+            _ => None,
+        })
+        .collect();
+    let flat_student: Vec<_> = flat
+        .iter()
+        .filter_map(|r| match *r {
+            Reference::Student { target, site } => Some((target, site)),
+            _ => None,
+        })
+        .collect();
+    let flat_week_pattern: Vec<_> = flat
+        .iter()
+        .filter_map(|r| match *r {
+            Reference::WeekPattern { target, site } => Some((target, site)),
+            _ => None,
+        })
+        .collect();
+    let flat_slot: Vec<_> = flat
+        .iter()
+        .filter_map(|r| match *r {
+            Reference::Slot { target, site } => Some((target, site)),
+            _ => None,
+        })
+        .collect();
+    let flat_group_list: Vec<_> = flat
+        .iter()
+        .filter_map(|r| match *r {
+            Reference::GroupList { target, site } => Some((target, site)),
+            _ => None,
+        })
+        .collect();
+
+    assert_eq!(flat_period, c.period);
+    assert_eq!(flat_week, c.week);
+    assert_eq!(flat_subject, c.subject);
+    assert_eq!(flat_teacher, c.teacher);
+    assert_eq!(flat_student, c.student);
+    assert_eq!(flat_week_pattern, c.week_pattern);
+    assert_eq!(flat_slot, c.slot);
+    assert_eq!(flat_group_list, c.group_list);
+
+    assert_eq!(
+        flat.len(),
+        c.period.len()
+            + c.week.len()
+            + c.subject.len()
+            + c.teacher.len()
+            + c.student.len()
+            + c.week_pattern.len()
+            + c.slot.len()
+            + c.group_list.len(),
+        "for_each_reference lost or duplicated an edge across kinds",
+    );
 }

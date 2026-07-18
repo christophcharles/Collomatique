@@ -607,18 +607,28 @@ state; this appendix supersedes them as the description of the live model.
 - The **triplicated checks** (candidate validation, delete-blocking, `check_invariants`)
   still exist — step 1 hand-updated them one last time (the accepted tax); steps 2–5
   collapse them.
-- **Refs registry**: gained `RefSite::WeekPeriodFk` (walked first in `walk_params_refs`).
+- **Refs registry**: gained `WeekPeriodFk` (walked first in `walk_params_refs`).
   The registry now holds only *direct* references, fine-grained: the old
-  `RefSite::WeekPatternLengthCoupling` (a materialized *transitive* pattern → period edge)
+  `WeekPatternLengthCoupling` (a materialized *transitive* pattern → period edge)
   was **removed** — it is derivable from `WeekPatternExcludedWeek` (pattern → week) composed
   with `WeekPeriodFk` (week → period), and the cascade derives period blocking through week
-  deletion, so the step-7 remodel deferral dissolves. `RefSite::AssignmentsKey` dropped its
+  deletion, so the step-7 remodel deferral dissolves. `AssignmentsKey` dropped its
   `non_trivial` flag (rows are canonical-absent, so a walked row is always non-trivial), and
-  `RefSite::SlotsOrderingKey` was removed (a subject has an ordering row iff it has ≥1 slot,
+  `SlotsOrderingKey` was removed (a subject has an ordering row iff it has ≥1 slot,
   with the key pinned to each slot's `subject_id`, so it adds nothing over `SlotSubject`).
   The pairing part sites split by role — `PairingRuleAntecedent` / `PairingRuleConsequent`
   (and `SlotPairingRuleAntecedent` / `SlotPairingRuleConsequent`) — so errors can name which
-  side of a rule references a subject/slot.
+  side of a rule references a subject/slot. The god `RefSite` enum was then **split into
+  eight per-kind site enums** (`PeriodRefSite`, `WeekRefSite`, …) plus a `Reference` edge
+  enum (`{ target, site }`, one variant per kind): `RefVisitor` callbacks and
+  `references_to_*` are now typed per kind, so a consumer matches exhaustively over one
+  kind's real cases only — no impossible arms, no catchall. Payloads follow the
+  **key-complement rule** (a site carries the referencing row's coordinates *minus* the
+  target; the target is never duplicated into a payload, and derivable values aren't
+  carried), so the two-sided rows (assignments `(period, subject)`, association entry,
+  colloscope interrogation `(slot, week)`) each yield one site per id occurrence — resolved
+  by the same row-removal op, arbitrated by the canonical order. `InnerData::for_each_reference`
+  funnels the whole walk into the flat `Reference` stream.
 - **Python glue keeps the dense-view pyclass contract** as *computed* views over the sparse
   core (`Colloscope::from_mem(&mem::Colloscope, &Parameters)`, assignment seeding, pattern
   projection) — throwaway scaffolding for the upcoming Python API rework; reference
