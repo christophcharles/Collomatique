@@ -1,0 +1,84 @@
+//! A [`RangeInclusive`] that is non-empty by construction.
+
+use serde::{Deserialize, Serialize};
+use std::ops::RangeInclusive;
+
+/// Error when a [`NonEmptyRangeInclusive`] would be empty (`start > end`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("range is empty (start > end)")]
+pub struct EmptyRangeError;
+
+/// A [`RangeInclusive`] that is non-empty by construction (`start <= end`).
+///
+/// Serialized exactly like [`RangeInclusive`] (`{"start": …, "end": …}`);
+/// deserialization of an empty range is a hard error.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "RangeInclusive<T>", into = "RangeInclusive<T>")]
+pub struct NonEmptyRangeInclusive<T: Ord + Clone>(RangeInclusive<T>);
+
+impl<T: Ord + Clone> NonEmptyRangeInclusive<T> {
+    /// Builds a non-empty range; returns `None` iff the range is empty.
+    pub fn new(range: RangeInclusive<T>) -> Option<Self> {
+        if range.is_empty() {
+            return None;
+        }
+        Some(NonEmptyRangeInclusive(range))
+    }
+}
+
+impl<T: Ord + Clone> std::ops::Deref for NonEmptyRangeInclusive<T> {
+    type Target = RangeInclusive<T>;
+    fn deref(&self) -> &RangeInclusive<T> {
+        &self.0
+    }
+}
+
+impl<T: Ord + Clone> From<NonEmptyRangeInclusive<T>> for RangeInclusive<T> {
+    fn from(value: NonEmptyRangeInclusive<T>) -> Self {
+        value.0
+    }
+}
+
+impl<T: Ord + Clone> TryFrom<RangeInclusive<T>> for NonEmptyRangeInclusive<T> {
+    type Error = EmptyRangeError;
+    fn try_from(range: RangeInclusive<T>) -> Result<Self, EmptyRangeError> {
+        NonEmptyRangeInclusive::new(range).ok_or(EmptyRangeError)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_range_is_rejected() {
+        assert_eq!(NonEmptyRangeInclusive::new(3..=2), None);
+    }
+
+    #[test]
+    fn singleton_and_proper_ranges_are_accepted() {
+        let singleton = NonEmptyRangeInclusive::new(2..=2).expect("non-empty");
+        assert_eq!(*singleton.start(), 2);
+        assert_eq!(*singleton.end(), 2);
+
+        let proper = NonEmptyRangeInclusive::new(2..=3).expect("non-empty");
+        assert_eq!(*proper.start(), 2);
+        assert_eq!(*proper.end(), 3);
+    }
+
+    #[test]
+    fn try_from_reports_empty_range() {
+        assert_eq!(
+            NonEmptyRangeInclusive::try_from(3..=2),
+            Err(EmptyRangeError)
+        );
+        assert!(NonEmptyRangeInclusive::try_from(2..=3).is_ok());
+    }
+
+    #[test]
+    fn round_trips_through_range_inclusive() {
+        let range = NonEmptyRangeInclusive::new(2..=3).expect("non-empty");
+        let back: RangeInclusive<u32> = range.into();
+        assert_eq!(back, 2..=3);
+    }
+}
