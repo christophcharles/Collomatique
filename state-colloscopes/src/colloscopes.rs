@@ -101,8 +101,9 @@ impl Colloscope {
 
     /// Test-only corruption: inserts an interrogation row verbatim, bypassing
     /// the canonicalizing [Self::set_interrogation] — a stored empty row is
-    /// exactly the [crate::invariants::LogicError::EmptyInterrogationRow] the
-    /// invariant checker must detect, and no production surface can produce it.
+    /// exactly the [crate::invariants::LogicError::EmptyInterrogationRow] (new
+    /// checker) / [ColloscopeError::EmptyInterrogationRow] (old checker) the
+    /// invariant checkers must detect, and no production surface can produce it.
     #[cfg(test)]
     pub(crate) fn forge_interrogation_row(
         &mut self,
@@ -115,8 +116,9 @@ impl Colloscope {
 
     /// Test-only corruption: inserts a group-list row verbatim, bypassing the
     /// canonicalizing [Self::set_group_list] — a stored empty row is exactly
-    /// the [crate::invariants::LogicError::EmptyColloscopeGroupListRow] the
-    /// invariant checker must detect.
+    /// the [crate::invariants::LogicError::EmptyColloscopeGroupListRow] (new
+    /// checker) / [ColloscopeError::EmptyGroupListRow] (old checker) the
+    /// invariant checkers must detect.
     #[cfg(test)]
     pub(crate) fn forge_group_list_row(
         &mut self,
@@ -136,11 +138,13 @@ impl Colloscope {
         &self,
         params: &super::colloscope_params::Parameters,
     ) -> Result<(), ColloscopeError> {
-        // Interrogation rows: the coordinate must be a possible interrogation
-        // cell and the assigned groups must fit the `(period, subject)`
-        // association bound. Rows are canonically non-empty, so an empty group
-        // set validates vacuously.
+        // Interrogation rows: the row must be canonically non-empty, the
+        // coordinate must be a possible interrogation cell and the assigned
+        // groups must fit the `(period, subject)` association bound.
         for ((slot_id, week_id), assigned_groups) in self.interrogations.iter() {
+            if assigned_groups.is_empty() {
+                return Err(ColloscopeError::EmptyInterrogationRow(slot_id, week_id));
+            }
             let Some((period_id, _)) = params.periods.week_position(week_id) else {
                 return Err(ColloscopeError::InvalidWeekId(week_id));
             };
@@ -188,10 +192,13 @@ impl Colloscope {
             }
         }
 
-        // Group-list rows: the id must resolve to a non-prefilled group list and
-        // its placements must be consistent with the params (excluded/invalid
-        // students, group numbers).
+        // Group-list rows: the row must be canonically non-empty, the id must
+        // resolve to a non-prefilled group list and its placements must be
+        // consistent with the params (excluded/invalid students, group numbers).
         for (group_list_id, placements) in self.group_lists.iter() {
+            if placements.is_empty() {
+                return Err(ColloscopeError::EmptyGroupListRow(group_list_id));
+            }
             let Some(params_group_list) = params.group_lists.group_list_map.get(&group_list_id)
             else {
                 return Err(ColloscopeError::InvalidGroupListId(group_list_id));
@@ -293,6 +300,17 @@ pub enum ColloscopeError {
     /// interrogation week)
     #[error("interrogation on inactive week {1:?} for slot {0:?}")]
     InterrogationOnInactiveWeek(SlotId, WeekId),
+
+    /// A stored interrogation row with an empty group set — canonically
+    /// unrepresentable (the sparse surface drops empty writes); only in-crate
+    /// corruption can produce it. Stage-6 backfill for old-checker completeness.
+    #[error("empty interrogation row stored for slot {0:?}, week {1:?}")]
+    EmptyInterrogationRow(SlotId, WeekId),
+
+    /// A stored colloscope group-list row with an empty placement map — same
+    /// canonical-absent contract as [Self::EmptyInterrogationRow].
+    #[error("empty group-list row stored for group list {0:?}")]
+    EmptyGroupListRow(GroupListId),
 }
 
 impl crate::Data {
@@ -421,5 +439,61 @@ impl crate::Data {
                 ))
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ids::Id;
+    use crate::{InnerData, InnerDataError};
+
+    /// Stage-6 backfill: a stored empty interrogation row — unreachable through
+    /// any public path — is rejected by the old checker.
+    #[test]
+    fn empty_interrogation_row_rejected() {
+        let mut data = InnerData::default();
+        let slot = unsafe { SlotId::new(1) };
+        let week = unsafe { WeekId::new(2) };
+        data.colloscope
+            .forge_interrogation_row(slot, week, BTreeSet::new());
+        assert_eq!(
+            data.check_invariants(),
+            Err(InnerDataError::ColloscopeError(
+                ColloscopeError::EmptyInterrogationRow(slot, week)
+            ))
+        );
+    }
+
+    /// Stage-6 backfill: a stored empty group-list row is likewise rejected.
+    #[test]
+    fn empty_group_list_row_rejected() {
+        let mut data = InnerData::default();
+        let group_list = unsafe { GroupListId::new(1) };
+        data.colloscope
+            .forge_group_list_row(group_list, BTreeMap::new());
+        assert_eq!(
+            data.check_invariants(),
+            Err(InnerDataError::ColloscopeError(
+                ColloscopeError::EmptyGroupListRow(group_list)
+            ))
+        );
+    }
+
+    /// Precedence: emptiness fires before id resolution, but a non-empty row
+    /// with dangling coordinates still reports the dangling id.
+    #[test]
+    fn non_empty_forged_row_reports_dangling_ids() {
+        let mut data = InnerData::default();
+        let slot = unsafe { SlotId::new(1) };
+        let week = unsafe { WeekId::new(2) };
+        data.colloscope
+            .forge_interrogation_row(slot, week, BTreeSet::from([0]));
+        assert_eq!(
+            data.check_invariants(),
+            Err(InnerDataError::ColloscopeError(
+                ColloscopeError::InvalidWeekId(week)
+            ))
+        );
     }
 }
