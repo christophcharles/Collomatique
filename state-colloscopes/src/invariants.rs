@@ -751,7 +751,8 @@ pub(crate) mod tests {
     use crate::InnerData;
     use crate::balancing::BalancingOptions;
     use crate::group_lists::{GroupList, GroupListFilling, GroupListParameters, PrefilledGroup};
-    use crate::ids::Id;
+    use crate::ids::{Id, IncompatId};
+    use crate::incompats::Incompatibility;
     use crate::pairings::{PairingRule, RulePart};
     use crate::periods::{Periods, WeekDesc};
     use crate::refs::{
@@ -767,6 +768,7 @@ pub(crate) mod tests {
     use crate::week_patterns::WeekPattern;
     use collomatique_time::{SlotStart, WholeMinuteTime};
     use std::collections::{BTreeMap, BTreeSet};
+    use std::num::NonZeroU32;
 
     /// A minimal well-formed slot on the given subject/teacher. Its `week_pattern`
     /// is `None`; callers override the fields they want to make dangle.
@@ -1417,6 +1419,12 @@ pub(crate) mod tests {
                 group_list
             )]))
         );
+        // The old checker coarsens this to `InvalidGroupList` — not
+        // logic-classified, so the differential is lenient here; pin it directly.
+        assert_eq!(
+            data.check_invariants(),
+            Err(InnerDataError::Params(InvariantError::InvalidGroupList))
+        );
     }
 
     #[test]
@@ -1452,6 +1460,11 @@ pub(crate) mod tests {
                 LogicError::DuplicatedStudentInPrefilledGroups(group_list)
             ]))
         );
+        // Old-checker image (lenient differential branch): `InvalidGroupList`.
+        assert_eq!(
+            data.check_invariants(),
+            Err(InnerDataError::Params(InvariantError::InvalidGroupList))
+        );
     }
 
     #[test]
@@ -1480,6 +1493,11 @@ pub(crate) mod tests {
                 rule
             )]))
         );
+        // Old-checker image (lenient differential branch): `InvalidPairingRule`.
+        assert_eq!(
+            data.check_invariants(),
+            Err(InnerDataError::Params(InvariantError::InvalidPairingRule))
+        );
     }
 
     #[test]
@@ -1507,6 +1525,13 @@ pub(crate) mod tests {
             Err(BTreeSet::from([LogicError::SlotPairingRulePartsShareSlot(
                 rule
             )]))
+        );
+        // Old-checker image (lenient differential branch): `InvalidSlotPairingRule`.
+        assert_eq!(
+            data.check_invariants(),
+            Err(InnerDataError::Params(
+                InvariantError::InvalidSlotPairingRule
+            ))
         );
     }
 
@@ -2541,6 +2566,508 @@ pub(crate) mod tests {
             .colloscope
             .set_interrogation(fx.slot, fx.week, BTreeSet::from([0]));
         assert_eq!(broken_invariants(&fx.data), Ok(BTreeSet::new()));
+    }
+
+    // ---- Stage 7: per-site legacy coverage ----
+    //
+    // One single-corruption fixture per DanglingFk site not already exercised by
+    // a stage-3/5 fixture, each pinning both the exact new output *and* the exact
+    // old first-error. Together with `assert_differential` (run by the
+    // `broken_invariants` wrapper), the two assertions are the operational proof
+    // of that §6 table row: the old checker's first error for the single dangle
+    // is exactly `to_legacy` of the reported reference. `Period@WeekPeriodFk` is
+    // type-guaranteed unrepresentable (weeks are keyed by their period), so it
+    // has no fixture — its `to_legacy` arm is kept for totality only.
+
+    /// Asserts that `data` has exactly the one dangling reference `reference`
+    /// (new checker) and that the old checker's first error is `old`. The
+    /// `broken_invariants` wrapper additionally runs the full differential.
+    #[track_caller]
+    fn assert_dangling_maps(data: &InnerData, reference: Reference, old: InnerDataError) {
+        assert_eq!(
+            broken_invariants(data),
+            Ok(BTreeSet::from([FixableInvariant::DanglingFk(reference)])),
+        );
+        assert_eq!(data.check_invariants(), Err(old));
+    }
+
+    /// Registers a default subject at position 0 (a common scaffold below).
+    fn register_subject(data: &mut InnerData, subject: SubjectId) {
+        data.params
+            .subjects
+            .ordered_subject_list
+            .insert_at(0, subject, Subject::default())
+            .unwrap();
+    }
+
+    #[test]
+    fn dangling_period_in_subject_exclusions_maps_to_legacy() {
+        let mut data = InnerData::default();
+        let subject = unsafe { SubjectId::new(1) };
+        let period = unsafe { PeriodId::new(2) };
+        data.params
+            .subjects
+            .ordered_subject_list
+            .insert_at(
+                0,
+                subject,
+                Subject {
+                    excluded_periods: BTreeSet::from([period]),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_dangling_maps(
+            &data,
+            Reference::Period {
+                target: period,
+                site: PeriodRefSite::SubjectExcludedPeriods(subject),
+            },
+            InnerDataError::Params(InvariantError::InvalidSubject),
+        );
+    }
+
+    #[test]
+    fn dangling_period_in_pairing_rule_maps_to_legacy() {
+        let mut data = InnerData::default();
+        let subject_a = unsafe { SubjectId::new(1) };
+        let subject_b = unsafe { SubjectId::new(2) };
+        let rule = unsafe { PairingRuleId::new(3) };
+        let period = unsafe { PeriodId::new(4) };
+        register_subject(&mut data, subject_a);
+        data.params
+            .subjects
+            .ordered_subject_list
+            .insert_at(1, subject_b, Subject::default())
+            .unwrap();
+        data.params.pairings.pairing_rule_map.insert(
+            rule,
+            PairingRule {
+                antecedent: RulePart {
+                    subject_id: subject_a,
+                    should_have: true,
+                },
+                consequent: RulePart {
+                    subject_id: subject_b,
+                    should_have: false,
+                },
+                excluded_periods: BTreeSet::from([period]),
+                soft: false,
+            },
+        );
+        assert_dangling_maps(
+            &data,
+            Reference::Period {
+                target: period,
+                site: PeriodRefSite::PairingRuleExcludedPeriods(rule),
+            },
+            InnerDataError::Params(InvariantError::InvalidPairingRule),
+        );
+    }
+
+    #[test]
+    fn dangling_period_in_slot_pairing_rule_maps_to_legacy() {
+        let mut data = InnerData::default();
+        let subject = unsafe { SubjectId::new(1) };
+        let teacher = unsafe { TeacherId::new(2) };
+        let slot_a = unsafe { SlotId::new(3) };
+        let slot_b = unsafe { SlotId::new(4) };
+        let rule = unsafe { SlotPairingRuleId::new(5) };
+        let period = unsafe { PeriodId::new(6) };
+        register_subject(&mut data, subject);
+        data.params.teachers.teacher_map.insert(
+            teacher,
+            Teacher {
+                subjects: BTreeSet::from([subject]),
+                ..Default::default()
+            },
+        );
+        data.params.slots = Slots::from_subject_rows([(
+            subject,
+            vec![
+                (slot_a, test_slot(subject, teacher)),
+                (slot_b, test_slot(subject, teacher)),
+            ],
+        )])
+        .unwrap();
+        data.params.slot_pairings.slot_pairing_rule_map.insert(
+            rule,
+            SlotPairingRule {
+                antecedent: SlotRulePart {
+                    slot_id: slot_a,
+                    should_have: true,
+                },
+                consequent: SlotRulePart {
+                    slot_id: slot_b,
+                    should_have: false,
+                },
+                excluded_periods: BTreeSet::from([period]),
+                soft: false,
+            },
+        );
+        assert_dangling_maps(
+            &data,
+            Reference::Period {
+                target: period,
+                site: PeriodRefSite::SlotPairingRuleExcludedPeriods(rule),
+            },
+            InnerDataError::Params(InvariantError::InvalidSlotPairingRule),
+        );
+    }
+
+    #[test]
+    fn dangling_period_in_association_maps_to_legacy() {
+        let mut data = InnerData::default();
+        let subject = unsafe { SubjectId::new(1) };
+        let group_list = unsafe { GroupListId::new(2) };
+        let period = unsafe { PeriodId::new(3) };
+        register_subject(&mut data, subject);
+        data.params
+            .group_lists
+            .group_list_map
+            .insert(group_list, automatic_group_list(2));
+        data.params
+            .group_lists
+            .subjects_associations
+            .insert((period, subject), group_list);
+        assert_dangling_maps(
+            &data,
+            Reference::Period {
+                target: period,
+                site: PeriodRefSite::AssociationEntry { subject },
+            },
+            InnerDataError::Params(
+                InvariantError::WrongPeriodCountInSubjectAssociationsForGroupLists,
+            ),
+        );
+    }
+
+    #[test]
+    fn dangling_period_in_assignments_key_maps_to_legacy() {
+        let mut data = InnerData::default();
+        let subject = unsafe { SubjectId::new(1) };
+        let student = unsafe { StudentId::new(2) };
+        let period = unsafe { PeriodId::new(3) };
+        register_subject(&mut data, subject);
+        data.params
+            .students
+            .student_map
+            .insert(student, Student::default());
+        data.params
+            .assignments
+            .map
+            .insert((period, subject), BTreeSet::from([student]));
+        assert_dangling_maps(
+            &data,
+            Reference::Period {
+                target: period,
+                site: PeriodRefSite::AssignmentsKey { subject },
+            },
+            InnerDataError::Params(InvariantError::InvalidPeriodIdInAssignements),
+        );
+    }
+
+    #[test]
+    fn dangling_week_in_interrogation_key_maps_to_legacy() {
+        let mut fx = colloscope_fixture();
+        let week = unsafe { WeekId::new(99) };
+        fx.data
+            .colloscope
+            .set_interrogation(fx.slot, week, BTreeSet::from([0]));
+        assert_dangling_maps(
+            &fx.data,
+            Reference::Week {
+                target: week,
+                site: WeekRefSite::ColloscopeInterrogation { slot: fx.slot },
+            },
+            InnerDataError::ColloscopeError(ColloscopeError::InvalidWeekId(week)),
+        );
+    }
+
+    #[test]
+    fn dangling_subject_in_incompat_maps_to_legacy() {
+        let mut data = InnerData::default();
+        let incompat = unsafe { IncompatId::new(1) };
+        let subject = unsafe { SubjectId::new(2) };
+        data.params.incompats.incompat_map.insert(
+            incompat,
+            Incompatibility {
+                subject_id: subject,
+                name: String::new(),
+                slots: vec![],
+                minimum_free_slots: NonZeroU32::new(1).unwrap(),
+                week_pattern_id: None,
+            },
+        );
+        assert_dangling_maps(
+            &data,
+            Reference::Subject {
+                target: subject,
+                site: SubjectRefSite::IncompatSubject(incompat),
+            },
+            InnerDataError::Params(InvariantError::InvalidIncompat),
+        );
+    }
+
+    #[test]
+    fn dangling_subject_in_pairing_antecedent_maps_to_legacy() {
+        let mut data = InnerData::default();
+        let subject = unsafe { SubjectId::new(1) };
+        let dangling = unsafe { SubjectId::new(2) };
+        let rule = unsafe { PairingRuleId::new(3) };
+        register_subject(&mut data, subject);
+        data.params.pairings.pairing_rule_map.insert(
+            rule,
+            PairingRule {
+                antecedent: RulePart {
+                    subject_id: dangling,
+                    should_have: true,
+                },
+                consequent: RulePart {
+                    subject_id: subject,
+                    should_have: false,
+                },
+                excluded_periods: BTreeSet::new(),
+                soft: false,
+            },
+        );
+        assert_dangling_maps(
+            &data,
+            Reference::Subject {
+                target: dangling,
+                site: SubjectRefSite::PairingRuleAntecedent(rule),
+            },
+            InnerDataError::Params(InvariantError::InvalidPairingRule),
+        );
+    }
+
+    #[test]
+    fn dangling_subject_in_pairing_consequent_maps_to_legacy() {
+        let mut data = InnerData::default();
+        let subject = unsafe { SubjectId::new(1) };
+        let dangling = unsafe { SubjectId::new(2) };
+        let rule = unsafe { PairingRuleId::new(3) };
+        register_subject(&mut data, subject);
+        data.params.pairings.pairing_rule_map.insert(
+            rule,
+            PairingRule {
+                antecedent: RulePart {
+                    subject_id: subject,
+                    should_have: true,
+                },
+                consequent: RulePart {
+                    subject_id: dangling,
+                    should_have: false,
+                },
+                excluded_periods: BTreeSet::new(),
+                soft: false,
+            },
+        );
+        assert_dangling_maps(
+            &data,
+            Reference::Subject {
+                target: dangling,
+                site: SubjectRefSite::PairingRuleConsequent(rule),
+            },
+            InnerDataError::Params(InvariantError::InvalidPairingRule),
+        );
+    }
+
+    #[test]
+    fn dangling_subject_in_balancing_maps_to_legacy() {
+        let mut data = InnerData::default();
+        let subject = unsafe { SubjectId::new(1) };
+        data.params
+            .balancing
+            .subjects
+            .insert(subject, BalancingOptions::default());
+        assert_dangling_maps(
+            &data,
+            Reference::Subject {
+                target: subject,
+                site: SubjectRefSite::BalancingSubjectKey,
+            },
+            InnerDataError::Params(InvariantError::InvalidSubjectIdInBalancing),
+        );
+    }
+
+    #[test]
+    fn dangling_subject_in_association_maps_to_legacy() {
+        let mut data = InnerData::default();
+        let period = unsafe { PeriodId::new(1) };
+        let week = unsafe { WeekId::new(2) };
+        let group_list = unsafe { GroupListId::new(3) };
+        let subject = unsafe { SubjectId::new(4) };
+        data.params.periods = test_periods(period, week, WeekDesc::default());
+        data.params
+            .group_lists
+            .group_list_map
+            .insert(group_list, automatic_group_list(2));
+        data.params
+            .group_lists
+            .subjects_associations
+            .insert((period, subject), group_list);
+        assert_dangling_maps(
+            &data,
+            Reference::Subject {
+                target: subject,
+                site: SubjectRefSite::AssociationEntry { period },
+            },
+            InnerDataError::Params(InvariantError::InvalidSubjectIdInSubjectAssociations),
+        );
+    }
+
+    #[test]
+    fn dangling_group_list_in_association_maps_to_legacy() {
+        let mut data = InnerData::default();
+        let period = unsafe { PeriodId::new(1) };
+        let week = unsafe { WeekId::new(2) };
+        let subject = unsafe { SubjectId::new(3) };
+        let group_list = unsafe { GroupListId::new(4) };
+        data.params.periods = test_periods(period, week, WeekDesc::default());
+        register_subject(&mut data, subject);
+        data.params
+            .group_lists
+            .subjects_associations
+            .insert((period, subject), group_list);
+        assert_dangling_maps(
+            &data,
+            Reference::GroupList {
+                target: group_list,
+                site: GroupListRefSite::AssociationEntry { period, subject },
+            },
+            InnerDataError::Params(InvariantError::InvalidGroupListIdInSubjectAssociations),
+        );
+    }
+
+    #[test]
+    fn dangling_student_in_prefilled_group_maps_to_legacy() {
+        let mut data = InnerData::default();
+        let group_list = unsafe { GroupListId::new(1) };
+        let student = unsafe { StudentId::new(2) };
+        // One named group and one prefilled group (counts match, no duplicate) so
+        // the first old-checker failure is the dangling student, not a prefill
+        // logic error.
+        data.params.group_lists.group_list_map.insert(
+            group_list,
+            GroupList {
+                params: GroupListParameters {
+                    group_names: vec![None],
+                    ..Default::default()
+                },
+                filling: GroupListFilling::Prefilled {
+                    groups: vec![PrefilledGroup {
+                        students: BTreeSet::from([student]),
+                    }],
+                },
+            },
+        );
+        assert_dangling_maps(
+            &data,
+            Reference::Student {
+                target: student,
+                site: StudentRefSite::GroupListPrefilledStudent(group_list),
+            },
+            InnerDataError::Params(InvariantError::InvalidGroupList),
+        );
+    }
+
+    #[test]
+    fn dangling_student_in_excluded_set_maps_to_legacy() {
+        let mut data = InnerData::default();
+        let group_list = unsafe { GroupListId::new(1) };
+        let student = unsafe { StudentId::new(2) };
+        data.params.group_lists.group_list_map.insert(
+            group_list,
+            GroupList {
+                params: GroupListParameters {
+                    group_names: vec![None, None],
+                    ..Default::default()
+                },
+                filling: GroupListFilling::Automatic {
+                    excluded_students: BTreeSet::from([student]),
+                },
+            },
+        );
+        assert_dangling_maps(
+            &data,
+            Reference::Student {
+                target: student,
+                site: StudentRefSite::GroupListExcludedStudent(group_list),
+            },
+            InnerDataError::Params(InvariantError::InvalidGroupList),
+        );
+    }
+
+    #[test]
+    fn dangling_student_in_assignments_cell_maps_to_legacy() {
+        let mut data = InnerData::default();
+        let period = unsafe { PeriodId::new(1) };
+        let week = unsafe { WeekId::new(2) };
+        let subject = unsafe { SubjectId::new(3) };
+        let student = unsafe { StudentId::new(4) };
+        data.params.periods = test_periods(period, week, WeekDesc::default());
+        register_subject(&mut data, subject);
+        data.params
+            .assignments
+            .map
+            .insert((period, subject), BTreeSet::from([student]));
+        assert_dangling_maps(
+            &data,
+            Reference::Student {
+                target: student,
+                site: StudentRefSite::AssignmentsStudent { period, subject },
+            },
+            InnerDataError::Params(InvariantError::InvalidStudentIdInAssignments),
+        );
+    }
+
+    #[test]
+    fn dangling_student_in_colloscope_group_list_maps_to_legacy() {
+        let mut data = InnerData::default();
+        let group_list = unsafe { GroupListId::new(1) };
+        let student = unsafe { StudentId::new(2) };
+        data.params
+            .group_lists
+            .group_list_map
+            .insert(group_list, automatic_group_list(2));
+        data.colloscope
+            .set_group_list(group_list, BTreeMap::from([(student, 0)]));
+        assert_dangling_maps(
+            &data,
+            Reference::Student {
+                target: student,
+                site: StudentRefSite::ColloscopeGroupListStudent(group_list),
+            },
+            InnerDataError::ColloscopeError(ColloscopeError::InvalidStudentId(student)),
+        );
+    }
+
+    #[test]
+    fn dangling_week_pattern_in_incompat_maps_to_legacy() {
+        let mut data = InnerData::default();
+        let incompat = unsafe { IncompatId::new(1) };
+        let subject = unsafe { SubjectId::new(2) };
+        let pattern = unsafe { WeekPatternId::new(3) };
+        register_subject(&mut data, subject);
+        data.params.incompats.incompat_map.insert(
+            incompat,
+            Incompatibility {
+                subject_id: subject,
+                name: String::new(),
+                slots: vec![],
+                minimum_free_slots: NonZeroU32::new(1).unwrap(),
+                week_pattern_id: Some(pattern),
+            },
+        );
+        assert_dangling_maps(
+            &data,
+            Reference::WeekPattern {
+                target: pattern,
+                site: WeekPatternRefSite::IncompatWeekPattern(incompat),
+            },
+            InnerDataError::Params(InvariantError::InvalidIncompat),
+        );
     }
 
     // ---- Stage 7: compound states ----
