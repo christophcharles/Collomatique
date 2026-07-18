@@ -3,7 +3,9 @@
 **Status:** direction agreed July 15 2026 (branch `consolidate_state`); **step 1 completed
 July 18 2026** — its detailed plan is retired (pinned at
 `git show 62949404:docs/plans/plan_step_1.md`), the delivered state is recorded in
-Appendix B. Next up: step 2.
+Appendix B. **Step 2 completed July 18 2026** — its session plan is retired (pinned at
+`git show 49b4f77d:docs/plans/plan_step_2.md`), the delivered state is recorded in
+Appendix C. Next up: step 3.
 This doc started as an exploration after phase C of the table-registry plan shipped (item 2's
 detailed plan, since delivered in full and retired; pinned at
 `git show 77695338:docs/table_registry_plan.md`); it now
@@ -148,7 +150,12 @@ apply_cascade(target_op):
             Err(carve-out error) =>
                 undo `applied`, return the error // bad input, not resolvable
             Err(broken_invariants) =>            // state already restored by try_apply
-                if any broken invariant has no map entry: PANIC   // structural tier
+                if any broken invariant has no map entry: PANIC   // structural tier — since
+                                                 // step 2, this arm is unrepresentable: the
+                                                 // checker's Result split routes tier 2 out as
+                                                 // Err(LogicError) before any fixable set is
+                                                 // built (Appendix C.1), so the map is total
+                                                 // over FixableInvariant
                 pick = min(broken_invariants)    // canonical Ord on the invariant enum
                 resolver = map[pick](coordinates, current_state)
                 queue.push_front(resolver)       // depth-first: resolver runs before op retries
@@ -269,7 +276,8 @@ beyond consumer ergonomics.
 - **`Join` — keep.** It is the vocabulary for tier-3 convergence checks *and* consumer ergonomics.
 - **`References` / `for_each_ref` — keep, recast.** Not for reverse-lookups, but as the generic
   tier-1 existence-sweep engine behind the precise checker (step 2), plus `all_ids`/duplicate
-  detection.
+  detection. **Delivered**: `InnerData::for_each_reference` is the layer-B sweep engine of
+  `broken_invariants` (Appendix C.1).
 - **`RefSite` + `references_to_*` (reverse lookup) — likely retire.** The cascade discovers
   referrers by tripping the checker, not by enumerating them. The `RefSite` *taxonomy* survives
   reincarnated as the precise-`InvariantError` variant set. Hold the deletion until gtk4's needs
@@ -320,12 +328,39 @@ The additive cascade died here, unwritten.
   ★ End-of-step gate: 500-seed harness clean, byte-stability + hogwarts pristine, contract
   scripts + gtk4 smoke passed (July 18 2026).
 
-**Step 2 — the precise checker, alongside the old one.** Write the *second*
-`check_invariants` without removing the first: the enriched coordinate-bearing
-`InvariantError` (§3), a generic dangling-reference sweep driven by `for_each_ref` (§7), the
-duplicate-id check, plus the hand-written residue — the tier-3 convergence checks (§6) and any
-structural leftovers not encapsulated per §6c. It returns **all** broken invariants in
-canonical (`Ord`) order.
+**Step 2 — the precise checker, alongside the old one — COMPLETED July 18 2026.** Written
+against the step-1 model, fully tested, and deliberately **unwired** — no production caller
+(wiring is steps 3–6's business); the old checker stays authoritative and untouched except
+the stage-6 backfill below. The session plan (decisions ledger, full variant tables, legacy
+conversion table) is retired; pinned at `git show 49b4f77d:docs/plans/plan_step_2.md`.
+**The delivered contract steps 3–7 build on is Appendix C.**
+
+  Two deliberate divergences from the §3 sketch: the vocabulary is **new types**
+  (`invariants.rs`: `LogicError` / `Convergence` / `FixableInvariant` over the refs
+  registry's `Reference` edge), not an enriched `InvariantError` — the old vocabulary stays
+  with the old checker until step 5; and the tier split is a **`Result`**
+  (`broken_invariants() -> Result<BTreeSet<FixableInvariant>, BTreeSet<LogicError>>`,
+  tier-2 logic errors short-circuit as `Err`), which makes the §5 "no map entry → PANIC"
+  arm unrepresentable for step 6. Stages as landed:
+  - **Stage 1 — empty ranges unrepresentable** (`d250c16b`, `d33100ed`, `220e8b9e`):
+    `NonEmptyRangeInclusive` newtype, five field swaps, four error shapes deleted; decode
+    hard-errors on an empty range in a file; bytes untouched (§6c applied to value shapes).
+  - **Stages 2–5 — vocabulary + the three layers** (`7667091b`, `ea62dead`, `7663844b`,
+    `2bcf0a83`): `Ord` on `Reference`/site enums; layer A (logic errors, `Err` path),
+    layer B (generic dangling sweep via `for_each_reference`), layer C (hand-written
+    convergence walks, skip-on-dangling).
+  - **Stage 6 — old-checker backfill** (`8f3bb093`): the two missing colloscope
+    canonical-absent checks added to the *old* architecture
+    (`ColloscopeError::{EmptyInterrogationRow, EmptyGroupListRow}`) — the old checker is
+    now the *complete* ground truth this step's differential and step 3's audit run against.
+  - **Stage 7 — legacy bridge + differential** (`be9eac90`, `158567a5`, `3d139d3a`): total
+    `to_legacy`, `is_necessarily_logic_error`, the three-part differential over every
+    fixture — a delivered head start on step 4 (the fuzz will drive the same harness).
+  - **Beyond plan** (`49b4f77d`): a parallel property harness on the new checker
+    (`property_ops_broken_invariants.rs`, forward direction only); the old harness stays
+    the oracle, untouched.
+
+  End-of-step gate: `cargo test --workspace` green, `Cargo.lock` unchanged (July 18 2026).
 
 **Step 3 — completeness audit.** Survey the old `check_invariants` *and* the
 `validate_*_internal` candidate checks (the side-constraint inventory of Appendix A.2 is the
@@ -420,8 +455,10 @@ Open (settled in the relevant step's session plan, not here):
 - ~~whether the slots `ordering` sidecar goes sparse~~ — settled in 1c: **yes** (row iff ≥1 slot);
 - ~~the `WeekDesc` container shape and the re-cut week op surface~~ — settled in 1b
   (Appendix B.1/B.2);
-- the `Ord` used for the canonical cascade pick (derive order on the invariant enum is the
-  natural candidate) — step 6.
+- ~~the `Ord` used for the canonical cascade pick (derive order on the invariant enum is the
+  natural candidate)~~ — settled in step 2: **derive order** (`DanglingFk < Convergence` so
+  `min()` prefers the precise row-removal fix; declaration order within each enum). Step 6
+  may still reorder variants — a variant-order edit, not a mechanism change (Appendix C.1).
 
 ---
 
@@ -429,8 +466,9 @@ Open (settled in the relevant step's session plan, not here):
 
 Copied (July 16 2026) from §3.2/§3.3 of the retired `docs/table_registry_plan.md` (item 2's
 detailed plan, delivered in full; the whole document is pinned at
-`git show 77695338:docs/table_registry_plan.md`). Step 2 uses A.1 as the existence-sweep
-target set; step 3 uses A.1 + A.2 as the completeness-audit checklist. File/line references
+`git show 77695338:docs/table_registry_plan.md`). Step 2 used A.1 as the existence-sweep
+target set (via the refs registry, B.5); step 3 uses A.1 + A.2 as the completeness-audit
+checklist. File/line references
 are against the tree at commit `de8ed888` (July 13 2026) and have rotted since — the file +
 function names are the stable part. The "block"/"twin" error columns describe the *old*
 architecture this design replaces; they document exactly what the new checker must cover.
@@ -656,3 +694,119 @@ state; this appendix supersedes them as the description of the live model.
 - The property harness (`property_ops.rs`, 100 seeds committed; 500-seed reference at
   milestones) remains the oracle; its generator lives in `collomatique-testgen-colloscopes`
   and targets ops from **params** (via the B.3 oracles), not from the data shapes.
+
+---
+
+## Appendix C — step 2 as delivered (July 18 2026)
+
+Recorded when the step-2 session plan was retired (full plan — decisions ledger, complete
+variant tables, the per-site legacy conversion table — pinned at
+`git show 49b4f77d:docs/plans/plan_step_2.md`; commit anchors in §8). This appendix records
+the *contract*; the variant sets and the legacy table live in
+`state-colloscopes/src/invariants.rs`, pinned by tests — they are deliberately not copied
+here. This is what steps 3–7 build on.
+
+### C.1 The checker
+
+```rust
+impl InnerData {
+    pub fn broken_invariants(&self)
+        -> Result<BTreeSet<FixableInvariant>, BTreeSet<LogicError>>;
+}
+```
+
+- **Semantics**: `Ok` = the *code* is sound; the payload is what the *data* needs fixed
+  (`Ok(empty)` = valid). `Err` = a state no elementary op can legitimately reach — the code
+  (or a hand-forged file) is wrong; the step-6 cascade panics on it, decode hard-errors.
+  Logic errors are collected **first and short-circuit**: they undermine the meaningfulness
+  of the fixable sweep, so the two payloads never mix. Consequence for step 6: the
+  resolution map is **total over `FixableInvariant`** — the §5 "no map entry → PANIC" arm
+  is unrepresentable.
+- **Three layers on the `Ok` side of the pipeline**: **A** — logic errors (duplicate-id
+  sweep, canonical-absent rows, prefill count/duplicate-student, parts-share-an-id); **B** —
+  the generic dangling sweep: eight per-kind existence sets, then `for_each_reference`;
+  every edge whose target does not resolve yields `DanglingFk(Reference)`. **C** —
+  hand-written convergence walks mirroring the old semantics (the differential is the
+  referee). Layer C **skips, never unwraps**, when a prerequisite ref dangles
+  (`let Some(x) = … else { continue }`) — the `DanglingFk` entry already reports it; B and
+  C coexist in one `Ok` set.
+- **Canonical order = derive order** on `BTreeSet` (dedup free). `DanglingFk < Convergence`
+  so that when a row is both dangling and convergence-broken, `min()` picks the precise
+  row-removal fix over the lossy one. Ordering is pinned by tests; step 6 may reorder
+  variants (a variant-order edit, not a mechanism change).
+
+### C.2 The vocabulary (`invariants.rs`, re-exported from `lib.rs`)
+
+Classification is **mechanical**, per edge/predicate — the module docs state the rule:
+
+- **`DanglingFk(Reference)`** — the edge is in the refs registry and its target id does not
+  resolve. Type-guaranteed edges (`WeekPeriodFk`) stay in the sweep — generic over the
+  registry — and simply never fire.
+- **`LogicError`** (9 variants) — truth decidable from a row's *own value* (or whole-document
+  id-uniqueness): no other entity's state can flip it, so no legitimate op produces it by
+  side effect. Nothing that follows a reference belongs here.
+- **`Convergence`** (16 variants) — a predicate over *existing* edges that legitimate ops can
+  break indirectly (e.g. `UpdateSubject` turning interrogations off, or lengthening the
+  duration past midnight — `SlotOverflowsDay` is convergence, not logic). The cascade
+  resolves these lossily.
+- `FixableInvariant = DanglingFk(Reference) | Convergence(Convergence)`. **No `dangling()`
+  unwrap helper**: every consumer (the step-6 resolution map foremost) matches both variants
+  exhaustively — no caller is entitled to panic on one of them.
+- All types derive `Ord` (+ `Ord` added to `Reference` and the eight `*RefSite` enums) and
+  thiserror `Display`. **No Serde** — step 5 revisits when the vocabulary becomes UI-visible.
+
+### C.3 Unrepresentable / encapsulated (what the checker does *not* sweep)
+
+- **Empty ranges** — unrepresentable: `NonEmptyRangeInclusive<T>`
+  (`non_empty_range.rs`; validated `new -> Option`, `Deref` reads, serde
+  `try_from`/`into` `RangeInclusive`) on the five range fields (four `Subject` ranges +
+  `GroupListParameters.students_per_group`). The four empty-range error variants are
+  deleted; an empty range in a *file* is a decode hard-error (honest-decode rule);
+  representation identical, bytes untouched.
+- **Mirrors** — type-encapsulated (§6c): the periods list↔map and slots ordering↔table
+  mirrors are maintained inside `Periods`/`Slots`; the new checker trusts them
+  unconditionally. (The old checker's mirror sweeps are pre-encapsulation vestiges and stay
+  there.)
+- **Remaining cross-field value shapes** (prefill count/duplicate-student, parts-share-an-id
+  ×2) stay `LogicError` variants for now: encapsulating them means privatizing
+  `GroupList`/`PairingRule`/`SlotPairingRule` behind smart constructors — public-API churn
+  step 5 does anyway. Do that churn once, at step 5.
+
+### C.4 Old-checker parity + the legacy bridge
+
+- **The old checker is now complete**: stage 6 backfilled the two missing colloscope
+  canonical-absent checks (`ColloscopeError::{EmptyInterrogationRow, EmptyGroupListRow}`,
+  rejected in `validate_against_params`). Zero observable change on real data — ops
+  canonicalize at write time and the spec-2 codec routes through the canonicalizing sparse
+  surface — only in-crate corruption tests reach them. Step 3 audits against this complete
+  ground truth.
+- **`to_legacy(&self) -> InnerDataError`** on both `LogicError` and `FixableInvariant` —
+  **total** (bought by the backfill). Codomain is `InnerDataError`, not `InvariantError`:
+  colloscope-side conditions live on the `ColloscopeError` arm, `DuplicatedId` on the
+  top-level `DuplicateIds`.
+- **`InnerDataError::is_necessarily_logic_error`** — `true` for exactly the six variants
+  whose *every* possible cause is tier-2; mixed-cause coarse variants classify `false`.
+- **The three-part differential** (every stage-3..6 fixture + clean + compound states):
+  (1) verdicts always agree (old `is_ok()` ⇔ new `Ok(∅)`); (2) if new is `Err(L)` and old's
+  error is logic-classified, old's error ∈ `to_legacy(L)` — lenient otherwise (in a
+  compound state old may trip a fixable error first); (3) if new is `Ok(F)` non-empty,
+  old's error ∈ `to_legacy(F)` exactly. **Step 4's fuzz drives this same harness** over
+  generated states instead of hand-built fixtures.
+
+### C.5 Unwired, and the tests pinning the contracts
+
+`broken_invariants` has **no production caller** — wiring is steps 3–6. Pinned by:
+
+- `invariants.rs` in-crate tests: ordering pins (`DanglingFk < Convergence`, declaration
+  order), one corruption fixture per variant (forged ids / crate-internal field access —
+  ops can't reach these states, which is the point), short-circuit and skip-on-dangling
+  pins, compound-state leniency pins, per-site differential coverage of the legacy table.
+- `colloscopes.rs` stage-6 corruption tests (the backfilled checks).
+- `tests/property_ops_broken_invariants.rs` — the forward-only property mirror
+  (old-valid ⇒ new fully clean; `broken_invariants` consumes no RNG, so seeded
+  trajectories stay identical). The reverse direction is out of scope until step 4;
+  `property_ops.rs` stays the oracle, untouched.
+
+Deferred hooks: Serde + value-shape encapsulation → step 5; resolution map (total over
+`FixableInvariant`) + possible variant reorder → step 6; `references_to_*` retirement still
+pending a gtk4 claim (§7 unchanged).
