@@ -31,11 +31,13 @@
 //! The checker itself ([crate::InnerData]`::broken_invariants`) lands in later
 //! stages; this module is vocabulary only.
 
+use std::collections::BTreeSet;
+
 use thiserror::Error;
 
 use crate::ids::{
     GroupListId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId, SubjectId,
-    TeacherId, WeekId,
+    TeacherId, WeekId, WeekPatternId,
 };
 use crate::refs::Reference;
 
@@ -166,12 +168,434 @@ pub enum FixableInvariant {
     Convergence(Convergence),
 }
 
+impl crate::InnerData {
+    /// Returns every broken invariant of the document, deduplicated, in
+    /// canonical order (the derived `Ord`s — see the module docs).
+    ///
+    /// `Ok` means the *code* is sound: the payload is what the *data* needs
+    /// fixed (empty = fully valid). `Err` means a logic error — a state no
+    /// legitimate elementary op can reach — and short-circuits: a logic error
+    /// undermines the meaningfulness of the fixable sweep.
+    ///
+    /// Coverage so far: the dangling-reference sweep (layer B). The
+    /// logic-error layer (stage 4) and the convergence layer (stage 5) land
+    /// next; until then the result is always `Ok`.
+    pub fn broken_invariants(&self) -> Result<BTreeSet<FixableInvariant>, BTreeSet<LogicError>> {
+        Ok(self.dangling_refs())
+    }
+
+    /// Layer B: every registry edge ([Self::for_each_reference]) whose target
+    /// id does not resolve, as [FixableInvariant::DanglingFk] entries.
+    ///
+    /// The eight existence sets are read from the entities' own tables (not the
+    /// ordering sidecars), so the sweep stays sound on potentially inconsistent
+    /// data. `Week@WeekPeriodFk` is type-guaranteed by the `Periods`
+    /// encapsulation (weeks are keyed by their owning period): the arm is
+    /// handled generically but never fires.
+    fn dangling_refs(&self) -> BTreeSet<FixableInvariant> {
+        let periods: BTreeSet<PeriodId> = self.params.periods.period_ids().collect();
+        let weeks: BTreeSet<WeekId> = self.params.periods.week_ids().collect();
+        let subjects: BTreeSet<SubjectId> =
+            self.params.subjects.ordered_subject_list.keys().collect();
+        let teachers: BTreeSet<TeacherId> = self.params.teachers.teacher_map.keys().collect();
+        let students: BTreeSet<StudentId> = self.params.students.student_map.keys().collect();
+        let week_patterns: BTreeSet<WeekPatternId> =
+            self.params.week_patterns.week_pattern_map.keys().collect();
+        let slots: BTreeSet<SlotId> = self.params.slots.slot_ids().collect();
+        let group_lists: BTreeSet<GroupListId> =
+            self.params.group_lists.group_list_map.keys().collect();
+
+        let mut dangling = BTreeSet::new();
+        self.for_each_reference(&mut |reference| {
+            let resolves = match reference {
+                Reference::Period { target, .. } => periods.contains(&target),
+                Reference::Week { target, .. } => weeks.contains(&target),
+                Reference::Subject { target, .. } => subjects.contains(&target),
+                Reference::Teacher { target, .. } => teachers.contains(&target),
+                Reference::Student { target, .. } => students.contains(&target),
+                Reference::WeekPattern { target, .. } => week_patterns.contains(&target),
+                Reference::Slot { target, .. } => slots.contains(&target),
+                Reference::GroupList { target, .. } => group_lists.contains(&target),
+            };
+            if !resolves {
+                dangling.insert(FixableInvariant::DanglingFk(reference));
+            }
+        });
+        dangling
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::InnerData;
     use crate::ids::Id;
-    use crate::refs::{GroupListRefSite, Reference};
-    use std::collections::BTreeSet;
+    use crate::refs::{
+        GroupListRefSite, PeriodRefSite, Reference, SlotRefSite, StudentRefSite, SubjectRefSite,
+        TeacherRefSite, WeekPatternRefSite, WeekRefSite,
+    };
+    use crate::settings::Limits;
+    use crate::slot_pairings::{SlotPairingRule, SlotRulePart};
+    use crate::slots::{Slot, Slots};
+    use crate::students::Student;
+    use crate::subjects::Subject;
+    use crate::teachers::Teacher;
+    use crate::week_patterns::WeekPattern;
+    use collomatique_time::{SlotStart, WholeMinuteTime};
+    use std::collections::{BTreeMap, BTreeSet};
+
+    /// A minimal well-formed slot on the given subject/teacher. Its `week_pattern`
+    /// is `None`; callers override the fields they want to make dangle.
+    fn test_slot(subject_id: SubjectId, teacher_id: TeacherId) -> Slot {
+        Slot {
+            subject_id,
+            teacher_id,
+            start_time: SlotStart {
+                weekday: chrono::Weekday::Mon.into(),
+                start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(8, 0, 0).unwrap())
+                    .unwrap(),
+            },
+            extra_info: String::new(),
+            week_pattern: None,
+            cost: 0,
+        }
+    }
+
+    // ---- Layer B: the dangling-reference sweep ----
+    //
+    // Each per-kind test registers just enough host entities that *exactly* the
+    // intended reference dangles, then asserts exact set equality on the whole
+    // `Ok(...)` — not mere membership. Ids are forged via `unsafe { Id::new(n) }`
+    // (test-only corruption); the fixtures reach the pub map fields / pub
+    // constructors directly, bypassing the ops that would reject a dangling id.
+
+    #[test]
+    fn dangling_period_in_student_exclusions() {
+        let mut data = InnerData::default();
+        let student = unsafe { StudentId::new(1) };
+        let period = unsafe { PeriodId::new(2) };
+        data.params.students.student_map.insert(
+            student,
+            Student {
+                excluded_periods: BTreeSet::from([period]),
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            data.broken_invariants(),
+            Ok(BTreeSet::from([FixableInvariant::DanglingFk(
+                Reference::Period {
+                    target: period,
+                    site: PeriodRefSite::StudentExcludedPeriods(student),
+                }
+            )]))
+        );
+    }
+
+    #[test]
+    fn dangling_week_in_week_pattern() {
+        let mut data = InnerData::default();
+        let pattern = unsafe { WeekPatternId::new(1) };
+        let week = unsafe { WeekId::new(2) };
+        data.params.week_patterns.week_pattern_map.insert(
+            pattern,
+            WeekPattern {
+                name: "P".into(),
+                excluded_weeks: BTreeSet::from([week]),
+            },
+        );
+        assert_eq!(
+            data.broken_invariants(),
+            Ok(BTreeSet::from([FixableInvariant::DanglingFk(
+                Reference::Week {
+                    target: week,
+                    site: WeekRefSite::WeekPatternExcludedWeek(pattern),
+                }
+            )]))
+        );
+    }
+
+    #[test]
+    fn dangling_subject_in_teacher() {
+        let mut data = InnerData::default();
+        let teacher = unsafe { TeacherId::new(1) };
+        let subject = unsafe { SubjectId::new(2) };
+        data.params.teachers.teacher_map.insert(
+            teacher,
+            Teacher {
+                subjects: BTreeSet::from([subject]),
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            data.broken_invariants(),
+            Ok(BTreeSet::from([FixableInvariant::DanglingFk(
+                Reference::Subject {
+                    target: subject,
+                    site: SubjectRefSite::TeacherSubjects(teacher),
+                }
+            )]))
+        );
+    }
+
+    #[test]
+    fn dangling_teacher_in_slot() {
+        let mut data = InnerData::default();
+        let subject = unsafe { SubjectId::new(1) };
+        let slot = unsafe { SlotId::new(2) };
+        let teacher = unsafe { TeacherId::new(3) };
+        // Register the subject so only the teacher dangles.
+        data.params
+            .subjects
+            .ordered_subject_list
+            .insert_at(0, subject, Subject::default())
+            .unwrap();
+        data.params.slots =
+            Slots::from_subject_rows([(subject, vec![(slot, test_slot(subject, teacher))])])
+                .unwrap();
+        assert_eq!(
+            data.broken_invariants(),
+            Ok(BTreeSet::from([FixableInvariant::DanglingFk(
+                Reference::Teacher {
+                    target: teacher,
+                    site: TeacherRefSite::SlotTeacher(slot),
+                }
+            )]))
+        );
+    }
+
+    #[test]
+    fn dangling_student_in_settings_key() {
+        let mut data = InnerData::default();
+        let student = unsafe { StudentId::new(1) };
+        data.params
+            .settings
+            .students
+            .insert(student, Limits::default());
+        assert_eq!(
+            data.broken_invariants(),
+            Ok(BTreeSet::from([FixableInvariant::DanglingFk(
+                Reference::Student {
+                    target: student,
+                    site: StudentRefSite::SettingsStudentKey,
+                }
+            )]))
+        );
+    }
+
+    #[test]
+    fn dangling_week_pattern_in_slot() {
+        let mut data = InnerData::default();
+        let subject = unsafe { SubjectId::new(1) };
+        let slot = unsafe { SlotId::new(2) };
+        let teacher = unsafe { TeacherId::new(3) };
+        let pattern = unsafe { WeekPatternId::new(4) };
+        // Register subject and teacher so only the week pattern dangles.
+        data.params
+            .subjects
+            .ordered_subject_list
+            .insert_at(0, subject, Subject::default())
+            .unwrap();
+        data.params
+            .teachers
+            .teacher_map
+            .insert(teacher, Teacher::default());
+        let mut slot_desc = test_slot(subject, teacher);
+        slot_desc.week_pattern = Some(pattern);
+        data.params.slots = Slots::from_subject_rows([(subject, vec![(slot, slot_desc)])]).unwrap();
+        assert_eq!(
+            data.broken_invariants(),
+            Ok(BTreeSet::from([FixableInvariant::DanglingFk(
+                Reference::WeekPattern {
+                    target: pattern,
+                    site: WeekPatternRefSite::SlotWeekPattern(slot),
+                }
+            )]))
+        );
+    }
+
+    #[test]
+    fn dangling_slots_in_slot_pairing_yield_distinct_sites() {
+        // Both parts forged: the antecedent and consequent slots dangle at
+        // *distinct* sites (D6 — the two-sided row doubles as a site-split pin).
+        let mut data = InnerData::default();
+        let rule = unsafe { SlotPairingRuleId::new(1) };
+        let slot_a = unsafe { SlotId::new(2) };
+        let slot_b = unsafe { SlotId::new(3) };
+        data.params.slot_pairings.slot_pairing_rule_map.insert(
+            rule,
+            SlotPairingRule {
+                antecedent: SlotRulePart {
+                    slot_id: slot_a,
+                    should_have: true,
+                },
+                consequent: SlotRulePart {
+                    slot_id: slot_b,
+                    should_have: false,
+                },
+                excluded_periods: BTreeSet::new(),
+                soft: false,
+            },
+        );
+        assert_eq!(
+            data.broken_invariants(),
+            Ok(BTreeSet::from([
+                FixableInvariant::DanglingFk(Reference::Slot {
+                    target: slot_a,
+                    site: SlotRefSite::SlotPairingRuleAntecedent(rule),
+                }),
+                FixableInvariant::DanglingFk(Reference::Slot {
+                    target: slot_b,
+                    site: SlotRefSite::SlotPairingRuleConsequent(rule),
+                }),
+            ]))
+        );
+    }
+
+    #[test]
+    fn dangling_group_list_in_colloscope() {
+        let mut data = InnerData::default();
+        let group_list = unsafe { GroupListId::new(1) };
+        let student = unsafe { StudentId::new(2) };
+        // Place a *registered* student so only the group list dangles.
+        data.params
+            .students
+            .student_map
+            .insert(student, Student::default());
+        data.colloscope
+            .set_group_list(group_list, BTreeMap::from([(student, 0)]));
+        assert_eq!(
+            data.broken_invariants(),
+            Ok(BTreeSet::from([FixableInvariant::DanglingFk(
+                Reference::GroupList {
+                    target: group_list,
+                    site: GroupListRefSite::ColloscopeGroupListKey,
+                }
+            )]))
+        );
+    }
+
+    #[test]
+    fn assignments_row_with_both_key_components_dangling() {
+        // The `(period, subject)` key contributes two references (a Period edge
+        // and a Subject edge); both dangle ⇒ two entries. The placed student is
+        // registered, so the row stays canonical (non-empty) and its own
+        // reference resolves.
+        let mut data = InnerData::default();
+        let period = unsafe { PeriodId::new(1) };
+        let subject = unsafe { SubjectId::new(2) };
+        let student = unsafe { StudentId::new(3) };
+        data.params
+            .students
+            .student_map
+            .insert(student, Student::default());
+        data.params
+            .assignments
+            .map
+            .insert((period, subject), BTreeSet::from([student]));
+        assert_eq!(
+            data.broken_invariants(),
+            Ok(BTreeSet::from([
+                FixableInvariant::DanglingFk(Reference::Period {
+                    target: period,
+                    site: PeriodRefSite::AssignmentsKey { subject },
+                }),
+                FixableInvariant::DanglingFk(Reference::Subject {
+                    target: subject,
+                    site: SubjectRefSite::AssignmentsKey { period },
+                }),
+            ]))
+        );
+    }
+
+    #[test]
+    fn interrogation_row_with_both_key_components_dangling() {
+        // The `(slot, week)` colloscope key contributes a Slot edge and a Week
+        // edge; both dangle ⇒ two entries.
+        let mut data = InnerData::default();
+        let slot = unsafe { SlotId::new(1) };
+        let week = unsafe { WeekId::new(2) };
+        data.colloscope
+            .set_interrogation(slot, week, BTreeSet::from([0]));
+        assert_eq!(
+            data.broken_invariants(),
+            Ok(BTreeSet::from([
+                FixableInvariant::DanglingFk(Reference::Week {
+                    target: week,
+                    site: WeekRefSite::ColloscopeInterrogation { slot },
+                }),
+                FixableInvariant::DanglingFk(Reference::Slot {
+                    target: slot,
+                    site: SlotRefSite::ColloscopeInterrogation { week },
+                }),
+            ]))
+        );
+    }
+
+    #[test]
+    fn one_entry_per_id_occurrence() {
+        // Two teachers reference the *same* forged subject: the registry's unit
+        // of account is the occurrence, so the two distinct-site references both
+        // survive dedup ⇒ two entries with the same target.
+        let mut data = InnerData::default();
+        let teacher_a = unsafe { TeacherId::new(1) };
+        let teacher_b = unsafe { TeacherId::new(2) };
+        let subject = unsafe { SubjectId::new(3) };
+        data.params.teachers.teacher_map.insert(
+            teacher_a,
+            Teacher {
+                subjects: BTreeSet::from([subject]),
+                ..Default::default()
+            },
+        );
+        data.params.teachers.teacher_map.insert(
+            teacher_b,
+            Teacher {
+                subjects: BTreeSet::from([subject]),
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            data.broken_invariants(),
+            Ok(BTreeSet::from([
+                FixableInvariant::DanglingFk(Reference::Subject {
+                    target: subject,
+                    site: SubjectRefSite::TeacherSubjects(teacher_a),
+                }),
+                FixableInvariant::DanglingFk(Reference::Subject {
+                    target: subject,
+                    site: SubjectRefSite::TeacherSubjects(teacher_b),
+                }),
+            ]))
+        );
+    }
+
+    #[test]
+    fn empty_state_has_no_broken_invariants() {
+        assert_eq!(
+            InnerData::default().broken_invariants(),
+            Ok(BTreeSet::new())
+        );
+    }
+
+    #[test]
+    fn bootstrap_states_have_no_broken_invariants() {
+        use collomatique_state::traits::Manager;
+        use collomatique_testgen_colloscopes::rand::SeedableRng;
+        use collomatique_testgen_colloscopes::{ChaCha8Rng, harness};
+
+        // Every reference in a legitimately-built document resolves. Fixed seeds
+        // keep the test deterministic (no time/randomness in test selection).
+        for seed in 0..5 {
+            let mut rng = ChaCha8Rng::seed_from_u64(seed);
+            let (state, _) = harness::bootstrap(&mut rng);
+            assert_eq!(
+                state.get_data().get_inner_data().broken_invariants(),
+                Ok(BTreeSet::new()),
+                "bootstrap seed {seed} produced broken invariants",
+            );
+        }
+    }
 
     #[test]
     fn logic_error_declaration_order_is_canonical() {
