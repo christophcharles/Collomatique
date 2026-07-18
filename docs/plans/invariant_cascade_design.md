@@ -1,6 +1,9 @@
 # Invariant checking & cascade resolution — design + plan of action
 
-**Status:** direction agreed, plan of action drafted (July 15 2026, branch `consolidate_state`).
+**Status:** direction agreed July 15 2026 (branch `consolidate_state`); **step 1 completed
+July 18 2026** — its detailed plan is retired (pinned at
+`git show 62949404:docs/plans/plan_step_1.md`), the delivered state is recorded in
+Appendix B. Next up: step 2.
 This doc started as an exploration after phase C of the table-registry plan shipped (item 2's
 detailed plan, since delivered in full and retired; pinned at
 `git show 77695338:docs/table_registry_plan.md`); it now
@@ -9,11 +12,11 @@ records the agreed design *direction* and a step-by-step plan. Per the house rul
 (and user sign-off) before implementation** — this doc fixes the direction, the ordering, and
 the decisions already taken, not the per-commit mechanics.
 
-It supersedes how `docs/state_consolidation_plan.md` **item 3** (invariant consolidation) and
+It supersedes how `docs/plans/state_consolidation_plan.md` **item 3** (invariant consolidation) and
 **item 5** (params↔colloscope synchronization) were going to be tackled, and reuses/retires
 parts of the phase-C reference registry. §9 details the impact on the existing plans.
 
-Read `docs/state_consolidation_plan.md` first — this builds on the retired table-registry
+Read `docs/plans/state_consolidation_plan.md` first — this builds on the retired table-registry
 plan's inventory (28 ID-based relationships, the triplicated checks, the dense mirrors),
 inlined below as Appendix A.
 
@@ -51,9 +54,9 @@ Two hard requirements follow:
 
 - **It must be complete.** Once validity is defined solely by `check_invariants`, that function
   becomes load-bearing; anything only a precondition caught silently stops being enforced.
-  Completeness is audited explicitly (plan step 3). Note: the commented-out multi-colloscope
-  block in `lib.rs:172` is *stale dead code* from the multi-colloscope era, not a live gap —
-  the live colloscope is checked at line 171; the audit resolves it (delete or revive).
+  Completeness is audited explicitly (plan step 3). (The commented-out multi-colloscope
+  block in `lib.rs:172` — stale dead code from the multi-colloscope era, not a live gap —
+  was deleted as a step-1 phase-1 rider, `d3c56e9f`; nothing left for the audit there.)
 - **It must return precise, coordinate-bearing errors.** Today `check_subjects_data_consistency`
   returns a bare `InvariantError::InvalidSubject` — no id, no site. That is useless for repair and
   mediocre for users. The error must say *which* entity references *which* dangling target at
@@ -285,25 +288,37 @@ gates throughout: the property harness (100 seeds; 500-seed reference at milesto
 `found_bugs.rs` asserts, storage byte-stability + the `examples/` smoke test, and the three
 contract scripts at milestones (run by the user).
 
-**Step 1 — reshape: remove a maximum of dense copies.** Done *under the old architecture* (the
-triplicated checks still exist), so each reshape hand-updates the old check families and the
-`ops/` cleaning paths one last time — accepted cost, bounded, and the reshapes *delete* more
-check code than they touch (the colloscope fan-out above all). Rationale for reshape-first: the
-new checker of step 2 is then written **once against the final data model** — and the reshapes
-remove precisely the dense/denseness invariants whose precise "expected-vs-actual, which entry
-is missing" errors were this design's hardest open problem. The additive cascade dies here,
-unwritten.
+**Step 1 — reshape: remove a maximum of dense copies — COMPLETED July 18 2026.** Done *under
+the old architecture* (the triplicated checks still exist), so each reshape hand-updated the
+old check families and the `ops/` cleaning paths one last time — accepted cost, bounded, and
+the reshapes *deleted* more check code than they touched (the colloscope fan-out above all).
+Rationale for reshape-first: the new checker of step 2 is now written **once against the final
+data model** — and the reshapes removed precisely the dense/denseness invariants whose precise
+"expected-vs-actual, which entry is missing" errors were this design's hardest open problem.
+The additive cascade died here, unwritten.
 
-  Sub-steps, roughly by size (each with its own session plan):
-  - **1a — assignments sparse** (§6a; smallest; deletes decode densification, byte-stable).
-  - **1b — `WeekId`** (§6b; medium; op re-cut + `constraints-colloscopes` global-week walk;
-    on-disk positional encoding kept, ids synthesized at decode).
-  - **1c — slots: no reshape** (decision recorded in §6); optionally sparse-ify the `ordering`
-    sidecar rows.
-  - **1d — colloscope sparse** (§6a; the big one; wants 1b first so interrogations re-key by
-    `WeekId`; dissolves the params→colloscope fan-out = item 5). Real consumer blast radius:
-    gtk4/xlsx/python read the dense shapes; pyclass mirrors and the contract scripts are
-    updated in the same change (house rule, `state_consolidation_plan.md` §7).
+  The detailed session plan (decision ledger, per-phase mechanics, landed-state notes) is
+  retired from the tree; pinned at `git show 62949404:docs/plans/plan_step_1.md`. **The
+  delivered state — final shapes, op surface, oracles, and what steps 2–7 build on — is
+  Appendix B.** Sub-steps as landed (order: bugfix → decoupling → 1a → 1c → 1b → 1d):
+  - **Phase 0 — bugfix**: the `UpdatePeriodWeekCount` colloscope-clean bounds bug (the §9
+    "suspected dormant drift" — confirmed real), test-first (`1418d4bf`, fix `f8e34128`).
+  - **Phase 1 — decoupling** (`d3c56e9f`): consumers stopped *relying* on denseness; riders
+    deleted the stale multi-colloscope block + `FromDataError`. (Adjacent: property-test
+    generator extracted to `collomatique-testgen-colloscopes`, `ca450d19`; fuzz-build net
+    `cfce7f1f`.)
+  - **1a — assignments sparse** (`9f4471e2`): row iff non-empty; decode densification deleted.
+  - **1c — slots ordering sidecar sparse** (`b681cdac`): the §6 optional tweak, taken.
+  - **1b — `WeekId`** — B1 as six commits (`2a0ec129`…`2de37eae`): Week entity,
+    `week_map` + ordering sidecar, `WeekOp` family, content-carrying `Move`; B2
+    (`d169df71`): patterns → `excluded_weeks: BTreeSet<WeekId>`, invariant #8 gone.
+  - **1d — colloscope sparse** — D0 surface + consumer migration (`c32a431b`, fixes
+    `9b10b655`/`bf191907`); D1 the swap as six commits (`996eb89d`…`0d5cc34b`, registry
+    rider `2903e5de`); D2 cleanup (`62949404`). The ~330-line params→colloscope fan-out is
+    gone — item 5 dissolved as designed.
+
+  ★ End-of-step gate: 500-seed harness clean, byte-stability + hogwarts pristine, contract
+  scripts + gtk4 smoke passed (July 18 2026).
 
 **Step 2 — the precise checker, alongside the old one.** Write the *second*
 `check_invariants` without removing the first: the enriched coordinate-bearing
@@ -314,8 +329,8 @@ canonical (`Ord`) order.
 
 **Step 3 — completeness audit.** Survey the old `check_invariants` *and* the
 `validate_*_internal` candidate checks (the side-constraint inventory of Appendix A.2 is the
-checklist) for anything the new checker misses; resolve
-the stale `lib.rs:172` block. At the end of this step the new checker is ground truth.
+checklist) for anything the new checker misses. (The stale `lib.rs:172` block was already
+deleted in step 1, phase 1.) At the end of this step the new checker is ground truth.
 
 **Step 4 — differential fuzz.** A way to build arbitrary (including invalid) `InnerData`:
 random elementary ops applied through a `force_apply` door *without* checking, deliberately
@@ -362,11 +377,12 @@ an op-list rendering layer replaces the warning texts.
   gtk4 claim); `Lookup`/`resolve`/`all_ids` unaffected. Phases D/E completed July 16 2026.
 - **`ops/` — step 7 is the promised remaster.** Until then, decision 6 of the registry plan
   (touch `ops/` minimally) stands. Supporting evidence for computed-over-hand-written
-  consequences: a suspected dormant drift bug in `general_planning.rs`
-  (`UpdatePeriodWeekCount`'s colloscope-cleaning loop iterates
+  consequences: the suspected dormant drift bug in `general_planning.rs`
+  (`UpdatePeriodWeekCount`'s colloscope-cleaning loop iterated
   `old_week_count..*week_count`, an empty range under its own guard — bounds swapped, so the
-  cleaning op can never fire; the elementary layer's blocking then surfaces as a hard error
-  instead of an auto-clean). To verify/fix independently; the class disappears at step 7.
+  cleaning op could never fire) **was confirmed real and fixed in step 1 phase 0**
+  (test-first, `1418d4bf` + `f8e34128`, regression pinned in `ops/tests/found_bugs.rs`);
+  the class disappears at step 7.
 - **The safety net** — the property harness stays the oracle throughout and gains the step-4
   differential fuzz; `found_bugs.rs` keeps its regression *scenarios* but its exact-variant
   asserts are rewritten at step 5 to the new error vocabulary.
@@ -399,9 +415,11 @@ an op-list rendering layer replaces the warning texts.
   (via `Join`) and *resolvable* (via the cascade + preview, lossily where needed).
 
 Open (settled in the relevant step's session plan, not here):
-- exact in-memory keying of the sparse colloscope (nested vs flat composite keys) — step 1d;
-- whether the slots `ordering` sidecar goes sparse — step 1c;
-- the `WeekDesc` container shape and the re-cut week op surface — step 1b;
+- ~~exact in-memory keying of the sparse colloscope~~ — settled in 1d: **flat composite keys**
+  (Appendix B.1);
+- ~~whether the slots `ordering` sidecar goes sparse~~ — settled in 1c: **yes** (row iff ≥1 slot);
+- ~~the `WeekDesc` container shape and the re-cut week op surface~~ — settled in 1b
+  (Appendix B.1/B.2);
 - the `Ord` used for the canonical cascade pick (derive order on the invariant enum is the
   natural candidate) — step 6.
 
@@ -500,3 +518,123 @@ architecture and each must find its home (tier or encapsulation) under this desi
   (`TeacherDoesNotTeachInSubject`), "subject must run on the period"
   (`SubjectAssociationForSubjectNotRunningOnPeriod`). These are the tier-3 convergence
   residue of §6.
+
+---
+
+## Appendix B — step 1 as delivered (July 18 2026)
+
+Recorded when the step-1 session plan was retired (full plan with the decision ledger and
+per-phase mechanics pinned at `git show 62949404:docs/plans/plan_step_1.md`; commit anchors
+in §8). This is the ground truth steps 2–7 build on. Note that Appendix A's dense-mirror
+rows (A.1 #5/7/10/21/26/28 payload shapes, A.2 structural counts) describe the *pre*-step-1
+state; this appendix supersedes them as the description of the live model.
+
+### B.1 Final data shapes (what the step-2 checker is written against)
+
+- **Assignments**: `Table<(PeriodId, SubjectId), BTreeSet<StudentId>>` — a row exists iff
+  its student set is non-empty. Whether a subject runs on a period is *not* encoded here;
+  the only source is `Subject.excluded_periods`.
+- **Periods/weeks**: private `ordered_period_list: OrderedTable<PeriodId, Vec<WeekId>>` +
+  `week_map: Table<WeekId, Week>` with `Week.period_id` as the authoritative FK; the
+  within-period ordering is encapsulated behind compound `pub(crate)` mutators (§6c) — the
+  list↔map mirror is checked (`InvariantError::InvalidWeek`), the ordering itself never
+  reaches `check_invariants`. `WeekDesc` survives as the FK-less op-payload/glue DTO.
+- **Slots**: unchanged flat `slot_map: Table<SlotId, Slot>` (+ `subject_id` FK) with the
+  `ordering` sidecar, whose rows are now **sparse** (row iff the subject has ≥1 slot).
+- **Week patterns**: `WeekPattern { name, excluded_weeks: BTreeSet<WeekId> }` — the
+  exception set; absent = active. The length-coupling invariant (#8) is gone; a removed week
+  is a dangling `WeekId` (tier 1). `excluded_weeks` is *not* canonicalized against
+  `week.interrogations` (a file may exclude a non-interrogation week; the bit is preserved
+  for byte-stability). Merged activity = `week.interrogations ∧ ¬excluded`.
+- **Colloscope**: two **crate-private** sparse tables, flat composite keys —
+  `interrogations: Table<(SlotId, WeekId), BTreeSet<u32>>` and
+  `group_lists: Table<GroupListId, BTreeMap<StudentId, u32>>`. The period layer and the
+  one-field wrapper types are gone; all access goes through the surface (B.3).
+- **Canonical-absent everywhere**: no empty rows in assignments, either colloscope table, or
+  the slots ordering sidecar. Enforced at op sites (an empty write clears the row); the
+  step-2 checker must *assert* it — it is what keeps `InnerData::Eq` honest.
+
+### B.2 Op surface (what the step-6 resolution map emits from)
+
+- **`WeekOp { AddFront, AddAfter, Remove, Update, Move }`**; `apply_week` is the sole week
+  writer. `Move` **carries content** (pattern membership travels with the id — no pattern
+  work at all; colloscope cells travel verbatim), guarded only where content cannot travel
+  (dest period lacks the slot / group numbers exceed the dest association bounds). `Remove`
+  requires trivial state (no pattern excludes the week, cells empty), so undo re-adds with
+  the original id. `WeekId` is **preserved across cut/merge** (re-parenting, not
+  delete+recreate) — colloscope cells and pattern exclusions survive.
+- **`PeriodOp { ChangeStartDate, AddFront, AddAfter, Remove }`** — a period is created
+  empty; `Remove` requires week-empty (`PeriodStillHasWeeks`).
+- **Colloscope ops are upserts**: `SetInterrogation(SlotId, WeekId, BTreeSet<u32>)` /
+  `SetGroupList(GroupListId, BTreeMap<StudentId, u32>)`; empty payload = remove row;
+  reverse = `Set…` with the prior payload (or empty).
+
+### B.3 Read surface and oracles
+
+- **`Periods`**: `walk()` is the canonical global order (`walk().enumerate()` = global week
+  index); `weeks_of`, `weeks_vec_of`, `find_week` (owning period via `week.period_id`),
+  `week_id_at`, `week_position`, `global_week_position`, `period_ids()`, `week_count_of`;
+  `find_period(PeriodId) -> Option<&Vec<WeekId>>` is pub and pinned by the `read_api`
+  pointer-identity test. `Lookup<WeekId> → Week`, `Lookup<PeriodId> → Vec<WeekId>`.
+- **Possibility oracles** (permanent, the single re-expression of the old dense "cell is
+  `Some`" rule): `WeekPatterns::is_week_active(periods, week, pattern)` (homed there so
+  gtk4 piece-clones can call it; `Parameters::is_week_active` delegates) and
+  `Parameters::is_interrogation_possible(slot, week)`. Every re-derivation — constraints
+  zero-fill, python dense views, decode trust-boundary checks — goes through these.
+- **Colloscope surface**: readers `interrogation`, `interrogations_for_slot`, `iter`,
+  `group_list`, `group_lists_iter`; writers `set_interrogation` / `set_group_list` (panic
+  on impossible coordinates, empty payload clears the row — canonical form maintained).
+
+### B.4 Deleted or dissolved by step 1
+
+- The **~330-line params→colloscope structural fan-out** (item 5's problem) — a removed
+  period/week/slot/group-list now leaves dangling rows for the cascade; the Remove guards
+  survive re-cut to row-existence scans (range scan on the composite key for slots).
+- `new_empty_from_params` (all levels), `update_slot_for_week_pattern` /
+  `update_slot_to_match_week_pattern`, `check_empty_on_removed_weeks`,
+  `save_then_clean_end_of_period` / `restore_end_of_period`, the pattern splice helpers
+  (`add_weeks` / `remove_weeks` / `clean_weeks` / `can_remove_weeks` / `move_week`).
+- Dense-count invariants (`WrongSubjectCountInAssignments`, `WrongSubjectCountInSlots`,
+  `BadWeekPatternLength`, the colloscope shape/count/week-structure checks) and the 10 dead
+  `ColloscopeError` variants; the last positional payload
+  (`InvalidGroupNumInInterrogation`) re-cut to row vocabulary `(SlotId, WeekId)`.
+- The stale multi-colloscope block (`lib.rs`) and the unused `FromDataError` (phase-1
+  riders) — nothing left there for the step-3 audit.
+- **No transitional code from step 1 survives** — the B1/B2 splices all died in 1d/D2.
+
+### B.5 What still stands (the old architecture steps 2–7 replace)
+
+- The **triplicated checks** (candidate validation, delete-blocking, `check_invariants`)
+  still exist — step 1 hand-updated them one last time (the accepted tax); steps 2–5
+  collapse them.
+- **Refs registry**: gained `RefSite::WeekPeriodFk` (walked first in `walk_params_refs`);
+  `RefSite::WeekPatternLengthCoupling` stays **period-keyed** with `non_trivial` = "the
+  pattern excludes ≥1 of this period's weeks" (mirrors the transitive delete guard);
+  remodelling it to a genuine week-ref is deferred to step 7.
+- **Python glue keeps the dense-view pyclass contract** as *computed* views over the sparse
+  core (`Colloscope::from_mem(&mem::Colloscope, &Parameters)`, assignment seeding, pattern
+  projection) — throwaway scaffolding for the upcoming Python API rework; reference
+  scripts untouched.
+- **`constraints-colloscopes` keeps `GlobalWeek`** internally; one canonical
+  `WeekId ↔ GlobalWeek` map built at model entry (the `walk()` order).
+- **Storage, format frozen**: decode pre-scans `max_used_id` over all id-bearing blocks and
+  synthesizes `WeekId`s `max+1, …` in walk order; encode projects back to positional
+  indices and never writes week ids — bytes unconditionally identical.
+  `populated_round_trip` compares **re-encoded bytes**, not `InnerData` equality
+  (decode-synthesized ids differ from ops-issued ones by design).
+
+### B.6 Tests pinning the step-1 contracts
+
+- `state-colloscopes/tests/week_ops.rs` — move-preserves-content, both Move guards,
+  remove-blocked-by-pattern-exclusion, undo restores the id.
+- `ops/tests/general_planning_content.rs` — cut preserves the tail's colloscope cell +
+  pattern membership; merge-back structure. **This is the cut/merge contract later steps
+  must not regress.**
+- `state-colloscopes/tests/read_api.rs` — `resolve == find_period` by pointer identity.
+- `state-colloscopes/tests/colloscope_surface.rs` — the sparse surface semantics
+  (absent/empty equivalence, writer canonicalization).
+- `ops/tests/found_bugs.rs` — the phase-0 `UpdatePeriodWeekCount` regression (first test
+  file in the crate); plus the long-standing `state-colloscopes` `found_bugs.rs` family.
+- The property harness (`property_ops.rs`, 100 seeds committed; 500-seed reference at
+  milestones) remains the oracle; its generator lives in `collomatique-testgen-colloscopes`
+  and targets ops from **params** (via the B.3 oracles), not from the data shapes.

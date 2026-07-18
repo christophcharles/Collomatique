@@ -50,7 +50,7 @@ reads via pyclass mirrors of `InnerData` types), `constraints-colloscopes`
    failures surface as a misleading `ProbablyIllformedEntry` because the custom
    `EntryContent::deserialize` swallows the underlying serde error. Only `#[serde(default)]`
    on late-added fields provides any compatibility.
-2. **Invariant double duty** *(being addressed — see `docs/invariant_cascade_design.md`)*:
+2. **Invariant double duty** *(being addressed — see `docs/plans/invariant_cascade_design.md`)*:
    each per-entity predicate exists twice
    (`validate_*_internal` for typed per-op errors, `check_*_data_consistency` discarding
    detail into the ~26-variant `InvariantError`); every referential relationship is
@@ -61,10 +61,10 @@ reads via pyclass mirrors of `InnerData` types), `constraints-colloscopes`
 3. **apply/build_rev duplication** *(resolved — Phase 2 item 1)*: was two parallel 15-way method
    families (~1,900 loc) that had to agree, with the inverse builders almost entirely untested.
    `apply` now computes and returns the inverse itself; `build_rev_with_current_state` is gone.
-4. **Write fan-out from the params↔colloscope mirror** *(dissolves at step 1d of
-   `docs/invariant_cascade_design.md`)*: e.g. adding a slot must insert an
-   empty `ColloscopeSlot` into every colloscope period; period ops span ~330 lines. Every
-   structural op mutates two parallel representations by hand.
+4. **Write fan-out from the params↔colloscope mirror** *(resolved — step 1d of
+   `docs/plans/invariant_cascade_design.md`, delivered July 18 2026)*: was — adding a slot
+   had to insert an empty `ColloscopeSlot` into every colloscope period; period ops spanned
+   ~330 lines. The colloscope is now sparse; the fan-out is deleted.
 5. **Inconsistent op granularity**: whole-struct `Update`s (Settings, Balancing, entities)
    next to 11 per-field `ExportConfigOp` variants and a single-bool `AssignmentOp`. No
    principle.
@@ -305,7 +305,7 @@ before implementation.** Ordered by leverage:
 2. **`Table<Id, T>` + declare-once relationship registry** — **DONE (July 16 2026)**. All
    five phases of the detailed plan delivered (the plan doc is retired; pinned at
    `git show 77695338:docs/table_registry_plan.md`, its inventories inlined as Appendix A of
-   `docs/invariant_cascade_design.md`): generic `Table`/`OrderedTable` in `state/` + the
+   `docs/plans/invariant_cascade_design.md`): generic `Table`/`OrderedTable` in `state/` + the
    `EntityId`/`References`/`Join` derives (new `collomatique-state-derive` crate, reusable by
    the rooms side-project); the `RefSite` walker + `references_to_*` reverse lookups; the
    SQL-like read API (`Lookup`, `lookup`/`resolve`, `all_ids`, `Joined*` views); all consumers
@@ -330,7 +330,7 @@ before implementation.** Ordered by leverage:
    *Lighter fallback* if this feels over-engineered when detailed: keep hand-written checks
    but merge the two per-entity predicate families so each rule exists exactly once.
 3. **Invariant consolidation** — **SUPERSEDED, direction reversed** (July 15 2026) by
-   `docs/invariant_cascade_design.md`, now the live roadmap: `check_invariants` becomes the
+   `docs/plans/invariant_cascade_design.md`, now the live roadmap: `check_invariants` becomes the
    *sole* enforcement — each elementary op is apply → check → rollback-on-failure, returning
    precise coordinate-bearing errors — and the per-op typed preconditions retire (the exact
    opposite of the demotion sketched below). The extended-scope note ("reroute the triplicated
@@ -352,7 +352,8 @@ before implementation.** Ordered by leverage:
 5. **Params↔colloscope synchronization** — **DISSOLVED** (July 15 2026) by the
    invariant-cascade design (step 1d + the cascade): the colloscope goes sparse, so there is
    no fan-out left to centralize — cleanup becomes cascade resolution. The spec-2 format was
-   deliberately shaped for exactly this re-keying and does not move.
+   deliberately shaped for exactly this re-keying and does not move. *Step 1d delivered
+   July 18 2026 — the sparse half is real; cleanup-as-cascade-resolution arrives at step 6.*
    *Original sketch (historical):* keep the dual representation (different access
    patterns) but centralize the fan-out (candidate: the registry owns "structural param ops
    propagate to colloscope"), and consider keying interrogations by week index instead of
@@ -422,11 +423,13 @@ When in doubt, ask the user to run the real scripts/files rather than guessing.
 
 - Phase 2 item 2 (`Table` + relationship registry) — **DONE (July 16 2026)**; see §6 item 2.
   The detailed plan doc is retired (pinned at `git show 77695338:docs/table_registry_plan.md`);
-  the inventories it carried live on as Appendix A of `docs/invariant_cascade_design.md`.
-- The live roadmap for the remaining phase-2 work is **`docs/invariant_cascade_design.md`**
+  the inventories it carried live on as Appendix A of `docs/plans/invariant_cascade_design.md`.
+- The live roadmap for the remaining phase-2 work is **`docs/plans/invariant_cascade_design.md`**
   (agreed July 15 2026), a 7-step plan: reshape the dense copies (1a assignments sparse,
   1b `WeekId`, 1c slots no-reshape, 1d colloscope sparse) → precise checker alongside the old
   one → completeness audit → differential fuzz → switch elementary ops to
   apply/check/restore → the cascade → the `ops/` remaster. It supersedes item 3 (direction
-  reversed) and dissolves item 5; item 4 can ride along its reshapes. Next concrete work: the
-  step-1 session plans, starting with 1a.
+  reversed) and dissolves item 5; item 4 can ride along its reshapes. **Step 1 completed
+  July 18 2026** (★ gate ran clean; session plan retired, pinned at
+  `git show 62949404:docs/plans/plan_step_1.md`; delivered state = Appendix B of the design
+  doc). Next concrete work: the step-2 session plan (the precise checker).
