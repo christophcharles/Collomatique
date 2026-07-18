@@ -1,6 +1,8 @@
 use super::*;
 use pyo3::types::PyString;
 
+use collomatique_state_colloscopes::NonEmptyRangeInclusive;
+
 #[pyclass(eq, hash, frozen)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct GroupListId {
@@ -126,19 +128,25 @@ impl From<collomatique_state_colloscopes::group_lists::GroupListParameters>
     }
 }
 
-impl From<GroupListParameters>
+impl TryFrom<GroupListParameters>
     for collomatique_state_colloscopes::group_lists::GroupListParameters
 {
-    fn from(value: GroupListParameters) -> Self {
-        collomatique_state_colloscopes::group_lists::GroupListParameters {
-            name: value.name,
-            students_per_group: value.students_per_group_min..=value.students_per_group_max,
-            group_names: value
-                .group_names
-                .into_iter()
-                .map(|opt| opt.and_then(|s| non_empty_string::NonEmptyString::new(s).ok()))
-                .collect(),
-        }
+    type Error = PyErr;
+    fn try_from(value: GroupListParameters) -> PyResult<Self> {
+        Ok(
+            collomatique_state_colloscopes::group_lists::GroupListParameters {
+                name: value.name,
+                students_per_group: NonEmptyRangeInclusive::new(
+                    value.students_per_group_min..=value.students_per_group_max,
+                )
+                .ok_or_else(|| PyValueError::new_err("Empty students per group range"))?,
+                group_names: value
+                    .group_names
+                    .into_iter()
+                    .map(|opt| opt.and_then(|s| non_empty_string::NonEmptyString::new(s).ok()))
+                    .collect(),
+            },
+        )
     }
 }
 

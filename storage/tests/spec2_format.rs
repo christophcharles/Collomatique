@@ -352,6 +352,40 @@ fn known_block_with_bad_payload_fails_with_serde_detail() {
 }
 
 #[test]
+fn subject_with_inverted_range_is_rejected() {
+    // An empty (min > max) range in a file must be a hard decode error, never
+    // silently repaired: `format::scalars::Range` rejects `min > max` at the
+    // serde layer, which is what makes the in-memory `NonEmptyRangeInclusive`
+    // non-empty by construction. This pins that contract at the document level.
+    let content = document(&[entry(
+        r#"{ "Subjects": [
+                {
+                    "id": 2,
+                    "name": "Mathématiques",
+                    "interrogation_parameters": {
+                        "students_per_group": { "min": 3, "max": 2 },
+                        "groups_per_interrogation": { "min": 1, "max": 1 },
+                        "duration_minutes": 60,
+                        "take_duration_into_account": true,
+                        "periodicity": { "ExactlyPeriodic": { "periodicity_in_weeks": 2 } }
+                    },
+                    "excluded_periods": []
+                }
+            ] }"#,
+    )]);
+
+    let error = expect_decode_error(&content);
+    let DecodeError::IllformedBlock { block, detail } = error else {
+        panic!("The error should be IllformedBlock, got {error:?}");
+    };
+    assert_eq!(block, "Subjects");
+    assert!(
+        detail.contains("invalid range"),
+        "The serde diagnostics should surface the inverted range, got {detail:?}"
+    );
+}
+
+#[test]
 fn duplicated_block_is_rejected() {
     let content = document(&[entry(SETTINGS_BLOCK), entry(SETTINGS_BLOCK)]);
 

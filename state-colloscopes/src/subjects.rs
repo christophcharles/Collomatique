@@ -12,6 +12,7 @@ use crate::OrderedTable;
 use crate::ids::{
     GroupListId, IncompatId, NewId, PairingRuleId, PeriodId, SlotId, SubjectId, TeacherId,
 };
+use crate::non_empty_range::NonEmptyRangeInclusive;
 use crate::ops::AnnotatedSubjectOp;
 
 /// Description of the subjects
@@ -65,7 +66,7 @@ pub struct SubjectInterrogationParameters {
     /// This is not entirely fixed by the group list as
     /// the same group list can be used for different
     /// subjects and not all students must attend all subjects.
-    pub students_per_group: std::ops::RangeInclusive<NonZeroU32>,
+    pub students_per_group: NonEmptyRangeInclusive<NonZeroU32>,
     /// number of groups to have during a single interrogation
     ///
     /// an interrogation can always have no groups. But we can
@@ -83,7 +84,7 @@ pub struct SubjectInterrogationParameters {
     ///   be registered individually. But it might be possible to have several
     ///   students at the same time. Having group size of 1 student and several
     ///   groups at the same time can represent this situation.
-    pub groups_per_interrogation: std::ops::RangeInclusive<NonZeroU32>,
+    pub groups_per_interrogation: NonEmptyRangeInclusive<NonZeroU32>,
     /// Duration of an interrogation in minutes
     pub duration: collomatique_time::NonZeroMinutes,
     /// This is useful when we try to limit or regulate
@@ -148,7 +149,7 @@ pub enum SubjectPeriodicity {
         ///
         /// The total amount can be in a range and it is technically possible
         /// to have a minimum of zero interrogations
-        interrogation_count_in_year: std::ops::RangeInclusive<u32>,
+        interrogation_count_in_year: NonEmptyRangeInclusive<u32>,
         /// Minimum of weeks between two interrogations for the same student
         ///
         /// Note that `0` is a valid possibility: it might be possible to have
@@ -213,7 +214,7 @@ pub struct WeekBlock {
     /// This is described by a range and it is technically possible
     /// The total amount can be in a range
     /// to have a minimum of zero interrogations
-    pub interrogation_count_in_block: std::ops::RangeInclusive<u32>,
+    pub interrogation_count_in_block: NonEmptyRangeInclusive<u32>,
 }
 
 impl Default for SubjectParameters {
@@ -228,8 +229,14 @@ impl Default for SubjectParameters {
 impl Default for SubjectInterrogationParameters {
     fn default() -> Self {
         SubjectInterrogationParameters {
-            students_per_group: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
-            groups_per_interrogation: NonZeroU32::new(1).unwrap()..=NonZeroU32::new(1).unwrap(),
+            students_per_group: NonEmptyRangeInclusive::new(
+                NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+            )
+            .expect("statically non-empty"),
+            groups_per_interrogation: NonEmptyRangeInclusive::new(
+                NonZeroU32::new(1).unwrap()..=NonZeroU32::new(1).unwrap(),
+            )
+            .expect("statically non-empty"),
             duration: collomatique_time::NonZeroMinutes::new(60).unwrap(),
             take_duration_into_account: true,
             periodicity: SubjectPeriodicity::ExactlyPeriodic {

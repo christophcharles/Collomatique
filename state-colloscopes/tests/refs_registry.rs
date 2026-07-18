@@ -13,10 +13,11 @@
 use collomatique_state::{AppState, traits::Manager};
 use collomatique_state_colloscopes::{
     AssignmentOp, BalancingOp, ColloscopeOp, Data, GroupListOp, GroupListRefSite, IncompatOp,
-    NewId, Op, PairingOp, PeriodOp, PeriodRefSite, RefVisitor, Reference, SettingsOp, SlotOp,
-    SlotPairingOp, SlotRefSite, StudentOp, StudentRefSite, Subject, SubjectInterrogationParameters,
-    SubjectOp, SubjectParameters, SubjectPeriodicity, SubjectRefSite, TeacherOp, TeacherRefSite,
-    WeekOp, WeekPatternOp, WeekPatternRefSite, WeekRefSite,
+    NewId, NonEmptyRangeInclusive, Op, PairingOp, PeriodOp, PeriodRefSite, RefVisitor, Reference,
+    SettingsOp, SlotOp, SlotPairingOp, SlotRefSite, StudentOp, StudentRefSite, Subject,
+    SubjectInterrogationParameters, SubjectOp, SubjectParameters, SubjectPeriodicity,
+    SubjectRefSite, TeacherOp, TeacherRefSite, WeekOp, WeekPatternOp, WeekPatternRefSite,
+    WeekRefSite,
     balancing::{Balancing, BalancingOptions},
     group_lists::{GroupListFilling, GroupListParameters, PrefilledGroup},
     ids::{GroupListId, PeriodId, SlotId, StudentId, SubjectId, TeacherId, WeekId, WeekPatternId},
@@ -80,8 +81,14 @@ fn interrogation_subject(name: &str, excluded_periods: BTreeSet<PeriodId>) -> Su
         parameters: SubjectParameters {
             name: name.into(),
             interrogation_parameters: Some(SubjectInterrogationParameters {
-                students_per_group: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
-                groups_per_interrogation: NonZeroU32::new(1).unwrap()..=NonZeroU32::new(1).unwrap(),
+                students_per_group: NonEmptyRangeInclusive::new(
+                    NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+                )
+                .expect("statically non-empty"),
+                groups_per_interrogation: NonEmptyRangeInclusive::new(
+                    NonZeroU32::new(1).unwrap()..=NonZeroU32::new(1).unwrap(),
+                )
+                .expect("statically non-empty"),
                 duration: collomatique_time::NonZeroMinutes::new(60).unwrap(),
                 take_duration_into_account: true,
                 periodicity: SubjectPeriodicity::ExactlyPeriodic {
@@ -114,7 +121,10 @@ fn slot(subject_id: SubjectId, teacher_id: TeacherId, week_pattern: Option<WeekP
 fn one_group_params(name: &str) -> GroupListParameters {
     GroupListParameters {
         name: name.into(),
-        students_per_group: NonZeroU32::new(1).unwrap()..=NonZeroU32::new(3).unwrap(),
+        students_per_group: NonEmptyRangeInclusive::new(
+            NonZeroU32::new(1).unwrap()..=NonZeroU32::new(3).unwrap(),
+        )
+        .expect("statically non-empty"),
         group_names: vec![None],
     }
 }

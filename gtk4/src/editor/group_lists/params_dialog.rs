@@ -6,6 +6,7 @@ use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque};
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
 use relm4::{adw, gtk};
 
+use collomatique_state_colloscopes::NonEmptyRangeInclusive;
 use std::num::NonZeroU32;
 
 pub struct Dialog {
@@ -296,8 +297,11 @@ impl Dialog {
     fn generate_data(&self) -> collomatique_state_colloscopes::group_lists::GroupListParameters {
         collomatique_state_colloscopes::group_lists::GroupListParameters {
             name: self.selected_name.clone(),
-            students_per_group: NonZeroU32::new(self.selected_students_per_group_minimum).unwrap()
-                ..=NonZeroU32::new(self.selected_students_per_group_maximum).unwrap(),
+            students_per_group: NonEmptyRangeInclusive::new(
+                NonZeroU32::new(self.selected_students_per_group_minimum).unwrap()
+                    ..=NonZeroU32::new(self.selected_students_per_group_maximum).unwrap(),
+            )
+            .expect("spinners clamp min <= max"),
             group_names: self
                 .group_name_data
                 .iter()

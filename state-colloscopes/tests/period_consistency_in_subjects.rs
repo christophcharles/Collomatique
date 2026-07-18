@@ -1,6 +1,7 @@
 use collomatique_state::{AppState, traits::Manager};
 use collomatique_state_colloscopes::{
-    Data, NewId, Op, PeriodOp, Subject, SubjectOp, SubjectParameters, SubjectPeriodicity, WeekOp,
+    Data, NewId, NonEmptyRangeInclusive, Op, PeriodOp, Subject, SubjectOp, SubjectParameters,
+    SubjectPeriodicity, WeekOp,
     ids::{PeriodId, WeekId},
     periods::WeekDesc,
     subjects::{SubjectInterrogationParameters, WeekBlock},
@@ -51,10 +52,14 @@ fn add_subject_referencing_period_then_remove_period() {
                 parameters: SubjectParameters {
                     name: "Math".into(),
                     interrogation_parameters: Some(SubjectInterrogationParameters {
-                        students_per_group: NonZeroU32::new(2).unwrap()
-                            ..=NonZeroU32::new(3).unwrap(),
-                        groups_per_interrogation: NonZeroU32::new(1).unwrap()
-                            ..=NonZeroU32::new(1).unwrap(),
+                        students_per_group: NonEmptyRangeInclusive::new(
+                            NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+                        )
+                        .expect("statically non-empty"),
+                        groups_per_interrogation: NonEmptyRangeInclusive::new(
+                            NonZeroU32::new(1).unwrap()..=NonZeroU32::new(1).unwrap(),
+                        )
+                        .expect("statically non-empty"),
                         duration: collomatique_time::NonZeroMinutes::new(60).unwrap(),
                         take_duration_into_account: true,
                         periodicity: SubjectPeriodicity::ExactlyPeriodic {
@@ -106,10 +111,14 @@ fn add_subject_referencing_period_then_remove_period_and_then_undo() {
                 parameters: SubjectParameters {
                     name: "Math".into(),
                     interrogation_parameters: Some(SubjectInterrogationParameters {
-                        students_per_group: NonZeroU32::new(2).unwrap()
-                            ..=NonZeroU32::new(3).unwrap(),
-                        groups_per_interrogation: NonZeroU32::new(1).unwrap()
-                            ..=NonZeroU32::new(1).unwrap(),
+                        students_per_group: NonEmptyRangeInclusive::new(
+                            NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+                        )
+                        .expect("statically non-empty"),
+                        groups_per_interrogation: NonEmptyRangeInclusive::new(
+                            NonZeroU32::new(1).unwrap()..=NonZeroU32::new(1).unwrap(),
+                        )
+                        .expect("statically non-empty"),
                         duration: collomatique_time::NonZeroMinutes::new(60).unwrap(),
                         take_duration_into_account: true,
                         periodicity: SubjectPeriodicity::ExactlyPeriodic {
@@ -133,10 +142,14 @@ fn add_subject_referencing_period_then_remove_period_and_then_undo() {
                 parameters: SubjectParameters {
                     name: "Math".into(),
                     interrogation_parameters: Some(SubjectInterrogationParameters {
-                        students_per_group: NonZeroU32::new(2).unwrap()
-                            ..=NonZeroU32::new(3).unwrap(),
-                        groups_per_interrogation: NonZeroU32::new(1).unwrap()
-                            ..=NonZeroU32::new(1).unwrap(),
+                        students_per_group: NonEmptyRangeInclusive::new(
+                            NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+                        )
+                        .expect("statically non-empty"),
+                        groups_per_interrogation: NonEmptyRangeInclusive::new(
+                            NonZeroU32::new(1).unwrap()..=NonZeroU32::new(1).unwrap(),
+                        )
+                        .expect("statically non-empty"),
                         duration: collomatique_time::NonZeroMinutes::new(60).unwrap(),
                         take_duration_into_account: true,
                         periodicity: SubjectPeriodicity::ExactlyPeriodic {
@@ -194,10 +207,14 @@ fn add_subject_referencing_week_then_shrink_week_count_but_keep_said_week() {
                 parameters: SubjectParameters {
                     name: "Math".into(),
                     interrogation_parameters: Some(SubjectInterrogationParameters {
-                        students_per_group: NonZeroU32::new(2).unwrap()
-                            ..=NonZeroU32::new(3).unwrap(),
-                        groups_per_interrogation: NonZeroU32::new(1).unwrap()
-                            ..=NonZeroU32::new(1).unwrap(),
+                        students_per_group: NonEmptyRangeInclusive::new(
+                            NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+                        )
+                        .expect("statically non-empty"),
+                        groups_per_interrogation: NonEmptyRangeInclusive::new(
+                            NonZeroU32::new(1).unwrap()..=NonZeroU32::new(1).unwrap(),
+                        )
+                        .expect("statically non-empty"),
                         duration: collomatique_time::NonZeroMinutes::new(60).unwrap(),
                         take_duration_into_account: true,
                         periodicity: SubjectPeriodicity::AmountForEveryArbitraryBlock {
@@ -206,12 +223,18 @@ fn add_subject_referencing_week_then_shrink_week_count_but_keep_said_week() {
                                 WeekBlock {
                                     delay_in_weeks: 0,
                                     size_in_weeks: NonZeroU32::new(3).unwrap(),
-                                    interrogation_count_in_block: 1..=1,
+                                    interrogation_count_in_block: NonEmptyRangeInclusive::new(
+                                        1..=1,
+                                    )
+                                    .expect("statically non-empty"),
                                 },
                                 WeekBlock {
                                     delay_in_weeks: 0,
                                     size_in_weeks: NonZeroU32::new(2).unwrap(),
-                                    interrogation_count_in_block: 1..=1,
+                                    interrogation_count_in_block: NonEmptyRangeInclusive::new(
+                                        1..=1,
+                                    )
+                                    .expect("statically non-empty"),
                                 },
                             ],
                         },

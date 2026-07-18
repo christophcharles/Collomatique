@@ -8,6 +8,7 @@ use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque};
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
 use relm4::{adw, gtk};
 
+use collomatique_state_colloscopes::NonEmptyRangeInclusive;
 use std::num::NonZeroU32;
 
 pub struct Dialog {
@@ -218,7 +219,7 @@ impl Dialog {
                 interrogation_count_in_year,
                 minimum_week_separation,
             } => AmountInYearParams {
-                interrogation_count_in_year: interrogation_count_in_year.clone(),
+                interrogation_count_in_year: (**interrogation_count_in_year).clone(),
                 minimum_week_separation: *minimum_week_separation,
             },
             _ => AmountInYearParams {
@@ -794,7 +795,7 @@ impl SimpleComponent for Dialog {
                     }
                     PeriodicityPanel::AmountInYear => {
                         collomatique_state_colloscopes::SubjectPeriodicity::AmountInYear {
-                            interrogation_count_in_year: self.amount_in_year_params.interrogation_count_in_year.clone(),
+                            interrogation_count_in_year: NonEmptyRangeInclusive::new(self.amount_in_year_params.interrogation_count_in_year.clone()).expect("spinners clamp min <= max"),
                             minimum_week_separation: self.amount_in_year_params.minimum_week_separation,
                         }
                     }
@@ -845,32 +846,36 @@ impl SimpleComponent for Dialog {
                     return;
                 }
                 let old_max = *self.interrogation_params.students_per_group.end();
-                assert!(new_min <= old_max);
-                self.interrogation_params.students_per_group = new_min..=old_max;
+                self.interrogation_params.students_per_group =
+                    NonEmptyRangeInclusive::new(new_min..=old_max)
+                        .expect("spinners clamp min <= max");
             }
             DialogInput::UpdateStudentsPerGroupMaximum(new_max) => {
                 if *self.interrogation_params.students_per_group.end() == new_max {
                     return;
                 }
                 let old_min = *self.interrogation_params.students_per_group.start();
-                assert!(old_min <= new_max);
-                self.interrogation_params.students_per_group = old_min..=new_max;
+                self.interrogation_params.students_per_group =
+                    NonEmptyRangeInclusive::new(old_min..=new_max)
+                        .expect("spinners clamp min <= max");
             }
             DialogInput::UpdateGroupsPerInterrogationMinimum(new_min) => {
                 if *self.interrogation_params.groups_per_interrogation.start() == new_min {
                     return;
                 }
                 let old_max = *self.interrogation_params.groups_per_interrogation.end();
-                assert!(new_min <= old_max);
-                self.interrogation_params.groups_per_interrogation = new_min..=old_max;
+                self.interrogation_params.groups_per_interrogation =
+                    NonEmptyRangeInclusive::new(new_min..=old_max)
+                        .expect("spinners clamp min <= max");
             }
             DialogInput::UpdateGroupsPerInterrogationMaximum(new_max) => {
                 if *self.interrogation_params.groups_per_interrogation.end() == new_max {
                     return;
                 }
                 let old_min = *self.interrogation_params.groups_per_interrogation.start();
-                assert!(old_min <= new_max);
-                self.interrogation_params.groups_per_interrogation = old_min..=new_max;
+                self.interrogation_params.groups_per_interrogation =
+                    NonEmptyRangeInclusive::new(old_min..=new_max)
+                        .expect("spinners clamp min <= max");
             }
             DialogInput::UpdatePeriodicityType(new_periodicity_type) => {
                 if self.periodicity_panel == new_periodicity_type {
@@ -941,7 +946,8 @@ impl SimpleComponent for Dialog {
                     collomatique_state_colloscopes::subjects::WeekBlock {
                         delay_in_weeks: 0,
                         size_in_weeks: NonZeroU32::new(1).unwrap(),
-                        interrogation_count_in_block: 1..=1,
+                        interrogation_count_in_block: NonEmptyRangeInclusive::new(1..=1)
+                            .expect("statically non-empty"),
                     },
                 );
                 self.synchronize_block_factory();
@@ -960,17 +966,17 @@ impl SimpleComponent for Dialog {
                 let old_max = *self.amount_for_every_arbitrary_block_params.blocks[block_num]
                     .interrogation_count_in_block
                     .end();
-                assert!(new_min <= old_max);
                 self.amount_for_every_arbitrary_block_params.blocks[block_num]
-                    .interrogation_count_in_block = new_min..=old_max;
+                    .interrogation_count_in_block = NonEmptyRangeInclusive::new(new_min..=old_max)
+                    .expect("spinners clamp min <= max");
             }
             DialogInput::UpdateInterrogationCountMaximum(block_num, new_max) => {
                 let old_min = *self.amount_for_every_arbitrary_block_params.blocks[block_num]
                     .interrogation_count_in_block
                     .start();
-                assert!(old_min <= new_max);
                 self.amount_for_every_arbitrary_block_params.blocks[block_num]
-                    .interrogation_count_in_block = old_min..=new_max;
+                    .interrogation_count_in_block = NonEmptyRangeInclusive::new(old_min..=new_max)
+                    .expect("spinners clamp min <= max");
             }
             DialogInput::DeleteBlock(block_num) => {
                 self.amount_for_every_arbitrary_block_params
@@ -1234,8 +1240,9 @@ impl FactoryComponent for Block {
                     return;
                 }
                 let old_max = *self.data.block_params.interrogation_count_in_block.end();
-                assert!(new_min <= old_max);
-                self.data.block_params.interrogation_count_in_block = new_min..=old_max;
+                self.data.block_params.interrogation_count_in_block =
+                    NonEmptyRangeInclusive::new(new_min..=old_max)
+                        .expect("spinners clamp min <= max");
                 sender
                     .output_sender()
                     .send(BlockOutput::UpdateInterrogationCountMinimum(
@@ -1249,8 +1256,9 @@ impl FactoryComponent for Block {
                     return;
                 }
                 let old_min = *self.data.block_params.interrogation_count_in_block.start();
-                assert!(old_min <= new_max);
-                self.data.block_params.interrogation_count_in_block = old_min..=new_max;
+                self.data.block_params.interrogation_count_in_block =
+                    NonEmptyRangeInclusive::new(old_min..=new_max)
+                        .expect("spinners clamp min <= max");
                 sender
                     .output_sender()
                     .send(BlockOutput::UpdateInterrogationCountMaximum(

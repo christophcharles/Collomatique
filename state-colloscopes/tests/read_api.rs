@@ -11,8 +11,8 @@
 
 use collomatique_state::{AppState, Join, traits::Manager};
 use collomatique_state_colloscopes::{
-    Data, GroupListOp, IncompatOp, JoinedRulePart, NewId, Op, PairingOp, PeriodOp, SlotOp,
-    SlotPairingOp, StudentOp, Subject, SubjectInterrogationParameters, SubjectOp,
+    Data, GroupListOp, IncompatOp, JoinedRulePart, NewId, NonEmptyRangeInclusive, Op, PairingOp,
+    PeriodOp, SlotOp, SlotPairingOp, StudentOp, Subject, SubjectInterrogationParameters, SubjectOp,
     SubjectParameters, SubjectPeriodicity, TeacherOp, WeekOp, WeekPatternOp,
     group_lists::GroupListParameters,
     ids::{
@@ -37,8 +37,14 @@ fn interrogation_subject(name: &str) -> Subject {
         parameters: SubjectParameters {
             name: name.into(),
             interrogation_parameters: Some(SubjectInterrogationParameters {
-                students_per_group: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
-                groups_per_interrogation: NonZeroU32::new(1).unwrap()..=NonZeroU32::new(1).unwrap(),
+                students_per_group: NonEmptyRangeInclusive::new(
+                    NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+                )
+                .expect("statically non-empty"),
+                groups_per_interrogation: NonEmptyRangeInclusive::new(
+                    NonZeroU32::new(1).unwrap()..=NonZeroU32::new(1).unwrap(),
+                )
+                .expect("statically non-empty"),
                 duration: collomatique_time::NonZeroMinutes::new(60).unwrap(),
                 take_duration_into_account: true,
                 periodicity: SubjectPeriodicity::ExactlyPeriodic {
@@ -74,7 +80,10 @@ fn make_slot(
 fn one_group_params(name: &str) -> GroupListParameters {
     GroupListParameters {
         name: name.into(),
-        students_per_group: NonZeroU32::new(1).unwrap()..=NonZeroU32::new(3).unwrap(),
+        students_per_group: NonEmptyRangeInclusive::new(
+            NonZeroU32::new(1).unwrap()..=NonZeroU32::new(3).unwrap(),
+        )
+        .expect("statically non-empty"),
         group_names: vec![None],
     }
 }

@@ -8,9 +8,9 @@
 
 use collomatique_state::{AppState, traits::Manager};
 use collomatique_state_colloscopes::{
-    ColloscopeOp, Data, Error, GroupListError, GroupListOp, NewId, Op, PeriodOp, SettingsOp,
-    SlotOp, StudentOp, Subject, SubjectInterrogationParameters, SubjectOp, SubjectParameters,
-    SubjectPeriodicity, TeacherOp, WeekOp,
+    ColloscopeOp, Data, Error, GroupListError, GroupListOp, NewId, NonEmptyRangeInclusive, Op,
+    PeriodOp, SettingsOp, SlotOp, StudentOp, Subject, SubjectInterrogationParameters, SubjectOp,
+    SubjectParameters, SubjectPeriodicity, TeacherOp, WeekOp,
     group_lists::{GroupListFilling, GroupListParameters, PrefilledGroup},
     ids::PeriodId,
     periods::WeekDesc,
@@ -187,10 +187,14 @@ fn update_shrinking_group_names_below_assigned_group_is_rejected() {
                 parameters: SubjectParameters {
                     name: "Math".into(),
                     interrogation_parameters: Some(SubjectInterrogationParameters {
-                        students_per_group: NonZeroU32::new(2).unwrap()
-                            ..=NonZeroU32::new(3).unwrap(),
-                        groups_per_interrogation: NonZeroU32::new(1).unwrap()
-                            ..=NonZeroU32::new(1).unwrap(),
+                        students_per_group: NonEmptyRangeInclusive::new(
+                            NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+                        )
+                        .expect("statically non-empty"),
+                        groups_per_interrogation: NonEmptyRangeInclusive::new(
+                            NonZeroU32::new(1).unwrap()..=NonZeroU32::new(1).unwrap(),
+                        )
+                        .expect("statically non-empty"),
                         duration: collomatique_time::NonZeroMinutes::new(60).unwrap(),
                         take_duration_into_account: true,
                         periodicity: SubjectPeriodicity::ExactlyPeriodic {
@@ -243,7 +247,10 @@ fn update_shrinking_group_names_below_assigned_group_is_rejected() {
     let Ok(Some(NewId::GroupListId(group_list_id))) = app_state.apply(
         Op::GroupList(GroupListOp::Add(GroupListParameters {
             name: "Liste".into(),
-            students_per_group: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+            students_per_group: NonEmptyRangeInclusive::new(
+                NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+            )
+            .expect("statically non-empty"),
             group_names: vec![None; 4],
         })),
         "Add group list".into(),
@@ -286,7 +293,10 @@ fn update_shrinking_group_names_below_assigned_group_is_rejected() {
             group_list_id,
             GroupListParameters {
                 name: "Liste".into(),
-                students_per_group: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+                students_per_group: NonEmptyRangeInclusive::new(
+                    NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+                )
+                .expect("statically non-empty"),
                 group_names: vec![None; 2],
             },
         )),
@@ -305,7 +315,10 @@ fn update_shrinking_group_names_below_assigned_group_is_rejected() {
             group_list_id,
             GroupListParameters {
                 name: "Liste".into(),
-                students_per_group: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+                students_per_group: NonEmptyRangeInclusive::new(
+                    NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+                )
+                .expect("statically non-empty"),
                 group_names: vec![None; 3],
             },
         )),
@@ -380,10 +393,14 @@ fn assign_to_subject_with_dangling_group_list_id_errors() {
                 parameters: SubjectParameters {
                     name: "Math".into(),
                     interrogation_parameters: Some(SubjectInterrogationParameters {
-                        students_per_group: NonZeroU32::new(2).unwrap()
-                            ..=NonZeroU32::new(3).unwrap(),
-                        groups_per_interrogation: NonZeroU32::new(1).unwrap()
-                            ..=NonZeroU32::new(1).unwrap(),
+                        students_per_group: NonEmptyRangeInclusive::new(
+                            NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+                        )
+                        .expect("statically non-empty"),
+                        groups_per_interrogation: NonEmptyRangeInclusive::new(
+                            NonZeroU32::new(1).unwrap()..=NonZeroU32::new(1).unwrap(),
+                        )
+                        .expect("statically non-empty"),
                         duration: collomatique_time::NonZeroMinutes::new(60).unwrap(),
                         take_duration_into_account: true,
                         periodicity: SubjectPeriodicity::ExactlyPeriodic {
@@ -445,8 +462,14 @@ fn slot_update_changing_subject_is_rejected() {
         parameters: SubjectParameters {
             name: name.into(),
             interrogation_parameters: Some(SubjectInterrogationParameters {
-                students_per_group: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
-                groups_per_interrogation: NonZeroU32::new(1).unwrap()..=NonZeroU32::new(1).unwrap(),
+                students_per_group: NonEmptyRangeInclusive::new(
+                    NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+                )
+                .expect("statically non-empty"),
+                groups_per_interrogation: NonEmptyRangeInclusive::new(
+                    NonZeroU32::new(1).unwrap()..=NonZeroU32::new(1).unwrap(),
+                )
+                .expect("statically non-empty"),
                 duration: collomatique_time::NonZeroMinutes::new(60).unwrap(),
                 take_duration_into_account: true,
                 periodicity: SubjectPeriodicity::ExactlyPeriodic {

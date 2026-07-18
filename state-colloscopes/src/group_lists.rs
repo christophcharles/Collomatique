@@ -4,7 +4,6 @@
 
 use std::collections::BTreeSet;
 use std::num::NonZeroU32;
-use std::ops::RangeInclusive;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -15,6 +14,7 @@ use crate::Table;
 use crate::colloscopes;
 use crate::group_lists;
 use crate::ids::{GroupListId, PeriodId, SlotId, StudentId, SubjectId};
+use crate::non_empty_range::NonEmptyRangeInclusive;
 use crate::ops::AnnotatedGroupListOp;
 
 /// Description of the group lists
@@ -194,7 +194,7 @@ pub struct GroupListParameters {
     /// Name for the list
     pub name: String,
     /// Range of possible count of students per group
-    pub students_per_group: RangeInclusive<NonZeroU32>,
+    pub students_per_group: NonEmptyRangeInclusive<NonZeroU32>,
     /// Group names (length determines max group count, None = unnamed group)
     pub group_names: Vec<Option<non_empty_string::NonEmptyString>>,
 }
@@ -203,7 +203,10 @@ impl Default for GroupListParameters {
     fn default() -> Self {
         GroupListParameters {
             name: "Liste".into(),
-            students_per_group: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+            students_per_group: NonEmptyRangeInclusive::new(
+                NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+            )
+            .expect("statically non-empty"),
             group_names: vec![None; 16], // 16 unnamed groups (typical for a class of 48 with 3 students per group)
         }
     }

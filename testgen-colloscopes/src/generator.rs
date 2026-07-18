@@ -399,9 +399,8 @@ fn gen_week(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
 
 fn gen_subject(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invalid: bool) -> Op {
     if invalid {
-        let op = match rng.random_range(0..3) {
-            0 => SubjectOp::AddAfter(None, synth::subject_invalid_empty_range(rng)),
-            1 if !pools.subject_ids.is_empty() => SubjectOp::ChangePosition(
+        let op = match rng.random_range(0..2) {
+            0 if !pools.subject_ids.is_empty() => SubjectOp::ChangePosition(
                 pick(rng, &pools.subject_ids),
                 pools.subject_ids.len() + 5,
             ),

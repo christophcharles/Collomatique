@@ -11,8 +11,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU32;
 
 use collomatique_state_colloscopes::{
-    PersonWithContact, Subject, SubjectInterrogationParameters, SubjectParameters,
-    SubjectPeriodicity,
+    NonEmptyRangeInclusive, PersonWithContact, Subject, SubjectInterrogationParameters,
+    SubjectParameters, SubjectPeriodicity,
     balancing::{Balancing, BalancingOptions},
     export_config,
     group_lists::{GroupListFilling, GroupListParameters, PrefilledGroup},
@@ -117,7 +117,8 @@ fn periodicity(rng: &mut ChaCha8Rng) -> SubjectPeriodicity {
         2 => SubjectPeriodicity::AmountInYear {
             interrogation_count_in_year: {
                 let min = rng.random_range(0..=3);
-                min..=(min + rng.random_range(0..=3))
+                NonEmptyRangeInclusive::new(min..=(min + rng.random_range(0..=3)))
+                    .expect("statically non-empty")
             },
             minimum_week_separation: rng.random_range(0..=2),
         },
@@ -128,7 +129,8 @@ fn periodicity(rng: &mut ChaCha8Rng) -> SubjectPeriodicity {
                     size_in_weeks: NonZeroU32::new(rng.random_range(1..=3)).unwrap(),
                     interrogation_count_in_block: {
                         let min = rng.random_range(0..=1);
-                        min..=(min + rng.random_range(0..=2))
+                        NonEmptyRangeInclusive::new(min..=(min + rng.random_range(0..=2)))
+                            .expect("statically non-empty")
                     },
                 })
                 .collect(),
@@ -141,10 +143,16 @@ pub fn interrogation_parameters(rng: &mut ChaCha8Rng) -> SubjectInterrogationPar
     let students_min = rng.random_range(1..=3);
     let groups_min = rng.random_range(1..=2);
     SubjectInterrogationParameters {
-        students_per_group: NonZeroU32::new(students_min).unwrap()
-            ..=NonZeroU32::new(students_min + rng.random_range(0..=2)).unwrap(),
-        groups_per_interrogation: NonZeroU32::new(groups_min).unwrap()
-            ..=NonZeroU32::new(groups_min + rng.random_range(0..=1)).unwrap(),
+        students_per_group: NonEmptyRangeInclusive::new(
+            NonZeroU32::new(students_min).unwrap()
+                ..=NonZeroU32::new(students_min + rng.random_range(0..=2)).unwrap(),
+        )
+        .expect("statically non-empty"),
+        groups_per_interrogation: NonEmptyRangeInclusive::new(
+            NonZeroU32::new(groups_min).unwrap()
+                ..=NonZeroU32::new(groups_min + rng.random_range(0..=1)).unwrap(),
+        )
+        .expect("statically non-empty"),
         duration: NonZeroMinutes::new(pick(rng, &DURATION_CHOICES)).unwrap(),
         take_duration_into_account: rng.random_bool(0.8),
         periodicity: periodicity(rng),
@@ -168,18 +176,6 @@ pub fn subject(rng: &mut ChaCha8Rng, period_ids: &[PeriodId], with_interrogation
         },
         excluded_periods,
     }
-}
-
-/// A subject whose interrogation parameters contain an empty range
-pub fn subject_invalid_empty_range(rng: &mut ChaCha8Rng) -> Subject {
-    let mut subject = subject(rng, &[], true);
-    let params = subject
-        .parameters
-        .interrogation_parameters
-        .as_mut()
-        .expect("Subject was built with interrogation parameters");
-    params.students_per_group = NonZeroU32::new(3).unwrap()..=NonZeroU32::new(2).unwrap();
-    subject
 }
 
 pub fn teacher(rng: &mut ChaCha8Rng, interrogation_subject_ids: &[SubjectId]) -> Teacher {
@@ -291,8 +287,11 @@ pub fn group_list_parameters(rng: &mut ChaCha8Rng, group_count: usize) -> GroupL
     let students_min = rng.random_range(1..=3);
     GroupListParameters {
         name: format!("List{}", rng.random_range(0..100_000u32)),
-        students_per_group: NonZeroU32::new(students_min).unwrap()
-            ..=NonZeroU32::new(students_min + rng.random_range(0..=2)).unwrap(),
+        students_per_group: NonEmptyRangeInclusive::new(
+            NonZeroU32::new(students_min).unwrap()
+                ..=NonZeroU32::new(students_min + rng.random_range(0..=2)).unwrap(),
+        )
+        .expect("statically non-empty"),
         group_names: (0..group_count)
             .map(|i| {
                 if rng.random_bool(0.5) {

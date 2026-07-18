@@ -12,9 +12,9 @@
 
 use collomatique_state::{AppState, InMemoryData, traits::Manager};
 use collomatique_state_colloscopes::{
-    ColloscopeOp, Data, Error, GroupListOp, NewId, Op, PeriodOp, SlotOp, Subject,
-    SubjectInterrogationParameters, SubjectOp, SubjectParameters, SubjectPeriodicity, TeacherOp,
-    WeekError, WeekOp, WeekPatternOp,
+    ColloscopeOp, Data, Error, GroupListOp, NewId, NonEmptyRangeInclusive, Op, PeriodOp, SlotOp,
+    Subject, SubjectInterrogationParameters, SubjectOp, SubjectParameters, SubjectPeriodicity,
+    TeacherOp, WeekError, WeekOp, WeekPatternOp,
     group_lists::GroupListParameters,
     ids::{PeriodId, SlotId, SubjectId, TeacherId, WeekId},
     periods::WeekDesc,
@@ -30,8 +30,14 @@ fn interrogation_subject(name: &str, excluded: BTreeSet<PeriodId>) -> Subject {
         parameters: SubjectParameters {
             name: name.into(),
             interrogation_parameters: Some(SubjectInterrogationParameters {
-                students_per_group: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
-                groups_per_interrogation: NonZeroU32::new(1).unwrap()..=NonZeroU32::new(1).unwrap(),
+                students_per_group: NonEmptyRangeInclusive::new(
+                    NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+                )
+                .expect("statically non-empty"),
+                groups_per_interrogation: NonEmptyRangeInclusive::new(
+                    NonZeroU32::new(1).unwrap()..=NonZeroU32::new(1).unwrap(),
+                )
+                .expect("statically non-empty"),
                 duration: collomatique_time::NonZeroMinutes::new(60).unwrap(),
                 take_duration_into_account: true,
                 periodicity: SubjectPeriodicity::ExactlyPeriodic {
@@ -249,7 +255,10 @@ fn update_week_to_inactive_blocked_by_filled_cell() {
     let Ok(Some(NewId::GroupListId(group_list))) = app.apply(
         Op::GroupList(GroupListOp::Add(GroupListParameters {
             name: "Liste".into(),
-            students_per_group: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+            students_per_group: NonEmptyRangeInclusive::new(
+                NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+            )
+            .expect("statically non-empty"),
             group_names: vec![None; 2],
         })),
         "Add group list".into(),
@@ -347,7 +356,10 @@ fn move_week_preserves_filled_cell() {
     let Ok(Some(NewId::GroupListId(group_list))) = app.apply(
         Op::GroupList(GroupListOp::Add(GroupListParameters {
             name: "Liste".into(),
-            students_per_group: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+            students_per_group: NonEmptyRangeInclusive::new(
+                NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+            )
+            .expect("statically non-empty"),
             group_names: vec![None; 2],
         })),
         "Add group list".into(),
@@ -461,7 +473,10 @@ fn move_week_blocked_when_destination_lacks_slot() {
     let Ok(Some(NewId::GroupListId(group_list))) = app.apply(
         Op::GroupList(GroupListOp::Add(GroupListParameters {
             name: "Liste".into(),
-            students_per_group: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+            students_per_group: NonEmptyRangeInclusive::new(
+                NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+            )
+            .expect("statically non-empty"),
             group_names: vec![None; 2],
         })),
         "Add group list".into(),

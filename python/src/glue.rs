@@ -423,7 +423,7 @@ impl CollomatiqueFile {
         let result = self_
             .file
             .apply_update(collomatique_ops::UpdateOp::Subjects(
-                collomatique_ops::SubjectsUpdateOp::AddNewSubject(subject_params.into()),
+                collomatique_ops::SubjectsUpdateOp::AddNewSubject(subject_params.try_into()?),
             ));
 
         match result {
@@ -453,7 +453,7 @@ impl CollomatiqueFile {
             .apply_update(collomatique_ops::UpdateOp::Subjects(
                 collomatique_ops::SubjectsUpdateOp::UpdateSubject(
                     id.into(),
-                    new_subject_params.into(),
+                    new_subject_params.try_into()?,
                 ),
             ));
 
@@ -1133,7 +1133,7 @@ impl CollomatiqueFile {
         let result = self_
             .file
             .apply_update(collomatique_ops::UpdateOp::GroupLists(
-                collomatique_ops::GroupListsUpdateOp::AddNewGroupList(params.into()),
+                collomatique_ops::GroupListsUpdateOp::AddNewGroupList(params.try_into()?),
             ));
 
         match result {
@@ -1155,7 +1155,10 @@ impl CollomatiqueFile {
         let result = self_
             .file
             .apply_update(collomatique_ops::UpdateOp::GroupLists(
-                collomatique_ops::GroupListsUpdateOp::UpdateGroupList(id.into(), new_params.into()),
+                collomatique_ops::GroupListsUpdateOp::UpdateGroupList(
+                    id.into(),
+                    new_params.try_into()?,
+                ),
             ));
 
         match result {

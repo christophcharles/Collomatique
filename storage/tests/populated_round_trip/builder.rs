@@ -11,9 +11,9 @@ use std::num::NonZeroU32;
 use collomatique_state::{AppState, traits::Manager};
 use collomatique_state_colloscopes::{
     AssignmentOp, BalancingOp, ColloscopeOp, Data, ExportConfigOp, GroupListOp, IncompatOp, NewId,
-    Op, PairingOp, PeriodOp, PersonWithContact, SettingsOp, SlotOp, SlotPairingOp, StudentOp,
-    Subject, SubjectInterrogationParameters, SubjectOp, SubjectParameters, SubjectPeriodicity,
-    TeacherOp, WeekOp, WeekPatternOp,
+    NonEmptyRangeInclusive, Op, PairingOp, PeriodOp, PersonWithContact, SettingsOp, SlotOp,
+    SlotPairingOp, StudentOp, Subject, SubjectInterrogationParameters, SubjectOp,
+    SubjectParameters, SubjectPeriodicity, TeacherOp, WeekOp, WeekPatternOp,
     balancing::{Balancing, BalancingOptions},
     export_config,
     group_lists::{GroupListFilling, GroupListParameters, PrefilledGroup},
@@ -40,6 +40,10 @@ fn non_empty(text: &str) -> non_empty_string::NonEmptyString {
 
 fn nz(value: u32) -> NonZeroU32 {
     NonZeroU32::new(value).expect("Value should be non-zero")
+}
+
+fn ner<T: Ord + Clone>(range: std::ops::RangeInclusive<T>) -> NonEmptyRangeInclusive<T> {
+    NonEmptyRangeInclusive::new(range).expect("Range should be non-empty")
 }
 
 fn person(
@@ -219,8 +223,8 @@ pub fn build_rich_data() -> Data {
                 parameters: SubjectParameters {
                     name: "Mathématiques".to_string(),
                     interrogation_parameters: Some(SubjectInterrogationParameters {
-                        students_per_group: nz(2)..=nz(3),
-                        groups_per_interrogation: nz(1)..=nz(1),
+                        students_per_group: ner(nz(2)..=nz(3)),
+                        groups_per_interrogation: ner(nz(1)..=nz(1)),
                         duration: NonZeroMinutes::new(60).expect("Duration should be non-zero"),
                         take_duration_into_account: true,
                         periodicity: SubjectPeriodicity::OnceForEveryBlockOfWeeks {
@@ -243,8 +247,8 @@ pub fn build_rich_data() -> Data {
                 parameters: SubjectParameters {
                     name: "Physique-Chimie".to_string(),
                     interrogation_parameters: Some(SubjectInterrogationParameters {
-                        students_per_group: nz(1)..=nz(3),
-                        groups_per_interrogation: nz(1)..=nz(2),
+                        students_per_group: ner(nz(1)..=nz(3)),
+                        groups_per_interrogation: ner(nz(1)..=nz(2)),
                         duration: NonZeroMinutes::new(30).expect("Duration should be non-zero"),
                         take_duration_into_account: false,
                         periodicity: SubjectPeriodicity::ExactlyPeriodic {
@@ -266,12 +270,12 @@ pub fn build_rich_data() -> Data {
                 parameters: SubjectParameters {
                     name: "Anglais".to_string(),
                     interrogation_parameters: Some(SubjectInterrogationParameters {
-                        students_per_group: nz(2)..=nz(2),
-                        groups_per_interrogation: nz(1)..=nz(1),
+                        students_per_group: ner(nz(2)..=nz(2)),
+                        groups_per_interrogation: ner(nz(1)..=nz(1)),
                         duration: NonZeroMinutes::new(30).expect("Duration should be non-zero"),
                         take_duration_into_account: true,
                         periodicity: SubjectPeriodicity::AmountInYear {
-                            interrogation_count_in_year: 1..=3,
+                            interrogation_count_in_year: ner(1..=3),
                             minimum_week_separation: 1,
                         },
                     }),
@@ -290,15 +294,15 @@ pub fn build_rich_data() -> Data {
                 parameters: SubjectParameters {
                     name: "Philosophie".to_string(),
                     interrogation_parameters: Some(SubjectInterrogationParameters {
-                        students_per_group: nz(1)..=nz(2),
-                        groups_per_interrogation: nz(1)..=nz(1),
+                        students_per_group: ner(nz(1)..=nz(2)),
+                        groups_per_interrogation: ner(nz(1)..=nz(1)),
                         duration: NonZeroMinutes::new(60).expect("Duration should be non-zero"),
                         take_duration_into_account: true,
                         periodicity: SubjectPeriodicity::AmountForEveryArbitraryBlock {
                             blocks: vec![WeekBlock {
                                 delay_in_weeks: 0,
                                 size_in_weeks: nz(3),
-                                interrogation_count_in_block: 1..=2,
+                                interrogation_count_in_block: ner(1..=2),
                             }],
                             minimum_week_separation: 1,
                         },
@@ -502,7 +506,7 @@ pub fn build_rich_data() -> Data {
         &mut state,
         Op::GroupList(GroupListOp::Add(GroupListParameters {
             name: "Groupes de maths".to_string(),
-            students_per_group: nz(2)..=nz(3),
+            students_per_group: ner(nz(2)..=nz(3)),
             group_names: vec![Some(non_empty("Gryffondor")), None],
         })),
         "group list maths",
@@ -529,7 +533,7 @@ pub fn build_rich_data() -> Data {
         &mut state,
         Op::GroupList(GroupListOp::Add(GroupListParameters {
             name: "Groupes de physique".to_string(),
-            students_per_group: nz(1)..=nz(2),
+            students_per_group: ner(nz(1)..=nz(2)),
             group_names: vec![None, Some(non_empty("Binôme B")), None],
         })),
         "group list physics",

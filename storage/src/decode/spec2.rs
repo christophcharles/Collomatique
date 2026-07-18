@@ -190,9 +190,10 @@ fn time_of_day(time: format::scalars::TimeOfDay) -> collomatique_time::WholeMinu
     .expect("Format time of day is on a whole minute")
 }
 
-fn range<T>(range: format::scalars::Range<T>) -> std::ops::RangeInclusive<T> {
+fn range<T: Ord + Clone>(range: format::scalars::Range<T>) -> mem::NonEmptyRangeInclusive<T> {
     let (min, max) = range.into_min_max();
-    min..=max
+    mem::NonEmptyRangeInclusive::new(min..=max)
+        .expect("format::scalars::Range guarantees min <= max")
 }
 
 fn soft_param<T>(param: format::scalars::SoftParam<T>) -> mem::soft_param::SoftParam<T> {
