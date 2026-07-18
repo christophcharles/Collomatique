@@ -16,19 +16,19 @@
 //! 5. slots (`slot_map` id order) — `subject_id`, `teacher_id`, `week_pattern`
 //! 6. incompats (id order) — `subject_id`, `week_pattern_id`
 //! 7. pairings (id order) — `antecedent`, `consequent`, `excluded_periods`
+//!    (antecedent and consequent yield distinct sites)
 //! 8. slot pairings (id order) — `antecedent`, `consequent`, `excluded_periods`
+//!    (antecedent and consequent yield distinct sites)
 //! 9. group lists (id order) — filling students
 //! 10. `settings.students` keys
 //! 11. `balancing.subjects` keys
 //! 12. week patterns (id order) — `excluded_weeks` → weeks (set order)
-//! 13. week-pattern length coupling: week patterns (id order) × periods (table order)
-//! 14. dense mirrors, in this order:
+//! 13. sparse mirrors, in this order:
 //!     a. `assignments.map` (per entry: key site to period then subject, then the
 //!        assigned students), in `(period, subject)` key order
 //!     b. `group_lists.subjects_associations` (per entry: period, subject, group
 //!        list), in `(period, subject)` key order
-//!     c. `slots.ordering` keys → subject, in subject-id order
-//! 15. colloscope: interrogation rows keyed `(slot, week)` — each emits a slot
+//! 14. colloscope: interrogation rows keyed `(slot, week)` — each emits a slot
 //!     key site then a week key site, in surface order (period → slot → week) —
 //!     then `group_lists` rows (group-list key site, then that list's placed
 //!     students → student)
@@ -37,10 +37,18 @@
 //!
 //! - `SubjectStillHasNonEmptySlotInColloscope` (update-only, and indirect via
 //!   slot → subject): handled later as a wrapper (item 3), not a reference site.
-//! - `slots.ordering` row *values*: a pure mirror of `slot_map` keys, covered by
-//!   the structural no-orphan/count checks.
+//! - `slots.ordering` keys *and* row values: a pure mirror of `slot_map` (a row
+//!   exists iff the subject has ≥1 slot, canonical-absent, and the key matches
+//!   each slot's `subject_id`), so the keys add nothing over the per-slot
+//!   `SlotSubject` sites; the values are covered by the structural
+//!   no-orphan/count checks.
 //! - `periods.ordered_period_list` row *values*: a pure mirror of `week_map` /
 //!   `Week::period_id`, covered by `check_periods_data_consistency`.
+//! - *transitive* references are not materialized. A week pattern references a
+//!   period only through the weeks it excludes; that edge is derivable from
+//!   `WeekPatternExcludedWeek` (pattern → week) composed with `WeekPeriodFk`
+//!   (week → period), and the cascade derives period blocking through week
+//!   deletion — so no direct pattern → period site exists.
 //! - colloscope group *indices*: not ids.
 
 use collomatique_state::References;
@@ -84,13 +92,14 @@ pub enum RefSite {
     IncompatSubject(IncompatId),
     /// `Incompatibility::week_pattern_id` → a week pattern
     IncompatWeekPattern(IncompatId),
-    /// `PairingRule::{antecedent,consequent}.subject_id` → a subject
-    ///
-    /// One variant for both parts (the block error does not distinguish them);
-    /// emitted once **per occurrence** (antecedent then consequent), callers dedup.
-    PairingRulePart(PairingRuleId),
-    /// `SlotPairingRule::{antecedent,consequent}.slot_id` → a slot
-    SlotPairingRulePart(SlotPairingRuleId),
+    /// `PairingRule::antecedent.subject_id` → a subject
+    PairingRuleAntecedent(PairingRuleId),
+    /// `PairingRule::consequent.subject_id` → a subject
+    PairingRuleConsequent(PairingRuleId),
+    /// `SlotPairingRule::antecedent.slot_id` → a slot
+    SlotPairingRuleAntecedent(SlotPairingRuleId),
+    /// `SlotPairingRule::consequent.slot_id` → a slot
+    SlotPairingRuleConsequent(SlotPairingRuleId),
     /// A prefilled group of the group list references a student
     GroupListPrefilledStudent(GroupListId),
     /// An automatic group list excludes a student
@@ -103,21 +112,13 @@ pub enum RefSite {
     /// direct reference the per-week `NonTrivialWeekPattern` guard enforces on
     /// week removal.
     WeekPatternExcludedWeek(WeekPatternId),
-    /// A week pattern references a period through the weeks it excludes.
-    /// `non_trivial` is `true` when the pattern excludes at least one of the
-    /// period's weeks (removing them — required before deleting the period — is
-    /// then blocked by the per-week `NonTrivialWeekPattern` guard).
-    WeekPatternLengthCoupling {
-        week_pattern: WeekPatternId,
-        non_trivial: bool,
-    },
-    // --- dense mirrors / junctions ---
+    // --- sparse mirrors / junctions ---
     /// An `assignments.map` key `(period, subject)` — references *both* a period
-    /// and a subject. `non_trivial` is `true` when the cell holds any student.
+    /// and a subject. Rows are canonical-absent (a row exists iff it holds an
+    /// assigned student), so a walked row is always non-trivial.
     AssignmentsKey {
         period: PeriodId,
         subject: SubjectId,
-        non_trivial: bool,
     },
     /// A student assigned in an `assignments.map` cell `(period, subject)`
     AssignmentsStudent {
@@ -131,10 +132,6 @@ pub enum RefSite {
         subject: SubjectId,
         group_list: GroupListId,
     },
-    /// A `slots.ordering` key — references a subject. The ordering is sparse
-    /// (canonical-absent), so a walked row is always non-empty and
-    /// `non_trivial` is always `true`.
-    SlotsOrderingKey { non_trivial: bool },
     // --- colloscope ---
     /// A colloscope interrogation row keyed `(slot, week)` — references *both* a
     /// slot and a week at once. Rows are canonical-absent (a row exists iff it
@@ -190,15 +187,18 @@ pub(crate) fn walk_params_refs(params: &Parameters, v: &mut impl RefVisitor) {
     walk_settings_keys(params, v);
     walk_balancing_keys(params, v);
     walk_week_patterns(params, v);
-    walk_week_pattern_coupling(params, v);
 }
 
 // The per-entity family walkers below drive `References::for_each_ref` and map
-// each yielded `NewId` to its [RefSite]. Within a single entity value the
-// referenced-id *kind* names the site uniquely (verified against the relationship
-// inventory), so the `match` on `NewId` is exhaustive over the kinds that entity
-// can reference; every other arm is `unreachable!`. `for_each_ref` visits fields
-// in declaration order, which is exactly the documented within-entity walk order.
+// each yielded `NewId` to its [RefSite]. `for_each_ref` visits fields in
+// declaration order, which is exactly the documented within-entity walk order;
+// every arm that cannot occur for that entity is `unreachable!`.
+//
+// The site is usually named by the referenced-id *kind* alone. When one entity
+// yields the same kind from two fields that must map to *distinct* sites
+// (antecedent vs consequent of a pairing rule), the walker sub-walks each field
+// through its own `References` impl rather than matching off the whole value —
+// see `walk_pairings` / `walk_slot_pairings`.
 
 fn walk_weeks(params: &Parameters, v: &mut impl RefVisitor) {
     for (week_id, week) in params.periods.week_entries() {
@@ -260,25 +260,46 @@ fn walk_incompats(params: &Parameters, v: &mut impl RefVisitor) {
 }
 
 fn walk_pairings(params: &Parameters, v: &mut impl RefVisitor) {
-    // Both parts share `RefSite::PairingRulePart` (the block error does not
-    // distinguish them); `for_each_ref` visits antecedent then consequent then
-    // the excluded periods, matching the documented order.
+    // Antecedent and consequent must yield distinct sites, so each part is
+    // sub-walked through its own `References` impl rather than matched off the
+    // whole rule. Order — antecedent, consequent, excluded periods — matches the
+    // `PairingRule` field declaration order the composed walk would produce.
     for (rule_id, rule) in params.pairings.pairing_rule_map.iter() {
-        rule.for_each_ref(&mut |id: NewId| match id {
-            NewId::SubjectId(s) => v.subject_ref(s, RefSite::PairingRulePart(rule_id)),
-            NewId::PeriodId(p) => v.period_ref(p, RefSite::PairingRuleExcludedPeriods(rule_id)),
-            _ => unreachable!("PairingRule only references subject/period"),
+        rule.antecedent.for_each_ref(&mut |id: NewId| match id {
+            NewId::SubjectId(s) => v.subject_ref(s, RefSite::PairingRuleAntecedent(rule_id)),
+            _ => unreachable!("RulePart only references a subject"),
         });
+        rule.consequent.for_each_ref(&mut |id: NewId| match id {
+            NewId::SubjectId(s) => v.subject_ref(s, RefSite::PairingRuleConsequent(rule_id)),
+            _ => unreachable!("RulePart only references a subject"),
+        });
+        rule.excluded_periods
+            .for_each_ref(&mut |id: NewId| match id {
+                NewId::PeriodId(p) => v.period_ref(p, RefSite::PairingRuleExcludedPeriods(rule_id)),
+                _ => unreachable!("excluded_periods only references periods"),
+            });
     }
 }
 
 fn walk_slot_pairings(params: &Parameters, v: &mut impl RefVisitor) {
+    // Antecedent and consequent must yield distinct sites, so each part is
+    // sub-walked through its own `References` impl (as in `walk_pairings`).
     for (rule_id, rule) in params.slot_pairings.slot_pairing_rule_map.iter() {
-        rule.for_each_ref(&mut |id: NewId| match id {
-            NewId::SlotId(s) => v.slot_ref(s, RefSite::SlotPairingRulePart(rule_id)),
-            NewId::PeriodId(p) => v.period_ref(p, RefSite::SlotPairingRuleExcludedPeriods(rule_id)),
-            _ => unreachable!("SlotPairingRule only references slot/period"),
+        rule.antecedent.for_each_ref(&mut |id: NewId| match id {
+            NewId::SlotId(s) => v.slot_ref(s, RefSite::SlotPairingRuleAntecedent(rule_id)),
+            _ => unreachable!("SlotRulePart only references a slot"),
         });
+        rule.consequent.for_each_ref(&mut |id: NewId| match id {
+            NewId::SlotId(s) => v.slot_ref(s, RefSite::SlotPairingRuleConsequent(rule_id)),
+            _ => unreachable!("SlotRulePart only references a slot"),
+        });
+        rule.excluded_periods
+            .for_each_ref(&mut |id: NewId| match id {
+                NewId::PeriodId(p) => {
+                    v.period_ref(p, RefSite::SlotPairingRuleExcludedPeriods(rule_id))
+                }
+                _ => unreachable!("excluded_periods only references periods"),
+            });
     }
 }
 
@@ -319,40 +340,12 @@ fn walk_week_patterns(params: &Parameters, v: &mut impl RefVisitor) {
     }
 }
 
-fn walk_week_pattern_coupling(params: &Parameters, v: &mut impl RefVisitor) {
-    for (wp_id, wp) in params.week_patterns.week_pattern_map.iter() {
-        for period_id in params.periods.period_ids() {
-            // `non_trivial` when the pattern excludes at least one of this
-            // period's weeks. Deleting the period requires first removing its
-            // weeks, and each such removal is blocked by the per-week
-            // `NonTrivialWeekPattern` guard (periods.rs Remove path) — so this
-            // mirrors the transitive delete-blocking predicate.
-            let week_ids = params
-                .periods
-                .find_period(period_id)
-                .expect("period id from period_ids is valid");
-            let non_trivial = week_ids.iter().any(|w| wp.excluded_weeks.contains(w));
-            v.period_ref(
-                period_id,
-                RefSite::WeekPatternLengthCoupling {
-                    week_pattern: wp_id,
-                    non_trivial,
-                },
-            );
-        }
-    }
-}
-
 /// Walks the sparse assignments mirror (step 13a): each stored `(period,
 /// subject)` row references *both* a period and a subject, then each assigned
 /// student. Rows are canonical-absent, so a walked row is always non-trivial.
 fn walk_assignments(params: &Parameters, v: &mut impl RefVisitor) {
     for ((period, subject), students) in params.assignments.map.iter() {
-        let site = RefSite::AssignmentsKey {
-            period,
-            subject,
-            non_trivial: !students.is_empty(),
-        };
+        let site = RefSite::AssignmentsKey { period, subject };
         v.period_ref(period, site);
         v.subject_ref(subject, site);
         for &student_id in students {
@@ -373,18 +366,6 @@ fn walk_associations(params: &Parameters, v: &mut impl RefVisitor) {
         v.period_ref(period, site);
         v.subject_ref(subject, site);
         v.group_list_ref(*group_list, site);
-    }
-}
-
-/// Walks the slots ordering mirror keys (step 13c): each key references a subject.
-fn walk_slots_ordering_keys(params: &Parameters, v: &mut impl RefVisitor) {
-    for (subject_id, row) in params.slots.ordering_entries() {
-        v.subject_ref(
-            subject_id,
-            RefSite::SlotsOrderingKey {
-                non_trivial: !row.is_empty(),
-            },
-        );
     }
 }
 
@@ -417,7 +398,6 @@ impl InnerData {
         walk_params_refs(&self.params, v);
         walk_assignments(&self.params, v);
         walk_associations(&self.params, v);
-        walk_slots_ordering_keys(&self.params, v);
         walk_colloscope(&self.colloscope, v);
     }
 }

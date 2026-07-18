@@ -158,8 +158,9 @@ fn walk_covers_every_site_in_order() {
         "add week to period 1"
     );
 
-    // A week pattern that is trivial on p0 (week kept) but non-trivial on p1
-    // (week w1 excluded) — exercises both `WeekPatternLengthCoupling` polarities.
+    // A week pattern that excludes w1 — exercises `WeekPatternExcludedWeek`
+    // (pattern → week). The pattern → period edge is transitive and no longer
+    // materialized as a reference site.
     let wp = apply_new!(
         Op::WeekPattern(WeekPatternOp::Add(WeekPattern {
             name: "WP".into(),
@@ -370,7 +371,6 @@ fn walk_covers_every_site_in_order() {
     let assign_p0_math = RefSite::AssignmentsKey {
         period: p0,
         subject: math,
-        non_trivial: true,
     };
     let association = RefSite::AssociationEntry {
         period: p0,
@@ -398,20 +398,7 @@ fn walk_covers_every_site_in_order() {
             (p1, RefSite::StudentExcludedPeriods(st1)),
             (p1, RefSite::PairingRuleExcludedPeriods(pairing)),
             (p1, RefSite::SlotPairingRuleExcludedPeriods(slot_pairing)),
-            (
-                p0,
-                RefSite::WeekPatternLengthCoupling {
-                    week_pattern: wp,
-                    non_trivial: false,
-                },
-            ),
-            (
-                p1,
-                RefSite::WeekPatternLengthCoupling {
-                    week_pattern: wp,
-                    non_trivial: true,
-                },
-            ),
+            // (the pattern → period edge is transitive, not a site)
             // assignments mirror
             (p0, assign_p0_math),
             // association mirror
@@ -437,16 +424,15 @@ fn walk_covers_every_site_in_order() {
             (math, RefSite::SlotSubject(slot1)),
             (math, RefSite::SlotSubject(slot2)),
             (math, RefSite::IncompatSubject(incompat)),
-            (math, RefSite::PairingRulePart(pairing)),
-            (phys, RefSite::PairingRulePart(pairing)),
+            // pairing: math is the antecedent, phys the consequent (distinct sites)
+            (math, RefSite::PairingRuleAntecedent(pairing)),
+            (phys, RefSite::PairingRuleConsequent(pairing)),
             (phys, RefSite::BalancingSubjectKey),
             // assignments mirror
             (math, assign_p0_math),
             // association mirror
             (math, association),
-            // ordering keys mirror (sparse: phys has interrogations but no
-            // slots, so it has no ordering row and no site here)
-            (math, RefSite::SlotsOrderingKey { non_trivial: true }),
+            // (no ordering-key site: those keys mirror `SlotSubject` and are excluded)
         ],
     );
 
@@ -491,9 +477,9 @@ fn walk_covers_every_site_in_order() {
     assert_eq!(
         c.slot,
         vec![
-            // families
-            (slot1, RefSite::SlotPairingRulePart(slot_pairing)),
-            (slot2, RefSite::SlotPairingRulePart(slot_pairing)),
+            // families: slot1 is the antecedent, slot2 the consequent (distinct sites)
+            (slot1, RefSite::SlotPairingRuleAntecedent(slot_pairing)),
+            (slot2, RefSite::SlotPairingRuleConsequent(slot_pairing)),
             // colloscope: only slot1 carries an interrogation row; slot2 is empty.
             (slot1, collo_int),
         ],
@@ -514,15 +500,7 @@ fn walk_covers_every_site_in_order() {
 
     assert_eq!(
         inner.references_to_period(p0),
-        vec![
-            RefSite::WeekPeriodFk(w0),
-            RefSite::WeekPatternLengthCoupling {
-                week_pattern: wp,
-                non_trivial: false,
-            },
-            assign_p0_math,
-            association,
-        ],
+        vec![RefSite::WeekPeriodFk(w0), assign_p0_math, association],
     );
     assert_eq!(
         inner.references_to_period(p1),
@@ -532,10 +510,6 @@ fn walk_covers_every_site_in_order() {
             RefSite::StudentExcludedPeriods(st1),
             RefSite::PairingRuleExcludedPeriods(pairing),
             RefSite::SlotPairingRuleExcludedPeriods(slot_pairing),
-            RefSite::WeekPatternLengthCoupling {
-                week_pattern: wp,
-                non_trivial: true,
-            },
         ],
     );
 
@@ -553,19 +527,17 @@ fn walk_covers_every_site_in_order() {
             RefSite::SlotSubject(slot1),
             RefSite::SlotSubject(slot2),
             RefSite::IncompatSubject(incompat),
-            RefSite::PairingRulePart(pairing),
+            RefSite::PairingRuleAntecedent(pairing),
             assign_p0_math,
             association,
-            RefSite::SlotsOrderingKey { non_trivial: true },
         ],
     );
     assert_eq!(
         inner.references_to_subject(phys),
         vec![
             RefSite::TeacherSubjects(teacher),
-            RefSite::PairingRulePart(pairing),
+            RefSite::PairingRuleConsequent(pairing),
             RefSite::BalancingSubjectKey,
-            // Sparse ordering: phys has no slots, hence no SlotsOrderingKey site.
         ],
     );
 
@@ -601,11 +573,11 @@ fn walk_covers_every_site_in_order() {
 
     assert_eq!(
         inner.references_to_slot(slot1),
-        vec![RefSite::SlotPairingRulePart(slot_pairing), collo_int],
+        vec![RefSite::SlotPairingRuleAntecedent(slot_pairing), collo_int],
     );
     assert_eq!(
         inner.references_to_slot(slot2),
-        vec![RefSite::SlotPairingRulePart(slot_pairing)],
+        vec![RefSite::SlotPairingRuleConsequent(slot_pairing)],
     );
 
     assert_eq!(
