@@ -46,7 +46,11 @@ use crate::ids::{
     GroupListId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId, SubjectId,
     TeacherId, WeekId, WeekPatternId,
 };
-use crate::refs::Reference;
+use crate::refs::{
+    GroupListRefSite, PeriodRefSite, Reference, SlotRefSite, StudentRefSite, SubjectRefSite,
+    TeacherRefSite, WeekPatternRefSite, WeekRefSite,
+};
+use crate::{ColloscopeError, InnerDataError, InvariantError};
 
 /// A state no legitimate elementary op can reach: the *code* (or a hand-forged
 /// file) is at fault, not the data. Truth is decidable from the row's own value
@@ -532,6 +536,212 @@ impl crate::InnerData {
         }
 
         out
+    }
+}
+
+// --- Legacy bridge ---
+//
+// Maps the new invariant vocabulary back to the old first-error checker's
+// [InnerDataError], and classifies which old variants are *necessarily* logic
+// errors. Consumed by roadmap steps 3 (completeness audit) and 4 (differential
+// fuzz); the semantics are decision 8 of `docs/plans/plan_step_2.md` §2. Each
+// `to_legacy` names the single [InnerDataError] the old checker emits *first*
+// for that condition in an otherwise-clean state; the mapping is total (the
+// stage-6 backfills bought totality). `is_necessarily_logic_error` is true for
+// exactly the variants whose every possible cause is a tier-2 logic error.
+
+impl LogicError {
+    /// The [InnerDataError] the old checker emits first for this logic error in
+    /// a single-corruption state. Total per `docs/plans/plan_step_2.md` §6.
+    pub fn to_legacy(&self) -> InnerDataError {
+        use InnerDataError as E;
+        match self {
+            LogicError::DuplicatedId(_) => E::DuplicateIds,
+            LogicError::EmptyAssignmentsRow(..) => E::Params(InvariantError::EmptyAssignmentRow),
+            LogicError::EmptySlotsRow(_) => E::Params(InvariantError::EmptySlotsRow),
+            LogicError::EmptyInterrogationRow(slot, week) => {
+                E::ColloscopeError(ColloscopeError::EmptyInterrogationRow(*slot, *week))
+            }
+            LogicError::EmptyColloscopeGroupListRow(group_list) => {
+                E::ColloscopeError(ColloscopeError::EmptyGroupListRow(*group_list))
+            }
+            LogicError::PrefillGroupCountMismatch(_)
+            | LogicError::DuplicatedStudentInPrefilledGroups(_) => {
+                E::Params(InvariantError::InvalidGroupList)
+            }
+            LogicError::PairingRulePartsShareSubject(_) => {
+                E::Params(InvariantError::InvalidPairingRule)
+            }
+            LogicError::SlotPairingRulePartsShareSlot(_) => {
+                E::Params(InvariantError::InvalidSlotPairingRule)
+            }
+        }
+    }
+}
+
+impl FixableInvariant {
+    /// The [InnerDataError] the old checker emits first for this fixable break
+    /// in a single-corruption state. Total per `docs/plans/plan_step_2.md` §6.
+    pub fn to_legacy(&self) -> InnerDataError {
+        match self {
+            FixableInvariant::DanglingFk(reference) => dangling_to_legacy(reference),
+            FixableInvariant::Convergence(convergence) => convergence_to_legacy(convergence),
+        }
+    }
+}
+
+/// The old-checker image of a dangling reference (`docs/plans/plan_step_2.md`
+/// §6 DanglingFk table). Each arm is the variant the old checker reports first
+/// for a single dangle at that site.
+fn dangling_to_legacy(reference: &Reference) -> InnerDataError {
+    use InvariantError as P;
+    match reference {
+        Reference::Period { site, .. } => InnerDataError::Params(match site {
+            // Type-guaranteed by the `Periods` encapsulation (weeks are keyed by
+            // their owning period); kept for totality, never fires.
+            PeriodRefSite::WeekPeriodFk(_) => P::InvalidWeek,
+            PeriodRefSite::SubjectExcludedPeriods(_) => P::InvalidSubject,
+            PeriodRefSite::StudentExcludedPeriods(_) => P::InvalidStudent,
+            PeriodRefSite::PairingRuleExcludedPeriods(_) => P::InvalidPairingRule,
+            PeriodRefSite::SlotPairingRuleExcludedPeriods(_) => P::InvalidSlotPairingRule,
+            PeriodRefSite::AssignmentsKey { .. } => P::InvalidPeriodIdInAssignements,
+            PeriodRefSite::AssociationEntry { .. } => {
+                P::WrongPeriodCountInSubjectAssociationsForGroupLists
+            }
+        }),
+        Reference::Week { target, site } => match site {
+            WeekRefSite::WeekPatternExcludedWeek(_) => {
+                InnerDataError::Params(P::InvalidWeekPattern)
+            }
+            WeekRefSite::ColloscopeInterrogation { .. } => {
+                InnerDataError::ColloscopeError(ColloscopeError::InvalidWeekId(*target))
+            }
+        },
+        Reference::Subject { site, .. } => InnerDataError::Params(match site {
+            SubjectRefSite::TeacherSubjects(_) => P::InvalidTeacher,
+            // The dangling subject is absent from the filtered set at
+            // colloscope_params.rs:566, which fires before validate_slot_internal.
+            SubjectRefSite::SlotSubject(_) => P::SlotsForSubjectWithoutInterrogations,
+            SubjectRefSite::IncompatSubject(_) => P::InvalidIncompat,
+            SubjectRefSite::PairingRuleAntecedent(_) | SubjectRefSite::PairingRuleConsequent(_) => {
+                P::InvalidPairingRule
+            }
+            SubjectRefSite::BalancingSubjectKey => P::InvalidSubjectIdInBalancing,
+            SubjectRefSite::AssignmentsKey { .. } => P::InvalidSubjectIdInAssignments,
+            SubjectRefSite::AssociationEntry { .. } => P::InvalidSubjectIdInSubjectAssociations,
+        }),
+        Reference::Teacher { site, .. } => match site {
+            TeacherRefSite::SlotTeacher(_) => InnerDataError::Params(P::InvalidSlot),
+        },
+        Reference::Student { target, site } => match site {
+            StudentRefSite::GroupListPrefilledStudent(_)
+            | StudentRefSite::GroupListExcludedStudent(_) => {
+                InnerDataError::Params(P::InvalidGroupList)
+            }
+            StudentRefSite::SettingsStudentKey => {
+                InnerDataError::Params(P::InvalidStudentIdInSettings)
+            }
+            StudentRefSite::AssignmentsStudent { .. } => {
+                InnerDataError::Params(P::InvalidStudentIdInAssignments)
+            }
+            StudentRefSite::ColloscopeGroupListStudent(_) => {
+                InnerDataError::ColloscopeError(ColloscopeError::InvalidStudentId(*target))
+            }
+        },
+        Reference::WeekPattern { site, .. } => InnerDataError::Params(match site {
+            WeekPatternRefSite::SlotWeekPattern(_) => P::InvalidSlot,
+            WeekPatternRefSite::IncompatWeekPattern(_) => P::InvalidIncompat,
+        }),
+        Reference::Slot { target, site } => match site {
+            SlotRefSite::SlotPairingRuleAntecedent(_)
+            | SlotRefSite::SlotPairingRuleConsequent(_) => {
+                InnerDataError::Params(P::InvalidSlotPairingRule)
+            }
+            SlotRefSite::ColloscopeInterrogation { .. } => {
+                InnerDataError::ColloscopeError(ColloscopeError::InvalidSlotId(*target))
+            }
+        },
+        Reference::GroupList { target, site } => match site {
+            GroupListRefSite::AssociationEntry { .. } => {
+                InnerDataError::Params(P::InvalidGroupListIdInSubjectAssociations)
+            }
+            GroupListRefSite::ColloscopeGroupListKey => {
+                InnerDataError::ColloscopeError(ColloscopeError::InvalidGroupListId(*target))
+            }
+        },
+    }
+}
+
+/// The old-checker image of a broken convergence predicate
+/// (`docs/plans/plan_step_2.md` §6 Convergence table).
+fn convergence_to_legacy(convergence: &Convergence) -> InnerDataError {
+    use ColloscopeError as CE;
+    use Convergence as V;
+    use InnerDataError as E;
+    use InvariantError as P;
+    match convergence {
+        V::SlotTeacherDoesNotTeachSubject(_) => E::Params(P::InvalidSlot),
+        V::TeacherSubjectWithoutInterrogations(..) => E::Params(P::InvalidTeacher),
+        V::SlotForSubjectWithoutInterrogations(_) => {
+            E::Params(P::SlotsForSubjectWithoutInterrogations)
+        }
+        V::SlotOverflowsDay(_) => E::Params(P::InvalidSlot),
+        V::AssignmentForSubjectNotRunningOnPeriod(..) => {
+            E::Params(P::AssignmentForSubjectNotRunningOnPeriod)
+        }
+        V::AssignedStudentNotPresentForPeriod { .. } => {
+            E::Params(P::AssignedStudentNotPresentForPeriod)
+        }
+        V::AssociationForSubjectWithoutInterrogations(..) => {
+            E::Params(P::SubjectAssociationForSubjectWithoutInterrogations)
+        }
+        V::AssociationForSubjectNotRunningOnPeriod(..) => {
+            E::Params(P::SubjectAssociationForSubjectNotRunningOnPeriod)
+        }
+        V::BalancingForSubjectWithoutInterrogations(_) => {
+            E::Params(P::BalancingForSubjectWithoutInterrogations)
+        }
+        V::PairedSlotsNotInSameSubject(_) => E::Params(P::InvalidSlotPairingRule),
+        V::InterrogationSlotNotRunningOnPeriod(slot, week) => {
+            E::ColloscopeError(CE::SlotNotRunningOnPeriod(*slot, *week))
+        }
+        V::InterrogationOnInactiveWeek(slot, week) => {
+            E::ColloscopeError(CE::InterrogationOnInactiveWeek(*slot, *week))
+        }
+        V::InterrogationGroupOutOfBounds(slot, week) => {
+            E::ColloscopeError(CE::InvalidGroupNumInInterrogation(*slot, *week))
+        }
+        V::ColloscopeGroupListPrefilled(group_list) => {
+            E::ColloscopeError(CE::PrefilledGroupListInColloscope(*group_list))
+        }
+        V::ColloscopeStudentExcluded(group_list, student) => {
+            E::ColloscopeError(CE::ExcludedStudentInGroupList(*group_list, *student))
+        }
+        V::ColloscopeStudentGroupOutOfBounds(group_list, student) => E::ColloscopeError(
+            CE::InvalidGroupNumForStudentInGroupList(*group_list, *student),
+        ),
+    }
+}
+
+impl InnerDataError {
+    /// True iff *every* possible cause of this variant is a tier-2 logic error
+    /// (`docs/plans/plan_step_2.md` decision 8). Mixed-cause coarse variants —
+    /// those a legitimate op could also produce — classify `false`. An inner
+    /// variant not listed here defaults `false`, the lenient (safe) direction.
+    pub fn is_necessarily_logic_error(&self) -> bool {
+        match self {
+            InnerDataError::DuplicateIds => true,
+            InnerDataError::Params(p) => matches!(
+                p,
+                InvariantError::DuplicatedId
+                    | InvariantError::EmptyAssignmentRow
+                    | InvariantError::EmptySlotsRow
+            ),
+            InnerDataError::ColloscopeError(c) => matches!(
+                c,
+                ColloscopeError::EmptyInterrogationRow(..) | ColloscopeError::EmptyGroupListRow(..)
+            ),
+        }
     }
 }
 
@@ -2271,5 +2481,148 @@ mod tests {
             .colloscope
             .set_interrogation(fx.slot, fx.week, BTreeSet::from([0]));
         assert_eq!(fx.data.broken_invariants(), Ok(BTreeSet::new()));
+    }
+
+    // ---- Stage 7: legacy bridge ----
+    //
+    // `to_legacy` and `is_necessarily_logic_error` are unit-checked here for
+    // classification and payload transport; the *operational* proof that each
+    // arm names the variant the old checker really emits first is the
+    // differential harness (`assert_differential`, wired through every fixture)
+    // plus the per-site coverage tests.
+
+    #[test]
+    fn is_necessarily_logic_error_classification() {
+        let slot = unsafe { SlotId::new(1) };
+        let week = unsafe { WeekId::new(2) };
+        let group_list = unsafe { GroupListId::new(3) };
+
+        // The six variants whose every cause is a tier-2 logic error.
+        for e in [
+            InnerDataError::DuplicateIds,
+            InnerDataError::Params(InvariantError::DuplicatedId),
+            InnerDataError::Params(InvariantError::EmptyAssignmentRow),
+            InnerDataError::Params(InvariantError::EmptySlotsRow),
+            InnerDataError::ColloscopeError(ColloscopeError::EmptyInterrogationRow(slot, week)),
+            InnerDataError::ColloscopeError(ColloscopeError::EmptyGroupListRow(group_list)),
+        ] {
+            assert!(e.is_necessarily_logic_error(), "{e:?} should classify true");
+        }
+
+        // The decision-8 coarse variants (a legitimate op could produce them),
+        // plus a couple of representative fixable images.
+        for e in [
+            InnerDataError::Params(InvariantError::InvalidPairingRule),
+            InnerDataError::Params(InvariantError::InvalidGroupList),
+            InnerDataError::Params(InvariantError::InvalidSlotPairingRule),
+            InnerDataError::Params(InvariantError::InvalidWeek),
+            InnerDataError::Params(InvariantError::InvalidSlot),
+            InnerDataError::ColloscopeError(ColloscopeError::InvalidWeekId(week)),
+        ] {
+            assert!(
+                !e.is_necessarily_logic_error(),
+                "{e:?} should classify false"
+            );
+        }
+    }
+
+    #[test]
+    fn to_legacy_payload_plumbing() {
+        let slot = unsafe { SlotId::new(1) };
+        let week = unsafe { WeekId::new(2) };
+        let group_list = unsafe { GroupListId::new(3) };
+        let student = unsafe { StudentId::new(4) };
+
+        // Logic errors that carry the payload straight through.
+        assert_eq!(
+            LogicError::EmptyInterrogationRow(slot, week).to_legacy(),
+            InnerDataError::ColloscopeError(ColloscopeError::EmptyInterrogationRow(slot, week)),
+        );
+        assert_eq!(
+            LogicError::EmptyColloscopeGroupListRow(group_list).to_legacy(),
+            InnerDataError::ColloscopeError(ColloscopeError::EmptyGroupListRow(group_list)),
+        );
+
+        // Dangling colloscope references: the *target* becomes the old error's
+        // payload (the site is dropped — the old checker keys on the target id).
+        assert_eq!(
+            FixableInvariant::DanglingFk(Reference::Week {
+                target: week,
+                site: WeekRefSite::ColloscopeInterrogation { slot },
+            })
+            .to_legacy(),
+            InnerDataError::ColloscopeError(ColloscopeError::InvalidWeekId(week)),
+        );
+        assert_eq!(
+            FixableInvariant::DanglingFk(Reference::Slot {
+                target: slot,
+                site: SlotRefSite::ColloscopeInterrogation { week },
+            })
+            .to_legacy(),
+            InnerDataError::ColloscopeError(ColloscopeError::InvalidSlotId(slot)),
+        );
+        assert_eq!(
+            FixableInvariant::DanglingFk(Reference::Student {
+                target: student,
+                site: StudentRefSite::ColloscopeGroupListStudent(group_list),
+            })
+            .to_legacy(),
+            InnerDataError::ColloscopeError(ColloscopeError::InvalidStudentId(student)),
+        );
+        assert_eq!(
+            FixableInvariant::DanglingFk(Reference::GroupList {
+                target: group_list,
+                site: GroupListRefSite::ColloscopeGroupListKey,
+            })
+            .to_legacy(),
+            InnerDataError::ColloscopeError(ColloscopeError::InvalidGroupListId(group_list)),
+        );
+
+        // The six payload-carrying convergence rows.
+        let convergence_cases = [
+            (
+                Convergence::InterrogationSlotNotRunningOnPeriod(slot, week),
+                InnerDataError::ColloscopeError(ColloscopeError::SlotNotRunningOnPeriod(
+                    slot, week,
+                )),
+            ),
+            (
+                Convergence::InterrogationOnInactiveWeek(slot, week),
+                InnerDataError::ColloscopeError(ColloscopeError::InterrogationOnInactiveWeek(
+                    slot, week,
+                )),
+            ),
+            (
+                Convergence::InterrogationGroupOutOfBounds(slot, week),
+                InnerDataError::ColloscopeError(ColloscopeError::InvalidGroupNumInInterrogation(
+                    slot, week,
+                )),
+            ),
+            (
+                Convergence::ColloscopeGroupListPrefilled(group_list),
+                InnerDataError::ColloscopeError(ColloscopeError::PrefilledGroupListInColloscope(
+                    group_list,
+                )),
+            ),
+            (
+                Convergence::ColloscopeStudentExcluded(group_list, student),
+                InnerDataError::ColloscopeError(ColloscopeError::ExcludedStudentInGroupList(
+                    group_list, student,
+                )),
+            ),
+            (
+                Convergence::ColloscopeStudentGroupOutOfBounds(group_list, student),
+                InnerDataError::ColloscopeError(
+                    ColloscopeError::InvalidGroupNumForStudentInGroupList(group_list, student),
+                ),
+            ),
+        ];
+        for (convergence, expected) in convergence_cases {
+            assert_eq!(
+                FixableInvariant::Convergence(convergence).to_legacy(),
+                expected,
+                "convergence {convergence:?} mapped wrong",
+            );
+        }
     }
 }
