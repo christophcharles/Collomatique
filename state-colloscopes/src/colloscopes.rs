@@ -463,6 +463,7 @@ mod tests {
                 ColloscopeError::EmptyInterrogationRow(slot, week)
             ))
         );
+        crate::invariants::tests::assert_differential(&data);
     }
 
     /// Stage-6 backfill: a stored empty group-list row is likewise rejected.
@@ -478,6 +479,7 @@ mod tests {
                 ColloscopeError::EmptyGroupListRow(group_list)
             ))
         );
+        crate::invariants::tests::assert_differential(&data);
     }
 
     /// Precedence: emptiness fires before id resolution, but a non-empty row
@@ -495,5 +497,6 @@ mod tests {
                 ColloscopeError::InvalidWeekId(week)
             ))
         );
+        crate::invariants::tests::assert_differential(&data);
     }
 }

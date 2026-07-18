@@ -746,7 +746,7 @@ impl InnerDataError {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::InnerData;
     use crate::balancing::BalancingOptions;
@@ -785,6 +785,60 @@ mod tests {
         }
     }
 
+    /// The three-part differential contract of `docs/plans/plan_step_2.md`
+    /// decision 8, cross-checking the new checker against the old first-error
+    /// [crate::InnerData::check_invariants]:
+    ///
+    /// 1. verdicts always agree (old `is_ok()` ⇔ new `Ok(∅)`);
+    /// 2. when the new checker short-circuits with logic errors *and* the old
+    ///    error is itself logic-classified, the old error is the legacy image of
+    ///    one of them — lenient otherwise (in a compound state the old checker
+    ///    may trip a fixable cause first);
+    /// 3. when the new checker reports fixable breaks, the old error is the
+    ///    legacy image of one of them.
+    ///
+    /// `pub(crate)` so `colloscopes.rs`'s stage-6 tests can share it.
+    #[track_caller]
+    pub(crate) fn assert_differential(data: &InnerData) {
+        let old = data.check_invariants();
+        let new = data.broken_invariants();
+        match &new {
+            Ok(fixable) if fixable.is_empty() => {
+                assert_eq!(old, Ok(()), "new checker is clean but old checker errs");
+            }
+            Ok(fixable) => {
+                let e = old.expect_err("new checker found fixable breaks but old checker is clean");
+                assert!(
+                    fixable.iter().any(|f| f.to_legacy() == e),
+                    "old error {e:?} is not the legacy image of any of {fixable:?}",
+                );
+            }
+            Err(logic) => {
+                let e = old.expect_err("new checker found logic errors but old checker is clean");
+                if e.is_necessarily_logic_error() {
+                    assert!(
+                        logic.iter().any(|l| l.to_legacy() == e),
+                        "old logic error {e:?} is not the legacy image of any of {logic:?}",
+                    );
+                }
+                // else: lenient — in a compound state the old checker may trip a
+                // fixable cause first (decision 8, requirement 2).
+            }
+        }
+    }
+
+    /// Runs [assert_differential] on `data`, then returns its
+    /// [crate::InnerData::broken_invariants]. Every fixture below asserts on the
+    /// checker *through this wrapper*, so the differential contract is verified
+    /// on each fixture's state without touching the fixtures themselves.
+    #[track_caller]
+    fn broken_invariants(
+        data: &InnerData,
+    ) -> Result<BTreeSet<FixableInvariant>, BTreeSet<LogicError>> {
+        assert_differential(data);
+        data.broken_invariants()
+    }
+
     // ---- Layer B: the dangling-reference sweep ----
     //
     // Each per-kind test registers just enough host entities that *exactly* the
@@ -806,7 +860,7 @@ mod tests {
             },
         );
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Ok(BTreeSet::from([FixableInvariant::DanglingFk(
                 Reference::Period {
                     target: period,
@@ -829,7 +883,7 @@ mod tests {
             },
         );
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Ok(BTreeSet::from([FixableInvariant::DanglingFk(
                 Reference::Week {
                     target: week,
@@ -852,7 +906,7 @@ mod tests {
             },
         );
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Ok(BTreeSet::from([FixableInvariant::DanglingFk(
                 Reference::Subject {
                     target: subject,
@@ -878,7 +932,7 @@ mod tests {
             Slots::from_subject_rows([(subject, vec![(slot, test_slot(subject, teacher))])])
                 .unwrap();
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Ok(BTreeSet::from([FixableInvariant::DanglingFk(
                 Reference::Teacher {
                     target: teacher,
@@ -897,7 +951,7 @@ mod tests {
             .students
             .insert(student, Limits::default());
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Ok(BTreeSet::from([FixableInvariant::DanglingFk(
                 Reference::Student {
                     target: student,
@@ -933,7 +987,7 @@ mod tests {
         slot_desc.week_pattern = Some(pattern);
         data.params.slots = Slots::from_subject_rows([(subject, vec![(slot, slot_desc)])]).unwrap();
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Ok(BTreeSet::from([FixableInvariant::DanglingFk(
                 Reference::WeekPattern {
                     target: pattern,
@@ -967,7 +1021,7 @@ mod tests {
             },
         );
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Ok(BTreeSet::from([
                 FixableInvariant::DanglingFk(Reference::Slot {
                     target: slot_a,
@@ -994,7 +1048,7 @@ mod tests {
         data.colloscope
             .set_group_list(group_list, BTreeMap::from([(student, 0)]));
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Ok(BTreeSet::from([FixableInvariant::DanglingFk(
                 Reference::GroupList {
                     target: group_list,
@@ -1023,7 +1077,7 @@ mod tests {
             .map
             .insert((period, subject), BTreeSet::from([student]));
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Ok(BTreeSet::from([
                 FixableInvariant::DanglingFk(Reference::Period {
                     target: period,
@@ -1047,7 +1101,7 @@ mod tests {
         data.colloscope
             .set_interrogation(slot, week, BTreeSet::from([0]));
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Ok(BTreeSet::from([
                 FixableInvariant::DanglingFk(Reference::Week {
                     target: week,
@@ -1085,7 +1139,7 @@ mod tests {
             },
         );
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Ok(BTreeSet::from([
                 FixableInvariant::DanglingFk(Reference::Subject {
                     target: subject,
@@ -1102,7 +1156,7 @@ mod tests {
     #[test]
     fn empty_state_has_no_broken_invariants() {
         assert_eq!(
-            InnerData::default().broken_invariants(),
+            broken_invariants(&InnerData::default()),
             Ok(BTreeSet::new())
         );
     }
@@ -1118,6 +1172,12 @@ mod tests {
         for seed in 0..5 {
             let mut rng = ChaCha8Rng::seed_from_u64(seed);
             let (state, _) = harness::bootstrap(&mut rng);
+            // The intentional dev-dep cycle (state-colloscopes ⇄ testgen) makes
+            // rustc instantiate this crate twice in the lib-test build, so the
+            // `InnerData` reachable through `testgen` is a distinct instance from
+            // this module's. It resolves the checker as a method (on its own
+            // instance) but cannot feed the local `broken_invariants` wrapper;
+            // this clean sanity check does not need the differential anyway.
             assert_eq!(
                 state.get_data().get_inner_data().broken_invariants(),
                 Ok(BTreeSet::new()),
@@ -1246,7 +1306,7 @@ mod tests {
             .teacher_map
             .insert(unsafe { TeacherId::new(1) }, Teacher::default());
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Err(BTreeSet::from([LogicError::DuplicatedId(1)]))
         );
     }
@@ -1272,7 +1332,7 @@ mod tests {
             },
         );
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Err(BTreeSet::from([LogicError::DuplicatedId(1)]))
         );
     }
@@ -1287,7 +1347,7 @@ mod tests {
             .map
             .insert((period, subject), BTreeSet::new());
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Err(BTreeSet::from([LogicError::EmptyAssignmentsRow(
                 period, subject
             )]))
@@ -1300,7 +1360,7 @@ mod tests {
         let subject = unsafe { SubjectId::new(1) };
         data.params.slots.forge_ordering_row(subject, vec![]);
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Err(BTreeSet::from([LogicError::EmptySlotsRow(subject)]))
         );
     }
@@ -1313,7 +1373,7 @@ mod tests {
         data.colloscope
             .forge_interrogation_row(slot, week, BTreeSet::new());
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Err(BTreeSet::from([LogicError::EmptyInterrogationRow(
                 slot, week
             )]))
@@ -1327,7 +1387,7 @@ mod tests {
         data.colloscope
             .forge_group_list_row(group_list, BTreeMap::new());
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Err(BTreeSet::from([LogicError::EmptyColloscopeGroupListRow(
                 group_list
             )]))
@@ -1352,7 +1412,7 @@ mod tests {
             },
         );
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Err(BTreeSet::from([LogicError::PrefillGroupCountMismatch(
                 group_list
             )]))
@@ -1387,7 +1447,7 @@ mod tests {
             },
         );
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Err(BTreeSet::from([
                 LogicError::DuplicatedStudentInPrefilledGroups(group_list)
             ]))
@@ -1415,7 +1475,7 @@ mod tests {
             },
         );
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Err(BTreeSet::from([LogicError::PairingRulePartsShareSubject(
                 rule
             )]))
@@ -1443,7 +1503,7 @@ mod tests {
             },
         );
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Err(BTreeSet::from([LogicError::SlotPairingRulePartsShareSlot(
                 rule
             )]))
@@ -1479,7 +1539,7 @@ mod tests {
             },
         );
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Err(BTreeSet::from([
                 LogicError::PrefillGroupCountMismatch(group_list),
                 LogicError::DuplicatedStudentInPrefilledGroups(group_list),
@@ -1524,7 +1584,7 @@ mod tests {
             },
         );
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Err(BTreeSet::from([
                 LogicError::DuplicatedId(1),
                 LogicError::EmptyAssignmentsRow(period, subject),
@@ -1548,7 +1608,7 @@ mod tests {
             },
         );
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Ok(BTreeSet::from([FixableInvariant::DanglingFk(
                 Reference::Period {
                     target: period,
@@ -1567,7 +1627,7 @@ mod tests {
             .map
             .insert((empty_period, empty_subject), BTreeSet::new());
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Err(BTreeSet::from([LogicError::EmptyAssignmentsRow(
                 empty_period,
                 empty_subject
@@ -1710,7 +1770,7 @@ mod tests {
             Slots::from_subject_rows([(subject, vec![(slot, test_slot(subject, teacher))])])
                 .unwrap();
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Ok(BTreeSet::from([FixableInvariant::Convergence(
                 Convergence::SlotTeacherDoesNotTeachSubject(slot)
             )]))
@@ -1735,7 +1795,7 @@ mod tests {
             },
         );
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Ok(BTreeSet::from([FixableInvariant::Convergence(
                 Convergence::TeacherSubjectWithoutInterrogations(teacher, subject)
             )]))
@@ -1766,7 +1826,7 @@ mod tests {
         // Two entries are unavoidable: a slot on an off subject implicates the
         // teacher entry that teaches it as well as the per-slot check.
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Ok(BTreeSet::from([
                 FixableInvariant::Convergence(Convergence::TeacherSubjectWithoutInterrogations(
                     teacher, subject
@@ -1801,7 +1861,7 @@ mod tests {
             Slots::from_subject_rows([(subject, vec![(slot, slot_at(subject, teacher, 23, 30))])])
                 .unwrap();
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Ok(BTreeSet::from([FixableInvariant::Convergence(
                 Convergence::SlotOverflowsDay(slot)
             )]))
@@ -1830,7 +1890,7 @@ mod tests {
         data.params.slots =
             Slots::from_subject_rows([(subject, vec![(slot, slot_at(subject, teacher, 23, 0))])])
                 .unwrap();
-        assert_eq!(data.broken_invariants(), Ok(BTreeSet::new()));
+        assert_eq!(broken_invariants(&data), Ok(BTreeSet::new()));
     }
 
     #[test]
@@ -1862,7 +1922,7 @@ mod tests {
             .map
             .insert((period, subject), BTreeSet::from([student]));
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Ok(BTreeSet::from([FixableInvariant::Convergence(
                 Convergence::AssignmentForSubjectNotRunningOnPeriod(period, subject)
             )]))
@@ -1894,7 +1954,7 @@ mod tests {
             .map
             .insert((period, subject), BTreeSet::from([student]));
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Ok(BTreeSet::from([FixableInvariant::Convergence(
                 Convergence::AssignedStudentNotPresentForPeriod {
                     period,
@@ -1927,7 +1987,7 @@ mod tests {
             .subjects_associations
             .insert((period, subject), group_list);
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Ok(BTreeSet::from([FixableInvariant::Convergence(
                 Convergence::AssociationForSubjectWithoutInterrogations(period, subject)
             )]))
@@ -1963,7 +2023,7 @@ mod tests {
             .subjects_associations
             .insert((period, subject), group_list);
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Ok(BTreeSet::from([FixableInvariant::Convergence(
                 Convergence::AssociationForSubjectNotRunningOnPeriod(period, subject)
             )]))
@@ -2004,7 +2064,7 @@ mod tests {
             .subjects_associations
             .insert((period, subject), group_list);
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Ok(BTreeSet::from([
                 FixableInvariant::Convergence(
                     Convergence::AssociationForSubjectWithoutInterrogations(period, subject)
@@ -2030,7 +2090,7 @@ mod tests {
             .subjects
             .insert(subject, BalancingOptions::default());
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Ok(BTreeSet::from([FixableInvariant::Convergence(
                 Convergence::BalancingForSubjectWithoutInterrogations(subject)
             )]))
@@ -2084,7 +2144,7 @@ mod tests {
             },
         );
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Ok(BTreeSet::from([FixableInvariant::Convergence(
                 Convergence::PairedSlotsNotInSameSubject(rule)
             )]))
@@ -2108,7 +2168,7 @@ mod tests {
         // Excluding the period breaks both the interrogation row and the
         // fixture's own association row.
         assert_eq!(
-            fx.data.broken_invariants(),
+            broken_invariants(&fx.data),
             Ok(BTreeSet::from([
                 FixableInvariant::Convergence(
                     Convergence::AssociationForSubjectNotRunningOnPeriod(fx.period, fx.subject)
@@ -2128,7 +2188,7 @@ mod tests {
             .colloscope
             .set_interrogation(fx.slot, fx.week, BTreeSet::from([0]));
         assert_eq!(
-            fx.data.broken_invariants(),
+            broken_invariants(&fx.data),
             Ok(BTreeSet::from([FixableInvariant::Convergence(
                 Convergence::InterrogationOnInactiveWeek(fx.slot, fx.week)
             )]))
@@ -2154,7 +2214,7 @@ mod tests {
             .colloscope
             .set_interrogation(fx.slot, fx.week, BTreeSet::from([0]));
         assert_eq!(
-            fx.data.broken_invariants(),
+            broken_invariants(&fx.data),
             Ok(BTreeSet::from([FixableInvariant::Convergence(
                 Convergence::InterrogationOnInactiveWeek(fx.slot, fx.week)
             )]))
@@ -2169,7 +2229,7 @@ mod tests {
             .colloscope
             .set_interrogation(fx.slot, fx.week, BTreeSet::from([2]));
         assert_eq!(
-            fx.data.broken_invariants(),
+            broken_invariants(&fx.data),
             Ok(BTreeSet::from([FixableInvariant::Convergence(
                 Convergence::InterrogationGroupOutOfBounds(fx.slot, fx.week)
             )]))
@@ -2180,7 +2240,7 @@ mod tests {
         fx.data
             .colloscope
             .set_interrogation(fx.slot, fx.week, BTreeSet::from([0, 1]));
-        assert_eq!(fx.data.broken_invariants(), Ok(BTreeSet::new()));
+        assert_eq!(broken_invariants(&fx.data), Ok(BTreeSet::new()));
     }
 
     #[test]
@@ -2197,7 +2257,7 @@ mod tests {
             .colloscope
             .set_interrogation(fx.slot, fx.week, BTreeSet::from([0]));
         assert_eq!(
-            fx.data.broken_invariants(),
+            broken_invariants(&fx.data),
             Ok(BTreeSet::from([FixableInvariant::Convergence(
                 Convergence::InterrogationGroupOutOfBounds(fx.slot, fx.week)
             )]))
@@ -2230,7 +2290,7 @@ mod tests {
         data.colloscope
             .set_group_list(group_list, BTreeMap::from([(student, 0)]));
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Ok(BTreeSet::from([FixableInvariant::Convergence(
                 Convergence::ColloscopeGroupListPrefilled(group_list)
             )]))
@@ -2261,7 +2321,7 @@ mod tests {
         data.colloscope
             .set_group_list(group_list, BTreeMap::from([(student, 0)]));
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Ok(BTreeSet::from([FixableInvariant::Convergence(
                 Convergence::ColloscopeStudentExcluded(group_list, student)
             )]))
@@ -2285,7 +2345,7 @@ mod tests {
         data.colloscope
             .set_group_list(group_list, BTreeMap::from([(student, 5)]));
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Ok(BTreeSet::from([FixableInvariant::Convergence(
                 Convergence::ColloscopeStudentGroupOutOfBounds(group_list, student)
             )]))
@@ -2304,7 +2364,7 @@ mod tests {
             .colloscope
             .set_interrogation(forged_slot, fx.week, BTreeSet::from([0]));
         assert_eq!(
-            fx.data.broken_invariants(),
+            broken_invariants(&fx.data),
             Ok(BTreeSet::from([FixableInvariant::DanglingFk(
                 Reference::Slot {
                     target: forged_slot,
@@ -2330,7 +2390,7 @@ mod tests {
             .colloscope
             .set_interrogation(fx.slot, fx.week, BTreeSet::from([5]));
         assert_eq!(
-            fx.data.broken_invariants(),
+            broken_invariants(&fx.data),
             Ok(BTreeSet::from([FixableInvariant::DanglingFk(
                 Reference::GroupList {
                     target: forged_gl,
@@ -2358,7 +2418,7 @@ mod tests {
             .colloscope
             .set_interrogation(fx.slot, fx.week, BTreeSet::from([0]));
         assert_eq!(
-            fx.data.broken_invariants(),
+            broken_invariants(&fx.data),
             Ok(BTreeSet::from([FixableInvariant::DanglingFk(
                 Reference::WeekPattern {
                     target: forged_pattern,
@@ -2391,7 +2451,7 @@ mod tests {
             .map
             .insert((period, forged_subject), BTreeSet::from([student]));
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Ok(BTreeSet::from([
                 FixableInvariant::DanglingFk(Reference::Subject {
                     target: forged_subject,
@@ -2425,7 +2485,7 @@ mod tests {
         )])
         .unwrap();
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Ok(BTreeSet::from([
                 FixableInvariant::DanglingFk(Reference::Subject {
                     target: forged_subject,
@@ -2464,7 +2524,7 @@ mod tests {
             .map
             .insert((empty_period, empty_subject), BTreeSet::new());
         assert_eq!(
-            data.broken_invariants(),
+            broken_invariants(&data),
             Err(BTreeSet::from([LogicError::EmptyAssignmentsRow(
                 empty_period,
                 empty_subject
@@ -2480,7 +2540,202 @@ mod tests {
         fx.data
             .colloscope
             .set_interrogation(fx.slot, fx.week, BTreeSet::from([0]));
-        assert_eq!(fx.data.broken_invariants(), Ok(BTreeSet::new()));
+        assert_eq!(broken_invariants(&fx.data), Ok(BTreeSet::new()));
+    }
+
+    // ---- Stage 7: compound states ----
+    //
+    // States with more than one corruption, pinning the differential contract's
+    // *lenient* branch (decision 8, requirement 2) and membership under
+    // multiplicity (requirement 3). Each asserts the exact new *and* old output,
+    // then runs `assert_differential` explicitly to document the branch taken.
+
+    #[test]
+    fn compound_row_both_empty_and_not_running() {
+        // One assignments row that is *both* empty (a layer-A logic error) and on
+        // a subject that excludes the period (a convergence). The new checker
+        // short-circuits on the logic error; the old checker's subject-runs check
+        // (colloscope_params.rs:465) fires *before* its empty-row check (:469), so
+        // the old error is the (non-logic-classified) convergence image — the
+        // differential's lenient branch, verdicts still agreeing.
+        let mut data = InnerData::default();
+        let period = unsafe { PeriodId::new(1) };
+        let week = unsafe { WeekId::new(2) };
+        let subject = unsafe { SubjectId::new(3) };
+        data.params.periods = test_periods(period, week, WeekDesc::default());
+        data.params
+            .subjects
+            .ordered_subject_list
+            .insert_at(
+                0,
+                subject,
+                Subject {
+                    excluded_periods: BTreeSet::from([period]),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        data.params
+            .assignments
+            .map
+            .insert((period, subject), BTreeSet::new());
+        assert_eq!(
+            broken_invariants(&data),
+            Err(BTreeSet::from([LogicError::EmptyAssignmentsRow(
+                period, subject
+            )]))
+        );
+        assert_eq!(
+            data.check_invariants(),
+            Err(InnerDataError::Params(
+                InvariantError::AssignmentForSubjectNotRunningOnPeriod
+            ))
+        );
+        assert_differential(&data);
+    }
+
+    #[test]
+    fn compound_logic_error_with_earlier_fixable() {
+        // A two-corruption state: an empty assignments row (layer-A logic error)
+        // and, unrelated, a dangling subject in a teacher's `subjects`. The new
+        // checker short-circuits on the logic error; the old checker meets the
+        // dangle first (teachers are swept before assignments) and reports the
+        // non-logic-classified `InvalidTeacher` — again the lenient branch.
+        let mut data = InnerData::default();
+        let teacher = unsafe { TeacherId::new(1) };
+        let dangling_subject = unsafe { SubjectId::new(99) };
+        let period = unsafe { PeriodId::new(2) };
+        let subject = unsafe { SubjectId::new(3) };
+        data.params.teachers.teacher_map.insert(
+            teacher,
+            Teacher {
+                subjects: BTreeSet::from([dangling_subject]),
+                ..Default::default()
+            },
+        );
+        data.params
+            .assignments
+            .map
+            .insert((period, subject), BTreeSet::new());
+        assert_eq!(
+            broken_invariants(&data),
+            Err(BTreeSet::from([LogicError::EmptyAssignmentsRow(
+                period, subject
+            )]))
+        );
+        assert_eq!(
+            data.check_invariants(),
+            Err(InnerDataError::Params(InvariantError::InvalidTeacher))
+        );
+        assert_differential(&data);
+    }
+
+    #[test]
+    fn compound_duplicate_id_with_dangling_ref() {
+        // A raw id shared by a student and a teacher (logic error) *plus* a
+        // dangling period in that student's exclusions. Both checkers prioritise
+        // the id collision (the old checker's duplicate-id gate runs before every
+        // helper; the new checker's layer A short-circuits), so the old error is
+        // logic-classified and membership must hold.
+        let mut data = InnerData::default();
+        let dangling_period = unsafe { PeriodId::new(50) };
+        data.params.students.student_map.insert(
+            unsafe { StudentId::new(1) },
+            Student {
+                excluded_periods: BTreeSet::from([dangling_period]),
+                ..Default::default()
+            },
+        );
+        data.params
+            .teachers
+            .teacher_map
+            .insert(unsafe { TeacherId::new(1) }, Teacher::default());
+        assert_eq!(
+            broken_invariants(&data),
+            Err(BTreeSet::from([LogicError::DuplicatedId(1)]))
+        );
+        assert_eq!(data.check_invariants(), Err(InnerDataError::DuplicateIds));
+        assert_differential(&data);
+    }
+
+    #[test]
+    fn compound_two_fixable_breaks() {
+        // Two independent dangling references — a teacher in a slot and a student
+        // in `settings` — so the new checker's `Ok` payload has two entries. The
+        // old checker reports the slots sweep first (`InvalidSlot`, before
+        // settings), which must be the legacy image of *one* of the two
+        // (requirement 3 membership with |F| > 1).
+        let mut data = InnerData::default();
+        let subject = unsafe { SubjectId::new(1) };
+        let slot = unsafe { SlotId::new(2) };
+        let teacher = unsafe { TeacherId::new(3) };
+        let student = unsafe { StudentId::new(4) };
+        data.params
+            .subjects
+            .ordered_subject_list
+            .insert_at(0, subject, Subject::default())
+            .unwrap();
+        data.params.slots =
+            Slots::from_subject_rows([(subject, vec![(slot, test_slot(subject, teacher))])])
+                .unwrap();
+        data.params
+            .settings
+            .students
+            .insert(student, Limits::default());
+        assert_eq!(
+            broken_invariants(&data),
+            Ok(BTreeSet::from([
+                FixableInvariant::DanglingFk(Reference::Teacher {
+                    target: teacher,
+                    site: TeacherRefSite::SlotTeacher(slot),
+                }),
+                FixableInvariant::DanglingFk(Reference::Student {
+                    target: student,
+                    site: StudentRefSite::SettingsStudentKey,
+                }),
+            ]))
+        );
+        assert_eq!(
+            data.check_invariants(),
+            Err(InnerDataError::Params(InvariantError::InvalidSlot))
+        );
+        assert_differential(&data);
+    }
+
+    #[test]
+    fn compound_convergence_with_dangling() {
+        // A clean fixture twisted into a day-overflowing slot (a convergence) with
+        // an added dangling student in `settings`. The new checker reports both,
+        // as `Ok`; the old checker stops at the slots sweep (`InvalidSlot`, before
+        // settings), the legacy image of the convergence entry.
+        let mut fx = colloscope_fixture();
+        let dangling_student = unsafe { StudentId::new(99) };
+        // 23:30 + the default 60-minute interrogation crosses midnight.
+        fx.data.params.slots = Slots::from_subject_rows([(
+            fx.subject,
+            vec![(fx.slot, slot_at(fx.subject, fx.teacher, 23, 30))],
+        )])
+        .unwrap();
+        fx.data
+            .params
+            .settings
+            .students
+            .insert(dangling_student, Limits::default());
+        assert_eq!(
+            broken_invariants(&fx.data),
+            Ok(BTreeSet::from([
+                FixableInvariant::DanglingFk(Reference::Student {
+                    target: dangling_student,
+                    site: StudentRefSite::SettingsStudentKey,
+                }),
+                FixableInvariant::Convergence(Convergence::SlotOverflowsDay(fx.slot)),
+            ]))
+        );
+        assert_eq!(
+            fx.data.check_invariants(),
+            Err(InnerDataError::Params(InvariantError::InvalidSlot))
+        );
+        assert_differential(&fx.data);
     }
 
     // ---- Stage 7: legacy bridge ----
