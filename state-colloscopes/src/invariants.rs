@@ -28,13 +28,15 @@
 //! both dangling and convergence-broken, `min()` picks the precise row-removal
 //! fix over the lossy one.
 //!
-//! The checker itself ([crate::InnerData]`::broken_invariants`) lands in later
-//! stages; this module is vocabulary only.
+//! The checker ([crate::InnerData]`::broken_invariants`) lives here too: the
+//! logic-error sweep (layer A, the `Err` path) and the dangling-reference sweep
+//! (layer B) are implemented; the convergence layer lands in a later stage.
 
 use std::collections::BTreeSet;
 
 use thiserror::Error;
 
+use crate::group_lists::GroupListFilling;
 use crate::ids::{
     GroupListId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId, SubjectId,
     TeacherId, WeekId, WeekPatternId,
@@ -177,11 +179,91 @@ impl crate::InnerData {
     /// legitimate elementary op can reach — and short-circuits: a logic error
     /// undermines the meaningfulness of the fixable sweep.
     ///
-    /// Coverage so far: the dangling-reference sweep (layer B). The
-    /// logic-error layer (stage 4) and the convergence layer (stage 5) land
-    /// next; until then the result is always `Ok`.
+    /// Coverage so far: the logic-error sweep (layer A, the `Err` path) and the
+    /// dangling-reference sweep (layer B, part of the `Ok` payload). The
+    /// convergence layer lands next; until then a clean logic-error sweep gives
+    /// an `Ok` holding only dangling references.
     pub fn broken_invariants(&self) -> Result<BTreeSet<FixableInvariant>, BTreeSet<LogicError>> {
+        let logic_errors = self.logic_errors();
+        if !logic_errors.is_empty() {
+            return Err(logic_errors);
+        }
         Ok(self.dangling_refs())
+    }
+
+    /// Layer A: every [LogicError] in the document — a state no legitimate
+    /// elementary op can reach (see [LogicError] for the classification rule).
+    /// Each check is decidable from a row's own value (or, for the duplicate-id
+    /// sweep, whole-document id uniqueness), so no reference-resolution guard is
+    /// needed and the sweep is exhaustive: unlike the old first-error checker,
+    /// every broken row is reported, and both prefill predicates can fire on the
+    /// same group list. A non-empty result short-circuits [Self::broken_invariants]
+    /// as `Err` — a logic error undermines the meaningfulness of the fixable sweep.
+    fn logic_errors(&self) -> BTreeSet<LogicError> {
+        let mut errors = BTreeSet::new();
+
+        // Duplicate raw ids across the shared `u64` namespace. The old check
+        // (`InnerData::check_no_duplicate_ids`) is a bool; here each colliding
+        // raw id is reported (an id reused three times still yields one entry —
+        // the set dedups).
+        let mut seen = BTreeSet::new();
+        for id in self.ids() {
+            if !seen.insert(id) {
+                errors.insert(LogicError::DuplicatedId(id));
+            }
+        }
+
+        // Canonical-absent rows: a stored row exists iff it is non-empty.
+        for (period, subject, students) in self.params.assignments.iter() {
+            if students.is_empty() {
+                errors.insert(LogicError::EmptyAssignmentsRow(period, subject));
+            }
+        }
+        for (subject, order) in self.params.slots.ordering_entries() {
+            if order.is_empty() {
+                errors.insert(LogicError::EmptySlotsRow(subject));
+            }
+        }
+        for ((slot, week), groups) in self.colloscope.iter() {
+            if groups.is_empty() {
+                errors.insert(LogicError::EmptyInterrogationRow(slot, week));
+            }
+        }
+        for (group_list, placements) in self.colloscope.group_lists_iter() {
+            if placements.is_empty() {
+                errors.insert(LogicError::EmptyColloscopeGroupListRow(group_list));
+            }
+        }
+
+        // Prefilled group lists: the group count matches the names, and no
+        // student appears twice. `check_duplicated_student` is vacuously true
+        // for `Automatic`, but we only reach it inside the `Prefilled` arm —
+        // reusing it keeps the predicate identical to the old checker's.
+        for (id, group_list) in self.params.group_lists.group_list_map.iter() {
+            if let GroupListFilling::Prefilled { groups } = &group_list.filling {
+                if groups.len() != group_list.params.group_names.len() {
+                    errors.insert(LogicError::PrefillGroupCountMismatch(id));
+                }
+                if !group_list.filling.check_duplicated_student() {
+                    errors.insert(LogicError::DuplicatedStudentInPrefilledGroups(id));
+                }
+            }
+        }
+
+        // Parts-share-an-id predicates: a rule whose antecedent and consequent
+        // name the same subject/slot is degenerate.
+        for (id, rule) in self.params.pairings.pairing_rule_map.iter() {
+            if rule.antecedent.subject_id == rule.consequent.subject_id {
+                errors.insert(LogicError::PairingRulePartsShareSubject(id));
+            }
+        }
+        for (id, rule) in self.params.slot_pairings.slot_pairing_rule_map.iter() {
+            if rule.antecedent.slot_id == rule.consequent.slot_id {
+                errors.insert(LogicError::SlotPairingRulePartsShareSlot(id));
+            }
+        }
+
+        errors
     }
 
     /// Layer B: every registry edge ([Self::for_each_reference]) whose target
@@ -229,7 +311,9 @@ impl crate::InnerData {
 mod tests {
     use super::*;
     use crate::InnerData;
+    use crate::group_lists::{GroupList, GroupListFilling, GroupListParameters, PrefilledGroup};
     use crate::ids::Id;
+    use crate::pairings::{PairingRule, RulePart};
     use crate::refs::{
         GroupListRefSite, PeriodRefSite, Reference, SlotRefSite, StudentRefSite, SubjectRefSite,
         TeacherRefSite, WeekPatternRefSite, WeekRefSite,
@@ -691,5 +775,358 @@ mod tests {
         set.insert(convergence);
         set.insert(dangling);
         assert!(matches!(set.first(), Some(FixableInvariant::DanglingFk(_))));
+    }
+
+    // ---- Layer A: logic errors (the `Err` path) ----
+    //
+    // Each test forges *exactly* one broken row (or, for the collection tests,
+    // a controlled few) and asserts exact set equality on the whole `Err(...)`.
+    // Corruption reaches otherwise-unreachable states through pub map fields,
+    // forged ids (`unsafe { Id::new(n) }`), and the `#[cfg(test)]` `forge_*`
+    // hatches on `Slots` / `Colloscope` (the three empty-row variants have no
+    // production surface — the canonicalizing setters drop empty writes).
+
+    #[test]
+    fn duplicated_id_is_reported() {
+        // The same raw id used by a student and a teacher: two distinct entities
+        // collide in the shared u64 namespace. Empty entities create no refs, so
+        // the id collision is the only fault.
+        let mut data = InnerData::default();
+        data.params
+            .students
+            .student_map
+            .insert(unsafe { StudentId::new(1) }, Student::default());
+        data.params
+            .teachers
+            .teacher_map
+            .insert(unsafe { TeacherId::new(1) }, Teacher::default());
+        assert_eq!(
+            data.broken_invariants(),
+            Err(BTreeSet::from([LogicError::DuplicatedId(1)]))
+        );
+    }
+
+    #[test]
+    fn duplicated_id_reported_once_per_raw_id() {
+        // The same raw id shared by three entities still yields a single entry:
+        // the `BTreeSet` dedups on the raw id, not the occurrence.
+        let mut data = InnerData::default();
+        data.params
+            .students
+            .student_map
+            .insert(unsafe { StudentId::new(1) }, Student::default());
+        data.params
+            .teachers
+            .teacher_map
+            .insert(unsafe { TeacherId::new(1) }, Teacher::default());
+        data.params.week_patterns.week_pattern_map.insert(
+            unsafe { WeekPatternId::new(1) },
+            WeekPattern {
+                name: "P".into(),
+                excluded_weeks: BTreeSet::new(),
+            },
+        );
+        assert_eq!(
+            data.broken_invariants(),
+            Err(BTreeSet::from([LogicError::DuplicatedId(1)]))
+        );
+    }
+
+    #[test]
+    fn empty_assignments_row() {
+        let mut data = InnerData::default();
+        let period = unsafe { PeriodId::new(1) };
+        let subject = unsafe { SubjectId::new(2) };
+        data.params
+            .assignments
+            .map
+            .insert((period, subject), BTreeSet::new());
+        assert_eq!(
+            data.broken_invariants(),
+            Err(BTreeSet::from([LogicError::EmptyAssignmentsRow(
+                period, subject
+            )]))
+        );
+    }
+
+    #[test]
+    fn empty_slots_row() {
+        let mut data = InnerData::default();
+        let subject = unsafe { SubjectId::new(1) };
+        data.params.slots.forge_ordering_row(subject, vec![]);
+        assert_eq!(
+            data.broken_invariants(),
+            Err(BTreeSet::from([LogicError::EmptySlotsRow(subject)]))
+        );
+    }
+
+    #[test]
+    fn empty_interrogation_row() {
+        let mut data = InnerData::default();
+        let slot = unsafe { SlotId::new(1) };
+        let week = unsafe { WeekId::new(2) };
+        data.colloscope
+            .forge_interrogation_row(slot, week, BTreeSet::new());
+        assert_eq!(
+            data.broken_invariants(),
+            Err(BTreeSet::from([LogicError::EmptyInterrogationRow(
+                slot, week
+            )]))
+        );
+    }
+
+    #[test]
+    fn empty_colloscope_group_list_row() {
+        let mut data = InnerData::default();
+        let group_list = unsafe { GroupListId::new(1) };
+        data.colloscope
+            .forge_group_list_row(group_list, BTreeMap::new());
+        assert_eq!(
+            data.broken_invariants(),
+            Err(BTreeSet::from([LogicError::EmptyColloscopeGroupListRow(
+                group_list
+            )]))
+        );
+    }
+
+    #[test]
+    fn prefill_group_count_mismatch() {
+        // One named group, zero prefilled groups: the count differs. Zero groups
+        // ⇒ the duplicate-student predicate is vacuously clean, isolating the
+        // variant. `group_names` must be set explicitly — the default is 16.
+        let mut data = InnerData::default();
+        let group_list = unsafe { GroupListId::new(1) };
+        data.params.group_lists.group_list_map.insert(
+            group_list,
+            GroupList {
+                params: GroupListParameters {
+                    group_names: vec![None],
+                    ..Default::default()
+                },
+                filling: GroupListFilling::Prefilled { groups: vec![] },
+            },
+        );
+        assert_eq!(
+            data.broken_invariants(),
+            Err(BTreeSet::from([LogicError::PrefillGroupCountMismatch(
+                group_list
+            )]))
+        );
+    }
+
+    #[test]
+    fn duplicated_student_in_prefilled_groups() {
+        // Two named groups, two prefilled groups (count matches), both holding
+        // the same student. The student id dangles, but the `Err` path never
+        // runs the dangling sweep — only the duplicate-student error surfaces.
+        let mut data = InnerData::default();
+        let group_list = unsafe { GroupListId::new(1) };
+        let student = unsafe { StudentId::new(2) };
+        data.params.group_lists.group_list_map.insert(
+            group_list,
+            GroupList {
+                params: GroupListParameters {
+                    group_names: vec![None, None],
+                    ..Default::default()
+                },
+                filling: GroupListFilling::Prefilled {
+                    groups: vec![
+                        PrefilledGroup {
+                            students: BTreeSet::from([student]),
+                        },
+                        PrefilledGroup {
+                            students: BTreeSet::from([student]),
+                        },
+                    ],
+                },
+            },
+        );
+        assert_eq!(
+            data.broken_invariants(),
+            Err(BTreeSet::from([
+                LogicError::DuplicatedStudentInPrefilledGroups(group_list)
+            ]))
+        );
+    }
+
+    #[test]
+    fn pairing_rule_parts_share_subject() {
+        let mut data = InnerData::default();
+        let rule = unsafe { PairingRuleId::new(1) };
+        let subject = unsafe { SubjectId::new(2) };
+        data.params.pairings.pairing_rule_map.insert(
+            rule,
+            PairingRule {
+                antecedent: RulePart {
+                    subject_id: subject,
+                    should_have: true,
+                },
+                consequent: RulePart {
+                    subject_id: subject,
+                    should_have: false,
+                },
+                excluded_periods: BTreeSet::new(),
+                soft: false,
+            },
+        );
+        assert_eq!(
+            data.broken_invariants(),
+            Err(BTreeSet::from([LogicError::PairingRulePartsShareSubject(
+                rule
+            )]))
+        );
+    }
+
+    #[test]
+    fn slot_pairing_rule_parts_share_slot() {
+        let mut data = InnerData::default();
+        let rule = unsafe { SlotPairingRuleId::new(1) };
+        let slot = unsafe { SlotId::new(2) };
+        data.params.slot_pairings.slot_pairing_rule_map.insert(
+            rule,
+            SlotPairingRule {
+                antecedent: SlotRulePart {
+                    slot_id: slot,
+                    should_have: true,
+                },
+                consequent: SlotRulePart {
+                    slot_id: slot,
+                    should_have: false,
+                },
+                excluded_periods: BTreeSet::new(),
+                soft: false,
+            },
+        );
+        assert_eq!(
+            data.broken_invariants(),
+            Err(BTreeSet::from([LogicError::SlotPairingRulePartsShareSlot(
+                rule
+            )]))
+        );
+    }
+
+    #[test]
+    fn both_prefill_errors_on_one_list() {
+        // Three named groups but only two prefilled groups (count mismatch), and
+        // those two share a student (duplicate). Both predicates fire on the same
+        // list — the exhaustive-collection contract the old first-error checker
+        // could not honor.
+        let mut data = InnerData::default();
+        let group_list = unsafe { GroupListId::new(1) };
+        let student = unsafe { StudentId::new(2) };
+        data.params.group_lists.group_list_map.insert(
+            group_list,
+            GroupList {
+                params: GroupListParameters {
+                    group_names: vec![None, None, None],
+                    ..Default::default()
+                },
+                filling: GroupListFilling::Prefilled {
+                    groups: vec![
+                        PrefilledGroup {
+                            students: BTreeSet::from([student]),
+                        },
+                        PrefilledGroup {
+                            students: BTreeSet::from([student]),
+                        },
+                    ],
+                },
+            },
+        );
+        assert_eq!(
+            data.broken_invariants(),
+            Err(BTreeSet::from([
+                LogicError::PrefillGroupCountMismatch(group_list),
+                LogicError::DuplicatedStudentInPrefilledGroups(group_list),
+            ]))
+        );
+    }
+
+    #[test]
+    fn multiple_logic_errors_all_reported() {
+        // A duplicate id, an empty assignments row, and a degenerate pairing rule
+        // in one state: all three surface together.
+        let mut data = InnerData::default();
+        data.params
+            .students
+            .student_map
+            .insert(unsafe { StudentId::new(1) }, Student::default());
+        data.params
+            .teachers
+            .teacher_map
+            .insert(unsafe { TeacherId::new(1) }, Teacher::default());
+        let period = unsafe { PeriodId::new(2) };
+        let subject = unsafe { SubjectId::new(3) };
+        data.params
+            .assignments
+            .map
+            .insert((period, subject), BTreeSet::new());
+        let rule = unsafe { PairingRuleId::new(4) };
+        let shared = unsafe { SubjectId::new(5) };
+        data.params.pairings.pairing_rule_map.insert(
+            rule,
+            PairingRule {
+                antecedent: RulePart {
+                    subject_id: shared,
+                    should_have: true,
+                },
+                consequent: RulePart {
+                    subject_id: shared,
+                    should_have: false,
+                },
+                excluded_periods: BTreeSet::new(),
+                soft: false,
+            },
+        );
+        assert_eq!(
+            data.broken_invariants(),
+            Err(BTreeSet::from([
+                LogicError::DuplicatedId(1),
+                LogicError::EmptyAssignmentsRow(period, subject),
+                LogicError::PairingRulePartsShareSubject(rule),
+            ]))
+        );
+    }
+
+    #[test]
+    fn logic_error_short_circuits_dangling_sweep() {
+        // The stage-3 dangling fixture: a student excluding a non-existent
+        // period. On its own it is a fixable dangling reference.
+        let mut data = InnerData::default();
+        let student = unsafe { StudentId::new(1) };
+        let period = unsafe { PeriodId::new(2) };
+        data.params.students.student_map.insert(
+            student,
+            Student {
+                excluded_periods: BTreeSet::from([period]),
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            data.broken_invariants(),
+            Ok(BTreeSet::from([FixableInvariant::DanglingFk(
+                Reference::Period {
+                    target: period,
+                    site: PeriodRefSite::StudentExcludedPeriods(student),
+                }
+            )]))
+        );
+
+        // Add a logic error to the *same* state: the verdict flips wholesale to
+        // `Err`, and the dangling reference no longer appears — the fixable sweep
+        // never runs.
+        let empty_period = unsafe { PeriodId::new(3) };
+        let empty_subject = unsafe { SubjectId::new(4) };
+        data.params
+            .assignments
+            .map
+            .insert((empty_period, empty_subject), BTreeSet::new());
+        assert_eq!(
+            data.broken_invariants(),
+            Err(BTreeSet::from([LogicError::EmptyAssignmentsRow(
+                empty_period,
+                empty_subject
+            )]))
+        );
     }
 }

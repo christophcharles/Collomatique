@@ -98,6 +98,33 @@ impl Colloscope {
             self.group_lists.insert(id, placements);
         }
     }
+
+    /// Test-only corruption: inserts an interrogation row verbatim, bypassing
+    /// the canonicalizing [Self::set_interrogation] — a stored empty row is
+    /// exactly the [crate::invariants::LogicError::EmptyInterrogationRow] the
+    /// invariant checker must detect, and no production surface can produce it.
+    #[cfg(test)]
+    pub(crate) fn forge_interrogation_row(
+        &mut self,
+        slot: SlotId,
+        week: WeekId,
+        groups: BTreeSet<u32>,
+    ) {
+        self.interrogations.insert((slot, week), groups);
+    }
+
+    /// Test-only corruption: inserts a group-list row verbatim, bypassing the
+    /// canonicalizing [Self::set_group_list] — a stored empty row is exactly
+    /// the [crate::invariants::LogicError::EmptyColloscopeGroupListRow] the
+    /// invariant checker must detect.
+    #[cfg(test)]
+    pub(crate) fn forge_group_list_row(
+        &mut self,
+        id: GroupListId,
+        placements: BTreeMap<StudentId, u32>,
+    ) {
+        self.group_lists.insert(id, placements);
+    }
 }
 
 impl Colloscope {

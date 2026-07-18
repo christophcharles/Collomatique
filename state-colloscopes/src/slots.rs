@@ -104,6 +104,16 @@ impl Slots {
         Ok(Slots { slot_map, ordering })
     }
 
+    /// Test-only corruption: inserts an ordering row verbatim, bypassing the
+    /// canonical-sparse discipline of [Self::from_subject_rows] (which drops
+    /// empty rows) — a stored empty row is exactly the
+    /// [crate::invariants::LogicError::EmptySlotsRow] the invariant checker must
+    /// detect, and no production surface can produce it.
+    #[cfg(test)]
+    pub(crate) fn forge_ordering_row(&mut self, subject: SubjectId, order: Vec<SlotId>) {
+        self.ordering.insert(subject, order);
+    }
+
     // ---- Read surface ----
     //
     // These methods are the sanctioned way to read the slots. Consumers go
