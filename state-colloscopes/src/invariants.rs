@@ -762,6 +762,51 @@ impl InnerDataError {
     }
 }
 
+/// The three-part differential contract of `docs/plans/plan_step_2.md`
+/// decision 8, cross-checking the new checker against the old first-error
+/// [crate::InnerData::check_invariants]:
+///
+/// 1. verdicts always agree (old `is_ok()` ⇔ new `Ok(∅)`);
+/// 2. when the new checker short-circuits with logic errors *and* the old
+///    error is itself logic-classified, the old error is the legacy image of
+///    one of them — lenient otherwise (in a compound state the old checker
+///    may trip a fixable cause first);
+/// 3. when the new checker reports fixable breaks, the old error is the
+///    legacy image of one of them.
+///
+/// Exposed (`#[doc(hidden)] pub`) for the step-4 differential fuzz
+/// (`tests/differential_force_apply.rs`) and the step-5 canary; the in-crate
+/// fixtures and `colloscopes.rs`'s stage-6 tests share it too.
+#[doc(hidden)]
+#[track_caller]
+pub fn assert_differential(data: &crate::InnerData) {
+    let old = data.check_invariants();
+    let new = data.broken_invariants();
+    match &new {
+        Ok(fixable) if fixable.is_empty() => {
+            assert_eq!(old, Ok(()), "new checker is clean but old checker errs");
+        }
+        Ok(fixable) => {
+            let e = old.expect_err("new checker found fixable breaks but old checker is clean");
+            assert!(
+                fixable.iter().any(|f| f.to_legacy() == e),
+                "old error {e:?} is not the legacy image of any of {fixable:?}",
+            );
+        }
+        Err(logic) => {
+            let e = old.expect_err("new checker found logic errors but old checker is clean");
+            if e.is_necessarily_logic_error() {
+                assert!(
+                    logic.iter().any(|l| l.to_legacy() == e),
+                    "old logic error {e:?} is not the legacy image of any of {logic:?}",
+                );
+            }
+            // else: lenient — in a compound state the old checker may trip a
+            // fixable cause first (decision 8, requirement 2).
+        }
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
@@ -801,48 +846,6 @@ pub(crate) mod tests {
             extra_info: String::new(),
             week_pattern: None,
             cost: 0,
-        }
-    }
-
-    /// The three-part differential contract of `docs/plans/plan_step_2.md`
-    /// decision 8, cross-checking the new checker against the old first-error
-    /// [crate::InnerData::check_invariants]:
-    ///
-    /// 1. verdicts always agree (old `is_ok()` ⇔ new `Ok(∅)`);
-    /// 2. when the new checker short-circuits with logic errors *and* the old
-    ///    error is itself logic-classified, the old error is the legacy image of
-    ///    one of them — lenient otherwise (in a compound state the old checker
-    ///    may trip a fixable cause first);
-    /// 3. when the new checker reports fixable breaks, the old error is the
-    ///    legacy image of one of them.
-    ///
-    /// `pub(crate)` so `colloscopes.rs`'s stage-6 tests can share it.
-    #[track_caller]
-    pub(crate) fn assert_differential(data: &InnerData) {
-        let old = data.check_invariants();
-        let new = data.broken_invariants();
-        match &new {
-            Ok(fixable) if fixable.is_empty() => {
-                assert_eq!(old, Ok(()), "new checker is clean but old checker errs");
-            }
-            Ok(fixable) => {
-                let e = old.expect_err("new checker found fixable breaks but old checker is clean");
-                assert!(
-                    fixable.iter().any(|f| f.to_legacy() == e),
-                    "old error {e:?} is not the legacy image of any of {fixable:?}",
-                );
-            }
-            Err(logic) => {
-                let e = old.expect_err("new checker found logic errors but old checker is clean");
-                if e.is_necessarily_logic_error() {
-                    assert!(
-                        logic.iter().any(|l| l.to_legacy() == e),
-                        "old logic error {e:?} is not the legacy image of any of {logic:?}",
-                    );
-                }
-                // else: lenient — in a compound state the old checker may trip a
-                // fixable cause first (decision 8, requirement 2).
-            }
         }
     }
 
