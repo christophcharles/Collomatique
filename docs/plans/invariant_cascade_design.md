@@ -362,12 +362,26 @@ conversion table) is retired; pinned at `git show 49b4f77d:docs/plans/plan_step_
 
   End-of-step gate: `cargo test --workspace` green, `Cargo.lock` unchanged (July 18 2026).
 
-**Step 3 — completeness audit.** Survey the old `check_invariants` *and* the
-`validate_*_internal` candidate checks (the side-constraint inventory of Appendix A.2 is the
-checklist) for anything the new checker misses. (The stale `lib.rs:172` block was already
-deleted in step 1, phase 1.) At the end of this step the new checker is ground truth.
+**Step 3 — completeness audit.** Certify the **old** `check_invariants` as the reliable
+*reference oracle* for the step-4 differential fuzz — the fuzz asserts verdict agreement,
+so a disagreement is only meaningful if the old checker is known-complete. (An earlier
+version of this step aimed the audit at the *new* checker and ended with "the new checker
+is ground truth" — that was wrong; the new checker earns trust *through* steps 3–4, it does
+not confer it.) The audit is two composed arrows: **old ⊆ new** (the July-19 review pass
+below) and **ops ⊆ old** (the session-plan survey: no elementary op enforces an *invariant*
+the old checker misses — transition checks like no-clobber, op-target existence and the
+other §4 carve-outs are expected checker-absent and are inventoried as such). Together:
+every invariant enforced anywhere is visible to both checkers. The session plan
+(`docs/plans/plan_step_3.md`) holds the row-by-row tables: every invariant-guarding op
+check → its old-checker twin, the carve-out register, and a field-by-field coverage sweep
+of the whole data model (the "missed by everything" backstop, checked against Appendix
+A.1 + A.2). **Doc-only step**: findings are recorded, not fixed. Result: **no gaps** — five
+observations for the record (vacuous `NotEmptyPeriodInColloscope` guard, `WeekMove`'s
+inline re-implementation of two checker conditions as the one drift-risk spot,
+a harmless check-order quirk, the justified `SubjectUpdate` asymmetry, and
+placements-without-association being deliberately valid).
 
-  *Audit pass ran July 19 2026* (review session, ahead of the step-3 session plan): the old
+  *The old ⊆ new arrow — review pass, July 19 2026* (ahead of the step-3 session plan): the old
   checker's complete condition set — 57 conditions: 3 top-level (`lib.rs:175`), 42
   params-side (`colloscope_params.rs`), 12 colloscope-side (`validate_against_params`) —
   each map to a `LogicError` / `DanglingFk` site / `Convergence` variant; counts match
@@ -390,8 +404,10 @@ deleted in step 1, phase 1.) At the end of this step the new checker is ground t
   - **`Err` short-circuit confirmed intended**: the fixable sweeps cannot be trusted over a
     logically-broken state, so `Err(LogicError)` deliberately says nothing about
     co-occurring fixable breaks. Module docs strengthened accordingly.
-  Declaring the new checker ground truth (the step's closing act) waits on the step-3
-  session plan per the §6 house rule of `state_consolidation_plan.md`.
+  With the ops ⊆ old survey delivered (session plan, July 19 2026), the old checker is
+  certified complete: it is the reference oracle step 4's differential fuzz measures the
+  new checker against. The session plan retires per the house pattern once the step is
+  signed off.
 
 **Step 4 — differential fuzz.** A way to build arbitrary (including invalid) `InnerData`:
 random elementary ops applied through a `force_apply` door *without* checking, deliberately
