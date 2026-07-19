@@ -5,7 +5,9 @@ July 18 2026** — its detailed plan is retired (pinned at
 `git show 62949404:docs/plans/plan_step_1.md`), the delivered state is recorded in
 Appendix B. **Step 2 completed July 18 2026** — its session plan is retired (pinned at
 `git show 49b4f77d:docs/plans/plan_step_2.md`), the delivered state is recorded in
-Appendix C. Next up: step 3.
+Appendix C. **Step 3 completed July 19 2026** (doc-only) — its session plan is retired
+(pinned at `git show 26d88024:docs/plans/plan_step_3.md`), the audit record is
+Appendix D. Next up: step 4.
 This doc started as an exploration after phase C of the table-registry plan shipped (item 2's
 detailed plan, since delivered in full and retired; pinned at
 `git show 77695338:docs/table_registry_plan.md`); it now
@@ -362,7 +364,7 @@ conversion table) is retired; pinned at `git show 49b4f77d:docs/plans/plan_step_
 
   End-of-step gate: `cargo test --workspace` green, `Cargo.lock` unchanged (July 18 2026).
 
-**Step 3 — completeness audit.** Certify the **old** `check_invariants` as the reliable
+**Step 3 — completeness audit — COMPLETED July 19 2026.** Certify the **old** `check_invariants` as the reliable
 *reference oracle* for the step-4 differential fuzz — the fuzz asserts verdict agreement,
 so a disagreement is only meaningful if the old checker is known-complete. (An earlier
 version of this step aimed the audit at the *new* checker and ended with "the new checker
@@ -371,15 +373,13 @@ not confer it.) The audit is two composed arrows: **old ⊆ new** (the July-19 r
 below) and **ops ⊆ old** (the session-plan survey: no elementary op enforces an *invariant*
 the old checker misses — transition checks like no-clobber, op-target existence and the
 other §4 carve-outs are expected checker-absent and are inventoried as such). Together:
-every invariant enforced anywhere is visible to both checkers. The session plan
-(`docs/plans/plan_step_3.md`) holds the row-by-row tables: every invariant-guarding op
-check → its old-checker twin, the carve-out register, and a field-by-field coverage sweep
-of the whole data model (the "missed by everything" backstop, checked against Appendix
-A.1 + A.2). **Doc-only step**: findings are recorded, not fixed. Result: **no gaps** — five
-observations for the record (vacuous `NotEmptyPeriodInColloscope` guard, `WeekMove`'s
-inline re-implementation of two checker conditions as the one drift-risk spot,
-a harmless check-order quirk, the justified `SubjectUpdate` asymmetry, and
-placements-without-association being deliberately valid).
+every invariant enforced anywhere is visible to both checkers. The session plan is
+retired per the house pattern (pinned at `git show 26d88024:docs/plans/plan_step_3.md`);
+it holds the full row-by-row tables: every invariant-guarding op check → its old-checker
+twin, the carve-out register, and a field-by-field coverage sweep of the whole data model
+(the "missed by everything" backstop, checked against Appendix A.1 + A.2). **Doc-only
+step**: findings were recorded, not fixed. Result: **no gaps** — the survey record and
+its five observations are Appendix D.
 
   *The old ⊆ new arrow — review pass, July 19 2026* (ahead of the step-3 session plan): the old
   checker's complete condition set — 57 conditions: 3 top-level (`lib.rs:175`), 42
@@ -404,10 +404,9 @@ placements-without-association being deliberately valid).
   - **`Err` short-circuit confirmed intended**: the fixable sweeps cannot be trusted over a
     logically-broken state, so `Err(LogicError)` deliberately says nothing about
     co-occurring fixable breaks. Module docs strengthened accordingly.
-  With the ops ⊆ old survey delivered (session plan, July 19 2026), the old checker is
+  With the ops ⊆ old survey delivered (July 19 2026, Appendix D), the old checker is
   certified complete: it is the reference oracle step 4's differential fuzz measures the
-  new checker against. The session plan retires per the house pattern once the step is
-  signed off.
+  new checker against.
 
 **Step 4 — differential fuzz.** A way to build arbitrary (including invalid) `InnerData`:
 random elementary ops applied through a `force_apply` door *without* checking, deliberately
@@ -509,8 +508,8 @@ Open (settled in the relevant step's session plan, not here):
 Copied (July 16 2026) from §3.2/§3.3 of the retired `docs/table_registry_plan.md` (item 2's
 detailed plan, delivered in full; the whole document is pinned at
 `git show 77695338:docs/table_registry_plan.md`). Step 2 used A.1 as the existence-sweep
-target set (via the refs registry, B.5); step 3 uses A.1 + A.2 as the completeness-audit
-checklist. File/line references
+target set (via the refs registry, B.5); step 3 used A.1 + A.2 as the completeness-audit
+checklist (Appendix D). File/line references
 are against the tree at commit `de8ed888` (July 13 2026) and have rotted since — the file +
 function names are the stable part. The "block"/"twin" error columns describe the *old*
 architecture this design replaces; they document exactly what the new checker must cover.
@@ -852,3 +851,79 @@ Classification is **mechanical**, per edge/predicate — the module docs state t
 Deferred hooks: Serde + value-shape encapsulation → step 5; resolution map (total over
 `FixableInvariant`) + possible variant reorder → step 6; `references_to_*` retirement still
 pending a gtk4 claim (§7 unchanged).
+
+---
+
+## Appendix D — step 3 as delivered (July 19 2026)
+
+Recorded when the step-3 session plan was retired (the full row-by-row tables — every
+invariant-guarding op check → its old-checker twin, the complete carve-out register with
+per-error sites, and the field-by-field coverage sweep — are pinned at
+`git show 26d88024:docs/plans/plan_step_3.md`; file/line references there are against the
+tree at `0a1041b6`). **Doc-only step**: no code was touched. This appendix records the
+certification and everything later steps need from it.
+
+### D.1 The certification
+
+The old checker (`InnerData::check_invariants`, `lib.rs:175`) is **certified complete**: it
+is fit to serve as the reference oracle of the step-4 differential fuzz. Two composed
+arrows, each audited independently:
+
+- **old ⊆ new** (the §8 review pass): each of the old checker's 57 conditions maps to a
+  `LogicError` / `DanglingFk` site / `Convergence` variant.
+- **ops ⊆ old** (the retired survey): no elementary op enforces an *invariant* — a property
+  of the resulting state — that the old checker misses, and a field-by-field walk of
+  `InnerData` (against A.1's 28 relationships + A.2) found no invariant checked *nowhere*.
+
+Together: every invariant enforced anywhere in the crate is visible to both checkers,
+which is exactly what the step-4 verdict differential requires.
+
+### D.2 Structure facts the survey leaned on (still true, worth knowing in steps 4–5)
+
+- Every `apply_*` is validate-before-mutate; after every successful apply, `lib.rs:340`
+  runs the full old checker as a panic net — so op/checker drift surfaces as a production
+  panic *provided the checker knows the invariant* (the conditional the survey discharged).
+- Add/Update payload validation goes through the **same** `validate_*` helpers the old
+  checker's `check_*_data_consistency` families call, so for those checks op/checker drift
+  is structurally impossible. The drift-able surface is only the hand-written Remove/Update
+  guards — each individually reconciled in the pinned Table 1.
+
+### D.3 The carve-out register (checker-absent by design — the step-5 keep-list)
+
+Every op check without an old-checker twin falls into one of the §4 transition categories;
+none is an invariant. These error families are what **survives** the step-5 precondition
+deletion (everything twinned in Table 1 retires in favor of the precise vocabulary):
+
+- **No-clobber** — `*IdAlreadyExists` in every Add.
+- **Op-target existence** — `Invalid*Id` on the entity being updated/removed.
+- **Parameter targeting** — op inputs that must resolve (`AddAfter` anchors incl.
+  `PreviousSlotIsNotInRightSubject`, `Assign`/`SetInterrogation`/`SetGroupList`/
+  `AssignToSubject` coordinates, `WeekMove` destination).
+- **Position bounds** — `InvalidPosition`, `PositionOutOfBounds`.
+- **Empty-first protocol** — `PeriodStillHasWeeks`, `RemainingFilling`,
+  `NonEmptyGroupsWhenReducing` (op-ordering discipline; these three are *preconditions*,
+  so step 5 decides their fate with the rest — the states they demand are valid either way).
+- **Immutability** — `CannotChangeSubject` (a slot's subject is fixed at creation).
+- **Payload shape** — `PrefillGroupCountMismatch` (dual-listed: also invariant-twinned).
+
+### D.4 Findings F1–F5 (no gaps; observations for the record)
+
+- **F1 — vacuous guard**: `NotEmptyPeriodInColloscope` (`periods.rs`) can never fire after
+  the `PeriodStillHasWeeks` guard; commented in code as defensive redundancy. Disappears
+  with all preconditions at step 5.
+- **F2 — the one drift-risk spot**: `WeekMove` (`periods.rs`, destination checks)
+  re-implements the checker's slot-runs-on-period + group-bound logic inline instead of
+  calling shared helpers. Not refactored — step 5 deletes all preconditions — but **any
+  pre-step-5 touch of that code must re-verify the pairing** against
+  `SlotNotRunningOnPeriod` / `InvalidGroupNumInInterrogation`.
+- **F3 — check-order quirk**: `GroupListAssignToSubject` tests the subject before the
+  period; a dangling period harmlessly reaches `SubjectDoesNotRunOnPeriod` first.
+  Error-variant choice only.
+- **F4 — justified asymmetry**: `SubjectUpdate`(interrogations→off) re-checks
+  balancing/teachers/associations/slots but *not* pairing/incompat references — correct:
+  those edges don't require interrogations, in the validators and both checkers alike
+  (documented on `Incompatibility::subject_id`).
+- **F5 — placements need no association**: a `Colloscope.group_lists` row may reference a
+  list not (yet) associated to any subject×period. Ops and both checkers agree this is
+  valid (placements can be prepared before associating) — **the step-6 resolution map must
+  not "fix" it**.
