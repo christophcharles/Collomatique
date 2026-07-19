@@ -367,6 +367,32 @@ conversion table) is retired; pinned at `git show 49b4f77d:docs/plans/plan_step_
 checklist) for anything the new checker misses. (The stale `lib.rs:172` block was already
 deleted in step 1, phase 1.) At the end of this step the new checker is ground truth.
 
+  *Audit pass ran July 19 2026* (review session, ahead of the step-3 session plan): the old
+  checker's complete condition set — 57 conditions: 3 top-level (`lib.rs:175`), 42
+  params-side (`colloscope_params.rs`), 12 colloscope-side (`validate_against_params`) —
+  each map to a `LogicError` / `DanglingFk` site / `Convergence` variant; counts match
+  Appendix C.2 (9 + 16 + the registry sweep). The refs-registry edge inventory and the
+  layer-B site set were derived independently and agree, colloscope tables included. The
+  only non-sweeps are the two encapsulated mirror families (Appendix C.3) — verified
+  private-field + compound-mutator sound. **No gaps found.** Four decisions confirmed in
+  review (documented in code where noted):
+  - **Incompat subjects need no interrogations** — intended, in both checkers: an
+    incompatibility may block slots for students declared in a subject whose own schedule
+    creates the unavailability, without that subject running colles. Documented on
+    `Incompatibility::subject_id` (`incompats.rs`).
+  - **Mirror desync = fail-fast panic** once the old checker retires at step 5: the
+    encapsulated mutators are simple and local, a desync is a hard code bug, and a quick
+    read-path panic is the wanted behavior — no checker sweep. Noted in the
+    `invariants.rs` module docs ("Deliberate non-checks").
+  - **The id-issuer high-water check stays**: it is `Data`-level state outside `InnerData`,
+    so the step-5 wiring keeps `Data::check_invariants`' issuer assert as a separate
+    companion to `broken_invariants`. Documented on `Data::check_invariants` (`lib.rs`).
+  - **`Err` short-circuit confirmed intended**: the fixable sweeps cannot be trusted over a
+    logically-broken state, so `Err(LogicError)` deliberately says nothing about
+    co-occurring fixable breaks. Module docs strengthened accordingly.
+  Declaring the new checker ground truth (the step's closing act) waits on the step-3
+  session plan per the §6 house rule of `state_consolidation_plan.md`.
+
 **Step 4 — differential fuzz.** A way to build arbitrary (including invalid) `InnerData`:
 random elementary ops applied through a `force_apply` door *without* checking, deliberately
 landing in inconsistent states. Assert the two checkers agree on the **verdict** (old rejects

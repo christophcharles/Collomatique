@@ -346,6 +346,11 @@ impl Data {
     /// USED INTERNALLY
     ///
     /// Checks all the invariants of data
+    ///
+    /// The id-issuer high-water check below is [Data]-level state (the issuer
+    /// is deliberately not part of [InnerData]), so it cannot live in
+    /// [InnerData::check_invariants] or [InnerData::broken_invariants]; the
+    /// step-5 switch to the new checker must keep it as a separate companion.
     fn check_invariants(&self) {
         let max_id = self.inner_data.ids().max();
 

@@ -17,8 +17,12 @@
 //!   lossily (clear the now-invalid data).
 //!
 //! `FixableInvariant = DanglingFk | Convergence` is the `Ok` payload of the
-//! checker; `LogicError` is the `Err` payload and short-circuits (a logic error
-//! undermines the meaningfulness of the fixable sweep).
+//! checker; `LogicError` is the `Err` payload and short-circuits: dangling and
+//! convergence sweeps cannot be trusted over a state whose own rows are
+//! malformed, so rather than return a fixable set it cannot vouch for, the
+//! checker reports only the logic errors. Consequence (intended): `Err` says
+//! nothing about dangles or convergence breaks that may co-occur — the API
+//! refuses to guess rather than lie.
 //!
 //! ## Canonical order
 //!
@@ -36,6 +40,19 @@
 //! [FixableInvariant::DanglingFk] already reports that dangle); an id used only
 //! as a compared value does not gate. Where the old first-error checker
 //! fail-fasts, layer C accumulates, so every broken row surfaces.
+//!
+//! ## Deliberate non-checks (confirmed in the step-3 completeness audit)
+//!
+//! - An [crate::incompats::Incompatibility]'s subject is *not* required to run
+//!   interrogations (see the `subject_id` field docs for why) — the one
+//!   subject reference without a "has interrogations" convergence predicate.
+//! - The periods list↔map and slots ordering↔table mirrors are encapsulated
+//!   behind compound mutators and trusted unconditionally here; a desync is a
+//!   hard code bug and surfaces as a read-path panic (fail-fast by design),
+//!   not a checker result.
+//! - The id-issuer high-water check lives in `Data::check_invariants`: the
+//!   issuer is `Data`-level state outside [crate::InnerData], so it stays a
+//!   separate companion to `broken_invariants`.
 
 use std::collections::BTreeSet;
 

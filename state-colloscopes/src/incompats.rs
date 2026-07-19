@@ -27,6 +27,14 @@ pub struct Incompats {
 #[join(error = NewId)]
 pub struct Incompatibility {
     /// Subject the incompatibility is linked to
+    ///
+    /// Deliberately, this subject is *not* required to run interrogations of
+    /// its own — unlike the subject references held by teachers, slots,
+    /// balancing and group-list associations. This lets students be declared
+    /// in a subject purely so that an incompatibility can block slots for them
+    /// (the subject's own schedule creates the unavailability) without the
+    /// subject having colles. Neither invariant checker enforces a
+    /// "has interrogations" predicate on this edge, on purpose.
     #[fk(name = subject)]
     pub subject_id: SubjectId,
     /// Name of the incompatibility for clarity
