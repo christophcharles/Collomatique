@@ -499,6 +499,26 @@ pub enum PeriodError {
     PeriodIsReferencedBySlotPairingRule(PeriodId, SlotPairingRuleId),
 }
 
+/// Precondition errors of the forced period ops — the carve-out subset
+/// (step-3 survey Table 2). Kept: no-clobber, op-target existence (Remove
+/// target + `AddAfter` anchor both surface as [Self::InvalidPeriodId]), and the
+/// empty-first protocol guard `PeriodStillHasWeeks`. All reference scans are
+/// stripped. Variants copied verbatim from [PeriodError].
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum PeriodPrecheckError {
+    /// A period id is invalid
+    #[error("invalid period id ({0:?})")]
+    InvalidPeriodId(PeriodId),
+
+    /// The period id already exists
+    #[error("period id ({0:?}) already exists")]
+    PeriodIdAlreadyExists(PeriodId),
+
+    /// The period still has weeks and cannot be removed
+    #[error("period id ({0:?}) still has weeks and cannot be removed")]
+    PeriodStillHasWeeks(PeriodId),
+}
+
 /// Errors for week operations
 ///
 /// These errors can be returned when trying to modify [crate::Data] with a week op.
@@ -527,6 +547,32 @@ pub enum WeekError {
     /// A slot in the colloscope blocks the operation on the week
     #[error("slot {1:?} in colloscope blocks the operation on week {0:?}")]
     NotCompatibleSlotInColloscope(WeekId, SlotId),
+}
+
+/// Precondition errors of the forced week ops — the carve-out subset
+/// (step-3 survey Table 2). Kept: no-clobber, op-target existence
+/// ([Self::InvalidWeekId]), destination-period existence for add/move
+/// ([Self::InvalidPeriodId]), and position bounds. The Remove reference scans,
+/// the Update silencing guard, and both `WeekMove` semantic guards (the F2
+/// inline re-implementations) are stripped. Variants copied verbatim from
+/// [WeekError].
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum WeekPrecheckError {
+    /// A period id is invalid
+    #[error("invalid period id ({0:?})")]
+    InvalidPeriodId(PeriodId),
+
+    /// A week id is invalid
+    #[error("invalid week id ({0:?})")]
+    InvalidWeekId(WeekId),
+
+    /// The week id already exists
+    #[error("week id ({0:?}) already exists")]
+    WeekIdAlreadyExists(WeekId),
+
+    /// The target position is out of range for the destination period
+    #[error("invalid position ({1}) in period ({0:?})")]
+    InvalidPosition(PeriodId, usize),
 }
 
 impl crate::Data {

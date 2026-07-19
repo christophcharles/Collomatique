@@ -77,6 +77,18 @@ pub enum SlotPairingError {
     SlotsNotInSameSubject(SlotId, SlotId),
 }
 
+/// Precondition errors of the forced slot-pairing ops — the carve-out subset
+/// (step-3 survey Table 2). Only no-clobber and op-target existence survive;
+/// `validate_slot_pairing_rule` is stripped. Variants copied verbatim from
+/// [SlotPairingError].
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum SlotPairingPrecheckError {
+    #[error("invalid slot pairing rule id ({0:?})")]
+    InvalidSlotPairingRuleId(SlotPairingRuleId),
+    #[error("slot pairing rule id ({0:?}) already exists")]
+    SlotPairingRuleIdAlreadyExists(SlotPairingRuleId),
+}
+
 impl crate::Data {
     pub(crate) fn apply_slot_pairing(
         &mut self,

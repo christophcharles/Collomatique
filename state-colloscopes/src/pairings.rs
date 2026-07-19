@@ -84,6 +84,21 @@ pub enum PairingError {
     SameSubjectInBothParts(SubjectId),
 }
 
+/// Precondition errors of the forced pairing ops — the carve-out subset
+/// (step-3 survey Table 2). Only no-clobber and op-target existence survive;
+/// `validate_pairing_rule` is stripped. Variants copied verbatim from
+/// [PairingError].
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum PairingPrecheckError {
+    /// A pairing rule id is invalid
+    #[error("invalid pairing rule id ({0:?})")]
+    InvalidPairingRuleId(PairingRuleId),
+
+    /// The pairing rule id already exists
+    #[error("pairing rule id ({0:?}) already exists")]
+    PairingRuleIdAlreadyExists(PairingRuleId),
+}
+
 impl crate::Data {
     /// Used internally
     ///

@@ -314,6 +314,27 @@ pub enum SubjectError {
     SubjectIsReferencedByPairingRule(SubjectId, PairingRuleId),
 }
 
+/// Precondition errors of the forced subject ops — the carve-out subset
+/// (step-3 survey Table 2). Kept: no-clobber, op-target existence + `AddAfter`
+/// anchor ([Self::InvalidSubjectId]), and position bounds. `validate_subject`,
+/// the Remove reference scans, the interrogations-off guards and the
+/// newly-excluded-period guards are stripped. Variants copied verbatim from
+/// [SubjectError].
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum SubjectPrecheckError {
+    /// A subject id is invalid
+    #[error("invalid subject id ({0:?})")]
+    InvalidSubjectId(SubjectId),
+
+    /// The subject id already exists
+    #[error("subject id ({0:?}) already exists")]
+    SubjectIdAlreadyExists(SubjectId),
+
+    /// A position is outside of bounds
+    #[error("Position {0} is outside the list (size = {1})")]
+    PositionOutOfBounds(usize, usize),
+}
+
 impl crate::Data {
     /// Used internally
     ///

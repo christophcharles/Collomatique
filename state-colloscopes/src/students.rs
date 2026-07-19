@@ -74,6 +74,24 @@ pub enum StudentError {
     StudentStillHasSettings(StudentId),
 }
 
+/// Precondition errors of the forced student ops — the carve-out subset
+/// (step-3 survey Table 2, pinned `git show 26d88024:docs/plans/plan_step_3.md`).
+///
+/// This is the error surface that survives step 5: [crate::Data::force_apply]
+/// keeps only the transition/input guards (no-clobber, op-target existence) and
+/// strips every invariant guard. Variant names and messages are copied verbatim
+/// from [StudentError].
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum StudentPrecheckError {
+    /// A student id is invalid
+    #[error("invalid student id ({0:?})")]
+    InvalidStudentId(StudentId),
+
+    /// The student id already exists
+    #[error("student id ({0:?}) already exists")]
+    StudentIdAlreadyExists(StudentId),
+}
+
 impl crate::Data {
     /// Used internally
     ///

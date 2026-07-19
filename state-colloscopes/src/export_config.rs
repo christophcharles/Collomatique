@@ -186,6 +186,13 @@ impl Default for ExportConfig {
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum ExportConfigError {}
 
+/// Precondition errors of the forced export-config op — the carve-out subset
+/// (step-3 survey Table 2). Export config is pure value data with no guards of
+/// any kind, so this enum is empty (as is [ExportConfigError]); kept for
+/// uniformity across the [crate::PrecheckError] family.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum ExportConfigPrecheckError {}
+
 impl crate::Data {
     /// Used internally
     ///

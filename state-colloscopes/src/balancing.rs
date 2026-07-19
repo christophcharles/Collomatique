@@ -85,6 +85,13 @@ pub enum BalancingError {
     SubjectHasNoInterrogation(SubjectId),
 }
 
+/// Precondition errors of the forced balancing op — the carve-out subset
+/// (step-3 survey Table 2). The balancing op has no transition/input guards
+/// (only `validate_balancing`, which strips), so this enum is empty; kept for
+/// uniformity across the [crate::PrecheckError] family.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum BalancingPrecheckError {}
+
 impl crate::Data {
     /// Used internally
     ///

@@ -64,6 +64,20 @@ pub enum TeacherError {
     TeacherStillHasAssociatedSlotsInSubject(TeacherId, SubjectId),
 }
 
+/// Precondition errors of the forced teacher ops — the carve-out subset
+/// (step-3 survey Table 2). See [StudentPrecheckError](crate::StudentPrecheckError)
+/// for the shape rationale; variants copied verbatim from [TeacherError].
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum TeacherPrecheckError {
+    /// A teacher id is invalid
+    #[error("invalid teacher id ({0:?})")]
+    InvalidTeacherId(TeacherId),
+
+    /// The teacher id already exists
+    #[error("teacher id ({0:?}) already exists")]
+    TeacherIdAlreadyExists(TeacherId),
+}
+
 impl crate::Data {
     /// Used internally
     ///

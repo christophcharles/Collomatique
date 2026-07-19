@@ -97,6 +97,21 @@ pub enum WeekPatternError {
     NotCompatibleSlotInColloscope(SlotId),
 }
 
+/// Precondition errors of the forced week-pattern ops — the carve-out subset
+/// (step-3 survey Table 2). Only no-clobber and op-target existence survive;
+/// `validate_week_pattern` and the reference scans are stripped. Variants
+/// copied verbatim from [WeekPatternError].
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum WeekPatternPrecheckError {
+    /// A week pattern id is invalid
+    #[error("invalid week pattern id ({0:?})")]
+    InvalidWeekPatternId(WeekPatternId),
+
+    /// The week pattern id already exists
+    #[error("week pattern id ({0:?}) already exists")]
+    WeekPatternIdAlreadyExists(WeekPatternId),
+}
+
 impl crate::Data {
     /// Used internally
     ///

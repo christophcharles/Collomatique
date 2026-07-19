@@ -55,6 +55,13 @@ pub enum SettingsError {
     InvalidStudentId(StudentId),
 }
 
+/// Precondition errors of the forced settings op — the carve-out subset
+/// (step-3 survey Table 2). The settings op has no transition/input guards
+/// (only `validate_settings`, which strips), so this enum is empty; kept for
+/// uniformity across the [crate::PrecheckError] family.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum SettingsPrecheckError {}
+
 impl crate::Data {
     /// Used internally
     ///

@@ -308,6 +308,49 @@ pub enum GroupListError {
     NonEmptyColloscopeGroupListWhenPrefilling(GroupListId),
 }
 
+/// Precondition errors of the forced group-list ops — the carve-out subset
+/// (step-3 survey Table 2). Kept: no-clobber, op-target existence, the
+/// empty-first protocol guards ([Self::RemainingFilling],
+/// [Self::NonEmptyGroupsWhenReducing]), the dual-listed prefill-count boundary
+/// ([Self::PrefillGroupCountMismatch], kept per Appendix D.3), and the
+/// `AssignToSubject` coordinate-existence checks
+/// ([Self::InvalidSubjectId] / [Self::InvalidPeriodId] / [Self::InvalidGroupListId]).
+/// `validate_group_list*`, the Remove/Update/SetFilling scans and the
+/// `AssignToSubject` semantic guards are stripped. Variants copied verbatim
+/// from [GroupListError].
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum GroupListPrecheckError {
+    /// group list id is invalid
+    #[error("invalid group list id ({0:?})")]
+    InvalidGroupListId(GroupListId),
+
+    /// The group list id already exists
+    #[error("group list id ({0:?}) already exists")]
+    GroupListIdAlreadyExists(GroupListId),
+
+    /// subject id is invalid
+    #[error("invalid subject id ({0:?})")]
+    InvalidSubjectId(SubjectId),
+
+    /// period id is invalid
+    #[error("invalid period id ({0:?})")]
+    InvalidPeriodId(PeriodId),
+
+    /// cannot remove group list as it still has a filling (prefilled or automatic with exclusions)
+    #[error("Group list still has a filling and cannot be removed")]
+    RemainingFilling,
+
+    /// Prefilled groups count does not match group_names count
+    #[error("prefilled groups count ({actual}) does not match group names count ({expected})")]
+    PrefillGroupCountMismatch { expected: usize, actual: usize },
+
+    /// Cannot reduce group count when last groups have students
+    #[error(
+        "cannot reduce group count: groups to be removed still have students (ops layer should clean first)"
+    )]
+    NonEmptyGroupsWhenReducing,
+}
+
 impl crate::Data {
     /// Used internally
     ///

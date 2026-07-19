@@ -384,6 +384,36 @@ pub enum SlotError {
     SlotIsReferencedBySlotPairingRule(SlotId, SlotPairingRuleId),
 }
 
+/// Precondition errors of the forced slot ops — the carve-out subset
+/// (step-3 survey Table 2). Kept: no-clobber, op-target existence
+/// ([Self::InvalidSlotId]), the `AddAfter` same-subject anchor
+/// ([Self::PreviousSlotIsNotInRightSubject]), position bounds, and the
+/// subject-immutability guard ([Self::CannotChangeSubject]). `validate_slot`,
+/// the Remove colloscope/pairing scans and the Update pattern guard are
+/// stripped. Variants copied verbatim from [SlotError].
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum SlotPrecheckError {
+    /// A slot id is invalid
+    #[error("invalid slot id ({0:?})")]
+    InvalidSlotId(SlotId),
+
+    /// The slot id already exists
+    #[error("slot id ({0:?}) already exists")]
+    SlotIdAlreadyExists(SlotId),
+
+    /// A position is outside of bounds
+    #[error("Position {0} is outside the list (size = {1})")]
+    PositionOutOfBounds(usize, usize),
+
+    /// The previous slot given is not for the same subject
+    #[error("Slot {0:?} to be previous slot is not for subject {1:?}")]
+    PreviousSlotIsNotInRightSubject(SlotId, SubjectId),
+
+    /// An update tried to move the slot to a different subject
+    #[error("slot ({0:?}) cannot change subject (from {1:?} to {2:?})")]
+    CannotChangeSubject(SlotId, SubjectId, SubjectId),
+}
+
 impl crate::Data {
     /// Used internally
     ///

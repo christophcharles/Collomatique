@@ -313,6 +313,27 @@ pub enum ColloscopeError {
     EmptyGroupListRow(GroupListId),
 }
 
+/// Precondition errors of the forced colloscope ops — the carve-out subset
+/// (step-3 survey Table 2). Kept: the `SetGroupList` target existence
+/// ([Self::InvalidGroupListId]) and the `SetInterrogation` coordinate existence
+/// ([Self::InvalidWeekId] / [Self::InvalidSlotId]). The `SetGroupList`
+/// prefilled/placement guards and all three `SetInterrogation` semantic guards
+/// are stripped. Variants copied verbatim from [ColloscopeError].
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum ColloscopePrecheckError {
+    /// Group list original id is invalid
+    #[error("invalid group list id ({0:?})")]
+    InvalidGroupListId(GroupListId),
+
+    /// The week id in a colloscope op does not resolve to any period
+    #[error("invalid week id ({0:?})")]
+    InvalidWeekId(WeekId),
+
+    /// Slot original id is invalid
+    #[error("invalid slot id ({0:?})")]
+    InvalidSlotId(SlotId),
+}
+
 impl crate::Data {
     /// Used internally
     ///

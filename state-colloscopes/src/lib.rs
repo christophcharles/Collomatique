@@ -78,6 +78,26 @@ pub use subjects::SubjectError;
 pub use teachers::TeacherError;
 pub use week_patterns::WeekPatternError;
 
+// Per-domain precheck error enums for [Data::force_apply] — the carve-out
+// subset of each domain's error surface (step-3 survey Table 2). Introduced in
+// step 4; this is the error vocabulary that survives step 5.
+pub use assignments::AssignmentPrecheckError;
+pub use balancing::BalancingPrecheckError;
+pub use colloscopes::ColloscopePrecheckError;
+pub use export_config::ExportConfigPrecheckError;
+pub use group_lists::GroupListPrecheckError;
+pub use incompats::IncompatPrecheckError;
+pub use pairings::PairingPrecheckError;
+pub use periods::PeriodPrecheckError;
+pub use periods::WeekPrecheckError;
+pub use settings::SettingsPrecheckError;
+pub use slot_pairings::SlotPairingPrecheckError;
+pub use slots::SlotPrecheckError;
+pub use students::StudentPrecheckError;
+pub use subjects::SubjectPrecheckError;
+pub use teachers::TeacherPrecheckError;
+pub use week_patterns::WeekPatternPrecheckError;
+
 pub use refs::{
     GroupListRefSite, PeriodRefSite, RefVisitor, Reference, SlotRefSite, StudentRefSite,
     SubjectRefSite, TeacherRefSite, WeekPatternRefSite, WeekRefSite,
@@ -262,6 +282,51 @@ pub enum Error {
     ExportConfig(#[from] ExportConfigError),
     #[error(transparent)]
     GlobalUpdate(#[from] InnerDataError),
+}
+
+/// Errors of [Data::force_apply]: only op preconditions (the carve-out subset —
+/// no-clobber, op-target existence, positions/anchors, empty-first protocol),
+/// never invariants. Invariant breaks are the caller's business via a checker
+/// (`InnerData::check_invariants` / `broken_invariants`) plus rollback.
+///
+/// Mirrors [Error] 1:1 with `#[from]` transparency, minus the `GlobalUpdate`
+/// arm: the forced `GlobalUpdate` drops the pre-gate and is infallible. Each
+/// arm wraps a per-domain `*PrecheckError` (the carve-out subset of the
+/// matching `*Error`); the three value-only domains carry empty enums.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum PrecheckError {
+    #[error(transparent)]
+    Student(#[from] StudentPrecheckError),
+    #[error(transparent)]
+    Period(#[from] PeriodPrecheckError),
+    #[error(transparent)]
+    Week(#[from] WeekPrecheckError),
+    #[error(transparent)]
+    Subject(#[from] SubjectPrecheckError),
+    #[error(transparent)]
+    Teacher(#[from] TeacherPrecheckError),
+    #[error(transparent)]
+    Assignment(#[from] AssignmentPrecheckError),
+    #[error(transparent)]
+    WeekPattern(#[from] WeekPatternPrecheckError),
+    #[error(transparent)]
+    Slot(#[from] SlotPrecheckError),
+    #[error(transparent)]
+    Incompat(#[from] IncompatPrecheckError),
+    #[error(transparent)]
+    GroupList(#[from] GroupListPrecheckError),
+    #[error(transparent)]
+    Settings(#[from] SettingsPrecheckError),
+    #[error(transparent)]
+    Pairing(#[from] PairingPrecheckError),
+    #[error(transparent)]
+    SlotPairing(#[from] SlotPairingPrecheckError),
+    #[error(transparent)]
+    Balancing(#[from] BalancingPrecheckError),
+    #[error(transparent)]
+    Colloscope(#[from] ColloscopePrecheckError),
+    #[error(transparent)]
+    ExportConfig(#[from] ExportConfigPrecheckError),
 }
 
 /// Errors for IDs

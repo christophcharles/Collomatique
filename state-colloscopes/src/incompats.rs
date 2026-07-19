@@ -74,6 +74,21 @@ pub enum IncompatError {
     InvalidWeekPatternId(WeekPatternId),
 }
 
+/// Precondition errors of the forced incompat ops — the carve-out subset
+/// (step-3 survey Table 2). Only no-clobber and op-target existence survive;
+/// `validate_incompat` is stripped. Variants copied verbatim from
+/// [IncompatError].
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum IncompatPrecheckError {
+    /// A incompat id is invalid
+    #[error("invalid incompat id ({0:?})")]
+    InvalidIncompatId(IncompatId),
+
+    /// The incompat id already exists
+    #[error("incompat id ({0:?}) already exists")]
+    IncompatIdAlreadyExists(IncompatId),
+}
+
 impl crate::Data {
     /// Used internally
     ///

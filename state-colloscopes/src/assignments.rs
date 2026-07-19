@@ -75,6 +75,26 @@ pub enum AssignmentError {
     StudentIsNotPresentOnPeriod(StudentId, PeriodId),
 }
 
+/// Precondition errors of the forced assignment op — the carve-out subset
+/// (step-3 survey Table 2). The three coordinate-existence checks are
+/// dual-listed (also invariant twins) and kept per Appendix D.3; the two
+/// semantic guards (subject-runs / student-present) are stripped. Variants
+/// copied verbatim from [AssignmentError].
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum AssignmentPrecheckError {
+    /// A period id is invalid
+    #[error("invalid period id ({0:?})")]
+    InvalidPeriodId(PeriodId),
+
+    /// A subject id is invalid
+    #[error("invalid subject id ({0:?})")]
+    InvalidSubjectId(SubjectId),
+
+    /// A student id is invalid
+    #[error("invalid student id ({0:?})")]
+    InvalidStudentId(StudentId),
+}
+
 impl crate::Data {
     /// Used internally
     ///
