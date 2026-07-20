@@ -20,6 +20,7 @@ use collomatique_state_colloscopes::{
         GroupListId, Id, IncompatId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId,
         SubjectId, TeacherId, WeekId, WeekPatternId,
     },
+    periods::WeekDesc,
     students::Student,
 };
 
@@ -1090,5 +1091,442 @@ fn gen_global_update(
         Op::GlobalUpdate(snapshots[rng.random_range(0..snapshots.len())].clone())
     } else {
         Op::GlobalUpdate(inner.clone())
+    }
+}
+
+// ============================================================================
+// Step-4 differential fuzz: the corruption generator
+// ============================================================================
+
+/// Probe kinds for the step-4 differential fuzz.
+///
+/// Every probe op is *carve-out-clean*: it targets a live entity, uses fresh
+/// (dangling) or duplicated ids and in-bounds positions, so `force_apply` lands
+/// it rather than bouncing off a kept precheck guard. All but [`Self::ForceValid`]
+/// additionally aim at a *stripped* invariant, so the landed state is (usually)
+/// broken — the depth-1 probe distribution the fuzz asserts the two checkers
+/// agree on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CorruptionKind {
+    /// `Remove` of an existing (likely referenced) entity → dangling FKs.
+    ForceRemove,
+    /// `Update` whose payload embeds a dangling id.
+    ForceRetarget,
+    /// Valid-shaped op whose only obstacle was a stripped invariant guard.
+    ForceSemantic,
+    /// Op landing a `LogicError` state (dup-id `GlobalUpdate`, same-subject
+    /// pairing part).
+    ForceLogic,
+    /// Plain valid op — the forced ≡ checked equivalence probe.
+    ForceValid,
+}
+
+impl CorruptionKind {
+    /// Every kind, for coverage assertions.
+    pub const ALL: [CorruptionKind; 5] = [
+        CorruptionKind::ForceRemove,
+        CorruptionKind::ForceRetarget,
+        CorruptionKind::ForceSemantic,
+        CorruptionKind::ForceLogic,
+        CorruptionKind::ForceValid,
+    ];
+
+    /// Label for the OpLog/RunStats category tracking (the harness keys on
+    /// `&'static str`).
+    pub fn label(self) -> &'static str {
+        match self {
+            CorruptionKind::ForceRemove => "force_remove",
+            CorruptionKind::ForceRetarget => "force_retarget",
+            CorruptionKind::ForceSemantic => "force_semantic",
+            CorruptionKind::ForceLogic => "force_logic",
+            CorruptionKind::ForceValid => "force_valid",
+        }
+    }
+
+    /// The four kinds expected to be able to break a state (everything but
+    /// [`Self::ForceValid`]).
+    pub fn corrupting(self) -> bool {
+        !matches!(self, CorruptionKind::ForceValid)
+    }
+}
+
+/// Generates one probe op for the differential fuzz.
+///
+/// A [`CorruptionKind`] is chosen uniformly among the kinds that have material
+/// in the current state (retarget and valid are always available); the returned
+/// op is carve-out-clean so `force_apply` lands it. All but
+/// [`CorruptionKind::ForceValid`] aim at a stripped invariant.
+pub fn gen_corruption_op(rng: &mut ChaCha8Rng, inner: &InnerData) -> (CorruptionKind, Op) {
+    let pools = Pools::extract(inner);
+    let semantic = available_semantic_recipes(inner, &pools);
+    let logic = available_logic_recipes(inner, &pools);
+
+    let mut eligible: Vec<CorruptionKind> = Vec::new();
+    if removable_present(&pools) {
+        eligible.push(CorruptionKind::ForceRemove);
+    }
+    eligible.push(CorruptionKind::ForceRetarget); // settings/balancing always work
+    if !semantic.is_empty() {
+        eligible.push(CorruptionKind::ForceSemantic);
+    }
+    if !logic.is_empty() {
+        eligible.push(CorruptionKind::ForceLogic);
+    }
+    eligible.push(CorruptionKind::ForceValid);
+
+    let kind = eligible[rng.random_range(0..eligible.len())];
+    let op = match kind {
+        CorruptionKind::ForceRemove => {
+            gen_force_remove(rng, &pools).expect("removable pool present")
+        }
+        CorruptionKind::ForceRetarget => gen_force_retarget(rng, inner, &pools),
+        CorruptionKind::ForceSemantic => gen_force_semantic(rng, inner, &pools, &semantic),
+        CorruptionKind::ForceLogic => gen_force_logic(rng, inner, &pools, &logic),
+        CorruptionKind::ForceValid => gen_op(rng, inner, &[], 0.0).1,
+    };
+    (kind, op)
+}
+
+fn removable_present(pools: &Pools) -> bool {
+    !pools.student_ids.is_empty()
+        || !pools.period_ids.is_empty()
+        || !pools.week_ids.is_empty()
+        || !pools.subject_ids.is_empty()
+        || !pools.teacher_ids.is_empty()
+        || !pools.week_pattern_ids.is_empty()
+        || !pools.slot_ids.is_empty()
+        || !pools.incompat_ids.is_empty()
+        || !pools.group_list_ids.is_empty()
+        || !pools.pairing_rule_ids.is_empty()
+        || !pools.slot_pairing_rule_ids.is_empty()
+}
+
+/// ForceRemove: one `Remove` of a live entity, drawn uniformly over the
+/// non-empty pools. Highest-yield dangling-FK source; a period still holding
+/// weeks bounces off the kept `PeriodStillHasWeeks` guard, which the fuzz
+/// tolerates like any other carve-out.
+fn gen_force_remove(rng: &mut ChaCha8Rng, pools: &Pools) -> Option<Op> {
+    let mut candidates: Vec<Op> = Vec::new();
+    if !pools.student_ids.is_empty() {
+        candidates.push(Op::Student(StudentOp::Remove(pick(
+            rng,
+            &pools.student_ids,
+        ))));
+    }
+    if !pools.period_ids.is_empty() {
+        candidates.push(Op::Period(PeriodOp::Remove(pick(rng, &pools.period_ids))));
+    }
+    if !pools.week_ids.is_empty() {
+        candidates.push(Op::Week(WeekOp::Remove(pick(rng, &pools.week_ids))));
+    }
+    if !pools.subject_ids.is_empty() {
+        candidates.push(Op::Subject(SubjectOp::Remove(pick(
+            rng,
+            &pools.subject_ids,
+        ))));
+    }
+    if !pools.teacher_ids.is_empty() {
+        candidates.push(Op::Teacher(TeacherOp::Remove(pick(
+            rng,
+            &pools.teacher_ids,
+        ))));
+    }
+    if !pools.week_pattern_ids.is_empty() {
+        candidates.push(Op::WeekPattern(WeekPatternOp::Remove(pick(
+            rng,
+            &pools.week_pattern_ids,
+        ))));
+    }
+    if !pools.slot_ids.is_empty() {
+        candidates.push(Op::Slot(SlotOp::Remove(pick(rng, &pools.slot_ids))));
+    }
+    if !pools.incompat_ids.is_empty() {
+        candidates.push(Op::Incompat(IncompatOp::Remove(pick(
+            rng,
+            &pools.incompat_ids,
+        ))));
+    }
+    if !pools.group_list_ids.is_empty() {
+        candidates.push(Op::GroupList(GroupListOp::Remove(pick(
+            rng,
+            &pools.group_list_ids,
+        ))));
+    }
+    if !pools.pairing_rule_ids.is_empty() {
+        candidates.push(Op::Pairing(PairingOp::Remove(pick(
+            rng,
+            &pools.pairing_rule_ids,
+        ))));
+    }
+    if !pools.slot_pairing_rule_ids.is_empty() {
+        candidates.push(Op::SlotPairing(SlotPairingOp::Remove(pick(
+            rng,
+            &pools.slot_pairing_rule_ids,
+        ))));
+    }
+    if candidates.is_empty() {
+        return None;
+    }
+    let idx = rng.random_range(0..candidates.len());
+    Some(candidates.swap_remove(idx))
+}
+
+/// ForceRetarget: an `Update` on a live target whose payload embeds a dangling
+/// id (stripped `validate_*` lets it land as a dangling FK). Settings and
+/// balancing are always available (whole-config replace), so the candidate set
+/// is never empty.
+fn gen_force_retarget(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools) -> Op {
+    let mut candidates: Vec<Op> = Vec::new();
+
+    {
+        let mut settings = synth::settings(rng, &pools.student_ids);
+        settings
+            .students
+            .insert(unsafe { StudentId::new(dangling(rng)) }, Default::default());
+        candidates.push(Op::Settings(SettingsOp::Update(settings)));
+    }
+    {
+        let mut balancing = synth::balancing(rng, &pools.interrogation_subject_ids);
+        balancing
+            .subjects
+            .insert(unsafe { SubjectId::new(dangling(rng)) }, Default::default());
+        candidates.push(Op::Balancing(BalancingOp::Update(balancing)));
+    }
+    if !pools.student_ids.is_empty() {
+        let id = pick(rng, &pools.student_ids);
+        let mut student = synth::student(rng, &pools.period_ids);
+        student
+            .excluded_periods
+            .insert(unsafe { PeriodId::new(dangling(rng)) });
+        candidates.push(Op::Student(StudentOp::Update(id, student)));
+    }
+    if !pools.subject_ids.is_empty() {
+        let id = pick(rng, &pools.subject_ids);
+        let with_interrogation = rng.random_bool(0.7);
+        let mut subject = synth::subject(rng, &pools.period_ids, with_interrogation);
+        subject
+            .excluded_periods
+            .insert(unsafe { PeriodId::new(dangling(rng)) });
+        candidates.push(Op::Subject(SubjectOp::Update(id, subject)));
+    }
+    if !pools.teacher_ids.is_empty() {
+        let id = pick(rng, &pools.teacher_ids);
+        let mut teacher = synth::teacher(rng, &pools.interrogation_subject_ids);
+        teacher
+            .subjects
+            .insert(unsafe { SubjectId::new(dangling(rng)) });
+        candidates.push(Op::Teacher(TeacherOp::Update(id, teacher)));
+    }
+    if !pools.incompat_ids.is_empty() {
+        let id = pick(rng, &pools.incompat_ids);
+        let dangling_subject = unsafe { SubjectId::new(dangling(rng)) };
+        let incompat = synth::incompatibility(rng, dangling_subject, &pools.week_pattern_ids);
+        candidates.push(Op::Incompat(IncompatOp::Update(id, incompat)));
+    }
+    if !pools.slot_ids.is_empty() {
+        // Update must keep the slot's subject (the kept `CannotChangeSubject`
+        // guard) and its teacher, so retarget the week pattern to a dangling id.
+        let slot_id = pick(rng, &pools.slot_ids);
+        let (subject_id, _pos) = inner
+            .params
+            .slots
+            .find_slot_subject_and_position(slot_id)
+            .expect("slot id from live pool");
+        let teacher_id = inner
+            .params
+            .slots
+            .find_slot(slot_id)
+            .expect("slot id from live pool")
+            .teacher_id;
+        let mut slot = synth::slot(rng, subject_id, teacher_id, &[]);
+        slot.week_pattern = Some(unsafe { WeekPatternId::new(dangling(rng)) });
+        candidates.push(Op::Slot(SlotOp::Update(slot_id, slot)));
+    }
+
+    let idx = rng.random_range(0..candidates.len());
+    candidates.swap_remove(idx)
+}
+
+/// A ForceSemantic recipe whose material is present in the current state.
+#[derive(Clone, Copy)]
+enum SemanticRecipe {
+    /// `Assign(period, student, subject, true)` of a student excluded on that
+    /// period (stripped `StudentIsNotPresentOnPeriod`).
+    ExcludedAssign,
+    /// `TeacherUpdate` dropping a subject still bound to one of the teacher's
+    /// slots (stripped slot-consistency scan).
+    TeacherDrop,
+    /// `SubjectUpdate` newly excluding a period that holds an assignment
+    /// (stripped newly-excluded-period scan).
+    SubjectExclude,
+    /// `WeekUpdate` flipping interrogations off under a colloscope row
+    /// (stripped silencing guard).
+    WeekOff,
+}
+
+fn available_semantic_recipes(inner: &InnerData, pools: &Pools) -> Vec<SemanticRecipe> {
+    let mut recipes = Vec::new();
+    if !pools.subject_ids.is_empty()
+        && inner
+            .params
+            .students
+            .student_map
+            .values()
+            .any(|s| !s.excluded_periods.is_empty())
+    {
+        recipes.push(SemanticRecipe::ExcludedAssign);
+    }
+    if !pools.slot_ids.is_empty() {
+        recipes.push(SemanticRecipe::TeacherDrop);
+    }
+    if inner.params.assignments.iter().next().is_some() {
+        recipes.push(SemanticRecipe::SubjectExclude);
+    }
+    if !inner.colloscope.is_empty() {
+        recipes.push(SemanticRecipe::WeekOff);
+    }
+    recipes
+}
+
+fn gen_force_semantic(
+    rng: &mut ChaCha8Rng,
+    inner: &InnerData,
+    pools: &Pools,
+    recipes: &[SemanticRecipe],
+) -> Op {
+    match recipes[rng.random_range(0..recipes.len())] {
+        SemanticRecipe::ExcludedAssign => {
+            let excluded_students: Vec<(StudentId, Vec<PeriodId>)> = inner
+                .params
+                .students
+                .student_map
+                .iter()
+                .filter(|(_, s)| !s.excluded_periods.is_empty())
+                .map(|(id, s)| (id, s.excluded_periods.iter().copied().collect()))
+                .collect();
+            let (student_id, periods) =
+                &excluded_students[rng.random_range(0..excluded_students.len())];
+            let period_id = periods[rng.random_range(0..periods.len())];
+            // Prefer a subject that runs on that period, so the only breakage is
+            // the excluded student (not also a non-running subject).
+            let running: Vec<SubjectId> = inner
+                .params
+                .subjects
+                .ordered_subject_list
+                .iter()
+                .filter(|(_, s)| !s.excluded_periods.contains(&period_id))
+                .map(|(id, _)| id)
+                .collect();
+            let subject_id = if running.is_empty() {
+                pick(rng, &pools.subject_ids)
+            } else {
+                pick(rng, &running)
+            };
+            Op::Assignment(AssignmentOp::Assign(
+                period_id,
+                *student_id,
+                subject_id,
+                true,
+            ))
+        }
+        SemanticRecipe::TeacherDrop => {
+            let slot_id = pick(rng, &pools.slot_ids);
+            let slot = inner
+                .params
+                .slots
+                .find_slot(slot_id)
+                .expect("slot id from live pool");
+            let (teacher_id, subject_id) = (slot.teacher_id, slot.subject_id);
+            let mut teacher = inner
+                .params
+                .teachers
+                .teacher_map
+                .get(&teacher_id)
+                .expect("a live slot's teacher is live")
+                .clone();
+            teacher.subjects.remove(&subject_id);
+            Op::Teacher(TeacherOp::Update(teacher_id, teacher))
+        }
+        SemanticRecipe::SubjectExclude => {
+            let rows: Vec<(PeriodId, SubjectId)> = inner
+                .params
+                .assignments
+                .iter()
+                .map(|(period, subject, _)| (period, subject))
+                .collect();
+            let (period_id, subject_id) = rows[rng.random_range(0..rows.len())];
+            let mut subject = inner
+                .params
+                .subjects
+                .find_subject(subject_id)
+                .expect("a subject with an assignment row is live")
+                .clone();
+            subject.excluded_periods.insert(period_id);
+            Op::Subject(SubjectOp::Update(subject_id, subject))
+        }
+        SemanticRecipe::WeekOff => {
+            let weeks: Vec<WeekId> = inner
+                .colloscope
+                .iter()
+                .map(|((_, week), _)| week)
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect();
+            let week_id = weeks[rng.random_range(0..weeks.len())];
+            Op::Week(WeekOp::Update(week_id, WeekDesc::new(false)))
+        }
+    }
+}
+
+/// A ForceLogic recipe whose material is present in the current state. Both
+/// land a `LogicError` state (short-circuiting the new checker). The
+/// prefill-count mismatch the plan sketched is *not* reachable via forced
+/// group-list ops — `Add` annotates to a default automatic filling and `Update`
+/// re-syncs the prefilled groups to the new count — so it never lands and is
+/// not a recipe here.
+#[derive(Clone, Copy)]
+enum LogicRecipe {
+    /// `GlobalUpdate` clone with a duplicated id (kept id max, so the issuer
+    /// stays out of the dangling range) → `DuplicatedId`.
+    GlobalDup,
+    /// `PairingAdd` with both parts on one subject → `PairingRulePartsShareSubject`.
+    PairingSameSubject,
+}
+
+fn available_logic_recipes(_inner: &InnerData, pools: &Pools) -> Vec<LogicRecipe> {
+    let mut recipes = Vec::new();
+    if !pools.subject_ids.is_empty() {
+        recipes.push(LogicRecipe::GlobalDup);
+        recipes.push(LogicRecipe::PairingSameSubject);
+    }
+    recipes
+}
+
+fn gen_force_logic(
+    rng: &mut ChaCha8Rng,
+    inner: &InnerData,
+    pools: &Pools,
+    recipes: &[LogicRecipe],
+) -> Op {
+    match recipes[rng.random_range(0..recipes.len())] {
+        LogicRecipe::GlobalDup => {
+            let mut broken = inner.clone();
+            let duplicated = unsafe { StudentId::new(pick(rng, &pools.subject_ids).inner()) };
+            broken
+                .params
+                .students
+                .student_map
+                .insert(duplicated, Student::default());
+            Op::GlobalUpdate(broken)
+        }
+        LogicRecipe::PairingSameSubject => {
+            let subject_id = pick(rng, &pools.subject_ids);
+            Op::Pairing(PairingOp::Add(synth::pairing_rule(
+                rng,
+                subject_id,
+                subject_id,
+                &pools.period_ids,
+            )))
+        }
     }
 }
