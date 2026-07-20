@@ -145,4 +145,62 @@ impl crate::Data {
             }
         }
     }
+
+    /// Used internally by [crate::Data::force_apply]
+    ///
+    /// Thin copy of [Self::apply_incompat]: carve-out guards kept (returned as
+    /// [IncompatPrecheckError]), invariant guards stripped (step-3 survey Table 1).
+    /// May leave the state invalid; the caller owns checking and rollback.
+    pub(crate) fn force_apply_incompat(
+        &mut self,
+        incompat_op: &AnnotatedIncompatOp,
+    ) -> std::result::Result<AnnotatedIncompatOp, IncompatPrecheckError> {
+        match incompat_op {
+            AnnotatedIncompatOp::Add(new_id, incompat) => {
+                if self
+                    .inner_data
+                    .params
+                    .incompats
+                    .incompat_map
+                    .contains(new_id)
+                {
+                    return Err(IncompatPrecheckError::IncompatIdAlreadyExists(*new_id));
+                }
+                // stripped: validate_incompat
+
+                self.inner_data
+                    .params
+                    .incompats
+                    .incompat_map
+                    .insert(*new_id, incompat.clone());
+
+                Ok(AnnotatedIncompatOp::Remove(*new_id))
+            }
+            AnnotatedIncompatOp::Remove(id) => {
+                let Some(old_incompat) = self.inner_data.params.incompats.incompat_map.remove(id)
+                else {
+                    return Err(IncompatPrecheckError::InvalidIncompatId(*id));
+                };
+
+                Ok(AnnotatedIncompatOp::Add(*id, old_incompat))
+            }
+            AnnotatedIncompatOp::Update(incompat_id, new_incompat) => {
+                // stripped: validate_incompat
+
+                let Some(incompat) = self
+                    .inner_data
+                    .params
+                    .incompats
+                    .incompat_map
+                    .get_mut(incompat_id)
+                else {
+                    return Err(IncompatPrecheckError::InvalidIncompatId(*incompat_id));
+                };
+
+                let old_incompat = std::mem::replace(incompat, new_incompat.clone());
+
+                Ok(AnnotatedIncompatOp::Update(*incompat_id, old_incompat))
+            }
+        }
+    }
 }

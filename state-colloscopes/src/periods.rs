@@ -797,6 +797,140 @@ impl crate::Data {
             }
         }
     }
+
+    /// Used internally by [crate::Data::force_apply]
+    ///
+    /// Thin copy of [Self::apply_period]: carve-out guards kept (returned as
+    /// [PeriodPrecheckError] — no-clobber, target existence, `AddAfter` anchor,
+    /// and the empty-first `PeriodStillHasWeeks` protocol guard), invariant
+    /// guards stripped (step-3 survey Table 1). May leave the state invalid; the
+    /// caller owns checking and rollback.
+    pub(crate) fn force_apply_period(
+        &mut self,
+        period_op: &AnnotatedPeriodOp,
+    ) -> std::result::Result<AnnotatedPeriodOp, PeriodPrecheckError> {
+        match period_op {
+            AnnotatedPeriodOp::ChangeStartDate(new_date) => {
+                let old_date = std::mem::replace(
+                    &mut self.inner_data.params.periods.first_week,
+                    new_date.clone(),
+                );
+                Ok(AnnotatedPeriodOp::ChangeStartDate(old_date))
+            }
+            AnnotatedPeriodOp::AddFront(period_id) => {
+                if self
+                    .inner_data
+                    .params
+                    .periods
+                    .find_period_position(*period_id)
+                    .is_some()
+                {
+                    return Err(PeriodPrecheckError::PeriodIdAlreadyExists(*period_id));
+                }
+
+                // Periods are created week-less (see [Self::apply_period]).
+                self.inner_data
+                    .params
+                    .periods
+                    .ordered_period_list
+                    .insert_at(0, *period_id, Vec::new())
+                    .expect("period id absence checked above");
+                Ok(AnnotatedPeriodOp::Remove(*period_id))
+            }
+            AnnotatedPeriodOp::AddAfter(period_id, after_id) => {
+                if self
+                    .inner_data
+                    .params
+                    .periods
+                    .find_period_position(*period_id)
+                    .is_some()
+                {
+                    return Err(PeriodPrecheckError::PeriodIdAlreadyExists(*period_id));
+                }
+
+                let Some(position) = self
+                    .inner_data
+                    .params
+                    .periods
+                    .find_period_position(*after_id)
+                else {
+                    return Err(PeriodPrecheckError::InvalidPeriodId(*after_id));
+                };
+
+                // Created week-less (see `AddFront` above).
+                self.inner_data
+                    .params
+                    .periods
+                    .ordered_period_list
+                    .insert_at(position + 1, *period_id, Vec::new())
+                    .expect("period id absence checked above");
+                Ok(AnnotatedPeriodOp::Remove(*period_id))
+            }
+            AnnotatedPeriodOp::Remove(period_id) => {
+                let Some(position) = self
+                    .inner_data
+                    .params
+                    .periods
+                    .find_period_position(*period_id)
+                else {
+                    return Err(PeriodPrecheckError::InvalidPeriodId(*period_id));
+                };
+
+                // Empty-first protocol guard (kept): a period must be week-empty
+                // before removal — `apply_week` is the only writer of week data.
+                let week_count = self
+                    .inner_data
+                    .params
+                    .periods
+                    .week_count_of(*period_id)
+                    .expect("period id comes from find_period_position");
+                if week_count != 0 {
+                    return Err(PeriodPrecheckError::PeriodStillHasWeeks(*period_id));
+                }
+
+                // stripped: colloscope / subject / student / pairing / slot-pairing
+                // / assignment / group-list-association reference scans
+
+                let previous_id = (position > 0).then(|| {
+                    self.inner_data
+                        .params
+                        .periods
+                        .ordered_period_list
+                        .get_at(position - 1)
+                        .expect("position > 0 checked")
+                        .0
+                });
+
+                self.inner_data
+                    .params
+                    .periods
+                    .ordered_period_list
+                    .remove_at(position);
+                // Drop this period's rows from the associations table (copied
+                // verbatim from [Self::apply_period]).
+                let association_keys: Vec<_> = self
+                    .inner_data
+                    .params
+                    .group_lists
+                    .subjects_associations
+                    .keys()
+                    .filter(|(p, _)| *p == *period_id)
+                    .collect();
+                for key in association_keys {
+                    self.inner_data
+                        .params
+                        .group_lists
+                        .subjects_associations
+                        .remove(&key);
+                }
+
+                Ok(match previous_id {
+                    None => AnnotatedPeriodOp::AddFront(*period_id),
+                    Some(prev) => AnnotatedPeriodOp::AddAfter(*period_id, prev),
+                })
+            }
+        }
+    }
 }
 
 impl crate::Data {
@@ -1049,6 +1183,172 @@ impl crate::Data {
         // Move the week entry (ordering slot + owning period). Patterns and the
         // colloscope need no maintenance: both key on the week id, which the
         // move preserves, so every exclusion and every row travels with it.
+        self.inner_data
+            .params
+            .periods
+            .move_week_entry(week_id, dest_period, dest_pos);
+
+        Ok(AnnotatedWeekOp::Move(week_id, src_period, src_pos))
+    }
+
+    /// Used internally by [crate::Data::force_apply]
+    ///
+    /// Thin copy of [Self::apply_week]: carve-out guards kept (returned as
+    /// [WeekPrecheckError] — no-clobber, target existence, destination-period
+    /// existence, position bounds), invariant guards stripped (step-3 survey
+    /// Table 1). May leave the state invalid; the caller owns checking and
+    /// rollback.
+    pub(crate) fn force_apply_week(
+        &mut self,
+        week_op: &AnnotatedWeekOp,
+    ) -> std::result::Result<AnnotatedWeekOp, WeekPrecheckError> {
+        match week_op {
+            AnnotatedWeekOp::AddFront(week_id, period_id, desc) => {
+                self.force_add_week(*week_id, *period_id, 0, desc)?;
+                Ok(AnnotatedWeekOp::Remove(*week_id))
+            }
+            AnnotatedWeekOp::AddAfter(week_id, after_id, desc) => {
+                let Some((period_id, after_pos)) =
+                    self.inner_data.params.periods.week_position(*after_id)
+                else {
+                    return Err(WeekPrecheckError::InvalidWeekId(*after_id));
+                };
+                self.force_add_week(*week_id, period_id, after_pos + 1, desc)?;
+                Ok(AnnotatedWeekOp::Remove(*week_id))
+            }
+            AnnotatedWeekOp::Remove(week_id) => self.force_remove_week(*week_id),
+            AnnotatedWeekOp::Update(week_id, desc) => self.force_update_week(*week_id, desc),
+            AnnotatedWeekOp::Move(week_id, dest_period, dest_pos) => {
+                self.force_move_week(*week_id, *dest_period, *dest_pos)
+            }
+        }
+    }
+
+    /// Thin copy of [Self::add_week]: no invariant guard exists here, so every
+    /// carve-out guard (no-clobber, destination-period existence, position
+    /// bounds) is kept.
+    fn force_add_week(
+        &mut self,
+        week_id: WeekId,
+        period_id: PeriodId,
+        per_pos: usize,
+        desc: &WeekDesc,
+    ) -> Result<(), WeekPrecheckError> {
+        if self.inner_data.params.periods.find_week(week_id).is_some() {
+            return Err(WeekPrecheckError::WeekIdAlreadyExists(week_id));
+        }
+
+        let period_len = match self.inner_data.params.periods.week_count_of(period_id) {
+            Some(len) => len,
+            None => return Err(WeekPrecheckError::InvalidPeriodId(period_id)),
+        };
+        if per_pos > period_len {
+            return Err(WeekPrecheckError::InvalidPosition(period_id, per_pos));
+        }
+
+        self.inner_data
+            .params
+            .periods
+            .insert_week_at(week_id, period_id, per_pos, desc.clone());
+
+        Ok(())
+    }
+
+    /// Thin copy of [Self::remove_week]: target existence kept; the
+    /// pattern-exclusion and colloscope-row scans (invariant guards) stripped.
+    fn force_remove_week(&mut self, week_id: WeekId) -> Result<AnnotatedWeekOp, WeekPrecheckError> {
+        let Some((period_id, per_pos)) = self.inner_data.params.periods.week_position(week_id)
+        else {
+            return Err(WeekPrecheckError::InvalidWeekId(week_id));
+        };
+
+        // stripped: NonTrivialWeekPattern scan + colloscope-row scan
+
+        // Compute the reverse op before mutating.
+        let prev_week_id = if per_pos > 0 {
+            self.inner_data
+                .params
+                .periods
+                .week_id_at(period_id, per_pos - 1)
+        } else {
+            None
+        };
+
+        let (_removed_period, _removed_pos, removed_desc) =
+            self.inner_data.params.periods.remove_week_entry(week_id);
+
+        Ok(match prev_week_id {
+            None => AnnotatedWeekOp::AddFront(week_id, period_id, removed_desc),
+            Some(prev) => AnnotatedWeekOp::AddAfter(week_id, prev, removed_desc),
+        })
+    }
+
+    /// Thin copy of [Self::update_week]: target existence kept; the silencing
+    /// colloscope guard (invariant guard) stripped.
+    fn force_update_week(
+        &mut self,
+        week_id: WeekId,
+        new_desc: &WeekDesc,
+    ) -> Result<AnnotatedWeekOp, WeekPrecheckError> {
+        if self
+            .inner_data
+            .params
+            .periods
+            .week_position(week_id)
+            .is_none()
+        {
+            return Err(WeekPrecheckError::InvalidWeekId(week_id));
+        }
+
+        // stripped: the interrogations→off silencing colloscope guard
+
+        let old_desc = self
+            .inner_data
+            .params
+            .periods
+            .replace_week_desc(week_id, new_desc.clone());
+
+        Ok(AnnotatedWeekOp::Update(week_id, old_desc))
+    }
+
+    /// Thin copy of [Self::move_week]: target existence, destination-period
+    /// existence and position bounds kept; both `WeekMove` semantic guards (the
+    /// F2 inline re-implementations) stripped.
+    fn force_move_week(
+        &mut self,
+        week_id: WeekId,
+        dest_period: PeriodId,
+        dest_pos: usize,
+    ) -> Result<AnnotatedWeekOp, WeekPrecheckError> {
+        let Some((src_period, src_pos)) = self.inner_data.params.periods.week_position(week_id)
+        else {
+            return Err(WeekPrecheckError::InvalidWeekId(week_id));
+        };
+        if self
+            .inner_data
+            .params
+            .periods
+            .week_count_of(dest_period)
+            .is_none()
+        {
+            return Err(WeekPrecheckError::InvalidPeriodId(dest_period));
+        }
+
+        // Destination length once the week is detached from its current spot.
+        let dest_len_post = self
+            .inner_data
+            .params
+            .periods
+            .week_count_of(dest_period)
+            .expect("dest period validated above")
+            - if dest_period == src_period { 1 } else { 0 };
+        if dest_pos > dest_len_post {
+            return Err(WeekPrecheckError::InvalidPosition(dest_period, dest_pos));
+        }
+
+        // stripped: the per-row colloscope compatibility guard (subject-runs +
+        // group-bound, the F2 inline re-implementations)
+
         self.inner_data
             .params
             .periods

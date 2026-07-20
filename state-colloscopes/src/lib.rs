@@ -408,6 +408,59 @@ impl InMemoryData for Data {
 }
 
 impl Data {
+    /// Applies `op` without checking invariants. Carve-out preconditions still
+    /// hold (no-clobber, op-target existence, positions/anchors, empty-first
+    /// protocol) and surface as [PrecheckError]; a failed call leaves the state
+    /// unchanged. A *successful* call may leave the state invalid: the caller
+    /// owns running a checker ([InnerData::check_invariants] /
+    /// [InnerData::broken_invariants]) and restoring a snapshot on failure.
+    ///
+    /// This is an independent thin copy of [InMemoryData::apply] (each arm calls
+    /// `force_apply_*`, the carve-out-only twin of `apply_*`). Three differences
+    /// from `apply`: errors land in [PrecheckError]; the `GlobalUpdate` arm drops
+    /// the `check_invariants()?` pre-gate (this *is* the force door); and the
+    /// trailing `check_invariants()` panic net is omitted (the state is allowed
+    /// to be invalid here). It is the step-5 apply/check/restore primitive; today
+    /// the step-4 differential fuzz exercises it.
+    pub fn force_apply(
+        &mut self,
+        op: &AnnotatedOp,
+    ) -> std::result::Result<AnnotatedOp, PrecheckError> {
+        let backward = match op {
+            AnnotatedOp::Student(o) => AnnotatedOp::Student(self.force_apply_student(o)?),
+            AnnotatedOp::Period(o) => AnnotatedOp::Period(self.force_apply_period(o)?),
+            AnnotatedOp::Week(o) => AnnotatedOp::Week(self.force_apply_week(o)?),
+            AnnotatedOp::Subject(o) => AnnotatedOp::Subject(self.force_apply_subject(o)?),
+            AnnotatedOp::Teacher(o) => AnnotatedOp::Teacher(self.force_apply_teacher(o)?),
+            AnnotatedOp::Assignment(o) => AnnotatedOp::Assignment(self.force_apply_assignment(o)?),
+            AnnotatedOp::WeekPattern(o) => {
+                AnnotatedOp::WeekPattern(self.force_apply_week_pattern(o)?)
+            }
+            AnnotatedOp::Slot(o) => AnnotatedOp::Slot(self.force_apply_slot(o)?),
+            AnnotatedOp::Incompat(o) => AnnotatedOp::Incompat(self.force_apply_incompat(o)?),
+            AnnotatedOp::Pairing(o) => AnnotatedOp::Pairing(self.force_apply_pairing(o)?),
+            AnnotatedOp::SlotPairing(o) => {
+                AnnotatedOp::SlotPairing(self.force_apply_slot_pairing(o)?)
+            }
+            AnnotatedOp::GroupList(o) => AnnotatedOp::GroupList(self.force_apply_group_list(o)?),
+            AnnotatedOp::Settings(o) => AnnotatedOp::Settings(self.force_apply_settings(o)?),
+            AnnotatedOp::Balancing(o) => AnnotatedOp::Balancing(self.force_apply_balancing(o)?),
+            AnnotatedOp::Colloscope(o) => AnnotatedOp::Colloscope(self.force_apply_colloscope(o)?),
+            AnnotatedOp::ExportConfig(o) => {
+                AnnotatedOp::ExportConfig(self.force_apply_export_config(o)?)
+            }
+            AnnotatedOp::GlobalUpdate(new_inner_data) => {
+                // no check_invariants pre-gate: this is the force door
+                let old = std::mem::replace(&mut self.inner_data, new_inner_data.clone());
+                AnnotatedOp::GlobalUpdate(old)
+            }
+        };
+        // no panic net: the state is allowed to be invalid here
+        Ok(backward)
+    }
+}
+
+impl Data {
     /// USED INTERNALLY
     ///
     /// Checks all the invariants of data
@@ -478,5 +531,200 @@ impl Data {
     /// an owned [InnerData]
     pub fn into_inner_data(self) -> InnerData {
         self.inner_data
+    }
+}
+
+#[cfg(test)]
+mod force_apply_tests {
+    //! Step-4 commit 2.2 pins for [Data::force_apply]: carve-out guards still
+    //! fire (leaving the state unchanged), stripped invariant guards let a
+    //! forced op land an *invalid* state that both checkers agree on, and a
+    //! forced *valid* op is byte-identical to the checked `apply` (the standing
+    //! anti-drift pin on the thin copies). The step-4 fuzz generalises these.
+
+    use crate::ids::{Id, PeriodId, StudentId, SubjectId, WeekPatternId};
+    use crate::invariants::assert_differential;
+    use crate::ops::{
+        AnnotatedOp, AnnotatedPeriodOp, AnnotatedStudentOp, AnnotatedSubjectOp, AssignmentOp, Op,
+        PeriodOp, StudentOp, SubjectOp, WeekOp,
+    };
+    use crate::periods::WeekDesc;
+    use crate::students::Student;
+    use crate::subjects::Subject;
+    use crate::week_patterns::WeekPattern;
+    use crate::{Data, FixableInvariant, InnerData, PrecheckError, StudentPrecheckError};
+    use collomatique_state::InMemoryData;
+    use std::collections::BTreeSet;
+
+    /// Applies a (valid) op through the checked path and returns its annotated
+    /// form, so callers can read back the freshly issued ids.
+    fn apply(data: &mut Data, op: Op) -> AnnotatedOp {
+        let (annotated, _) = data.annotate(op);
+        data.apply(&annotated).expect("valid op should apply");
+        annotated
+    }
+
+    /// The smallest state where a student is referenced by an assignments row:
+    /// one period, one subject running on it, one student assigned. Returns
+    /// `(data, period, subject, student)`.
+    fn data_with_assignment() -> (Data, PeriodId, SubjectId, StudentId) {
+        let mut data = Data::default();
+        let period = match apply(&mut data, Op::Period(PeriodOp::AddFront)) {
+            AnnotatedOp::Period(AnnotatedPeriodOp::AddFront(p)) => p,
+            other => panic!("unexpected annotated op {other:?}"),
+        };
+        let subject = match apply(
+            &mut data,
+            Op::Subject(SubjectOp::AddAfter(None, Subject::default())),
+        ) {
+            AnnotatedOp::Subject(AnnotatedSubjectOp::AddAfter(s, _, _)) => s,
+            other => panic!("unexpected annotated op {other:?}"),
+        };
+        let student = match apply(&mut data, Op::Student(StudentOp::Add(Student::default()))) {
+            AnnotatedOp::Student(AnnotatedStudentOp::Add(u, _)) => u,
+            other => panic!("unexpected annotated op {other:?}"),
+        };
+        apply(
+            &mut data,
+            Op::Assignment(AssignmentOp::Assign(period, student, subject, true)),
+        );
+        (data, period, subject, student)
+    }
+
+    #[test]
+    fn force_remove_referenced_student_lands_a_dangling_fk() {
+        let (mut data, _period, _subject, student) = data_with_assignment();
+        assert!(
+            data.get_inner_data().check_invariants().is_ok(),
+            "the built state is valid"
+        );
+
+        // The Remove scans (colloscope / group-list / assignments / settings)
+        // are stripped, so the forced removal succeeds even though the student
+        // is still referenced by an assignments row.
+        let (remove, _) = data.annotate(Op::Student(StudentOp::Remove(student)));
+        data.force_apply(&remove)
+            .expect("forced remove of a live student succeeds (scans stripped)");
+
+        // Both checkers must see the now-dangling reference, and the three-part
+        // differential must agree on it.
+        assert_differential(data.get_inner_data());
+        let broken = data.get_inner_data().broken_invariants();
+        assert!(
+            matches!(&broken, Ok(set) if set.iter().any(|f| matches!(f, FixableInvariant::DanglingFk(_)))),
+            "expected a dangling-FK report, got {broken:?}"
+        );
+        assert!(
+            data.get_inner_data().check_invariants().is_err(),
+            "the old checker must also reject the dangling state"
+        );
+    }
+
+    #[test]
+    fn force_add_on_existing_id_hard_errors_and_leaves_state_unchanged() {
+        let (mut data, _period, _subject, student) = data_with_assignment();
+        let before = data.clone();
+
+        // A directly-built Add re-using a live id — the no-clobber carve-out is
+        // kept, so this hard-errors without mutating.
+        let dup = AnnotatedOp::Student(AnnotatedStudentOp::Add(student, Student::default()));
+        let err = data.force_apply(&dup).unwrap_err();
+        assert!(
+            matches!(err, PrecheckError::Student(StudentPrecheckError::StudentIdAlreadyExists(id)) if id == student),
+            "expected StudentIdAlreadyExists, got {err:?}"
+        );
+        assert!(
+            data == before,
+            "a failed force_apply must not mutate the state"
+        );
+    }
+
+    #[test]
+    fn force_update_on_dangling_target_hard_errors_and_leaves_state_unchanged() {
+        let (mut data, _period, _subject, _student) = data_with_assignment();
+        let before = data.clone();
+
+        // Op-target existence is kept, so an Update on an absent id hard-errors.
+        let ghost = unsafe { StudentId::new(9_999) };
+        let update = AnnotatedOp::Student(AnnotatedStudentOp::Update(ghost, Student::default()));
+        let err = data.force_apply(&update).unwrap_err();
+        assert!(
+            matches!(err, PrecheckError::Student(StudentPrecheckError::InvalidStudentId(id)) if id == ghost),
+            "expected InvalidStudentId, got {err:?}"
+        );
+        assert!(
+            data == before,
+            "a failed force_apply must not mutate the state"
+        );
+    }
+
+    #[test]
+    fn force_global_update_drops_the_pre_gate_and_lands_an_invalid_state() {
+        // A valid vehicle; its inner is replaced wholesale.
+        let mut data = Data::default();
+
+        // A corrupt inner: a student and a week pattern sharing the same raw id
+        // — a duplicated-id LogicError that `apply`'s GlobalUpdate pre-gate would
+        // reject. `force_apply` drops that gate, so the corrupt state lands.
+        let mut corrupt = InnerData::default();
+        let student = unsafe { StudentId::new(1) };
+        let pattern = unsafe { WeekPatternId::new(1) };
+        corrupt
+            .params
+            .students
+            .student_map
+            .insert(student, Student::default());
+        corrupt.params.week_patterns.week_pattern_map.insert(
+            pattern,
+            WeekPattern {
+                name: "P".into(),
+                excluded_weeks: BTreeSet::new(),
+            },
+        );
+
+        let op = AnnotatedOp::GlobalUpdate(corrupt);
+        data.force_apply(&op)
+            .expect("forced GlobalUpdate is infallible (no pre-gate)");
+
+        assert!(
+            data.get_inner_data().check_invariants().is_err(),
+            "the duplicated-id state is invalid"
+        );
+        assert_differential(data.get_inner_data());
+    }
+
+    #[test]
+    fn forced_valid_student_add_equals_checked_apply() {
+        let data = Data::default();
+        let (add, _) = data.annotate(Op::Student(StudentOp::Add(Student::default())));
+
+        let mut checked = data.clone();
+        let mut forced = data.clone();
+        let checked_rev = checked.apply(&add).expect("valid op");
+        let forced_rev = forced.force_apply(&add).expect("valid op");
+
+        assert_eq!(checked.get_inner_data(), forced.get_inner_data());
+        assert_eq!(checked_rev, forced_rev);
+    }
+
+    #[test]
+    fn forced_valid_week_add_equals_checked_apply() {
+        // Weeks exercise the copied helpers (`force_add_week` &c.), the highest
+        // drift-risk spot (F2). Build a period, then compare the two paths on a
+        // week AddFront.
+        let mut data = Data::default();
+        let period = match apply(&mut data, Op::Period(PeriodOp::AddFront)) {
+            AnnotatedOp::Period(AnnotatedPeriodOp::AddFront(p)) => p,
+            other => panic!("unexpected annotated op {other:?}"),
+        };
+
+        let (add_week, _) = data.annotate(Op::Week(WeekOp::AddFront(period, WeekDesc::default())));
+        let mut checked = data.clone();
+        let mut forced = data.clone();
+        let checked_rev = checked.apply(&add_week).expect("valid op");
+        let forced_rev = forced.force_apply(&add_week).expect("valid op");
+
+        assert_eq!(checked.get_inner_data(), forced.get_inner_data());
+        assert_eq!(checked_rev, forced_rev);
     }
 }

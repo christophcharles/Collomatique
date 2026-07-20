@@ -239,4 +239,72 @@ impl crate::Data {
             }
         }
     }
+
+    /// Used internally by [crate::Data::force_apply]
+    ///
+    /// Thin copy of [Self::apply_week_pattern]: carve-out guards kept (returned
+    /// as [WeekPatternPrecheckError]), invariant guards stripped (step-3 survey
+    /// Table 1). May leave the state invalid; the caller owns checking and
+    /// rollback.
+    pub(crate) fn force_apply_week_pattern(
+        &mut self,
+        week_pattern_op: &AnnotatedWeekPatternOp,
+    ) -> std::result::Result<AnnotatedWeekPatternOp, WeekPatternPrecheckError> {
+        match week_pattern_op {
+            AnnotatedWeekPatternOp::Add(new_id, week_pattern) => {
+                if self
+                    .inner_data
+                    .params
+                    .week_patterns
+                    .week_pattern_map
+                    .contains(new_id)
+                {
+                    return Err(WeekPatternPrecheckError::WeekPatternIdAlreadyExists(
+                        *new_id,
+                    ));
+                }
+
+                // stripped: validate_week_pattern
+
+                self.inner_data
+                    .params
+                    .week_patterns
+                    .week_pattern_map
+                    .insert(*new_id, week_pattern.clone());
+
+                Ok(AnnotatedWeekPatternOp::Remove(*new_id))
+            }
+            AnnotatedWeekPatternOp::Remove(id) => {
+                // stripped: slot-reference / incompat-reference scans
+                let Some(old_week_pattern) = self
+                    .inner_data
+                    .params
+                    .week_patterns
+                    .week_pattern_map
+                    .remove(id)
+                else {
+                    return Err(WeekPatternPrecheckError::InvalidWeekPatternId(*id));
+                };
+
+                Ok(AnnotatedWeekPatternOp::Add(*id, old_week_pattern))
+            }
+            AnnotatedWeekPatternOp::Update(id, new_week_pattern) => {
+                // stripped: validate_week_pattern + the colloscope silencing guard
+                let Some(current_week_pattern) = self
+                    .inner_data
+                    .params
+                    .week_patterns
+                    .week_pattern_map
+                    .get_mut(id)
+                else {
+                    return Err(WeekPatternPrecheckError::InvalidWeekPatternId(*id));
+                };
+
+                let old_week_pattern =
+                    std::mem::replace(current_week_pattern, new_week_pattern.clone());
+
+                Ok(AnnotatedWeekPatternOp::Update(*id, old_week_pattern))
+            }
+        }
+    }
 }

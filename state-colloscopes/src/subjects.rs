@@ -642,4 +642,125 @@ impl crate::Data {
             }
         }
     }
+
+    /// Used internally by [crate::Data::force_apply]
+    ///
+    /// Thin copy of [Self::apply_subject]: carve-out guards kept (returned as
+    /// [SubjectPrecheckError] — no-clobber, target existence, `AddAfter` anchor,
+    /// position bounds), invariant guards stripped (step-3 survey Table 1). May
+    /// leave the state invalid; the caller owns checking and rollback.
+    pub(crate) fn force_apply_subject(
+        &mut self,
+        subject_op: &AnnotatedSubjectOp,
+    ) -> std::result::Result<AnnotatedSubjectOp, SubjectPrecheckError> {
+        match subject_op {
+            AnnotatedSubjectOp::AddAfter(new_id, after_id, params) => {
+                if self
+                    .inner_data
+                    .params
+                    .subjects
+                    .find_subject_position(*new_id)
+                    .is_some()
+                {
+                    return Err(SubjectPrecheckError::SubjectIdAlreadyExists(*new_id));
+                }
+                // stripped: validate_subject
+
+                let position = match after_id {
+                    Some(id) => {
+                        self.inner_data
+                            .params
+                            .subjects
+                            .find_subject_position(*id)
+                            .ok_or(SubjectPrecheckError::InvalidSubjectId(*id))?
+                            + 1
+                    }
+                    None => 0,
+                };
+
+                self.inner_data
+                    .params
+                    .subjects
+                    .ordered_subject_list
+                    .insert_at(position, *new_id, params.clone())
+                    .expect("subject id absence checked above");
+
+                Ok(AnnotatedSubjectOp::Remove(*new_id))
+            }
+            AnnotatedSubjectOp::ChangePosition(id, new_pos) => {
+                if *new_pos >= self.inner_data.params.subjects.ordered_subject_list.len() {
+                    return Err(SubjectPrecheckError::PositionOutOfBounds(
+                        *new_pos,
+                        self.inner_data.params.subjects.ordered_subject_list.len(),
+                    ));
+                }
+                let Some(old_pos) = self.inner_data.params.subjects.find_subject_position(*id)
+                else {
+                    return Err(SubjectPrecheckError::InvalidSubjectId(*id));
+                };
+
+                self.inner_data
+                    .params
+                    .subjects
+                    .ordered_subject_list
+                    .move_entry(old_pos, *new_pos);
+                Ok(AnnotatedSubjectOp::ChangePosition(*id, old_pos))
+            }
+            AnnotatedSubjectOp::Remove(id) => {
+                let Some(position) = self.inner_data.params.subjects.find_subject_position(*id)
+                else {
+                    return Err(SubjectPrecheckError::InvalidSubjectId(*id));
+                };
+
+                // stripped: balancing / pairing / association / slot / teacher /
+                // incompat / assignment reference scans
+
+                let previous_id = (position > 0).then(|| {
+                    self.inner_data
+                        .params
+                        .subjects
+                        .ordered_subject_list
+                        .get_at(position - 1)
+                        .expect("position > 0 checked")
+                        .0
+                });
+
+                let (_, params) = self
+                    .inner_data
+                    .params
+                    .subjects
+                    .ordered_subject_list
+                    .remove_at(position);
+
+                Ok(AnnotatedSubjectOp::AddAfter(*id, previous_id, params))
+            }
+            AnnotatedSubjectOp::Update(id, new_params) => {
+                // stripped: validate_subject
+                let Some(position) = self.inner_data.params.subjects.find_subject_position(*id)
+                else {
+                    return Err(SubjectPrecheckError::InvalidSubjectId(*id));
+                };
+
+                let old_params = self
+                    .inner_data
+                    .params
+                    .subjects
+                    .ordered_subject_list
+                    .get_at(position)
+                    .expect("position comes from find_subject_position")
+                    .1
+                    .clone();
+
+                // stripped: interrogations-off guards + newly-excluded-period guards
+
+                self.inner_data
+                    .params
+                    .subjects
+                    .ordered_subject_list
+                    .replace_value_at(position, new_params.clone());
+
+                Ok(AnnotatedSubjectOp::Update(*id, old_params))
+            }
+        }
+    }
 }

@@ -109,6 +109,26 @@ impl crate::Data {
             }
         }
     }
+
+    /// Used internally by [crate::Data::force_apply]
+    ///
+    /// Thin copy of [Self::apply_balancing]: the only guard (`validate_balancing`)
+    /// is an invariant guard and is stripped (step-3 survey Table 1), so this
+    /// copy is guard-free and its [BalancingPrecheckError] is empty. May leave the
+    /// state invalid; the caller owns checking and rollback.
+    pub(crate) fn force_apply_balancing(
+        &mut self,
+        balancing_op: &AnnotatedBalancingOp,
+    ) -> std::result::Result<AnnotatedBalancingOp, BalancingPrecheckError> {
+        match balancing_op {
+            AnnotatedBalancingOp::Update(new_balancing) => {
+                // stripped: validate_balancing
+                let old_balancing =
+                    std::mem::replace(&mut self.inner_data.params.balancing, new_balancing.clone());
+                Ok(AnnotatedBalancingOp::Update(old_balancing))
+            }
+        }
+    }
 }
 
 #[cfg(test)]

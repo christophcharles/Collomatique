@@ -204,4 +204,51 @@ impl crate::Data {
             }
         }
     }
+
+    /// Used internally by [crate::Data::force_apply]
+    ///
+    /// Thin copy of [Self::apply_student]: carve-out guards kept (returned as
+    /// [StudentPrecheckError]), invariant guards stripped (step-3 survey Table 1).
+    /// May leave the state invalid; the caller owns checking and rollback.
+    pub(crate) fn force_apply_student(
+        &mut self,
+        student_op: &AnnotatedStudentOp,
+    ) -> std::result::Result<AnnotatedStudentOp, StudentPrecheckError> {
+        match student_op {
+            AnnotatedStudentOp::Add(new_id, student) => {
+                if self.inner_data.params.students.student_map.contains(new_id) {
+                    return Err(StudentPrecheckError::StudentIdAlreadyExists(*new_id));
+                }
+                // stripped: validate_student
+
+                self.inner_data
+                    .params
+                    .students
+                    .student_map
+                    .insert(*new_id, student.clone());
+
+                Ok(AnnotatedStudentOp::Remove(*new_id))
+            }
+            AnnotatedStudentOp::Remove(id) => {
+                // stripped: colloscope-placement / group-list / assignments / settings scans
+                let Some(old_student) = self.inner_data.params.students.student_map.remove(id)
+                else {
+                    return Err(StudentPrecheckError::InvalidStudentId(*id));
+                };
+
+                Ok(AnnotatedStudentOp::Add(*id, old_student))
+            }
+            AnnotatedStudentOp::Update(id, new_student) => {
+                // stripped: validate_student + newly-excluded-period assignment scan
+                let Some(current_student) = self.inner_data.params.students.student_map.get_mut(id)
+                else {
+                    return Err(StudentPrecheckError::InvalidStudentId(*id));
+                };
+
+                let old_student = std::mem::replace(current_student, new_student.clone());
+
+                Ok(AnnotatedStudentOp::Update(*id, old_student))
+            }
+        }
+    }
 }

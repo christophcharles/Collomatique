@@ -596,4 +596,135 @@ impl crate::Data {
             }
         }
     }
+
+    /// Used internally by [crate::Data::force_apply]
+    ///
+    /// Thin copy of [Self::apply_slot]: carve-out guards kept (returned as
+    /// [SlotPrecheckError] — no-clobber, target existence, `AddAfter` same-subject
+    /// anchor, position bounds, subject immutability), invariant guards stripped
+    /// (step-3 survey Table 1). May leave the state invalid; the caller owns
+    /// checking and rollback.
+    pub(crate) fn force_apply_slot(
+        &mut self,
+        slot_op: &AnnotatedSlotOp,
+    ) -> std::result::Result<AnnotatedSlotOp, SlotPrecheckError> {
+        match slot_op {
+            AnnotatedSlotOp::AddAfter(new_id, after_id, slot) => {
+                // The subject is authoritative from the slot itself.
+                let subject_id = slot.subject_id;
+
+                if self.inner_data.params.slots.find_slot(*new_id).is_some() {
+                    return Err(SlotPrecheckError::SlotIdAlreadyExists(*new_id));
+                }
+                // stripped: validate_slot
+
+                let position = match after_id {
+                    Some(id) => {
+                        let (sub_id, after_pos) = self
+                            .inner_data
+                            .params
+                            .slots
+                            .find_slot_subject_and_position(*id)
+                            .ok_or(SlotPrecheckError::InvalidSlotId(*id))?;
+                        if sub_id != subject_id {
+                            return Err(SlotPrecheckError::PreviousSlotIsNotInRightSubject(
+                                *id, subject_id,
+                            ));
+                        }
+
+                        after_pos + 1
+                    }
+                    None => 0,
+                };
+
+                self.inner_data
+                    .params
+                    .slots
+                    .insert_slot_at(*new_id, slot.clone(), position);
+
+                Ok(AnnotatedSlotOp::Remove(*new_id))
+            }
+            AnnotatedSlotOp::ChangePosition(id, new_pos) => {
+                let Some((subject_id, old_pos)) = self
+                    .inner_data
+                    .params
+                    .slots
+                    .find_slot_subject_and_position(*id)
+                else {
+                    return Err(SlotPrecheckError::InvalidSlotId(*id));
+                };
+
+                let count = self
+                    .inner_data
+                    .params
+                    .slots
+                    .slot_count_for_subject(subject_id)
+                    .expect("Subject id should be valid at this point");
+                if *new_pos >= count {
+                    return Err(SlotPrecheckError::PositionOutOfBounds(*new_pos, count));
+                }
+
+                self.inner_data.params.slots.move_slot(*id, *new_pos);
+
+                Ok(AnnotatedSlotOp::ChangePosition(*id, old_pos))
+            }
+            AnnotatedSlotOp::Remove(id) => {
+                let Some((subject_id, old_pos)) = self
+                    .inner_data
+                    .params
+                    .slots
+                    .find_slot_subject_and_position(*id)
+                else {
+                    return Err(SlotPrecheckError::InvalidSlotId(*id));
+                };
+
+                // stripped: colloscope-row scan + slot-pairing reference scan
+
+                // Capture the previous slot in the subject ordering before removing.
+                let previous_id = if old_pos > 0 {
+                    self.inner_data
+                        .params
+                        .slots
+                        .slots_for_subject(subject_id)
+                        .expect("Subject id should be valid at this point")
+                        .nth(old_pos - 1)
+                        .map(|(slot_id, _)| *slot_id)
+                } else {
+                    None
+                };
+                let (_old_pos, old_slot) = self.inner_data.params.slots.remove_slot(*id);
+
+                Ok(AnnotatedSlotOp::AddAfter(*id, previous_id, old_slot))
+            }
+            AnnotatedSlotOp::Update(slot_id, new_slot) => {
+                let Some((subject_id, _position)) = self
+                    .inner_data
+                    .params
+                    .slots
+                    .find_slot_subject_and_position(*slot_id)
+                else {
+                    return Err(SlotPrecheckError::InvalidSlotId(*slot_id));
+                };
+
+                // A slot cannot be moved to a different subject.
+                if new_slot.subject_id != subject_id {
+                    return Err(SlotPrecheckError::CannotChangeSubject(
+                        *slot_id,
+                        subject_id,
+                        new_slot.subject_id,
+                    ));
+                }
+
+                // stripped: validate_slot + the colloscope pattern-compat guard
+
+                let old_slot = self
+                    .inner_data
+                    .params
+                    .slots
+                    .replace_slot(*slot_id, new_slot.clone());
+
+                Ok(AnnotatedSlotOp::Update(*slot_id, old_slot))
+            }
+        }
+    }
 }

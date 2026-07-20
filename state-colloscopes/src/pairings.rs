@@ -150,4 +150,57 @@ impl crate::Data {
             }
         }
     }
+
+    /// Used internally by [crate::Data::force_apply]
+    ///
+    /// Thin copy of [Self::apply_pairing]: carve-out guards kept (returned as
+    /// [PairingPrecheckError]), invariant guards stripped (step-3 survey Table 1).
+    /// May leave the state invalid; the caller owns checking and rollback.
+    pub(crate) fn force_apply_pairing(
+        &mut self,
+        pairing_op: &AnnotatedPairingOp,
+    ) -> std::result::Result<AnnotatedPairingOp, PairingPrecheckError> {
+        match pairing_op {
+            AnnotatedPairingOp::Add(new_id, rule) => {
+                if self
+                    .inner_data
+                    .params
+                    .pairings
+                    .pairing_rule_map
+                    .contains(new_id)
+                {
+                    return Err(PairingPrecheckError::PairingRuleIdAlreadyExists(*new_id));
+                }
+                // stripped: validate_pairing_rule
+
+                self.inner_data
+                    .params
+                    .pairings
+                    .pairing_rule_map
+                    .insert(*new_id, rule.clone());
+
+                Ok(AnnotatedPairingOp::Remove(*new_id))
+            }
+            AnnotatedPairingOp::Remove(id) => {
+                let Some(old_rule) = self.inner_data.params.pairings.pairing_rule_map.remove(id)
+                else {
+                    return Err(PairingPrecheckError::InvalidPairingRuleId(*id));
+                };
+
+                Ok(AnnotatedPairingOp::Add(*id, old_rule))
+            }
+            AnnotatedPairingOp::Update(id, new_rule) => {
+                // stripped: validate_pairing_rule
+
+                let Some(rule) = self.inner_data.params.pairings.pairing_rule_map.get_mut(id)
+                else {
+                    return Err(PairingPrecheckError::InvalidPairingRuleId(*id));
+                };
+
+                let old_rule = std::mem::replace(rule, new_rule.clone());
+
+                Ok(AnnotatedPairingOp::Update(*id, old_rule))
+            }
+        }
+    }
 }

@@ -79,6 +79,26 @@ impl crate::Data {
             }
         }
     }
+
+    /// Used internally by [crate::Data::force_apply]
+    ///
+    /// Thin copy of [Self::apply_settings]: the only guard (`validate_settings`)
+    /// is an invariant guard and is stripped (step-3 survey Table 1), so this
+    /// copy is guard-free and its [SettingsPrecheckError] is empty. May leave the
+    /// state invalid; the caller owns checking and rollback.
+    pub(crate) fn force_apply_settings(
+        &mut self,
+        settings_op: &AnnotatedSettingsOp,
+    ) -> std::result::Result<AnnotatedSettingsOp, SettingsPrecheckError> {
+        match settings_op {
+            AnnotatedSettingsOp::Update(new_settings) => {
+                // stripped: validate_settings
+                let old_settings =
+                    std::mem::replace(&mut self.inner_data.params.settings, new_settings.clone());
+                Ok(AnnotatedSettingsOp::Update(old_settings))
+            }
+        }
+    }
 }
 
 #[cfg(test)]

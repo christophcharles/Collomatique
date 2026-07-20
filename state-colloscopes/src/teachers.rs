@@ -155,4 +155,51 @@ impl crate::Data {
             }
         }
     }
+
+    /// Used internally by [crate::Data::force_apply]
+    ///
+    /// Thin copy of [Self::apply_teacher]: carve-out guards kept (returned as
+    /// [TeacherPrecheckError]), invariant guards stripped (step-3 survey Table 1).
+    /// May leave the state invalid; the caller owns checking and rollback.
+    pub(crate) fn force_apply_teacher(
+        &mut self,
+        teacher_op: &AnnotatedTeacherOp,
+    ) -> std::result::Result<AnnotatedTeacherOp, TeacherPrecheckError> {
+        match teacher_op {
+            AnnotatedTeacherOp::Add(new_id, teacher) => {
+                if self.inner_data.params.teachers.teacher_map.contains(new_id) {
+                    return Err(TeacherPrecheckError::TeacherIdAlreadyExists(*new_id));
+                }
+                // stripped: validate_teacher
+
+                self.inner_data
+                    .params
+                    .teachers
+                    .teacher_map
+                    .insert(*new_id, teacher.clone());
+
+                Ok(AnnotatedTeacherOp::Remove(*new_id))
+            }
+            AnnotatedTeacherOp::Remove(id) => {
+                // stripped: slot-reference scan
+                let Some(old_teacher) = self.inner_data.params.teachers.teacher_map.remove(id)
+                else {
+                    return Err(TeacherPrecheckError::InvalidTeacherId(*id));
+                };
+
+                Ok(AnnotatedTeacherOp::Add(*id, old_teacher))
+            }
+            AnnotatedTeacherOp::Update(id, new_teacher) => {
+                // stripped: validate_teacher + dropped-subject slot scan
+                let Some(current_teacher) = self.inner_data.params.teachers.teacher_map.get_mut(id)
+                else {
+                    return Err(TeacherPrecheckError::InvalidTeacherId(*id));
+                };
+
+                let old_teacher = std::mem::replace(current_teacher, new_teacher.clone());
+
+                Ok(AnnotatedTeacherOp::Update(*id, old_teacher))
+            }
+        }
+    }
 }

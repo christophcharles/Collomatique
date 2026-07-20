@@ -732,4 +732,251 @@ impl crate::Data {
             }
         }
     }
+
+    /// Used internally by [crate::Data::force_apply]
+    ///
+    /// Thin copy of [Self::apply_group_list]: carve-out guards kept (returned as
+    /// [GroupListPrecheckError] — no-clobber, target existence, the empty-first
+    /// protocol guards `RemainingFilling` / `NonEmptyGroupsWhenReducing`, the
+    /// dual-listed `PrefillGroupCountMismatch`, and the `AssignToSubject`
+    /// coordinate existence), invariant guards stripped (step-3 survey Table 1).
+    /// May leave the state invalid; the caller owns checking and rollback.
+    pub(crate) fn force_apply_group_list(
+        &mut self,
+        group_list_op: &AnnotatedGroupListOp,
+    ) -> std::result::Result<AnnotatedGroupListOp, GroupListPrecheckError> {
+        match group_list_op {
+            AnnotatedGroupListOp::Add(new_id, params, filling) => {
+                if self
+                    .inner_data
+                    .params
+                    .group_lists
+                    .group_list_map
+                    .contains(new_id)
+                {
+                    return Err(GroupListPrecheckError::GroupListIdAlreadyExists(*new_id));
+                };
+                let new_group_list = group_lists::GroupList {
+                    params: params.clone(),
+                    filling: filling.clone(),
+                };
+                // stripped: validate_group_list
+
+                self.inner_data
+                    .params
+                    .group_lists
+                    .group_list_map
+                    .insert(*new_id, new_group_list);
+
+                Ok(AnnotatedGroupListOp::Remove(*new_id))
+            }
+            AnnotatedGroupListOp::Remove(id) => {
+                let Some(old_group_list) =
+                    self.inner_data.params.group_lists.group_list_map.get(id)
+                else {
+                    return Err(GroupListPrecheckError::InvalidGroupListId(*id));
+                };
+
+                // Empty-first protocol guard (kept): filling must be empty.
+                match &old_group_list.filling {
+                    group_lists::GroupListFilling::Prefilled { groups } => {
+                        if groups.iter().any(|g| !g.students.is_empty()) {
+                            return Err(GroupListPrecheckError::RemainingFilling);
+                        }
+                    }
+                    group_lists::GroupListFilling::Automatic { excluded_students } => {
+                        if !excluded_students.is_empty() {
+                            return Err(GroupListPrecheckError::RemainingFilling);
+                        }
+                        // stripped: NotEmptyGroupListInColloscope scan
+                    }
+                }
+
+                // stripped: RemainingAssociatedSubjects scan
+
+                let old_group_list = self
+                    .inner_data
+                    .params
+                    .group_lists
+                    .group_list_map
+                    .remove(id)
+                    .expect("Group list ID was checked above");
+
+                Ok(AnnotatedGroupListOp::Add(
+                    *id,
+                    old_group_list.params,
+                    old_group_list.filling,
+                ))
+            }
+            AnnotatedGroupListOp::Update(group_list_id, new_params) => {
+                let Some(old_group_list) = self
+                    .inner_data
+                    .params
+                    .group_lists
+                    .group_list_map
+                    .get(group_list_id)
+                else {
+                    return Err(GroupListPrecheckError::InvalidGroupListId(*group_list_id));
+                };
+
+                // stripped: colloscope placement compat guard + interrogation
+                // group-bound scan
+
+                // Atomically adjust filling when size changes. The
+                // NonEmptyGroupsWhenReducing protocol guard is kept.
+                let new_filling = match &old_group_list.filling {
+                    group_lists::GroupListFilling::Automatic { excluded_students } => {
+                        group_lists::GroupListFilling::Automatic {
+                            excluded_students: excluded_students.clone(),
+                        }
+                    }
+                    group_lists::GroupListFilling::Prefilled { groups: old_groups } => {
+                        let old_count = old_group_list.params.group_names.len();
+                        let new_count = new_params.group_names.len();
+
+                        if new_count < old_count {
+                            // Reducing groups: check last groups are empty
+                            for group in old_groups.iter().skip(new_count) {
+                                if !group.students.is_empty() {
+                                    return Err(GroupListPrecheckError::NonEmptyGroupsWhenReducing);
+                                }
+                            }
+                            // Truncate to new size
+                            group_lists::GroupListFilling::Prefilled {
+                                groups: old_groups[..new_count].to_vec(),
+                            }
+                        } else if new_count > old_count {
+                            // Increasing groups: extend with empty groups
+                            let mut new_groups = old_groups.clone();
+                            for _ in old_count..new_count {
+                                new_groups.push(group_lists::PrefilledGroup::default());
+                            }
+                            group_lists::GroupListFilling::Prefilled { groups: new_groups }
+                        } else {
+                            // Same size: keep as is
+                            group_lists::GroupListFilling::Prefilled {
+                                groups: old_groups.clone(),
+                            }
+                        }
+                    }
+                };
+
+                let new_group_list = group_lists::GroupList {
+                    params: new_params.clone(),
+                    filling: new_filling,
+                };
+
+                // stripped: validate_group_list
+
+                let old_group_list = self
+                    .inner_data
+                    .params
+                    .group_lists
+                    .group_list_map
+                    .insert(*group_list_id, new_group_list)
+                    .expect("Group list ID was checked above");
+
+                Ok(AnnotatedGroupListOp::Update(
+                    *group_list_id,
+                    old_group_list.params,
+                ))
+            }
+            AnnotatedGroupListOp::SetFilling(group_list_id, filling) => {
+                let Some(old_group_list) = self
+                    .inner_data
+                    .params
+                    .group_lists
+                    .group_list_map
+                    .get(group_list_id)
+                else {
+                    return Err(GroupListPrecheckError::InvalidGroupListId(*group_list_id));
+                };
+
+                // Payload-shape carve-out (kept, dual-listed): prefilled groups
+                // count must match group_names count.
+                if let group_lists::GroupListFilling::Prefilled { groups } = filling {
+                    let expected = old_group_list.params.group_names.len();
+                    let actual = groups.len();
+                    if actual != expected {
+                        return Err(GroupListPrecheckError::PrefillGroupCountMismatch {
+                            expected,
+                            actual,
+                        });
+                    }
+                }
+
+                // stripped: prefill-transition colloscope guards
+                // (NonEmptyColloscopeGroupListWhenPrefilling / placement compat)
+
+                let new_group_list = group_lists::GroupList {
+                    params: old_group_list.params.clone(),
+                    filling: filling.clone(),
+                };
+
+                // stripped: validate_group_list
+
+                let old_group_list = self
+                    .inner_data
+                    .params
+                    .group_lists
+                    .group_list_map
+                    .insert(*group_list_id, new_group_list)
+                    .expect("Group list ID was checked above");
+
+                Ok(AnnotatedGroupListOp::SetFilling(
+                    *group_list_id,
+                    old_group_list.filling,
+                ))
+            }
+            AnnotatedGroupListOp::AssignToSubject(period_id, subject_id, group_list_id) => {
+                if self
+                    .inner_data
+                    .params
+                    .subjects
+                    .find_subject(*subject_id)
+                    .is_none()
+                {
+                    return Err(GroupListPrecheckError::InvalidSubjectId(*subject_id));
+                }
+                // stripped: SubjectHasNoInterrogation + SubjectDoesNotRunOnPeriod
+                if self
+                    .inner_data
+                    .params
+                    .periods
+                    .find_period_position(*period_id)
+                    .is_none()
+                {
+                    return Err(GroupListPrecheckError::InvalidPeriodId(*period_id));
+                }
+
+                // Keep the group-list existence carve-out; the bound value it also
+                // computed was only used by the stripped group-bound scan.
+                if let Some(id) = group_list_id
+                    && !self
+                        .inner_data
+                        .params
+                        .group_lists
+                        .group_list_map
+                        .contains(id)
+                {
+                    return Err(GroupListPrecheckError::InvalidGroupListId(*id));
+                }
+
+                // stripped: check_interrogations_group_bound
+
+                let associations = &mut self.inner_data.params.group_lists.subjects_associations;
+
+                let old_group_list_id = match group_list_id {
+                    Some(id) => associations.insert((*period_id, *subject_id), *id),
+                    None => associations.remove(&(*period_id, *subject_id)),
+                };
+
+                Ok(AnnotatedGroupListOp::AssignToSubject(
+                    *period_id,
+                    *subject_id,
+                    old_group_list_id,
+                ))
+            }
+        }
+    }
 }

@@ -151,4 +151,72 @@ impl crate::Data {
         };
         Ok(backward)
     }
+
+    /// Used internally by [crate::Data::force_apply]
+    ///
+    /// Thin copy of [Self::apply_slot_pairing]: carve-out guards kept (returned
+    /// as [SlotPairingPrecheckError]), invariant guards stripped (step-3 survey
+    /// Table 1). May leave the state invalid; the caller owns checking and
+    /// rollback.
+    pub(crate) fn force_apply_slot_pairing(
+        &mut self,
+        slot_pairing_op: &AnnotatedSlotPairingOp,
+    ) -> Result<AnnotatedSlotPairingOp, SlotPairingPrecheckError> {
+        let backward = match slot_pairing_op {
+            AnnotatedSlotPairingOp::Add(new_id, rule) => {
+                if self
+                    .inner_data
+                    .params
+                    .slot_pairings
+                    .slot_pairing_rule_map
+                    .contains(new_id)
+                {
+                    return Err(SlotPairingPrecheckError::SlotPairingRuleIdAlreadyExists(
+                        *new_id,
+                    ));
+                }
+
+                // stripped: validate_slot_pairing_rule
+
+                self.inner_data
+                    .params
+                    .slot_pairings
+                    .slot_pairing_rule_map
+                    .insert(*new_id, rule.clone());
+
+                AnnotatedSlotPairingOp::Remove(*new_id)
+            }
+            AnnotatedSlotPairingOp::Remove(id) => {
+                let Some(old_rule) = self
+                    .inner_data
+                    .params
+                    .slot_pairings
+                    .slot_pairing_rule_map
+                    .remove(id)
+                else {
+                    return Err(SlotPairingPrecheckError::InvalidSlotPairingRuleId(*id));
+                };
+
+                AnnotatedSlotPairingOp::Add(*id, old_rule)
+            }
+            AnnotatedSlotPairingOp::Update(id, new_rule) => {
+                // stripped: validate_slot_pairing_rule
+
+                let Some(rule) = self
+                    .inner_data
+                    .params
+                    .slot_pairings
+                    .slot_pairing_rule_map
+                    .get_mut(id)
+                else {
+                    return Err(SlotPairingPrecheckError::InvalidSlotPairingRuleId(*id));
+                };
+
+                let old_rule = std::mem::replace(rule, new_rule.clone());
+
+                AnnotatedSlotPairingOp::Update(*id, old_rule)
+            }
+        };
+        Ok(backward)
+    }
 }

@@ -461,6 +461,95 @@ impl crate::Data {
             }
         }
     }
+
+    /// Used internally by [crate::Data::force_apply]
+    ///
+    /// Thin copy of [Self::apply_colloscope]: the coordinate-existence carve-outs
+    /// are kept (returned as [ColloscopePrecheckError] — `SetGroupList` target,
+    /// `SetInterrogation` week + slot), the `SetGroupList` prefilled/placement
+    /// guards and the three `SetInterrogation` semantic guards are stripped
+    /// (step-3 survey Table 1). Sparse writers copied verbatim. May leave the
+    /// state invalid; the caller owns checking and rollback.
+    pub(crate) fn force_apply_colloscope(
+        &mut self,
+        colloscope_op: &AnnotatedColloscopeOp,
+    ) -> std::result::Result<AnnotatedColloscopeOp, ColloscopePrecheckError> {
+        match colloscope_op {
+            AnnotatedColloscopeOp::SetGroupList(group_list_id, placements) => {
+                if self
+                    .inner_data
+                    .params
+                    .group_lists
+                    .group_list_map
+                    .get(group_list_id)
+                    .is_none()
+                {
+                    return Err(ColloscopePrecheckError::InvalidGroupListId(*group_list_id));
+                }
+
+                // stripped: is_prefilled guard + validate_group_list_placements
+
+                // Read the prior placements for the reverse op, then write.
+                let old_placements = self
+                    .inner_data
+                    .colloscope
+                    .group_list(*group_list_id)
+                    .cloned()
+                    .unwrap_or_default();
+                self.inner_data
+                    .colloscope
+                    .set_group_list(*group_list_id, placements.clone());
+
+                Ok(AnnotatedColloscopeOp::SetGroupList(
+                    *group_list_id,
+                    old_placements,
+                ))
+            }
+            AnnotatedColloscopeOp::SetInterrogation(slot_id, week_id, assigned_groups) => {
+                // Resolve the week to its (period, position) coordinate (kept).
+                if self
+                    .inner_data
+                    .params
+                    .periods
+                    .week_position(*week_id)
+                    .is_none()
+                {
+                    return Err(ColloscopePrecheckError::InvalidWeekId(*week_id));
+                }
+
+                // The slot must exist (kept).
+                if self
+                    .inner_data
+                    .params
+                    .slots
+                    .find_slot_with_subject(*slot_id)
+                    .is_none()
+                {
+                    return Err(ColloscopePrecheckError::InvalidSlotId(*slot_id));
+                }
+
+                // stripped: SlotNotRunningOnPeriod + InterrogationOnInactiveWeek
+                // + InvalidGroupNumInInterrogation group-bound guard
+
+                // Read the prior groups for the reverse op, then write.
+                let old_groups = self
+                    .inner_data
+                    .colloscope
+                    .interrogation(*slot_id, *week_id)
+                    .cloned()
+                    .unwrap_or_default();
+                self.inner_data.colloscope.set_interrogation(
+                    *slot_id,
+                    *week_id,
+                    assigned_groups.clone(),
+                );
+
+                Ok(AnnotatedColloscopeOp::SetInterrogation(
+                    *slot_id, *week_id, old_groups,
+                ))
+            }
+        }
+    }
 }
 
 #[cfg(test)]

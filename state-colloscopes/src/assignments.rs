@@ -172,4 +172,82 @@ impl crate::Data {
             }
         }
     }
+
+    /// Used internally by [crate::Data::force_apply]
+    ///
+    /// Thin copy of [Self::apply_assignment]: the three coordinate-existence
+    /// checks are kept (dual-listed carve-outs, returned as
+    /// [AssignmentPrecheckError]); the two semantic guards (subject-runs /
+    /// student-present) are stripped (step-3 survey Table 1). Write-time
+    /// canonicalization is copied verbatim. May leave the state invalid; the
+    /// caller owns checking and rollback.
+    pub(crate) fn force_apply_assignment(
+        &mut self,
+        assignment_op: &AnnotatedAssignmentOp,
+    ) -> std::result::Result<AnnotatedAssignmentOp, AssignmentPrecheckError> {
+        match assignment_op {
+            AnnotatedAssignmentOp::Assign(period_id, student_id, subject_id, status) => {
+                if self
+                    .inner_data
+                    .params
+                    .periods
+                    .find_period_position(*period_id)
+                    .is_none()
+                {
+                    return Err(AssignmentPrecheckError::InvalidPeriodId(*period_id));
+                }
+
+                if self
+                    .inner_data
+                    .params
+                    .subjects
+                    .find_subject(*subject_id)
+                    .is_none()
+                {
+                    return Err(AssignmentPrecheckError::InvalidSubjectId(*subject_id));
+                }
+
+                // stripped: SubjectDoesNotRunOnPeriod semantic guard
+
+                if !self
+                    .inner_data
+                    .params
+                    .students
+                    .student_map
+                    .contains(student_id)
+                {
+                    return Err(AssignmentPrecheckError::InvalidStudentId(*student_id));
+                }
+
+                // stripped: StudentIsNotPresentOnPeriod semantic guard
+
+                // Sparse canonical form: a `(period, subject)` row exists iff
+                // its student set is non-empty. Assigning creates the row on
+                // demand; de-assigning drops the row once it empties.
+                let map = &mut self.inner_data.params.assignments.map;
+                let key = (*period_id, *subject_id);
+                let previous_status = map.get(&key).is_some_and(|s| s.contains(student_id));
+
+                if *status {
+                    if let Some(assigned_students) = map.get_mut(&key) {
+                        assigned_students.insert(*student_id);
+                    } else {
+                        map.insert(key, BTreeSet::from([*student_id]));
+                    }
+                } else if let Some(assigned_students) = map.get_mut(&key) {
+                    assigned_students.remove(student_id);
+                    if assigned_students.is_empty() {
+                        map.remove(&key);
+                    }
+                }
+
+                Ok(AnnotatedAssignmentOp::Assign(
+                    *period_id,
+                    *student_id,
+                    *subject_id,
+                    previous_status,
+                ))
+            }
+        }
+    }
 }
