@@ -923,7 +923,16 @@ deletion (everything twinned in Table 1 retires in favor of the precise vocabula
   balancing/teachers/associations/slots but *not* pairing/incompat references — correct:
   those edges don't require interrogations, in the validators and both checkers alike
   (documented on `Incompatibility::subject_id`).
-- **F5 — placements need no association**: a `Colloscope.group_lists` row may reference a
-  list not (yet) associated to any subject×period. Ops and both checkers agree this is
-  valid (placements can be prepared before associating) — **the step-6 resolution map must
-  not "fix" it**.
+- **F5 — a filled group list needs no association**: this concerns *only* the
+  `Colloscope.group_lists` table — the per-list student→group fillings. Such a row may
+  reference a list not (yet) associated to any subject×period: ops and both checkers
+  agree this is valid (a filling can be prepared first, the list associated afterwards) —
+  **the step-6 resolution map must not "fix" it**. It does NOT extend to
+  `Colloscope.interrogations` rows: those *do* require the `(period, subject)`
+  association — without one the group-number bound saturates to 0 (old checker
+  `.unwrap_or(0)`, new checker `None => Some(0)`), so every interrogation placement at an
+  association-less coordinate is invalid (`InvalidGroupNumInInterrogation` /
+  `Convergence::InterrogationGroupOutOfBounds`). Clearing an association out from under
+  live interrogation placements therefore lands a *broken* state, in both checkers
+  (re-verified Jul 21 2026 when a mis-reading of this finding briefly suggested
+  otherwise).
