@@ -906,23 +906,14 @@ impl crate::Data {
                     .periods
                     .ordered_period_list
                     .remove_at(position);
-                // Drop this period's rows from the associations table (copied
-                // verbatim from [Self::apply_period]).
-                let association_keys: Vec<_> = self
-                    .inner_data
-                    .params
-                    .group_lists
-                    .subjects_associations
-                    .keys()
-                    .filter(|(p, _)| *p == *period_id)
-                    .collect();
-                for key in association_keys {
-                    self.inner_data
-                        .params
-                        .group_lists
-                        .subjects_associations
-                        .remove(&key);
-                }
+                // stripped: the association-row cleanup of [Self::apply_period].
+                // There it is dead code (the stripped
+                // PeriodStillHasNonTrivialGroupListAssociation guard rejects the
+                // removal while any row exists); alive here it would silently
+                // repair the would-be-dangling rows, landing a VALID state on an
+                // op the checked apply rejects — and irreversibly, since the
+                // reverse only re-adds the period. force_apply never fixes
+                // anything: the dangling rows are the checker's to report.
 
                 Ok(match previous_id {
                     None => AnnotatedPeriodOp::AddFront(*period_id),

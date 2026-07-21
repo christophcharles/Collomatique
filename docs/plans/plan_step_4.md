@@ -55,6 +55,13 @@ guard in the 16 `apply_*` paths; it is the authoritative row list for this step:
   clearing in `Assign`, the sparse colloscope writers). Only guard blocks are deleted. Care
   point: where mutation reuses a binding produced by a *stripped* guard, rebind it from the
   *kept* target-existence lookup; never re-add validation to get a binding back.
+- **Refinement (Jul 21, fuzz-found): guard-dead cleanup loops strip too.** Cleanup code
+  that is only reachable when a *stripped* guard would have rejected the op (e.g.
+  `apply_period` Remove's association-row drop, dead under
+  `PeriodStillHasNonTrivialGroupListAssociation`) is not mutation — alive in the copy it
+  silently *repairs* would-be-dangling refs, landing a valid state on an op checked apply
+  rejects, and irreversibly. `force_apply` must not fix anything; broken is the point —
+  the checker owns it.
 
 Table 1/2 line refs are against `0a1041b6`; only doc commits landed since, so they are
 current.
