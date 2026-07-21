@@ -60,6 +60,7 @@ fn force_apply_agrees_with_old_checker() {
     let broken = Cell::new(0usize);
     let attempted: [Cell<usize>; 5] = std::array::from_fn(|_| Cell::new(0));
     let broken_by_kind: [Cell<usize>; 5] = std::array::from_fn(|_| Cell::new(0));
+    let valid_equivalences = Cell::new(0usize);
 
     harness::for_each_seed(
         "force_apply_agrees_with_old_checker",
@@ -106,13 +107,16 @@ fn force_apply_agrees_with_old_checker() {
                 since_probe = 0;
 
                 // --- corruption probe off the current (valid) state ---
-                let snapshot = data.clone();
                 let (kind, op) = generator::gen_corruption_op(rng, data.get_inner_data());
                 log.push(kind.label(), &op);
                 let i = kind_index(kind);
                 attempted[i].set(attempted[i].get() + 1);
 
                 let (annotated, _) = data.annotate(op);
+                // Snapshot after annotate (like the walk's `before`): the clone
+                // must carry the already-advanced id issuer, or a checked replay
+                // of an Add probe trips apply's issuer high-water panic net.
+                let snapshot = data.clone();
                 match data.force_apply(&annotated) {
                     Err(_) => {
                         // Bounced off a kept carve-out guard: state untouched.
@@ -120,6 +124,15 @@ fn force_apply_agrees_with_old_checker() {
                             data == snapshot,
                             "a failed force_apply must leave the state unchanged",
                         );
+                        if kind == CorruptionKind::ForceValid {
+                            // Carve-out guards are a subset of apply's guards,
+                            // so checked apply must reject this op too.
+                            let mut checked = snapshot.clone();
+                            assert!(
+                                checked.apply(&annotated).is_err(),
+                                "force_apply rejected an op that checked apply accepts",
+                            );
+                        }
                     }
                     Ok(reverse) => {
                         // The payoff: the two checkers must agree on this state.
@@ -143,21 +156,39 @@ fn force_apply_agrees_with_old_checker() {
                         }
 
                         if kind == CorruptionKind::ForceValid {
-                            // Standing anti-drift pin: on a valid op the thin
-                            // copy must match the checked original exactly, in
-                            // both the resulting state and the computed reverse.
                             let mut checked = snapshot.clone();
-                            let checked_rev = checked
-                                .apply(&annotated)
-                                .expect("a ForceValid op must pass checked apply");
-                            assert!(
-                                checked.get_inner_data() == data.get_inner_data(),
-                                "forced apply diverged from checked apply on a valid op",
-                            );
-                            assert!(
-                                checked_rev == reverse,
-                                "forced reverse diverged from checked reverse on a valid op",
-                            );
+                            match checked.apply(&annotated) {
+                                Ok(checked_rev) => {
+                                    // Standing anti-drift pin: on a truly valid
+                                    // op the thin copy must match the checked
+                                    // original exactly, in both the resulting
+                                    // state and the computed reverse.
+                                    valid_equivalences.set(valid_equivalences.get() + 1);
+                                    assert!(
+                                        checked.get_inner_data() == data.get_inner_data(),
+                                        "forced apply diverged from checked apply on a valid op",
+                                    );
+                                    assert!(
+                                        checked_rev == reverse,
+                                        "forced reverse diverged from checked reverse on a valid op",
+                                    );
+                                }
+                                Err(_) => {
+                                    // gen_op's valid arm only guarantees a
+                                    // valid-*shaped* op; checked apply may still
+                                    // bounce off an invariant guard. force_apply
+                                    // landed it, so the rejection was strip-list
+                                    // class — and step 3 certified every stripped
+                                    // guard has an old-checker twin, so the
+                                    // landed state must be broken.
+                                    assert!(
+                                        is_broken,
+                                        "checked apply rejected a ForceValid op but the landed \
+                                         forced state is clean — a stripped guard with no \
+                                         old-checker twin",
+                                    );
+                                }
+                            }
                         }
                     }
                 }
@@ -176,6 +207,11 @@ fn force_apply_agrees_with_old_checker() {
         total_broken * 4 >= total_landed,
         "expected >=25% of landed probes to be broken (old checker Err); \
          got {total_broken}/{total_landed}",
+    );
+
+    assert!(
+        valid_equivalences.get() > 0,
+        "the forced ≡ checked anti-drift pin never executed across all seeds",
     );
 
     for kind in CorruptionKind::ALL {

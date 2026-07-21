@@ -331,10 +331,12 @@ Walk loop = `gen_op` → `data.annotate` → `data.apply`, recorded in `stats` (
 `PROBE_STRIDE` successful walk ops, one probe:
 
 ```rust
-let snapshot = data.clone();                    // Data clone includes the id issuer
 let (kind, op) = generator::gen_corruption_op(rng, data.get_inner_data());
 log.push(kind.label(), &op);
 let (annotated, _) = data.annotate(op);
+let snapshot = data.clone();   // after annotate: the clone must carry the
+                               // already-advanced id issuer, or a checked replay
+                               // of an Add probe trips apply's issuer panic net
 match data.force_apply(&annotated) {
     Err(_) => {                                 // bounced off a kept carve-out guard
         assert!(data == snapshot, "failed force_apply must leave the state unchanged");
@@ -350,11 +352,21 @@ match data.force_apply(&annotated) {
                 "reverse must restore the pre-state");
         }
         if kind == CorruptionKind::ForceValid {
-            // forced ≡ checked: the standing anti-drift pin on the copies
+            // forced ≡ checked: the standing anti-drift pin on the copies.
+            // gen_op's valid arm only guarantees a valid-*shaped* op (live ids,
+            // well-formed payload), not applicability — so branch on the
+            // checked outcome instead of expecting Ok.
             let mut checked = snapshot.clone();
-            let checked_rev = checked.apply(&annotated).expect("valid op must pass apply");
-            assert!(checked.get_inner_data() == data.get_inner_data());
-            assert!(checked_rev == reverse);
+            match checked.apply(&annotated) {
+                Ok(checked_rev) => {
+                    assert!(checked.get_inner_data() == data.get_inner_data());
+                    assert!(checked_rev == reverse);
+                }
+                // checked apply bounced off a stripped (strip-list) guard, and
+                // step 3 certified every stripped guard has an old-checker twin
+                // → the landed forced state must be broken.
+                Err(_) => assert!(broken),
+            }
         }
         if broken { broken_by_kind[kind] += 1; }
     }
@@ -391,6 +403,8 @@ tests), then the fix.
 4. **Dual-listed guards keep** (Assign coordinates, SetFilling prefill boundary) — D.3 is
    the certified keep-list; fuzz coverage unaffected (alternate routes exist).
 5. **Anti-drift**: the ForceValid probe continuously asserts forced ≡ checked on valid ops.
+   ForceValid ops are valid-*shaped* (gen_op's contract); when checked apply rejects one,
+   the pin asserts the forced landing is broken instead of asserting applicability.
 6. **`assert_differential` moves to crate scope** (`#[doc(hidden)] pub`) — cfg(test) items
    are invisible to integration tests; body unchanged.
 7. **Enums over strings** for probe kinds (`CorruptionKind`), with `label()` bridging into
