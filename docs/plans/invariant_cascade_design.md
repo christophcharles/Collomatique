@@ -7,7 +7,9 @@ Appendix B. **Step 2 completed July 18 2026** — its session plan is retired (p
 `git show 49b4f77d:docs/plans/plan_step_2.md`), the delivered state is recorded in
 Appendix C. **Step 3 completed July 19 2026** (doc-only) — its session plan is retired
 (pinned at `git show 26d88024:docs/plans/plan_step_3.md`), the audit record is
-Appendix D. Next up: step 4.
+Appendix D. **Step 4 completed July 21 2026** — its session plan is retired (pinned at
+`git show fbc4ae6d:docs/plans/plan_step_4.md`), the delivered state is recorded in
+Appendix E. Next up: step 5.
 This doc started as an exploration after phase C of the table-registry plan shipped (item 2's
 detailed plan, since delivered in full and retired; pinned at
 `git show 77695338:docs/table_registry_plan.md`); it now
@@ -408,12 +410,19 @@ its five observations are Appendix D.
   certified complete: it is the reference oracle step 4's differential fuzz measures the
   new checker against.
 
-**Step 4 — differential fuzz.** A way to build arbitrary (including invalid) `InnerData`:
-random elementary ops applied through a `force_apply` door *without* checking, deliberately
-landing in inconsistent states. Assert the two checkers agree on the **verdict** (old rejects
-iff new reports non-empty) — not on variants: the old checker returns its first error in its
-own order, the new vocabulary is richer. Encapsulated invariants (§6c) can't be broken this
-way — by design, out of the fuzz's scope.
+**Step 4 — differential fuzz — COMPLETED July 21 2026.** A way to build arbitrary
+(including invalid) `InnerData`: random elementary ops applied through a `force_apply` door
+*without* checking, deliberately landing in inconsistent states. The fuzz asserts the two
+checkers agree on the **verdict** (old rejects iff new reports non-empty) — not on variants:
+the old checker returns its first error in its own order, the new vocabulary is richer.
+Encapsulated invariants (§6c) can't be broken this way — by design, out of the fuzz's scope.
+Delivered as depth-1 corruption probes off a validated walk (in step 5 `force_apply` only
+ever runs on a *consistent* state, so `{valid state} + {one forced op}` is the target
+distribution). Two things earned here that step 5 builds on: the governing rule
+**`force_apply` fixes nothing** (it does only what the op asks, never repairs the rest of
+the state), and the per-domain precheck vocabulary (the carve-out subset that survives the
+step-5 deletion). **The delivered `force_apply` door, precheck vocabulary, strip/keep rule,
+and differential fuzz are Appendix E.**
 
 **Step 5 — switch elementary ops to apply/check/restore (§4).** `apply` becomes
 `force_apply` + new checker + rollback — the same primitives step 4 built. The item-1 canary
@@ -936,3 +945,109 @@ deletion (everything twinned in Table 1 retires in favor of the precise vocabula
   live interrogation placements therefore lands a *broken* state, in both checkers
   (re-verified Jul 21 2026 when a mis-reading of this finding briefly suggested
   otherwise).
+
+## Appendix E — step 4 as delivered (July 21 2026)
+
+Recorded when the step-4 session plan was retired (the per-commit mechanics, the full
+strip/keep row list, and the corruption-generator recipes are pinned at
+`git show fbc4ae6d:docs/plans/plan_step_4.md`; its file/line references are against the
+tree at `d3dcc4e5`, with the Table 1/2 line refs against `0a1041b6`). Step 4 built the
+`force_apply` door and used it to **corroborate the new checker against the certified old
+one** on invalid states via differential fuzzing. Both checkers are still wired only in
+tests — step 5 rewires production.
+
+### E.1 The `force_apply` door
+
+`Data::force_apply` (`lib.rs:425`) applies one op and **never checks invariants**:
+
+- Returns `Ok(reverse)` or `Err(PrecheckError)`; a failed call leaves the state unchanged.
+- A *successful* call **may leave the state invalid** — that is the point. The caller owns
+  checking (`InnerData::check_invariants` / `broken_invariants`) and restoring a snapshot on
+  failure.
+- It is an **independent thin copy** of `apply`: each arm calls a `force_apply_*` twin of
+  `apply_*`, and `apply`/`apply_*` are byte-untouched. Three differences from `apply`:
+  errors are `PrecheckError`; the `GlobalUpdate` arm drops the `check_invariants()?`
+  pre-gate (this *is* the force door); the trailing `check_invariants()` panic net is
+  omitted. It is the step-5 apply/check/restore primitive; the checked originals are deleted
+  there, so the duplication is short-lived.
+
+**The governing rule: `force_apply` fixes nothing.** It does only what the op asks, and
+never touches state outside the op's direct target to keep the rest consistent. A broken
+landing is valid; reporting it is the checker's job.
+
+### E.2 The strip/keep rule as executed
+
+Each `force_apply_*` is `apply_*` with its guards classified by the step-3 survey (pinned
+Table 1/2):
+
+- **Stripped** — every guard with an old-checker twin (the invariant guards): the
+  `validate_*` calls and the hand-written Remove/Update reference scans.
+- **Kept** — the carve-out register (D.3): no-clobber, op-target existence, position/anchor
+  bounds, empty-first protocol (`PeriodStillHasWeeks`, `RemainingFilling`,
+  `NonEmptyGroupsWhenReducing`), immutability (`CannotChangeSubject`), and the
+  parameter-targeting checks. The dual-listed guards (Assign coordinates, the `SetFilling`
+  prefill boundary) are kept.
+- **Mutation copied verbatim**, including same-domain canonicalization that is *live* in
+  checked apply — the assignments empty-row drop, the slots empty-ordering-row drop, the
+  group-list Update filling truncate/extend, the sparse colloscope writers. These are op
+  semantics, not repair, and the fuzz's forced ≡ checked pin locks them against drift.
+
+**Refinement (fuzz-found, Jul 21): guard-dead cleanup loops strip too.** Cleanup reachable
+only when a *stripped* guard would have rejected the op is not mutation — alive in the copy
+it silently repairs. The one instance: `force_apply_period` Remove's association-row drop
+(dead in `apply_period` behind the stripped
+`PeriodStillHasNonTrivialGroupListAssociation` guard). Left in, it would land a *valid*
+state on a removal checked apply rejects, and irreversibly. Stripped (commit `4e7563f5`);
+a Jul-21 audit of all 16 copies found no other instance.
+
+### E.3 The precheck vocabulary
+
+Each domain gets a new `*PrecheckError` enum holding **only its keep-list** — this *is* the
+step-5 carve-out error surface, born here (`apply`'s existing per-domain error enums are
+untouched). The three value-only domains carry empty enums (`SettingsPrecheckError`,
+`BalancingPrecheckError`, `ExportConfigPrecheckError` — kept for uniformity). The top-level
+`PrecheckError` (`lib.rs:297`) mirrors `Error` 1:1 with `#[from]` transparency, minus the
+infallible `GlobalUpdate` arm.
+
+### E.4 The differential fuzz
+
+`state-colloscopes/tests/differential_force_apply.rs` — a validated random walk (existing
+testgen harness, byte-untouched) interrupted every `PROBE_STRIDE = 10` successful ops by a
+**depth-1 corruption probe**: snapshot → force one op → `assert_differential` → restore →
+resume. In the step-5 architecture `force_apply` only ever runs on a *consistent* state, so
+`{valid state} + {one forced op}` is the exact target distribution. `assert_differential`
+(`invariants.rs:782`, moved to crate scope in commit 1) is the stage-7 three-part check that
+the old and new checkers agree.
+
+Probe kinds — `CorruptionKind` in `testgen-colloscopes` (`ForceRemove`, `ForceRetarget`,
+`ForceSemantic`, `ForceLogic`, `ForceValid`). `ForceValid` carries the standing
+**anti-drift pin**: on a truly valid op the thin copy must match checked apply exactly
+(state + reverse).
+
+Two hard-won test-protocol rulings (Jul 21):
+
+- **No targeting prechecks in `force_apply`.** Pre-checking consistency is the very thing
+  being removed. `gen_op`'s valid arm only guarantees a valid-*shaped* op, so checked apply
+  may still reject a `ForceValid` probe (a stripped guard). When it does, the forced landing
+  must be **broken** (the checker sees the damage) **or a perfect no-op** (the rejected input
+  left no trace — e.g. clearing an association at a coordinate that cannot hold one). A
+  state-*changing* valid landing would be hidden work: a silently repairing copy. This is a
+  carve-out in the *test*, never a guard in `force_apply`.
+- **Clean-landing reverse pin.** When a forced op lands a valid state, its reverse must
+  restore the pre-state exactly (that reverse feeds history in step 5).
+
+**Honesty guards** (cross-seed): ≥25% of landed probes were actually broken (old checker
+`Err`); every kind attempted, each *corrupting* kind landed a broken state at least once.
+Committed config: `seeds: 100, ops_per_run: 1000`; a 500-seed crank was run once locally
+and is green.
+
+### E.5 Delivered artifacts & standing rules for steps 5–6
+
+- `Data::force_apply` (`lib.rs:425`) + 16 `force_apply_*` twins; `PrecheckError`
+  (`lib.rs:297`) + 16 `*PrecheckError` enums; `assert_differential` at crate scope
+  (`invariants.rs:782`); `CorruptionKind` + `gen_corruption_op` in `testgen-colloscopes`;
+  the fuzz test. `apply` and all `apply_*` byte-untouched.
+- **Rules later steps must honor:** `force_apply` fixes nothing (no cross-target
+  consistency maintenance, no guard-dead cleanup); no consistency prechecks are ever added
+  to it; and the step-6 resolution map must not "fix" a filling-without-association (F5,
+  D.4) or any placement it did not itself create.
