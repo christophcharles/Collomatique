@@ -176,16 +176,19 @@ fn force_apply_agrees_with_old_checker() {
                                 Err(_) => {
                                     // gen_op's valid arm only guarantees a
                                     // valid-*shaped* op; checked apply may still
-                                    // bounce off an invariant guard. force_apply
-                                    // landed it, so the rejection was strip-list
-                                    // class — and step 3 certified every stripped
-                                    // guard has an old-checker twin, so the
-                                    // landed state must be broken.
+                                    // bounce off a stripped guard. Then the
+                                    // forced landing must be broken (the checker
+                                    // sees the damage) or a perfect no-op (the
+                                    // rejected input left no trace — e.g.
+                                    // clearing an association at a coordinate
+                                    // that cannot hold one). A state-CHANGING
+                                    // valid landing would be hidden work: a
+                                    // force copy silently repairing what the
+                                    // stripped guard protected.
                                     assert!(
-                                        is_broken,
-                                        "checked apply rejected a ForceValid op but the landed \
-                                         forced state is clean — a stripped guard with no \
-                                         old-checker twin",
+                                        is_broken || data == snapshot,
+                                        "checked apply rejected a ForceValid op but the forced \
+                                         landing is a state-changing valid state — hidden work",
                                     );
                                 }
                             }

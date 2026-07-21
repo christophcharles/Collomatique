@@ -369,10 +369,14 @@ match data.force_apply(&annotated) {
                     assert!(checked.get_inner_data() == data.get_inner_data());
                     assert!(checked_rev == reverse);
                 }
-                // checked apply bounced off a stripped (strip-list) guard, and
-                // step 3 certified every stripped guard has an old-checker twin
-                // → the landed forced state must be broken.
-                Err(_) => assert!(broken),
+                // checked apply bounced off a stripped guard → the forced
+                // landing must be broken OR a perfect no-op (Jul 21 protocol
+                // carve-out: a rejected input may leave no trace, e.g. clearing
+                // an association at a coordinate that cannot hold one — no
+                // targeting prechecks are added to force_apply for these, that
+                // would be pre-checking consistency). A state-changing valid
+                // landing = hidden work = a silently-repairing force copy.
+                Err(_) => assert!(broken || data == snapshot),
             }
         }
         if broken { broken_by_kind[kind] += 1; }
