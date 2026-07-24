@@ -92,9 +92,9 @@ pub fn build_complete_config(env: &Parameters, colloscope: &Colloscope) -> Confi
     for period_id in env.periods.period_ids() {
         let week_ids: Vec<WeekId> = env
             .periods
-            .find_period(period_id)
+            .week_ids_of(period_id)
             .expect("period id from period_ids is valid")
-            .clone();
+            .collect();
         for (slot_id, _slot) in env.slots.all_slots() {
             let (subject_id, _pos) = env
                 .slots

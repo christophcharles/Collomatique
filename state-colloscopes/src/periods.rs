@@ -16,17 +16,26 @@ use crate::{OrderedTable, Table};
 
 /// Description of the periods
 ///
-/// The period order lives in `ordered_period_list` and each week is a standalone
-/// [Week] entity in `week_map` (both private): consumers read through the
-/// accessor surface below rather than touching the containers directly, so the
-/// backend shape can change without rippling through every call site.
+/// A period owns *existence and display order* only: `ordered_period_list` is
+/// the public ordered set of period ids (mirroring `Subjects.ordered_subject_list`),
+/// each mapping to `()` — a period carries no other data of its own. Weeks are
+/// standalone [Week] entities in `week_map` (each naming its owning period as a
+/// foreign key), and their per-period ordering lives in the sparse `ordering`
+/// sidecar. Both `week_map` and `ordering` are private: consumers read through
+/// the accessor surface below rather than touching the containers directly, so
+/// the backend shape can change without rippling through every call site.
 ///
-/// The two structures must stay consistent — every week id in the ordering
-/// exists in `week_map` and names its owning period, and no `week_map` entry is
-/// left un-ordered — an invariant checked in
-/// `Parameters::check_periods_data_consistency`. All mutation stays inside this
-/// module and routes the week structures through the compound helpers below so
-/// no call site can desynchronize them.
+/// (The module split of `weeks.rs` — moving `week_map`/`ordering` and the week
+/// surface into their own module, the twin of `slots.rs` — lands in a later
+/// commit; this shape is already the final one.)
+///
+/// The three structures must stay consistent — every period named by an
+/// `ordering` row exists in `ordered_period_list`, the row is non-empty
+/// (canonical sparse form), every week id in it exists in `week_map` and names
+/// that period, and no `week_map` entry is left un-ordered — an invariant
+/// checked in `Parameters::check_periods_data_consistency`. All mutation stays
+/// inside this module and routes the week structures through the compound
+/// helpers below so no call site can desynchronize them.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Periods {
     /// Start date for the colloscope
@@ -35,18 +44,26 @@ pub struct Periods {
     /// the eventual pretty output
     pub first_week: Option<collomatique_time::WeekStart>,
 
-    /// Ordered list of periods, each with its ordered week ids
+    /// Ordered set of period ids — existence and display order only
     ///
-    /// This field gives the relative order of the different periods identified
-    /// by their ids, and for each period the order of its weeks (by id). The
-    /// week data itself lives in `week_map`.
-    ordered_period_list: OrderedTable<PeriodId, Vec<WeekId>>,
+    /// A period owns nothing else; week data and per-period week ordering live
+    /// in the `ordering` sidecar and `week_map`. Public, mirroring
+    /// `Subjects.ordered_subject_list`.
+    pub ordered_period_list: OrderedTable<PeriodId, ()>,
 
     /// Every week, keyed by its id
     ///
-    /// Each week carries its owning period as a foreign key; the ordering above
-    /// groups those same week ids under that period.
+    /// Each week carries its owning period as a foreign key; the `ordering`
+    /// sidecar groups those same week ids under that period.
     week_map: Table<WeekId, Week>,
+
+    /// Per-period ordered week ids
+    ///
+    /// Sparse: a row exists exactly when the period has at least one week
+    /// (canonical form — no empty rows), mirroring the slots ordering. A
+    /// week-empty period has no row. The row key has double duty with each
+    /// week's `period_id` foreign key, so it needs no separate reference edge.
+    ordering: Table<PeriodId, Vec<WeekId>>,
 }
 
 /// Error returned when building [Periods] from rows with a duplicated id
@@ -140,7 +157,8 @@ impl Periods {
         rows: Vec<(PeriodId, Vec<(WeekId, WeekDesc)>)>,
     ) -> Result<Self, PeriodRowsError> {
         let mut week_map = Table::new();
-        let mut ordering_rows = Vec::with_capacity(rows.len());
+        let mut ordering = Table::new();
+        let mut period_rows = Vec::with_capacity(rows.len());
         for (period_id, weeks) in rows {
             let mut order = Vec::with_capacity(weeks.len());
             for (week_id, desc) in weeks {
@@ -152,9 +170,13 @@ impl Periods {
                 }
                 order.push(week_id);
             }
-            ordering_rows.push((period_id, order));
+            // Canonical sparse form: a week-empty period gets no ordering row.
+            if !order.is_empty() {
+                ordering.insert(period_id, order);
+            }
+            period_rows.push((period_id, ()));
         }
-        let ordered_period_list = ordering_rows.try_into().map_err(
+        let ordered_period_list = period_rows.try_into().map_err(
             |collomatique_state::tables::DuplicatedIdError(id)| {
                 PeriodRowsError::DuplicatedPeriodId(id)
             },
@@ -163,7 +185,19 @@ impl Periods {
             first_week,
             ordered_period_list,
             week_map,
+            ordering,
         })
+    }
+
+    /// Test-only corruption: inserts an ordering row verbatim, bypassing the
+    /// canonical-sparse discipline of [Self::from_period_rows] (which drops
+    /// empty rows) — a stored empty row is exactly the
+    /// [crate::invariants::LogicError::EmptyWeeksRow] the invariant checker must
+    /// detect, and no production surface can produce it. Twin of
+    /// [`crate::slots::Slots::forge_ordering_row`].
+    #[cfg(test)]
+    pub(crate) fn forge_ordering_row(&mut self, period: PeriodId, order: Vec<WeekId>) {
+        self.ordering.insert(period, order);
     }
 
     // ---- Read surface ----
@@ -197,43 +231,59 @@ impl Periods {
     /// gives the global week index — this replaces every hand-rolled
     /// accumulate-`len()` loop.
     pub fn walk(&self) -> impl Iterator<Item = (PeriodId, WeekId, &Week)> + '_ {
-        self.ordered_period_list
-            .iter()
-            .flat_map(move |(period_id, order)| {
-                order.iter().map(move |week_id| {
-                    let week = self
-                        .week_map
-                        .get(week_id)
-                        .expect("ordering id should be present in week_map");
-                    (period_id, *week_id, week)
-                })
+        self.ordered_period_list.keys().flat_map(move |period_id| {
+            self.week_order(period_id).iter().map(move |week_id| {
+                let week = self
+                    .week_map
+                    .get(week_id)
+                    .expect("ordering id should be present in week_map");
+                (period_id, *week_id, week)
             })
+        })
+    }
+
+    /// The ordered week ids of a period that is known to exist, defaulting to an
+    /// empty slice when the period has no ordering row (a week-empty period).
+    fn week_order(&self, id: PeriodId) -> &[WeekId] {
+        self.ordering.get(&id).map(Vec::as_slice).unwrap_or(&[])
     }
 
     /// All week ids, in global week order.
     pub fn week_ids(&self) -> impl Iterator<Item = WeekId> + '_ {
         self.ordered_period_list
-            .iter()
-            .flat_map(|(_period_id, order)| order.iter().copied())
+            .keys()
+            .flat_map(move |period_id| self.week_order(period_id).iter().copied())
     }
 
     /// Weeks of one period, in order; `None` if the period id is invalid.
     pub fn weeks_of(&self, id: PeriodId) -> Option<impl Iterator<Item = &Week> + '_> {
-        let order = self.ordered_period_list.get(&id)?;
-        Some(order.iter().map(move |week_id| {
+        if !self.ordered_period_list.contains(&id) {
+            return None;
+        }
+        Some(self.week_order(id).iter().map(move |week_id| {
             self.week_map
                 .get(week_id)
                 .expect("ordering id should be present in week_map")
         }))
     }
 
+    /// Ordered week ids of one period; `None` if the period id is invalid.
+    pub fn week_ids_of(&self, id: PeriodId) -> Option<impl Iterator<Item = WeekId> + '_> {
+        if !self.ordered_period_list.contains(&id) {
+            return None;
+        }
+        Some(self.week_order(id).iter().copied())
+    }
+
     /// Owned copy of a period's weeks — descriptions only, ids and owning period
     /// stripped (op-payload building in `ops/` and gtk4); `None` if the period
     /// id is invalid.
     pub fn weeks_vec_of(&self, id: PeriodId) -> Option<Vec<WeekDesc>> {
-        let order = self.ordered_period_list.get(&id)?;
+        if !self.ordered_period_list.contains(&id) {
+            return None;
+        }
         Some(
-            order
+            self.week_order(id)
                 .iter()
                 .map(|week_id| {
                     self.week_map
@@ -247,14 +297,14 @@ impl Periods {
 
     /// Number of weeks of one period; `None` if the period id is invalid.
     pub fn week_count_of(&self, id: PeriodId) -> Option<usize> {
-        self.ordered_period_list.get(&id).map(|order| order.len())
+        if !self.ordered_period_list.contains(&id) {
+            return None;
+        }
+        Some(self.week_order(id).len())
     }
 
     pub fn count_weeks(&self) -> usize {
-        self.ordered_period_list
-            .iter()
-            .map(|(_period_id, order)| order.len())
-            .sum()
+        self.ordering.values().map(|order| order.len()).sum()
     }
 
     /// Finds the position of a period by id
@@ -266,11 +316,11 @@ impl Periods {
     pub fn find_period_position_and_first_week(&self, id: PeriodId) -> Option<(usize, usize)> {
         let mut first_week = 0usize;
 
-        for (pos, (period_id, order)) in self.ordered_period_list.iter().enumerate() {
+        for (pos, period_id) in self.ordered_period_list.keys().enumerate() {
             if period_id == id {
                 return Some((pos, first_week));
             }
-            first_week += order.len();
+            first_week += self.week_order(period_id).len();
         }
 
         None
@@ -284,19 +334,14 @@ impl Periods {
     ) -> Option<(usize, usize)> {
         let mut total_weeks = 0usize;
 
-        for (pos, (period_id, order)) in self.ordered_period_list.iter().enumerate() {
-            total_weeks += order.len();
+        for (pos, period_id) in self.ordered_period_list.keys().enumerate() {
+            total_weeks += self.week_order(period_id).len();
             if period_id == id {
                 return Some((pos, total_weeks));
             }
         }
 
         None
-    }
-
-    /// Finds a period by id, returning its ordered week ids.
-    pub fn find_period(&self, id: PeriodId) -> Option<&Vec<WeekId>> {
-        self.ordered_period_list.get(&id)
     }
 
     /// Finds a week by id, returning the stored [Week] entity (owning period
@@ -310,7 +355,7 @@ impl Periods {
     pub fn week_position(&self, id: WeekId) -> Option<(PeriodId, usize)> {
         let period_id = self.week_map.get(&id)?.period_id;
         let pos = self
-            .ordered_period_list
+            .ordering
             .get(&period_id)
             .expect("week's period should have an ordering row")
             .iter()
@@ -322,7 +367,10 @@ impl Periods {
     /// The id of the week at position `pos` within `period`; `None` if the
     /// period id is invalid or the position is out of range.
     pub fn week_id_at(&self, period: PeriodId, pos: usize) -> Option<WeekId> {
-        self.ordered_period_list.get(&period)?.get(pos).copied()
+        if !self.ordered_period_list.contains(&period) {
+            return None;
+        }
+        self.week_order(period).get(pos).copied()
     }
 
     /// The global week position of a week (its index in `walk()` order);
@@ -335,11 +383,12 @@ impl Periods {
     pub fn get_first_week_and_length_for_period(&self, id: PeriodId) -> Option<(usize, usize)> {
         let mut first_week = 0usize;
 
-        for (period_id, order) in self.ordered_period_list.iter() {
+        for period_id in self.ordered_period_list.keys() {
+            let len = self.week_order(period_id).len();
             if period_id == id {
-                return Some((first_week, order.len()));
+                return Some((first_week, len));
             }
-            first_week += order.len();
+            first_week += len;
         }
 
         None
@@ -362,7 +411,7 @@ impl Periods {
     /// Raw view of the ordering sidecar (period → ordered week ids), for the
     /// consistency invariant check.
     pub(crate) fn ordering_entries(&self) -> impl Iterator<Item = (PeriodId, &[WeekId])> {
-        self.ordered_period_list
+        self.ordering
             .iter()
             .map(|(id, order)| (id, order.as_slice()))
     }
@@ -373,6 +422,10 @@ impl Periods {
     // and `week_map` can never desynchronize.
 
     /// Inserts a week into `period_id`'s ordering at `pos` and into `week_map`.
+    ///
+    /// Under the sparse ordering the row is created on demand for the period's
+    /// first week (which lands at position 0), mirroring
+    /// [`crate::slots::Slots::insert_slot_at`].
     pub(crate) fn insert_week_at(
         &mut self,
         week_id: WeekId,
@@ -380,19 +433,24 @@ impl Periods {
         pos: usize,
         desc: WeekDesc,
     ) {
-        self.ordered_period_list
-            .get_mut(&period_id)
-            .expect("period id should be valid")
-            .insert(pos, week_id);
+        if let Some(order) = self.ordering.get_mut(&period_id) {
+            order.insert(pos, week_id);
+        } else {
+            debug_assert_eq!(pos, 0, "first week of a period must land at position 0");
+            self.ordering.insert(period_id, vec![week_id]);
+        }
         self.week_map
             .insert(week_id, Week::from_desc(period_id, desc));
     }
 
     /// Removes a week, returning its former period, position and description.
+    ///
+    /// Dropping a period's last week removes its ordering row, keeping the
+    /// sparse canonical form.
     pub(crate) fn remove_week_entry(&mut self, week_id: WeekId) -> (PeriodId, usize, WeekDesc) {
         let week = self.week_map.remove(&week_id).expect("week should exist");
         let order = self
-            .ordered_period_list
+            .ordering
             .get_mut(&week.period_id)
             .expect("week's period should have an ordering row");
         let pos = order
@@ -400,12 +458,19 @@ impl Periods {
             .position(|id| *id == week_id)
             .expect("week should appear in its period's ordering");
         order.remove(pos);
+        if order.is_empty() {
+            self.ordering.remove(&week.period_id);
+        }
         (week.period_id, pos, week.desc())
     }
 
     /// Moves a week to `dest_pos` in `dest_period`, returning its former
     /// `(period, position)`. The week keeps its id and description; only its
     /// owning period and its slot in the ordering change.
+    ///
+    /// Detaching from the source period drops that period's ordering row if it
+    /// becomes empty; attaching to the destination creates its row on demand —
+    /// keeping the sparse canonical form on both sides.
     pub(crate) fn move_week_entry(
         &mut self,
         week_id: WeekId,
@@ -419,7 +484,7 @@ impl Periods {
             .period_id;
         let src_pos = {
             let order = self
-                .ordered_period_list
+                .ordering
                 .get_mut(&src_period)
                 .expect("week's period should have an ordering row");
             let pos = order
@@ -427,12 +492,20 @@ impl Periods {
                 .position(|id| *id == week_id)
                 .expect("week should appear in its period's ordering");
             order.remove(pos);
+            if order.is_empty() && src_period != dest_period {
+                self.ordering.remove(&src_period);
+            }
             pos
         };
-        self.ordered_period_list
-            .get_mut(&dest_period)
-            .expect("destination period should be valid")
-            .insert(dest_pos, week_id);
+        if let Some(order) = self.ordering.get_mut(&dest_period) {
+            order.insert(dest_pos, week_id);
+        } else {
+            debug_assert_eq!(
+                dest_pos, 0,
+                "first week of a period must land at position 0"
+            );
+            self.ordering.insert(dest_period, vec![week_id]);
+        }
         self.week_map
             .get_mut(&week_id)
             .expect("week should exist")
@@ -610,7 +683,7 @@ impl crate::Data {
                     .params
                     .periods
                     .ordered_period_list
-                    .insert_at(0, *period_id, Vec::new())
+                    .insert_at(0, *period_id, ())
                     .expect("period id absence checked above");
                 Ok(AnnotatedPeriodOp::Remove(*period_id))
             }
@@ -639,7 +712,7 @@ impl crate::Data {
                     .params
                     .periods
                     .ordered_period_list
-                    .insert_at(position + 1, *period_id, Vec::new())
+                    .insert_at(position + 1, *period_id, ())
                     .expect("period id absence checked above");
                 Ok(AnnotatedPeriodOp::Remove(*period_id))
             }
@@ -833,7 +906,7 @@ impl crate::Data {
                     .params
                     .periods
                     .ordered_period_list
-                    .insert_at(0, *period_id, Vec::new())
+                    .insert_at(0, *period_id, ())
                     .expect("period id absence checked above");
                 Ok(AnnotatedPeriodOp::Remove(*period_id))
             }
@@ -862,7 +935,7 @@ impl crate::Data {
                     .params
                     .periods
                     .ordered_period_list
-                    .insert_at(position + 1, *period_id, Vec::new())
+                    .insert_at(position + 1, *period_id, ())
                     .expect("period id absence checked above");
                 Ok(AnnotatedPeriodOp::Remove(*period_id))
             }

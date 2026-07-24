@@ -45,8 +45,9 @@ impl Colloscope {
             .map(|period_id| {
                 let week_ids = params
                     .periods
-                    .find_period(period_id)
-                    .expect("period id from period_ids is valid");
+                    .week_ids_of(period_id)
+                    .expect("period id from period_ids is valid")
+                    .collect::<Vec<_>>();
                 let mut slot_map = BTreeMap::new();
                 for (subject_id, subject) in params.subjects.ordered_subject_list.iter() {
                     if subject.excluded_periods.contains(&period_id) {

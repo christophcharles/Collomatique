@@ -179,9 +179,9 @@ impl Parameters {
 // rebuild. These are the context impls the `Join` derives resolve against.
 
 impl Lookup<PeriodId> for Parameters {
-    type Entity = Vec<WeekId>;
-    fn lookup(&self, id: PeriodId) -> Option<&Vec<WeekId>> {
-        self.periods.find_period(id)
+    type Entity = ();
+    fn lookup(&self, id: PeriodId) -> Option<&()> {
+        self.periods.ordered_period_list.get(&id)
     }
 }
 
@@ -1028,15 +1028,30 @@ impl Parameters {
 
     /// USED INTERNALLY
     ///
-    /// Checks the periods backend consistency: the ordering sidecar and the
-    /// week table must mirror each other. Every week id in the ordering exists
-    /// in the week table, names its owning period and appears exactly once; and
-    /// no week table entry is left un-ordered (no orphan weeks). `find_week` is
-    /// used (not `weeks_of`) so a desynchronized ordering yields a clean error
-    /// rather than panicking.
-    fn check_periods_data_consistency(&self) -> Result<(), InvariantError> {
+    /// Checks the periods backend consistency, mirroring
+    /// [Self::check_slots_data_consistency]. The ordering sidecar is sparse: a
+    /// row is present exactly when its period has at least one week. Each row's
+    /// period must exist and the row must be non-empty (canonical form); every
+    /// week id in it exists in the week table, names that period and appears
+    /// exactly once; and no week table entry is left un-ordered (no orphan
+    /// weeks). `find_week` is used (not `weeks_of`) so a desynchronized ordering
+    /// yields a clean error rather than panicking.
+    fn check_periods_data_consistency(
+        &self,
+        period_ids: &BTreeSet<PeriodId>,
+    ) -> Result<(), InvariantError> {
         let mut ordered_ids = BTreeSet::new();
         for (period_id, order) in self.periods.ordering_entries() {
+            if !period_ids.contains(&period_id) {
+                // A week's owning period was removed out from under it: the
+                // ordering row now names a period that no longer exists (newly
+                // representable once `PeriodStillHasWeeks` stops guarding force
+                // removal). Reported as a `InvalidWeek` (dangling week data).
+                return Err(InvariantError::InvalidWeek);
+            }
+            if order.is_empty() {
+                return Err(InvariantError::EmptyWeeksRow);
+            }
             for week_id in order {
                 let Some(week) = self.periods.find_week(*week_id) else {
                     return Err(InvariantError::InvalidWeek);
@@ -1083,11 +1098,11 @@ impl Parameters {
             return Err(InvariantError::DuplicatedId);
         }
 
-        self.check_periods_data_consistency()?;
-
         let period_ids = self.build_period_ids();
         let week_pattern_ids = self.build_week_pattern_ids();
         let subject_ids = self.build_subject_ids();
+
+        self.check_periods_data_consistency(&period_ids)?;
 
         self.check_subjects_data_consistency(&period_ids)?;
         self.check_teachers_data_consistency()?;
@@ -1135,6 +1150,8 @@ pub enum InvariantError {
     EmptyAssignmentRow,
     #[error("week table and ordering are inconsistent")]
     InvalidWeek,
+    #[error("empty weeks ordering row (non-canonical)")]
+    EmptyWeeksRow,
     #[error("slots ordering row for a subject without interrogations")]
     SlotsForSubjectWithoutInterrogations,
     #[error("empty slots ordering row (non-canonical)")]

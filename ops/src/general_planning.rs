@@ -452,8 +452,8 @@ impl GeneralPlanningUpdateOp {
                     .get_inner_data()
                     .params
                     .periods
-                    .find_period(*period_id)
-                    .map(|weeks| weeks.clone())
+                    .week_ids_of(*period_id)
+                    .map(|weeks| weeks.collect::<Vec<_>>())
                 else {
                     return None;
                 };

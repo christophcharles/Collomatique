@@ -148,11 +148,11 @@ impl Pools {
         // no possible weeks and is dropped, matching the old skeleton walk.
         let mut colloscope_targets: Vec<(PeriodId, SlotId, Vec<usize>)> = Vec::new();
         for period_id in params.periods.period_ids() {
-            let week_ids = params
+            let week_ids: Vec<WeekId> = params
                 .periods
-                .find_period(period_id)
+                .week_ids_of(period_id)
                 .expect("period id from period_ids is valid")
-                .clone();
+                .collect();
             for (slot_id, _slot) in params.slots.all_slots() {
                 let weeks: Vec<usize> = week_ids
                     .iter()

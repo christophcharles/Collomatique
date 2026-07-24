@@ -89,6 +89,10 @@ pub enum LogicError {
     /// the subject has ≥ 1 slot)
     #[error("slots-ordering row for subject {0:?} is stored with an empty slot list")]
     EmptySlotsRow(SubjectId),
+    /// A stored weeks-ordering row with an empty week list (a row exists iff
+    /// the period has ≥ 1 week)
+    #[error("weeks-ordering row for period {0:?} is stored with an empty week list")]
+    EmptyWeeksRow(PeriodId),
     /// A stored colloscope interrogation row with an empty group set (rows are
     /// canonical-absent: a row exists iff it holds an assigned group)
     #[error("colloscope interrogation row ({0:?}, {1:?}) is stored with an empty group set")]
@@ -257,6 +261,11 @@ impl crate::InnerData {
                 errors.insert(LogicError::EmptySlotsRow(subject));
             }
         }
+        for (period, order) in self.params.periods.ordering_entries() {
+            if order.is_empty() {
+                errors.insert(LogicError::EmptyWeeksRow(period));
+            }
+        }
         for ((slot, week), groups) in self.colloscope.iter() {
             if groups.is_empty() {
                 errors.insert(LogicError::EmptyInterrogationRow(slot, week));
@@ -309,7 +318,12 @@ impl crate::InnerData {
     /// handled generically but never fires.
     fn dangling_refs(&self) -> BTreeSet<FixableInvariant> {
         let periods: BTreeSet<PeriodId> = self.params.periods.period_ids().collect();
-        let weeks: BTreeSet<WeekId> = self.params.periods.week_ids().collect();
+        let weeks: BTreeSet<WeekId> = self
+            .params
+            .periods
+            .week_entries()
+            .map(|(id, _week)| id)
+            .collect();
         let subjects: BTreeSet<SubjectId> =
             self.params.subjects.ordered_subject_list.keys().collect();
         let teachers: BTreeSet<TeacherId> = self.params.teachers.teacher_map.keys().collect();
@@ -576,6 +590,7 @@ impl LogicError {
             LogicError::DuplicatedId(_) => E::DuplicateIds,
             LogicError::EmptyAssignmentsRow(..) => E::Params(InvariantError::EmptyAssignmentRow),
             LogicError::EmptySlotsRow(_) => E::Params(InvariantError::EmptySlotsRow),
+            LogicError::EmptyWeeksRow(_) => E::Params(InvariantError::EmptyWeeksRow),
             LogicError::EmptyInterrogationRow(slot, week) => {
                 E::ColloscopeError(ColloscopeError::EmptyInterrogationRow(*slot, *week))
             }
@@ -753,6 +768,7 @@ impl InnerDataError {
                 InvariantError::DuplicatedId
                     | InvariantError::EmptyAssignmentRow
                     | InvariantError::EmptySlotsRow
+                    | InvariantError::EmptyWeeksRow
             ),
             InnerDataError::ColloscopeError(c) => matches!(
                 c,
@@ -1384,6 +1400,17 @@ pub(crate) mod tests {
         assert_eq!(
             broken_invariants(&data),
             Err(BTreeSet::from([LogicError::EmptySlotsRow(subject)]))
+        );
+    }
+
+    #[test]
+    fn empty_weeks_row() {
+        let mut data = InnerData::default();
+        let period = unsafe { PeriodId::new(1) };
+        data.params.periods.forge_ordering_row(period, vec![]);
+        assert_eq!(
+            broken_invariants(&data),
+            Err(BTreeSet::from([LogicError::EmptyWeeksRow(period)]))
         );
     }
 

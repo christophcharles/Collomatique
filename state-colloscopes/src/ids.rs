@@ -38,7 +38,7 @@ pub struct StudentId(u64);
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, EntityId,
 )]
-#[entity(Vec<WeekId>)]
+#[entity(())]
 pub struct PeriodId(u64);
 
 /// This type represents an ID for a week

@@ -17,7 +17,7 @@ use collomatique_state_colloscopes::{
     group_lists::GroupListParameters,
     ids::{
         GroupListId, Id, IncompatId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId,
-        SubjectId, TeacherId, WeekPatternId,
+        SubjectId, TeacherId, WeekId, WeekPatternId,
     },
     incompats::Incompatibility,
     pairings::{PairingRule, RulePart},
@@ -91,6 +91,7 @@ fn one_group_params(name: &str) -> GroupListParameters {
 /// Ids captured while building the document, one per entity kind.
 struct Built {
     period: PeriodId,
+    week: WeekId,
     subject: SubjectId,
     phys: SubjectId,
     teacher: TeacherId,
@@ -121,7 +122,7 @@ fn build_document(app: &mut AppState<Data, String>) -> Built {
         NewId::PeriodId,
         "add period"
     );
-    let _week = apply_new!(
+    let week = apply_new!(
         Op::Week(WeekOp::AddFront(period, WeekDesc::new(true))),
         NewId::WeekId,
         "add week"
@@ -230,6 +231,7 @@ fn build_document(app: &mut AppState<Data, String>) -> Built {
 
     Built {
         period,
+        week,
         subject,
         phys,
         teacher,
@@ -267,7 +269,13 @@ fn lookup_borrows_the_live_entity_for_every_kind() {
         }};
     }
 
-    assert_resolves_to!(ids.period, params.periods.find_period(ids.period));
+    // A period resolves to the unit entity (existence only): pointer identity
+    // is meaningless for a ZST, so the period pin is a value check.
+    assert_eq!(params.lookup(ids.period), Some(&()));
+    assert_eq!(params.resolve(ids.period), &());
+    // The pointer-identity pin for the periods module lives on the week entity,
+    // which is the borrowable [Week] out of the week table.
+    assert_resolves_to!(ids.week, params.periods.find_week(ids.week));
     assert_resolves_to!(ids.subject, params.subjects.find_subject(ids.subject));
     assert_resolves_to!(ids.teacher, params.teachers.teacher_map.get(&ids.teacher));
     assert_resolves_to!(ids.student, params.students.student_map.get(&ids.student));
