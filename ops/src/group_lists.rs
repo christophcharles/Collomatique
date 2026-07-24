@@ -828,10 +828,18 @@ impl GroupListsUpdateOp {
     ) -> Result<Option<collomatique_state_colloscopes::GroupListId>, GroupListsUpdateError> {
         match self {
             Self::AddNewGroupList(params) => {
+                // The low-level op carries a whole `GroupList`; a new list is
+                // always automatic (the annotate default before the op-surface
+                // consolidation), which is trivially internally consistent.
+                let group_list = collomatique_state_colloscopes::group_lists::GroupList::new(
+                    params.clone(),
+                    collomatique_state_colloscopes::group_lists::GroupListFilling::default(),
+                )
+                .expect("automatic filling is always consistent");
                 let result = data
                     .apply(
                         collomatique_state_colloscopes::Op::GroupList(
-                            collomatique_state_colloscopes::GroupListOp::Add(params.clone()),
+                            collomatique_state_colloscopes::GroupListOp::Add(group_list),
                         ),
                         self.get_desc(),
                     )
@@ -843,23 +851,67 @@ impl GroupListsUpdateOp {
                 Ok(Some(new_id))
             }
             Self::UpdateGroupList(group_list_id, params) => {
-                if !data
+                use collomatique_state_colloscopes::group_lists::{
+                    GroupList, GroupListFilling, PrefilledGroup,
+                };
+
+                let Some(old_group_list) = data
                     .get_data()
                     .get_inner_data()
                     .params
                     .group_lists
                     .group_list_map
-                    .contains(group_list_id)
-                {
+                    .get(group_list_id)
+                else {
                     return Err(UpdateGroupListError::InvalidGroupListId(*group_list_id).into());
                 };
+
+                // The low-level op now carries a whole `GroupList`, so the
+                // group-count reshaping that used to live in the elementary op
+                // happens here: grow by padding empty groups, shrink by
+                // truncating. The cleaning phase has already emptied any dropped
+                // group, so the truncation is loss-free (asserted as a backstop).
+                let new_filling = match old_group_list.filling() {
+                    GroupListFilling::Automatic { excluded_students } => {
+                        GroupListFilling::Automatic {
+                            excluded_students: excluded_students.clone(),
+                        }
+                    }
+                    GroupListFilling::Prefilled { groups: old_groups } => {
+                        let old_count = old_group_list.params().group_names.len();
+                        let new_count = params.group_names.len();
+                        if new_count < old_count {
+                            for group in old_groups.iter().skip(new_count) {
+                                assert!(
+                                    group.students.is_empty(),
+                                    "cleaning phase should have emptied the dropped groups"
+                                );
+                            }
+                            GroupListFilling::Prefilled {
+                                groups: old_groups[..new_count].to_vec(),
+                            }
+                        } else if new_count > old_count {
+                            let mut new_groups = old_groups.clone();
+                            for _ in old_count..new_count {
+                                new_groups.push(PrefilledGroup::default());
+                            }
+                            GroupListFilling::Prefilled { groups: new_groups }
+                        } else {
+                            GroupListFilling::Prefilled {
+                                groups: old_groups.clone(),
+                            }
+                        }
+                    }
+                };
+                let group_list = GroupList::new(params.clone(), new_filling)
+                    .expect("count maintained by construction");
 
                 let result = data
                     .apply(
                         collomatique_state_colloscopes::Op::GroupList(
                             collomatique_state_colloscopes::GroupListOp::Update(
                                 *group_list_id,
-                                params.clone(),
+                                group_list,
                             ),
                         ),
                         self.get_desc(),
@@ -890,7 +942,6 @@ impl GroupListsUpdateOp {
                     ) {
                         Ok(r) => r,
                         Err(collomatique_state_colloscopes::Error::GroupList(ge)) => match ge {
-                            collomatique_state_colloscopes::GroupListError::RemainingFilling => panic!("Filling should be properly cleaned"),
                             collomatique_state_colloscopes::GroupListError::RemainingAssociatedSubjects => panic!("Associated subjects should be properly cleaned"),
                             _ => panic!("Unexpected error when calling GroupListOp::Remove")
                         }
@@ -952,12 +1003,32 @@ impl GroupListsUpdateOp {
                     }
                 }
 
+                // The low-level op carries a whole `GroupList`: keep the old
+                // params and swap in the new filling (the ex-`SetFilling`
+                // semantics, now expressed as an `Update`). The caller
+                // guarantees the prefill arity, mirroring today's panic contract.
+                let old_params = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .group_lists
+                    .group_list_map
+                    .get(group_list_id)
+                    .expect("existence checked above")
+                    .params()
+                    .clone();
+                let group_list = collomatique_state_colloscopes::group_lists::GroupList::new(
+                    old_params,
+                    filling.clone(),
+                )
+                .expect("caller guarantees prefill arity");
+
                 let result = data
                     .apply(
                         collomatique_state_colloscopes::Op::GroupList(
-                            collomatique_state_colloscopes::GroupListOp::SetFilling(
+                            collomatique_state_colloscopes::GroupListOp::Update(
                                 *group_list_id,
-                                filling.clone(),
+                                group_list,
                             ),
                         ),
                         self.get_desc(),

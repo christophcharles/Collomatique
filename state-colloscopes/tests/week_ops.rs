@@ -15,7 +15,7 @@ use collomatique_state_colloscopes::{
     ColloscopeOp, Data, Error, GroupListOp, NewId, NonEmptyRangeInclusive, Op, PeriodOp, SlotOp,
     Subject, SubjectInterrogationParameters, SubjectOp, SubjectParameters, SubjectPeriodicity,
     TeacherOp, WeekError, WeekOp, WeekPatternOp,
-    group_lists::GroupListParameters,
+    group_lists::{GroupList, GroupListFilling, GroupListParameters},
     ids::{PeriodId, SlotId, SubjectId, TeacherId, WeekId},
     slots::Slot,
     teachers::Teacher,
@@ -248,14 +248,20 @@ fn update_week_to_inactive_blocked_by_filled_cell() {
         panic!("adding a slot should return a slot id");
     };
     let Ok(Some(NewId::GroupListId(group_list))) = app.apply(
-        Op::GroupList(GroupListOp::Add(GroupListParameters {
-            name: "Liste".into(),
-            students_per_group: NonEmptyRangeInclusive::new(
-                NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+        Op::GroupList(GroupListOp::Add(
+            GroupList::new(
+                GroupListParameters {
+                    name: "Liste".into(),
+                    students_per_group: NonEmptyRangeInclusive::new(
+                        NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+                    )
+                    .expect("statically non-empty"),
+                    group_names: vec![None; 2],
+                },
+                GroupListFilling::default(),
             )
-            .expect("statically non-empty"),
-            group_names: vec![None; 2],
-        })),
+            .unwrap(),
+        )),
         "Add group list".into(),
     ) else {
         panic!("adding a group list should return a group list id");
@@ -349,14 +355,20 @@ fn move_week_preserves_filled_cell() {
         panic!("adding a slot should return a slot id");
     };
     let Ok(Some(NewId::GroupListId(group_list))) = app.apply(
-        Op::GroupList(GroupListOp::Add(GroupListParameters {
-            name: "Liste".into(),
-            students_per_group: NonEmptyRangeInclusive::new(
-                NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+        Op::GroupList(GroupListOp::Add(
+            GroupList::new(
+                GroupListParameters {
+                    name: "Liste".into(),
+                    students_per_group: NonEmptyRangeInclusive::new(
+                        NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+                    )
+                    .expect("statically non-empty"),
+                    group_names: vec![None; 2],
+                },
+                GroupListFilling::default(),
             )
-            .expect("statically non-empty"),
-            group_names: vec![None; 2],
-        })),
+            .unwrap(),
+        )),
         "Add group list".into(),
     ) else {
         panic!("adding a group list should return a group list id");
@@ -466,14 +478,20 @@ fn move_week_blocked_when_destination_lacks_slot() {
         panic!("adding a slot should return a slot id");
     };
     let Ok(Some(NewId::GroupListId(group_list))) = app.apply(
-        Op::GroupList(GroupListOp::Add(GroupListParameters {
-            name: "Liste".into(),
-            students_per_group: NonEmptyRangeInclusive::new(
-                NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+        Op::GroupList(GroupListOp::Add(
+            GroupList::new(
+                GroupListParameters {
+                    name: "Liste".into(),
+                    students_per_group: NonEmptyRangeInclusive::new(
+                        NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+                    )
+                    .expect("statically non-empty"),
+                    group_names: vec![None; 2],
+                },
+                GroupListFilling::default(),
             )
-            .expect("statically non-empty"),
-            group_names: vec![None; 2],
-        })),
+            .unwrap(),
+        )),
         "Add group list".into(),
     ) else {
         panic!("adding a group list should return a group list id");

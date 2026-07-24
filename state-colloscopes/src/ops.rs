@@ -211,13 +211,11 @@ pub enum IncompatOp {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GroupListOp {
     /// Add a group list
-    Add(group_lists::GroupListParameters),
+    Add(group_lists::GroupList),
     /// Remove an existing group list
     Remove(GroupListId),
-    /// Update a group list
-    Update(GroupListId, group_lists::GroupListParameters),
-    /// Set filling strategy for a group list
-    SetFilling(GroupListId, group_lists::GroupListFilling),
+    /// Update a group list (replaces the whole value)
+    Update(GroupListId, group_lists::GroupList),
     /// Assign a group list to a subject
     AssignToSubject(PeriodId, SubjectId, Option<GroupListId>),
 }
@@ -630,21 +628,14 @@ pub enum AnnotatedGroupListOp {
     /// Add a group list
     /// First parameter is the group list id for the new group list
     ///
-    /// The filling is always default (automatic, no exclusion) when
-    /// annotating a [GroupListOp::Add]; it only carries information when
-    /// the op is the reverse of a [AnnotatedGroupListOp::Remove], so that
-    /// undoing a removal restores the original filling
-    Add(
-        GroupListId,
-        group_lists::GroupListParameters,
-        group_lists::GroupListFilling,
-    ),
+    /// The whole group list value is carried, so undoing a removal
+    /// (this op is the reverse of a [AnnotatedGroupListOp::Remove])
+    /// naturally restores the original value.
+    Add(GroupListId, group_lists::GroupList),
     /// Remove an existing group list
     Remove(GroupListId),
-    /// Update a group list
-    Update(GroupListId, group_lists::GroupListParameters),
-    /// Set filling strategy for a group list
-    SetFilling(GroupListId, group_lists::GroupListFilling),
+    /// Update a group list (replaces the whole value)
+    Update(GroupListId, group_lists::GroupList),
     /// Assign a group list to a subject
     AssignToSubject(PeriodId, SubjectId, Option<GroupListId>),
 }
@@ -1047,25 +1038,15 @@ impl AnnotatedGroupListOp {
         id_issuer: &mut IdIssuer,
     ) -> (AnnotatedGroupListOp, Option<GroupListId>) {
         match group_list_op {
-            GroupListOp::Add(params) => {
+            GroupListOp::Add(group_list) => {
                 let new_id = id_issuer.get_group_list_id();
-                (
-                    AnnotatedGroupListOp::Add(
-                        new_id,
-                        params,
-                        group_lists::GroupListFilling::default(),
-                    ),
-                    Some(new_id),
-                )
+                (AnnotatedGroupListOp::Add(new_id, group_list), Some(new_id))
             }
             GroupListOp::Remove(group_list_id) => {
                 (AnnotatedGroupListOp::Remove(group_list_id), None)
             }
-            GroupListOp::Update(group_list_id, params) => {
-                (AnnotatedGroupListOp::Update(group_list_id, params), None)
-            }
-            GroupListOp::SetFilling(group_list_id, filling) => (
-                AnnotatedGroupListOp::SetFilling(group_list_id, filling),
+            GroupListOp::Update(group_list_id, group_list) => (
+                AnnotatedGroupListOp::Update(group_list_id, group_list),
                 None,
             ),
             GroupListOp::AssignToSubject(period_id, subject_id, group_list_id) => (

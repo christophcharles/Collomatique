@@ -12,7 +12,6 @@ use collomatique_state::References;
 
 use crate::Table;
 use crate::colloscopes;
-use crate::group_lists;
 use crate::ids::{GroupListId, PeriodId, SlotId, StudentId, SubjectId};
 use crate::non_empty_range::NonEmptyRangeInclusive;
 use crate::ops::AnnotatedGroupListOp;
@@ -300,17 +299,6 @@ impl GroupList {
         Ok(GroupList { params, filling })
     }
 
-    /// Builds a group list without validating the value-internal invariants.
-    /// Used only by [`crate::Data::force_apply`], which fixes nothing and adds
-    /// no checks: a forced op may leave the pair inconsistent for the caller to
-    /// detect and roll back.
-    pub(crate) fn from_parts_unchecked(
-        params: GroupListParameters,
-        filling: GroupListFilling,
-    ) -> Self {
-        GroupList { params, filling }
-    }
-
     /// Read access to the parameters.
     pub fn params(&self) -> &GroupListParameters {
         &self.params
@@ -380,10 +368,6 @@ pub enum GroupListError {
     #[error("invalid subject id {0:?} for period {1:?}")]
     SubjectDoesNotRunOnPeriod(SubjectId, PeriodId),
 
-    /// cannot remove group list as it still has a filling (prefilled or automatic with exclusions)
-    #[error("Group list still has a filling and cannot be removed")]
-    RemainingFilling,
-
     /// cannot remove group list as there are still associated subjects
     #[error("Group list still is associated to subjects and cannot be removed")]
     RemainingAssociatedSubjects,
@@ -402,31 +386,20 @@ pub enum GroupListError {
     )]
     InvalidGroupInSubjectSlotInColloscope(SubjectId, PeriodId, SlotId),
 
-    /// Prefilled groups count does not match group_names count
-    #[error("prefilled groups count ({actual}) does not match group names count ({expected})")]
-    PrefillGroupCountMismatch { expected: usize, actual: usize },
-
-    /// Cannot reduce group count when last groups have students
-    #[error(
-        "cannot reduce group count: groups to be removed still have students (ops layer should clean first)"
-    )]
-    NonEmptyGroupsWhenReducing,
-
     /// Cannot set prefilling: colloscope group list has students assigned
     #[error("Cannot set prefilling: colloscope group list {0:?} has students assigned")]
     NonEmptyColloscopeGroupListWhenPrefilling(GroupListId),
 }
 
 /// Precondition errors of the forced group-list ops — the carve-out subset
-/// (step-3 survey Table 2). Kept: no-clobber, op-target existence, the
-/// empty-first protocol guards ([Self::RemainingFilling],
-/// [Self::NonEmptyGroupsWhenReducing]), the dual-listed prefill-count boundary
-/// ([Self::PrefillGroupCountMismatch], kept per Appendix D.3), and the
+/// (step-3 survey Table 2). Kept: no-clobber, op-target existence, and the
 /// `AssignToSubject` coordinate-existence checks
 /// ([Self::InvalidSubjectId] / [Self::InvalidPeriodId] / [Self::InvalidGroupListId]).
-/// `validate_group_list*`, the Remove/Update/SetFilling scans and the
-/// `AssignToSubject` semantic guards are stripped. Variants copied verbatim
-/// from [GroupListError].
+/// With the op payload consolidated to a whole sealed [GroupList], the
+/// empty-first protocol guards and the prefill-count boundary have no place
+/// left in the surface (the shape invariants hold by construction);
+/// `validate_group_list*`, the Remove/Update scans and the `AssignToSubject`
+/// semantic guards are stripped. Variants copied verbatim from [GroupListError].
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum GroupListPrecheckError {
     /// group list id is invalid
@@ -444,40 +417,6 @@ pub enum GroupListPrecheckError {
     /// period id is invalid
     #[error("invalid period id ({0:?})")]
     InvalidPeriodId(PeriodId),
-
-    /// cannot remove group list as it still has a filling (prefilled or automatic with exclusions)
-    #[error("Group list still has a filling and cannot be removed")]
-    RemainingFilling,
-
-    /// Prefilled groups count does not match group_names count
-    #[error("prefilled groups count ({actual}) does not match group names count ({expected})")]
-    PrefillGroupCountMismatch { expected: usize, actual: usize },
-
-    /// Cannot reduce group count when last groups have students
-    #[error(
-        "cannot reduce group count: groups to be removed still have students (ops layer should clean first)"
-    )]
-    NonEmptyGroupsWhenReducing,
-}
-
-/// Maps a [`GroupListBuildError`] onto the checked-apply error surface. The
-/// count mismatch is a real, reachable op rejection
-/// ([`GroupListError::PrefillGroupCountMismatch`]); a duplicate-student pair
-/// cannot reach the low-level op from any live caller (decode rejects it, the
-/// ops layer pre-validates), so it panics rather than widening the error
-/// surface.
-fn build_error_to_group_list_error(err: GroupListBuildError) -> GroupListError {
-    match err {
-        GroupListBuildError::PrefillGroupCountMismatch { expected, actual } => {
-            GroupListError::PrefillGroupCountMismatch { expected, actual }
-        }
-        GroupListBuildError::DuplicatedStudentInPrefilledGroups(student_id) => {
-            panic!(
-                "duplicate student {student_id:?} in a prefilled group reached the low-level \
-                 group-list op; callers must pre-validate the filling"
-            )
-        }
-    }
 }
 
 impl crate::Data {
@@ -525,7 +464,7 @@ impl crate::Data {
         group_list_op: &AnnotatedGroupListOp,
     ) -> std::result::Result<AnnotatedGroupListOp, GroupListError> {
         match group_list_op {
-            AnnotatedGroupListOp::Add(new_id, params, filling) => {
+            AnnotatedGroupListOp::Add(new_id, new_group_list) => {
                 if self
                     .inner_data
                     .params
@@ -535,18 +474,17 @@ impl crate::Data {
                 {
                     return Err(GroupListError::GroupListIdAlreadyExists(*new_id));
                 };
-                let new_group_list = group_lists::GroupList::new(params.clone(), filling.clone())
-                    .map_err(build_error_to_group_list_error)?;
 
-                self.inner_data
-                    .params
-                    .validate_group_list(&new_group_list)?;
+                // The value is a sealed `GroupList`: its value-internal invariants
+                // hold by construction. Only the state-dependent fact (student
+                // existence) is checked here.
+                self.inner_data.params.validate_group_list(new_group_list)?;
 
                 self.inner_data
                     .params
                     .group_lists
                     .group_list_map
-                    .insert(*new_id, new_group_list);
+                    .insert(*new_id, new_group_list.clone());
 
                 // No colloscope row is seeded: a group list's placements are a
                 // sparse table row created lazily on the first non-empty write
@@ -555,29 +493,23 @@ impl crate::Data {
                 Ok(AnnotatedGroupListOp::Remove(*new_id))
             }
             AnnotatedGroupListOp::Remove(id) => {
-                let Some(old_group_list) =
-                    self.inner_data.params.group_lists.group_list_map.get(id)
-                else {
+                if !self
+                    .inner_data
+                    .params
+                    .group_lists
+                    .group_list_map
+                    .contains(id)
+                {
                     return Err(GroupListError::InvalidGroupListId(*id));
-                };
+                }
 
-                // Check filling is empty before removal
-                match old_group_list.filling() {
-                    group_lists::GroupListFilling::Prefilled { groups } => {
-                        if groups.iter().any(|g| !g.students.is_empty()) {
-                            return Err(GroupListError::RemainingFilling);
-                        }
-                    }
-                    group_lists::GroupListFilling::Automatic { excluded_students } => {
-                        if !excluded_students.is_empty() {
-                            return Err(GroupListError::RemainingFilling);
-                        }
-                        // Canonical-absent surface: a non-empty placement row
-                        // blocks removal.
-                        if self.inner_data.colloscope.group_list(*id).is_some() {
-                            return Err(GroupListError::NotEmptyGroupListInColloscope(*id));
-                        }
-                    }
+                // The whole value (filling included) is removed atomically and
+                // carried in the reverse `Add`, so a non-empty filling no longer
+                // blocks removal. Canonical-absent surface: a non-empty placement
+                // row would be left dangling, so it still blocks (a placement row
+                // is never valid for a prefilled list either).
+                if self.inner_data.colloscope.group_list(*id).is_some() {
+                    return Err(GroupListError::NotEmptyGroupListInColloscope(*id));
                 }
 
                 for group_list_id in self
@@ -599,13 +531,10 @@ impl crate::Data {
                     .group_list_map
                     .remove(id)
                     .expect("Group list ID was checked above");
-                // The removal guard above rejected the op while any placement
-                // row survived, so there is no colloscope row to drop.
 
-                let (old_params, old_filling) = old_group_list.into_parts();
-                Ok(AnnotatedGroupListOp::Add(*id, old_params, old_filling))
+                Ok(AnnotatedGroupListOp::Add(*id, old_group_list))
             }
-            AnnotatedGroupListOp::Update(group_list_id, new_params) => {
+            AnnotatedGroupListOp::Update(group_list_id, new_group_list) => {
                 let Some(old_group_list) = self
                     .inner_data
                     .params
@@ -616,28 +545,54 @@ impl crate::Data {
                     return Err(GroupListError::InvalidGroupListId(*group_list_id));
                 };
 
-                // Only validate colloscope placements for non-prefilled group
-                // lists. Canonical-absent surface: an empty (or absent) list is
-                // trivially compatible.
-                if !old_group_list.is_prefilled()
-                    && let Some(placements) = self.inner_data.colloscope.group_list(*group_list_id)
-                    && colloscopes::validate_group_list_placements(
-                        *group_list_id,
-                        placements,
-                        new_params,
-                        old_group_list.filling(),
-                        &self.inner_data.params.students,
-                    )
-                    .is_err()
-                {
-                    return Err(GroupListError::NotCompatibleGroupListInColloscope(
-                        *group_list_id,
-                    ));
+                // The new value is a sealed, complete `GroupList`: only the
+                // state-dependent fact (student existence) needs checking.
+                self.inner_data.params.validate_group_list(new_group_list)?;
+
+                // Merged colloscope guard set, driven by the prefill transition.
+                // Canonical-absent surface: an empty (or absent) placement row is
+                // trivially compatible. A prefilled list never owns a placement
+                // row, so `(true, _)` has nothing to check.
+                match (old_group_list.is_prefilled(), new_group_list.is_prefilled()) {
+                    (false, false) => {
+                        // Staying automatic: existing placements must stay
+                        // compatible with the complete new pair.
+                        if let Some(placements) =
+                            self.inner_data.colloscope.group_list(*group_list_id)
+                            && colloscopes::validate_group_list_placements(
+                                *group_list_id,
+                                placements,
+                                new_group_list.params(),
+                                new_group_list.filling(),
+                                &self.inner_data.params.students,
+                            )
+                            .is_err()
+                        {
+                            return Err(GroupListError::NotCompatibleGroupListInColloscope(
+                                *group_list_id,
+                            ));
+                        }
+                    }
+                    (false, true) => {
+                        // Turning prefilled: the colloscope must hold no
+                        // placements (a present row means non-empty placements).
+                        if self
+                            .inner_data
+                            .colloscope
+                            .group_list(*group_list_id)
+                            .is_some()
+                        {
+                            return Err(GroupListError::NonEmptyColloscopeGroupListWhenPrefilling(
+                                *group_list_id,
+                            ));
+                        }
+                    }
+                    (true, _) => {}
                 }
 
                 // The interrogations of every subject associated with this
-                // list must stay within the new group count
-                let first_forbidden_group_number = new_params.group_names.len() as u32;
+                // list must stay within the new group count.
+                let first_forbidden_group_number = new_group_list.params().group_names.len() as u32;
                 for ((period_id, subject_id), associated_list) in self
                     .inner_data
                     .params
@@ -654,144 +609,15 @@ impl crate::Data {
                     }
                 }
 
-                // Atomically adjust filling when size changes
-                let new_filling = match old_group_list.filling() {
-                    group_lists::GroupListFilling::Automatic { excluded_students } => {
-                        group_lists::GroupListFilling::Automatic {
-                            excluded_students: excluded_students.clone(),
-                        }
-                    }
-                    group_lists::GroupListFilling::Prefilled { groups: old_groups } => {
-                        let old_count = old_group_list.params().group_names.len();
-                        let new_count = new_params.group_names.len();
-
-                        if new_count < old_count {
-                            // Reducing groups: check last groups are empty
-                            for group in old_groups.iter().skip(new_count) {
-                                if !group.students.is_empty() {
-                                    return Err(GroupListError::NonEmptyGroupsWhenReducing);
-                                }
-                            }
-                            // Truncate to new size
-                            group_lists::GroupListFilling::Prefilled {
-                                groups: old_groups[..new_count].to_vec(),
-                            }
-                        } else if new_count > old_count {
-                            // Increasing groups: extend with empty groups
-                            let mut new_groups = old_groups.clone();
-                            for _ in old_count..new_count {
-                                new_groups.push(group_lists::PrefilledGroup::default());
-                            }
-                            group_lists::GroupListFilling::Prefilled { groups: new_groups }
-                        } else {
-                            // Same size: keep as is
-                            group_lists::GroupListFilling::Prefilled {
-                                groups: old_groups.clone(),
-                            }
-                        }
-                    }
-                };
-
-                let new_group_list = group_lists::GroupList::new(new_params.clone(), new_filling)
-                    .expect(
-                        "Update reshaping keeps the group count in sync with group_names and \
-                         preserves the dup-freedom of the (already valid) old filling",
-                    );
-
-                self.inner_data
-                    .params
-                    .validate_group_list(&new_group_list)?;
-
                 let old_group_list = self
                     .inner_data
                     .params
                     .group_lists
                     .group_list_map
-                    .insert(*group_list_id, new_group_list)
+                    .insert(*group_list_id, new_group_list.clone())
                     .expect("Group list ID was validated above");
 
-                let (old_params, _old_filling) = old_group_list.into_parts();
-                Ok(AnnotatedGroupListOp::Update(*group_list_id, old_params))
-            }
-            AnnotatedGroupListOp::SetFilling(group_list_id, filling) => {
-                let Some(old_group_list) = self
-                    .inner_data
-                    .params
-                    .group_lists
-                    .group_list_map
-                    .get(group_list_id)
-                else {
-                    return Err(GroupListError::InvalidGroupListId(*group_list_id));
-                };
-
-                // The count guard now lives in `GroupList::new`; build the new
-                // value up front and surface a count mismatch exactly as before.
-                // (A duplicate-student pair cannot reach this low-level op — see
-                // `build_error_to_group_list_error`.)
-                let new_group_list =
-                    group_lists::GroupList::new(old_group_list.params().clone(), filling.clone())
-                        .map_err(build_error_to_group_list_error)?;
-
-                // Handle colloscope group list based on prefill transition
-                let was_prefilled = old_group_list.is_prefilled();
-                let will_be_prefilled = filling.is_prefilled();
-
-                if !was_prefilled && will_be_prefilled {
-                    // Transitioning to prefilled: the colloscope must hold no
-                    // placements. Canonical-absent surface: a present row means
-                    // non-empty placements (and an absent row needs no cleanup).
-                    if self
-                        .inner_data
-                        .colloscope
-                        .group_list(*group_list_id)
-                        .is_some()
-                    {
-                        return Err(GroupListError::NonEmptyColloscopeGroupListWhenPrefilling(
-                            *group_list_id,
-                        ));
-                    }
-                } else if was_prefilled && !will_be_prefilled {
-                    // Transitioning from prefilled: nothing to seed — the empty
-                    // placement map is simply an absent sparse row.
-                } else if !was_prefilled
-                    && !will_be_prefilled
-                    && let Some(placements) = self.inner_data.colloscope.group_list(*group_list_id)
-                {
-                    // Staying automatic: the colloscope placements persist, so
-                    // the new exclusions must be compatible with the placed
-                    // students.
-                    if colloscopes::validate_group_list_placements(
-                        *group_list_id,
-                        placements,
-                        old_group_list.params(),
-                        filling,
-                        &self.inner_data.params.students,
-                    )
-                    .is_err()
-                    {
-                        return Err(GroupListError::NotCompatibleGroupListInColloscope(
-                            *group_list_id,
-                        ));
-                    }
-                }
-
-                self.inner_data
-                    .params
-                    .validate_group_list(&new_group_list)?;
-
-                let old_group_list = self
-                    .inner_data
-                    .params
-                    .group_lists
-                    .group_list_map
-                    .insert(*group_list_id, new_group_list)
-                    .expect("Group list ID was validated above");
-
-                let (_old_params, old_filling) = old_group_list.into_parts();
-                Ok(AnnotatedGroupListOp::SetFilling(
-                    *group_list_id,
-                    old_filling,
-                ))
+                Ok(AnnotatedGroupListOp::Update(*group_list_id, old_group_list))
             }
             AnnotatedGroupListOp::AssignToSubject(period_id, subject_id, group_list_id) => {
                 let Some(subject) = self.inner_data.params.subjects.find_subject(*subject_id)
@@ -864,7 +690,7 @@ impl crate::Data {
         group_list_op: &AnnotatedGroupListOp,
     ) -> std::result::Result<AnnotatedGroupListOp, GroupListPrecheckError> {
         match group_list_op {
-            AnnotatedGroupListOp::Add(new_id, params, filling) => {
+            AnnotatedGroupListOp::Add(new_id, new_group_list) => {
                 if self
                     .inner_data
                     .params
@@ -874,42 +700,31 @@ impl crate::Data {
                 {
                     return Err(GroupListPrecheckError::GroupListIdAlreadyExists(*new_id));
                 };
-                // force builds unchecked: no value-internal validation (fixes
-                // nothing) and no student-existence check.
-                let new_group_list =
-                    group_lists::GroupList::from_parts_unchecked(params.clone(), filling.clone());
-
+                // force inserts the value verbatim: no student-existence check
+                // (fixes nothing). The payload is a sealed `GroupList`, so its
+                // value-internal invariants already hold by construction.
                 self.inner_data
                     .params
                     .group_lists
                     .group_list_map
-                    .insert(*new_id, new_group_list);
+                    .insert(*new_id, new_group_list.clone());
 
                 Ok(AnnotatedGroupListOp::Remove(*new_id))
             }
             AnnotatedGroupListOp::Remove(id) => {
-                let Some(old_group_list) =
-                    self.inner_data.params.group_lists.group_list_map.get(id)
-                else {
+                // Target existence only: the whole value is removed atomically
+                // and carried in the reverse `Add`.
+                if !self
+                    .inner_data
+                    .params
+                    .group_lists
+                    .group_list_map
+                    .contains(id)
+                {
                     return Err(GroupListPrecheckError::InvalidGroupListId(*id));
-                };
-
-                // Empty-first protocol guard (kept): filling must be empty.
-                match old_group_list.filling() {
-                    group_lists::GroupListFilling::Prefilled { groups } => {
-                        if groups.iter().any(|g| !g.students.is_empty()) {
-                            return Err(GroupListPrecheckError::RemainingFilling);
-                        }
-                    }
-                    group_lists::GroupListFilling::Automatic { excluded_students } => {
-                        if !excluded_students.is_empty() {
-                            return Err(GroupListPrecheckError::RemainingFilling);
-                        }
-                        // stripped: NotEmptyGroupListInColloscope scan
-                    }
                 }
 
-                // stripped: RemainingAssociatedSubjects scan
+                // stripped: NotEmptyGroupListInColloscope + RemainingAssociatedSubjects scans
 
                 let old_group_list = self
                     .inner_data
@@ -919,125 +734,33 @@ impl crate::Data {
                     .remove(id)
                     .expect("Group list ID was checked above");
 
-                let (old_params, old_filling) = old_group_list.into_parts();
-                Ok(AnnotatedGroupListOp::Add(*id, old_params, old_filling))
+                Ok(AnnotatedGroupListOp::Add(*id, old_group_list))
             }
-            AnnotatedGroupListOp::Update(group_list_id, new_params) => {
-                let Some(old_group_list) = self
+            AnnotatedGroupListOp::Update(group_list_id, new_group_list) => {
+                // Target existence only; the sealed value replaces the old one
+                // verbatim.
+                if !self
                     .inner_data
                     .params
                     .group_lists
                     .group_list_map
-                    .get(group_list_id)
-                else {
+                    .contains(group_list_id)
+                {
                     return Err(GroupListPrecheckError::InvalidGroupListId(*group_list_id));
-                };
-
-                // stripped: colloscope placement compat guard + interrogation
-                // group-bound scan
-
-                // Atomically adjust filling when size changes. The
-                // NonEmptyGroupsWhenReducing protocol guard is kept.
-                let new_filling = match old_group_list.filling() {
-                    group_lists::GroupListFilling::Automatic { excluded_students } => {
-                        group_lists::GroupListFilling::Automatic {
-                            excluded_students: excluded_students.clone(),
-                        }
-                    }
-                    group_lists::GroupListFilling::Prefilled { groups: old_groups } => {
-                        let old_count = old_group_list.params().group_names.len();
-                        let new_count = new_params.group_names.len();
-
-                        if new_count < old_count {
-                            // Reducing groups: check last groups are empty
-                            for group in old_groups.iter().skip(new_count) {
-                                if !group.students.is_empty() {
-                                    return Err(GroupListPrecheckError::NonEmptyGroupsWhenReducing);
-                                }
-                            }
-                            // Truncate to new size
-                            group_lists::GroupListFilling::Prefilled {
-                                groups: old_groups[..new_count].to_vec(),
-                            }
-                        } else if new_count > old_count {
-                            // Increasing groups: extend with empty groups
-                            let mut new_groups = old_groups.clone();
-                            for _ in old_count..new_count {
-                                new_groups.push(group_lists::PrefilledGroup::default());
-                            }
-                            group_lists::GroupListFilling::Prefilled { groups: new_groups }
-                        } else {
-                            // Same size: keep as is
-                            group_lists::GroupListFilling::Prefilled {
-                                groups: old_groups.clone(),
-                            }
-                        }
-                    }
-                };
-
-                let new_group_list =
-                    group_lists::GroupList::from_parts_unchecked(new_params.clone(), new_filling);
-
-                // stripped: validate_group_list
-
-                let old_group_list = self
-                    .inner_data
-                    .params
-                    .group_lists
-                    .group_list_map
-                    .insert(*group_list_id, new_group_list)
-                    .expect("Group list ID was checked above");
-
-                let (old_params, _old_filling) = old_group_list.into_parts();
-                Ok(AnnotatedGroupListOp::Update(*group_list_id, old_params))
-            }
-            AnnotatedGroupListOp::SetFilling(group_list_id, filling) => {
-                let Some(old_group_list) = self
-                    .inner_data
-                    .params
-                    .group_lists
-                    .group_list_map
-                    .get(group_list_id)
-                else {
-                    return Err(GroupListPrecheckError::InvalidGroupListId(*group_list_id));
-                };
-
-                // Payload-shape carve-out (kept, dual-listed): prefilled groups
-                // count must match group_names count.
-                if let group_lists::GroupListFilling::Prefilled { groups } = filling {
-                    let expected = old_group_list.params().group_names.len();
-                    let actual = groups.len();
-                    if actual != expected {
-                        return Err(GroupListPrecheckError::PrefillGroupCountMismatch {
-                            expected,
-                            actual,
-                        });
-                    }
                 }
 
-                // stripped: prefill-transition colloscope guards
-                // (NonEmptyColloscopeGroupListWhenPrefilling / placement compat)
-
-                let new_group_list = group_lists::GroupList::from_parts_unchecked(
-                    old_group_list.params().clone(),
-                    filling.clone(),
-                );
-
-                // stripped: validate_group_list
+                // stripped: colloscope placement compat guard + interrogation
+                // group-bound scan + validate_group_list
 
                 let old_group_list = self
                     .inner_data
                     .params
                     .group_lists
                     .group_list_map
-                    .insert(*group_list_id, new_group_list)
+                    .insert(*group_list_id, new_group_list.clone())
                     .expect("Group list ID was checked above");
 
-                let (_old_params, old_filling) = old_group_list.into_parts();
-                Ok(AnnotatedGroupListOp::SetFilling(
-                    *group_list_id,
-                    old_filling,
-                ))
+                Ok(AnnotatedGroupListOp::Update(*group_list_id, old_group_list))
             }
             AnnotatedGroupListOp::AssignToSubject(period_id, subject_id, group_list_id) => {
                 if self

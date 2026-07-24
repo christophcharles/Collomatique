@@ -19,7 +19,7 @@ use collomatique_state_colloscopes::{
     SubjectRefSite, TeacherOp, TeacherRefSite, WeekOp, WeekPatternOp, WeekPatternRefSite,
     WeekRefSite,
     balancing::{Balancing, BalancingOptions},
-    group_lists::{GroupListFilling, GroupListParameters, PrefilledGroup},
+    group_lists::{GroupList, GroupListFilling, GroupListParameters, PrefilledGroup},
     ids::{GroupListId, PeriodId, SlotId, StudentId, SubjectId, TeacherId, WeekId, WeekPatternId},
     incompats::Incompatibility,
     pairings::{PairingRule, RulePart},
@@ -289,34 +289,46 @@ fn walk_covers_every_site_in_order() {
 
     // Prefilled group list referencing st2.
     let gl_pre = apply_new!(
-        Op::GroupList(GroupListOp::Add(one_group_params("Prefilled"))),
+        Op::GroupList(GroupListOp::Add(
+            GroupList::new(one_group_params("Prefilled"), GroupListFilling::default()).unwrap(),
+        )),
         NewId::GroupListId,
         "add prefilled group list"
     );
     apply_none!(
-        Op::GroupList(GroupListOp::SetFilling(
+        Op::GroupList(GroupListOp::Update(
             gl_pre,
-            GroupListFilling::Prefilled {
-                groups: vec![PrefilledGroup {
-                    students: BTreeSet::from([st2]),
-                }],
-            },
+            GroupList::new(
+                one_group_params("Prefilled"),
+                GroupListFilling::Prefilled {
+                    groups: vec![PrefilledGroup {
+                        students: BTreeSet::from([st2]),
+                    }],
+                },
+            )
+            .unwrap(),
         )),
         "prefill group list"
     );
 
     // Automatic group list excluding st1.
     let gl_auto = apply_new!(
-        Op::GroupList(GroupListOp::Add(one_group_params("Automatic"))),
+        Op::GroupList(GroupListOp::Add(
+            GroupList::new(one_group_params("Automatic"), GroupListFilling::default()).unwrap(),
+        )),
         NewId::GroupListId,
         "add automatic group list"
     );
     apply_none!(
-        Op::GroupList(GroupListOp::SetFilling(
+        Op::GroupList(GroupListOp::Update(
             gl_auto,
-            GroupListFilling::Automatic {
-                excluded_students: BTreeSet::from([st1]),
-            },
+            GroupList::new(
+                one_group_params("Automatic"),
+                GroupListFilling::Automatic {
+                    excluded_students: BTreeSet::from([st1]),
+                },
+            )
+            .unwrap(),
         )),
         "set automatic exclusion"
     );

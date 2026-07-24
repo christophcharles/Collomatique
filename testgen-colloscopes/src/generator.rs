@@ -15,7 +15,7 @@ use collomatique_state_colloscopes::{
     AssignmentOp, BalancingOp, ColloscopeOp, ExportConfigOp, GroupListOp, IncompatOp, InnerData,
     Op, PairingOp, PeriodOp, SettingsOp, SlotOp, SlotPairingOp, StudentOp, SubjectOp, TeacherOp,
     WeekOp, WeekPatternOp,
-    group_lists::{GroupListFilling, PrefilledGroup},
+    group_lists::{GroupList, GroupListFilling, PrefilledGroup},
     ids::{
         GroupListId, Id, IncompatId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId,
         SubjectId, TeacherId, WeekId, WeekPatternId,
@@ -700,25 +700,10 @@ fn gen_incompat(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
 
 fn gen_group_list(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invalid: bool) -> Op {
     if invalid {
-        let op = match rng.random_range(0..4) {
-            0 if !pools.group_list_ids.is_empty() => {
-                // Prefilled groups whose count does not match group_names
-                let group_list_id = pick(rng, &pools.group_list_ids);
-                let group_names_len = inner
-                    .params
-                    .group_lists
-                    .group_list_map
-                    .get(&group_list_id)
-                    .expect("group list id from pool")
-                    .params()
-                    .group_names
-                    .len();
-                GroupListOp::SetFilling(
-                    group_list_id,
-                    synth::prefilled_filling(rng, group_names_len + 1, &pools.student_ids),
-                )
-            }
-            1 if !pools.period_ids.is_empty()
+        // The count-mismatch case is gone: a `GroupList` is sealed, so an
+        // over-counted prefilled filling is unrepresentable at the op boundary.
+        let op = match rng.random_range(0..3) {
+            0 if !pools.period_ids.is_empty()
                 && !pools.non_interrogation_subject_ids.is_empty() =>
             {
                 // Associating a group list to a subject without interrogations
@@ -728,7 +713,7 @@ fn gen_group_list(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invali
                     None,
                 )
             }
-            2 if !pools.period_ids.is_empty() && !pools.interrogation_subject_ids.is_empty() => {
+            1 if !pools.period_ids.is_empty() && !pools.interrogation_subject_ids.is_empty() => {
                 // Associating a dangling group list id
                 GroupListOp::AssignToSubject(
                     pick(rng, &pools.period_ids),
@@ -753,45 +738,68 @@ fn gen_group_list(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invali
     let remove_w = if n > 0 { 2 } else { 0 };
     let op = match weighted(rng, &[add_w, update_w, filling_w, assign_w, remove_w]) {
         0 => {
+            // A new list is always automatic (the default filling), which is
+            // trivially consistent with any parameters.
             let group_count = rng.random_range(2..=5);
-            GroupListOp::Add(synth::group_list_parameters(rng, group_count))
+            let params = synth::group_list_parameters(rng, group_count);
+            GroupListOp::Add(
+                GroupList::new(params, GroupListFilling::default())
+                    .expect("automatic filling is always consistent"),
+            )
         }
         1 => {
             let group_list_id = pick(rng, &pools.group_list_ids);
-            // Keep the group count stable for prefilled lists so the
-            // filling stays consistent with the new parameters
             let current = inner
                 .params
                 .group_lists
                 .group_list_map
                 .get(&group_list_id)
                 .expect("group list id from pool");
-            let group_count = match current.filling() {
-                GroupListFilling::Prefilled { groups } => groups.len(),
-                GroupListFilling::Automatic { .. } => rng.random_range(2..=5),
+            // Keep the group count stable for prefilled lists so the reshaped
+            // filling stays consistent with the new parameters; the whole value
+            // is carried by the consolidated `Update` op.
+            let (group_count, new_filling) = match current.filling() {
+                GroupListFilling::Prefilled { groups } => (
+                    groups.len(),
+                    GroupListFilling::Prefilled {
+                        groups: groups.clone(),
+                    },
+                ),
+                GroupListFilling::Automatic { excluded_students } => (
+                    rng.random_range(2..=5),
+                    GroupListFilling::Automatic {
+                        excluded_students: excluded_students.clone(),
+                    },
+                ),
             };
+            let params = synth::group_list_parameters(rng, group_count);
             GroupListOp::Update(
                 group_list_id,
-                synth::group_list_parameters(rng, group_count),
+                GroupList::new(params, new_filling).expect("group count kept in sync"),
             )
         }
         2 => {
+            // Swap the filling while keeping the parameters — the ex-`SetFilling`
+            // move, now expressed as a whole-value `Update`.
             let group_list_id = pick(rng, &pools.group_list_ids);
-            let group_names_len = inner
+            let params = inner
                 .params
                 .group_lists
                 .group_list_map
                 .get(&group_list_id)
                 .expect("group list id from pool")
                 .params()
-                .group_names
-                .len();
+                .clone();
+            let group_names_len = params.group_names.len();
             let filling = if rng.random_bool(0.5) {
                 synth::prefilled_filling(rng, group_names_len, &pools.student_ids)
             } else {
                 synth::automatic_filling(rng, &pools.student_ids)
             };
-            GroupListOp::SetFilling(group_list_id, filling)
+            GroupListOp::Update(
+                group_list_id,
+                GroupList::new(params, filling).expect("prefilled count matches group_names"),
+            )
         }
         3 => {
             let period_id = pick(rng, &pools.period_ids);
@@ -1350,31 +1358,34 @@ fn gen_force_retarget(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools) ->
         candidates.push(Op::Slot(SlotOp::Update(slot_id, slot)));
     }
     {
-        // A dangling student id buried inside a prefilled group. The filling
-        // keeps `group_names.len()` groups so the kept `SetFilling` count guard
-        // passes; the stripped `validate_group_list` reference scan is what lets
-        // the dangling FK land. Needs a list with at least one group to hold it.
+        // A dangling student id buried inside a prefilled group. The rebuilt
+        // filling keeps `group_names.len()` groups so `GroupList::new` accepts it
+        // (count matches, the single student is not duplicated); force's stripped
+        // `validate_group_list` reference scan is what lets the dangling FK land.
+        // Needs a list with at least one group to hold it.
         let lists = group_lists_with_min_groups(inner, 1);
         if !lists.is_empty() {
             let group_list_id = pick(rng, &lists);
-            let group_count = inner
+            let params = inner
                 .params
                 .group_lists
                 .group_list_map
                 .get(&group_list_id)
                 .expect("group list id from live pool")
                 .params()
-                .group_names
-                .len();
+                .clone();
+            let group_count = params.group_names.len();
             let mut groups: Vec<PrefilledGroup> = (0..group_count)
                 .map(|_| PrefilledGroup::default())
                 .collect();
             groups[0]
                 .students
                 .insert(unsafe { StudentId::new(dangling(rng)) });
-            candidates.push(Op::GroupList(GroupListOp::SetFilling(
+            let group_list = GroupList::new(params, GroupListFilling::Prefilled { groups })
+                .expect("count matches group_names and the lone student is not duplicated");
+            candidates.push(Op::GroupList(GroupListOp::Update(
                 group_list_id,
-                GroupListFilling::Prefilled { groups },
+                group_list,
             )));
         }
     }

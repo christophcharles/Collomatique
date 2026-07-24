@@ -16,7 +16,7 @@ use collomatique_state_colloscopes::{
     SubjectParameters, SubjectPeriodicity, TeacherOp, WeekOp, WeekPatternOp,
     balancing::{Balancing, BalancingOptions},
     export_config,
-    group_lists::{GroupListFilling, GroupListParameters, PrefilledGroup},
+    group_lists::{GroupList, GroupListFilling, GroupListParameters, PrefilledGroup},
     ids::{PeriodId, WeekId},
     incompats::Incompatibility,
     pairings::{PairingRule, RulePart},
@@ -501,50 +501,64 @@ pub fn build_rich_data() -> Data {
 
     // Group lists: a prefilled one (mixed named/unnamed groups) and an
     // automatic one (with an excluded student), both associated to subjects
+    let maths_params = GroupListParameters {
+        name: "Groupes de maths".to_string(),
+        students_per_group: ner(nz(2)..=nz(3)),
+        group_names: vec![Some(non_empty("Gryffondor")), None],
+    };
     let group_list_maths = apply_new_id!(
         &mut state,
-        Op::GroupList(GroupListOp::Add(GroupListParameters {
-            name: "Groupes de maths".to_string(),
-            students_per_group: ner(nz(2)..=nz(3)),
-            group_names: vec![Some(non_empty("Gryffondor")), None],
-        })),
+        Op::GroupList(GroupListOp::Add(
+            GroupList::new(maths_params.clone(), GroupListFilling::default()).unwrap(),
+        )),
         "group list maths",
         GroupListId
     );
     apply(
         &mut state,
-        Op::GroupList(GroupListOp::SetFilling(
+        Op::GroupList(GroupListOp::Update(
             group_list_maths,
-            GroupListFilling::Prefilled {
-                groups: vec![
-                    PrefilledGroup {
-                        students: BTreeSet::from([student1, student2]),
-                    },
-                    PrefilledGroup {
-                        students: BTreeSet::from([student3]),
-                    },
-                ],
-            },
+            GroupList::new(
+                maths_params,
+                GroupListFilling::Prefilled {
+                    groups: vec![
+                        PrefilledGroup {
+                            students: BTreeSet::from([student1, student2]),
+                        },
+                        PrefilledGroup {
+                            students: BTreeSet::from([student3]),
+                        },
+                    ],
+                },
+            )
+            .unwrap(),
         )),
         "prefill group list maths",
     );
+    let physics_params = GroupListParameters {
+        name: "Groupes de physique".to_string(),
+        students_per_group: ner(nz(1)..=nz(2)),
+        group_names: vec![None, Some(non_empty("Binôme B")), None],
+    };
     let group_list_physics = apply_new_id!(
         &mut state,
-        Op::GroupList(GroupListOp::Add(GroupListParameters {
-            name: "Groupes de physique".to_string(),
-            students_per_group: ner(nz(1)..=nz(2)),
-            group_names: vec![None, Some(non_empty("Binôme B")), None],
-        })),
+        Op::GroupList(GroupListOp::Add(
+            GroupList::new(physics_params.clone(), GroupListFilling::default()).unwrap(),
+        )),
         "group list physics",
         GroupListId
     );
     apply(
         &mut state,
-        Op::GroupList(GroupListOp::SetFilling(
+        Op::GroupList(GroupListOp::Update(
             group_list_physics,
-            GroupListFilling::Automatic {
-                excluded_students: BTreeSet::from([student4]),
-            },
+            GroupList::new(
+                physics_params,
+                GroupListFilling::Automatic {
+                    excluded_students: BTreeSet::from([student4]),
+                },
+            )
+            .unwrap(),
         )),
         "exclusions group list physics",
     );

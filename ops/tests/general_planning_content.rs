@@ -14,8 +14,13 @@ use collomatique_state::{AppState, traits::Manager};
 use collomatique_state_colloscopes::{
     ColloscopeOp, Data, GroupListOp, NewId, NonEmptyRangeInclusive, Op, PeriodOp, SlotOp, Subject,
     SubjectInterrogationParameters, SubjectOp, SubjectParameters, SubjectPeriodicity, TeacherOp,
-    WeekOp, WeekPatternOp, group_lists::GroupListParameters, ids::PeriodId, slots::Slot,
-    teachers::Teacher, week_patterns::WeekPattern, weeks::WeekDesc,
+    WeekOp, WeekPatternOp,
+    group_lists::{GroupList, GroupListFilling, GroupListParameters},
+    ids::PeriodId,
+    slots::Slot,
+    teachers::Teacher,
+    week_patterns::WeekPattern,
+    weeks::WeekDesc,
 };
 use std::collections::BTreeSet;
 use std::num::NonZeroU32;
@@ -130,7 +135,9 @@ fn cutting_a_period_preserves_tail_colloscope_and_pattern() {
     };
 
     let Ok(Some(NewId::GroupListId(group_list_id))) = app_state.apply(
-        Op::GroupList(GroupListOp::Add(GroupListParameters::default())),
+        Op::GroupList(GroupListOp::Add(
+            GroupList::new(GroupListParameters::default(), GroupListFilling::default()).unwrap(),
+        )),
         desc("Add group list"),
     ) else {
         panic!("Unexpected result after adding the group list");

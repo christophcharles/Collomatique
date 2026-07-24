@@ -11,7 +11,7 @@ use collomatique_state_colloscopes::{
     ColloscopeOp, Data, Error, GroupListError, GroupListOp, NewId, NonEmptyRangeInclusive, Op,
     PeriodOp, SettingsOp, SlotOp, StudentOp, Subject, SubjectInterrogationParameters, SubjectOp,
     SubjectParameters, SubjectPeriodicity, TeacherOp, WeekOp,
-    group_lists::{GroupListFilling, GroupListParameters, PrefilledGroup},
+    group_lists::{GroupList, GroupListFilling, GroupListParameters, PrefilledGroup},
     ids::PeriodId,
     settings::{Limits, Settings},
     slots::{Slot, SlotError},
@@ -96,12 +96,12 @@ fn remove_student_with_settings_is_rejected() {
     };
 }
 
-/// An automatic→automatic `GroupListOp::SetFilling` must check the new
+/// An automatic→automatic `GroupListOp::Update` (which swaps the filling
+/// while keeping the params — the ex-`SetFilling` move) must check the new
 /// `excluded_students` against students already placed in the colloscope
-/// entry of the list, exactly like the prefilled↔automatic transitions
-/// and `GroupListOp::Update` do. Before the fix, the op succeeded and
-/// left an excluded-but-placed student, panicking the internal
-/// invariant check (`ExcludedStudentInGroupList`).
+/// entry of the list, exactly like the prefilled↔automatic transitions do.
+/// Before the fix, the op succeeded and left an excluded-but-placed student,
+/// panicking the internal invariant check (`ExcludedStudentInGroupList`).
 #[test]
 fn set_filling_excluding_placed_student_is_rejected() {
     let mut app_state = AppState::<_, String>::new(Data::new());
@@ -121,7 +121,9 @@ fn set_filling_excluding_placed_student_is_rejected() {
 
     // Automatic (default) filling: the list has a colloscope entry
     let Ok(Some(NewId::GroupListId(group_list_id))) = app_state.apply(
-        Op::GroupList(GroupListOp::Add(GroupListParameters::default())),
+        Op::GroupList(GroupListOp::Add(
+            GroupList::new(GroupListParameters::default(), GroupListFilling::default()).unwrap(),
+        )),
         "Add group list".into(),
     ) else {
         panic!("Unexpected result after adding the group list");
@@ -138,13 +140,17 @@ fn set_filling_excluding_placed_student_is_rejected() {
         panic!("Unexpected result after placing the student");
     };
 
-    // Excluding the placed student must fail
+    // Excluding the placed student must fail (whole-value update keeping params)
     let result = app_state.apply(
-        Op::GroupList(GroupListOp::SetFilling(
+        Op::GroupList(GroupListOp::Update(
             group_list_id,
-            GroupListFilling::Automatic {
-                excluded_students: BTreeSet::from([placed_student]),
-            },
+            GroupList::new(
+                GroupListParameters::default(),
+                GroupListFilling::Automatic {
+                    excluded_students: BTreeSet::from([placed_student]),
+                },
+            )
+            .unwrap(),
         )),
         "Exclude placed student".into(),
     );
@@ -157,11 +163,15 @@ fn set_filling_excluding_placed_student_is_rejected() {
 
     // Excluding a student that is not placed still works
     let Ok(None) = app_state.apply(
-        Op::GroupList(GroupListOp::SetFilling(
+        Op::GroupList(GroupListOp::Update(
             group_list_id,
-            GroupListFilling::Automatic {
-                excluded_students: BTreeSet::from([other_student]),
-            },
+            GroupList::new(
+                GroupListParameters::default(),
+                GroupListFilling::Automatic {
+                    excluded_students: BTreeSet::from([other_student]),
+                },
+            )
+            .unwrap(),
         )),
         "Exclude non-placed student".into(),
     ) else {
@@ -245,14 +255,20 @@ fn update_shrinking_group_names_below_assigned_group_is_rejected() {
 
     // Group list with 4 groups, associated with the subject
     let Ok(Some(NewId::GroupListId(group_list_id))) = app_state.apply(
-        Op::GroupList(GroupListOp::Add(GroupListParameters {
-            name: "Liste".into(),
-            students_per_group: NonEmptyRangeInclusive::new(
-                NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+        Op::GroupList(GroupListOp::Add(
+            GroupList::new(
+                GroupListParameters {
+                    name: "Liste".into(),
+                    students_per_group: NonEmptyRangeInclusive::new(
+                        NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+                    )
+                    .expect("statically non-empty"),
+                    group_names: vec![None; 4],
+                },
+                GroupListFilling::default(),
             )
-            .expect("statically non-empty"),
-            group_names: vec![None; 4],
-        })),
+            .unwrap(),
+        )),
         "Add group list".into(),
     ) else {
         panic!("Unexpected result after adding the group list");
@@ -291,14 +307,18 @@ fn update_shrinking_group_names_below_assigned_group_is_rejected() {
     let result = app_state.apply(
         Op::GroupList(GroupListOp::Update(
             group_list_id,
-            GroupListParameters {
-                name: "Liste".into(),
-                students_per_group: NonEmptyRangeInclusive::new(
-                    NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
-                )
-                .expect("statically non-empty"),
-                group_names: vec![None; 2],
-            },
+            GroupList::new(
+                GroupListParameters {
+                    name: "Liste".into(),
+                    students_per_group: NonEmptyRangeInclusive::new(
+                        NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+                    )
+                    .expect("statically non-empty"),
+                    group_names: vec![None; 2],
+                },
+                GroupListFilling::default(),
+            )
+            .unwrap(),
         )),
         "Shrink group list below assigned group".into(),
     );
@@ -313,14 +333,18 @@ fn update_shrinking_group_names_below_assigned_group_is_rejected() {
     let Ok(None) = app_state.apply(
         Op::GroupList(GroupListOp::Update(
             group_list_id,
-            GroupListParameters {
-                name: "Liste".into(),
-                students_per_group: NonEmptyRangeInclusive::new(
-                    NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
-                )
-                .expect("statically non-empty"),
-                group_names: vec![None; 3],
-            },
+            GroupList::new(
+                GroupListParameters {
+                    name: "Liste".into(),
+                    students_per_group: NonEmptyRangeInclusive::new(
+                        NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+                    )
+                    .expect("statically non-empty"),
+                    group_names: vec![None; 3],
+                },
+                GroupListFilling::default(),
+            )
+            .unwrap(),
         )),
         "Shrink group list above assigned group".into(),
     ) else {
@@ -340,18 +364,24 @@ fn remove_prefilled_group_list_round_trips_on_reverse() {
     let mut app_state = AppState::<_, String>::new(Data::new());
 
     let Ok(Some(NewId::GroupListId(group_list_id))) = app_state.apply(
-        Op::GroupList(GroupListOp::Add(GroupListParameters::default())),
+        Op::GroupList(GroupListOp::Add(
+            GroupList::new(GroupListParameters::default(), GroupListFilling::default()).unwrap(),
+        )),
         "Add group list".into(),
     ) else {
         panic!("Unexpected result after adding the group list");
     };
     let group_count = 16; // GroupListParameters::default() has 16 groups
     let Ok(None) = app_state.apply(
-        Op::GroupList(GroupListOp::SetFilling(
+        Op::GroupList(GroupListOp::Update(
             group_list_id,
-            GroupListFilling::Prefilled {
-                groups: vec![PrefilledGroup::default(); group_count],
-            },
+            GroupList::new(
+                GroupListParameters::default(),
+                GroupListFilling::Prefilled {
+                    groups: vec![PrefilledGroup::default(); group_count],
+                },
+            )
+            .unwrap(),
         )),
         "Make the group list prefilled".into(),
     ) else {
@@ -418,7 +448,9 @@ fn assign_to_subject_with_dangling_group_list_id_errors() {
 
     // A removed group list leaves a dangling id
     let Ok(Some(NewId::GroupListId(group_list_id))) = app_state.apply(
-        Op::GroupList(GroupListOp::Add(GroupListParameters::default())),
+        Op::GroupList(GroupListOp::Add(
+            GroupList::new(GroupListParameters::default(), GroupListFilling::default()).unwrap(),
+        )),
         "Add group list".into(),
     ) else {
         panic!("Unexpected result after adding the group list");

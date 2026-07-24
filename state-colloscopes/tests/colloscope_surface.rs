@@ -13,7 +13,7 @@ use collomatique_state_colloscopes::{
     SubjectInterrogationParameters, SubjectOp, SubjectParameters, SubjectPeriodicity, TeacherOp,
     WeekOp, WeekPatternOp,
     colloscopes::Colloscope,
-    group_lists::GroupListParameters,
+    group_lists::{GroupList, GroupListFilling, GroupListParameters},
     ids::{Id, PeriodId, SlotId, StudentId, SubjectId, TeacherId, WeekId, WeekPatternId},
     slots::Slot,
     students::Student,
@@ -233,7 +233,9 @@ fn build_document(app: &mut AppState<Data, String>) -> Built {
     );
 
     let group_list = apply_new!(
-        Op::GroupList(GroupListOp::Add(one_group_params("GL"))),
+        Op::GroupList(GroupListOp::Add(
+            GroupList::new(one_group_params("GL"), GroupListFilling::default()).unwrap(),
+        )),
         NewId::GroupListId,
         "add group list"
     );

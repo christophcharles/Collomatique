@@ -14,7 +14,7 @@ use collomatique_state_colloscopes::{
     Data, GroupListOp, IncompatOp, JoinedRulePart, NewId, NonEmptyRangeInclusive, Op, PairingOp,
     PeriodOp, SlotOp, SlotPairingOp, StudentOp, Subject, SubjectInterrogationParameters, SubjectOp,
     SubjectParameters, SubjectPeriodicity, TeacherOp, WeekOp, WeekPatternOp,
-    group_lists::GroupListParameters,
+    group_lists::{GroupList, GroupListFilling, GroupListParameters},
     ids::{
         GroupListId, Id, IncompatId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId,
         SubjectId, TeacherId, WeekId, WeekPatternId,
@@ -192,7 +192,9 @@ fn build_document(app: &mut AppState<Data, String>) -> Built {
         "add incompat"
     );
     let group_list = apply_new!(
-        Op::GroupList(GroupListOp::Add(one_group_params("GL"))),
+        Op::GroupList(GroupListOp::Add(
+            GroupList::new(one_group_params("GL"), GroupListFilling::default()).unwrap(),
+        )),
         NewId::GroupListId,
         "add group list"
     );
