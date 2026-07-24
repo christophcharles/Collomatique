@@ -96,13 +96,10 @@ pub fn build(
     for (period_index, period_id) in params
         .periods
         .period_ids()
-        .filter(|&id| params.periods.week_count_of(id).unwrap_or(0) != 0)
+        .filter(|&id| params.weeks().week_count_for_period(id).unwrap_or(0) != 0)
         .enumerate()
     {
-        let nw = params
-            .periods
-            .week_count_of(period_id)
-            .expect("period id from period_ids is valid");
+        let nw = params.weeks().week_count_for_period(period_id).unwrap_or(0);
         period_layout.push(PeriodLayout {
             period_id,
             col_start: col_offset,
@@ -128,10 +125,11 @@ pub fn build(
     // Annotations — collected early so we can use them for week background colors
     let mut annotations: HashMap<(PeriodId, usize), String> = HashMap::new();
     for period_id in params.periods.period_ids() {
-        for (week_index, week) in params
-            .periods
-            .weeks_of(period_id)
-            .expect("period id from period_ids is valid")
+        for (week_index, (_week_id, week)) in params
+            .weeks()
+            .weeks_for_period(period_id)
+            .into_iter()
+            .flatten()
             .enumerate()
         {
             if !week.interrogations {
@@ -355,7 +353,7 @@ pub fn build(
                     // Sparse colloscope surface: translate the positional week
                     // to its id and read the (slot, week) row (absent = empty).
                     let cell_text = params
-                        .periods
+                        .weeks()
                         .week_id_at(pl.period_id, w)
                         .and_then(|week_id| data.colloscope.interrogation(*slot_id, week_id))
                         .map(|assigned_groups| {

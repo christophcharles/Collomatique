@@ -30,17 +30,15 @@ fn period_interrogation_windows(
     let mut global_week = 0usize;
     for (i, period_id) in env.periods.period_ids().enumerate() {
         if subject.excluded_periods.contains(&period_id) {
-            global_week += env
-                .periods
-                .week_count_of(period_id)
-                .expect("period id from period_ids is valid");
+            global_week += env.weeks().week_count_for_period(period_id).unwrap_or(0);
             continue;
         }
         let mut weeks = Vec::new();
-        for week_desc in env
-            .periods
-            .weeks_of(period_id)
-            .expect("period id from period_ids is valid")
+        for (_week_id, week_desc) in env
+            .weeks()
+            .weeks_for_period(period_id)
+            .into_iter()
+            .flatten()
         {
             if week_desc.interrogations {
                 weeks.push(GlobalWeek(global_week));

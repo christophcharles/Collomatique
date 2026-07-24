@@ -30,10 +30,7 @@ fn compute_period_runs(
     let mut global_week = 0usize;
 
     for period_id in env.periods.period_ids() {
-        let period_len = env
-            .periods
-            .week_count_of(period_id)
-            .expect("period id from period_ids is valid");
+        let period_len = env.weeks().week_count_for_period(period_id).unwrap_or(0);
         let period_id = &period_id;
         let first_of_period = GlobalWeek(global_week);
         let last_of_period = GlobalWeek(global_week + period_len.saturating_sub(1));
@@ -49,10 +46,11 @@ fn compute_period_runs(
                 current_first = Some(first_of_period);
             }
             current_last = last_of_period;
-            for week_desc in env
-                .periods
-                .weeks_of(*period_id)
-                .expect("period id from period_ids is valid")
+            for (_week_id, week_desc) in env
+                .weeks()
+                .weeks_for_period(*period_id)
+                .into_iter()
+                .flatten()
             {
                 if week_desc.interrogations {
                     current_active_weeks.push(GlobalWeek(global_week));

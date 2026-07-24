@@ -26,12 +26,12 @@ pub fn build_config(env: &Parameters, colloscope: &Colloscope) -> ConfigData<Var
 
     for ((slot_id, week_id), assigned_groups) in colloscope.iter() {
         let (period_id, _pos) = env
-            .periods
+            .weeks()
             .week_position(week_id)
             .expect("week id from a live colloscope row is valid");
         let week = env
-            .periods
-            .global_week_position(week_id)
+            .weeks()
+            .global_week_position(&env.periods, week_id)
             .expect("week id from a live colloscope row is valid");
 
         for group_num in assigned_groups {
@@ -91,9 +91,11 @@ pub fn build_complete_config(env: &Parameters, colloscope: &Colloscope) -> Confi
     // `ConfigData` is a map, so the enumeration order is invisible.
     for period_id in env.periods.period_ids() {
         let week_ids: Vec<WeekId> = env
-            .periods
-            .week_ids_of(period_id)
-            .expect("period id from period_ids is valid")
+            .weeks()
+            .weeks_for_period(period_id)
+            .into_iter()
+            .flatten()
+            .map(|(id, _)| *id)
             .collect();
         for (slot_id, _slot) in env.slots.all_slots() {
             let (subject_id, _pos) = env
@@ -118,8 +120,8 @@ pub fn build_complete_config(env: &Parameters, colloscope: &Colloscope) -> Confi
                     continue;
                 }
                 let week = env
-                    .periods
-                    .global_week_position(week_id)
+                    .weeks()
+                    .global_week_position(&env.periods, week_id)
                     .expect("week id is valid");
                 let assigned = colloscope.interrogation(*slot_id, week_id);
 
@@ -148,11 +150,7 @@ pub fn build_colloscope(env: &Parameters, config_data: &ConfigData<Var>) -> Opti
     let mut colloscope = Colloscope::default();
 
     // Global week index → week id (canonical walk order).
-    let week_ids: Vec<WeekId> = env
-        .periods
-        .walk()
-        .map(|(_p, week_id, _w)| week_id)
-        .collect();
+    let week_ids: Vec<WeekId> = env.walk_weeks().map(|(_p, week_id, _w)| week_id).collect();
 
     // Accumulate rows locally — this is 1d's sparse storage shape — then commit
     // them through the surface writers once each coordinate has been validated
