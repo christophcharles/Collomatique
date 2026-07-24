@@ -11,13 +11,13 @@ use serde::{Deserialize, Serialize};
 use crate::group_lists::GroupList;
 use crate::incompats::Incompatibility;
 use crate::pairings::PairingRule;
-use crate::periods::Week;
 use crate::slot_pairings::SlotPairingRule;
 use crate::slots::Slot;
 use crate::students::Student;
 use crate::subjects::Subject;
 use crate::teachers::Teacher;
 use crate::week_patterns::WeekPattern;
+use crate::weeks::Week;
 
 pub use collomatique_state::ids::Id;
 

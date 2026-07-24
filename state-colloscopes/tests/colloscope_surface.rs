@@ -15,11 +15,11 @@ use collomatique_state_colloscopes::{
     colloscopes::Colloscope,
     group_lists::GroupListParameters,
     ids::{Id, PeriodId, SlotId, StudentId, SubjectId, TeacherId, WeekId, WeekPatternId},
-    periods::WeekDesc,
     slots::Slot,
     students::Student,
     teachers::Teacher,
     week_patterns::WeekPattern,
+    weeks::WeekDesc,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU32;
@@ -356,7 +356,7 @@ fn week_patterns_is_week_active_matches_parameters() {
                 params.is_week_active(week, pattern),
                 params
                     .week_patterns
-                    .is_week_active(&params.periods, week, pattern),
+                    .is_week_active(params.weeks(), week, pattern),
                 "delegation must agree for week {week:?} pattern {pattern:?}",
             );
         }

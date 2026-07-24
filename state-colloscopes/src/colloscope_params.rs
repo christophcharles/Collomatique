@@ -45,7 +45,7 @@ impl Parameters {
     /// layer and the Python glue.
     pub fn is_week_active(&self, week_id: WeekId, pattern: Option<WeekPatternId>) -> bool {
         self.week_patterns
-            .is_week_active(&self.periods, week_id, pattern)
+            .is_week_active(self.weeks(), week_id, pattern)
     }
 
     /// The single definition of "slot `slot` can carry an interrogation on week
@@ -58,7 +58,7 @@ impl Parameters {
     /// is true iff the dense cell exists and is `Some`. It is the possibility
     /// oracle behind the sparse colloscope surface and its consumers.
     pub fn is_interrogation_possible(&self, slot: SlotId, week: WeekId) -> bool {
-        let Some((period_id, _pos)) = self.periods.week_position(week) else {
+        let Some((period_id, _pos)) = self.weeks().week_position(week) else {
             return false;
         };
         let Some((subject_id, slot_desc)) = self.slots.find_slot_with_subject(slot) else {
@@ -74,6 +74,37 @@ impl Parameters {
             return false;
         }
         self.is_week_active(week, slot_desc.week_pattern)
+    }
+}
+
+impl Parameters {
+    /// Transitional shared access to the weeks container.
+    ///
+    /// Returns the [weeks::Weeks] nested (for now) in [periods::Periods]. Call
+    /// sites read weeks through this accessor and the delegations below so that
+    /// at the module hoist (P3.8) only this body changes
+    /// (`&self.periods.weeks` → `&self.weeks`) — the call sites never move again.
+    pub fn weeks(&self) -> &weeks::Weeks {
+        &self.periods.weeks
+    }
+
+    /// The canonical global week order: every week of every period, in
+    /// period-then-position order, each with its identity (delegates to
+    /// [`weeks::Weeks::walk`], passing the sibling periods for display order).
+    pub fn walk_weeks(&self) -> impl Iterator<Item = (PeriodId, WeekId, &weeks::Week)> + '_ {
+        self.weeks().walk(&self.periods)
+    }
+
+    /// All week ids, in global week order (delegates to
+    /// [`weeks::Weeks::week_ids`]).
+    pub fn week_ids(&self) -> impl Iterator<Item = WeekId> + '_ {
+        self.weeks().week_ids(&self.periods)
+    }
+
+    /// Total number of weeks across all periods (delegates to
+    /// [`weeks::Weeks::count_weeks`]).
+    pub fn count_weeks(&self) -> usize {
+        self.weeks().count_weeks()
     }
 }
 
@@ -186,9 +217,9 @@ impl Lookup<PeriodId> for Parameters {
 }
 
 impl Lookup<WeekId> for Parameters {
-    type Entity = periods::Week;
-    fn lookup(&self, id: WeekId) -> Option<&periods::Week> {
-        self.periods.find_week(id)
+    type Entity = weeks::Week;
+    fn lookup(&self, id: WeekId) -> Option<&weeks::Week> {
+        self.weeks().find_week(id)
     }
 }
 
@@ -299,7 +330,7 @@ impl Parameters {
             .keys()
             .map(NewId::from)
             .chain(self.periods.period_ids().map(NewId::from))
-            .chain(self.periods.week_ids().map(NewId::from))
+            .chain(self.week_ids().map(NewId::from))
             .chain(self.subjects.ordered_subject_list.keys().map(NewId::from))
             .chain(self.teachers.teacher_map.keys().map(NewId::from))
             .chain(self.week_patterns.week_pattern_map.keys().map(NewId::from))
@@ -969,7 +1000,7 @@ impl Parameters {
         week_pattern: &week_patterns::WeekPattern,
     ) -> Result<(), WeekPatternError> {
         for &week_id in &week_pattern.excluded_weeks {
-            if self.periods.find_week(week_id).is_none() {
+            if self.weeks().find_week(week_id).is_none() {
                 return Err(WeekPatternError::WeekPatternExcludesInvalidWeek(week_id));
             }
         }
@@ -983,7 +1014,7 @@ impl Parameters {
     fn check_week_pattern_data_consistency(&self) -> Result<(), InvariantError> {
         for week_pattern in self.week_patterns.week_pattern_map.values() {
             for &week_id in &week_pattern.excluded_weeks {
-                if self.periods.find_week(week_id).is_none() {
+                if self.weeks().find_week(week_id).is_none() {
                     return Err(InvariantError::InvalidWeekPattern);
                 }
             }
@@ -1028,20 +1059,20 @@ impl Parameters {
 
     /// USED INTERNALLY
     ///
-    /// Checks the periods backend consistency, mirroring
+    /// Checks the weeks backend consistency, mirroring
     /// [Self::check_slots_data_consistency]. The ordering sidecar is sparse: a
     /// row is present exactly when its period has at least one week. Each row's
     /// period must exist and the row must be non-empty (canonical form); every
     /// week id in it exists in the week table, names that period and appears
     /// exactly once; and no week table entry is left un-ordered (no orphan
-    /// weeks). `find_week` is used (not `weeks_of`) so a desynchronized ordering
-    /// yields a clean error rather than panicking.
-    fn check_periods_data_consistency(
+    /// weeks). `find_week` is used (not `weeks_for_period`) so a desynchronized
+    /// ordering yields a clean error rather than panicking.
+    fn check_weeks_data_consistency(
         &self,
         period_ids: &BTreeSet<PeriodId>,
     ) -> Result<(), InvariantError> {
         let mut ordered_ids = BTreeSet::new();
-        for (period_id, order) in self.periods.ordering_entries() {
+        for (period_id, order) in self.weeks().ordering_entries() {
             if !period_ids.contains(&period_id) {
                 // A week's owning period was removed out from under it: the
                 // ordering row now names a period that no longer exists
@@ -1054,7 +1085,7 @@ impl Parameters {
                 return Err(InvariantError::EmptyWeeksRow);
             }
             for week_id in order {
-                let Some(week) = self.periods.find_week(*week_id) else {
+                let Some(week) = self.weeks().find_week(*week_id) else {
                     return Err(InvariantError::InvalidWeek);
                 };
                 if week.period_id != period_id {
@@ -1067,7 +1098,7 @@ impl Parameters {
         }
 
         // No orphan weeks: every week in the table is covered by the ordering.
-        for (week_id, _week) in self.periods.week_entries() {
+        for (week_id, _week) in self.weeks().week_entries() {
             if !ordered_ids.contains(&week_id) {
                 return Err(InvariantError::InvalidWeek);
             }
@@ -1103,7 +1134,7 @@ impl Parameters {
         let week_pattern_ids = self.build_week_pattern_ids();
         let subject_ids = self.build_subject_ids();
 
-        self.check_periods_data_consistency(&period_ids)?;
+        self.check_weeks_data_consistency(&period_ids)?;
 
         self.check_subjects_data_consistency(&period_ids)?;
         self.check_teachers_data_consistency()?;

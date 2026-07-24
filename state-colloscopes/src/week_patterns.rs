@@ -43,7 +43,7 @@ pub struct WeekPattern {
 impl WeekPatterns {
     /// The single definition of "a slot can carry an interrogation on `week`":
     /// the week runs interrogations and is not excluded by the given pattern (or
-    /// there is no pattern). Homed here so consumers holding only a `Periods` +
+    /// there is no pattern). Homed here so consumers holding only a `Weeks` +
     /// `WeekPatterns` pair — e.g. the gtk4 colloscope grid — can call it;
     /// [`super::colloscope_params::Parameters::is_week_active`] delegates to it.
     ///
@@ -51,11 +51,11 @@ impl WeekPatterns {
     /// as "no exclusion". Both are bugs on validated data.
     pub fn is_week_active(
         &self,
-        periods: &super::periods::Periods,
+        weeks: &super::weeks::Weeks,
         week: WeekId,
         pattern: Option<WeekPatternId>,
     ) -> bool {
-        let Some(week_desc) = periods.find_week(week) else {
+        let Some(week_desc) = weeks.find_week(week) else {
             return false;
         };
         week_desc.interrogations
@@ -216,7 +216,7 @@ impl crate::Data {
                         let week_runs = self
                             .inner_data
                             .params
-                            .periods
+                            .weeks()
                             .find_week(week)
                             .is_some_and(|w| w.interrogations);
                         if !week_runs || new_week_pattern.excluded_weeks.contains(&week) {

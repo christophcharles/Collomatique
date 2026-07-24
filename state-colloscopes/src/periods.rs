@@ -26,7 +26,7 @@ pub use crate::weeks::{Week, WeekDesc, WeekError, WeekPrecheckError};
 ///
 /// The cross-container consistency (every `ordering` row names a live period,
 /// the row is non-empty, every week names its period, no week is left
-/// un-ordered) is checked in `Parameters::check_periods_data_consistency`.
+/// un-ordered) is checked in `Parameters::check_weeks_data_consistency`.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Periods {
     /// Start date for the colloscope
@@ -115,14 +115,6 @@ impl Periods {
     /// [crate::Parameters] and consumers read `params.weeks` directly.
     pub fn weeks(&self) -> &Weeks {
         &self.weeks
-    }
-
-    /// Test-only corruption: delegates to [`Weeks::forge_ordering_row`],
-    /// inserting an ordering row verbatim to bypass the canonical-sparse
-    /// discipline. Transitional; dies at the module hoist.
-    #[cfg(test)]
-    pub(crate) fn forge_ordering_row(&mut self, period: PeriodId, order: Vec<WeekId>) {
-        self.weeks.forge_ordering_row(period, order);
     }
 
     // ---- Read surface ----
@@ -279,24 +271,6 @@ impl Periods {
     /// delegation onto [Weeks]).
     pub fn get_first_week_and_length_for_period(&self, id: PeriodId) -> Option<(usize, usize)> {
         self.weeks.get_first_week_and_length_for_period(self, id)
-    }
-
-    // ---- Internal accessors (checker / reference registry) ----
-
-    /// USED INTERNALLY
-    ///
-    /// Iterator over every `(week id, week)` entry, in id order (transitional
-    /// delegation onto [`Weeks::week_entries`]).
-    pub(crate) fn week_entries(&self) -> impl Iterator<Item = (WeekId, &Week)> {
-        self.weeks.week_entries()
-    }
-
-    /// USED INTERNALLY
-    ///
-    /// Raw view of the ordering sidecar (transitional delegation onto
-    /// [`Weeks::ordering_entries`]).
-    pub(crate) fn ordering_entries(&self) -> impl Iterator<Item = (PeriodId, &[WeekId])> {
-        self.weeks.ordering_entries()
     }
 }
 

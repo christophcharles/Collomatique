@@ -63,7 +63,7 @@
 //!   matches each week's `period_id`), so the keys add nothing over the per-week
 //!   `WeekPeriodFk` sites — a force-removed period leaves the row keyed by the
 //!   absent period, but every week in it already dangles at `WeekPeriodFk`; the
-//!   values are covered by `check_periods_data_consistency`.
+//!   values are covered by `check_weeks_data_consistency`.
 //! - *transitive* references are not materialized. A week pattern references a
 //!   period only through the weeks it excludes; that edge is derivable from
 //!   `WeekPatternExcludedWeek` (pattern → week) composed with `WeekPeriodFk`
@@ -309,7 +309,7 @@ pub(crate) fn walk_params_refs(params: &Parameters, v: &mut impl RefVisitor) {
 // see `walk_pairings` / `walk_slot_pairings`.
 
 fn walk_weeks(params: &Parameters, v: &mut impl RefVisitor) {
-    for (week_id, week) in params.periods.week_entries() {
+    for (week_id, week) in params.weeks().week_entries() {
         week.for_each_ref(&mut |id: NewId| match id {
             NewId::PeriodId(p) => v.period_ref(p, PeriodRefSite::WeekPeriodFk(week_id)),
             _ => unreachable!("Week only references its period"),

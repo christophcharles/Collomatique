@@ -549,10 +549,10 @@ mod force_apply_tests {
         AnnotatedOp, AnnotatedPeriodOp, AnnotatedStudentOp, AnnotatedSubjectOp, AssignmentOp, Op,
         PeriodOp, StudentOp, SubjectOp, WeekOp,
     };
-    use crate::periods::WeekDesc;
     use crate::students::Student;
     use crate::subjects::Subject;
     use crate::week_patterns::WeekPattern;
+    use crate::weeks::WeekDesc;
     use crate::{Data, FixableInvariant, InnerData, PrecheckError, StudentPrecheckError};
     use collomatique_state::InMemoryData;
     use std::collections::BTreeSet;

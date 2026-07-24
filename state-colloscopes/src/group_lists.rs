@@ -367,12 +367,12 @@ impl crate::Data {
             // No slots: no interrogation can reference a group number
             return Ok(());
         };
-        let periods = &self.inner_data.params.periods;
+        let weeks = self.inner_data.params.weeks();
         for (slot_id, _slot) in subject_slots {
             for (week, assigned_groups) in
                 self.inner_data.colloscope.interrogations_for_slot(*slot_id)
             {
-                if periods.week_position(week).map(|(p, _pos)| p) != Some(period_id) {
+                if weeks.week_position(week).map(|(p, _pos)| p) != Some(period_id) {
                     continue;
                 }
                 if assigned_groups

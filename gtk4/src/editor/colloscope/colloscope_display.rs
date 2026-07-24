@@ -289,7 +289,7 @@ impl Display {
                             // Impossible week (pattern-excluded or no interrogations)
                             // → no cell, matching the old dense `None`.
                             if !self.week_patterns.is_week_active(
-                                &self.periods,
+                                self.periods.weeks(),
                                 week_id,
                                 slot.week_pattern,
                             ) {

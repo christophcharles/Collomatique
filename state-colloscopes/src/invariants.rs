@@ -261,7 +261,7 @@ impl crate::InnerData {
                 errors.insert(LogicError::EmptySlotsRow(subject));
             }
         }
-        for (period, order) in self.params.periods.ordering_entries() {
+        for (period, order) in self.params.weeks().ordering_entries() {
             if order.is_empty() {
                 errors.insert(LogicError::EmptyWeeksRow(period));
             }
@@ -321,7 +321,7 @@ impl crate::InnerData {
         let periods: BTreeSet<PeriodId> = self.params.periods.period_ids().collect();
         let weeks: BTreeSet<WeekId> = self
             .params
-            .periods
+            .weeks()
             .week_entries()
             .map(|(id, _week)| id)
             .collect();
@@ -491,7 +491,7 @@ impl crate::InnerData {
         // the slot's subject runs on the week's period, the week is active for
         // the slot's pattern, and every group number fits the association bound.
         for ((slot_id, week_id), groups) in self.colloscope.iter() {
-            let period = params.periods.week_position(week_id).map(|(p, _pos)| p);
+            let period = params.weeks().week_position(week_id).map(|(p, _pos)| p);
             let slot = params.slots.find_slot_with_subject(slot_id);
 
             // Subject-excludes-period half of the old `SlotNotRunningOnPeriod`
@@ -632,7 +632,7 @@ fn dangling_to_legacy(reference: &Reference) -> InnerDataError {
         Reference::Period { site, .. } => InnerDataError::Params(match site {
             // A week whose `period_id` dangles (force-removed period). The old
             // checker reports it as `InvalidWeek` from the re-cut
-            // `check_periods_data_consistency`, which runs first.
+            // `check_weeks_data_consistency`, which runs first.
             PeriodRefSite::WeekPeriodFk(_) => P::InvalidWeek,
             PeriodRefSite::SubjectExcludedPeriods(_) => P::InvalidSubject,
             PeriodRefSite::StudentExcludedPeriods(_) => P::InvalidStudent,
@@ -1409,7 +1409,7 @@ pub(crate) mod tests {
     fn empty_weeks_row() {
         let mut data = InnerData::default();
         let period = unsafe { PeriodId::new(1) };
-        data.params.periods.forge_ordering_row(period, vec![]);
+        data.params.periods.weeks.forge_ordering_row(period, vec![]);
         assert_eq!(
             broken_invariants(&data),
             Err(BTreeSet::from([LogicError::EmptyWeeksRow(period)]))

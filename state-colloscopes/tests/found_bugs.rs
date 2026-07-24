@@ -13,11 +13,11 @@ use collomatique_state_colloscopes::{
     SubjectParameters, SubjectPeriodicity, TeacherOp, WeekOp,
     group_lists::{GroupListFilling, GroupListParameters, PrefilledGroup},
     ids::PeriodId,
-    periods::WeekDesc,
     settings::{Limits, Settings},
     slots::{Slot, SlotError},
     students::Student,
     teachers::Teacher,
+    weeks::WeekDesc,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU32;

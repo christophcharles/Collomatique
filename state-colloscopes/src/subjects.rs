@@ -603,15 +603,14 @@ impl crate::Data {
                     // interrogation row on a week of this period.
                     if let Some(subject_slots) = self.inner_data.params.slots.slots_for_subject(*id)
                     {
-                        let periods = &self.inner_data.params.periods;
+                        let weeks = self.inner_data.params.weeks();
                         for (slot_id, _slot) in subject_slots {
                             let has_row = self
                                 .inner_data
                                 .colloscope
                                 .interrogations_for_slot(*slot_id)
                                 .any(|(week, _groups)| {
-                                    periods.week_position(week).map(|(p, _pos)| p)
-                                        == Some(period_id)
+                                    weeks.week_position(week).map(|(p, _pos)| p) == Some(period_id)
                                 });
                             if has_row {
                                 return Err(SubjectError::SubjectStillHasNonEmptySlotInColloscope(

@@ -17,10 +17,10 @@ use collomatique_state_colloscopes::{
     TeacherOp, WeekError, WeekOp, WeekPatternOp,
     group_lists::GroupListParameters,
     ids::{PeriodId, SlotId, SubjectId, TeacherId, WeekId},
-    periods::WeekDesc,
     slots::Slot,
     teachers::Teacher,
     week_patterns::WeekPattern,
+    weeks::WeekDesc,
 };
 use std::collections::BTreeSet;
 use std::num::NonZeroU32;
@@ -97,7 +97,7 @@ fn add_period(
 
 fn week_ids_of(app: &AppState<Data, String>, period: PeriodId) -> Vec<WeekId> {
     let params = &app.get_data().get_inner_data().params;
-    let count = params.periods.week_count_of(period).expect("valid period");
+    let count = params.weeks().week_count_for_period(period).unwrap_or(0);
     (0..count)
         .map(|i| {
             params

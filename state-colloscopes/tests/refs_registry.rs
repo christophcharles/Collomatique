@@ -23,13 +23,13 @@ use collomatique_state_colloscopes::{
     ids::{GroupListId, PeriodId, SlotId, StudentId, SubjectId, TeacherId, WeekId, WeekPatternId},
     incompats::Incompatibility,
     pairings::{PairingRule, RulePart},
-    periods::WeekDesc,
     settings::{Limits, Settings},
     slot_pairings::{SlotPairingRule, SlotRulePart},
     slots::Slot,
     students::Student,
     teachers::Teacher,
     week_patterns::WeekPattern,
+    weeks::WeekDesc,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU32;

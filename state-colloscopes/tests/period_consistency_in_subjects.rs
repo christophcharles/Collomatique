@@ -3,8 +3,8 @@ use collomatique_state_colloscopes::{
     Data, NewId, NonEmptyRangeInclusive, Op, PeriodOp, Subject, SubjectOp, SubjectParameters,
     SubjectPeriodicity, WeekOp,
     ids::{PeriodId, WeekId},
-    periods::WeekDesc,
     subjects::{SubjectInterrogationParameters, WeekBlock},
+    weeks::WeekDesc,
 };
 use std::{collections::BTreeSet, num::NonZeroU32};
 

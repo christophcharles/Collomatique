@@ -21,12 +21,12 @@ use collomatique_state_colloscopes::{
     },
     incompats::Incompatibility,
     pairings::{PairingRule, RulePart},
-    periods::WeekDesc,
     slot_pairings::{SlotPairingRule, SlotRulePart},
     slots::Slot,
     students::Student,
     teachers::Teacher,
     week_patterns::WeekPattern,
+    weeks::WeekDesc,
 };
 use std::collections::BTreeSet;
 use std::num::NonZeroU32;
@@ -275,7 +275,7 @@ fn lookup_borrows_the_live_entity_for_every_kind() {
     assert_eq!(params.resolve(ids.period), &());
     // The pointer-identity pin for the periods module lives on the week entity,
     // which is the borrowable [Week] out of the week table.
-    assert_resolves_to!(ids.week, params.periods.find_week(ids.week));
+    assert_resolves_to!(ids.week, params.weeks().find_week(ids.week));
     assert_resolves_to!(ids.subject, params.subjects.find_subject(ids.subject));
     assert_resolves_to!(ids.teacher, params.teachers.teacher_map.get(&ids.teacher));
     assert_resolves_to!(ids.student, params.students.student_map.get(&ids.student));
@@ -460,11 +460,7 @@ fn all_ids_lists_every_table_in_canonical_order() {
     // patterns, slots (id order: slot then slot2), incompats, group lists,
     // pairing rules, slot pairing rules. The document's single period holds one
     // week.
-    let week = params
-        .periods
-        .week_ids()
-        .next()
-        .expect("the period has one week");
+    let week = params.week_ids().next().expect("the period has one week");
     let expected = vec![
         NewId::StudentId(ids.student),
         NewId::PeriodId(ids.period),
