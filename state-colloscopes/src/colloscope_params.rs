@@ -1044,9 +1044,10 @@ impl Parameters {
         for (period_id, order) in self.periods.ordering_entries() {
             if !period_ids.contains(&period_id) {
                 // A week's owning period was removed out from under it: the
-                // ordering row now names a period that no longer exists (newly
-                // representable once `PeriodStillHasWeeks` stops guarding force
-                // removal). Reported as a `InvalidWeek` (dangling week data).
+                // ordering row now names a period that no longer exists
+                // (representable since the force path dropped the
+                // `PeriodStillHasWeeks` guard). Reported as an `InvalidWeek`
+                // (dangling week data).
                 return Err(InvariantError::InvalidWeek);
             }
             if order.is_empty() {

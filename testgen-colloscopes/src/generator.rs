@@ -341,9 +341,12 @@ fn gen_period(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
     let add_w = if n < 4 { 4 } else { 1 };
     let remove_w = if n > 0 { 2 } else { 0 };
     // Periods are created empty (weeks are spliced in by the WeekOp family,
-    // driven by `gen_week`); `PeriodOp::Remove` now needs a week-empty period,
-    // so it will often bounce off `PeriodStillHasWeeks` — a legitimate error
-    // the harness tolerates like any other.
+    // driven by `gen_week`). This is the valid walk, applied through *checked*
+    // `apply`, which still guards `PeriodOp::Remove` with `PeriodStillHasWeeks`:
+    // removing a week-non-empty period bounces here — a legitimate error the
+    // harness tolerates like any other. (The force path dropped that guard; the
+    // corruption arm exploits it to reach the dangling landing — see
+    // `gen_corruption_op`.)
     let op = match weighted(rng, &[2, add_w, remove_w]) {
         0 => PeriodOp::ChangeStartDate(if rng.random_bool(0.7) {
             Some(synth::week_start(rng))
@@ -1203,9 +1206,10 @@ fn removable_present(pools: &Pools) -> bool {
 }
 
 /// ForceRemove: one `Remove` of a live entity, drawn uniformly over the
-/// non-empty pools. Highest-yield dangling-FK source; a period still holding
-/// weeks bounces off the kept `PeriodStillHasWeeks` guard, which the fuzz
-/// tolerates like any other carve-out.
+/// non-empty pools. Highest-yield dangling-FK source; the period draw covers all
+/// periods, so a period still holding weeks can be picked — the force path
+/// dropped `PeriodStillHasWeeks`, so it lands broken (dangling `Week::period_id`
+/// FKs) instead of bouncing.
 fn gen_force_remove(rng: &mut ChaCha8Rng, pools: &Pools) -> Option<Op> {
     let mut candidates: Vec<Op> = Vec::new();
     if !pools.student_ids.is_empty() {

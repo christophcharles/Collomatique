@@ -313,9 +313,10 @@ impl crate::InnerData {
     ///
     /// The eight existence sets are read from the entities' own tables (not the
     /// ordering sidecars), so the sweep stays sound on potentially inconsistent
-    /// data. `Week@WeekPeriodFk` is type-guaranteed by the `Periods`
-    /// encapsulation (weeks are keyed by their owning period): the arm is
-    /// handled generically but never fires.
+    /// data. `Week@WeekPeriodFk` — a week whose `period_id` points at an absent
+    /// period — fires when `force_apply` removes a period that still has weeks
+    /// (the guard was dropped from the force path; the week rows and ordering
+    /// sidecar are left dangling for the cascade).
     fn dangling_refs(&self) -> BTreeSet<FixableInvariant> {
         let periods: BTreeSet<PeriodId> = self.params.periods.period_ids().collect();
         let weeks: BTreeSet<WeekId> = self
@@ -629,8 +630,9 @@ fn dangling_to_legacy(reference: &Reference) -> InnerDataError {
     use InvariantError as P;
     match reference {
         Reference::Period { site, .. } => InnerDataError::Params(match site {
-            // Type-guaranteed by the `Periods` encapsulation (weeks are keyed by
-            // their owning period); kept for totality, never fires.
+            // A week whose `period_id` dangles (force-removed period). The old
+            // checker reports it as `InvalidWeek` from the re-cut
+            // `check_periods_data_consistency`, which runs first.
             PeriodRefSite::WeekPeriodFk(_) => P::InvalidWeek,
             PeriodRefSite::SubjectExcludedPeriods(_) => P::InvalidSubject,
             PeriodRefSite::StudentExcludedPeriods(_) => P::InvalidStudent,
@@ -2622,9 +2624,10 @@ pub(crate) mod tests {
     // old first-error. Together with `assert_differential` (run by the
     // `broken_invariants` wrapper), the two assertions are the operational proof
     // of that §6 table row: the old checker's first error for the single dangle
-    // is exactly `to_legacy` of the reported reference. `Period@WeekPeriodFk` is
-    // type-guaranteed unrepresentable (weeks are keyed by their period), so it
-    // has no fixture — its `to_legacy` arm is kept for totality only.
+    // is exactly `to_legacy` of the reported reference. `Period@WeekPeriodFk`
+    // became representable when the force path dropped the `PeriodStillHasWeeks`
+    // guard, so it now has a fixture
+    // (`dangling_period_from_forced_removal_maps_to_legacy`).
 
     /// Asserts that `data` has exactly the one dangling reference `reference`
     /// (new checker) and that the old checker's first error is `old`. The
@@ -2671,6 +2674,27 @@ pub(crate) mod tests {
                 site: PeriodRefSite::SubjectExcludedPeriods(subject),
             },
             InnerDataError::Params(InvariantError::InvalidSubject),
+        );
+    }
+
+    #[test]
+    fn dangling_period_from_forced_removal_maps_to_legacy() {
+        // A period holding one week, then force-removed. `force_apply_period`
+        // Remove now drops the `PeriodStillHasWeeks` guard, so its only mutation
+        // is `ordered_period_list.remove_at(position)`: the `week_map` entry and
+        // the ordering row stay, leaving the week's `period_id` FK dangling.
+        let period = unsafe { PeriodId::new(1) };
+        let week = unsafe { WeekId::new(2) };
+        let mut data = InnerData::default();
+        data.params.periods = test_periods(period, week, WeekDesc::default());
+        data.params.periods.ordered_period_list.remove_at(0);
+        assert_dangling_maps(
+            &data,
+            Reference::Period {
+                target: period,
+                site: PeriodRefSite::WeekPeriodFk(week),
+            },
+            InnerDataError::Params(InvariantError::InvalidWeek),
         );
     }
 

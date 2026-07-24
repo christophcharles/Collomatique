@@ -86,7 +86,10 @@ pub enum PeriodOp {
     AddAfter(PeriodId),
     /// Remove an existing period
     ///
-    /// The period must be week-empty (empty it first with [WeekOp::Remove]).
+    /// Checked `apply` requires the period to be week-empty (empty it first with
+    /// [WeekOp::Remove]). Forced apply drops that guard: removing a period that
+    /// still has weeks leaves their `Week::period_id` FKs dangling for the
+    /// cascade.
     Remove(PeriodId),
 }
 

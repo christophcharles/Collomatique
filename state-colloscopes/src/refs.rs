@@ -58,8 +58,12 @@
 //!   each slot's `subject_id`), so the keys add nothing over the per-slot
 //!   `SlotSubject` sites; the values are covered by the structural
 //!   no-orphan/count checks.
-//! - `periods.ordered_period_list` row *values*: a pure mirror of `week_map` /
-//!   `Week::period_id`, covered by `check_periods_data_consistency`.
+//! - `periods.ordering` keys *and* row values: a pure mirror of `week_map` (a
+//!   row exists iff the period has ≥1 week, canonical-absent, and the key
+//!   matches each week's `period_id`), so the keys add nothing over the per-week
+//!   `WeekPeriodFk` sites — a force-removed period leaves the row keyed by the
+//!   absent period, but every week in it already dangles at `WeekPeriodFk`; the
+//!   values are covered by `check_periods_data_consistency`.
 //! - *transitive* references are not materialized. A week pattern references a
 //!   period only through the weeks it excludes; that edge is derivable from
 //!   `WeekPatternExcludedWeek` (pattern → week) composed with `WeekPeriodFk`

@@ -573,10 +573,12 @@ pub enum PeriodError {
 }
 
 /// Precondition errors of the forced period ops — the carve-out subset
-/// (step-3 survey Table 2). Kept: no-clobber, op-target existence (Remove
-/// target + `AddAfter` anchor both surface as [Self::InvalidPeriodId]), and the
-/// empty-first protocol guard `PeriodStillHasWeeks`. All reference scans are
-/// stripped. Variants copied verbatim from [PeriodError].
+/// (step-3 survey Table 2). Kept: no-clobber and op-target existence (Remove
+/// target + `AddAfter` anchor both surface as [Self::InvalidPeriodId]). All
+/// reference scans are stripped, including the empty-first `PeriodStillHasWeeks`
+/// guard: force-removing a period with weeks leaves dangling `Week::period_id`
+/// FKs for the cascade, exactly like every other stripped reference scan.
+/// Variants copied verbatim from [PeriodError].
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum PeriodPrecheckError {
     /// A period id is invalid
@@ -586,10 +588,6 @@ pub enum PeriodPrecheckError {
     /// The period id already exists
     #[error("period id ({0:?}) already exists")]
     PeriodIdAlreadyExists(PeriodId),
-
-    /// The period still has weeks and cannot be removed
-    #[error("period id ({0:?}) still has weeks and cannot be removed")]
-    PeriodStillHasWeeks(PeriodId),
 }
 
 /// Errors for week operations
@@ -874,10 +872,11 @@ impl crate::Data {
     /// Used internally by [crate::Data::force_apply]
     ///
     /// Thin copy of [Self::apply_period]: carve-out guards kept (returned as
-    /// [PeriodPrecheckError] — no-clobber, target existence, `AddAfter` anchor,
-    /// and the empty-first `PeriodStillHasWeeks` protocol guard), invariant
-    /// guards stripped (step-3 survey Table 1). May leave the state invalid; the
-    /// caller owns checking and rollback.
+    /// [PeriodPrecheckError] — no-clobber, target existence, `AddAfter` anchor),
+    /// invariant guards stripped (step-3 survey Table 1), including the
+    /// empty-first `PeriodStillHasWeeks` guard — force-removing a period with
+    /// weeks leaves dangling `Week::period_id` FKs. May leave the state invalid;
+    /// the caller owns checking and rollback.
     pub(crate) fn force_apply_period(
         &mut self,
         period_op: &AnnotatedPeriodOp,
@@ -949,20 +948,13 @@ impl crate::Data {
                     return Err(PeriodPrecheckError::InvalidPeriodId(*period_id));
                 };
 
-                // Empty-first protocol guard (kept): a period must be week-empty
-                // before removal — `apply_week` is the only writer of week data.
-                let week_count = self
-                    .inner_data
-                    .params
-                    .periods
-                    .week_count_of(*period_id)
-                    .expect("period id comes from find_period_position");
-                if week_count != 0 {
-                    return Err(PeriodPrecheckError::PeriodStillHasWeeks(*period_id));
-                }
-
-                // stripped: colloscope / subject / student / pairing / slot-pairing
-                // / assignment / group-list-association reference scans
+                // stripped: the empty-first `PeriodStillHasWeeks` guard (a
+                // period with weeks now removes, leaving dangling
+                // `Week::period_id` FKs — the ordering sidecar row and
+                // `week_map` entries are untouched, since force_apply fixes
+                // nothing) and the colloscope / subject / student / pairing /
+                // slot-pairing / assignment / group-list-association reference
+                // scans
 
                 let previous_id = (position > 0).then(|| {
                     self.inner_data
