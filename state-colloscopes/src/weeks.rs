@@ -563,12 +563,8 @@ impl crate::Data {
                 Ok(AnnotatedWeekOp::Remove(*week_id))
             }
             AnnotatedWeekOp::AddAfter(week_id, after_id, desc) => {
-                let Some((period_id, after_pos)) = self
-                    .inner_data
-                    .params
-                    .periods
-                    .weeks
-                    .week_position(*after_id)
+                let Some((period_id, after_pos)) =
+                    self.inner_data.params.weeks.week_position(*after_id)
                 else {
                     return Err(WeekError::InvalidWeekId(*after_id));
                 };
@@ -595,14 +591,7 @@ impl crate::Data {
         per_pos: usize,
         desc: &WeekDesc,
     ) -> Result<(), WeekError> {
-        if self
-            .inner_data
-            .params
-            .periods
-            .weeks
-            .find_week(week_id)
-            .is_some()
-        {
+        if self.inner_data.params.weeks.find_week(week_id).is_some() {
             return Err(WeekError::WeekIdAlreadyExists(week_id));
         }
 
@@ -621,7 +610,6 @@ impl crate::Data {
         let period_len = self
             .inner_data
             .params
-            .periods
             .weeks
             .week_count_for_period(period_id)
             .unwrap_or(0);
@@ -629,12 +617,10 @@ impl crate::Data {
             return Err(WeekError::InvalidPosition(period_id, per_pos));
         }
 
-        self.inner_data.params.periods.weeks.insert_week_at(
-            week_id,
-            period_id,
-            per_pos,
-            desc.clone(),
-        );
+        self.inner_data
+            .params
+            .weeks
+            .insert_week_at(week_id, period_id, per_pos, desc.clone());
 
         Ok(())
     }
@@ -645,9 +631,7 @@ impl crate::Data {
     /// membership exactly) and every colloscope cell to be empty. The reverse
     /// re-adds the week at the same spot with the same id.
     fn remove_week(&mut self, week_id: WeekId) -> Result<AnnotatedWeekOp, WeekError> {
-        let Some((period_id, per_pos)) =
-            self.inner_data.params.periods.weeks.week_position(week_id)
-        else {
+        let Some((period_id, per_pos)) = self.inner_data.params.weeks.week_position(week_id) else {
             return Err(WeekError::InvalidWeekId(week_id));
         };
 
@@ -675,19 +659,14 @@ impl crate::Data {
         let prev_week_id = if per_pos > 0 {
             self.inner_data
                 .params
-                .periods
                 .weeks
                 .week_id_at(period_id, per_pos - 1)
         } else {
             None
         };
 
-        let (_removed_period, _removed_pos, removed_desc) = self
-            .inner_data
-            .params
-            .periods
-            .weeks
-            .remove_week_entry(week_id);
+        let (_removed_period, _removed_pos, removed_desc) =
+            self.inner_data.params.weeks.remove_week_entry(week_id);
 
         Ok(match prev_week_id {
             None => AnnotatedWeekOp::AddFront(week_id, period_id, removed_desc),
@@ -709,7 +688,6 @@ impl crate::Data {
         if self
             .inner_data
             .params
-            .periods
             .weeks
             .week_position(week_id)
             .is_none()
@@ -735,7 +713,6 @@ impl crate::Data {
         let old_desc = self
             .inner_data
             .params
-            .periods
             .weeks
             .replace_week_desc(week_id, new_desc.clone());
 
@@ -756,8 +733,7 @@ impl crate::Data {
         dest_period: PeriodId,
         dest_pos: usize,
     ) -> Result<AnnotatedWeekOp, WeekError> {
-        let Some((src_period, src_pos)) =
-            self.inner_data.params.periods.weeks.week_position(week_id)
+        let Some((src_period, src_pos)) = self.inner_data.params.weeks.week_position(week_id)
         else {
             return Err(WeekError::InvalidWeekId(week_id));
         };
@@ -775,7 +751,6 @@ impl crate::Data {
         let dest_len_post = self
             .inner_data
             .params
-            .periods
             .weeks
             .week_count_for_period(dest_period)
             .unwrap_or(0)
@@ -833,7 +808,6 @@ impl crate::Data {
         // move preserves, so every exclusion and every row travels with it.
         self.inner_data
             .params
-            .periods
             .weeks
             .move_week_entry(week_id, dest_period, dest_pos);
 
@@ -857,12 +831,8 @@ impl crate::Data {
                 Ok(AnnotatedWeekOp::Remove(*week_id))
             }
             AnnotatedWeekOp::AddAfter(week_id, after_id, desc) => {
-                let Some((period_id, after_pos)) = self
-                    .inner_data
-                    .params
-                    .periods
-                    .weeks
-                    .week_position(*after_id)
+                let Some((period_id, after_pos)) =
+                    self.inner_data.params.weeks.week_position(*after_id)
                 else {
                     return Err(WeekPrecheckError::InvalidWeekId(*after_id));
                 };
@@ -887,14 +857,7 @@ impl crate::Data {
         per_pos: usize,
         desc: &WeekDesc,
     ) -> Result<(), WeekPrecheckError> {
-        if self
-            .inner_data
-            .params
-            .periods
-            .weeks
-            .find_week(week_id)
-            .is_some()
-        {
+        if self.inner_data.params.weeks.find_week(week_id).is_some() {
             return Err(WeekPrecheckError::WeekIdAlreadyExists(week_id));
         }
 
@@ -911,7 +874,6 @@ impl crate::Data {
         let period_len = self
             .inner_data
             .params
-            .periods
             .weeks
             .week_count_for_period(period_id)
             .unwrap_or(0);
@@ -919,12 +881,10 @@ impl crate::Data {
             return Err(WeekPrecheckError::InvalidPosition(period_id, per_pos));
         }
 
-        self.inner_data.params.periods.weeks.insert_week_at(
-            week_id,
-            period_id,
-            per_pos,
-            desc.clone(),
-        );
+        self.inner_data
+            .params
+            .weeks
+            .insert_week_at(week_id, period_id, per_pos, desc.clone());
 
         Ok(())
     }
@@ -932,9 +892,7 @@ impl crate::Data {
     /// Thin copy of [Self::remove_week]: target existence kept; the
     /// pattern-exclusion and colloscope-row scans (invariant guards) stripped.
     fn force_remove_week(&mut self, week_id: WeekId) -> Result<AnnotatedWeekOp, WeekPrecheckError> {
-        let Some((period_id, per_pos)) =
-            self.inner_data.params.periods.weeks.week_position(week_id)
-        else {
+        let Some((period_id, per_pos)) = self.inner_data.params.weeks.week_position(week_id) else {
             return Err(WeekPrecheckError::InvalidWeekId(week_id));
         };
 
@@ -944,19 +902,14 @@ impl crate::Data {
         let prev_week_id = if per_pos > 0 {
             self.inner_data
                 .params
-                .periods
                 .weeks
                 .week_id_at(period_id, per_pos - 1)
         } else {
             None
         };
 
-        let (_removed_period, _removed_pos, removed_desc) = self
-            .inner_data
-            .params
-            .periods
-            .weeks
-            .remove_week_entry(week_id);
+        let (_removed_period, _removed_pos, removed_desc) =
+            self.inner_data.params.weeks.remove_week_entry(week_id);
 
         Ok(match prev_week_id {
             None => AnnotatedWeekOp::AddFront(week_id, period_id, removed_desc),
@@ -974,7 +927,6 @@ impl crate::Data {
         if self
             .inner_data
             .params
-            .periods
             .weeks
             .week_position(week_id)
             .is_none()
@@ -987,7 +939,6 @@ impl crate::Data {
         let old_desc = self
             .inner_data
             .params
-            .periods
             .weeks
             .replace_week_desc(week_id, new_desc.clone());
 
@@ -1003,8 +954,7 @@ impl crate::Data {
         dest_period: PeriodId,
         dest_pos: usize,
     ) -> Result<AnnotatedWeekOp, WeekPrecheckError> {
-        let Some((src_period, src_pos)) =
-            self.inner_data.params.periods.weeks.week_position(week_id)
+        let Some((src_period, src_pos)) = self.inner_data.params.weeks.week_position(week_id)
         else {
             return Err(WeekPrecheckError::InvalidWeekId(week_id));
         };
@@ -1022,7 +972,6 @@ impl crate::Data {
         let dest_len_post = self
             .inner_data
             .params
-            .periods
             .weeks
             .week_count_for_period(dest_period)
             .unwrap_or(0)
@@ -1036,7 +985,6 @@ impl crate::Data {
 
         self.inner_data
             .params
-            .periods
             .weeks
             .move_week_entry(week_id, dest_period, dest_pos);
 

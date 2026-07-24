@@ -509,7 +509,7 @@ impl crate::Data {
                     .and_then(|(week, _groups)| {
                         self.inner_data
                             .params
-                            .weeks()
+                            .weeks
                             .week_position(week)
                             .map(|(period_id, _pos)| period_id)
                     })

@@ -367,7 +367,7 @@ impl crate::Data {
             // No slots: no interrogation can reference a group number
             return Ok(());
         };
-        let weeks = self.inner_data.params.weeks();
+        let weeks = &self.inner_data.params.weeks;
         for (slot_id, _slot) in subject_slots {
             for (week, assigned_groups) in
                 self.inner_data.colloscope.interrogations_for_slot(*slot_id)

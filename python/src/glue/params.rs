@@ -87,7 +87,7 @@ impl TryFrom<collomatique_state_colloscopes::colloscope_params::Parameters> for 
                 .map(|period_id| Period {
                     id: period_id.into(),
                     weeks_status: value
-                        .weeks()
+                        .weeks
                         .weeks_desc_vec_for_period(period_id)
                         .unwrap_or_default()
                         .into_iter()

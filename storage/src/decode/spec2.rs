@@ -282,7 +282,7 @@ fn reconstruct(blocks: Blocks) -> Result<InnerData, DecodeError> {
     // out-of-range id near `u64::MAX`; such an id is rejected by layer 3
     // regardless (the synthesized weeks never reach it).
     let mut next_week_id = max_used_id(&blocks).saturating_add(1);
-    let periods = reconstruct_periods(
+    let (periods, weeks) = reconstruct_periods(
         blocks.general_planning.unwrap_or_default(),
         &mut next_week_id,
     )?;
@@ -290,11 +290,8 @@ fn reconstruct(blocks: Blocks) -> Result<InnerData, DecodeError> {
     let teachers = reconstruct_teachers(blocks.teachers.unwrap_or_default());
     let students = reconstruct_students(blocks.students.unwrap_or_default());
     let assignments = reconstruct_assignments(blocks.assignments.unwrap_or_default(), &periods)?;
-    let week_patterns = reconstruct_week_patterns(
-        blocks.week_patterns.unwrap_or_default(),
-        periods.weeks(),
-        &periods,
-    );
+    let week_patterns =
+        reconstruct_week_patterns(blocks.week_patterns.unwrap_or_default(), &weeks, &periods);
     let slots = reconstruct_slots(blocks.slots.unwrap_or_default())?;
     let incompats = reconstruct_incompats(blocks.incompatibilities.unwrap_or_default())?;
     let group_lists = reconstruct_group_lists(
@@ -308,6 +305,7 @@ fn reconstruct(blocks: Blocks) -> Result<InnerData, DecodeError> {
 
     let params = mem::colloscope_params::Parameters {
         periods,
+        weeks,
         subjects,
         teachers,
         students,
@@ -341,7 +339,7 @@ fn reconstruct(blocks: Blocks) -> Result<InnerData, DecodeError> {
 fn reconstruct_periods(
     block: format::general_planning::GeneralPlanning,
     next_week_id: &mut u64,
-) -> Result<mem::periods::Periods, DecodeError> {
+) -> Result<(mem::periods::Periods, mem::weeks::Weeks), DecodeError> {
     let first_week = block.first_week.map(|date| {
         collomatique_time::WeekStart::new(date.date()).expect("Format week start date is a Monday")
     });
@@ -360,7 +358,7 @@ fn reconstruct_periods(
                         *next_week_id = next_week_id.saturating_add(1);
                         (
                             week_id,
-                            mem::periods::WeekDesc {
+                            mem::weeks::WeekDesc {
                                 interrogations: week.interrogations,
                                 annotation: week.annotation,
                             },
@@ -371,7 +369,14 @@ fn reconstruct_periods(
         })
         .collect::<Vec<_>>();
 
-    mem::periods::Periods::from_period_rows(first_week, rows).map_err(|_| DecodeError::DuplicatedID)
+    // The period set is exactly the week-row keys by construction, so the two
+    // containers are built from the same rows: periods carry only the ordered
+    // ids, weeks carry the per-period ordering and the week table.
+    let period_ids = rows.iter().map(|(id, _)| *id).collect();
+    let periods = mem::periods::Periods::from_ordered_ids(first_week, period_ids)
+        .map_err(|_| DecodeError::DuplicatedID)?;
+    let weeks = mem::weeks::Weeks::from_period_rows(rows).map_err(|_| DecodeError::DuplicatedID)?;
+    Ok((periods, weeks))
 }
 
 fn reconstruct_subjects(

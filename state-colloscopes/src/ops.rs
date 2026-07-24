@@ -102,13 +102,13 @@ pub enum PeriodOp {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WeekOp {
     /// Add a week at the front of a period
-    AddFront(PeriodId, periods::WeekDesc),
+    AddFront(PeriodId, weeks::WeekDesc),
     /// Add a week right after an existing week
-    AddAfter(WeekId, periods::WeekDesc),
+    AddAfter(WeekId, weeks::WeekDesc),
     /// Remove an existing week
     Remove(WeekId),
     /// Update the status/annotation of an existing week
-    Update(WeekId, periods::WeekDesc),
+    Update(WeekId, weeks::WeekDesc),
     /// Move a week to a position (same or different period), preserving its id
     /// and its content. The position is interpreted after the week is
     /// detached from its current spot.
@@ -493,14 +493,14 @@ pub enum AnnotatedPeriodOp {
 pub enum AnnotatedWeekOp {
     /// Add a week at the front of a period
     /// First parameter is the week id for the new week
-    AddFront(WeekId, PeriodId, periods::WeekDesc),
+    AddFront(WeekId, PeriodId, weeks::WeekDesc),
     /// Add a week right after an existing week
     /// First parameter is the week id for the new week
-    AddAfter(WeekId, WeekId, periods::WeekDesc),
+    AddAfter(WeekId, WeekId, weeks::WeekDesc),
     /// Remove an existing week
     Remove(WeekId),
     /// Update the status/annotation of an existing week
-    Update(WeekId, periods::WeekDesc),
+    Update(WeekId, weeks::WeekDesc),
     /// Move a week to a position (same or different period), preserving its id
     /// and its content
     Move(WeekId, PeriodId, usize),

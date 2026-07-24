@@ -145,7 +145,7 @@ impl Colloscope {
             if assigned_groups.is_empty() {
                 return Err(ColloscopeError::EmptyInterrogationRow(slot_id, week_id));
             }
-            let Some((period_id, _)) = params.weeks().week_position(week_id) else {
+            let Some((period_id, _)) = params.weeks.week_position(week_id) else {
                 return Err(ColloscopeError::InvalidWeekId(week_id));
             };
 
@@ -391,7 +391,7 @@ impl crate::Data {
                 let params = &self.inner_data.params;
 
                 // Resolve the week to its (period, position) coordinate.
-                let Some((period_id, _)) = params.weeks().week_position(*week_id) else {
+                let Some((period_id, _)) = params.weeks.week_position(*week_id) else {
                     return Err(ColloscopeError::InvalidWeekId(*week_id));
                 };
 
@@ -510,7 +510,7 @@ impl crate::Data {
                 if self
                     .inner_data
                     .params
-                    .weeks()
+                    .weeks
                     .week_position(*week_id)
                     .is_none()
                 {

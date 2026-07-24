@@ -309,7 +309,7 @@ pub(crate) fn walk_params_refs(params: &Parameters, v: &mut impl RefVisitor) {
 // see `walk_pairings` / `walk_slot_pairings`.
 
 fn walk_weeks(params: &Parameters, v: &mut impl RefVisitor) {
-    for (week_id, week) in params.weeks().week_entries() {
+    for (week_id, week) in params.weeks.week_entries() {
         week.for_each_ref(&mut |id: NewId| match id {
             NewId::PeriodId(p) => v.period_ref(p, PeriodRefSite::WeekPeriodFk(week_id)),
             _ => unreachable!("Week only references its period"),

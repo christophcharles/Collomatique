@@ -97,14 +97,9 @@ fn add_period(
 
 fn week_ids_of(app: &AppState<Data, String>, period: PeriodId) -> Vec<WeekId> {
     let params = &app.get_data().get_inner_data().params;
-    let count = params.weeks().week_count_for_period(period).unwrap_or(0);
+    let count = params.weeks.week_count_for_period(period).unwrap_or(0);
     (0..count)
-        .map(|i| {
-            params
-                .periods
-                .week_id_at(period, i)
-                .expect("valid position")
-        })
+        .map(|i| params.weeks.week_id_at(period, i).expect("valid position"))
         .collect()
 }
 
@@ -120,7 +115,7 @@ fn cell_at(
     let inner = data.get_inner_data();
     let week_id = inner
         .params
-        .periods
+        .weeks
         .week_id_at(period, pos)
         .expect("valid position");
     inner.colloscope.interrogation(slot, week_id).cloned()
@@ -210,7 +205,7 @@ fn remove_week_then_undo_restores_identity() {
 
     assert!(data == before, "remove + undo must restore the prior state");
     assert_eq!(
-        data.get_inner_data().params.periods.week_id_at(period, 1),
+        data.get_inner_data().params.weeks.week_id_at(period, 1),
         Some(middle),
         "the restored week must keep its original id at its original position",
     );
@@ -415,7 +410,7 @@ fn move_week_preserves_filled_cell() {
         app.get_data()
             .get_inner_data()
             .params
-            .periods
+            .weeks
             .week_id_at(period_b, 0),
         Some(moved),
         "the moved week keeps its id at the destination",

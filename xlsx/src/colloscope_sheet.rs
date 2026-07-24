@@ -96,10 +96,10 @@ pub fn build(
     for (period_index, period_id) in params
         .periods
         .period_ids()
-        .filter(|&id| params.weeks().week_count_for_period(id).unwrap_or(0) != 0)
+        .filter(|&id| params.weeks.week_count_for_period(id).unwrap_or(0) != 0)
         .enumerate()
     {
-        let nw = params.weeks().week_count_for_period(period_id).unwrap_or(0);
+        let nw = params.weeks.week_count_for_period(period_id).unwrap_or(0);
         period_layout.push(PeriodLayout {
             period_id,
             col_start: col_offset,
@@ -126,7 +126,7 @@ pub fn build(
     let mut annotations: HashMap<(PeriodId, usize), String> = HashMap::new();
     for period_id in params.periods.period_ids() {
         for (week_index, (_week_id, week)) in params
-            .weeks()
+            .weeks
             .weeks_for_period(period_id)
             .into_iter()
             .flatten()
@@ -353,7 +353,7 @@ pub fn build(
                     // Sparse colloscope surface: translate the positional week
                     // to its id and read the (slot, week) row (absent = empty).
                     let cell_text = params
-                        .weeks()
+                        .weeks
                         .week_id_at(pl.period_id, w)
                         .and_then(|week_id| data.colloscope.interrogation(*slot_id, week_id))
                         .map(|assigned_groups| {

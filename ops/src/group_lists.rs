@@ -405,7 +405,7 @@ impl GroupListsUpdateOp {
                         for (week_id, groups) in inner.colloscope.interrogations_for_slot(slot_id) {
                             let (row_period, _pos) = inner
                                 .params
-                                .weeks()
+                                .weeks
                                 .week_position(week_id)
                                 .expect("week id from a live colloscope row is valid");
                             if row_period != assoc_period {
@@ -500,7 +500,7 @@ impl GroupListsUpdateOp {
                         {
                             let (row_period, _pos) = inner
                                 .params
-                                .weeks()
+                                .weeks
                                 .week_position(week_id)
                                 .expect("week id from a live colloscope row is valid");
                             if row_period != assoc_period {
@@ -697,7 +697,7 @@ impl GroupListsUpdateOp {
                     for (week_id, groups) in inner.colloscope.interrogations_for_slot(slot_id) {
                         let (row_period, _pos) = inner
                             .params
-                            .weeks()
+                            .weeks
                             .week_position(week_id)
                             .expect("week id from a live colloscope row is valid");
                         if row_period != *period_id {
@@ -788,7 +788,7 @@ impl GroupListsUpdateOp {
                         for (week_id, groups) in inner.colloscope.interrogations_for_slot(slot_id) {
                             let (row_period, _pos) = inner
                                 .params
-                                .weeks()
+                                .weeks
                                 .week_position(week_id)
                                 .expect("week id from a live colloscope row is valid");
                             if row_period != *period_id {

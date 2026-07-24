@@ -674,7 +674,7 @@ impl Component for Colloscope {
 
                 let (period_id, _pos) = self
                     .params
-                    .weeks()
+                    .weeks
                     .week_position(week_id)
                     .expect("week id should be valid");
                 let (subject_id, _pos) = self
@@ -1087,7 +1087,7 @@ impl Colloscope {
             .sender()
             .send(colloscope_display::DisplayInput::Update(
                 self.params.periods.clone(),
-                self.params.weeks().clone(),
+                self.params.weeks.clone(),
                 self.params.subjects.clone(),
                 self.params.slots.clone(),
                 self.params.teachers.clone(),

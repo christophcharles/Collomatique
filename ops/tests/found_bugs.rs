@@ -151,7 +151,7 @@ fn shrinking_a_period_cleans_colloscope_on_removed_weeks() {
         .get_data()
         .get_inner_data()
         .params
-        .weeks()
+        .weeks
         .week_id_at(period_id, 2)
         .expect("period has a third week");
     let Ok(None) = app_state.apply(
@@ -199,7 +199,7 @@ fn shrinking_a_period_cleans_colloscope_on_removed_weeks() {
             .get_data()
             .get_inner_data()
             .params
-            .periods
+            .weeks
             .count_weeks(),
         2,
         "the period should have been shrunk to two weeks",

@@ -216,7 +216,7 @@ impl crate::Data {
                         let week_runs = self
                             .inner_data
                             .params
-                            .weeks()
+                            .weeks
                             .find_week(week)
                             .is_some_and(|w| w.interrogations);
                         if !week_runs || new_week_pattern.excluded_weeks.contains(&week) {

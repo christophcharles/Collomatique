@@ -62,7 +62,7 @@ fn cutting_a_period_preserves_tail_colloscope_and_pattern() {
         .get_data()
         .get_inner_data()
         .params
-        .weeks()
+        .weeks
         .week_id_at(period_id, 3)
         .expect("the period has a fourth week");
 
@@ -164,7 +164,7 @@ fn cutting_a_period_preserves_tail_colloscope_and_pattern() {
         .get_data()
         .get_inner_data()
         .params
-        .weeks()
+        .weeks
         .week_id_at(period_id, 2)
         .expect("the period has a third week");
     let Ok(None) = app_state.apply(
@@ -206,7 +206,7 @@ fn cutting_a_period_preserves_tail_colloscope_and_pattern() {
             .get_data()
             .get_inner_data()
             .params
-            .weeks()
+            .weeks
             .week_count_for_period(period_id)
             .unwrap_or(0),
         2,
@@ -217,7 +217,7 @@ fn cutting_a_period_preserves_tail_colloscope_and_pattern() {
             .get_data()
             .get_inner_data()
             .params
-            .weeks()
+            .weeks
             .week_count_for_period(new_period_id)
             .unwrap_or(0),
         2,
@@ -245,7 +245,7 @@ fn cutting_a_period_preserves_tail_colloscope_and_pattern() {
         let inner = app_state.get_data().get_inner_data();
         let moved_week = inner
             .params
-            .weeks()
+            .weeks
             .week_id_at(new_period_id, 0)
             .expect("the new period has a first week");
         assert_eq!(
@@ -282,7 +282,7 @@ fn cutting_a_period_preserves_tail_colloscope_and_pattern() {
             .get_data()
             .get_inner_data()
             .params
-            .weeks()
+            .weeks
             .week_count_for_period(period_id)
             .unwrap_or(0),
         4,

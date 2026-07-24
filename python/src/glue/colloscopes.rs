@@ -44,7 +44,7 @@ impl Colloscope {
             .period_ids()
             .map(|period_id| {
                 let week_ids = params
-                    .weeks()
+                    .weeks
                     .weeks_for_period(period_id)
                     .into_iter()
                     .flatten()

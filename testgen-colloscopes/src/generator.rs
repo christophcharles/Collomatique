@@ -149,7 +149,7 @@ impl Pools {
         let mut colloscope_targets: Vec<(PeriodId, SlotId, Vec<usize>)> = Vec::new();
         for period_id in params.periods.period_ids() {
             let week_ids: Vec<WeekId> = params
-                .weeks()
+                .weeks
                 .weeks_for_period(period_id)
                 .into_iter()
                 .flatten()
@@ -1044,7 +1044,7 @@ fn gen_colloscope(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invali
 
     let week_id = inner
         .params
-        .weeks()
+        .weeks
         .week_id_at(*period_id, week_in_period)
         .expect("position within the period is valid");
     Op::Colloscope(ColloscopeOp::SetInterrogation(

@@ -681,14 +681,14 @@ pub fn build_rich_data() -> Data {
         .get_data()
         .get_inner_data()
         .params
-        .weeks()
+        .weeks
         .week_id_at(period1, 0)
         .expect("period1 has a first week");
     let week1_p1 = state
         .get_data()
         .get_inner_data()
         .params
-        .weeks()
+        .weeks
         .week_id_at(period1, 1)
         .expect("period1 has a second week");
     apply(

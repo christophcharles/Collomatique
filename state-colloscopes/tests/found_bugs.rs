@@ -273,7 +273,7 @@ fn update_shrinking_group_names_below_assigned_group_is_rejected() {
         .get_data()
         .get_inner_data()
         .params
-        .periods
+        .weeks
         .week_id_at(period_id, 0)
         .expect("period has a first week");
     let Ok(None) = app_state.apply(

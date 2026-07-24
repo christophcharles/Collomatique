@@ -5,11 +5,8 @@
 use thiserror::Error;
 
 use crate::OrderedTable;
-use crate::ids::{PairingRuleId, PeriodId, SlotPairingRuleId, StudentId, SubjectId, WeekId};
+use crate::ids::{PairingRuleId, PeriodId, SlotPairingRuleId, StudentId, SubjectId};
 use crate::ops::AnnotatedPeriodOp;
-
-use crate::weeks::{DuplicatedWeekIdError, Weeks};
-pub use crate::weeks::{Week, WeekDesc, WeekError, WeekPrecheckError};
 
 /// Description of the periods
 ///
@@ -17,12 +14,8 @@ pub use crate::weeks::{Week, WeekDesc, WeekError, WeekPrecheckError};
 /// the public ordered set of period ids (mirroring `Subjects.ordered_subject_list`),
 /// each mapping to `()` — a period carries no other data of its own.
 ///
-/// Weeks and their per-period ordering live in the sibling [Weeks] container.
-/// It is nested here transitionally (`weeks`): consumers reach it through the
-/// [Self::weeks] accessor and the delegating week methods below, which keep the
-/// pre-split surface compiling while call sites migrate. At the module hoist it
-/// becomes a sibling field on [crate::Parameters] and this nesting — with all
-/// the delegations — is removed.
+/// Weeks and their per-period ordering live in the sibling [crate::weeks::Weeks]
+/// container, a sibling field on [crate::Parameters].
 ///
 /// The cross-container consistency (every `ordering` row names a live period,
 /// the row is non-empty, every week names its period, no week is left
@@ -38,25 +31,9 @@ pub struct Periods {
     /// Ordered set of period ids — existence and display order only
     ///
     /// A period owns nothing else; week data and per-period week ordering live
-    /// in the sibling [Weeks]. Public, mirroring `Subjects.ordered_subject_list`.
+    /// in the sibling [crate::weeks::Weeks]. Public, mirroring
+    /// `Subjects.ordered_subject_list`.
     pub ordered_period_list: OrderedTable<PeriodId, ()>,
-
-    /// The weeks and their per-period ordering
-    ///
-    /// Nested transitionally (see the type doc); becomes a sibling field on
-    /// [crate::Parameters] at the module hoist.
-    pub(crate) weeks: Weeks,
-}
-
-/// Error returned when building [Periods] from rows with a duplicated id
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Error)]
-pub enum PeriodRowsError {
-    /// A period id appears more than once
-    #[error("duplicated period id {0:?}")]
-    DuplicatedPeriodId(PeriodId),
-    /// A week id appears more than once (across all periods)
-    #[error("duplicated week id {0:?}")]
-    DuplicatedWeekId(WeekId),
 }
 
 /// Error returned when building [Periods] from ordered ids with a duplicate
@@ -69,8 +46,8 @@ impl Periods {
     ///
     /// The ids define the display order; the resulting periods have no weeks.
     /// Returns an error on a duplicate id. This is the constructor storage
-    /// decode uses once the [Weeks] container is built separately;
-    /// [Self::from_period_rows] layers the weeks on top of it.
+    /// decode uses; the sibling [`crate::weeks::Weeks`] container is built
+    /// separately with [`crate::weeks::Weeks::from_period_rows`].
     pub fn from_ordered_ids(
         first_week: Option<collomatique_time::WeekStart>,
         ids: Vec<PeriodId>,
@@ -82,48 +59,14 @@ impl Periods {
         Ok(Periods {
             first_week,
             ordered_period_list,
-            weeks: Weeks::default(),
         })
-    }
-
-    /// Builds a [Periods] from period rows (used by storage decode).
-    ///
-    /// `rows` provides the periods in display order, each with its ordered
-    /// weeks (identity paired with description). Returns an error if a period
-    /// id or a week id appears more than once — otherwise the two backend
-    /// structures would silently desynchronize.
-    ///
-    /// Transitional: it builds the period order and the nested [Weeks]
-    /// together. At the module hoist storage builds the two containers
-    /// separately ([Self::from_ordered_ids] + [`Weeks::from_period_rows`]) and
-    /// this constructor is removed.
-    pub fn from_period_rows(
-        first_week: Option<collomatique_time::WeekStart>,
-        rows: Vec<(PeriodId, Vec<(WeekId, WeekDesc)>)>,
-    ) -> Result<Self, PeriodRowsError> {
-        let period_ids: Vec<PeriodId> = rows.iter().map(|(id, _)| *id).collect();
-        let mut periods = Periods::from_ordered_ids(first_week, period_ids)
-            .map_err(|DuplicatedPeriodIdError(id)| PeriodRowsError::DuplicatedPeriodId(id))?;
-        periods.weeks = Weeks::from_period_rows(rows)
-            .map_err(|DuplicatedWeekIdError(id)| PeriodRowsError::DuplicatedWeekId(id))?;
-        Ok(periods)
-    }
-
-    /// Transitional shared access to the nested [Weeks].
-    ///
-    /// Dies at the module hoist (P3.8), when weeks becomes a sibling field on
-    /// [crate::Parameters] and consumers read `params.weeks` directly.
-    pub fn weeks(&self) -> &Weeks {
-        &self.weeks
     }
 
     // ---- Read surface ----
     //
     // These methods are the sanctioned way to read the periods. Consumers go
-    // through them rather than the private `ordered_period_list` field. The
-    // week methods below are transitional one-line delegations onto the nested
-    // [Weeks] (preserving the pre-split names and `None` semantics); they die at
-    // the module hoist.
+    // through them rather than the private `ordered_period_list` field. Week
+    // data is read from the sibling [`crate::weeks::Weeks`] container.
 
     /// Period ids in display order.
     pub fn period_ids(&self) -> impl Iterator<Item = PeriodId> + '_ {
@@ -145,132 +88,9 @@ impl Periods {
         self.ordered_period_list.get_at(pos).map(|(id, _)| id)
     }
 
-    /// The canonical global week order (transitional delegation onto [Weeks]).
-    pub fn walk(&self) -> impl Iterator<Item = (PeriodId, WeekId, &Week)> + '_ {
-        self.weeks.walk(self)
-    }
-
-    /// All week ids, in global week order (transitional delegation onto [Weeks]).
-    pub fn week_ids(&self) -> impl Iterator<Item = WeekId> + '_ {
-        self.weeks.week_ids(self)
-    }
-
-    /// Weeks of one period, in order; `None` if the period id is invalid.
-    ///
-    /// Transitional delegation onto the nested [Weeks]; preserves the pre-split
-    /// `None = invalid period id` semantics (a valid week-empty period yields
-    /// `Some(empty)`, unlike [`Weeks::weeks_for_period`]).
-    pub fn weeks_of(&self, id: PeriodId) -> Option<impl Iterator<Item = &Week> + '_> {
-        if !self.ordered_period_list.contains(&id) {
-            return None;
-        }
-        Some(
-            self.weeks
-                .weeks_for_period(id)
-                .into_iter()
-                .flatten()
-                .map(|(_, w)| w),
-        )
-    }
-
-    /// Ordered week ids of one period; `None` if the period id is invalid.
-    ///
-    /// Transitional delegation onto the nested [Weeks] (pre-split `None`
-    /// semantics — see [Self::weeks_of]).
-    pub fn week_ids_of(&self, id: PeriodId) -> Option<impl Iterator<Item = WeekId> + '_> {
-        if !self.ordered_period_list.contains(&id) {
-            return None;
-        }
-        Some(
-            self.weeks
-                .weeks_for_period(id)
-                .into_iter()
-                .flatten()
-                .map(|(week_id, _)| *week_id),
-        )
-    }
-
-    /// Owned copy of a period's weeks — descriptions only, ids and owning period
-    /// stripped; `None` if the period id is invalid.
-    ///
-    /// Transitional delegation onto the nested [Weeks] (pre-split `None`
-    /// semantics — see [Self::weeks_of]).
-    pub fn weeks_vec_of(&self, id: PeriodId) -> Option<Vec<WeekDesc>> {
-        if !self.ordered_period_list.contains(&id) {
-            return None;
-        }
-        Some(self.weeks.weeks_desc_vec_for_period(id).unwrap_or_default())
-    }
-
-    /// Number of weeks of one period; `None` if the period id is invalid.
-    ///
-    /// Transitional delegation onto the nested [Weeks] (pre-split `None`
-    /// semantics — see [Self::weeks_of]).
-    pub fn week_count_of(&self, id: PeriodId) -> Option<usize> {
-        if !self.ordered_period_list.contains(&id) {
-            return None;
-        }
-        Some(self.weeks.week_count_for_period(id).unwrap_or(0))
-    }
-
-    /// Total number of weeks across all periods (transitional delegation).
-    pub fn count_weeks(&self) -> usize {
-        self.weeks.count_weeks()
-    }
-
     /// Finds the position of a period by id
     pub fn find_period_position(&self, id: PeriodId) -> Option<usize> {
         self.ordered_period_list.position_of(&id)
-    }
-
-    /// Finds the position of a period by id and gives the number of the first
-    /// week (transitional delegation onto [Weeks]).
-    pub fn find_period_position_and_first_week(&self, id: PeriodId) -> Option<(usize, usize)> {
-        self.weeks.find_period_position_and_first_week(self, id)
-    }
-
-    /// Finds the position of a period by id and gives the total number of weeks
-    /// up to and including the given period (transitional delegation onto
-    /// [Weeks]).
-    pub fn find_period_position_and_total_number_of_weeks(
-        &self,
-        id: PeriodId,
-    ) -> Option<(usize, usize)> {
-        self.weeks
-            .find_period_position_and_total_number_of_weeks(self, id)
-    }
-
-    /// Finds a week by id, returning the stored [Week] entity (transitional
-    /// delegation onto [Weeks]).
-    pub fn find_week(&self, id: WeekId) -> Option<&Week> {
-        self.weeks.find_week(id)
-    }
-
-    /// Locates a week by id: its owning period and its position within that
-    /// period (transitional delegation onto [Weeks]).
-    pub fn week_position(&self, id: WeekId) -> Option<(PeriodId, usize)> {
-        self.weeks.week_position(id)
-    }
-
-    /// The id of the week at position `pos` within `period`; `None` if the
-    /// period id is invalid or the position is out of range.
-    ///
-    /// Transitional delegation onto the nested [Weeks]. Behavior-identical to
-    /// the pre-split version: an invalid period has no ordering row, so the
-    /// gate is redundant with [`Weeks::week_id_at`].
-    pub fn week_id_at(&self, period: PeriodId, pos: usize) -> Option<WeekId> {
-        self.weeks.week_id_at(period, pos)
-    }
-
-    /// The global week position of a week (transitional delegation onto [Weeks]).
-    pub fn global_week_position(&self, id: WeekId) -> Option<usize> {
-        self.weeks.global_week_position(self, id)
-    }
-
-    /// Finds the first week number and the length of a period (transitional
-    /// delegation onto [Weeks]).
-    pub fn get_first_week_and_length_for_period(&self, id: PeriodId) -> Option<(usize, usize)> {
-        self.weeks.get_first_week_and_length_for_period(self, id)
     }
 }
 
@@ -425,9 +245,9 @@ impl crate::Data {
                 let week_count = self
                     .inner_data
                     .params
-                    .periods
-                    .week_count_of(*period_id)
-                    .expect("period id comes from find_period_position");
+                    .weeks
+                    .week_count_for_period(*period_id)
+                    .unwrap_or(0);
                 if week_count != 0 {
                     return Err(PeriodError::PeriodStillHasWeeks(*period_id));
                 }
@@ -443,7 +263,7 @@ impl crate::Data {
                         .any(|((_slot_id, week), _groups)| {
                             self.inner_data
                                 .params
-                                .periods
+                                .weeks
                                 .week_position(week)
                                 .map(|(p, _pos)| p)
                                 == Some(*period_id)

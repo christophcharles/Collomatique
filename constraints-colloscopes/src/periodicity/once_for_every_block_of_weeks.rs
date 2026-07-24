@@ -36,13 +36,13 @@ pub(super) fn build(env: &VarEnv, mut bundle: MyBundle) -> MyBundle {
         // Per-period block constraints
         let mut global_week_offset = 0usize;
         for period_id in env.periods.period_ids() {
-            let period_len = env.weeks().week_count_for_period(period_id).unwrap_or(0);
+            let period_len = env.weeks.week_count_for_period(period_id).unwrap_or(0);
             let period_id = &period_id;
             let first_global_week = GlobalWeek(global_week_offset);
             let last_global_week = GlobalWeek(global_week_offset + period_len.saturating_sub(1));
 
             let active_weeks_in_period: Vec<GlobalWeek> = env
-                .weeks()
+                .weeks
                 .weeks_for_period(*period_id)
                 .into_iter()
                 .flatten()

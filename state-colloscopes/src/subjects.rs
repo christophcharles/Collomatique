@@ -603,7 +603,7 @@ impl crate::Data {
                     // interrogation row on a week of this period.
                     if let Some(subject_slots) = self.inner_data.params.slots.slots_for_subject(*id)
                     {
-                        let weeks = self.inner_data.params.weeks();
+                        let weeks = &self.inner_data.params.weeks;
                         for (slot_id, _slot) in subject_slots {
                             let has_row = self
                                 .inner_data

@@ -356,7 +356,7 @@ fn week_patterns_is_week_active_matches_parameters() {
                 params.is_week_active(week, pattern),
                 params
                     .week_patterns
-                    .is_week_active(params.weeks(), week, pattern),
+                    .is_week_active(&params.weeks, week, pattern),
                 "delegation must agree for week {week:?} pattern {pattern:?}",
             );
         }

@@ -158,7 +158,7 @@ fn build_general_planning(
             .map(|period_id| format::general_planning::Period {
                 id: period_id.inner(),
                 weeks: params
-                    .weeks()
+                    .weeks
                     .weeks_for_period(period_id)
                     .into_iter()
                     .flatten()
@@ -563,7 +563,7 @@ fn build_colloscope(inner: &mem::InnerData) -> format::colloscope::Colloscope {
         .map(|((slot_id, week_id), assigned_groups)| {
             let week = u32::try_from(
                 params
-                    .weeks()
+                    .weeks
                     .global_week_position(&params.periods, week_id)
                     .expect("colloscope week id is valid"),
             )

@@ -28,7 +28,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
 
         let mut global_week_offset = 0usize;
         for period_id in env.periods.period_ids() {
-            let period_len = env.weeks().week_count_for_period(period_id).unwrap_or(0);
+            let period_len = env.weeks.week_count_for_period(period_id).unwrap_or(0);
             let period_id = &period_id;
             if rule.excluded_periods.contains(period_id)
                 || ant_subj.excluded_periods.contains(period_id)
@@ -48,7 +48,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
             let both_students: Vec<StudentId> = ant_set.intersection(con_set).copied().collect();
 
             for (local_idx, (_week_id, week_desc)) in env
-                .weeks()
+                .weeks
                 .weeks_for_period(*period_id)
                 .into_iter()
                 .flatten()

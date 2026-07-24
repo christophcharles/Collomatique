@@ -102,7 +102,7 @@ impl Dialog {
             .period_ids()
             .enumerate()
             .scan(0usize, |first_week_num, (index, id)| {
-                let week_count = self.params.weeks().week_count_for_period(id).unwrap_or(0);
+                let week_count = self.params.weeks.week_count_for_period(id).unwrap_or(0);
                 let title = crate::editor::generate_period_title(
                     &global_first_week,
                     index,

@@ -261,7 +261,7 @@ impl crate::InnerData {
                 errors.insert(LogicError::EmptySlotsRow(subject));
             }
         }
-        for (period, order) in self.params.weeks().ordering_entries() {
+        for (period, order) in self.params.weeks.ordering_entries() {
             if order.is_empty() {
                 errors.insert(LogicError::EmptyWeeksRow(period));
             }
@@ -321,7 +321,7 @@ impl crate::InnerData {
         let periods: BTreeSet<PeriodId> = self.params.periods.period_ids().collect();
         let weeks: BTreeSet<WeekId> = self
             .params
-            .weeks()
+            .weeks
             .week_entries()
             .map(|(id, _week)| id)
             .collect();
@@ -491,7 +491,7 @@ impl crate::InnerData {
         // the slot's subject runs on the week's period, the week is active for
         // the slot's pattern, and every group number fits the association bound.
         for ((slot_id, week_id), groups) in self.colloscope.iter() {
-            let period = params.weeks().week_position(week_id).map(|(p, _pos)| p);
+            let period = params.weeks.week_position(week_id).map(|(p, _pos)| p);
             let slot = params.slots.find_slot_with_subject(slot_id);
 
             // Subject-excludes-period half of the old `SlotNotRunningOnPeriod`
@@ -834,7 +834,7 @@ pub(crate) mod tests {
     use crate::ids::{Id, IncompatId};
     use crate::incompats::Incompatibility;
     use crate::pairings::{PairingRule, RulePart};
-    use crate::periods::{Periods, WeekDesc};
+    use crate::periods::Periods;
     use crate::refs::{
         GroupListRefSite, PeriodRefSite, Reference, SlotRefSite, StudentRefSite, SubjectRefSite,
         TeacherRefSite, WeekPatternRefSite, WeekRefSite,
@@ -846,6 +846,7 @@ pub(crate) mod tests {
     use crate::subjects::{Subject, SubjectParameters};
     use crate::teachers::Teacher;
     use crate::week_patterns::WeekPattern;
+    use crate::weeks::{WeekDesc, Weeks};
     use collomatique_time::{SlotStart, WholeMinuteTime};
     use std::collections::{BTreeMap, BTreeSet};
     use std::num::NonZeroU32;
@@ -1409,7 +1410,7 @@ pub(crate) mod tests {
     fn empty_weeks_row() {
         let mut data = InnerData::default();
         let period = unsafe { PeriodId::new(1) };
-        data.params.periods.weeks.forge_ordering_row(period, vec![]);
+        data.params.weeks.forge_ordering_row(period, vec![]);
         assert_eq!(
             broken_invariants(&data),
             Err(BTreeSet::from([LogicError::EmptyWeeksRow(period)]))
@@ -1720,9 +1721,11 @@ pub(crate) mod tests {
     // predicate behind it, showing layers B and C coexist and that a dangling
     // data-reading lookup skips the predicate.
 
-    /// One period holding one week, built through the public constructor.
-    fn test_periods(period: PeriodId, week: WeekId, desc: WeekDesc) -> Periods {
-        Periods::from_period_rows(None, vec![(period, vec![(week, desc)])]).unwrap()
+    /// One period holding one week, built through the public constructors.
+    fn test_periods(period: PeriodId, week: WeekId, desc: WeekDesc) -> (Periods, Weeks) {
+        let periods = Periods::from_ordered_ids(None, vec![period]).unwrap();
+        let weeks = Weeks::from_period_rows(vec![(period, vec![(week, desc)])]).unwrap();
+        (periods, weeks)
     }
 
     /// A subject with interrogations disabled (the default has them enabled).
@@ -1785,7 +1788,7 @@ pub(crate) mod tests {
         let student = unsafe { StudentId::new(7) };
 
         let mut data = InnerData::default();
-        data.params.periods = test_periods(period, week, WeekDesc::default());
+        (data.params.periods, data.params.weeks) = test_periods(period, week, WeekDesc::default());
         data.params
             .subjects
             .ordered_subject_list
@@ -1974,7 +1977,7 @@ pub(crate) mod tests {
         let week = unsafe { WeekId::new(2) };
         let subject = unsafe { SubjectId::new(3) };
         let student = unsafe { StudentId::new(4) };
-        data.params.periods = test_periods(period, week, WeekDesc::default());
+        (data.params.periods, data.params.weeks) = test_periods(period, week, WeekDesc::default());
         data.params
             .subjects
             .ordered_subject_list
@@ -2010,7 +2013,7 @@ pub(crate) mod tests {
         let week = unsafe { WeekId::new(2) };
         let subject = unsafe { SubjectId::new(3) };
         let student = unsafe { StudentId::new(4) };
-        data.params.periods = test_periods(period, week, WeekDesc::default());
+        (data.params.periods, data.params.weeks) = test_periods(period, week, WeekDesc::default());
         data.params
             .subjects
             .ordered_subject_list
@@ -2046,7 +2049,7 @@ pub(crate) mod tests {
         let week = unsafe { WeekId::new(2) };
         let subject = unsafe { SubjectId::new(3) };
         let group_list = unsafe { GroupListId::new(4) };
-        data.params.periods = test_periods(period, week, WeekDesc::default());
+        (data.params.periods, data.params.weeks) = test_periods(period, week, WeekDesc::default());
         data.params
             .subjects
             .ordered_subject_list
@@ -2075,7 +2078,7 @@ pub(crate) mod tests {
         let week = unsafe { WeekId::new(2) };
         let subject = unsafe { SubjectId::new(3) };
         let group_list = unsafe { GroupListId::new(4) };
-        data.params.periods = test_periods(period, week, WeekDesc::default());
+        (data.params.periods, data.params.weeks) = test_periods(period, week, WeekDesc::default());
         data.params
             .subjects
             .ordered_subject_list
@@ -2113,7 +2116,7 @@ pub(crate) mod tests {
         let week = unsafe { WeekId::new(2) };
         let subject = unsafe { SubjectId::new(3) };
         let group_list = unsafe { GroupListId::new(4) };
-        data.params.periods = test_periods(period, week, WeekDesc::default());
+        (data.params.periods, data.params.weeks) = test_periods(period, week, WeekDesc::default());
         data.params
             .subjects
             .ordered_subject_list
@@ -2257,7 +2260,8 @@ pub(crate) mod tests {
     #[test]
     fn interrogation_on_inactive_week() {
         let mut fx = colloscope_fixture();
-        fx.data.params.periods = test_periods(fx.period, fx.week, WeekDesc::new(false));
+        (fx.data.params.periods, fx.data.params.weeks) =
+            test_periods(fx.period, fx.week, WeekDesc::new(false));
         fx.data
             .colloscope
             .set_interrogation(fx.slot, fx.week, BTreeSet::from([0]));
@@ -2432,7 +2436,8 @@ pub(crate) mod tests {
         // bounds checks all need the slot to resolve, so they skip — only the
         // dangling slot surfaces.
         let mut fx = colloscope_fixture();
-        fx.data.params.periods = test_periods(fx.period, fx.week, WeekDesc::new(false));
+        (fx.data.params.periods, fx.data.params.weeks) =
+            test_periods(fx.period, fx.week, WeekDesc::new(false));
         let forged_slot = unsafe { SlotId::new(99) };
         fx.data
             .colloscope
@@ -2512,7 +2517,7 @@ pub(crate) mod tests {
         let week = unsafe { WeekId::new(2) };
         let forged_subject = unsafe { SubjectId::new(3) };
         let student = unsafe { StudentId::new(4) };
-        data.params.periods = test_periods(period, week, WeekDesc::default());
+        (data.params.periods, data.params.weeks) = test_periods(period, week, WeekDesc::default());
         data.params.students.student_map.insert(
             student,
             Student {
@@ -2686,7 +2691,7 @@ pub(crate) mod tests {
         let period = unsafe { PeriodId::new(1) };
         let week = unsafe { WeekId::new(2) };
         let mut data = InnerData::default();
-        data.params.periods = test_periods(period, week, WeekDesc::default());
+        (data.params.periods, data.params.weeks) = test_periods(period, week, WeekDesc::default());
         data.params.periods.ordered_period_list.remove_at(0);
         assert_dangling_maps(
             &data,
@@ -2969,7 +2974,7 @@ pub(crate) mod tests {
         let week = unsafe { WeekId::new(2) };
         let group_list = unsafe { GroupListId::new(3) };
         let subject = unsafe { SubjectId::new(4) };
-        data.params.periods = test_periods(period, week, WeekDesc::default());
+        (data.params.periods, data.params.weeks) = test_periods(period, week, WeekDesc::default());
         data.params
             .group_lists
             .group_list_map
@@ -2995,7 +3000,7 @@ pub(crate) mod tests {
         let week = unsafe { WeekId::new(2) };
         let subject = unsafe { SubjectId::new(3) };
         let group_list = unsafe { GroupListId::new(4) };
-        data.params.periods = test_periods(period, week, WeekDesc::default());
+        (data.params.periods, data.params.weeks) = test_periods(period, week, WeekDesc::default());
         register_subject(&mut data, subject);
         data.params
             .group_lists
@@ -3077,7 +3082,7 @@ pub(crate) mod tests {
         let week = unsafe { WeekId::new(2) };
         let subject = unsafe { SubjectId::new(3) };
         let student = unsafe { StudentId::new(4) };
-        data.params.periods = test_periods(period, week, WeekDesc::default());
+        (data.params.periods, data.params.weeks) = test_periods(period, week, WeekDesc::default());
         register_subject(&mut data, subject);
         data.params
             .assignments
@@ -3160,7 +3165,7 @@ pub(crate) mod tests {
         let period = unsafe { PeriodId::new(1) };
         let week = unsafe { WeekId::new(2) };
         let subject = unsafe { SubjectId::new(3) };
-        data.params.periods = test_periods(period, week, WeekDesc::default());
+        (data.params.periods, data.params.weeks) = test_periods(period, week, WeekDesc::default());
         data.params
             .subjects
             .ordered_subject_list

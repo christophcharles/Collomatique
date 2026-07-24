@@ -323,15 +323,12 @@ impl GeneralPlanningUpdateOp {
             GeneralPlanningUpdateOp::UpdatePeriodWeekCount(period_id, week_count) => {
                 let params = &data.get_data().get_inner_data().params;
                 let Some((_pos, _first_week)) = params
-                    .weeks()
+                    .weeks
                     .find_period_position_and_first_week(&params.periods, *period_id)
                 else {
                     return None;
                 };
-                let old_week_count = params
-                    .weeks()
-                    .week_count_for_period(*period_id)
-                    .unwrap_or(0);
+                let old_week_count = params.weeks.week_count_for_period(*period_id).unwrap_or(0);
 
                 if *week_count >= old_week_count {
                     return None;
@@ -349,7 +346,7 @@ impl GeneralPlanningUpdateOp {
                     .map(|pos| {
                         inner
                             .params
-                            .weeks()
+                            .weeks
                             .week_id_at(*period_id, pos)
                             .expect("position within the period is valid")
                     })
@@ -416,7 +413,7 @@ impl GeneralPlanningUpdateOp {
                 }
 
                 let inner = data.get_data().get_inner_data();
-                let Some(week_id) = inner.params.weeks().week_id_at(*period_id, *week) else {
+                let Some(week_id) = inner.params.weeks.week_id_at(*period_id, *week) else {
                     return None;
                 };
 
@@ -446,7 +443,7 @@ impl GeneralPlanningUpdateOp {
                     .get_data()
                     .get_inner_data()
                     .params
-                    .weeks()
+                    .weeks
                     .weeks_for_period(*period_id)
                     .into_iter()
                     .flatten()
@@ -954,7 +951,7 @@ impl GeneralPlanningUpdateOp {
                     .get_data()
                     .get_inner_data()
                     .params
-                    .weeks()
+                    .weeks
                     .week_count_for_period(*period_id)
                     .unwrap_or(0);
 
@@ -966,7 +963,7 @@ impl GeneralPlanningUpdateOp {
                         .get_data()
                         .get_inner_data()
                         .params
-                        .weeks()
+                        .weeks
                         .weeks_desc_vec_for_period(*period_id)
                         .unwrap_or_default()
                         .last()
@@ -979,7 +976,7 @@ impl GeneralPlanningUpdateOp {
                         data.get_data()
                             .get_inner_data()
                             .params
-                            .weeks()
+                            .weeks
                             .week_id_at(*period_id, old_week_count - 1)
                     };
 
@@ -1016,7 +1013,7 @@ impl GeneralPlanningUpdateOp {
                             .get_data()
                             .get_inner_data()
                             .params
-                            .weeks()
+                            .weeks
                             .week_id_at(*period_id, pos)
                             .expect("position in range");
                         let result = data
@@ -1043,7 +1040,7 @@ impl GeneralPlanningUpdateOp {
                     .get_data()
                     .get_inner_data()
                     .params
-                    .weeks()
+                    .weeks
                     .week_count_for_period(*period_id)
                 {
                     for pos in (0..week_count).rev() {
@@ -1051,7 +1048,7 @@ impl GeneralPlanningUpdateOp {
                             .get_data()
                             .get_inner_data()
                             .params
-                            .weeks()
+                            .weeks
                             .week_id_at(*period_id, pos)
                             .expect("position in range");
                         let result = data
@@ -1094,7 +1091,7 @@ impl GeneralPlanningUpdateOp {
                     .get_data()
                     .get_inner_data()
                     .params
-                    .weeks()
+                    .weeks
                     .week_count_for_period(*period_id)
                     .unwrap_or(0);
 
@@ -1248,7 +1245,7 @@ impl GeneralPlanningUpdateOp {
                         data.get_data()
                             .get_inner_data()
                             .params
-                            .weeks()
+                            .weeks
                             .week_id_at(*period_id, pos)
                             .expect("tail week exists")
                     })
@@ -1301,14 +1298,14 @@ impl GeneralPlanningUpdateOp {
                     .get_data()
                     .get_inner_data()
                     .params
-                    .weeks()
+                    .weeks
                     .week_count_for_period(previous_id)
                     .unwrap_or(0);
                 let week_count = data
                     .get_data()
                     .get_inner_data()
                     .params
-                    .weeks()
+                    .weeks
                     .week_count_for_period(*period_id)
                     .unwrap_or(0);
                 let week_ids: Vec<collomatique_state_colloscopes::WeekId> = (0..week_count)
@@ -1316,7 +1313,7 @@ impl GeneralPlanningUpdateOp {
                         data.get_data()
                             .get_inner_data()
                             .params
-                            .weeks()
+                            .weeks
                             .week_id_at(*period_id, pos)
                             .expect("week exists")
                     })
@@ -1363,7 +1360,7 @@ impl GeneralPlanningUpdateOp {
                     .get_data()
                     .get_inner_data()
                     .params
-                    .weeks()
+                    .weeks
                     .weeks_desc_vec_for_period(*period_id)
                     .unwrap_or_default();
 
@@ -1378,7 +1375,7 @@ impl GeneralPlanningUpdateOp {
                     .get_data()
                     .get_inner_data()
                     .params
-                    .weeks()
+                    .weeks
                     .week_id_at(*period_id, *week_num)
                     .expect("week number checked in range above");
                 let mut new_desc = desc[*week_num].clone();
@@ -1408,7 +1405,7 @@ impl GeneralPlanningUpdateOp {
                     .get_data()
                     .get_inner_data()
                     .params
-                    .weeks()
+                    .weeks
                     .weeks_desc_vec_for_period(*period_id)
                     .unwrap_or_default();
 
@@ -1423,7 +1420,7 @@ impl GeneralPlanningUpdateOp {
                     .get_data()
                     .get_inner_data()
                     .params
-                    .weeks()
+                    .weeks
                     .week_id_at(*period_id, *week_num)
                     .expect("week number checked in range above");
                 let mut new_desc = desc[*week_num].clone();

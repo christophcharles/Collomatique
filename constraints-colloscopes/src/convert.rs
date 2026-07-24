@@ -26,11 +26,11 @@ pub fn build_config(env: &Parameters, colloscope: &Colloscope) -> ConfigData<Var
 
     for ((slot_id, week_id), assigned_groups) in colloscope.iter() {
         let (period_id, _pos) = env
-            .weeks()
+            .weeks
             .week_position(week_id)
             .expect("week id from a live colloscope row is valid");
         let week = env
-            .weeks()
+            .weeks
             .global_week_position(&env.periods, week_id)
             .expect("week id from a live colloscope row is valid");
 
@@ -91,7 +91,7 @@ pub fn build_complete_config(env: &Parameters, colloscope: &Colloscope) -> Confi
     // `ConfigData` is a map, so the enumeration order is invisible.
     for period_id in env.periods.period_ids() {
         let week_ids: Vec<WeekId> = env
-            .weeks()
+            .weeks
             .weeks_for_period(period_id)
             .into_iter()
             .flatten()
@@ -120,7 +120,7 @@ pub fn build_complete_config(env: &Parameters, colloscope: &Colloscope) -> Confi
                     continue;
                 }
                 let week = env
-                    .weeks()
+                    .weeks
                     .global_week_position(&env.periods, week_id)
                     .expect("week id is valid");
                 let assigned = colloscope.interrogation(*slot_id, week_id);
