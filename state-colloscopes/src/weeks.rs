@@ -182,6 +182,11 @@ impl Weeks {
     /// .enumerate()` gives the global week index — this replaces every
     /// hand-rolled accumulate-`len()` loop. The period display order comes from
     /// the sibling [Periods].
+    ///
+    /// `periods` must be the sibling container of the same state. In a valid
+    /// state the invariants guarantee every week is visited exactly once, so
+    /// the walk total equals [`Self::count_weeks`]; a dangling ordering row
+    /// (broken state — the checker's concern) is simply not walked.
     pub fn walk<'a>(
         &'a self,
         periods: &'a Periods,
@@ -259,13 +264,22 @@ impl Weeks {
     }
 
     /// Whether no period has any weeks.
+    ///
+    /// Reads the week table: the compound mutators keep it in lockstep with
+    /// `ordering`, so the two containers cover the same week ids in every
+    /// ops-reachable state (force ops included); only test forgery can split
+    /// them.
     pub fn is_empty(&self) -> bool {
-        self.ordering.is_empty()
+        self.week_map.is_empty()
     }
 
     /// Total number of weeks across all periods.
+    ///
+    /// Reads the week table; by the same lockstep argument as
+    /// [`Self::is_empty`] this equals summing the `ordering` rows, and — in a
+    /// valid state — the [`Self::walk`] total.
     pub fn count_weeks(&self) -> usize {
-        self.ordering.values().map(|order| order.len()).sum()
+        self.week_map.len()
     }
 
     /// Finds a week by id, returning the stored [Week] entity (owning period
