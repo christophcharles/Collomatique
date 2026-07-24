@@ -158,10 +158,11 @@ fn build_general_planning(
             .map(|period_id| format::general_planning::Period {
                 id: period_id.inner(),
                 weeks: params
-                    .periods
-                    .weeks_of(period_id)
-                    .expect("period id from period_ids is valid")
-                    .map(|week| format::general_planning::Week {
+                    .weeks()
+                    .weeks_for_period(period_id)
+                    .into_iter()
+                    .flatten()
+                    .map(|(_, week)| format::general_planning::Week {
                         interrogations: week.interrogations,
                         annotation: week.annotation.clone(),
                     })
@@ -306,8 +307,7 @@ fn build_week_patterns(
     // Project the sparse exclusion set back to the frozen positional bitmask:
     // one bit per week in global walk order, `true` iff not excluded.
     let week_ids: Vec<_> = params
-        .periods
-        .walk()
+        .walk_weeks()
         .map(|(_period_id, week_id, _week)| week_id)
         .collect();
     keyed(
@@ -563,8 +563,8 @@ fn build_colloscope(inner: &mem::InnerData) -> format::colloscope::Colloscope {
         .map(|((slot_id, week_id), assigned_groups)| {
             let week = u32::try_from(
                 params
-                    .periods
-                    .global_week_position(week_id)
+                    .weeks()
+                    .global_week_position(&params.periods, week_id)
                     .expect("colloscope week id is valid"),
             )
             .expect("Global week indices fit in u32");

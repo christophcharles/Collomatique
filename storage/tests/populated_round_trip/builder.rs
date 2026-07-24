@@ -20,7 +20,6 @@ use collomatique_state_colloscopes::{
     ids::{PeriodId, WeekId},
     incompats::Incompatibility,
     pairings::{PairingRule, RulePart},
-    periods::WeekDesc,
     settings::{Limits, Settings},
     slot_pairings::{SlotPairingRule, SlotRulePart},
     slots::Slot,
@@ -29,6 +28,7 @@ use collomatique_state_colloscopes::{
     subjects::WeekBlock,
     teachers::Teacher,
     week_patterns::WeekPattern,
+    weeks::WeekDesc,
 };
 use collomatique_time::{
     NonZeroMinutes, SlotStart, SlotWithDuration, WeekStart, Weekday, WholeMinuteTime,
@@ -392,8 +392,7 @@ pub fn build_rich_data() -> Data {
         .get_data()
         .get_inner_data()
         .params
-        .periods
-        .walk()
+        .walk_weeks()
         .map(|(_period_id, week_id, _week)| week_id)
         .collect();
     let pattern_fortnight = apply_new_id!(
@@ -682,14 +681,14 @@ pub fn build_rich_data() -> Data {
         .get_data()
         .get_inner_data()
         .params
-        .periods
+        .weeks()
         .week_id_at(period1, 0)
         .expect("period1 has a first week");
     let week1_p1 = state
         .get_data()
         .get_inner_data()
         .params
-        .periods
+        .weeks()
         .week_id_at(period1, 1)
         .expect("period1 has a second week");
     apply(
@@ -835,8 +834,7 @@ fn check_all_sections_populated(data: &Data) {
     assert!(params.periods.period_count() >= 2);
     assert!(
         params
-            .periods
-            .walk()
+            .walk_weeks()
             .any(|(_id, _week_id, week)| week.annotation.is_some())
     );
 

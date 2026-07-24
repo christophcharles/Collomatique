@@ -290,8 +290,11 @@ fn reconstruct(blocks: Blocks) -> Result<InnerData, DecodeError> {
     let teachers = reconstruct_teachers(blocks.teachers.unwrap_or_default());
     let students = reconstruct_students(blocks.students.unwrap_or_default());
     let assignments = reconstruct_assignments(blocks.assignments.unwrap_or_default(), &periods)?;
-    let week_patterns =
-        reconstruct_week_patterns(blocks.week_patterns.unwrap_or_default(), &periods);
+    let week_patterns = reconstruct_week_patterns(
+        blocks.week_patterns.unwrap_or_default(),
+        periods.weeks(),
+        &periods,
+    );
     let slots = reconstruct_slots(blocks.slots.unwrap_or_default())?;
     let incompats = reconstruct_incompats(blocks.incompatibilities.unwrap_or_default())?;
     let group_lists = reconstruct_group_lists(
@@ -526,14 +529,15 @@ fn reconstruct_assignments(
 
 fn reconstruct_week_patterns(
     block: format::week_patterns::WeekPatterns,
+    weeks: &mem::weeks::Weeks,
     periods: &mem::periods::Periods,
 ) -> mem::week_patterns::WeekPatterns {
     // The frozen positional bitmask carries one bit per week in global walk
     // order; a `false` bit excludes that week. Zipping against the walk order
     // maps each bit back to its synthesized week id (and gracefully ignores any
     // trailing bits past the schedule — such a file is rejected by layer 3).
-    let week_ids: Vec<WeekId> = periods
-        .walk()
+    let week_ids: Vec<WeekId> = weeks
+        .walk(periods)
         .map(|(_period_id, week_id, _week)| week_id)
         .collect();
     mem::week_patterns::WeekPatterns {
@@ -815,8 +819,7 @@ fn reconstruct_colloscope(
 
     // Global week index -> week id, in walk order (S11).
     let week_table: Vec<WeekId> = params
-        .periods
-        .walk()
+        .walk_weeks()
         .map(|(_period_id, week_id, _week)| week_id)
         .collect();
 
