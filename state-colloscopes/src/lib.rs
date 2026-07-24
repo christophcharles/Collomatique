@@ -57,6 +57,7 @@ pub mod students;
 pub mod subjects;
 pub mod teachers;
 pub mod week_patterns;
+pub mod weeks;
 
 pub use assignments::AssignmentError;
 pub use balancing::BalancingError;
@@ -69,7 +70,6 @@ pub use invariants::{Convergence, FixableInvariant, LogicError};
 pub use non_empty_range::{EmptyRangeError, NonEmptyRangeInclusive};
 pub use pairings::PairingError;
 pub use periods::PeriodError;
-pub use periods::WeekError;
 pub use settings::SettingsError;
 pub use slot_pairings::SlotPairingError;
 pub use slots::SlotError;
@@ -77,6 +77,7 @@ pub use students::StudentError;
 pub use subjects::SubjectError;
 pub use teachers::TeacherError;
 pub use week_patterns::WeekPatternError;
+pub use weeks::WeekError;
 
 // Per-domain precheck error enums for [Data::force_apply] — the carve-out
 // subset of each domain's error surface (step-3 survey Table 2). Introduced in
@@ -89,7 +90,6 @@ pub use group_lists::GroupListPrecheckError;
 pub use incompats::IncompatPrecheckError;
 pub use pairings::PairingPrecheckError;
 pub use periods::PeriodPrecheckError;
-pub use periods::WeekPrecheckError;
 pub use settings::SettingsPrecheckError;
 pub use slot_pairings::SlotPairingPrecheckError;
 pub use slots::SlotPrecheckError;
@@ -97,6 +97,7 @@ pub use students::StudentPrecheckError;
 pub use subjects::SubjectPrecheckError;
 pub use teachers::TeacherPrecheckError;
 pub use week_patterns::WeekPatternPrecheckError;
+pub use weeks::WeekPrecheckError;
 
 pub use refs::{
     GroupListRefSite, PeriodRefSite, RefVisitor, Reference, SlotRefSite, StudentRefSite,
