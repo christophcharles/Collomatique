@@ -1073,7 +1073,7 @@ impl Colloscope {
             })
             .collect();
 
-        group_lists_vec.sort_by_key(|data| (data.group_list.params.name.clone(), data.id));
+        group_lists_vec.sort_by_key(|data| (data.group_list.params().name.clone(), data.id));
 
         crate::tools::factories::update_vec_deque(
             &mut self.group_list_entries,

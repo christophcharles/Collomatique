@@ -238,7 +238,7 @@ impl Component for GroupLists {
                     .group_list_map
                     .get(&group_list_id)
                     .expect("Group list ID should be valid")
-                    .params
+                    .params()
                     .clone();
                 self.params_selection_reason = GroupListParamsSelectionReason::Edit(group_list_id);
                 self.params_dialog
@@ -313,7 +313,7 @@ impl GroupLists {
             })
             .collect();
 
-        group_lists_vec.sort_by_key(|data| (data.group_list.params.name.clone(), data.id));
+        group_lists_vec.sort_by_key(|data| (data.group_list.params().name.clone(), data.id));
 
         crate::tools::factories::update_vec_deque(
             &mut self.group_list_entries,

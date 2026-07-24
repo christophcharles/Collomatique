@@ -53,7 +53,7 @@ impl GroupListsUpdateWarning {
 
                 Some(format!(
                     "Perte complète du préremplissage de la liste de groupe \"{}\"",
-                    group_list.params.name
+                    group_list.params().name
                 ))
             }
             Self::LooseStudentsInPrefilledGroupList(group_list_id, student_ids) => {
@@ -87,7 +87,7 @@ impl GroupListsUpdateWarning {
 
                 Some(format!(
                     "Perte du préremplissage de la liste de groupe \"{}\" avec les élèves: {}",
-                    group_list.params.name,
+                    group_list.params().name,
                     student_names.join(", ")
                 ))
             }
@@ -122,7 +122,7 @@ impl GroupListsUpdateWarning {
 
                 Some(format!(
                     "Perte des élèves exclus de la liste de groupe \"{}\": {}",
-                    group_list.params.name,
+                    group_list.params().name,
                     student_names.join(", ")
                 ))
             }
@@ -158,7 +158,7 @@ impl GroupListsUpdateWarning {
                 Some(format!(
                     "Perte de l'association de la matière \"{}\" à la liste de groupe \"{}\" pour la période {}",
                     subject.parameters.name,
-                    group_list.params.name,
+                    group_list.params().name,
                     period_num + 1
                 ))
             }
@@ -175,7 +175,7 @@ impl GroupListsUpdateWarning {
                 };
                 Some(format!(
                     "Perte du remplissage de la liste de groupe \"{}\" dans le colloscope",
-                    group_list.params.name
+                    group_list.params().name
                 ))
             }
             Self::LooseInterrogationsInColloscope(subject_id, period_id) => {
@@ -226,7 +226,9 @@ impl GroupListsUpdateWarning {
                 };
                 Some(format!(
                     "Perte de l'affectation du l'élève {} {} dans la liste de groupe \"{}\" du le colloscope",
-                    student.desc.firstname, student.desc.surname, group_list.params.name
+                    student.desc.firstname,
+                    student.desc.surname,
+                    group_list.params().name
                 ))
             }
             Self::LooseGroupsInInterrogationsInColloscope(subject_id, period_id) => {
@@ -432,10 +434,10 @@ impl GroupListsUpdateOp {
 
                 if let collomatique_state_colloscopes::group_lists::GroupListFilling::Prefilled {
                     groups,
-                } = &old_group_list.filling
+                } = old_group_list.filling()
                 {
                     let new_count = params.group_names.len();
-                    let old_count = old_group_list.params.group_names.len();
+                    let old_count = old_group_list.params().group_names.len();
 
                     if new_count < old_count {
                         // Collect students from groups to be removed
@@ -526,7 +528,7 @@ impl GroupListsUpdateOp {
                 // Clear excluded_students if Automatic mode with non-empty excluded_students
                 if let collomatique_state_colloscopes::group_lists::GroupListFilling::Automatic {
                     excluded_students,
-                } = &old_group_list.filling
+                } = old_group_list.filling()
                     && !excluded_students.is_empty()
                 {
                     return Some(CleaningOp {
@@ -684,7 +686,7 @@ impl GroupListsUpdateOp {
                     None => None,
                 };
                 let first_forbidden_group_number = match new_group_list {
-                    Some(group_list) => group_list.params.group_names.len() as u32,
+                    Some(group_list) => group_list.params().group_names.len() as u32,
                     None => 0,
                 };
 
@@ -774,7 +776,7 @@ impl GroupListsUpdateOp {
                         None => None,
                     };
                     let first_forbidden_group_number = match new_group_list {
-                        Some(group_list) => group_list.params.group_names.len() as u32,
+                        Some(group_list) => group_list.params().group_names.len() as u32,
                         None => 0,
                     };
 

@@ -710,7 +710,7 @@ fn gen_group_list(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invali
                     .group_list_map
                     .get(&group_list_id)
                     .expect("group list id from pool")
-                    .params
+                    .params()
                     .group_names
                     .len();
                 GroupListOp::SetFilling(
@@ -766,7 +766,7 @@ fn gen_group_list(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invali
                 .group_list_map
                 .get(&group_list_id)
                 .expect("group list id from pool");
-            let group_count = match &current.filling {
+            let group_count = match current.filling() {
                 GroupListFilling::Prefilled { groups } => groups.len(),
                 GroupListFilling::Automatic { .. } => rng.random_range(2..=5),
             };
@@ -783,7 +783,7 @@ fn gen_group_list(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invali
                 .group_list_map
                 .get(&group_list_id)
                 .expect("group list id from pool")
-                .params
+                .params()
                 .group_names
                 .len();
             let filling = if rng.random_bool(0.5) {
@@ -982,12 +982,12 @@ fn gen_colloscope(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invali
             .group_list_map
             .get(&group_list_id)
             .expect("group list id from pool");
-        let group_count = group_list.params.group_names.len() as u32;
+        let group_count = group_list.params().group_names.len() as u32;
         let allowed_students: Vec<StudentId> = pools
             .student_ids
             .iter()
             .copied()
-            .filter(|id| !group_list.filling.excluded_students().contains(id))
+            .filter(|id| !group_list.filling().excluded_students().contains(id))
             .collect();
         let mut groups_for_students: BTreeMap<StudentId, u32> = BTreeMap::new();
         if group_count > 0 {
@@ -1027,7 +1027,7 @@ fn gen_colloscope(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invali
                 .group_list_map
                 .get(group_list_id)
                 .expect("association references a live group list")
-                .params
+                .params()
                 .group_names
                 .len() as u32
         })
@@ -1363,7 +1363,7 @@ fn gen_force_retarget(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools) ->
                 .group_list_map
                 .get(&group_list_id)
                 .expect("group list id from live pool")
-                .params
+                .params()
                 .group_names
                 .len();
             let mut groups: Vec<PrefilledGroup> = (0..group_count)
@@ -1391,7 +1391,7 @@ fn group_lists_with_min_groups(inner: &InnerData, min: usize) -> Vec<GroupListId
         .group_lists
         .group_list_map
         .iter()
-        .filter(|(_, group_list)| group_list.params.group_names.len() >= min)
+        .filter(|(_, group_list)| group_list.params().group_names.len() >= min)
         .map(|(id, _)| id)
         .collect()
 }
@@ -1530,44 +1530,26 @@ fn gen_force_semantic(
 /// A ForceLogic recipe whose material is present in the current state. Each
 /// lands a `LogicError` state (short-circuiting the new checker).
 ///
-/// The prefill-count mismatch is *not* reachable through the group-list op
-/// surface — `Add` annotates to a default automatic filling, `Update` re-syncs
-/// the prefilled groups to the new count, and forced `SetFilling` *keeps* the
-/// `PrefillGroupCountMismatch` precheck (the dual-listed carve-out). So we land
-/// it via a hand-corrupted `GlobalUpdate` ([`Self::GlobalPrefillMismatch`]),
-/// mirroring [`Self::GlobalDup`]. The duplicated-student flavor, by contrast,
-/// *is* reachable through forced `SetFilling`: that op keeps only the count
-/// guard, so a count-matching filling with one student in two groups lands
-/// ([`Self::SetFillingDupStudent`]).
+/// (The prefill count/duplicate flavors are gone: `GroupList::new` makes those
+/// states unrepresentable — a mismatched or duplicate-student filling can no
+/// longer be constructed, neither through the op surface nor a `GlobalUpdate`
+/// clone — so there is no such `LogicError` left to forge.)
 #[derive(Clone, Copy)]
 enum LogicRecipe {
     /// `GlobalUpdate` clone with a duplicated id (kept id max, so the issuer
     /// stays out of the dangling range) → `DuplicatedId`.
     GlobalDup,
-    /// `GlobalUpdate` clone whose live group list gets a prefilled filling of
-    /// `group_names.len() + 1` empty groups → `PrefillGroupCountMismatch`.
-    GlobalPrefillMismatch,
-    /// Forced `SetFilling` with a count-matching prefilled filling placing one
-    /// live student in two groups → `DuplicatedStudentInPrefilledGroups`.
-    SetFillingDupStudent,
     /// `PairingAdd` with both parts on one subject → `PairingRulePartsShareSubject`.
     PairingSameSubject,
     /// `SlotPairingAdd` with both parts on one slot → `SlotPairingRulePartsShareSlot`.
     SlotPairingSameSlot,
 }
 
-fn available_logic_recipes(inner: &InnerData, pools: &Pools) -> Vec<LogicRecipe> {
+fn available_logic_recipes(_inner: &InnerData, pools: &Pools) -> Vec<LogicRecipe> {
     let mut recipes = Vec::new();
     if !pools.subject_ids.is_empty() {
         recipes.push(LogicRecipe::GlobalDup);
         recipes.push(LogicRecipe::PairingSameSubject);
-    }
-    if !pools.group_list_ids.is_empty() {
-        recipes.push(LogicRecipe::GlobalPrefillMismatch);
-    }
-    // Two distinct groups are needed to place one student twice.
-    if !pools.student_ids.is_empty() && !group_lists_with_min_groups(inner, 2).is_empty() {
-        recipes.push(LogicRecipe::SetFillingDupStudent);
     }
     if !pools.slot_ids.is_empty() {
         recipes.push(LogicRecipe::SlotPairingSameSlot);
@@ -1591,53 +1573,6 @@ fn gen_force_logic(
                 .student_map
                 .insert(duplicated, Student::default());
             Op::GlobalUpdate(broken)
-        }
-        LogicRecipe::GlobalPrefillMismatch => {
-            // Hand-corrupt a clone: overwrite one live group list's filling with
-            // `group_names.len() + 1` empty prefilled groups. Empty groups keep
-            // it a clean single-invariant probe (no dangling FK, no dup student).
-            let mut broken = inner.clone();
-            let group_list_id = pick(rng, &pools.group_list_ids);
-            let group_list = broken
-                .params
-                .group_lists
-                .group_list_map
-                .get_mut(&group_list_id)
-                .expect("group list id from live pool");
-            let count = group_list.params.group_names.len() + 1;
-            group_list.filling = GroupListFilling::Prefilled {
-                groups: (0..count).map(|_| PrefilledGroup::default()).collect(),
-            };
-            Op::GlobalUpdate(broken)
-        }
-        LogicRecipe::SetFillingDupStudent => {
-            let lists = group_lists_with_min_groups(inner, 2);
-            let group_list_id = pick(rng, &lists);
-            let group_count = inner
-                .params
-                .group_lists
-                .group_list_map
-                .get(&group_list_id)
-                .expect("group list id from live pool")
-                .params
-                .group_names
-                .len();
-            let student_id = pick(rng, &pools.student_ids);
-            let mut groups: Vec<PrefilledGroup> = (0..group_count)
-                .map(|_| PrefilledGroup::default())
-                .collect();
-            // Place the same live student in two distinct groups.
-            let first = rng.random_range(0..group_count);
-            let mut second = rng.random_range(0..group_count - 1);
-            if second >= first {
-                second += 1;
-            }
-            groups[first].students.insert(student_id);
-            groups[second].students.insert(student_id);
-            Op::GroupList(GroupListOp::SetFilling(
-                group_list_id,
-                GroupListFilling::Prefilled { groups },
-            ))
         }
         LogicRecipe::PairingSameSubject => {
             let subject_id = pick(rng, &pools.subject_ids);

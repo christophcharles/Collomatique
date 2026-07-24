@@ -237,7 +237,7 @@ impl SimpleComponent for Dialog {
                 self.hidden = false;
                 self.should_redraw = true;
                 self.filtered_students = filtered_students;
-                self.prefill_mode = match &group_list_data.filling {
+                self.prefill_mode = match group_list_data.filling() {
                     collomatique_state_colloscopes::group_lists::GroupListFilling::Automatic {
                         ..
                     } => PrefillMode::Automatic,
@@ -314,12 +314,12 @@ impl Dialog {
     }
 
     fn update_from_data(&mut self, data: collomatique_state_colloscopes::group_lists::GroupList) {
-        self.list_name = data.params.name.clone();
-        self.group_names = data.params.group_names.clone();
+        self.list_name = data.params().name.clone();
+        self.group_names = data.params().group_names.clone();
 
         let group_count = self.group_names.len();
 
-        match &data.filling {
+        match data.filling() {
             collomatique_state_colloscopes::group_lists::GroupListFilling::Automatic {
                 excluded_students,
             } => {

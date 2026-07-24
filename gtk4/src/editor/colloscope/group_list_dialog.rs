@@ -51,7 +51,7 @@ impl Dialog {
     }
 
     fn generate_list_name(&self) -> String {
-        format!("Liste concernée : {}", self.group_list.params.name)
+        format!("Liste concernée : {}", self.group_list.params().name)
     }
 }
 
@@ -198,7 +198,7 @@ impl Dialog {
             .iter()
             .filter_map(|(id, student)| {
                 let id = &id;
-                if self.group_list.filling.excluded_students().contains(id) {
+                if self.group_list.filling().excluded_students().contains(id) {
                     return None;
                 }
                 Some((
@@ -216,7 +216,7 @@ impl Dialog {
     fn update_list_model(&mut self) {
         let group_names_list: Vec<_> = ["(Aucun groupe)".into()]
             .into_iter()
-            .chain(self.group_list.params.group_names.iter().enumerate().map(
+            .chain(self.group_list.params().group_names.iter().enumerate().map(
                 |(num, group_name)| match group_name {
                     Some(name) => {
                         format!("Groupe {} : {}", num + 1, name)

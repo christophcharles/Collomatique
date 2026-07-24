@@ -33,7 +33,7 @@ pub enum EntryOutput {
 
 impl Entry {
     fn generate_list_name(&self) -> String {
-        self.data.group_list.params.name.clone()
+        self.data.group_list.params().name.clone()
     }
 
     fn generate_remaining_student_text(&self) -> String {
@@ -135,7 +135,7 @@ impl FactoryComponent for Entry {
 impl Entry {
     fn update_remaining_student_count(&mut self) {
         self.remaining_student_count = self.data.total_student_count
-            - self.data.group_list.filling.excluded_students().len()
+            - self.data.group_list.filling().excluded_students().len()
             - self.data.groups_for_students.len();
     }
 }

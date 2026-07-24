@@ -151,6 +151,10 @@ impl FileLoader {
                 "Le fichier est mal formé et est probablement corrompu.\n(Le colloscope remplit une liste de groupes invalide, id {})",
                 group_list_id
             ),
+            DecodeError::InconsistentGroupList(group_list_id) => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(Une liste de groupes est incohérente : nombre de groupes préremplis ou élève en double, id {})",
+                group_list_id
+            ),
             DecodeError::InnerDataError(error) => format!(
                 "Fichier mal formé et est probablement corrompu.\n(Les données ne vérifient pas un invariant : {})",
                 error

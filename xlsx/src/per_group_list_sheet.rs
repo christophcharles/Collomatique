@@ -38,7 +38,7 @@ pub fn build(
             members.push((*group_number as i64, *student_id));
         }
     }
-    if let Some(GroupListFilling::Prefilled { groups }) = group_list.map(|gl| &gl.filling) {
+    if let Some(GroupListFilling::Prefilled { groups }) = group_list.map(|gl| gl.filling()) {
         for (group_index, group) in groups.iter().enumerate() {
             for student_id in &group.students {
                 members.push((group_index as i64, *student_id));

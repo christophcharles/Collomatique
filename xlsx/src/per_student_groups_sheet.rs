@@ -33,7 +33,7 @@ fn prefilled_student_groups(
     student_groups: &mut HashMap<(GroupListId, StudentId), i64>,
 ) {
     for (gl_id, group_list) in data.params.group_lists.group_list_map.iter() {
-        if let GroupListFilling::Prefilled { groups } = &group_list.filling {
+        if let GroupListFilling::Prefilled { groups } = group_list.filling() {
             for (group_index, group) in groups.iter().enumerate() {
                 for student_id in &group.students {
                     student_groups.insert((gl_id, *student_id), group_index as i64);
@@ -63,7 +63,7 @@ fn query_automatic(data: &InnerData) -> GroupListsAndMembers {
                 .group_lists
                 .group_list_map
                 .get(&gl_id)
-                .map(|gl| gl.params.name.clone())
+                .map(|gl| gl.params().name.clone())
                 .unwrap_or_default();
             (gl_id, name)
         })
@@ -82,8 +82,8 @@ fn query_prefilled(data: &InnerData) -> GroupListsAndMembers {
         .group_lists
         .group_list_map
         .iter()
-        .filter(|(_gl_id, gl)| gl.filling.iter_students().next().is_some())
-        .map(|(gl_id, gl)| (gl_id, gl.params.name.clone()))
+        .filter(|(_gl_id, gl)| gl.filling().iter_students().next().is_some())
+        .map(|(gl_id, gl)| (gl_id, gl.params().name.clone()))
         .collect();
     group_lists.sort_by(|a, b| a.1.cmp(&b.1));
 

@@ -176,7 +176,7 @@ pub fn write_xlsx(data: &InnerData, path: &Path, config: &Config) -> Result<(), 
             .group_lists
             .group_list_map
             .values()
-            .any(|gl| !gl.filling.is_prefilled());
+            .any(|gl| !gl.filling().is_prefilled());
 
         if has_automatic_groups {
             let groups_ws = workbook.add_worksheet();
@@ -211,7 +211,7 @@ pub fn write_xlsx(data: &InnerData, path: &Path, config: &Config) -> Result<(), 
             .group_lists
             .group_list_map
             .values()
-            .any(|gl| gl.filling.is_prefilled());
+            .any(|gl| gl.filling().is_prefilled());
 
         if has_prefilled_groups {
             let prefilled_ws = workbook.add_worksheet();
@@ -283,10 +283,10 @@ pub(crate) fn non_empty_group_lists_by_name(
             // Sparse surface: `group_list` yields `Some` only for a non-empty
             // placement row.
             let has_automatic_students = data.colloscope.group_list(*gl_id).is_some();
-            let has_prefilled_students = gl.filling.iter_students().next().is_some();
+            let has_prefilled_students = gl.filling().iter_students().next().is_some();
             has_automatic_students || has_prefilled_students
         })
-        .map(|(gl_id, gl)| (gl_id, gl.params.name.clone()))
+        .map(|(gl_id, gl)| (gl_id, gl.params().name.clone()))
         .collect();
     group_lists.sort_by(|a, b| a.1.cmp(&b.1));
     group_lists
@@ -295,7 +295,7 @@ pub(crate) fn non_empty_group_lists_by_name(
 /// Group names of a group list as plain strings, unnamed groups becoming `""`.
 pub(crate) fn group_names_vec(group_list: &GroupList) -> Vec<String> {
     group_list
-        .params
+        .params()
         .group_names
         .iter()
         .map(|name| name.as_ref().map(|n| n.to_string()).unwrap_or_default())

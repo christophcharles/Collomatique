@@ -807,7 +807,7 @@ impl crate::Data {
                         .group_list_map
                         .get(group_list_id)
                         .expect("association references a live group list")
-                        .params
+                        .params()
                         .group_names
                         .len() as u32
                 })

@@ -58,8 +58,8 @@ fn build_for_group(
 pub(super) fn build(env: &VarEnv) -> MyBundle {
     let mut bundle = MyBundle::new();
     for (group_list, gl) in env.group_lists.group_list_map.iter() {
-        let min_students = gl.params.students_per_group.start().get();
-        let max_students = gl.params.students_per_group.end().get();
+        let min_students = gl.params().students_per_group.start().get();
+        let max_students = gl.params().students_per_group.end().get();
         for group in GroupNum::enumerate(env, group_list) {
             bundle = build_for_group(
                 env,

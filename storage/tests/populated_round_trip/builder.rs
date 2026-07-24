@@ -903,14 +903,14 @@ fn check_all_sections_populated(data: &Data) {
             .group_lists
             .group_list_map
             .values()
-            .any(|group_list| group_list.filling.is_prefilled())
+            .any(|group_list| group_list.filling().is_prefilled())
     );
     assert!(
         params
             .group_lists
             .group_list_map
             .values()
-            .any(|group_list| !group_list.filling.is_prefilled())
+            .any(|group_list| !group_list.filling().is_prefilled())
     );
     assert!(!params.group_lists.subjects_associations.is_empty());
 

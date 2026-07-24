@@ -88,7 +88,7 @@ pub(crate) fn weeks_for_slot(
 }
 
 pub(crate) fn students_for_group_list(env: &VarEnv, gl: &GroupList) -> Vec<StudentId> {
-    match &gl.filling {
+    match gl.filling() {
         collomatique_state_colloscopes::group_lists::GroupListFilling::Automatic {
             excluded_students,
         } => env
@@ -295,7 +295,7 @@ fn build_group_has_students(env: &VarEnv) -> MyBundle {
     for (group_list, gl) in env.group_lists.group_list_map.iter() {
         for group in GroupNum::enumerate(env, group_list) {
             let var = ExtraVarName::GroupHasStudents { group_list, group };
-            match &gl.filling {
+            match gl.filling() {
                 GroupListFilling::Prefilled { groups } => {
                     let has_students = groups
                         .get(group.index())
@@ -438,7 +438,7 @@ fn build_student_at_interrogation(env: &VarEnv) -> MyBundle {
                         continue;
                     };
 
-                    match &gl.filling {
+                    match gl.filling() {
                         GroupListFilling::Prefilled { groups } => {
                             let group = groups.iter().enumerate().find_map(|(i, g)| {
                                 g.students.contains(&student).then(|| {

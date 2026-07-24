@@ -49,7 +49,7 @@ impl Var {
             Some(data) => data,
             None => return 0.,
         };
-        (group_list_data.params.group_names.len() as i32 - 1) as f64
+        (group_list_data.params().group_names.len() as i32 - 1) as f64
     }
 
     pub fn compute_slot_range(env: &VarEnv) -> Vec<SlotId> {
@@ -100,7 +100,7 @@ impl Var {
             Some(group_list) => group_list,
             None => return Vec::new(),
         };
-        match &group_list_data.filling {
+        match group_list_data.filling() {
             collomatique_state_colloscopes::group_lists::GroupListFilling::Automatic {
                 excluded_students,
             } => env
@@ -133,7 +133,7 @@ impl Var {
         };
 
         if group_list_data
-            .filling
+            .filling()
             .excluded_students()
             .contains(student)
         {
@@ -141,12 +141,12 @@ impl Var {
         }
 
         let collomatique_state_colloscopes::group_lists::GroupListFilling::Prefilled { .. } =
-            &group_list_data.filling
+            group_list_data.filling()
         else {
             return None;
         };
 
-        let Some(num) = group_list_data.filling.find_student_group(*student) else {
+        let Some(num) = group_list_data.filling().find_student_group(*student) else {
             return Some(-1.0);
         };
 

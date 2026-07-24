@@ -88,7 +88,7 @@ fn add_reification(
         period,
     };
 
-    match &gl.filling {
+    match gl.filling() {
         GroupListFilling::Prefilled { groups } => {
             let enrolled = env.assignments.students(period, subject);
             let has_students = groups.get(group.index()).is_some_and(|g| {

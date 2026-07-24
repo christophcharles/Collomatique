@@ -785,7 +785,7 @@ fn group_list_name(
     env.group_lists
         .group_list_map
         .get(&group_list)
-        .map(|gl| gl.params.name.clone())
+        .map(|gl| gl.params().name.clone())
         .unwrap_or_else(|| format!("{:?}", group_list))
 }
 
@@ -799,7 +799,7 @@ fn group_name(
         .group_lists
         .group_list_map
         .get(&group_list)
-        .and_then(|gl| gl.params.group_names.get(group.index()))
+        .and_then(|gl| gl.params().group_names.get(group.index()))
         .and_then(|name| name.as_ref());
     match name {
         Some(name) => format!("{} ({})", number, name),

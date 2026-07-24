@@ -58,7 +58,6 @@ use std::collections::BTreeSet;
 
 use thiserror::Error;
 
-use crate::group_lists::GroupListFilling;
 use crate::ids::{
     GroupListId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId, SubjectId,
     TeacherId, WeekId, WeekPatternId,
@@ -101,12 +100,6 @@ pub enum LogicError {
     /// exists iff it holds a placement)
     #[error("colloscope group-list row {0:?} is stored with an empty placement map")]
     EmptyColloscopeGroupListRow(GroupListId),
-    /// A prefilled group list whose group count differs from `group_names.len()`
-    #[error("prefilled group count does not match the group names of group list {0:?}")]
-    PrefillGroupCountMismatch(GroupListId),
-    /// A student placed in two prefilled groups of the same group list
-    #[error("a student is placed in two prefilled groups of group list {0:?}")]
-    DuplicatedStudentInPrefilledGroups(GroupListId),
     /// A pairing rule whose antecedent and consequent name the same subject
     #[error("pairing rule {0:?} has its antecedent and consequent on the same subject")]
     PairingRulePartsShareSubject(PairingRuleId),
@@ -277,20 +270,9 @@ impl crate::InnerData {
             }
         }
 
-        // Prefilled group lists: the group count matches the names, and no
-        // student appears twice. `check_duplicated_student` is vacuously true
-        // for `Automatic`, but we only reach it inside the `Prefilled` arm —
-        // reusing it keeps the predicate identical to the old checker's.
-        for (id, group_list) in self.params.group_lists.group_list_map.iter() {
-            if let GroupListFilling::Prefilled { groups } = &group_list.filling {
-                if groups.len() != group_list.params.group_names.len() {
-                    errors.insert(LogicError::PrefillGroupCountMismatch(id));
-                }
-                if !group_list.filling.check_duplicated_student() {
-                    errors.insert(LogicError::DuplicatedStudentInPrefilledGroups(id));
-                }
-            }
-        }
+        // (Prefilled group lists cannot violate the count/duplicate invariants:
+        // `GroupList::new` enforces them by construction, so no state can hold a
+        // mismatched or duplicate-student filling — there is nothing to sweep.)
 
         // Parts-share-an-id predicates: a rule whose antecedent and consequent
         // name the same subject/slot is degenerate.
@@ -529,7 +511,7 @@ impl crate::InnerData {
                         .group_lists
                         .group_list_map
                         .get(group_list_id)
-                        .map(|gl| gl.params.group_names.len() as u32),
+                        .map(|gl| gl.params().group_names.len() as u32),
                 };
                 if let Some(bound) = bound
                     && groups.iter().any(|&group_num| group_num >= bound)
@@ -549,8 +531,8 @@ impl crate::InnerData {
             if group_list.is_prefilled() {
                 out.insert(Convergence::ColloscopeGroupListPrefilled(group_list_id));
             }
-            let excluded = group_list.filling.excluded_students();
-            let bound = group_list.params.group_names.len() as u32;
+            let excluded = group_list.filling().excluded_students();
+            let bound = group_list.params().group_names.len() as u32;
             for (&student_id, &group_num) in placements {
                 if excluded.contains(&student_id) {
                     out.insert(Convergence::ColloscopeStudentExcluded(
@@ -597,10 +579,6 @@ impl LogicError {
             }
             LogicError::EmptyColloscopeGroupListRow(group_list) => {
                 E::ColloscopeError(ColloscopeError::EmptyGroupListRow(*group_list))
-            }
-            LogicError::PrefillGroupCountMismatch(_)
-            | LogicError::DuplicatedStudentInPrefilledGroups(_) => {
-                E::Params(InvariantError::InvalidGroupList)
             }
             LogicError::PairingRulePartsShareSubject(_) => {
                 E::Params(InvariantError::InvalidPairingRule)
@@ -1244,8 +1222,6 @@ pub(crate) mod tests {
             LogicError::EmptySlotsRow(subject),
             LogicError::EmptyInterrogationRow(slot, week),
             LogicError::EmptyColloscopeGroupListRow(group_list),
-            LogicError::PrefillGroupCountMismatch(group_list),
-            LogicError::DuplicatedStudentInPrefilledGroups(group_list),
             LogicError::PairingRulePartsShareSubject(pairing_rule),
             LogicError::SlotPairingRulePartsShareSlot(slot_pairing_rule),
         ];
@@ -1447,77 +1423,6 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn prefill_group_count_mismatch() {
-        // One named group, zero prefilled groups: the count differs. Zero groups
-        // ⇒ the duplicate-student predicate is vacuously clean, isolating the
-        // variant. `group_names` must be set explicitly — the default is 16.
-        let mut data = InnerData::default();
-        let group_list = unsafe { GroupListId::new(1) };
-        data.params.group_lists.group_list_map.insert(
-            group_list,
-            GroupList {
-                params: GroupListParameters {
-                    group_names: vec![None],
-                    ..Default::default()
-                },
-                filling: GroupListFilling::Prefilled { groups: vec![] },
-            },
-        );
-        assert_eq!(
-            broken_invariants(&data),
-            Err(BTreeSet::from([LogicError::PrefillGroupCountMismatch(
-                group_list
-            )]))
-        );
-        // The old checker coarsens this to `InvalidGroupList` — not
-        // logic-classified, so the differential is lenient here; pin it directly.
-        assert_eq!(
-            data.check_invariants(),
-            Err(InnerDataError::Params(InvariantError::InvalidGroupList))
-        );
-    }
-
-    #[test]
-    fn duplicated_student_in_prefilled_groups() {
-        // Two named groups, two prefilled groups (count matches), both holding
-        // the same student. The student id dangles, but the `Err` path never
-        // runs the dangling sweep — only the duplicate-student error surfaces.
-        let mut data = InnerData::default();
-        let group_list = unsafe { GroupListId::new(1) };
-        let student = unsafe { StudentId::new(2) };
-        data.params.group_lists.group_list_map.insert(
-            group_list,
-            GroupList {
-                params: GroupListParameters {
-                    group_names: vec![None, None],
-                    ..Default::default()
-                },
-                filling: GroupListFilling::Prefilled {
-                    groups: vec![
-                        PrefilledGroup {
-                            students: BTreeSet::from([student]),
-                        },
-                        PrefilledGroup {
-                            students: BTreeSet::from([student]),
-                        },
-                    ],
-                },
-            },
-        );
-        assert_eq!(
-            broken_invariants(&data),
-            Err(BTreeSet::from([
-                LogicError::DuplicatedStudentInPrefilledGroups(group_list)
-            ]))
-        );
-        // Old-checker image (lenient differential branch): `InvalidGroupList`.
-        assert_eq!(
-            data.check_invariants(),
-            Err(InnerDataError::Params(InvariantError::InvalidGroupList))
-        );
-    }
-
-    #[test]
     fn pairing_rule_parts_share_subject() {
         let mut data = InnerData::default();
         let rule = unsafe { PairingRuleId::new(1) };
@@ -1582,43 +1487,6 @@ pub(crate) mod tests {
             Err(InnerDataError::Params(
                 InvariantError::InvalidSlotPairingRule
             ))
-        );
-    }
-
-    #[test]
-    fn both_prefill_errors_on_one_list() {
-        // Three named groups but only two prefilled groups (count mismatch), and
-        // those two share a student (duplicate). Both predicates fire on the same
-        // list — the exhaustive-collection contract the old first-error checker
-        // could not honor.
-        let mut data = InnerData::default();
-        let group_list = unsafe { GroupListId::new(1) };
-        let student = unsafe { StudentId::new(2) };
-        data.params.group_lists.group_list_map.insert(
-            group_list,
-            GroupList {
-                params: GroupListParameters {
-                    group_names: vec![None, None, None],
-                    ..Default::default()
-                },
-                filling: GroupListFilling::Prefilled {
-                    groups: vec![
-                        PrefilledGroup {
-                            students: BTreeSet::from([student]),
-                        },
-                        PrefilledGroup {
-                            students: BTreeSet::from([student]),
-                        },
-                    ],
-                },
-            },
-        );
-        assert_eq!(
-            broken_invariants(&data),
-            Err(BTreeSet::from([
-                LogicError::PrefillGroupCountMismatch(group_list),
-                LogicError::DuplicatedStudentInPrefilledGroups(group_list),
-            ]))
         );
     }
 
@@ -1742,15 +1610,16 @@ pub(crate) mod tests {
     /// An automatic (non-prefilled) group list with `n` unnamed groups and no
     /// excluded students.
     fn automatic_group_list(n: usize) -> GroupList {
-        GroupList {
-            params: GroupListParameters {
+        GroupList::new(
+            GroupListParameters {
                 group_names: vec![None; n],
                 ..Default::default()
             },
-            filling: GroupListFilling::Automatic {
+            GroupListFilling::Automatic {
                 excluded_students: BTreeSet::new(),
             },
-        }
+        )
+        .expect("automatic filling is always consistent")
     }
 
     /// A copy of [test_slot] with the start time set to `h:m`.
@@ -2351,15 +2220,16 @@ pub(crate) mod tests {
         // duplicated student) with a colloscope placement row.
         data.params.group_lists.group_list_map.insert(
             group_list,
-            GroupList {
-                params: GroupListParameters {
+            GroupList::new(
+                GroupListParameters {
                     group_names: vec![None],
                     ..Default::default()
                 },
-                filling: GroupListFilling::Prefilled {
+                GroupListFilling::Prefilled {
                     groups: vec![PrefilledGroup::default()],
                 },
-            },
+            )
+            .expect("consistent prefilled list"),
         );
         data.params
             .students
@@ -2382,15 +2252,16 @@ pub(crate) mod tests {
         let student = unsafe { StudentId::new(2) };
         data.params.group_lists.group_list_map.insert(
             group_list,
-            GroupList {
-                params: GroupListParameters {
+            GroupList::new(
+                GroupListParameters {
                     group_names: vec![None, None],
                     ..Default::default()
                 },
-                filling: GroupListFilling::Automatic {
+                GroupListFilling::Automatic {
                     excluded_students: BTreeSet::from([student]),
                 },
-            },
+            )
+            .expect("automatic filling is always consistent"),
         );
         data.params
             .students
@@ -3026,17 +2897,18 @@ pub(crate) mod tests {
         // logic error.
         data.params.group_lists.group_list_map.insert(
             group_list,
-            GroupList {
-                params: GroupListParameters {
+            GroupList::new(
+                GroupListParameters {
                     group_names: vec![None],
                     ..Default::default()
                 },
-                filling: GroupListFilling::Prefilled {
+                GroupListFilling::Prefilled {
                     groups: vec![PrefilledGroup {
                         students: BTreeSet::from([student]),
                     }],
                 },
-            },
+            )
+            .expect("consistent prefilled list (student existence is not checked here)"),
         );
         assert_dangling_maps(
             &data,
@@ -3055,15 +2927,16 @@ pub(crate) mod tests {
         let student = unsafe { StudentId::new(2) };
         data.params.group_lists.group_list_map.insert(
             group_list,
-            GroupList {
-                params: GroupListParameters {
+            GroupList::new(
+                GroupListParameters {
                     group_names: vec![None, None],
                     ..Default::default()
                 },
-                filling: GroupListFilling::Automatic {
+                GroupListFilling::Automatic {
                     excluded_students: BTreeSet::from([student]),
                 },
-            },
+            )
+            .expect("automatic filling is always consistent"),
         );
         assert_dangling_maps(
             &data,

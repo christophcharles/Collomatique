@@ -297,7 +297,7 @@ fn reconstruct(blocks: Blocks) -> Result<InnerData, DecodeError> {
     let group_lists = reconstruct_group_lists(
         blocks.group_lists.unwrap_or_default(),
         blocks.group_list_associations.unwrap_or_default(),
-    );
+    )?;
     let settings = reconstruct_settings(blocks.settings.unwrap_or_default());
     let pairings = reconstruct_pairings(blocks.pairings.unwrap_or_default());
     let slot_pairings = reconstruct_slot_pairings(blocks.slot_pairings.unwrap_or_default());
@@ -651,11 +651,12 @@ fn reconstruct_incompats(
 fn reconstruct_group_lists(
     block: format::group_lists::GroupLists,
     associations: format::group_list_associations::GroupListAssociations,
-) -> mem::group_lists::GroupLists {
+) -> Result<mem::group_lists::GroupLists, DecodeError> {
     let group_list_map = block
         .into_inner()
         .into_iter()
         .map(|group_list| {
+            let raw_id = group_list.id;
             let filling = match group_list.filling {
                 format::group_lists::Filling::Prefilled(prefilled) => {
                     mem::group_lists::GroupListFilling::Prefilled {
@@ -674,19 +675,18 @@ fn reconstruct_group_lists(
                     }
                 }
             };
-            (
-                id::<GroupListId>(group_list.id),
-                mem::group_lists::GroupList {
-                    params: mem::group_lists::GroupListParameters {
-                        name: group_list.name,
-                        students_per_group: range(group_list.students_per_group),
-                        group_names: group_list.group_names,
-                    },
-                    filling,
-                },
-            )
+            let params = mem::group_lists::GroupListParameters {
+                name: group_list.name,
+                students_per_group: range(group_list.students_per_group),
+                group_names: group_list.group_names,
+            };
+            // Honest decode: an inconsistent (params, filling) pair is a hard
+            // error here rather than being caught later by layer 3.
+            let value = mem::group_lists::GroupList::new(params, filling)
+                .map_err(|_| DecodeError::InconsistentGroupList(raw_id))?;
+            Ok((id::<GroupListId>(raw_id), value))
         })
-        .collect();
+        .collect::<Result<_, DecodeError>>()?;
 
     // The associations table is sparse: one row per associated
     // `(period, subject)` (spec §4.10). Rows on an unknown period are kept
@@ -705,10 +705,10 @@ fn reconstruct_group_lists(
         })
         .collect();
 
-    mem::group_lists::GroupLists {
+    Ok(mem::group_lists::GroupLists {
         group_list_map,
         subjects_associations,
-    }
+    })
 }
 
 fn limits(limits: format::settings::Limits) -> mem::settings::Limits {

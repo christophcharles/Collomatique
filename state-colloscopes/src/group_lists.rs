@@ -34,13 +34,71 @@ pub struct GroupLists {
 }
 
 /// Description of a single group list
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default, References)]
+///
+/// Sealed: the fields are private and every value is built through
+/// [`GroupList::new`], which enforces the two value-internal invariants (the
+/// prefilled group count matches the group-name count, and no student appears
+/// in two prefilled groups). State-dependent facts (student existence) stay
+/// with the checker/walker as dangling FKs. Serialized exactly like the raw
+/// `{ params, filling }` pair via [`RawGroupList`]; deserializing an
+/// inconsistent pair is a hard error (the [`NonEmptyRangeInclusive`] precedent).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References)]
+#[serde(try_from = "RawGroupList", into = "RawGroupList")]
 pub struct GroupList {
     /// parameters for the group list
-    pub params: GroupListParameters,
+    params: GroupListParameters,
     /// Filling strategy for the group list
     #[fk]
-    pub filling: GroupListFilling,
+    filling: GroupListFilling,
+}
+
+/// Private serde mirror of [`GroupList`]: the transparent `{ params, filling }`
+/// pair. Deserialization funnels through [`GroupList::new`] (honest decode);
+/// serialization is the plain field dump, so the wire format is byte-identical
+/// to the pre-sealing struct.
+#[derive(Serialize, Deserialize)]
+struct RawGroupList {
+    params: GroupListParameters,
+    filling: GroupListFilling,
+}
+
+impl From<GroupList> for RawGroupList {
+    fn from(group_list: GroupList) -> Self {
+        RawGroupList {
+            params: group_list.params,
+            filling: group_list.filling,
+        }
+    }
+}
+
+impl TryFrom<RawGroupList> for GroupList {
+    type Error = GroupListBuildError;
+    fn try_from(raw: RawGroupList) -> Result<Self, GroupListBuildError> {
+        GroupList::new(raw.params, raw.filling)
+    }
+}
+
+impl Default for GroupList {
+    fn default() -> Self {
+        // Default params paired with the automatic filling — always internally
+        // consistent (no prefilled groups to count or deduplicate).
+        GroupList {
+            params: GroupListParameters::default(),
+            filling: GroupListFilling::default(),
+        }
+    }
+}
+
+/// Value-internal build failures of [`GroupList::new`]. These describe a
+/// self-contradictory `(params, filling)` pair, independent of any state.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum GroupListBuildError {
+    /// Prefilled groups count does not match `group_names` count
+    #[error("prefilled group count ({actual}) does not match the group name count ({expected})")]
+    PrefillGroupCountMismatch { expected: usize, actual: usize },
+    /// A student appears in two prefilled groups
+    #[error("student {0:?} appears in two prefilled groups")]
+    DuplicatedStudentInPrefilledGroups(StudentId),
 }
 
 /// Filling strategy for a group list
@@ -213,6 +271,61 @@ impl Default for GroupListParameters {
 }
 
 impl GroupList {
+    /// Builds a group list, enforcing the two value-internal invariants: a
+    /// prefilled filling must have exactly as many groups as `group_names`, and
+    /// no student may appear in two prefilled groups. Student *existence* is a
+    /// state-dependent fact and stays with the checker.
+    pub fn new(
+        params: GroupListParameters,
+        filling: GroupListFilling,
+    ) -> Result<Self, GroupListBuildError> {
+        if let GroupListFilling::Prefilled { groups } = &filling {
+            if groups.len() != params.group_names.len() {
+                return Err(GroupListBuildError::PrefillGroupCountMismatch {
+                    expected: params.group_names.len(),
+                    actual: groups.len(),
+                });
+            }
+            let mut seen = BTreeSet::new();
+            for group in groups {
+                for &student_id in &group.students {
+                    if !seen.insert(student_id) {
+                        return Err(GroupListBuildError::DuplicatedStudentInPrefilledGroups(
+                            student_id,
+                        ));
+                    }
+                }
+            }
+        }
+        Ok(GroupList { params, filling })
+    }
+
+    /// Builds a group list without validating the value-internal invariants.
+    /// Used only by [`crate::Data::force_apply`], which fixes nothing and adds
+    /// no checks: a forced op may leave the pair inconsistent for the caller to
+    /// detect and roll back.
+    pub(crate) fn from_parts_unchecked(
+        params: GroupListParameters,
+        filling: GroupListFilling,
+    ) -> Self {
+        GroupList { params, filling }
+    }
+
+    /// Read access to the parameters.
+    pub fn params(&self) -> &GroupListParameters {
+        &self.params
+    }
+
+    /// Read access to the filling strategy.
+    pub fn filling(&self) -> &GroupListFilling {
+        &self.filling
+    }
+
+    /// Consumes the group list, yielding its `(params, filling)` pair.
+    pub fn into_parts(self) -> (GroupListParameters, GroupListFilling) {
+        (self.params, self.filling)
+    }
+
     /// Checks whether the group list is prefilled
     ///
     /// Returns true if filling is Prefilled variant
@@ -270,10 +383,6 @@ pub enum GroupListError {
     /// cannot remove group list as it still has a filling (prefilled or automatic with exclusions)
     #[error("Group list still has a filling and cannot be removed")]
     RemainingFilling,
-
-    /// students appear multiple times in prefilled groups
-    #[error("Some students appear multiple times in prefilled groups")]
-    DuplicatedStudentInPrefilledGroups,
 
     /// cannot remove group list as there are still associated subjects
     #[error("Group list still is associated to subjects and cannot be removed")]
@@ -351,6 +460,26 @@ pub enum GroupListPrecheckError {
     NonEmptyGroupsWhenReducing,
 }
 
+/// Maps a [`GroupListBuildError`] onto the checked-apply error surface. The
+/// count mismatch is a real, reachable op rejection
+/// ([`GroupListError::PrefillGroupCountMismatch`]); a duplicate-student pair
+/// cannot reach the low-level op from any live caller (decode rejects it, the
+/// ops layer pre-validates), so it panics rather than widening the error
+/// surface.
+fn build_error_to_group_list_error(err: GroupListBuildError) -> GroupListError {
+    match err {
+        GroupListBuildError::PrefillGroupCountMismatch { expected, actual } => {
+            GroupListError::PrefillGroupCountMismatch { expected, actual }
+        }
+        GroupListBuildError::DuplicatedStudentInPrefilledGroups(student_id) => {
+            panic!(
+                "duplicate student {student_id:?} in a prefilled group reached the low-level \
+                 group-list op; callers must pre-validate the filling"
+            )
+        }
+    }
+}
+
 impl crate::Data {
     /// Used internally
     ///
@@ -406,10 +535,8 @@ impl crate::Data {
                 {
                     return Err(GroupListError::GroupListIdAlreadyExists(*new_id));
                 };
-                let new_group_list = group_lists::GroupList {
-                    params: params.clone(),
-                    filling: filling.clone(),
-                };
+                let new_group_list = group_lists::GroupList::new(params.clone(), filling.clone())
+                    .map_err(build_error_to_group_list_error)?;
 
                 self.inner_data
                     .params
@@ -435,7 +562,7 @@ impl crate::Data {
                 };
 
                 // Check filling is empty before removal
-                match &old_group_list.filling {
+                match old_group_list.filling() {
                     group_lists::GroupListFilling::Prefilled { groups } => {
                         if groups.iter().any(|g| !g.students.is_empty()) {
                             return Err(GroupListError::RemainingFilling);
@@ -475,11 +602,8 @@ impl crate::Data {
                 // The removal guard above rejected the op while any placement
                 // row survived, so there is no colloscope row to drop.
 
-                Ok(AnnotatedGroupListOp::Add(
-                    *id,
-                    old_group_list.params,
-                    old_group_list.filling,
-                ))
+                let (old_params, old_filling) = old_group_list.into_parts();
+                Ok(AnnotatedGroupListOp::Add(*id, old_params, old_filling))
             }
             AnnotatedGroupListOp::Update(group_list_id, new_params) => {
                 let Some(old_group_list) = self
@@ -501,7 +625,7 @@ impl crate::Data {
                         *group_list_id,
                         placements,
                         new_params,
-                        &old_group_list.filling,
+                        old_group_list.filling(),
                         &self.inner_data.params.students,
                     )
                     .is_err()
@@ -531,14 +655,14 @@ impl crate::Data {
                 }
 
                 // Atomically adjust filling when size changes
-                let new_filling = match &old_group_list.filling {
+                let new_filling = match old_group_list.filling() {
                     group_lists::GroupListFilling::Automatic { excluded_students } => {
                         group_lists::GroupListFilling::Automatic {
                             excluded_students: excluded_students.clone(),
                         }
                     }
                     group_lists::GroupListFilling::Prefilled { groups: old_groups } => {
-                        let old_count = old_group_list.params.group_names.len();
+                        let old_count = old_group_list.params().group_names.len();
                         let new_count = new_params.group_names.len();
 
                         if new_count < old_count {
@@ -568,10 +692,11 @@ impl crate::Data {
                     }
                 };
 
-                let new_group_list = group_lists::GroupList {
-                    params: new_params.clone(),
-                    filling: new_filling,
-                };
+                let new_group_list = group_lists::GroupList::new(new_params.clone(), new_filling)
+                    .expect(
+                        "Update reshaping keeps the group count in sync with group_names and \
+                         preserves the dup-freedom of the (already valid) old filling",
+                    );
 
                 self.inner_data
                     .params
@@ -585,10 +710,8 @@ impl crate::Data {
                     .insert(*group_list_id, new_group_list)
                     .expect("Group list ID was validated above");
 
-                Ok(AnnotatedGroupListOp::Update(
-                    *group_list_id,
-                    old_group_list.params,
-                ))
+                let (old_params, _old_filling) = old_group_list.into_parts();
+                Ok(AnnotatedGroupListOp::Update(*group_list_id, old_params))
             }
             AnnotatedGroupListOp::SetFilling(group_list_id, filling) => {
                 let Some(old_group_list) = self
@@ -601,14 +724,13 @@ impl crate::Data {
                     return Err(GroupListError::InvalidGroupListId(*group_list_id));
                 };
 
-                // Check that prefilled groups count matches group_names count
-                if let group_lists::GroupListFilling::Prefilled { groups } = filling {
-                    let expected = old_group_list.params.group_names.len();
-                    let actual = groups.len();
-                    if actual != expected {
-                        return Err(GroupListError::PrefillGroupCountMismatch { expected, actual });
-                    }
-                }
+                // The count guard now lives in `GroupList::new`; build the new
+                // value up front and surface a count mismatch exactly as before.
+                // (A duplicate-student pair cannot reach this low-level op — see
+                // `build_error_to_group_list_error`.)
+                let new_group_list =
+                    group_lists::GroupList::new(old_group_list.params().clone(), filling.clone())
+                        .map_err(build_error_to_group_list_error)?;
 
                 // Handle colloscope group list based on prefill transition
                 let was_prefilled = old_group_list.is_prefilled();
@@ -641,7 +763,7 @@ impl crate::Data {
                     if colloscopes::validate_group_list_placements(
                         *group_list_id,
                         placements,
-                        &old_group_list.params,
+                        old_group_list.params(),
                         filling,
                         &self.inner_data.params.students,
                     )
@@ -652,11 +774,6 @@ impl crate::Data {
                         ));
                     }
                 }
-
-                let new_group_list = group_lists::GroupList {
-                    params: old_group_list.params.clone(),
-                    filling: filling.clone(),
-                };
 
                 self.inner_data
                     .params
@@ -670,9 +787,10 @@ impl crate::Data {
                     .insert(*group_list_id, new_group_list)
                     .expect("Group list ID was validated above");
 
+                let (_old_params, old_filling) = old_group_list.into_parts();
                 Ok(AnnotatedGroupListOp::SetFilling(
                     *group_list_id,
-                    old_group_list.filling,
+                    old_filling,
                 ))
             }
             AnnotatedGroupListOp::AssignToSubject(period_id, subject_id, group_list_id) => {
@@ -706,7 +824,7 @@ impl crate::Data {
                         else {
                             return Err(GroupListError::InvalidGroupListId(*id));
                         };
-                        group_list.params.group_names.len() as u32
+                        group_list.params().group_names.len() as u32
                     }
                     None => 0,
                 };
@@ -756,11 +874,10 @@ impl crate::Data {
                 {
                     return Err(GroupListPrecheckError::GroupListIdAlreadyExists(*new_id));
                 };
-                let new_group_list = group_lists::GroupList {
-                    params: params.clone(),
-                    filling: filling.clone(),
-                };
-                // stripped: validate_group_list
+                // force builds unchecked: no value-internal validation (fixes
+                // nothing) and no student-existence check.
+                let new_group_list =
+                    group_lists::GroupList::from_parts_unchecked(params.clone(), filling.clone());
 
                 self.inner_data
                     .params
@@ -778,7 +895,7 @@ impl crate::Data {
                 };
 
                 // Empty-first protocol guard (kept): filling must be empty.
-                match &old_group_list.filling {
+                match old_group_list.filling() {
                     group_lists::GroupListFilling::Prefilled { groups } => {
                         if groups.iter().any(|g| !g.students.is_empty()) {
                             return Err(GroupListPrecheckError::RemainingFilling);
@@ -802,11 +919,8 @@ impl crate::Data {
                     .remove(id)
                     .expect("Group list ID was checked above");
 
-                Ok(AnnotatedGroupListOp::Add(
-                    *id,
-                    old_group_list.params,
-                    old_group_list.filling,
-                ))
+                let (old_params, old_filling) = old_group_list.into_parts();
+                Ok(AnnotatedGroupListOp::Add(*id, old_params, old_filling))
             }
             AnnotatedGroupListOp::Update(group_list_id, new_params) => {
                 let Some(old_group_list) = self
@@ -824,14 +938,14 @@ impl crate::Data {
 
                 // Atomically adjust filling when size changes. The
                 // NonEmptyGroupsWhenReducing protocol guard is kept.
-                let new_filling = match &old_group_list.filling {
+                let new_filling = match old_group_list.filling() {
                     group_lists::GroupListFilling::Automatic { excluded_students } => {
                         group_lists::GroupListFilling::Automatic {
                             excluded_students: excluded_students.clone(),
                         }
                     }
                     group_lists::GroupListFilling::Prefilled { groups: old_groups } => {
-                        let old_count = old_group_list.params.group_names.len();
+                        let old_count = old_group_list.params().group_names.len();
                         let new_count = new_params.group_names.len();
 
                         if new_count < old_count {
@@ -861,10 +975,8 @@ impl crate::Data {
                     }
                 };
 
-                let new_group_list = group_lists::GroupList {
-                    params: new_params.clone(),
-                    filling: new_filling,
-                };
+                let new_group_list =
+                    group_lists::GroupList::from_parts_unchecked(new_params.clone(), new_filling);
 
                 // stripped: validate_group_list
 
@@ -876,10 +988,8 @@ impl crate::Data {
                     .insert(*group_list_id, new_group_list)
                     .expect("Group list ID was checked above");
 
-                Ok(AnnotatedGroupListOp::Update(
-                    *group_list_id,
-                    old_group_list.params,
-                ))
+                let (old_params, _old_filling) = old_group_list.into_parts();
+                Ok(AnnotatedGroupListOp::Update(*group_list_id, old_params))
             }
             AnnotatedGroupListOp::SetFilling(group_list_id, filling) => {
                 let Some(old_group_list) = self
@@ -895,7 +1005,7 @@ impl crate::Data {
                 // Payload-shape carve-out (kept, dual-listed): prefilled groups
                 // count must match group_names count.
                 if let group_lists::GroupListFilling::Prefilled { groups } = filling {
-                    let expected = old_group_list.params.group_names.len();
+                    let expected = old_group_list.params().group_names.len();
                     let actual = groups.len();
                     if actual != expected {
                         return Err(GroupListPrecheckError::PrefillGroupCountMismatch {
@@ -908,10 +1018,10 @@ impl crate::Data {
                 // stripped: prefill-transition colloscope guards
                 // (NonEmptyColloscopeGroupListWhenPrefilling / placement compat)
 
-                let new_group_list = group_lists::GroupList {
-                    params: old_group_list.params.clone(),
-                    filling: filling.clone(),
-                };
+                let new_group_list = group_lists::GroupList::from_parts_unchecked(
+                    old_group_list.params().clone(),
+                    filling.clone(),
+                );
 
                 // stripped: validate_group_list
 
@@ -923,9 +1033,10 @@ impl crate::Data {
                     .insert(*group_list_id, new_group_list)
                     .expect("Group list ID was checked above");
 
+                let (_old_params, old_filling) = old_group_list.into_parts();
                 Ok(AnnotatedGroupListOp::SetFilling(
                     *group_list_id,
-                    old_group_list.filling,
+                    old_filling,
                 ))
             }
             AnnotatedGroupListOp::AssignToSubject(period_id, subject_id, group_list_id) => {

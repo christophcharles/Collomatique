@@ -308,7 +308,7 @@ impl Display {
                                             *num,
                                             match group_list {
                                                 Some(list) => list
-                                                    .params
+                                                    .params()
                                                     .group_names
                                                     .get(*num as usize)
                                                     .cloned()

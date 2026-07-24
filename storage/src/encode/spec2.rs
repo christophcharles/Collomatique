@@ -400,7 +400,7 @@ fn build_group_lists(
             .group_list_map
             .iter()
             .map(|(group_list_id, group_list)| {
-                let filling = match &group_list.filling {
+                let filling = match group_list.filling() {
                     mem::group_lists::GroupListFilling::Prefilled { groups } => {
                         format::group_lists::Filling::Prefilled(format::group_lists::Prefilled {
                             groups: groups
@@ -419,9 +419,9 @@ fn build_group_lists(
                 };
                 format::group_lists::GroupList {
                     id: group_list_id.inner(),
-                    name: group_list.params.name.clone(),
-                    students_per_group: range(&group_list.params.students_per_group),
-                    group_names: group_list.params.group_names.clone(),
+                    name: group_list.params().name.clone(),
+                    students_per_group: range(&group_list.params().students_per_group),
+                    group_names: group_list.params().group_names.clone(),
                     filling,
                 }
             })

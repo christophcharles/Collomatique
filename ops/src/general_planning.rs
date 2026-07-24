@@ -142,7 +142,7 @@ impl GeneralPlanningUpdateWarning {
                 Some(format!(
                     "Perte de l'association de la matière \"{}\" à la liste de groupe \"{}\" pour la période {}",
                     subject.parameters.name,
-                    group_list.params.name,
+                    group_list.params().name,
                     period_num + 1
                 ))
             }

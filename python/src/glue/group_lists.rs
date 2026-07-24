@@ -71,8 +71,8 @@ impl GroupList {
 impl From<collomatique_state_colloscopes::group_lists::GroupList> for GroupList {
     fn from(value: collomatique_state_colloscopes::group_lists::GroupList) -> Self {
         GroupList {
-            parameters: value.params.into(),
-            filling: value.filling.into(),
+            parameters: value.params().clone().into(),
+            filling: value.filling().clone().into(),
         }
     }
 }

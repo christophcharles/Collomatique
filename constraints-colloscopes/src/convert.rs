@@ -70,7 +70,11 @@ pub fn build_complete_config(env: &Parameters, colloscope: &Colloscope) -> Confi
             continue;
         }
         for student_id in env.students.student_map.keys() {
-            if group_list.filling.excluded_students().contains(&student_id) {
+            if group_list
+                .filling()
+                .excluded_students()
+                .contains(&student_id)
+            {
                 continue;
             }
             let var = Var::StudentGroup {
@@ -125,7 +129,7 @@ pub fn build_complete_config(env: &Parameters, colloscope: &Colloscope) -> Confi
                     .expect("week id is valid");
                 let assigned = colloscope.interrogation(*slot_id, week_id);
 
-                for group_num in 0..group_list.params.group_names.len() {
+                for group_num in 0..group_list.params().group_names.len() {
                     if assigned.is_some_and(|groups| groups.contains(&(group_num as u32))) {
                         continue;
                     }

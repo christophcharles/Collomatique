@@ -122,7 +122,7 @@ impl Dialog {
             .group_list_map
             .values()
             .filter(|group_list| !group_list.is_prefilled())
-            .map(|group_list| group_list.params.name.clone())
+            .map(|group_list| group_list.params().name.clone())
             .collect()
     }
 

@@ -30,7 +30,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                 };
                 let (period, _) = week_to_period_id(env, week).unwrap();
 
-                match &gl.filling {
+                match gl.filling() {
                     GroupListFilling::Prefilled { groups } => {
                         let enrolled = env.assignments.students(period, subject_id);
 

@@ -18,7 +18,7 @@ pub struct GroupNum {
 impl GroupNum {
     pub fn new(env: &Parameters, group_list: GroupListId, index: usize) -> Option<GroupNum> {
         let gl = env.group_lists.group_list_map.get(&group_list)?;
-        let count = gl.params.group_names.len();
+        let count = gl.params().group_names.len();
         if index >= count {
             return None;
         }
@@ -61,7 +61,7 @@ impl GroupNum {
             .group_lists
             .group_list_map
             .get(&group_list)
-            .map(|gl| gl.params.group_names.len())
+            .map(|gl| gl.params().group_names.len())
             .unwrap_or(0);
         let last_group = count.saturating_sub(1);
         (0..count).map(move |i| GroupNum {

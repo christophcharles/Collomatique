@@ -79,7 +79,9 @@ impl StudentsUpdateWarning {
                 };
                 Some(format!(
                     "Perte de l'exclusion de {} {} de la liste de groupes \"{}\"",
-                    student.desc.firstname, student.desc.surname, group_list.params.name,
+                    student.desc.firstname,
+                    student.desc.surname,
+                    group_list.params().name,
                 ))
             }
             Self::LoosePrefilledGroup(student_id, group_list_id) => {
@@ -105,7 +107,9 @@ impl StudentsUpdateWarning {
                 };
                 Some(format!(
                     "Perte du préremplissage de la liste de groupes \"{}\" avec {} {}",
-                    group_list.params.name, student.desc.firstname, student.desc.surname,
+                    group_list.params().name,
+                    student.desc.firstname,
+                    student.desc.surname,
                 ))
             }
             StudentsUpdateWarning::LooseLimitsForStudent(student_id) => {
@@ -147,7 +151,9 @@ impl StudentsUpdateWarning {
                 };
                 Some(format!(
                     "Perte de l'attribution de {} {} dans la liste de groupes \"{}\" dans le colloscope",
-                    student.desc.firstname, student.desc.surname, group_list.params.name,
+                    student.desc.firstname,
+                    student.desc.surname,
+                    group_list.params().name,
                 ))
             }
         }
@@ -248,9 +254,9 @@ impl StudentsUpdateOp {
                     .iter()
                 {
                     let group_list_id = &group_list_id;
-                    match &group_list.filling {
+                    match group_list.filling() {
                         collomatique_state_colloscopes::group_lists::GroupListFilling::Prefilled { groups } => {
-                            if group_list.filling.contains_student(*student_id) {
+                            if group_list.filling().contains_student(*student_id) {
                                 let new_groups: Vec<_> = groups.iter().map(
                                     |g| collomatique_state_colloscopes::group_lists::PrefilledGroup {
                                         students: g.students.iter().copied().filter(|id| *id != *student_id).collect(),

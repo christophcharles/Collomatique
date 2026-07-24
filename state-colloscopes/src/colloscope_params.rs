@@ -679,19 +679,13 @@ impl Parameters {
     fn validate_group_list_filling_internal(
         filling: &group_lists::GroupListFilling,
         students: &students::Students,
-        group_names_len: usize,
     ) -> Result<(), GroupListError> {
+        // The value-internal facts (prefill count matches `group_names`, no
+        // duplicated student) are now enforced by `GroupList::new`, so a stored
+        // group list cannot violate them. Only the state-dependent fact —
+        // student existence — is left to check here.
         match filling {
             group_lists::GroupListFilling::Prefilled { groups } => {
-                if groups.len() != group_names_len {
-                    return Err(GroupListError::PrefillGroupCountMismatch {
-                        expected: group_names_len,
-                        actual: groups.len(),
-                    });
-                }
-                if !filling.check_duplicated_student() {
-                    return Err(GroupListError::DuplicatedStudentInPrefilledGroups);
-                }
                 for group in groups {
                     for student_id in &group.students {
                         if !students.student_map.contains(student_id) {
@@ -718,11 +712,7 @@ impl Parameters {
         group_list: &group_lists::GroupList,
         students: &students::Students,
     ) -> Result<(), GroupListError> {
-        Self::validate_group_list_filling_internal(
-            &group_list.filling,
-            students,
-            group_list.params.group_names.len(),
-        )?;
+        Self::validate_group_list_filling_internal(group_list.filling(), students)?;
         Ok(())
     }
 

@@ -178,7 +178,7 @@ impl Colloscope {
                         .group_list_map
                         .get(group_list_id)
                         .expect("association references a live group list")
-                        .params
+                        .params()
                         .group_names
                         .len() as u32
                 })
@@ -211,8 +211,8 @@ impl Colloscope {
             validate_group_list_placements(
                 group_list_id,
                 placements,
-                &params_group_list.params,
-                &params_group_list.filling,
+                params_group_list.params(),
+                params_group_list.filling(),
                 &params.students,
             )?;
         }
@@ -366,8 +366,8 @@ impl crate::Data {
                 validate_group_list_placements(
                     *group_list_id,
                     placements,
-                    &params_group_list.params,
-                    &params_group_list.filling,
+                    params_group_list.params(),
+                    params_group_list.filling(),
                     &self.inner_data.params.students,
                 )?;
 
@@ -429,7 +429,7 @@ impl crate::Data {
                             .group_list_map
                             .get(group_list_id)
                             .expect("association references a live group list")
-                            .params
+                            .params()
                             .group_names
                             .len() as u32
                     })

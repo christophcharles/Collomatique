@@ -135,13 +135,13 @@ impl crate::Data {
                 for (group_list_id, group_list) in
                     self.inner_data.params.group_lists.group_list_map.iter()
                 {
-                    if group_list.filling.excluded_students().contains(id) {
+                    if group_list.filling().excluded_students().contains(id) {
                         return Err(StudentError::StudentIsStillExcludedByGroupList(
                             *id,
                             group_list_id,
                         ));
                     }
-                    if group_list.filling.contains_student(*id) {
+                    if group_list.filling().contains_student(*id) {
                         return Err(StudentError::StudentIsStillReferencedByPrefilledGroupList(
                             *id,
                             group_list_id,

@@ -424,7 +424,7 @@ fn walk_group_lists(params: &Parameters, v: &mut impl RefVisitor) {
         // A group list value is exactly one filling variant, so pre-matching once
         // picks the site constructor soundly (the two student sites are
         // distinguished by variant, not by which student is referenced).
-        let site = match &gl.filling {
+        let site = match gl.filling() {
             GroupListFilling::Prefilled { .. } => StudentRefSite::GroupListPrefilledStudent(gl_id),
             GroupListFilling::Automatic { .. } => StudentRefSite::GroupListExcludedStudent(gl_id),
         };

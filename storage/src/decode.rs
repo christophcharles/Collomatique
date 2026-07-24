@@ -52,6 +52,10 @@ pub enum DecodeError {
     InvalidInterrogationCell { slot_id: u64, week: u32 },
     #[error("The colloscope fills group list id {0} which is not an automatic group list")]
     InvalidColloscopeGroupList(u64),
+    #[error(
+        "Group list id {0} has an internally inconsistent filling (prefill group count or duplicated student)"
+    )]
+    InconsistentGroupList(u64),
     #[error("generating new IDs is not secure, half the usable IDs have been used already")]
     EndOfTheUniverse,
     #[error("Duplicated ID")]

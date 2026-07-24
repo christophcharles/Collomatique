@@ -33,11 +33,11 @@ pub enum EntryOutput {
 
 impl Entry {
     fn generate_list_name(&self) -> String {
-        self.data.group_list.params.name.clone()
+        self.data.group_list.params().name.clone()
     }
 
     fn generate_students_per_group_text(&self) -> String {
-        let range = &self.data.group_list.params.students_per_group;
+        let range = &self.data.group_list.params().students_per_group;
         if range.start() == range.end() {
             format!("<b>Élèves par groupe :</b> {}", range.start())
         } else {
@@ -52,7 +52,7 @@ impl Entry {
     fn generate_group_count_text(&self) -> String {
         format!(
             "<b>Nombre de groupes :</b> {}",
-            self.data.group_list.params.group_names.len()
+            self.data.group_list.params().group_names.len()
         )
     }
 }
