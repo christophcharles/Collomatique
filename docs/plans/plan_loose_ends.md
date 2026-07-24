@@ -41,7 +41,7 @@ Edit tool only, no sed.
 
 ## Part P — Periods/weeks (3 commits)
 
-### Commit P1 — field reshape inside `periods.rs` (no behavior change)
+### Commit P1 — field reshape inside `periods.rs` (no behavior change) — DONE (5b416763)
 
 `state-colloscopes/src/periods.rs`:
 
@@ -117,7 +117,7 @@ pub struct Periods {
 - Tests: existing suites + differential fuzz (100 seeds) — must be green with zero
   behavioral diff (guard still in place).
 
-### Commit P2 — drop `PeriodStillHasWeeks` from the force path (behavioral)
+### Commit P2 — drop `PeriodStillHasWeeks` from the force path (behavioral) — DONE (af543578)
 
 - `periods.rs`: delete `PeriodPrecheckError::PeriodStillHasWeeks` (`:517-519`) and the
   guard in `force_apply_period` Remove (`:879-889`). **Checked `apply_period` keeps its
@@ -142,7 +142,7 @@ pub struct Periods {
 - Gate: differential fuzz 100 seeds green; check the honesty guards still hold
   (≥25% broken landings, every kind lands broken once).
 
-### Commit P3 — module split: `periods.rs` + new `weeks.rs` (mechanical)
+### Commit P3 — module split: `periods.rs` + new `weeks.rs` (mechanical) — DONE (split into 8 green commits P3.1–P3.8, e66f62fe..286c242f)
 
 New `state-colloscopes/src/weeks.rs`, twin of `slots.rs`:
 
