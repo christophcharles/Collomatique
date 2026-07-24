@@ -11,6 +11,7 @@ pub struct Dialog {
     should_redraw: bool,
     student_data: collomatique_state_colloscopes::students::Student,
     periods: collomatique_state_colloscopes::periods::Periods,
+    weeks: collomatique_state_colloscopes::weeks::Weeks,
     period_entries: FactoryVecDeque<PeriodEntry>,
 }
 
@@ -18,6 +19,7 @@ pub struct Dialog {
 pub enum DialogInput {
     Show(
         collomatique_state_colloscopes::periods::Periods,
+        collomatique_state_colloscopes::weeks::Weeks,
         collomatique_state_colloscopes::students::Student,
     ),
     Cancel,
@@ -166,6 +168,7 @@ impl SimpleComponent for Dialog {
     ) -> ComponentParts<Self> {
         let student_data = collomatique_state_colloscopes::students::Student::default();
         let periods = collomatique_state_colloscopes::periods::Periods::default();
+        let weeks = collomatique_state_colloscopes::weeks::Weeks::default();
 
         let period_entries = FactoryVecDeque::builder()
             .launch(adw::PreferencesGroup::default())
@@ -180,6 +183,7 @@ impl SimpleComponent for Dialog {
             should_redraw: false,
             student_data,
             periods,
+            weeks,
             period_entries,
         };
 
@@ -192,20 +196,18 @@ impl SimpleComponent for Dialog {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         self.should_redraw = false;
         match msg {
-            DialogInput::Show(periods, student_data) => {
+            DialogInput::Show(periods, weeks, student_data) => {
                 self.hidden = false;
                 self.should_redraw = true;
                 self.periods = periods;
+                self.weeks = weeks;
                 self.student_data = student_data;
 
                 let transformed_data: Vec<_> = self
                     .periods
                     .period_ids()
                     .scan(0usize, |current_week, id| {
-                        let week_count = self
-                            .periods
-                            .week_count_of(id)
-                            .expect("period id from period_ids is valid");
+                        let week_count = self.weeks.week_count_for_period(id).unwrap_or(0);
                         let new_period = PeriodData {
                             global_first_week: self.periods.first_week.clone(),
                             first_week_num: *current_week,

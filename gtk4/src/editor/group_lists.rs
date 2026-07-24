@@ -16,6 +16,7 @@ mod prefill_dialog;
 pub enum GroupListsInput {
     Update(
         collomatique_state_colloscopes::periods::Periods,
+        collomatique_state_colloscopes::weeks::Weeks,
         collomatique_state_colloscopes::subjects::Subjects,
         collomatique_state_colloscopes::students::Students,
         collomatique_state_colloscopes::group_lists::GroupLists,
@@ -37,6 +38,7 @@ enum GroupListParamsSelectionReason {
 
 pub struct GroupLists {
     periods: collomatique_state_colloscopes::periods::Periods,
+    weeks: collomatique_state_colloscopes::weeks::Weeks,
     subjects: collomatique_state_colloscopes::subjects::Subjects,
     students: collomatique_state_colloscopes::students::Students,
     group_lists: collomatique_state_colloscopes::group_lists::GroupLists,
@@ -185,6 +187,7 @@ impl Component for GroupLists {
 
         let model = GroupLists {
             periods: collomatique_state_colloscopes::periods::Periods::default(),
+            weeks: collomatique_state_colloscopes::weeks::Weeks::default(),
             subjects: collomatique_state_colloscopes::subjects::Subjects::default(),
             students: collomatique_state_colloscopes::students::Students::default(),
             group_lists: collomatique_state_colloscopes::group_lists::GroupLists::default(),
@@ -205,8 +208,9 @@ impl Component for GroupLists {
 
     fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match message {
-            GroupListsInput::Update(periods, subjects, students, group_lists) => {
+            GroupListsInput::Update(periods, weeks, subjects, students, group_lists) => {
                 self.periods = periods;
+                self.weeks = weeks;
                 self.subjects = subjects;
                 self.students = students;
                 self.group_lists = group_lists;
@@ -324,10 +328,7 @@ impl GroupLists {
             .period_ids()
             .enumerate()
             .scan(0usize, |acc, (num, id)| {
-                let period_len = self
-                    .periods
-                    .week_count_of(id)
-                    .expect("period id from period_ids is valid");
+                let period_len = self.weeks.week_count_for_period(id).unwrap_or(0);
                 let id = &id;
                 let out = associations_display::PeriodEntryData {
                     period_id: *id,

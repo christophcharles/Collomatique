@@ -14,6 +14,7 @@ mod subjects_display;
 pub enum SubjectsInput {
     Update(
         collomatique_state_colloscopes::periods::Periods,
+        collomatique_state_colloscopes::weeks::Weeks,
         collomatique_state_colloscopes::subjects::Subjects,
     ),
     AddSubjectClicked,
@@ -35,6 +36,7 @@ enum SubjectParamsSelectionReason {
 
 pub struct Subjects {
     periods: collomatique_state_colloscopes::periods::Periods,
+    weeks: collomatique_state_colloscopes::weeks::Weeks,
     subjects: collomatique_state_colloscopes::subjects::Subjects,
     subjects_list: FactoryVecDeque<subjects_display::Entry>,
 
@@ -118,6 +120,7 @@ impl Component for Subjects {
 
         let model = Subjects {
             periods: collomatique_state_colloscopes::periods::Periods::default(),
+            weeks: collomatique_state_colloscopes::weeks::Weeks::default(),
             subjects: collomatique_state_colloscopes::subjects::Subjects::default(),
             subjects_list,
             subject_params_selection_reason: SubjectParamsSelectionReason::New,
@@ -131,8 +134,9 @@ impl Component for Subjects {
 
     fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match message {
-            SubjectsInput::Update(new_periods, new_subjects) => {
+            SubjectsInput::Update(new_periods, new_weeks, new_subjects) => {
                 self.periods = new_periods;
+                self.weeks = new_weeks;
                 self.subjects = new_subjects;
 
                 crate::tools::factories::update_vec_deque(
@@ -147,10 +151,7 @@ impl Component for Subjects {
                                 .periods
                                 .period_ids()
                                 .map(|id| subjects_display::PeriodData {
-                                    week_count: self
-                                        .periods
-                                        .week_count_of(id)
-                                        .expect("period id from period_ids is valid"),
+                                    week_count: self.weeks.week_count_for_period(id).unwrap_or(0),
                                     status: !desc.excluded_periods.contains(&id),
                                 })
                                 .collect(),

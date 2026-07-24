@@ -11,6 +11,7 @@ mod assignments_display;
 pub enum AssignmentsInput {
     Update(
         collomatique_state_colloscopes::periods::Periods,
+        collomatique_state_colloscopes::weeks::Weeks,
         collomatique_state_colloscopes::subjects::Subjects,
         collomatique_state_colloscopes::students::Students,
         collomatique_state_colloscopes::assignments::Assignments,
@@ -31,6 +32,7 @@ pub enum AssignmentsInput {
 
 pub struct Assignments {
     periods: collomatique_state_colloscopes::periods::Periods,
+    weeks: collomatique_state_colloscopes::weeks::Weeks,
     subjects: collomatique_state_colloscopes::subjects::Subjects,
     students: collomatique_state_colloscopes::students::Students,
     assignments: collomatique_state_colloscopes::assignments::Assignments,
@@ -99,6 +101,7 @@ impl Component for Assignments {
 
         let model = Assignments {
             periods: collomatique_state_colloscopes::periods::Periods::default(),
+            weeks: collomatique_state_colloscopes::weeks::Weeks::default(),
             subjects: collomatique_state_colloscopes::subjects::Subjects::default(),
             students: collomatique_state_colloscopes::students::Students::default(),
             assignments: collomatique_state_colloscopes::assignments::Assignments::default(),
@@ -114,8 +117,15 @@ impl Component for Assignments {
 
     fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match message {
-            AssignmentsInput::Update(new_periods, new_subjects, new_students, new_assignments) => {
+            AssignmentsInput::Update(
+                new_periods,
+                new_weeks,
+                new_subjects,
+                new_students,
+                new_assignments,
+            ) => {
                 self.periods = new_periods;
+                self.weeks = new_weeks;
                 self.subjects = new_subjects;
                 self.students = new_students;
                 self.assignments = new_assignments;
@@ -151,10 +161,7 @@ impl Assignments {
             .periods
             .period_ids()
             .scan(0usize, |acc, id| {
-                let period_len = self
-                    .periods
-                    .week_count_of(id)
-                    .expect("period id from period_ids is valid");
+                let period_len = self.weeks.week_count_for_period(id).unwrap_or(0);
                 let id = &id;
                 let current_first_week = *acc;
                 *acc += period_len;

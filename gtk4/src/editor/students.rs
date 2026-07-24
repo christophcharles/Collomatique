@@ -12,6 +12,7 @@ mod dialog;
 pub enum StudentsInput {
     Update(
         collomatique_state_colloscopes::periods::Periods,
+        collomatique_state_colloscopes::weeks::Weeks,
         collomatique_state_colloscopes::students::Students,
     ),
     EditStudentClicked(collomatique_state_colloscopes::StudentId),
@@ -38,6 +39,7 @@ use crate::widgets::contact_list::ContactInfo;
 
 pub struct Students {
     periods: collomatique_state_colloscopes::periods::Periods,
+    weeks: collomatique_state_colloscopes::weeks::Weeks,
     students: collomatique_state_colloscopes::students::Students,
 
     student_modification_reason: StudentModificationReason,
@@ -159,6 +161,7 @@ impl Component for Students {
             });
         let model = Students {
             periods: collomatique_state_colloscopes::periods::Periods::default(),
+            weeks: collomatique_state_colloscopes::weeks::Weeks::default(),
             students: collomatique_state_colloscopes::students::Students::default(),
             student_modification_reason: StudentModificationReason::New,
             current_filter: StudentFilter::NoFilter,
@@ -175,8 +178,9 @@ impl Component for Students {
 
     fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match message {
-            StudentsInput::Update(new_periods, new_students) => {
+            StudentsInput::Update(new_periods, new_weeks, new_students) => {
                 self.periods = new_periods;
+                self.weeks = new_weeks;
                 self.students = new_students;
                 self.fix_current_filter_if_necessary();
                 self.update_filter_droplist();
@@ -196,6 +200,7 @@ impl Component for Students {
                     .sender()
                     .send(dialog::DialogInput::Show(
                         self.periods.clone(),
+                        self.weeks.clone(),
                         student_data.clone(),
                     ))
                     .unwrap();
@@ -206,6 +211,7 @@ impl Component for Students {
                     .sender()
                     .send(dialog::DialogInput::Show(
                         self.periods.clone(),
+                        self.weeks.clone(),
                         collomatique_state_colloscopes::students::Student::default(),
                     ))
                     .unwrap();
@@ -261,10 +267,7 @@ impl Students {
 
         let mut first_week_num = 0usize;
         for (index, period_id) in self.periods.period_ids().enumerate() {
-            let period_len = self
-                .periods
-                .week_count_of(period_id)
-                .expect("period id from period_ids is valid");
+            let period_len = self.weeks.week_count_for_period(period_id).unwrap_or(0);
             list.push(super::generate_week_succession_title(
                 "La période",
                 &self.periods.first_week,

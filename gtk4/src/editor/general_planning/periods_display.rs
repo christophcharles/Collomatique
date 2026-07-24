@@ -8,7 +8,7 @@ use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque, RelmWidget
 pub struct EntryData {
     pub global_first_week: Option<collomatique_time::WeekStart>,
     pub first_week_num: usize,
-    pub desc: Vec<collomatique_state_colloscopes::periods::WeekDesc>,
+    pub desc: Vec<collomatique_state_colloscopes::weeks::WeekDesc>,
     pub period_id: collomatique_state_colloscopes::PeriodId,
 }
 
@@ -64,7 +64,7 @@ impl Entry {
         global_first_week: Option<collomatique_time::WeekStart>,
         first_week_in_period: usize,
         week_num_in_period: usize,
-        state: collomatique_state_colloscopes::periods::WeekDesc,
+        state: collomatique_state_colloscopes::weeks::WeekDesc,
     ) -> WeekData {
         WeekData {
             global_first_week,
@@ -246,7 +246,7 @@ pub struct WeekData {
     pub global_first_week: Option<collomatique_time::WeekStart>,
     pub first_week_in_period: usize,
     pub week_num_in_period: usize,
-    pub state: collomatique_state_colloscopes::periods::WeekDesc,
+    pub state: collomatique_state_colloscopes::weeks::WeekDesc,
 }
 
 #[derive(Debug)]

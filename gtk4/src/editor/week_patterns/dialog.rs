@@ -13,6 +13,7 @@ pub struct Dialog {
     hidden: bool,
     should_redraw: bool,
     periods: collomatique_state_colloscopes::periods::Periods,
+    weeks_state: collomatique_state_colloscopes::weeks::Weeks,
     /// The pattern's name being edited.
     name: String,
     /// The pattern edited positionally: one bit per week in global walk order,
@@ -26,6 +27,7 @@ pub struct Dialog {
 pub enum DialogInput {
     Show(
         collomatique_state_colloscopes::periods::Periods,
+        collomatique_state_colloscopes::weeks::Weeks,
         collomatique_state_colloscopes::week_patterns::WeekPattern,
     ),
     Cancel,
@@ -167,6 +169,7 @@ impl SimpleComponent for Dialog {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let periods = collomatique_state_colloscopes::periods::Periods::default();
+        let weeks_state = collomatique_state_colloscopes::weeks::Weeks::default();
 
         let period_entries = FactoryVecDeque::builder()
             .launch(gtk::Box::default())
@@ -180,6 +183,7 @@ impl SimpleComponent for Dialog {
             hidden: true,
             should_redraw: false,
             periods,
+            weeks_state,
             name: "Placeholder".into(),
             weeks: vec![],
             period_entries,
@@ -209,19 +213,20 @@ impl SimpleComponent for Dialog {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         self.should_redraw = false;
         match msg {
-            DialogInput::Show(periods, week_pattern) => {
+            DialogInput::Show(periods, weeks_state, week_pattern) => {
                 self.hidden = false;
                 self.should_redraw = true;
                 // Project the sparse core pattern into positional bits, in the
                 // global walk order the UI is indexed by.
-                self.weeks = periods
-                    .walk()
+                self.weeks = weeks_state
+                    .walk(&periods)
                     .map(|(_period_id, week_id, _week)| {
                         !week_pattern.excluded_weeks.contains(&week_id)
                     })
                     .collect();
                 self.name = week_pattern.name;
                 self.periods = periods;
+                self.weeks_state = weeks_state;
 
                 self.update_factory();
             }
@@ -232,8 +237,8 @@ impl SimpleComponent for Dialog {
                 self.hidden = true;
                 // Fold the positional bits back into the sparse exclusion set.
                 let excluded_weeks = self
-                    .periods
-                    .walk()
+                    .weeks_state
+                    .walk(&self.periods)
                     .zip(self.weeks.iter())
                     .filter_map(|((_period_id, week_id, _week), active)| {
                         (!*active).then_some(week_id)
@@ -340,9 +345,9 @@ impl SimpleComponent for Dialog {
 }
 
 impl Dialog {
-    fn build_status_in_periods(&self) -> Vec<collomatique_state_colloscopes::periods::WeekDesc> {
+    fn build_status_in_periods(&self) -> Vec<collomatique_state_colloscopes::weeks::WeekDesc> {
         let mut output = vec![];
-        for (_id, _week_id, week) in self.periods.walk() {
+        for (_id, _week_id, week) in self.weeks_state.walk(&self.periods) {
             output.push(week.desc());
         }
         output
@@ -354,9 +359,9 @@ impl Dialog {
             .period_ids()
             .scan(0usize, |acc, id| {
                 let desc = self
-                    .periods
-                    .weeks_vec_of(id)
-                    .expect("period id from period_ids is valid");
+                    .weeks_state
+                    .weeks_desc_vec_for_period(id)
+                    .unwrap_or_default();
                 let current_first_week = *acc;
                 *acc += desc.len();
                 Some(PeriodData {

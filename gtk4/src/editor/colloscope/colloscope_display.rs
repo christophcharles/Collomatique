@@ -10,6 +10,7 @@ use std::collections::BTreeMap;
 pub enum DisplayInput {
     Update(
         collomatique_state_colloscopes::periods::Periods,
+        collomatique_state_colloscopes::weeks::Weeks,
         collomatique_state_colloscopes::subjects::Subjects,
         collomatique_state_colloscopes::slots::Slots,
         collomatique_state_colloscopes::teachers::Teachers,
@@ -43,6 +44,7 @@ enum DisplayIssue {
 
 pub struct Display {
     periods: collomatique_state_colloscopes::periods::Periods,
+    weeks: collomatique_state_colloscopes::weeks::Weeks,
     subjects: collomatique_state_colloscopes::subjects::Subjects,
     slots: collomatique_state_colloscopes::slots::Slots,
     teachers: collomatique_state_colloscopes::teachers::Teachers,
@@ -129,6 +131,7 @@ impl Component for Display {
 
         let model = Display {
             periods: collomatique_state_colloscopes::periods::Periods::default(),
+            weeks: collomatique_state_colloscopes::weeks::Weeks::default(),
             subjects: collomatique_state_colloscopes::subjects::Subjects::default(),
             slots: collomatique_state_colloscopes::slots::Slots::default(),
             teachers: collomatique_state_colloscopes::teachers::Teachers::default(),
@@ -151,6 +154,7 @@ impl Component for Display {
         match message {
             DisplayInput::Update(
                 periods,
+                weeks,
                 subjects,
                 slots,
                 teachers,
@@ -160,6 +164,7 @@ impl Component for Display {
                 colloscope,
             ) => {
                 self.periods = periods;
+                self.weeks = weeks;
                 self.subjects = subjects;
                 self.slots = slots;
                 self.teachers = teachers;
@@ -186,7 +191,7 @@ impl Display {
     fn update_display_issue(&mut self) {
         self.issue = if self.periods.is_empty() {
             Some(DisplayIssue::NoPeriods)
-        } else if self.periods.count_weeks() == 0 {
+        } else if self.weeks.count_weeks() == 0 {
             Some(DisplayIssue::NoWeeks)
         } else if self.subjects.ordered_subject_list.is_empty() {
             Some(DisplayIssue::NoSubjects)
@@ -213,16 +218,14 @@ impl Display {
             .map(|period_id| {
                 (
                     period_id,
-                    self.periods
-                        .week_count_of(period_id)
-                        .expect("period id from period_ids is valid"),
+                    self.weeks.week_count_for_period(period_id).unwrap_or(0),
                 )
             })
             .collect();
         for (period_id, period_len) in period_specs {
             for week_in_period in 0..period_len {
                 let week_id = self
-                    .periods
+                    .weeks
                     .week_id_at(period_id, week_in_period)
                     .expect("position within the period is valid");
                 self.column_view.append_column(WeekColumn {
@@ -249,10 +252,7 @@ impl Display {
                 let mut period_map = BTreeMap::new();
 
                 for period_id in self.periods.period_ids() {
-                    let period_len = self
-                        .periods
-                        .week_count_of(period_id)
-                        .expect("period id from period_ids is valid");
+                    let period_len = self.weeks.week_count_for_period(period_id).unwrap_or(0);
 
                     // The slot runs in this period iff its subject does — not
                     // excluded and has interrogations. Otherwise every cell is
@@ -283,13 +283,13 @@ impl Display {
                     let slots = (0..period_len)
                         .map(|week_in_period| {
                             let week_id = self
-                                .periods
+                                .weeks
                                 .week_id_at(period_id, week_in_period)
                                 .expect("position within the period is valid");
                             // Impossible week (pattern-excluded or no interrogations)
                             // → no cell, matching the old dense `None`.
                             if !self.week_patterns.is_week_active(
-                                self.periods.weeks(),
+                                &self.weeks,
                                 week_id,
                                 slot.week_pattern,
                             ) {

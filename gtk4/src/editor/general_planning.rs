@@ -15,7 +15,10 @@ mod select_start_date;
 
 #[derive(Debug)]
 pub enum GeneralPlanningInput {
-    Update(collomatique_state_colloscopes::periods::Periods),
+    Update(
+        collomatique_state_colloscopes::periods::Periods,
+        collomatique_state_colloscopes::weeks::Weeks,
+    ),
 
     DeleteFirstWeekClicked,
     EditFirstWeekClicked,
@@ -42,6 +45,7 @@ enum WeekCountSelectionReason {
 
 pub struct GeneralPlanning {
     periods: collomatique_state_colloscopes::periods::Periods,
+    weeks: collomatique_state_colloscopes::weeks::Weeks,
     week_selection_reason: WeekCountSelectionReason,
     periods_list: FactoryVecDeque<periods_display::Entry>,
 
@@ -68,7 +72,7 @@ impl GeneralPlanning {
 
     fn count_interrogation_weeks(&self) -> usize {
         let mut count = 0usize;
-        for (_id, _week_id, v) in self.periods.walk() {
+        for (_id, _week_id, v) in self.weeks.walk(&self.periods) {
             if v.interrogations {
                 count += 1;
             }
@@ -216,6 +220,7 @@ impl Component for GeneralPlanning {
             });
         let model = GeneralPlanning {
             periods: collomatique_state_colloscopes::periods::Periods::default(),
+            weeks: collomatique_state_colloscopes::weeks::Weeks::default(),
             week_selection_reason: WeekCountSelectionReason::New,
             periods_list,
             select_start_date_dialog,
@@ -232,17 +237,15 @@ impl Component for GeneralPlanning {
 
     fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match message {
-            GeneralPlanningInput::Update(new_periods) => {
+            GeneralPlanningInput::Update(new_periods, new_weeks) => {
                 self.periods = new_periods;
+                self.weeks = new_weeks;
 
                 let new_data = self
                     .periods
                     .period_ids()
                     .scan(0usize, |acc, id| {
-                        let desc = self
-                            .periods
-                            .weeks_vec_of(id)
-                            .expect("period id from period_ids is valid");
+                        let desc = self.weeks.weeks_desc_vec_for_period(id).unwrap_or_default();
                         let current_first_week = *acc;
                         *acc += desc.len();
                         Some(periods_display::EntryData {
@@ -303,8 +306,7 @@ impl Component for GeneralPlanning {
                 .unwrap(),
             GeneralPlanningInput::EditPeriodClicked(period_id) => {
                 self.week_selection_reason = WeekCountSelectionReason::Edit(period_id);
-                let current_week_count =
-                    self.periods.week_count_of(period_id).expect("valid period");
+                let current_week_count = self.weeks.week_count_for_period(period_id).unwrap_or(0);
                 self.period_duration_dialog
                     .sender()
                     .send(period_duration::DialogInput::Show(current_week_count))
@@ -312,8 +314,7 @@ impl Component for GeneralPlanning {
             }
             GeneralPlanningInput::CutPeriodClicked(period_id) => {
                 self.week_selection_reason = WeekCountSelectionReason::Cut(period_id);
-                let current_week_count =
-                    self.periods.week_count_of(period_id).expect("valid period");
+                let current_week_count = self.weeks.week_count_for_period(period_id).unwrap_or(0);
                 self.period_cut_dialog
                     .sender()
                     .send(period_cut::DialogInput::Show(current_week_count))
@@ -333,9 +334,11 @@ impl Component for GeneralPlanning {
             GeneralPlanningInput::EditAnnotationClicked(period_id, week_num) => {
                 self.week_being_annotated = Some((period_id, week_num));
                 let current_annotation = self
-                    .periods
-                    .weeks_of(period_id)
-                    .expect("Period ID should be valid")
+                    .weeks
+                    .weeks_for_period(period_id)
+                    .into_iter()
+                    .flatten()
+                    .map(|(_, w)| w)
                     .nth(week_num)
                     .expect("Week number should be valid")
                     .annotation

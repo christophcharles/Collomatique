@@ -323,12 +323,14 @@ impl EditorPanel {
             .sender()
             .send(general_planning::GeneralPlanningInput::Update(
                 self.data.get_data().get_inner_data().params.periods.clone(),
+                self.data.get_data().get_inner_data().params.weeks().clone(),
             ))
             .unwrap();
         self.subjects
             .sender()
             .send(subjects::SubjectsInput::Update(
                 self.data.get_data().get_inner_data().params.periods.clone(),
+                self.data.get_data().get_inner_data().params.weeks().clone(),
                 self.data
                     .get_data()
                     .get_inner_data()
@@ -358,6 +360,7 @@ impl EditorPanel {
             .sender()
             .send(students::StudentsInput::Update(
                 self.data.get_data().get_inner_data().params.periods.clone(),
+                self.data.get_data().get_inner_data().params.weeks().clone(),
                 self.data
                     .get_data()
                     .get_inner_data()
@@ -370,6 +373,7 @@ impl EditorPanel {
             .sender()
             .send(assignments::AssignmentsInput::Update(
                 self.data.get_data().get_inner_data().params.periods.clone(),
+                self.data.get_data().get_inner_data().params.weeks().clone(),
                 self.data
                     .get_data()
                     .get_inner_data()
@@ -394,6 +398,7 @@ impl EditorPanel {
             .sender()
             .send(week_patterns::WeekPatternsInput::Update(
                 self.data.get_data().get_inner_data().params.periods.clone(),
+                self.data.get_data().get_inner_data().params.weeks().clone(),
                 self.data
                     .get_data()
                     .get_inner_data()
@@ -496,6 +501,7 @@ impl EditorPanel {
             .sender()
             .send(group_lists::GroupListsInput::Update(
                 self.data.get_data().get_inner_data().params.periods.clone(),
+                self.data.get_data().get_inner_data().params.weeks().clone(),
                 self.data
                     .get_data()
                     .get_inner_data()
@@ -562,8 +568,7 @@ impl EditorPanel {
             .get_data()
             .get_inner_data()
             .params
-            .periods
-            .walk()
+            .walk_weeks()
             .filter_map(|(_, _, w)| w.annotation.as_ref().map(|a| a.to_string()))
             .collect();
         self.export_panel

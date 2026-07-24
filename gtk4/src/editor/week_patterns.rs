@@ -15,6 +15,7 @@ mod dialog;
 pub enum WeekPatternsInput {
     Update(
         collomatique_state_colloscopes::periods::Periods,
+        collomatique_state_colloscopes::weeks::Weeks,
         collomatique_state_colloscopes::week_patterns::WeekPatterns,
     ),
     EditWeekPatternClicked(collomatique_state_colloscopes::WeekPatternId),
@@ -31,6 +32,7 @@ enum WeekPatternModificationReason {
 
 pub struct WeekPatterns {
     periods: collomatique_state_colloscopes::periods::Periods,
+    weeks: collomatique_state_colloscopes::weeks::Weeks,
     week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatterns,
 
     week_pattern_modification_reason: WeekPatternModificationReason,
@@ -100,6 +102,7 @@ impl Component for WeekPatterns {
             });
         let model = WeekPatterns {
             periods: collomatique_state_colloscopes::periods::Periods::default(),
+            weeks: collomatique_state_colloscopes::weeks::Weeks::default(),
             week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatterns::default(),
             week_pattern_modification_reason: WeekPatternModificationReason::New,
             week_pattern_entries,
@@ -113,8 +116,9 @@ impl Component for WeekPatterns {
 
     fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match message {
-            WeekPatternsInput::Update(new_periods, new_week_patterns) => {
+            WeekPatternsInput::Update(new_periods, new_weeks, new_week_patterns) => {
                 self.periods = new_periods;
+                self.weeks = new_weeks;
                 self.week_patterns = new_week_patterns;
                 self.update_factory();
             }
@@ -134,6 +138,7 @@ impl Component for WeekPatterns {
                     .sender()
                     .send(dialog::DialogInput::Show(
                         self.periods.clone(),
+                        self.weeks.clone(),
                         week_pattern_data.clone(),
                     ))
                     .unwrap();
@@ -144,6 +149,7 @@ impl Component for WeekPatterns {
                     .sender()
                     .send(dialog::DialogInput::Show(
                         self.periods.clone(),
+                        self.weeks.clone(),
                         collomatique_state_colloscopes::week_patterns::WeekPattern {
                             name: "Nouveau modèle".into(),
                             excluded_weeks: std::collections::BTreeSet::new(),
