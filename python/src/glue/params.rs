@@ -53,8 +53,7 @@ impl TryFrom<collomatique_state_colloscopes::colloscope_params::Parameters> for 
         // schedule's week ids in global walk order; snapshot them before
         // `value.periods` is consumed.
         let week_ids: Vec<collomatique_state_colloscopes::WeekId> = value
-            .periods
-            .walk()
+            .walk_weeks()
             .map(|(_period_id, week_id, _week)| week_id)
             .collect();
         // The sparse core only stores non-empty assignment rows, but the
@@ -88,9 +87,9 @@ impl TryFrom<collomatique_state_colloscopes::colloscope_params::Parameters> for 
                 .map(|period_id| Period {
                     id: period_id.into(),
                     weeks_status: value
-                        .periods
-                        .weeks_vec_of(period_id)
-                        .expect("period id from period_ids is valid")
+                        .weeks()
+                        .weeks_desc_vec_for_period(period_id)
+                        .unwrap_or_default()
                         .into_iter()
                         .map(|x| x.into())
                         .collect(),

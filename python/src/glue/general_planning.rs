@@ -86,17 +86,17 @@ impl WeekDesc {
     }
 }
 
-impl From<WeekDesc> for collomatique_state_colloscopes::periods::WeekDesc {
-    fn from(value: WeekDesc) -> collomatique_state_colloscopes::periods::WeekDesc {
-        collomatique_state_colloscopes::periods::WeekDesc {
+impl From<WeekDesc> for collomatique_state_colloscopes::weeks::WeekDesc {
+    fn from(value: WeekDesc) -> collomatique_state_colloscopes::weeks::WeekDesc {
+        collomatique_state_colloscopes::weeks::WeekDesc {
             interrogations: value.interrogations,
             annotation: non_empty_string::NonEmptyString::new(value.annotation).ok(),
         }
     }
 }
 
-impl From<collomatique_state_colloscopes::periods::WeekDesc> for WeekDesc {
-    fn from(value: collomatique_state_colloscopes::periods::WeekDesc) -> WeekDesc {
+impl From<collomatique_state_colloscopes::weeks::WeekDesc> for WeekDesc {
+    fn from(value: collomatique_state_colloscopes::weeks::WeekDesc) -> WeekDesc {
         WeekDesc {
             interrogations: value.interrogations,
             annotation: value.annotation.map(|x| x.into_inner()).unwrap_or_default(),

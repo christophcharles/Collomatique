@@ -19,7 +19,6 @@ use collomatique_state_colloscopes::{
     ids::{PeriodId, SlotId, StudentId, SubjectId, TeacherId, WeekId, WeekPatternId},
     incompats::Incompatibility,
     pairings::{PairingRule, RulePart},
-    periods::WeekDesc,
     settings::{Limits, Settings},
     slot_pairings::{SlotPairingRule, SlotRulePart},
     slots::Slot,
@@ -28,6 +27,7 @@ use collomatique_state_colloscopes::{
     subjects::WeekBlock,
     teachers::Teacher,
     week_patterns::WeekPattern,
+    weeks::WeekDesc,
 };
 use collomatique_time::{NonZeroMinutes, SlotStart, WeekStart, Weekday, WholeMinuteTime};
 

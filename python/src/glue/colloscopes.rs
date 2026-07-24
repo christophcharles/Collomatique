@@ -44,9 +44,11 @@ impl Colloscope {
             .period_ids()
             .map(|period_id| {
                 let week_ids = params
-                    .periods
-                    .week_ids_of(period_id)
-                    .expect("period id from period_ids is valid")
+                    .weeks()
+                    .weeks_for_period(period_id)
+                    .into_iter()
+                    .flatten()
+                    .map(|(week_id, _week)| *week_id)
                     .collect::<Vec<_>>();
                 let mut slot_map = BTreeMap::new();
                 for (subject_id, subject) in params.subjects.ordered_subject_list.iter() {

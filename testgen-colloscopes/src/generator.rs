@@ -20,8 +20,8 @@ use collomatique_state_colloscopes::{
         GroupListId, Id, IncompatId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId,
         SubjectId, TeacherId, WeekId, WeekPatternId,
     },
-    periods::WeekDesc,
     students::Student,
+    weeks::WeekDesc,
 };
 
 use crate::synth;
@@ -99,7 +99,7 @@ impl Pools {
     fn extract(inner: &InnerData) -> Pools {
         let params = &inner.params;
         let period_ids: Vec<_> = params.periods.period_ids().collect();
-        let week_ids: Vec<_> = params.periods.week_ids().collect();
+        let week_ids: Vec<_> = params.week_ids().collect();
         let subject_ids: Vec<_> = params
             .subjects
             .ordered_subject_list
@@ -149,9 +149,11 @@ impl Pools {
         let mut colloscope_targets: Vec<(PeriodId, SlotId, Vec<usize>)> = Vec::new();
         for period_id in params.periods.period_ids() {
             let week_ids: Vec<WeekId> = params
-                .periods
-                .week_ids_of(period_id)
-                .expect("period id from period_ids is valid")
+                .weeks()
+                .weeks_for_period(period_id)
+                .into_iter()
+                .flatten()
+                .map(|(week_id, _week)| *week_id)
                 .collect();
             for (slot_id, _slot) in params.slots.all_slots() {
                 let weeks: Vec<usize> = week_ids
@@ -1042,7 +1044,7 @@ fn gen_colloscope(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invali
 
     let week_id = inner
         .params
-        .periods
+        .weeks()
         .week_id_at(*period_id, week_in_period)
         .expect("position within the period is valid");
     Op::Colloscope(ColloscopeOp::SetInterrogation(

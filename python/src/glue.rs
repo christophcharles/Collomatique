@@ -1378,8 +1378,7 @@ impl InternalFile {
             .get_data()
             .get_inner_data()
             .params
-            .periods
-            .walk()
+            .walk_weeks()
             .map(|(_period_id, week_id, _week)| week_id)
             .collect()
     }
