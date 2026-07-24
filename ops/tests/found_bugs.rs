@@ -12,8 +12,8 @@ use collomatique_state::{AppState, traits::Manager};
 use collomatique_state_colloscopes::{
     ColloscopeOp, Data, GroupListOp, NewId, NonEmptyRangeInclusive, Op, PeriodOp, SlotOp, Subject,
     SubjectInterrogationParameters, SubjectOp, SubjectParameters, SubjectPeriodicity, TeacherOp,
-    WeekOp, group_lists::GroupListParameters, ids::PeriodId, periods::WeekDesc, slots::Slot,
-    teachers::Teacher,
+    WeekOp, group_lists::GroupListParameters, ids::PeriodId, slots::Slot, teachers::Teacher,
+    weeks::WeekDesc,
 };
 use std::collections::BTreeSet;
 use std::num::NonZeroU32;
@@ -151,7 +151,7 @@ fn shrinking_a_period_cleans_colloscope_on_removed_weeks() {
         .get_data()
         .get_inner_data()
         .params
-        .periods
+        .weeks()
         .week_id_at(period_id, 2)
         .expect("period has a third week");
     let Ok(None) = app_state.apply(

@@ -484,7 +484,7 @@ impl SubjectsUpdateOp {
                             {
                                 let (row_period, _pos) = inner
                                     .params
-                                    .periods
+                                    .weeks()
                                     .week_position(week_id)
                                     .expect("week id from a live colloscope row is valid");
                                 if row_period != *period_id {

@@ -14,8 +14,8 @@ use collomatique_state::{AppState, traits::Manager};
 use collomatique_state_colloscopes::{
     ColloscopeOp, Data, GroupListOp, NewId, NonEmptyRangeInclusive, Op, PeriodOp, SlotOp, Subject,
     SubjectInterrogationParameters, SubjectOp, SubjectParameters, SubjectPeriodicity, TeacherOp,
-    WeekOp, WeekPatternOp, group_lists::GroupListParameters, ids::PeriodId, periods::WeekDesc,
-    slots::Slot, teachers::Teacher, week_patterns::WeekPattern,
+    WeekOp, WeekPatternOp, group_lists::GroupListParameters, ids::PeriodId, slots::Slot,
+    teachers::Teacher, week_patterns::WeekPattern, weeks::WeekDesc,
 };
 use std::collections::BTreeSet;
 use std::num::NonZeroU32;
@@ -62,7 +62,7 @@ fn cutting_a_period_preserves_tail_colloscope_and_pattern() {
         .get_data()
         .get_inner_data()
         .params
-        .periods
+        .weeks()
         .week_id_at(period_id, 3)
         .expect("the period has a fourth week");
 
@@ -164,7 +164,7 @@ fn cutting_a_period_preserves_tail_colloscope_and_pattern() {
         .get_data()
         .get_inner_data()
         .params
-        .periods
+        .weeks()
         .week_id_at(period_id, 2)
         .expect("the period has a third week");
     let Ok(None) = app_state.apply(
@@ -206,9 +206,10 @@ fn cutting_a_period_preserves_tail_colloscope_and_pattern() {
             .get_data()
             .get_inner_data()
             .params
-            .periods
-            .week_count_of(period_id),
-        Some(2),
+            .weeks()
+            .week_count_for_period(period_id)
+            .unwrap_or(0),
+        2,
         "the original period should keep its first two weeks",
     );
     assert_eq!(
@@ -216,9 +217,10 @@ fn cutting_a_period_preserves_tail_colloscope_and_pattern() {
             .get_data()
             .get_inner_data()
             .params
-            .periods
-            .week_count_of(new_period_id),
-        Some(2),
+            .weeks()
+            .week_count_for_period(new_period_id)
+            .unwrap_or(0),
+        2,
         "the new period should hold the two tail weeks",
     );
 
@@ -243,7 +245,7 @@ fn cutting_a_period_preserves_tail_colloscope_and_pattern() {
         let inner = app_state.get_data().get_inner_data();
         let moved_week = inner
             .params
-            .periods
+            .weeks()
             .week_id_at(new_period_id, 0)
             .expect("the new period has a first week");
         assert_eq!(
@@ -280,9 +282,10 @@ fn cutting_a_period_preserves_tail_colloscope_and_pattern() {
             .get_data()
             .get_inner_data()
             .params
-            .periods
-            .week_count_of(period_id),
-        Some(4),
+            .weeks()
+            .week_count_for_period(period_id)
+            .unwrap_or(0),
+        4,
         "the merged period should hold all four weeks again",
     );
     assert_eq!(
