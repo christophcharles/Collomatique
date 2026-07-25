@@ -220,10 +220,11 @@ The **canary test** (§6) re-verifies this whole contract continuously, op-by-op
 | 3.1–3.11 | ops migration, one module per commit: teachers, students, week_patterns, incompatibilities, pairings, slot_pairings, subjects, group_lists, assignments, colloscope, slots | ops |
 | 3.12 | ops migration: the four `.expect`-only modules (general_planning, settings, balancing, export_config) | ops |
 | 4 | gtk4 direct `GlobalUpdate` sites (2 sites, `e.to_string()` only) | gtk4 |
-| 5 | state-colloscopes test migration: found_bugs, week_ops, period_consistency, colloscopes.rs fixtures, lib.rs force_apply_tests, invariants fixtures; differential fuzz rewritten as `property_try_apply.rs` | state-colloscopes |
+| 5.1–5.4 | state-colloscopes test migration, split per `plan_step_5_commit_5.md`: period_consistency (5.1), week_ops (5.2), found_bugs (5.3), new `property_try_apply.rs` (5.4). Tests only; the old invariant checks are untouched — old commit 5's `src/` fixture edits moved to R1.5 | state-colloscopes (tests) |
 | 6 | Decode rewiring: `from_inner_data` onto `broken_invariants`, `FromInnerDataError` arms, `DecodeError` arms, spec2 edits, gtk4 file_loader arm | state-colloscopes, storage, gtk4, rpc-engine (Display only) |
 | R1 | Deactivate: property harness oracles switch; canary + old-fuzz deleted; old API caller-free (replay path already moved in 3.0) | state, state-colloscopes, constraints-colloscopes |
 | — | **Testing pause** (user-run: full suite once to scratchpad, 500-seed crank, smoke, contract scripts) | |
+| R1.5 | Retire the old-checker test scaffolding (invariants fixtures, colloscopes.rs stage-6, lib.rs force_apply_tests) — deferred out of commit 5, see `plan_step_5_commit_5.md` §6 | state-colloscopes |
 | R2 | Remove: checked `apply_*`, old `Error` + per-domain enums, old checkers, legacy bridge, old trait members | state, state-colloscopes |
 | — | **Testing pause** | |
 | R3 | Mechanical rename: `try_apply` → `apply`, `ApplyError` → `Error` everywhere | workspace |
@@ -506,6 +507,8 @@ Two sites, both `Op::GlobalUpdate` with `e.to_string()`-only error handling, so 
 
 ## 9. Commit 5 — state-colloscopes test migration
 
+> **REVISED (Jul 25 2026).** Commit 5 is split into four **test-only** commits (5.1–5.4), detailed with full old+new snippets in `plan_step_5_commit_5.md` — implement from that document, not from this section. Ruling: **the old invariant checks are untouched at this point** — tests switch to `try_apply` only where they drive the public op surface, never where the two worlds are compared. Accordingly, the "In-crate fixtures" subsection below (`invariants.rs`, `colloscopes.rs`, `lib.rs` force_apply_tests) is deferred to the new commit R1.5 (§11). The expected outcomes worked out below remain valid as the reference they always were.
+
 All scenario builds are untouched; only apply calls switch to `try_apply` and assert tails change to the new vocabulary. Exact expected outcomes (worked out against the checker):
 
 ### found_bugs.rs (5 asserts)
@@ -599,6 +602,16 @@ with `FromInnerDataError` (lib.rs:335-340) losing its `InnerDataError` arm and g
 After R1 the old API is intact but caller-free (pub items and trait methods don't warn as dead code, so every intermediate state compiles cleanly).
 
 **→ First testing pause.** User-run: full workspace suite once (captured to a scratchpad file, then grepped), a 500-seed crank of `property_try_apply` + `property_ops`, the examples smoke tests, and a first pass of the contract scripts.
+
+### R1.5 — retire the old-checker test scaffolding
+
+Deferred out of commit 5 (ruling of Jul 25 2026: the test-migration commits do not touch the old invariant checks). One commit, after the first testing pause and before R2, so R2 stays a mechanical deletion:
+
+1. `invariants.rs`: the fixture wrapper drops its `assert_differential(data)` call (every fixture's exact-set `broken_invariants` assert survives verbatim); `assert_dangling_maps` loses its old-checker `InnerDataError` argument and assert (callers drop the argument); the explicit `data.check_invariants() == Err(...)` asserts inside compound fixtures (:3455-3458, :3491-3494) and the two legacy-bridge unit tests (:3506-3639) are deleted whole.
+2. `colloscopes.rs` :571-610: the three stage-6 corruption tests become new-checker asserts on the same forged states (`Err({EmptyInterrogationRow})`, `Err({EmptyColloscopeGroupListRow})`, and the forged-row test asserts the exact two-entry `DanglingFk` set); the `assert_differential` calls are dropped.
+3. `lib.rs` force_apply_tests (:538-731): drop the old-checker asserts and `assert_differential` calls; the two `forced_valid_*_equals_checked_apply` anti-drift pins retarget as `try_apply` happy-path pins (valid op through `try_apply` equals `force_apply`-on-a-twin in state and reverse) — after R3 they read naturally as `apply` happy-path tests.
+
+R1.5 gets its own detailed snippet-level pass when reached (line anchors above are against `aaceda78`).
 
 ### R2 — remove
 
