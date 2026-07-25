@@ -81,28 +81,56 @@ impl PairingsUpdateOp {
         match self {
             Self::AddNewPairingRule(rule) => {
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::Pairing(
                             collomatique_state_colloscopes::PairingOp::Add(rule.clone()),
                         ),
                         self.get_desc(),
                     )
                     .map_err(|e| {
-                        if let collomatique_state_colloscopes::Error::Pairing(pe) = e {
-                            match pe {
-                                collomatique_state_colloscopes::PairingError::InvalidSubjectId(
-                                    id,
-                                ) => AddNewPairingRuleError::InvalidSubjectId(id),
-                                collomatique_state_colloscopes::PairingError::InvalidPeriodId(
-                                    id,
-                                ) => AddNewPairingRuleError::InvalidPeriodId(id),
-                                _ => panic!(
-                                    "Unexpected pairing error during AddNewPairingRule: {:?}",
-                                    pe
-                                ),
+                        use collomatique_state_colloscopes::{
+                            ApplyError, FixableInvariant, PeriodRefSite, Reference, SubjectRefSite,
+                        };
+                        match e {
+                            // The pre-op state was valid, so any dangle in the set
+                            // was introduced by this Add. Old validator order
+                            // (validate_pairing_rule_internal): antecedent subject,
+                            // then consequent subject, then excluded period. Both
+                            // subject sites map to InvalidSubjectId but carry
+                            // different payloads, so the passes stay separate.
+                            ApplyError::Invariants(set) => {
+                                for inv in &set {
+                                    if let FixableInvariant::DanglingFk(Reference::Subject {
+                                        target,
+                                        site: SubjectRefSite::PairingRuleAntecedent(_),
+                                    }) = inv
+                                    {
+                                        return AddNewPairingRuleError::InvalidSubjectId(*target);
+                                    }
+                                }
+                                for inv in &set {
+                                    if let FixableInvariant::DanglingFk(Reference::Subject {
+                                        target,
+                                        site: SubjectRefSite::PairingRuleConsequent(_),
+                                    }) = inv
+                                    {
+                                        return AddNewPairingRuleError::InvalidSubjectId(*target);
+                                    }
+                                }
+                                for inv in &set {
+                                    if let FixableInvariant::DanglingFk(Reference::Period {
+                                        target,
+                                        site: PeriodRefSite::PairingRuleExcludedPeriods(_),
+                                    }) = inv
+                                    {
+                                        return AddNewPairingRuleError::InvalidPeriodId(*target);
+                                    }
+                                }
+                                panic!(
+                                    "Unexpected invariant breaks during AddNewPairingRule: {set:?}"
+                                );
                             }
-                        } else {
-                            panic!("Unexpected error during AddNewPairingRule: {:?}", e);
+                            _ => panic!("Unexpected error during AddNewPairingRule: {e:?}"),
                         }
                     })?;
                 let Some(collomatique_state_colloscopes::NewId::PairingRuleId(new_id)) = result
@@ -113,25 +141,21 @@ impl PairingsUpdateOp {
             }
             Self::DeletePairingRule(rule_id) => {
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::Pairing(
                             collomatique_state_colloscopes::PairingOp::Remove(*rule_id),
                         ),
                         self.get_desc(),
                     )
                     .map_err(|e| {
-                        if let collomatique_state_colloscopes::Error::Pairing(pe) = e {
-                            match pe {
-                                collomatique_state_colloscopes::PairingError::InvalidPairingRuleId(id) => {
-                                    DeletePairingRuleError::InvalidPairingRuleId(id)
-                                }
-                                _ => panic!(
-                                    "Unexpected pairing error during DeletePairingRule: {:?}",
-                                    pe
-                                ),
-                            }
-                        } else {
-                            panic!("Unexpected error during DeletePairingRule: {:?}", e);
+                        use collomatique_state_colloscopes::{
+                            ApplyError, PairingPrecheckError, PrecheckError,
+                        };
+                        match e {
+                            ApplyError::Precheck(PrecheckError::Pairing(
+                                PairingPrecheckError::InvalidPairingRuleId(id),
+                            )) => DeletePairingRuleError::InvalidPairingRuleId(id),
+                            _ => panic!("Unexpected error during DeletePairingRule: {e:?}"),
                         }
                     })?;
 
@@ -141,7 +165,7 @@ impl PairingsUpdateOp {
             }
             Self::UpdatePairingRule(rule_id, rule) => {
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::Pairing(
                             collomatique_state_colloscopes::PairingOp::Update(
                                 *rule_id,
@@ -151,24 +175,49 @@ impl PairingsUpdateOp {
                         self.get_desc(),
                     )
                     .map_err(|e| {
-                        if let collomatique_state_colloscopes::Error::Pairing(pe) = e {
-                            match pe {
-                                collomatique_state_colloscopes::PairingError::InvalidPairingRuleId(id) => {
-                                    UpdatePairingRuleError::InvalidPairingRuleId(id)
+                        use collomatique_state_colloscopes::{
+                            ApplyError, FixableInvariant, PairingPrecheckError, PeriodRefSite,
+                            PrecheckError, Reference, SubjectRefSite,
+                        };
+                        match e {
+                            ApplyError::Precheck(PrecheckError::Pairing(
+                                PairingPrecheckError::InvalidPairingRuleId(id),
+                            )) => UpdatePairingRuleError::InvalidPairingRuleId(id),
+                            // Old validator order: antecedent subject, then
+                            // consequent subject, then excluded period.
+                            ApplyError::Invariants(set) => {
+                                for inv in &set {
+                                    if let FixableInvariant::DanglingFk(Reference::Subject {
+                                        target,
+                                        site: SubjectRefSite::PairingRuleAntecedent(_),
+                                    }) = inv
+                                    {
+                                        return UpdatePairingRuleError::InvalidSubjectId(*target);
+                                    }
                                 }
-                                collomatique_state_colloscopes::PairingError::InvalidSubjectId(
-                                    id,
-                                ) => UpdatePairingRuleError::InvalidSubjectId(id),
-                                collomatique_state_colloscopes::PairingError::InvalidPeriodId(
-                                    id,
-                                ) => UpdatePairingRuleError::InvalidPeriodId(id),
-                                _ => panic!(
-                                    "Unexpected pairing error during UpdatePairingRule: {:?}",
-                                    pe
-                                ),
+                                for inv in &set {
+                                    if let FixableInvariant::DanglingFk(Reference::Subject {
+                                        target,
+                                        site: SubjectRefSite::PairingRuleConsequent(_),
+                                    }) = inv
+                                    {
+                                        return UpdatePairingRuleError::InvalidSubjectId(*target);
+                                    }
+                                }
+                                for inv in &set {
+                                    if let FixableInvariant::DanglingFk(Reference::Period {
+                                        target,
+                                        site: PeriodRefSite::PairingRuleExcludedPeriods(_),
+                                    }) = inv
+                                    {
+                                        return UpdatePairingRuleError::InvalidPeriodId(*target);
+                                    }
+                                }
+                                panic!(
+                                    "Unexpected invariant breaks during UpdatePairingRule: {set:?}"
+                                );
                             }
-                        } else {
-                            panic!("Unexpected error during UpdatePairingRule: {:?}", e);
+                            _ => panic!("Unexpected error during UpdatePairingRule: {e:?}"),
                         }
                     })?;
 
