@@ -1141,7 +1141,7 @@ impl Component for EditorPanel {
                     collomatique_ops::OpCategory::None,
                     "Résolution du colloscope".to_string(),
                 );
-                match Manager::apply(&mut self.data, op, desc) {
+                match Manager::try_apply(&mut self.data, op, desc) {
                     Ok(_) => {
                         self.dirty = true;
                         self.send_msg_for_interface_update(sender);
