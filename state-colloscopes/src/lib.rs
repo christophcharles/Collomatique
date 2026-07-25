@@ -330,6 +330,37 @@ pub enum PrecheckError {
     ExportConfig(#[from] ExportConfigPrecheckError),
 }
 
+/// Error surface of the apply/check/rollback gate ([Data::try_apply]).
+///
+/// Three tiers. [ApplyError::Precheck] is bad op input caught before any
+/// mutation (the state was never touched). [ApplyError::Logic] and
+/// [ApplyError::Invariants] are reported after a forced apply and a rollback,
+/// so the state is left bit-identical to before the op.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum ApplyError {
+    /// Bad op input (no-clobber, dangling target, bad position/anchor).
+    /// The state was never touched.
+    #[error(transparent)]
+    Precheck(#[from] PrecheckError),
+    /// The op would land logically impossible rows; rolled back.
+    ///
+    /// Only reachable from data built outside this crate (`GlobalUpdate`
+    /// payloads, decode): ordinary elementary ops cannot construct logically
+    /// impossible rows since the value types were sealed.
+    #[error("the operation would leave logically impossible data: {}", format_error_set(.0))]
+    Logic(BTreeSet<LogicError>),
+    /// The op would break fixable invariants; rolled back. At step 6 this is
+    /// what the cascade resolves; at step 5 it is simply an error.
+    #[error("the operation would break data invariants: {}", format_error_set(.0))]
+    Invariants(BTreeSet<FixableInvariant>),
+}
+
+/// Itemises a set of errors through each entry's own [std::fmt::Display] so a
+/// UI dialog can surface a meaningful message without learning the vocabulary.
+fn format_error_set<T: std::fmt::Display>(set: &BTreeSet<T>) -> String {
+    set.iter().map(T::to_string).collect::<Vec<_>>().join("; ")
+}
+
 /// Errors for IDs
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum FromInnerDataError {
@@ -344,6 +375,7 @@ impl InMemoryData for Data {
     type AnnotatedOperation = AnnotatedOp;
     type NewInfo = Option<NewId>;
     type Error = Error;
+    type ApplyError = ApplyError;
 
     fn annotate(&self, op: Op) -> (AnnotatedOp, Option<NewId>) {
         let mut guard = self.id_issuer.lock().unwrap();
@@ -406,6 +438,52 @@ impl InMemoryData for Data {
         self.check_invariants();
         Ok(backward)
     }
+
+    /// The apply/check/rollback gate: snapshot, [Data::force_apply], check with
+    /// [InnerData::broken_invariants], and roll back on any breakage.
+    ///
+    /// On the accepted path the id-issuer high-water assert
+    /// ([Data::assert_id_issuer_high_water]) is the surviving [Data]-level
+    /// companion of the checker. It cannot fire through the [Manager] surface:
+    /// `annotate` draws every fresh id from this issuer, and the `GlobalUpdate`
+    /// annotate arm absorbs foreign payload ids up front via
+    /// `IdIssuer::skip_to_id`. Its only trigger is an [AnnotatedOp] transplanted
+    /// from another [Data] instance through this raw entry point — a caller bug,
+    /// hence a panic rather than an error arm.
+    fn try_apply(
+        &mut self,
+        op: &Self::AnnotatedOperation,
+    ) -> std::result::Result<Self::AnnotatedOperation, Self::ApplyError> {
+        // Snapshot everything an op could conceivably touch. `force_apply` never
+        // uses the id issuer today (ids are issued in `annotate`), but the issuer
+        // is a single counter — snapshotting it keeps rollback total even if a
+        // later change to a `force_apply_*` copy starts touching it. Note what it
+        // must *not* undo: `annotate` runs before `try_apply` and its issued ids
+        // stay burned on failure, exactly as today — history ids are never reused.
+        let snapshot = self.inner_data.clone();
+        let issuer_snapshot = self.id_issuer.lock().unwrap().clone();
+
+        // Precheck failures return before any mutation (by construction of the
+        // `force_apply_*` copies), so the state is untouched on this arm.
+        let backward = self.force_apply(op)?;
+
+        match self.inner_data.broken_invariants() {
+            Err(logic) => {
+                self.inner_data = snapshot;
+                *self.id_issuer.lock().unwrap() = issuer_snapshot;
+                Err(ApplyError::Logic(logic))
+            }
+            Ok(fixable) if !fixable.is_empty() => {
+                self.inner_data = snapshot;
+                *self.id_issuer.lock().unwrap() = issuer_snapshot;
+                Err(ApplyError::Invariants(fixable))
+            }
+            Ok(_empty) => {
+                self.assert_id_issuer_high_water();
+                Ok(backward)
+            }
+        }
+    }
 }
 
 impl Data {
@@ -464,13 +542,15 @@ impl Data {
 impl Data {
     /// USED INTERNALLY
     ///
-    /// Checks all the invariants of data
+    /// Asserts the id-issuer high-water invariant: the issuer's internal counter
+    /// is strictly greater than every id currently live in the data, so a freshly
+    /// issued id can never collide with an existing one.
     ///
-    /// The id-issuer high-water check below is [Data]-level state (the issuer
-    /// is deliberately not part of [InnerData]), so it cannot live in
-    /// [InnerData::check_invariants] or [InnerData::broken_invariants]; the
-    /// step-5 switch to the new checker must keep it as a separate companion.
-    fn check_invariants(&self) {
+    /// This is [Data]-level state (the issuer is deliberately not part of
+    /// [InnerData]), so it cannot live in [InnerData::check_invariants] or
+    /// [InnerData::broken_invariants]; it is the surviving companion the
+    /// apply/check/rollback gate ([Data::try_apply]) runs on the accepted path.
+    fn assert_id_issuer_high_water(&self) {
         let max_id = self.inner_data.ids().max();
 
         if let Some(id) = max_id {
@@ -479,6 +559,14 @@ impl Data {
                 panic!("IdIssuer internal counter is not greater than all internal ids");
             }
         }
+    }
+
+    /// USED INTERNALLY
+    ///
+    /// Checks all the invariants of data (the old-checker panic net, kept for the
+    /// checked [InMemoryData::apply] path during the step-5 migration window).
+    fn check_invariants(&self) {
+        self.assert_id_issuer_high_water();
 
         self.inner_data
             .check_invariants()
@@ -727,5 +815,121 @@ mod force_apply_tests {
 
         assert_eq!(checked.get_inner_data(), forced.get_inner_data());
         assert_eq!(checked_rev, forced_rev);
+    }
+}
+
+#[cfg(test)]
+mod try_apply_tests {
+    //! Step-5 commit 1 pins for [Data::try_apply]: the apply/check/rollback gate
+    //! rolls a broken landing back to a bit-identical pre-op state and reports it
+    //! precisely; a `GlobalUpdate` carrying logically impossible (duplicated-id)
+    //! data comes back as [ApplyError::Logic], rolled back.
+
+    use crate::ids::{Id, StudentId, WeekPatternId};
+    use crate::ops::{
+        AnnotatedOp, AnnotatedPeriodOp, AnnotatedStudentOp, AnnotatedSubjectOp, AssignmentOp, Op,
+        PeriodOp, StudentOp, SubjectOp,
+    };
+    use crate::students::Student;
+    use crate::subjects::Subject;
+    use crate::week_patterns::WeekPattern;
+    use crate::{ApplyError, Data, FixableInvariant, InnerData};
+    use collomatique_state::InMemoryData;
+    use std::collections::BTreeSet;
+
+    /// Applies a (valid) op through the checked path and returns its annotated
+    /// form, so callers can read back the freshly issued ids.
+    fn apply(data: &mut Data, op: Op) -> AnnotatedOp {
+        let (annotated, _) = data.annotate(op);
+        data.apply(&annotated).expect("valid op should apply");
+        annotated
+    }
+
+    /// The smallest state where a student is referenced by an assignments row:
+    /// one period, one subject running on it, one student assigned.
+    fn data_with_assignment() -> (Data, StudentId) {
+        let mut data = Data::default();
+        let period = match apply(&mut data, Op::Period(PeriodOp::AddFront)) {
+            AnnotatedOp::Period(AnnotatedPeriodOp::AddFront(p)) => p,
+            other => panic!("unexpected annotated op {other:?}"),
+        };
+        let subject = match apply(
+            &mut data,
+            Op::Subject(SubjectOp::AddAfter(None, Subject::default())),
+        ) {
+            AnnotatedOp::Subject(AnnotatedSubjectOp::AddAfter(s, _, _)) => s,
+            other => panic!("unexpected annotated op {other:?}"),
+        };
+        let student = match apply(&mut data, Op::Student(StudentOp::Add(Student::default()))) {
+            AnnotatedOp::Student(AnnotatedStudentOp::Add(u, _)) => u,
+            other => panic!("unexpected annotated op {other:?}"),
+        };
+        apply(
+            &mut data,
+            Op::Assignment(AssignmentOp::Assign(period, student, subject, true)),
+        );
+        (data, student)
+    }
+
+    #[test]
+    fn try_apply_invariant_breaking_op_rolls_back_and_reports() {
+        let (mut data, student) = data_with_assignment();
+        let before = data.clone();
+
+        // Removing a still-referenced student lands a dangling assignments FK
+        // (the Remove scans are stripped in `force_apply`); the gate must roll the
+        // state back and report it as an Invariants error.
+        let (remove, _) = data.annotate(Op::Student(StudentOp::Remove(student)));
+        let err = data.try_apply(&remove).unwrap_err();
+
+        match err {
+            ApplyError::Invariants(set) => assert!(
+                set.iter()
+                    .any(|f| matches!(f, FixableInvariant::DanglingFk(_))),
+                "expected a dangling-FK report, got {set:?}"
+            ),
+            other => panic!("expected Invariants, got {other:?}"),
+        }
+        assert!(
+            data == before,
+            "a rolled-back try_apply must leave the state bit-identical"
+        );
+    }
+
+    #[test]
+    fn try_apply_global_update_with_duplicated_id_errors_logic_and_rolls_back() {
+        let mut data = Data::default();
+        let before = data.clone();
+
+        // A corrupt inner: a student and a week pattern sharing raw id 1 — a
+        // duplicated-id LogicError. Through the gate this rolls back and surfaces
+        // as ApplyError::Logic (post-sealing the only route into that arm).
+        let mut corrupt = InnerData::default();
+        let student = unsafe { StudentId::new(1) };
+        let pattern = unsafe { WeekPatternId::new(1) };
+        corrupt
+            .params
+            .students
+            .student_map
+            .insert(student, Student::default());
+        corrupt.params.week_patterns.week_pattern_map.insert(
+            pattern,
+            WeekPattern {
+                name: "P".into(),
+                excluded_weeks: BTreeSet::new(),
+            },
+        );
+
+        let op = AnnotatedOp::GlobalUpdate(corrupt);
+        let err = data.try_apply(&op).unwrap_err();
+
+        assert!(
+            matches!(err, ApplyError::Logic(ref set) if !set.is_empty()),
+            "expected a non-empty Logic error, got {err:?}"
+        );
+        assert!(
+            data == before,
+            "a rolled-back GlobalUpdate must leave the state bit-identical"
+        );
     }
 }

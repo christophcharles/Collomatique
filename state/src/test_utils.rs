@@ -49,6 +49,10 @@ impl InMemoryData for FakeData {
     type AnnotatedOperation = FakeOp;
     type NewInfo = ();
     type Error = FakeError;
+    // FakeData has no invariants to check, so the gate reduces to `apply` and
+    // reuses `FakeError`. The trait does not require the two error types to
+    // differ; this exercises that flexibility.
+    type ApplyError = FakeError;
 
     fn annotate(&self, op: FakeOp) -> (FakeOp, ()) {
         (op, ())
@@ -71,6 +75,10 @@ impl InMemoryData for FakeData {
             }
             FakeOp::Fail => Err(FakeError::ApplyFailed),
         }
+    }
+
+    fn try_apply(&mut self, op: &FakeOp) -> Result<FakeOp, FakeError> {
+        self.apply(op)
     }
 }
 

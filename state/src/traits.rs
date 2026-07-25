@@ -39,6 +39,9 @@ pub trait InMemoryData: Clone + Send + Sync + std::fmt::Debug {
     /// Error type for when [Self::apply] fails.
     type Error: std::error::Error + Send + Sync + Clone;
 
+    /// Error type for when [Self::try_apply] fails.
+    type ApplyError: std::error::Error + Send + Sync + Clone;
+
     /// Annotate an operation
     ///
     /// If [Self::OriginalOperation] and [Self::AnnotatedOperation]
@@ -64,6 +67,19 @@ pub trait InMemoryData: Clone + Send + Sync + std::fmt::Debug {
         &mut self,
         op: &Self::AnnotatedOperation,
     ) -> std::result::Result<Self::AnnotatedOperation, Self::Error>;
+
+    /// Apply an operation through the apply/check/rollback gate and return its
+    /// inverse.
+    ///
+    /// Unlike [Self::apply] (which validates first, then mutates), this method
+    /// forces the operation through and then checks the resulting state: on any
+    /// breakage the data is rolled back from a snapshot. Precheck failures never
+    /// touch the data; invariant/logic failures are rolled back. Either way, a
+    /// failed call leaves the data strictly unchanged.
+    fn try_apply(
+        &mut self,
+        op: &Self::AnnotatedOperation,
+    ) -> std::result::Result<Self::AnnotatedOperation, Self::ApplyError>;
 }
 
 use thiserror::Error;
@@ -109,6 +125,35 @@ pub trait Manager: private::ManagerInternal {
         let (annotated_op, new_info) = self.get_in_memory_data_mut().annotate(op);
 
         let backward = self.get_in_memory_data_mut().apply(&annotated_op)?;
+        let rev_op = crate::history::ReversibleOp {
+            forward: annotated_op,
+            backward,
+        };
+
+        let aggregated_op = crate::history::AggregatedOp::new(vec![rev_op]);
+        self.get_modification_history_mut()
+            .store(aggregated_op, desc);
+
+        Ok(new_info)
+    }
+
+    /// Apply an operation through the apply/check/rollback gate and keep the
+    /// modification history consistent.
+    ///
+    /// Mirrors [Manager::apply], but routes the operation through
+    /// [InMemoryData::try_apply] instead of [InMemoryData::apply]. A failed op
+    /// leaves the data unchanged and stores nothing in history.
+    fn try_apply(
+        &mut self,
+        op: <<Self as private::ManagerInternal>::Data as InMemoryData>::OriginalOperation,
+        desc: <Self as private::ManagerInternal>::Desc,
+    ) -> Result<
+        <<Self as private::ManagerInternal>::Data as InMemoryData>::NewInfo,
+        <<Self as private::ManagerInternal>::Data as InMemoryData>::ApplyError,
+    > {
+        let (annotated_op, new_info) = self.get_in_memory_data_mut().annotate(op);
+
+        let backward = self.get_in_memory_data_mut().try_apply(&annotated_op)?;
         let rev_op = crate::history::ReversibleOp {
             forward: annotated_op,
             backward,
@@ -394,6 +439,49 @@ mod tests {
         assert_eq!(state.get_data().value, 0);
         assert!(!state.can_undo());
         assert_eq!(state.get_last_op(), None);
+    }
+
+    #[test]
+    fn try_apply_changes_data_and_stores_history() {
+        let mut state = new_state(0);
+
+        let result = state.try_apply(FakeOp::Set { old: 0, new: 1 }, "set to 1");
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(state.get_data().value, 1);
+        assert!(state.can_undo());
+        assert!(!state.can_redo());
+        assert_eq!(state.get_undo_name(), Some(&"set to 1"));
+    }
+
+    #[test]
+    fn try_apply_failing_leaves_state_untouched_and_stores_nothing() {
+        let mut state = new_state(0);
+
+        let result = state.try_apply(FakeOp::Fail, "never happens");
+
+        assert_eq!(result, Err(FakeError::ApplyFailed));
+        assert_eq!(state.get_data().value, 0);
+        assert!(!state.can_undo());
+        assert_eq!(state.get_last_op(), None);
+    }
+
+    #[test]
+    // The coexistence contract in miniature: history written by the new
+    // `try_apply` must replay correctly through the old-`apply` replay path
+    // (undo/redo go through `update_internal_state_with_aggregated`, which stays
+    // on `apply` until the migration's deactivation commit).
+    fn try_apply_history_replays_through_undo_redo() {
+        let mut state = new_state(0);
+        state
+            .try_apply(FakeOp::Set { old: 0, new: 1 }, "set to 1")
+            .expect("valid op");
+
+        state.undo().expect("one op to undo");
+        assert_eq!(state.get_data().value, 0);
+
+        state.redo().expect("one op to redo");
+        assert_eq!(state.get_data().value, 1);
     }
 
     #[test]
