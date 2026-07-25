@@ -163,9 +163,17 @@ impl FileLoader {
                 "Le fichier est mal formé et est probablement corrompu.\n(Un appariement de créneaux utilise le même créneau des deux côtés, id {})",
                 rule_id
             ),
-            DecodeError::InnerDataError(error) => format!(
+            DecodeError::UnknownPeriodInAssignments(period_id) => format!(
+                "Fichier mal formé et est probablement corrompu.\n(Les affectations référencent une période inconnue, id {})",
+                period_id
+            ),
+            DecodeError::LogicError(set) => format!(
+                "Fichier mal formé et est probablement corrompu.\n(Les données sont logiquement impossibles : {})",
+                set.iter().map(|e| e.to_string()).collect::<Vec<_>>().join(" ; ")
+            ),
+            DecodeError::BrokenInvariants(set) => format!(
                 "Fichier mal formé et est probablement corrompu.\n(Les données ne vérifient pas un invariant : {})",
-                error
+                set.iter().map(|e| e.to_string()).collect::<Vec<_>>().join(" ; ")
             ),
         }
     }

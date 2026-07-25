@@ -64,8 +64,12 @@ pub enum DecodeError {
     EndOfTheUniverse,
     #[error("Duplicated ID")]
     DuplicatedID,
-    #[error(transparent)]
-    InnerDataError(#[from] collomatique_state_colloscopes::InnerDataError),
+    #[error("The assignments reference an unknown period (period id {0})")]
+    UnknownPeriodInAssignments(u64),
+    #[error("The loaded data is logically impossible: {0:?}")]
+    LogicError(BTreeSet<collomatique_state_colloscopes::LogicError>),
+    #[error("The loaded data breaks an invariant: {0:?}")]
+    BrokenInvariants(BTreeSet<collomatique_state_colloscopes::FixableInvariant>),
 }
 
 impl From<collomatique_state_colloscopes::FromInnerDataError> for DecodeError {
@@ -77,7 +81,8 @@ impl From<collomatique_state_colloscopes::FromInnerDataError> for DecodeError {
                 IdError::DuplicatedId => DecodeError::DuplicatedID,
                 IdError::EndOfTheUniverse => DecodeError::EndOfTheUniverse,
             },
-            FromInnerDataError::InnerDataError(inner_data_error) => inner_data_error.into(),
+            FromInnerDataError::Logic(set) => DecodeError::LogicError(set),
+            FromInnerDataError::BrokenInvariants(set) => DecodeError::BrokenInvariants(set),
         }
     }
 }

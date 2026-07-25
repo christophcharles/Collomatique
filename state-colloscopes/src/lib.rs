@@ -361,13 +361,21 @@ fn format_error_set<T: std::fmt::Display>(set: &BTreeSet<T>) -> String {
     set.iter().map(T::to_string).collect::<Vec<_>>().join("; ")
 }
 
-/// Errors for IDs
+/// Error surface of [Data::from_inner_data] — rebuilding a [Data] from a loaded
+/// [InnerData]. A loaded file must be fully valid (broken states never exist
+/// outside the apply/check/rollback primitive), so any non-clean checker result
+/// is an error here.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum FromInnerDataError {
     #[error(transparent)]
     IdError(#[from] tools::IdError),
-    #[error(transparent)]
-    InnerDataError(#[from] InnerDataError),
+    /// The loaded data would leave logically impossible rows.
+    #[error("the loaded data is logically impossible: {}", format_error_set(.0))]
+    Logic(BTreeSet<LogicError>),
+    /// The loaded data breaks fixable invariants (dangling references or broken
+    /// convergence facts).
+    #[error("the loaded data breaks invariants: {}", format_error_set(.0))]
+    BrokenInvariants(BTreeSet<FixableInvariant>),
 }
 
 impl InMemoryData for Data {
@@ -594,7 +602,14 @@ impl Data {
     /// This will check the consistency of the data
     /// and will also do some internal checks, so this might fail.
     pub fn from_inner_data(inner_data: InnerData) -> Result<Data, FromInnerDataError> {
-        inner_data.check_invariants()?;
+        // A loaded file must be fully valid: hard error on a logic breakage and
+        // on any non-empty fixable set. Broken states never exist outside the
+        // apply/check/rollback primitive.
+        match inner_data.broken_invariants() {
+            Err(logic) => return Err(FromInnerDataError::Logic(logic)),
+            Ok(set) if !set.is_empty() => return Err(FromInnerDataError::BrokenInvariants(set)),
+            Ok(_) => {}
+        }
 
         let id_issuer = IdIssuer::new(inner_data.ids())?;
 
@@ -603,7 +618,9 @@ impl Data {
             inner_data,
         };
 
-        data.check_invariants();
+        // Data-level companion of the checker (the id issuer is not part of
+        // InnerData, so broken_invariants cannot see it).
+        data.assert_id_issuer_high_water();
 
         Ok(data)
     }

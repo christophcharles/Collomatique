@@ -24,8 +24,8 @@ use crate::json::{CURRENT_SPEC_VERSION, RawEntry, Version};
 use collomatique_state_colloscopes as mem;
 use mem::ids::Id;
 use mem::{
-    Data, GroupListId, InnerData, InnerDataError, InvariantError, PairingRuleId, PeriodId, SlotId,
-    SlotPairingRuleId, StudentId, SubjectId, TeacherId, WeekId, WeekPatternId,
+    Data, GroupListId, InnerData, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId,
+    SubjectId, TeacherId, WeekId, WeekPatternId,
 };
 
 /// Every spec-2 block name declares these canonical envelope values
@@ -320,12 +320,6 @@ fn reconstruct(blocks: Blocks) -> Result<InnerData, DecodeError> {
         balancing,
     };
 
-    // Colloscope reconstruction's trust-boundary checks assume the params are
-    // invariant-clean (they re-express the dense "cell is `Some`" rule against
-    // them), so the params are validated first. This anticipates (part of)
-    // layer 3 with the same errors, fixing the error ordering.
-    params.check_invariants().map_err(InnerDataError::from)?;
-
     let colloscope = reconstruct_colloscope(blocks.colloscope.unwrap_or_default(), &params)?;
     let export_config = reconstruct_export_config(blocks.export_config.unwrap_or_default());
 
@@ -510,12 +504,10 @@ fn reconstruct_assignments(
     for row in block.into_inner() {
         let period_id = id::<PeriodId>(row.period_id);
         if periods.find_period_position(period_id).is_none() {
-            // Layer 3 rejects unknown period ids with this same error, but a
-            // row on an unknown period could not otherwise be caught, so it is
-            // rejected here.
-            return Err(
-                InnerDataError::Params(InvariantError::InvalidPeriodIdInAssignements).into(),
-            );
+            // An empty assignments row keyed by an unknown period decodes to an
+            // absent row (canonical-absent rule) and would otherwise vanish
+            // silently before the final gate can see it, so it is rejected here.
+            return Err(DecodeError::UnknownPeriodInAssignments(row.period_id));
         }
         let students = id_set(row.students);
         if students.is_empty() {
