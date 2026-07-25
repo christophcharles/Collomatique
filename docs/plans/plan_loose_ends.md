@@ -203,7 +203,7 @@ pub struct Weeks {
 
 ## Part G — Group lists (2 commits)
 
-### Commit G1 — seal `GroupList` (validated constructor; ops unchanged)
+### Commit G1 — seal `GroupList` (validated constructor; ops unchanged) — DONE (5f731cd3)
 
 `state-colloscopes/src/group_lists.rs`:
 
@@ -272,7 +272,7 @@ invariant is *cross-field* on the pair; gtk4 dialog literals stay legal).
   rejection just moves earlier).
 - Gate: workspace suites + differential fuzz 100 seeds.
 
-### Commit G2 — consolidate the elementary op surface (drop `SetFilling`)
+### Commit G2 — consolidate the elementary op surface (drop `SetFilling`) — DONE (7e4c3e71)
 
 `ops.rs`:
 
@@ -357,15 +357,53 @@ carries information when reversing a Remove" note dies.
 
 ---
 
-## Closing commit — design-doc amendment
+## Addendum — mirror-consistency LogicErrors (from the post-implementation review) — DONE (4b1b8f5f)
 
-Update `docs/plans/invariant_cascade_design.md`: B.1 (periods/weeks shapes: `Periods`
-existence-only + `Weeks` module; sealed `GroupList`), B.2 (`PeriodOp::Remove` no longer
-week-empty-gated in force; `GroupListOp` consolidated shape), B.3 (read surface re-home),
-C.3 (smart-constructor churn done early for `GroupList`), D.3 (empty-first trio resolved:
-all three deleted; `PrefillGroupCountMismatch` unrepresentable), E.3 (precheck enums
-shrunk), D.4-F1 note (unchanged — checked apply keeps both guards until step 5), and
-retire `plan_loose_ends.md` with a pin. Update auto-memory afterwards.
+The post-implementation review of Parts P and G found a gap the differential fuzz was
+masking. The old checker's `check_weeks_data_consistency` / `check_slots_data_consistency`
+validate the full ordering↔table mirror per sidecar; the new checker (`invariants.rs`)
+had ported only the canonical "no empty row" fact (`EmptyWeeksRow` / `EmptySlotsRow`).
+The other four facts — every ordered id exists in the entity table, names the entity that
+keys its row, appears exactly once, and every table entry is covered — lived nowhere in
+the new checker, kept honest only by the old checker acting as fuzz ground truth.
+
+**Ruling.** The old checker is temporary transition code and retires at step 5, so the
+new checker must carry the mirror itself. A desync is unreachable through any op (the
+compound mutators keep both containers in lockstep, force ops included; only the
+test-only `forge_ordering_row` hatch can split them), and "unreachable by ops, decidable
+from the data, code-at-fault-if-present" is exactly `LogicError` — `EmptyWeeksRow` was
+already the precedent. So the four remaining facts became eight new `LogicError` variants:
+`SlotOrderingUnknownId`, `SlotOrderingWrongSubject`, `SlotOrderingDuplicate`, `OrphanSlot`
+and the weeks twins `WeekOrderingUnknownId`, `WeekOrderingWrongPeriod`,
+`WeekOrderingDuplicate`, `OrphanWeek`.
+
+**Row-key liveness deliberately excluded.** A row keyed by a removed period/subject is the
+op-reachable dangle that commit P2 made representable on purpose; it stays in
+`FixableInvariant` (`DanglingFk(WeekPeriodFk)` / `SlotSubjectFk`) so the cascade can repair
+it. A short-circuiting `LogicError` there would block that repair. The full rationale,
+sweep code, and the walk-vs-`count_weeks` convention note live in the design doc after the
+closing commit.
+
+## Close-out — two docs-only commits
+
+The phase closes in two documentation commits, following the established retirement
+pattern (step-3 `d3dcc4e5`, step-4 `f2443c49`):
+
+1. **Finalize this file in place** (the commit landing these done-markers and the
+   addendum above) so the completed plan exists in git history before removal.
+2. **Retire the plan; amend the design doc.** `git rm docs/plans/plan_loose_ends.md`,
+   with the pin recorded in `docs/plans/invariant_cascade_design.md`
+   (`git show <finalize-commit hash>:docs/plans/plan_loose_ends.md`). The design doc gains
+   a new appendix recording the **delivered state** of this phase — final `Periods`
+   (existence-only `OrderedTable<PeriodId, ()>` + `first_week`) and `Weeks` (twin-of-Slots
+   module, sparse ordering sidecar) shapes; sealed `GroupList`; consolidated `GroupListOp`
+   (SetFilling gone at the elementary level, high-level API translated onto `Update`);
+   shrunk `GroupListPrecheckError` / `GroupListError`; the mirror-consistency `LogicError`s
+   and the row-key-liveness exclusion rule; the walk-vs-`count_weeks` convention note — and
+   an inter-step "pre-step-5 loose ends" note between the step-4 and step-5 sections of the
+   7-step roadmap, listing what changed under step 5's feet (B.1/B.2/B.3, C.3, D.3, E.3,
+   D.4-F1 unchanged, and the new-checker mirror coverage that lets the old checker retire).
+   Update auto-memory afterwards.
 
 ## Verification
 
