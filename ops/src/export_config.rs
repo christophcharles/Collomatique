@@ -57,7 +57,7 @@ impl ExportConfigUpdateOp {
         match self {
             Self::UpdateGlobalConfig(v) => {
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::ExportConfig(
                             ExportConfigOp::UpdateGlobalConfig(v.clone()),
                         ),
@@ -69,7 +69,7 @@ impl ExportConfigUpdateOp {
             }
             Self::UpdateColloscopeEnabled(v) => {
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::ExportConfig(
                             ExportConfigOp::UpdateColloscopeEnabled(*v),
                         ),
@@ -81,7 +81,7 @@ impl ExportConfigUpdateOp {
             }
             Self::UpdateAllGroupsEnabled(v) => {
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::ExportConfig(
                             ExportConfigOp::UpdateAllGroupsEnabled(*v),
                         ),
@@ -93,7 +93,7 @@ impl ExportConfigUpdateOp {
             }
             Self::UpdatePrefilledGroupsEnabled(v) => {
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::ExportConfig(
                             ExportConfigOp::UpdatePrefilledGroupsEnabled(*v),
                         ),
@@ -105,7 +105,7 @@ impl ExportConfigUpdateOp {
             }
             Self::UpdateAutomaticGroupsEnabled(v) => {
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::ExportConfig(
                             ExportConfigOp::UpdateAutomaticGroupsEnabled(*v),
                         ),
@@ -117,7 +117,7 @@ impl ExportConfigUpdateOp {
             }
             Self::UpdatePerGroupListEnabled(v) => {
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::ExportConfig(
                             ExportConfigOp::UpdatePerGroupListEnabled(*v),
                         ),
@@ -129,7 +129,7 @@ impl ExportConfigUpdateOp {
             }
             Self::UpdateColloscopeConfig(v) => {
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::ExportConfig(
                             ExportConfigOp::UpdateColloscopeConfig(v.clone()),
                         ),
@@ -141,7 +141,7 @@ impl ExportConfigUpdateOp {
             }
             Self::UpdateAllGroupsConfig(v) => {
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::ExportConfig(
                             ExportConfigOp::UpdateAllGroupsConfig(v.clone()),
                         ),
@@ -153,7 +153,7 @@ impl ExportConfigUpdateOp {
             }
             Self::UpdatePrefilledGroupsConfig(v) => {
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::ExportConfig(
                             ExportConfigOp::UpdatePrefilledGroupsConfig(v.clone()),
                         ),
@@ -165,7 +165,7 @@ impl ExportConfigUpdateOp {
             }
             Self::UpdateAutomaticGroupsConfig(v) => {
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::ExportConfig(
                             ExportConfigOp::UpdateAutomaticGroupsConfig(v.clone()),
                         ),
@@ -177,7 +177,7 @@ impl ExportConfigUpdateOp {
             }
             Self::UpdatePerGroupListConfig(v) => {
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::ExportConfig(
                             ExportConfigOp::UpdatePerGroupListConfig(v.clone()),
                         ),

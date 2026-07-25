@@ -72,7 +72,7 @@ impl SettingsUpdateOp {
                 new_settings.global = limits.clone();
 
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::Settings(
                             collomatique_state_colloscopes::SettingsOp::Update(new_settings),
                         ),
@@ -100,7 +100,7 @@ impl SettingsUpdateOp {
                 new_settings.students.insert(*student_id, limits.clone());
 
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::Settings(
                             collomatique_state_colloscopes::SettingsOp::Update(new_settings),
                         ),
@@ -130,7 +130,7 @@ impl SettingsUpdateOp {
                 }
 
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::Settings(
                             collomatique_state_colloscopes::SettingsOp::Update(new_settings),
                         ),
