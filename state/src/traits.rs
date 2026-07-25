@@ -278,14 +278,14 @@ pub(crate) mod private {
     pub fn update_internal_state_with_aggregated<T: ManagerInternal>(
         manager: &mut T,
         aggregated_op: &crate::history::AggregatedOp<<T::Data as InMemoryData>::AnnotatedOperation>,
-    ) -> Result<(), <T::Data as InMemoryData>::Error> {
+    ) -> Result<(), <T::Data as InMemoryData>::ApplyError> {
         let ops = aggregated_op.inner();
 
         let mut error = None;
         let mut count = 0;
 
         for rev_op in ops {
-            match manager.get_in_memory_data_mut().apply(&rev_op.forward) {
+            match manager.get_in_memory_data_mut().try_apply(&rev_op.forward) {
                 Ok(inverse) => {
                     debug_assert_eq!(
                         inverse, rev_op.backward,
@@ -307,7 +307,7 @@ pub(crate) mod private {
 
         let skip_size = ops.len() - count;
         for rev_op in ops.iter().rev().skip(skip_size) {
-            let result = manager.get_in_memory_data_mut().apply(&rev_op.backward);
+            let result = manager.get_in_memory_data_mut().try_apply(&rev_op.backward);
 
             if let Err(e) = result {
                 panic!(
@@ -467,10 +467,10 @@ mod tests {
     }
 
     #[test]
-    // The coexistence contract in miniature: history written by the new
-    // `try_apply` must replay correctly through the old-`apply` replay path
-    // (undo/redo go through `update_internal_state_with_aggregated`, which stays
-    // on `apply` until the migration's deactivation commit).
+    // History written by `try_apply` must replay correctly through undo/redo,
+    // which go through `update_internal_state_with_aggregated` — itself now on
+    // `try_apply` (commit 3.0), so the ops it recorded replay through the same
+    // gate that accepted them.
     fn try_apply_history_replays_through_undo_redo() {
         let mut state = new_state(0);
         state
