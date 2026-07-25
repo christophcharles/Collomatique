@@ -9,7 +9,11 @@ Appendix C. **Step 3 completed July 19 2026** (doc-only) — its session plan is
 (pinned at `git show 26d88024:docs/plans/plan_step_3.md`), the audit record is
 Appendix D. **Step 4 completed July 21 2026** — its session plan is retired (pinned at
 `git show fbc4ae6d:docs/plans/plan_step_4.md`), the delivered state is recorded in
-Appendix E. Next up: step 5.
+Appendix E. **Pre-step-5 loose ends completed July 25 2026** — a small consolidation phase
+run before step 5 (periods/weeks module split, sealed `GroupList`, consolidated
+`GroupListOp`, mirror-consistency `LogicError`s); its session plan is retired (pinned at
+`git show 25fdc50b:docs/plans/plan_loose_ends.md`), the delivered state is recorded in
+Appendix F. Next up: step 5.
 This doc started as an exploration after phase C of the table-registry plan shipped (item 2's
 detailed plan, since delivered in full and retired; pinned at
 `git show 77695338:docs/table_registry_plan.md`); it now
@@ -396,10 +400,13 @@ its five observations are Appendix D.
     incompatibility may block slots for students declared in a subject whose own schedule
     creates the unavailability, without that subject running colles. Documented on
     `Incompatibility::subject_id` (`incompats.rs`).
-  - **Mirror desync = fail-fast panic** once the old checker retires at step 5: the
-    encapsulated mutators are simple and local, a desync is a hard code bug, and a quick
-    read-path panic is the wanted behavior — no checker sweep. Noted in the
-    `invariants.rs` module docs ("Deliberate non-checks").
+  - **Mirror desync = `LogicError`** — *superseded by the loose-ends phase (Appendix F).*
+    This bullet originally planned a fail-fast read-path panic once the old checker retired.
+    The loose-ends review (July 25 2026) ruled otherwise: since the old checker carries the
+    full ordering↔table mirror and retires at step 5, the new checker must carry it too, as
+    `LogicError`s (eight variants). A desync is unreachable by ops but decidable from the
+    data and code-at-fault-if-present — exactly `LogicError`. Row-key liveness alone stays
+    out (it is the op-reachable dangle owned by layer B). See Appendix F.
   - **The id-issuer high-water check stays**: it is `Data`-level state outside `InnerData`,
     so the step-5 wiring keeps `Data::check_invariants`' issuer assert as a separate
     companion to `broken_invariants`. Documented on `Data::check_invariants` (`lib.rs`).
@@ -423,6 +430,30 @@ distribution). Two things earned here that step 5 builds on: the governing rule
 the state), and the per-domain precheck vocabulary (the carve-out subset that survives the
 step-5 deletion). **The delivered `force_apply` door, precheck vocabulary, strip/keep rule,
 and differential fuzz are Appendix E.**
+
+**Pre-step-5 loose ends — COMPLETED July 25 2026.** A small consolidation phase run before
+step 5 rewires production, so step 5 lands on a cleaner op surface. What changed under step
+5's feet (full delivered state in Appendix F):
+
+- **B.1/B.2/B.3 (periods/weeks)** — `Periods` shrank to existence-only
+  (`OrderedTable<PeriodId, ()>` + `first_week`); week data moved to a new `Weeks` module
+  (twin of `slots.rs`: `week_map` + a sparse `ordering` sidecar). `PeriodOp::Remove` is no
+  longer week-empty-gated in the *force* path (checked apply keeps its guard until step 5) —
+  removing a week-bearing period now leaves dangling `WeekPeriodFk`s for the cascade. Read
+  surface re-homed onto `Weeks`/`Parameters` (slots naming).
+- **C.3 / D.3 (GroupList + the empty-first trio)** — the `GroupList` smart-constructor churn
+  C.3 parked for step 5 is done: `GroupList` is sealed (private fields, validating `new()`),
+  and the elementary `GroupListOp` carries a whole consistent `GroupList` (elementary
+  `SetFilling` gone; the high-level `ops/` API is frozen and translated onto `Update`). This
+  makes the D.3 empty-first trio unrepresentable: `RemainingFilling`,
+  `PrefillGroupCountMismatch`, `NonEmptyGroupsWhenReducing` are all deleted.
+- **E.3 (precheck enums)** — `GroupListPrecheckError`/`GroupListError` shrank accordingly.
+- **D.4-F1 unchanged** — checked `apply_*` keeps its guards (incl. `NotEmptyPeriodInColloscope`)
+  until step 5; only the force copies lost the invariant guards.
+- **New-checker mirror coverage** — the new checker now carries the full ordering↔table
+  mirror as `LogicError`s (superseding C.3's "trusts them unconditionally" and §8's
+  "fail-fast panic"), so the old checker can retire at step 5 without leaving validation
+  behind.
 
 **Step 5 — switch elementary ops to apply/check/restore (§4).** `apply` becomes
 `force_apply` + new checker + rollback — the same primitives step 4 built. The item-1 canary
@@ -627,6 +658,9 @@ state; this appendix supersedes them as the description of the live model.
   within-period ordering is encapsulated behind compound `pub(crate)` mutators (§6c) — the
   list↔map mirror is checked (`InvariantError::InvalidWeek`), the ordering itself never
   reaches `check_invariants`. `WeekDesc` survives as the FK-less op-payload/glue DTO.
+  *Reshaped by the loose-ends phase (Appendix F): `Periods` is now existence-only and week
+  data lives in a separate `Weeks` module; the ordering mirror is now checked by the new
+  checker as `LogicError`s, not merely by the old checker.*
 - **Slots**: unchanged flat `slot_map: Table<SlotId, Slot>` (+ `subject_id` FK) with the
   `ordering` sidecar, whose rows are now **sparse** (row iff the subject has ≥1 slot).
 - **Week patterns**: `WeekPattern { name, excluded_weeks: BTreeSet<WeekId> }` — the
@@ -652,7 +686,9 @@ state; this appendix supersedes them as the description of the live model.
   the original id. `WeekId` is **preserved across cut/merge** (re-parenting, not
   delete+recreate) — colloscope cells and pattern exclusions survive.
 - **`PeriodOp { ChangeStartDate, AddFront, AddAfter, Remove }`** — a period is created
-  empty; `Remove` requires week-empty (`PeriodStillHasWeeks`).
+  empty; `Remove` requires week-empty (`PeriodStillHasWeeks`). *Loose-ends phase (Appendix
+  F): the force path dropped this guard (checked apply keeps it until step 5); the
+  elementary `GroupListOp` was also consolidated to carry a whole sealed `GroupList`.*
 - **Colloscope ops are upserts**: `SetInterrogation(SlotId, WeekId, BTreeSet<u32>)` /
   `SetGroupList(GroupListId, BTreeMap<StudentId, u32>)`; empty payload = remove row;
   reverse = `Set…` with the prior payload (or empty).
@@ -664,6 +700,9 @@ state; this appendix supersedes them as the description of the live model.
   `week_id_at`, `week_position`, `global_week_position`, `period_ids()`, `week_count_of`;
   `find_period(PeriodId) -> Option<&Vec<WeekId>>` is pub and pinned by the `read_api`
   pointer-identity test. `Lookup<WeekId> → Week`, `Lookup<PeriodId> → Vec<WeekId>`.
+  *Loose-ends phase (Appendix F): this read surface re-homed onto `Weeks`/`Parameters`
+  (slots naming); `find_period` was deleted, `Lookup<PeriodId>` now yields `()`, and the
+  `read_api` pointer pin moved to `find_week`.*
 - **Possibility oracles** (permanent, the single re-expression of the old dense "cell is
   `Some`" rule): `WeekPatterns::is_week_active(periods, week, pattern)` (homed there so
   gtk4 piece-clones can call it; `Parameters::is_week_active` delegates) and
@@ -816,11 +855,16 @@ Classification is **mechanical**, per edge/predicate — the module docs state t
 - **Mirrors** — type-encapsulated (§6c): the periods list↔map and slots ordering↔table
   mirrors are maintained inside `Periods`/`Slots`; the new checker trusts them
   unconditionally. (The old checker's mirror sweeps are pre-encapsulation vestiges and stay
-  there.)
+  there.) *Reversed by the loose-ends phase (Appendix F): since the old checker retires at
+  step 5, the new checker no longer trusts the mirrors — it carries the full ordering↔table
+  mirror as `LogicError`s. Only row-key liveness stays out (op-reachable dangle, layer B).*
 - **Remaining cross-field value shapes** (prefill count/duplicate-student, parts-share-an-id
   ×2) stay `LogicError` variants for now: encapsulating them means privatizing
   `GroupList`/`PairingRule`/`SlotPairingRule` behind smart constructors — public-API churn
-  step 5 does anyway. Do that churn once, at step 5.
+  step 5 does anyway. Do that churn once, at step 5. *Loose-ends phase (Appendix F): the
+  `GroupList` half was done early — `GroupList` is sealed, so the prefill
+  count/duplicate-student shapes are now unrepresentable (variants deleted). `PairingRule`/
+  `SlotPairingRule` remain for step 5.*
 
 ### C.4 Old-checker parity + the legacy bridge
 
@@ -912,6 +956,10 @@ deletion (everything twinned in Table 1 retires in favor of the precise vocabula
 - **Empty-first protocol** — `PeriodStillHasWeeks`, `RemainingFilling`,
   `NonEmptyGroupsWhenReducing` (op-ordering discipline; these three are *preconditions*,
   so step 5 decides their fate with the rest — the states they demand are valid either way).
+  *Loose-ends phase (Appendix F): `RemainingFilling` and `NonEmptyGroupsWhenReducing` are
+  deleted (the consolidated `GroupListOp` carries a whole `GroupList`, so the Remove/Update
+  reshaping that needed them is gone); `PeriodStillHasWeeks` was dropped from the force path
+  only (checked apply keeps it until step 5).*
 - **Immutability** — `CannotChangeSubject` (a slot's subject is fixed at creation).
 - **Payload shape** — `PrefillGroupCountMismatch` (dual-listed: also invariant-twinned).
 
@@ -1007,7 +1055,9 @@ step-5 carve-out error surface, born here (`apply`'s existing per-domain error e
 untouched). The three value-only domains carry empty enums (`SettingsPrecheckError`,
 `BalancingPrecheckError`, `ExportConfigPrecheckError` — kept for uniformity). The top-level
 `PrecheckError` (`lib.rs:297`) mirrors `Error` 1:1 with `#[from]` transparency, minus the
-infallible `GlobalUpdate` arm.
+infallible `GlobalUpdate` arm. *Loose-ends phase (Appendix F): `GroupListPrecheckError`
+shrank to `{InvalidGroupListId, GroupListIdAlreadyExists, InvalidSubjectId, InvalidPeriodId}`
+and `PeriodPrecheckError` lost `PeriodStillHasWeeks`, as the force copies shed those guards.*
 
 ### E.4 The differential fuzz
 
@@ -1051,3 +1101,123 @@ and is green.
   consistency maintenance, no guard-dead cleanup); no consistency prechecks are ever added
   to it; and the step-6 resolution map must not "fix" a filling-without-association (F5,
   D.4) or any placement it did not itself create.
+
+## Appendix F — pre-step-5 loose ends as delivered (July 25 2026)
+
+Recorded when the loose-ends session plan was retired (per-commit mechanics pinned at
+`git show 25fdc50b:docs/plans/plan_loose_ends.md`; commits: P1 `5b416763`, P2 `af543578`,
+P3 split into `e66f62fe`..`286c242f` + follow-up `7d4b67c2`, G1 `5f731cd3`, G2 `7e4c3e71`,
+mirror `LogicError`s `4b1b8f5f`). This phase ran *before* step 5 to clean the op surface it
+lands on. Two op-surface warts were removed (periods-with-weeks removal; the split-value
+group-list ops), and one checker gap the differential fuzz was masking was closed. Both
+checkers are still wired only in tests — step 5 still does the production rewire.
+
+### F.1 Periods and weeks (supersedes the periods/weeks parts of B.1/B.2/B.3)
+
+- **`Periods` is existence-only**: `pub first_week: Option<WeekStart>` +
+  `pub ordered_period_list: OrderedTable<PeriodId, ()>` (order and existence, mirroring
+  `Subjects.ordered_subject_list`). A period owns nothing else. `PeriodId` is `#[entity(())]`;
+  `Lookup<PeriodId>` yields `&()`. `Periods::from_ordered_ids(first_week, Vec<PeriodId>)`.
+- **`Weeks` is a new module** (`state-colloscopes/src/weeks.rs`, twin of `slots.rs`):
+  `week_map: Table<WeekId, Week>` + a sparse `ordering: Table<PeriodId, Vec<WeekId>>`
+  sidecar (a row exists iff the period has ≥1 week — canonical-absent, like the slots
+  ordering). The ordering-row key double-duties with the per-week `WeekPeriodFk`; no new
+  registry edge (same argument that dropped `SlotsOrderingKey`). `Parameters` gained
+  `pub weeks: weeks::Weeks`, ordered right after `periods`.
+- **Read surface re-homed** (slots naming): single-container readers (`find_week`,
+  `week_position`, `week_id_at`) and cross-container composites on `Weeks` taking
+  `&Periods` (`walk`, `week_ids`, `count_weeks`, `global_week_position`, …), plus
+  `Parameters::{walk_weeks, count_weeks, week_ids}` delegations. `weeks_of` →
+  `weeks_for_period` etc. with slots-style `None = no row` semantics. `find_period` (the old
+  borrowable-`Vec` accessor) is **deleted**; the `read_api` pointer-identity pin moved to
+  `find_week`. `WeekPatterns::is_week_active(weeks: &Weeks, …)`.
+- **`PeriodOp::Remove` no longer week-empty-gated in the force path.** Removing a
+  week-bearing period is now representable and leaves each surviving week dangling at
+  `WeekPeriodFk` for the cascade to repair. `PeriodPrecheckError::PeriodStillHasWeeks` and
+  the guard in `force_apply_period` Remove are gone. **Checked `apply_period` keeps its
+  guard** (it retires wholesale at step 5; stripping now would only turn the case into a
+  `check_invariants` panic) — the 4.2 fuzz carve-out: a checked-rejected `ForceValid` probe
+  must land broken, and it does.
+- Storage wire format untouched: `spec2` decode builds both containers
+  (`Periods::from_ordered_ids` + `Weeks::from_period_rows`), encode rebuilds the per-period
+  week vecs; `populated_round_trip` stays byte-identical.
+
+### F.2 Sealed `GroupList` (fulfils C.3's deferred smart-constructor churn)
+
+`GroupList` has private fields (`params`, `filling`) and a validating
+`GroupList::new(params, filling) -> Result<Self, GroupListBuildError>` that checks the
+value-internal cross-field facts only (prefill group count matches the name count; no
+student in two prefilled groups). Accessors `params()`/`filling()`/`is_prefilled()`/
+`into_parts()`; serde via a private `RawGroupList` mirror whose `TryFrom` calls `new()`
+(honest-decode, the `NonEmptyRangeInclusive` precedent). The one external constructor
+(`storage` decode) maps `GroupListBuildError` to a hard decode error.
+
+Consequences: `LogicError::{PrefillGroupCountMismatch, DuplicatedStudentInPrefilledGroups}`
+and `GroupListError::DuplicatedStudentInPrefilledGroups` are **deleted** (unrepresentable);
+the old checker's `validate_group_list_filling_internal` keeps only student-existence.
+State-dependent facts (student existence) stay with the checker/walker as dangling FKs.
+
+### F.3 Consolidated `GroupListOp` (elementary `SetFilling` gone)
+
+The elementary op payload is now a whole sealed `GroupList`:
+`GroupListOp::{Add(GroupList), Remove(id), Update(id, GroupList), AssignToSubject(period,
+subject, Option<id>)}` (and the annotated twin `Add(id, GroupList)` for undo-of-Remove).
+`apply_group_list` Update runs the merged colloscope-guard set driven by
+`(old.is_prefilled(), new.is_prefilled())`. **`RemainingFilling` and
+`NonEmptyGroupsWhenReducing` are deleted** — the row goes atomically, and the op carries a
+complete consistent value, so the truncate/extend reshaping is gone. `GroupListPrecheckError`
+shrank to `{InvalidGroupListId, GroupListIdAlreadyExists, InvalidSubjectId, InvalidPeriodId}`;
+`GroupListError` dropped `RemainingFilling`, `NonEmptyGroupsWhenReducing`,
+`PrefillGroupCountMismatch`.
+
+**The high-level `ops/` API is frozen.** `GroupListsUpdateOp`, its error enums, and the
+cleaning-op machinery are unchanged; the translators to low-level ops absorb the reshaping
+(`AddNewGroupList` → `Add(new(params, default).expect(...))`; `UpdateGroupList` replicates
+the grow/shrink pad-and-truncate then `Update(id, new(...).expect(...))`; the high-level
+`SetFilling` survives, translated to a low-level `Update`). Same panic contracts as before.
+
+### F.4 Mirror-consistency `LogicError`s (supersedes C.3's "Mirrors" bullet + §8's panic plan)
+
+Because the old checker retires at step 5, the new checker now carries the full
+ordering↔table mirror itself, for both sidecars (slots and weeks). Eight new `LogicError`
+variants: `SlotOrderingUnknownId`, `SlotOrderingWrongSubject`, `SlotOrderingDuplicate`,
+`OrphanSlot`, and the weeks twins `WeekOrderingUnknownId`, `WeekOrderingWrongPeriod`,
+`WeekOrderingDuplicate`, `OrphanWeek`. The two empty-row loops in `logic_errors()` grew into
+accumulating mirror sweeps: every ordered id must exist in the entity table, name the entity
+that keys its row, appear exactly once, and every table entry must be covered. `to_legacy`
+maps all four slots variants to `InvalidSlot` and all four weeks variants to `InvalidWeek`
+(the old checker's first image); `is_necessarily_logic_error` is unchanged (those legacy
+images are shared with the fixable dangles, so they are not "necessarily" logic errors).
+
+**Row-key liveness is deliberately excluded.** A row keyed by a removed period/subject is the
+op-reachable dangle (F.1's period removal; the analogous subject removal), reported per
+entity as `DanglingFk(WeekPeriodFk)` / `SlotSubjectFk` and repaired by the cascade. A
+short-circuiting `LogicError` there would block that repair, so it stays in the fixable
+layer. Every desync the sweeps *do* catch is reachable only through the `#[cfg(test)]`
+`forge_ordering_row` hatch — a code bug if it ever appears in production.
+
+This is consistent with the `LogicError` definition, not a doctrine change: unreachable by
+ops, decidable from the data, code-at-fault-if-present (`EmptyWeeksRow` was already the
+precedent). The classification rustdoc widened to admit "consistency of an ordering sidecar
+with its entity table" as a third decidable class, parallel to how `DuplicatedId` widened it.
+
+### F.5 The `walk` vs `count_weeks` convention note
+
+`Parameters::count_weeks` reads the week *table* while `walk`/`week_ids` are period-keyed
+(they iterate the ordering). On a valid state the two agree; on a broken (dangling) state
+they disagree — an orphan week is counted but never walked. Never mix the two conventions
+off a validated state. (Motivating site: `constraints-colloscopes/src/helpers.rs` derives
+indices from `walk_weeks().enumerate()` in one place and `count_weeks()` in another; safe
+only because the solver sees validated states.) Documented on `count_weeks`.
+
+### F.6 What step 5 inherits
+
+- **Op surface** is smaller: no `PeriodStillHasWeeks`/`RemainingFilling`/
+  `NonEmptyGroupsWhenReducing` in the force path, no elementary `SetFilling`; sealed
+  `GroupList` carried whole by `GroupListOp`.
+- **The new checker no longer leans on the old one** for mirror validation, so step 5 can
+  delete the old checker without leaving any invariant behind. The differential fuzz stayed
+  green (100 seeds) throughout — the new `LogicError`s are forge-only, outside its walk space.
+- **Unchanged:** checked `apply_*` keeps all its guards until step 5 (D.4-F1 still holds —
+  `NotEmptyPeriodInColloscope` stays vacuous-but-present); `PairingRule`/`SlotPairingRule`
+  are not yet sealed (their two cross-field `LogicError`s remain for step 5).
