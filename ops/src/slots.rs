@@ -306,28 +306,75 @@ impl SlotsUpdateOp {
                 // The state op takes the subject from the slot itself.
                 let mut slot = slot.clone();
                 slot.subject_id = *subject_id;
+                // Capture the teacher id before `slot` is moved into the op:
+                // the SlotTeacherDoesNotTeachSubject convergence carries only the
+                // slot id, so the reported (teacher, subject) pair is synthesized
+                // from the op payload in scope.
+                let teacher_id = slot.teacher_id;
 
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::Slot(
-                            collomatique_state_colloscopes::SlotOp::AddAfter(
-                                last_slot_id,
-                                slot,
-                            )
+                            collomatique_state_colloscopes::SlotOp::AddAfter(last_slot_id, slot),
                         ),
                         self.get_desc(),
-                    ).map_err(|e| if let collomatique_state_colloscopes::Error::Slot(se) = e {
-                        match se {
-                            collomatique_state_colloscopes::SlotError::InvalidSubjectId(_) => panic!("Subject id should be valid at this point"),
-                            collomatique_state_colloscopes::SlotError::SubjectHasNoInterrogation(_) => panic!("Subject should have interrogations at this point"),
-                            collomatique_state_colloscopes::SlotError::InvalidTeacherId(id) => AddNewSlotError::InvalidTeacherId(id),
-                            collomatique_state_colloscopes::SlotError::InvalidWeekPatternId(id) => AddNewSlotError::InvalidWeekPatternId(id),
-                            collomatique_state_colloscopes::SlotError::TeacherDoesNotTeachInSubject(tid, sid) => AddNewSlotError::TeacherDoesNotTeachInSubject(tid, sid),
-                            collomatique_state_colloscopes::SlotError::SlotOverlapsWithNextDay => AddNewSlotError::SlotOverlapsWithNextDay,
-                            _ => panic!("Unexpected slot error during AddNewSlot: {:?}", se),
+                    )
+                    .map_err(|e| {
+                        use collomatique_state_colloscopes::{
+                            ApplyError, Convergence, FixableInvariant, Reference, TeacherRefSite,
+                            WeekPatternRefSite,
+                        };
+                        match e {
+                            // Subject validity and interrogation presence are
+                            // pre-checked in the ops layer above, so those two
+                            // guards are unreachable here (their breaks would fall
+                            // through to the panic). The pre-op state was valid, so
+                            // every break in the set was introduced by this add.
+                            // Old validator order (validate_slot_internal):
+                            // teacher-resolves, teacher-teaches, week-pattern, then
+                            // day overflow.
+                            ApplyError::Invariants(set) => {
+                                for inv in &set {
+                                    if let FixableInvariant::DanglingFk(Reference::Teacher {
+                                        target,
+                                        site: TeacherRefSite::SlotTeacher(_),
+                                    }) = inv
+                                    {
+                                        return AddNewSlotError::InvalidTeacherId(*target);
+                                    }
+                                }
+                                for inv in &set {
+                                    if let FixableInvariant::Convergence(
+                                        Convergence::SlotTeacherDoesNotTeachSubject(_),
+                                    ) = inv
+                                    {
+                                        return AddNewSlotError::TeacherDoesNotTeachInSubject(
+                                            teacher_id,
+                                            *subject_id,
+                                        );
+                                    }
+                                }
+                                for inv in &set {
+                                    if let FixableInvariant::DanglingFk(Reference::WeekPattern {
+                                        target,
+                                        site: WeekPatternRefSite::SlotWeekPattern(_),
+                                    }) = inv
+                                    {
+                                        return AddNewSlotError::InvalidWeekPatternId(*target);
+                                    }
+                                }
+                                for inv in &set {
+                                    if let FixableInvariant::Convergence(
+                                        Convergence::SlotOverflowsDay(_),
+                                    ) = inv
+                                    {
+                                        return AddNewSlotError::SlotOverlapsWithNextDay;
+                                    }
+                                }
+                                panic!("Unexpected invariant breaks during AddNewSlot: {set:?}");
+                            }
+                            _ => panic!("Unexpected error during AddNewSlot: {e:?}"),
                         }
-                    } else {
-                        panic!("Unexpected error during AddNewSlot: {:?}", e);
                     })?;
                 let Some(collomatique_state_colloscopes::NewId::SlotId(new_id)) = result else {
                     panic!("Unexpected result from SlotOp::AddAfter");
@@ -349,29 +396,94 @@ impl SlotsUpdateOp {
                 {
                     slot.subject_id = subject_id;
                 }
+                // Sources for the reduced convergence variants (both carry only
+                // the slot id). On the Invariants path the slot existed (else the
+                // InvalidSlotId precheck fires first), so the subject is pinned.
+                let teacher_id = slot.teacher_id;
+                let subject_id = slot.subject_id;
 
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::Slot(
-                            collomatique_state_colloscopes::SlotOp::Update(
-                                *slot_id,
-                                slot,
-                            )
+                            collomatique_state_colloscopes::SlotOp::Update(*slot_id, slot),
                         ),
-                        self.get_desc()
-                    ).map_err(|e| if let collomatique_state_colloscopes::Error::Slot(se) = e {
-                        match se {
-                            collomatique_state_colloscopes::SlotError::InvalidSlotId(id) => UpdateSlotError::InvalidSlotId(id),
-                            collomatique_state_colloscopes::SlotError::InvalidSubjectId(id) => UpdateSlotError::InvalidSubjectId(id),
-                            collomatique_state_colloscopes::SlotError::SubjectHasNoInterrogation(id) => UpdateSlotError::SubjectHasNoInterrogation(id),
-                            collomatique_state_colloscopes::SlotError::InvalidTeacherId(id) => UpdateSlotError::InvalidTeacherId(id),
-                            collomatique_state_colloscopes::SlotError::InvalidWeekPatternId(id) => UpdateSlotError::InvalidWeekPatternId(id),
-                            collomatique_state_colloscopes::SlotError::TeacherDoesNotTeachInSubject(tid, sid) => UpdateSlotError::TeacherDoesNotTeachInSubject(tid, sid),
-                            collomatique_state_colloscopes::SlotError::SlotOverlapsWithNextDay => UpdateSlotError::SlotOverlapsWithNextDay,
-                            _ => panic!("Unexpected slot error during UpdateSlot: {:?}", se),
+                        self.get_desc(),
+                    )
+                    .map_err(|e| {
+                        use collomatique_state_colloscopes::{
+                            ApplyError, Convergence, FixableInvariant, PrecheckError, Reference,
+                            SlotPrecheckError, TeacherRefSite, WeekPatternRefSite,
+                        };
+                        match e {
+                            ApplyError::Precheck(PrecheckError::Slot(pe)) => match pe {
+                                SlotPrecheckError::InvalidSlotId(id) => {
+                                    UpdateSlotError::InvalidSlotId(id)
+                                }
+                                // The subject is pinned to the slot's current
+                                // subject above, so CannotChangeSubject cannot
+                                // arise here; the remaining precheck variants are
+                                // add/move-only.
+                                _ => panic!("Unexpected slot precheck during UpdateSlot: {pe:?}"),
+                            },
+                            // The pre-op state was valid, so every break in the set
+                            // was introduced by this update. Old validator order
+                            // (validate_slot_internal): teacher-resolves,
+                            // teacher-teaches, week-pattern, subject-has-
+                            // interrogations, then day overflow. (InvalidSubjectId
+                            // sits between week-pattern and no-interrogations, but
+                            // the pinned subject is always valid, so it is
+                            // unreachable and omitted.)
+                            ApplyError::Invariants(set) => {
+                                for inv in &set {
+                                    if let FixableInvariant::DanglingFk(Reference::Teacher {
+                                        target,
+                                        site: TeacherRefSite::SlotTeacher(_),
+                                    }) = inv
+                                    {
+                                        return UpdateSlotError::InvalidTeacherId(*target);
+                                    }
+                                }
+                                for inv in &set {
+                                    if let FixableInvariant::Convergence(
+                                        Convergence::SlotTeacherDoesNotTeachSubject(_),
+                                    ) = inv
+                                    {
+                                        return UpdateSlotError::TeacherDoesNotTeachInSubject(
+                                            teacher_id, subject_id,
+                                        );
+                                    }
+                                }
+                                for inv in &set {
+                                    if let FixableInvariant::DanglingFk(Reference::WeekPattern {
+                                        target,
+                                        site: WeekPatternRefSite::SlotWeekPattern(_),
+                                    }) = inv
+                                    {
+                                        return UpdateSlotError::InvalidWeekPatternId(*target);
+                                    }
+                                }
+                                for inv in &set {
+                                    if let FixableInvariant::Convergence(
+                                        Convergence::SlotForSubjectWithoutInterrogations(_),
+                                    ) = inv
+                                    {
+                                        return UpdateSlotError::SubjectHasNoInterrogation(
+                                            subject_id,
+                                        );
+                                    }
+                                }
+                                for inv in &set {
+                                    if let FixableInvariant::Convergence(
+                                        Convergence::SlotOverflowsDay(_),
+                                    ) = inv
+                                    {
+                                        return UpdateSlotError::SlotOverlapsWithNextDay;
+                                    }
+                                }
+                                panic!("Unexpected invariant breaks during UpdateSlot: {set:?}");
+                            }
+                            _ => panic!("Unexpected error during UpdateSlot: {e:?}"),
                         }
-                    } else {
-                        panic!("Unexpected error during UpdateSlot: {:?}", e);
                     })?;
 
                 assert!(result.is_none());
@@ -380,22 +492,24 @@ impl SlotsUpdateOp {
             }
             Self::DeleteSlot(slot_id) => {
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::Slot(
                             collomatique_state_colloscopes::SlotOp::Remove(*slot_id),
                         ),
                         self.get_desc(),
                     )
                     .map_err(|e| {
-                        if let collomatique_state_colloscopes::Error::Slot(se) = e {
-                            match se {
-                                collomatique_state_colloscopes::SlotError::InvalidSlotId(id) => {
-                                    DeleteSlotError::InvalidSlotId(id)
-                                }
-                                _ => panic!("Unexpected slot error during DeleteSlot: {:?}", se),
-                            }
-                        } else {
-                            panic!("Unexpected error during DeleteSlot: {:?}", e);
+                        use collomatique_state_colloscopes::{
+                            ApplyError, PrecheckError, SlotPrecheckError,
+                        };
+                        match e {
+                            ApplyError::Precheck(PrecheckError::Slot(
+                                SlotPrecheckError::InvalidSlotId(id),
+                            )) => DeleteSlotError::InvalidSlotId(id),
+                            // Colloscope rows and slot-pairing references are
+                            // cleared by the cleaning phase before this runs, so
+                            // their stripped-guard breaks are unreachable here.
+                            _ => panic!("Unexpected error during DeleteSlot: {e:?}"),
                         }
                     })?;
 
@@ -417,7 +531,7 @@ impl SlotsUpdateOp {
                 }
 
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::Slot(
                             collomatique_state_colloscopes::SlotOp::ChangePosition(
                                 *slot_id,
@@ -455,7 +569,7 @@ impl SlotsUpdateOp {
                 }
 
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::Slot(
                             collomatique_state_colloscopes::SlotOp::ChangePosition(
                                 *slot_id,
