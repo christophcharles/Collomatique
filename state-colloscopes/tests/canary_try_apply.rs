@@ -4,10 +4,14 @@
 //! one file at a time from the checked `apply_*` world to the
 //! [`Data::try_apply`] gate (snapshot → `force_apply` → `broken_invariants` →
 //! rollback), and undo/redo still replays recorded ops through the *old*
-//! `apply`. That coexistence is only sound if the two APIs agree op-by-op:
-//! anything `try_apply` accepts, checked `apply` must also accept, with the
-//! same resulting state and the same computed reverse (and vice-versa). This
-//! canary re-verifies that agreement continuously, across the whole generated
+//! `apply`. That coexistence is only sound if the two APIs agree op-by-op —
+//! but the contract is *one-directional* (see plan_step_5.md §3): everything
+//! old `apply` accepts, `try_apply` must also accept with the same resulting
+//! state and the same computed reverse. The reverse direction has one known
+//! exception, carried over from step 4: old `apply` rejects a harmless *no-op*
+//! (e.g. clearing a group-list association on a non-interrogation subject,
+//! `SubjectHasNoInterrogation`) that the gate accepts as a perfect no-op. This
+//! canary re-verifies that contract continuously, across the whole generated
 //! op space, for the entire life of the migration.
 //!
 //! **Shape.** A validated random walk (the testgen harness, byte-untouched)
@@ -16,12 +20,18 @@
 //! [`PROBE_STRIDE`] committed ops, a `gen_corruption_op` probe — the op is
 //! annotated once and then run on two twin clones of the same pre-state: one
 //! through old `apply`, one through new `try_apply`. The canary asserts:
-//!   * verdict agreement — old `Ok` ⇔ new `Ok`; any split is a hard failure;
 //!   * on double-`Ok` — equal resulting state and equal computed reverses
 //!     (the replay-interchangeability contract);
 //!   * on double-`Err` — both twins bit-identical to the pre-state (old-apply
 //!     guard atomicity and new-gate rollback atomicity), and a new-side
-//!     `Invariants`/`Logic` error carries a non-empty set.
+//!     `Invariants`/`Logic` error carries a non-empty set;
+//!   * on an old-`Ok`/new-`Err` split — a hard failure (new-checker-stricter,
+//!     never tolerated);
+//!   * on an old-`Err`/new-`Ok` split — tolerated **only** when the new twin is
+//!     a perfect no-op (state bit-identical to the pre-state *and* the returned
+//!     reverse itself that same no-op, so replay is a no-op either direction);
+//!     any state-changing new-`Ok` against an old-`Err` is hidden work and stays
+//!     fatal.
 //!
 //! The corruption-probe interleave is the important part: `gen_op`'s invalid
 //! arm produces op-shaped invalidity, while `gen_corruption_op`'s five kinds
@@ -69,23 +79,19 @@ fn kind_index(kind: CorruptionKind) -> usize {
 }
 
 /// Runs `annotated` on two twin clones of `before` — one through old checked
-/// `apply`, one through new `try_apply` — and asserts the two APIs agree.
+/// `apply`, one through new `try_apply` — and asserts the one-directional
+/// agreement contract (plan_step_5.md §3).
 ///
 /// Returns the old-path result state on a double-`Ok` (so the caller can
-/// advance the authoritative walk through the old path), or `None` on a
-/// double-`Err`.
+/// advance the authoritative walk through the old path), or `None` otherwise
+/// (double-`Err`, or a tolerated old-`Err`/new-`Ok` perfect-no-op split — in
+/// both of which the old path did not advance).
 fn twin_compare(before: &Data, annotated: &AnnotatedOp, what: &str) -> Option<Data> {
     let mut old_twin = before.clone();
     let mut new_twin = before.clone();
 
     let old_res = old_twin.apply(annotated);
     let new_res = new_twin.try_apply(annotated);
-
-    assert_eq!(
-        old_res.is_ok(),
-        new_res.is_ok(),
-        "verdict split on {what}:\n  old apply    = {old_res:?}\n  new try_apply = {new_res:?}",
-    );
 
     match (old_res, new_res) {
         (Ok(old_rev), Ok(new_rev)) => {
@@ -121,7 +127,40 @@ fn twin_compare(before: &Data, annotated: &AnnotatedOp, what: &str) -> Option<Da
             }
             None
         }
-        _ => unreachable!("verdict agreement was asserted above"),
+        (Ok(old_rev), Err(new_err)) => {
+            // The forbidden direction: old apply accepts, new try_apply rejects.
+            // That would be a new-checker-stricter regression, never tolerated.
+            panic!(
+                "verdict split on {what}: old apply accepted but new try_apply rejected \
+                 (new-checker-stricter — never tolerated):\n  old reverse   = {old_rev:?}\n  \
+                 new try_apply = {new_err:?}",
+            );
+        }
+        (Err(old_err), Ok(new_rev)) => {
+            // The known step-4 divergence: old checked apply rejects a harmless
+            // no-op (e.g. clearing a group-list association on a
+            // non-interrogation subject → `SubjectHasNoInterrogation`) that the
+            // gate accepts as a perfect no-op. Tolerated ONLY when the new twin
+            // changed nothing AND the returned reverse is itself that same no-op:
+            // then replaying this recorded op is a no-op in either direction, so
+            // it is sound to store (once replay moves onto `try_apply` in commit
+            // 3.0). A state-CHANGING new-`Ok` against an old-`Err` is hidden work
+            // — a force copy silently repairing what the stripped guard policed —
+            // and stays fatal.
+            assert!(
+                &new_twin == before,
+                "old-Err/new-Ok split on {what} with a state change — hidden work, not a no-op:\n  \
+                 old apply = {old_err:?}\n  new try_apply landed a *changed* state",
+            );
+            let mut rev_twin = before.clone();
+            let rev_res = rev_twin.try_apply(&new_rev);
+            assert!(
+                rev_res.is_ok() && &rev_twin == before,
+                "old-Err/new-Ok no-op split on {what} but the returned reverse is not itself a \
+                 no-op:\n  reverse = {new_rev:?}\n  reverse result = {rev_res:?}",
+            );
+            None
+        }
     }
 }
 

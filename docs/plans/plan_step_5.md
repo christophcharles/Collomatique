@@ -193,15 +193,19 @@ History recording is identical because errors only exist on failure — a failed
 
 ---
 
-## 3. Why coexistence is safe (the contract the canary enforces)
+## 3. Why coexistence is safe (the one-directional contract the canary enforces)
 
-During the migration window, ops recorded by `Manager::try_apply` are replayed (undo/redo, `AppSession::cancel`) through the old `apply`. This is sound because:
+During the migration window, ops recorded by `Manager::try_apply` are replayed (undo/redo, `AppSession::cancel`). **The replay path is switched from old `apply` to `try_apply` up front, in commit 3.0, before any ops module migrates** — so history recorded by *either* API replays through the same gate that accepts it. This ordering is what makes the coexistence honest; the reasoning below is the *agreement* contract the canary pins, not a claim that the two apply paths are interchangeable in both directions.
 
-1. **Any op `try_apply` accepts, checked `apply` also accepts, with the same resulting state and the same computed reverse.** Step 3 certified the old checker as complete ground truth (ops ⊆ old, no gaps), so a landing that is clean under `broken_invariants` violates no old guard. The step-4 differential fuzz's `ForceValid` pins already assert valid-op equivalence of state + reverse between `apply` and `force_apply` (tests/differential_force_apply.rs:160-174) — and `try_apply` on the accepted path *is* `force_apply` plus a clean check.
-2. **The `debug_assert_eq!` in replay** (traits.rs:245-248: recomputed inverse must equal stored backward) holds for the same reason.
-3. The **canary test** (§6) re-verifies both facts continuously, op-by-op, across the whole generated op space — including corruption ops that probe exactly the stripped-guard territory — for the entire life of the migration.
+The contract is **one-directional**:
 
-The reverse direction (op accepted by old `apply` but rejected by `try_apply`) would be a *new-checker-stricter* disagreement; the canary turns any such case into a hard failure with a replayable seed, which is precisely the kind of finding we want surfaced before the old world is deleted, not after.
+1. **Everything old checked `apply` accepts, `try_apply` also accepts — with the same resulting state and the same computed reverse.** Step 3 certified the old checker as complete ground truth (ops ⊆ old, no gaps), so any op that survives every old guard lands a state that is clean under `broken_invariants`; and `try_apply` on the accepted path *is* `force_apply` plus that clean check. The step-4 differential fuzz's `ForceValid` pins already assert valid-op equivalence of state + reverse between `apply` and `force_apply` (tests/differential_force_apply.rs:160-174). This is the direction that matters for soundness: the `debug_assert_eq!` in replay (traits.rs:245-248: recomputed inverse must equal stored backward) rests on it.
+
+2. **The reverse direction has one known, bounded exception.** An op that old `apply` *rejects* may still be *accepted* by `try_apply` — but only as a **perfect no-op**: the state is left bit-identical and the returned reverse is itself that same no-op. This is the step-4 divergence: old checked apply rejects a harmless clear (e.g. clearing a group-list association on a non-interrogation subject, `SubjectHasNoInterrogation`), which the gate accepts because clearing a non-existent association changes nothing. Because such a recorded op is a no-op in *both* replay directions, storing it is sound the moment replay runs through `try_apply` (commit 3.0) — and it was never sound through old `apply`, which is exactly why 3.0 comes first. Any *state-changing* `try_apply`-Ok against an old-`apply`-Err would be hidden work (a force copy silently repairing what a stripped guard policed) and is a hard failure.
+
+The forbidden direction is **old `apply` Ok / `try_apply` Err** — a genuine new-checker-stricter regression. The canary turns any such case into a hard failure with a replayable seed, which is precisely the kind of finding we want surfaced before the old world is deleted, not after.
+
+The **canary test** (§6) re-verifies this whole contract continuously, op-by-op, across the generated op space — including corruption ops that probe the stripped-guard territory — for the entire life of the migration.
 
 ---
 
@@ -211,12 +215,14 @@ The reverse direction (op accepted by old `apply` but rejected by `try_apply`) w
 |---|--------|----------------|
 | 1 | API commit: trait members, `ApplyError`, `Data::try_apply`, `Manager::try_apply`, `FakeData`, traits tests | state, state-colloscopes |
 | 2 | Canary: twin-execution verdict-agreement fuzz | state-colloscopes (test) |
+| 2.5 | Canary carve-out: relax to the one-directional contract (asymmetric perfect-no-op tolerance); plan §3/§6 rewrite | state-colloscopes (test), docs |
+| 3.0 | Replay path onto `try_apply`: `update_internal_state_with_aggregated` (both call sites, return type → `ApplyError`) | state |
 | 3.1–3.11 | ops migration, one module per commit: teachers, students, week_patterns, incompatibilities, pairings, slot_pairings, subjects, group_lists, assignments, colloscope, slots | ops |
 | 3.12 | ops migration: the four `.expect`-only modules (general_planning, settings, balancing, export_config) | ops |
 | 4 | gtk4 direct `GlobalUpdate` sites (2 sites, `e.to_string()` only) | gtk4 |
 | 5 | state-colloscopes test migration: found_bugs, week_ops, period_consistency, colloscopes.rs fixtures, lib.rs force_apply_tests, invariants fixtures; differential fuzz rewritten as `property_try_apply.rs` | state-colloscopes |
 | 6 | Decode rewiring: `from_inner_data` onto `broken_invariants`, `FromInnerDataError` arms, `DecodeError` arms, spec2 edits, gtk4 file_loader arm | state-colloscopes, storage, gtk4, rpc-engine (Display only) |
-| R1 | Deactivate: replay path switches to `try_apply`; property harness oracles switch; canary + old-fuzz deleted; old API caller-free | state, state-colloscopes, constraints-colloscopes |
+| R1 | Deactivate: property harness oracles switch; canary + old-fuzz deleted; old API caller-free (replay path already moved in 3.0) | state, state-colloscopes, constraints-colloscopes |
 | — | **Testing pause** (user-run: full suite once to scratchpad, 500-seed crank, smoke, contract scripts) | |
 | R2 | Remove: checked `apply_*`, old `Error` + per-domain enums, old checkers, legacy bridge, old trait members | state, state-colloscopes |
 | — | **Testing pause** | |
@@ -244,14 +250,31 @@ Everything in §2, in one commit: both crates must move together because `Data` 
 The design doc's §8 asks for exactly this: "one commit runs old validation and the new gate side by side with the property harness asserting verdict agreement across generated valid+invalid ops". Shape (modeled on `tests/differential_force_apply.rs`'s walk; exact plumbing adapted at implementation):
 
 - One seeded walk per `for_each_seed` iteration (`RunConfig { seeds: 100, ops_per_run: 1000, invalid_fraction: 0.15 }` — house scale), bootstrapped via `harness::bootstrap`.
-- For **every** generated op (both `gen_op`'s valid/invalid walk ops and, every `PROBE_STRIDE` committed ops, a `gen_corruption_op` probe): annotate once, then run old `apply` and new `try_apply` on **twin clones of the same pre-state**, and assert:
-  - verdict agreement: old `Ok` ⇔ new `Ok`; any split is a hard failure printing the op and both results;
+- For **every** generated op (both `gen_op`'s valid/invalid walk ops and, every `PROBE_STRIDE` committed ops, a `gen_corruption_op` probe): annotate once, then run old `apply` and new `try_apply` on **twin clones of the same pre-state**, and assert the **one-directional agreement contract of §3** (see the carve-out note below):
   - on double-`Ok`: resulting `InnerData` equal and computed reverses equal (the replay-interchangeability contract of §3);
-  - on double-`Err`: both states bit-identical to the pre-state (old-apply guard atomicity and new-gate rollback atomicity), and a new-side `Invariants`/`Logic` error carries a non-empty set.
+  - on double-`Err`: both states bit-identical to the pre-state (old-apply guard atomicity and new-gate rollback atomicity), and a new-side `Invariants`/`Logic` error carries a non-empty set;
+  - on an **old-`Ok`/new-`Err`** split: a hard failure printing the op and both results (new-checker-stricter — never tolerated);
+  - on an **old-`Err`/new-`Ok`** split: tolerated **only** as a perfect no-op — the new twin is bit-identical to the pre-state *and* the returned reverse is itself that same no-op (verified by re-applying it and checking it too changes nothing); any state-changing new-`Ok` against an old-`Err` is a hard failure (hidden work).
 - The walk **commits through the old path** (still the authoritative one), so trajectories stay comparable with `property_ops.rs` seeds.
 - The corruption-probe interleave is the important part: `gen_op`'s invalid arm produces op-shaped invalidity, while `gen_corruption_op`'s five kinds (`ForceRemove`/`ForceRetarget`/`ForceSemantic`/`ForceLogic`/`ForceValid`) target exactly the space the stripped guards used to police — where old-vs-new verdicts could plausibly split.
 
-**Lifetime:** the canary lands right after commit 1, must stay green through every 3.x/4/5/6 commit, gets one 500-seed crank at the first testing pause, and is **deleted in R1** — it structurally requires both APIs, and its job (verdict-equivalence evidence) is complete the moment the old API loses authority. Its module doc says this explicitly so nobody "ports" it later.
+**The carve-out (commit 2.5).** Commit 2 lands the canary with strict `old Ok ⇔ new Ok` agreement, and it immediately catches the known step-4 divergence (a no-op clear the gate accepts but old `apply` rejects) — landing red on purpose. Commit 2.5 relaxes it to the asymmetric contract above: the old-`Err`/new-`Ok` perfect-no-op exception is tolerated, while the old-`Ok`/new-`Err` direction and every state-changing split stay fatal. This is a test + plan-only change (this §3/§6 rewrite is that plan half). The underlying replay soundness for those no-op ops is delivered by commit 3.0 (§6.5), which moves replay onto `try_apply` up front.
+
+**Lifetime:** the canary lands right after commit 1, must stay green (with the 2.5 carve-out) through every 3.x/4/5/6 commit, gets one 500-seed crank at the first testing pause, and is **deleted in R1** — it structurally requires both APIs, and its job (verdict-equivalence evidence) is complete the moment the old API loses authority. Its module doc says this explicitly so nobody "ports" it later.
+
+---
+
+## 6.5 Commit 3.0 — replay onto `try_apply`
+
+Moving the replay path onto the gate **before** any ops module migrates is what makes the §3 coexistence honest: history recorded by `try_apply` (including the tolerated perfect-no-op ops of §3) then replays through the same gate that accepts it, instead of through old `apply`, which would reject those no-ops.
+
+`private::update_internal_state_with_aggregated` (state/src/traits.rs:233-280) is the undo/redo/`cancel` replay engine. It applies each stored `ReversibleOp` — the forward op on redo, the backward op on undo — through `self.get_in_memory_data_mut().apply(...)` at both call sites (:243 forward, :265 backward), and its `debug_assert_eq!` recomputes the inverse and pins it against the stored backward. Commit 3.0:
+
+- switches both `apply(...)` call sites to `try_apply(...)`;
+- changes the function's return type from the `Error`-typed result to the `ApplyError`-typed one (it is `pub(crate)`-private and its callers panic on `Err`, so nothing outside moves);
+- the `debug_assert_eq!` inverse pin is unchanged — on the accepted path `try_apply`'s reverse equals `force_apply`'s, which the step-4 pins already tie to the checked reverse.
+
+The old `apply` remains for the not-yet-migrated ops modules; only the *replay* of already-recorded ops moves. This is the single item peeled out of R1's original "replay path switches to `try_apply`" bullet (§11), landed early instead.
 
 ---
 
@@ -568,7 +591,7 @@ with `FromInnerDataError` (lib.rs:335-340) losing its `InnerDataError` arm and g
 
 ### R1 — deactivate (old API loses its last callers; code still present)
 
-1. `state/src/traits.rs`: `update_internal_state_with_aggregated` switches from `apply` to `try_apply` (both call sites, :243 forward and :265 backward; its return type becomes `ApplyError`-typed — it is `pub(crate)`-private and its callers panic on `Err`, so nothing else moves). Undo/redo/cancel now replay through the gate.
+1. (Replay path already moved to `try_apply` in commit 3.0 — see §6.5 — so R1 no longer touches `update_internal_state_with_aggregated`.)
 2. `state-colloscopes/tests/property_ops.rs`: the walk switches to `Manager::try_apply` and the oracle from `check_invariants()` to `broken_invariants() == Ok(∅)`. This makes `tests/property_ops_broken_invariants.rs` redundant (the two harnesses become identical) — delete it here, noting the merge in the commit message.
 3. `constraints-colloscopes/tests/property_build.rs:146`: same oracle swap.
 4. Delete the **canary** (`tests/canary_try_apply.rs`) and the old differential fuzz (`tests/differential_force_apply.rs`) — `property_try_apply.rs` (commit 5) already carries the fuzz coverage forward.
@@ -616,13 +639,14 @@ Decisions made in this plan (all settled — nothing deferred to implementation)
 1. **Parallel-API migration with rename-back** — add `ApplyError`/`try_apply`, migrate, delete old, rename. (User's approach; the associated-type "flip" problem only forbids *replacing* gradually, not *adding*.)
 2. **Three-tier `ApplyError`** with a `Logic` arm — required by `GlobalUpdate`'s external payloads, and (post-sealing) reachable *only* from external data. Sets pass through as `BTreeSet`, `Display` itemizes entries.
 3. **`try_apply` = snapshot + `force_apply` + `broken_invariants` + rollback**, snapshotting *both* `InnerData` and the `IdIssuer` (the issuer clone is one `u64` of defensive insurance against future force-path changes; `annotate`-issued ids stay burned on failure, as today). The id-issuer assert is the surviving Data-level companion on the accepted path (Appendix D.4's pin).
-4. **Replay stays on old `apply` until R1**; safety by step-3 certification + step-4 `ForceValid` equivalence pins + the canary.
+4. **Replay moves to `try_apply` up front (commit 3.0), before any ops module migrates** — so history recorded by either API replays through the gate that accepts it (in particular the tolerated perfect-no-op ops of §3, which old `apply` would reject on replay). Safety by step-3 certification + step-4 `ForceValid` equivalence pins + the canary. (This was originally R1's first bullet; it is peeled out and landed early — the reason commit 2's red carve-out is safe to accept.)
 5. **Ops translation doctrine**: pre-op validity ⇒ set-membership attribution; old-validator precedence via explicit priority passes; missing payloads synthesized from the op in scope; cleaning-contract panics stay panics; `UpdateError` and all ops-layer cleaning frozen (step 6/7 territory).
 6. **Decode validates once, at the end, on the full `InnerData`** (reconstruction verified total on unvalidated params); the empty-assignments-row-on-unknown-period check stays as a decoder-owned error; loaded files hard-error on any non-clean checker result.
 7. **Differential fuzz is rewritten, not deleted** (`property_try_apply.rs`: atomicity + honesty + reverse pins over the public gate); the canary is deliberately temporary and dies in R1; `property_ops_broken_invariants.rs` merges into `property_ops.rs` at R1.
 8. **Exact-set asserts** in migrated tests wherever the expected set is known (stronger pins than the old single-variant matches), including the two-entry set at week_ops :530 pinning the F5 bound-0 rule.
 9. **PairingRule/SlotPairingRule are sealed *before* step 5 starts** (separate session; G1/G2 recipe with a plain-fields DTO at the ops boundary). This plan assumes the sealed state: the two parts-share `LogicError` variants are gone, and the `Logic` tier means "external data only".
 10. **The id-issuer high-water check stays a panic**, not an error arm: `annotate` fuses id issuance (normal ops draw from this issuer; the `GlobalUpdate` annotate arm absorbs payload ids via `skip_to_id(max_id + 1)`, ops.rs:820-827), so the check cannot fire through the `Manager` surface. Its only trigger is a cross-instance `AnnotatedOp` transplant through the raw `try_apply` — a caller bug every consumer would panic on anyway, so an error arm would just recreate dead `panic!("cannot happen")` boilerplate.
+11. **The old↔new agreement contract is one-directional** (decided when commit 2 landed red, encoded by commit 2.5). Old `Ok` ⇒ new `Ok` with equal state and reverse is the soundness direction and is strict. The reverse direction tolerates exactly one bounded exception — the step-4 perfect-no-op divergence, where old `apply` rejects a harmless clear (`SubjectHasNoInterrogation`) that the gate accepts without changing anything and with a no-op reverse. Every *state-changing* new-`Ok`-against-old-`Err`, and every old-`Ok`/new-`Err`, stays fatal. The canary encodes this asymmetry; the replay soundness it relies on is delivered by commit 3.0.
 
 ## 14. Design-doc bookkeeping (close-out)
 
