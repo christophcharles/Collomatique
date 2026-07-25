@@ -94,6 +94,13 @@ impl Parameters {
 
     /// Total number of weeks across all periods (delegates to
     /// [`weeks::Weeks::count_weeks`]).
+    ///
+    /// This reads the week *table*, whereas [`Self::walk_weeks`] and
+    /// [`Self::week_ids`] are period-keyed (they walk the ordering sidecar under
+    /// the period display order). On a valid state the two conventions agree, but
+    /// on a broken (dangling) state they disagree — an orphan week is counted
+    /// here yet never walked. Never mix a `count_weeks`-derived total with a
+    /// `walk_weeks`-derived index outside a validated state.
     pub fn count_weeks(&self) -> usize {
         self.weeks.count_weeks()
     }

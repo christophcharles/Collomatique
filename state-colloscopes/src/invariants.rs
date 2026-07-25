@@ -7,9 +7,11 @@
 //!   ([crate::InnerData::for_each_reference]) and its target id does not
 //!   resolve. Fixed by removing or clearing the referencing data.
 //! - [LogicError] — truth decidable from a row's *own value* (or, for
-//!   [LogicError::DuplicatedId], a whole-document id-uniqueness property): no
-//!   *other* entity's state can flip it, so no legitimate elementary op can
-//!   produce it by side effect. Only buggy code (or a hand-forged file) can.
+//!   [LogicError::DuplicatedId], a whole-document id-uniqueness property; or,
+//!   for the ordering variants, whether an ordering sidecar agrees with its
+//!   entity table): no *other* entity's state can flip it, so no legitimate
+//!   elementary op can produce it by side effect. Only buggy code (or a
+//!   hand-forged file) can.
 //!   Not fixable: consumers panic (cascade) or hard-error (decode).
 //! - [Convergence] — a predicate over *existing* edges that legitimate ops can
 //!   break indirectly (e.g. `UpdateSubject` turning interrogations off breaks
@@ -46,10 +48,15 @@
 //! - An [crate::incompats::Incompatibility]'s subject is *not* required to run
 //!   interrogations (see the `subject_id` field docs for why) — the one
 //!   subject reference without a "has interrogations" convergence predicate.
-//! - The periods list↔map and slots ordering↔table mirrors are encapsulated
-//!   behind compound mutators and trusted unconditionally here; a desync is a
-//!   hard code bug and surfaces as a read-path panic (fail-fast by design),
-//!   not a checker result.
+//! - The slots and weeks ordering↔table mirrors *are* validated here, by the
+//!   layer-A sweeps, as [LogicError]s (a desync is unreachable through any op —
+//!   the compound mutators keep both containers in lockstep, force ops included;
+//!   only the test-only `forge_ordering_row` hatch can split them — so it is
+//!   code-at-fault, exactly the [LogicError] contract). The one mirror fact left
+//!   *out* is row-key liveness: an ordering row keyed by a removed period (or
+//!   subject) is the op-reachable dangle that layer B owns as
+//!   [FixableInvariant::DanglingFk] and the cascade repairs, so promoting it to
+//!   a short-circuiting [LogicError] would block that repair.
 //! - The id-issuer high-water check lives in `Data::check_invariants`: the
 //!   issuer is `Data`-level state outside [crate::InnerData], so it stays a
 //!   separate companion to `broken_invariants`.
@@ -70,8 +77,9 @@ use crate::{ColloscopeError, InnerDataError, InvariantError};
 
 /// A state no legitimate elementary op can reach: the *code* (or a hand-forged
 /// file) is at fault, not the data. Truth is decidable from the row's own value
-/// (or, for [LogicError::DuplicatedId], whole-document id uniqueness) — see the
-/// module docs for the classification rule.
+/// (or, for [LogicError::DuplicatedId], whole-document id uniqueness; or, for
+/// the ordering variants, consistency of an ordering sidecar with its entity
+/// table) — see the module docs for the classification rule.
 ///
 /// Declaration order is the canonical order (derived `Ord`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Error)]
@@ -88,10 +96,36 @@ pub enum LogicError {
     /// the subject has ≥ 1 slot)
     #[error("slots-ordering row for subject {0:?} is stored with an empty slot list")]
     EmptySlotsRow(SubjectId),
+    /// A slots-ordering row lists a slot id that is absent from the slot table
+    #[error("slots-ordering row for subject {0:?} lists unknown slot {1:?}")]
+    SlotOrderingUnknownId(SubjectId, SlotId),
+    /// A slot sits in the ordering row of a subject other than its own
+    /// `slot.subject_id` (the row-key/entity mismatch)
+    #[error("slot {1:?} is filed under subject {0:?} but names another subject")]
+    SlotOrderingWrongSubject(SubjectId, SlotId),
+    /// A slot id appears more than once across the ordering rows
+    #[error("slot {0:?} appears more than once in the slots ordering")]
+    SlotOrderingDuplicate(SlotId),
+    /// A slot table entry is covered by no ordering row
+    #[error("slot {0:?} exists in the slot table but is absent from the ordering")]
+    OrphanSlot(SlotId),
     /// A stored weeks-ordering row with an empty week list (a row exists iff
     /// the period has ≥ 1 week)
     #[error("weeks-ordering row for period {0:?} is stored with an empty week list")]
     EmptyWeeksRow(PeriodId),
+    /// A weeks-ordering row lists a week id that is absent from the week table
+    #[error("weeks-ordering row for period {0:?} lists unknown week {1:?}")]
+    WeekOrderingUnknownId(PeriodId, WeekId),
+    /// A week sits in the ordering row of a period other than its own
+    /// `week.period_id` (the row-key/entity mismatch)
+    #[error("week {1:?} is filed under period {0:?} but names another period")]
+    WeekOrderingWrongPeriod(PeriodId, WeekId),
+    /// A week id appears more than once across the ordering rows
+    #[error("week {0:?} appears more than once in the weeks ordering")]
+    WeekOrderingDuplicate(WeekId),
+    /// A week table entry is covered by no ordering row
+    #[error("week {0:?} exists in the week table but is absent from the ordering")]
+    OrphanWeek(WeekId),
     /// A stored colloscope interrogation row with an empty group set (rows are
     /// canonical-absent: a row exists iff it holds an assigned group)
     #[error("colloscope interrogation row ({0:?}, {1:?}) is stored with an empty group set")]
@@ -249,14 +283,67 @@ impl crate::InnerData {
                 errors.insert(LogicError::EmptyAssignmentsRow(period, subject));
             }
         }
+        // Ordering↔table mirror (slots). Row-key liveness is deliberately NOT
+        // checked here: a row keyed by a removed subject is the op-reachable
+        // dangling state, reported per slot as DanglingFk(SlotSubjectFk) in
+        // layer B and repaired by the cascade. Everything else about the mirror
+        // is a code bug — every listed id must exist in the slot table, name the
+        // subject that keys its row, appear exactly once, and cover every slot.
+        let mut seen_slots = BTreeSet::new();
         for (subject, order) in self.params.slots.ordering_entries() {
             if order.is_empty() {
                 errors.insert(LogicError::EmptySlotsRow(subject));
             }
+            for slot_id in order {
+                match self.params.slots.find_slot(*slot_id) {
+                    None => {
+                        errors.insert(LogicError::SlotOrderingUnknownId(subject, *slot_id));
+                    }
+                    Some(slot) => {
+                        if slot.subject_id != subject {
+                            errors.insert(LogicError::SlotOrderingWrongSubject(subject, *slot_id));
+                        }
+                    }
+                }
+                if !seen_slots.insert(*slot_id) {
+                    errors.insert(LogicError::SlotOrderingDuplicate(*slot_id));
+                }
+            }
         }
+        for (slot_id, _slot) in self.params.slots.slot_entries() {
+            if !seen_slots.contains(&slot_id) {
+                errors.insert(LogicError::OrphanSlot(slot_id));
+            }
+        }
+
+        // Ordering↔table mirror (weeks), the exact twin of the slots sweep
+        // above. Row-key liveness (a row keyed by a removed period) stays out
+        // for the same reason: it is the op-reachable DanglingFk(WeekPeriodFk)
+        // the cascade repairs.
+        let mut seen_weeks = BTreeSet::new();
         for (period, order) in self.params.weeks.ordering_entries() {
             if order.is_empty() {
                 errors.insert(LogicError::EmptyWeeksRow(period));
+            }
+            for week_id in order {
+                match self.params.weeks.find_week(*week_id) {
+                    None => {
+                        errors.insert(LogicError::WeekOrderingUnknownId(period, *week_id));
+                    }
+                    Some(week) => {
+                        if week.period_id != period {
+                            errors.insert(LogicError::WeekOrderingWrongPeriod(period, *week_id));
+                        }
+                    }
+                }
+                if !seen_weeks.insert(*week_id) {
+                    errors.insert(LogicError::WeekOrderingDuplicate(*week_id));
+                }
+            }
+        }
+        for (week_id, _week) in self.params.weeks.week_entries() {
+            if !seen_weeks.contains(&week_id) {
+                errors.insert(LogicError::OrphanWeek(week_id));
             }
         }
         for ((slot, week), groups) in self.colloscope.iter() {
@@ -573,7 +660,15 @@ impl LogicError {
             LogicError::DuplicatedId(_) => E::DuplicateIds,
             LogicError::EmptyAssignmentsRow(..) => E::Params(InvariantError::EmptyAssignmentRow),
             LogicError::EmptySlotsRow(_) => E::Params(InvariantError::EmptySlotsRow),
+            LogicError::SlotOrderingUnknownId(..)
+            | LogicError::SlotOrderingWrongSubject(..)
+            | LogicError::SlotOrderingDuplicate(_)
+            | LogicError::OrphanSlot(_) => E::Params(InvariantError::InvalidSlot),
             LogicError::EmptyWeeksRow(_) => E::Params(InvariantError::EmptyWeeksRow),
+            LogicError::WeekOrderingUnknownId(..)
+            | LogicError::WeekOrderingWrongPeriod(..)
+            | LogicError::WeekOrderingDuplicate(_)
+            | LogicError::OrphanWeek(_) => E::Params(InvariantError::InvalidWeek),
             LogicError::EmptyInterrogationRow(slot, week) => {
                 E::ColloscopeError(ColloscopeError::EmptyInterrogationRow(*slot, *week))
             }
@@ -1220,6 +1315,15 @@ pub(crate) mod tests {
             LogicError::DuplicatedId(42),
             LogicError::EmptyAssignmentsRow(period, subject),
             LogicError::EmptySlotsRow(subject),
+            LogicError::SlotOrderingUnknownId(subject, slot),
+            LogicError::SlotOrderingWrongSubject(subject, slot),
+            LogicError::SlotOrderingDuplicate(slot),
+            LogicError::OrphanSlot(slot),
+            LogicError::EmptyWeeksRow(period),
+            LogicError::WeekOrderingUnknownId(period, week),
+            LogicError::WeekOrderingWrongPeriod(period, week),
+            LogicError::WeekOrderingDuplicate(week),
+            LogicError::OrphanWeek(week),
             LogicError::EmptyInterrogationRow(slot, week),
             LogicError::EmptyColloscopeGroupListRow(group_list),
             LogicError::PairingRulePartsShareSubject(pairing_rule),
@@ -1390,6 +1494,183 @@ pub(crate) mod tests {
         assert_eq!(
             broken_invariants(&data),
             Err(BTreeSet::from([LogicError::EmptyWeeksRow(period)]))
+        );
+    }
+
+    // ---- Ordering↔table mirror (slots). Each fixture plants a real slot via
+    // the `insert_slot_at` compound mutator (keeps both containers in lockstep),
+    // then re-forges the ordering row into the one desync under test. `find_slot`
+    // failures and dangling teacher/subject refs never surface: the logic-error
+    // sweep short-circuits `broken_invariants` before layer B runs.
+
+    #[test]
+    fn slot_ordering_unknown_id() {
+        let mut data = InnerData::default();
+        let subject = unsafe { SubjectId::new(1) };
+        let teacher = unsafe { TeacherId::new(2) };
+        let slot = unsafe { SlotId::new(3) };
+        let fake = unsafe { SlotId::new(4) };
+        data.params
+            .slots
+            .insert_slot_at(slot, test_slot(subject, teacher), 0);
+        // Re-forge the row to name a slot id that was never issued.
+        data.params
+            .slots
+            .forge_ordering_row(subject, vec![slot, fake]);
+        assert_eq!(
+            broken_invariants(&data),
+            Err(BTreeSet::from([LogicError::SlotOrderingUnknownId(
+                subject, fake
+            )]))
+        );
+    }
+
+    #[test]
+    fn slot_ordering_wrong_subject() {
+        let mut data = InnerData::default();
+        let subject_a = unsafe { SubjectId::new(1) };
+        let subject_b = unsafe { SubjectId::new(2) };
+        let teacher = unsafe { TeacherId::new(3) };
+        let s1 = unsafe { SlotId::new(4) };
+        let s2 = unsafe { SlotId::new(5) };
+        // Both slots name subject A; file s2 under subject B's row.
+        data.params
+            .slots
+            .insert_slot_at(s1, test_slot(subject_a, teacher), 0);
+        data.params
+            .slots
+            .insert_slot_at(s2, test_slot(subject_a, teacher), 1);
+        data.params.slots.forge_ordering_row(subject_a, vec![s1]);
+        data.params.slots.forge_ordering_row(subject_b, vec![s2]);
+        assert_eq!(
+            broken_invariants(&data),
+            Err(BTreeSet::from([LogicError::SlotOrderingWrongSubject(
+                subject_b, s2
+            )]))
+        );
+    }
+
+    #[test]
+    fn slot_ordering_duplicate() {
+        let mut data = InnerData::default();
+        let subject = unsafe { SubjectId::new(1) };
+        let teacher = unsafe { TeacherId::new(2) };
+        let slot = unsafe { SlotId::new(3) };
+        data.params
+            .slots
+            .insert_slot_at(slot, test_slot(subject, teacher), 0);
+        data.params
+            .slots
+            .forge_ordering_row(subject, vec![slot, slot]);
+        assert_eq!(
+            broken_invariants(&data),
+            Err(BTreeSet::from([LogicError::SlotOrderingDuplicate(slot)]))
+        );
+    }
+
+    #[test]
+    fn orphan_slot() {
+        let mut data = InnerData::default();
+        let subject = unsafe { SubjectId::new(1) };
+        let teacher = unsafe { TeacherId::new(2) };
+        let s1 = unsafe { SlotId::new(3) };
+        let s2 = unsafe { SlotId::new(4) };
+        data.params
+            .slots
+            .insert_slot_at(s1, test_slot(subject, teacher), 0);
+        data.params
+            .slots
+            .insert_slot_at(s2, test_slot(subject, teacher), 1);
+        // Drop s2 from the ordering: it is left in the slot table, un-ordered.
+        data.params.slots.forge_ordering_row(subject, vec![s1]);
+        assert_eq!(
+            broken_invariants(&data),
+            Err(BTreeSet::from([LogicError::OrphanSlot(s2)]))
+        );
+    }
+
+    // ---- Ordering↔table mirror (weeks). The exact twin of the slots block:
+    // `insert_week_at` plants a real week, `forge_ordering_row` splits the two
+    // containers into the one desync under test.
+
+    #[test]
+    fn week_ordering_unknown_id() {
+        let mut data = InnerData::default();
+        let period = unsafe { PeriodId::new(1) };
+        let week = unsafe { WeekId::new(2) };
+        let fake = unsafe { WeekId::new(3) };
+        data.params
+            .weeks
+            .insert_week_at(week, period, 0, WeekDesc::default());
+        data.params
+            .weeks
+            .forge_ordering_row(period, vec![week, fake]);
+        assert_eq!(
+            broken_invariants(&data),
+            Err(BTreeSet::from([LogicError::WeekOrderingUnknownId(
+                period, fake
+            )]))
+        );
+    }
+
+    #[test]
+    fn week_ordering_wrong_period() {
+        let mut data = InnerData::default();
+        let period_a = unsafe { PeriodId::new(1) };
+        let period_b = unsafe { PeriodId::new(2) };
+        let w1 = unsafe { WeekId::new(3) };
+        let w2 = unsafe { WeekId::new(4) };
+        // Both weeks name period A; file w2 under period B's row.
+        data.params
+            .weeks
+            .insert_week_at(w1, period_a, 0, WeekDesc::default());
+        data.params
+            .weeks
+            .insert_week_at(w2, period_a, 1, WeekDesc::default());
+        data.params.weeks.forge_ordering_row(period_a, vec![w1]);
+        data.params.weeks.forge_ordering_row(period_b, vec![w2]);
+        assert_eq!(
+            broken_invariants(&data),
+            Err(BTreeSet::from([LogicError::WeekOrderingWrongPeriod(
+                period_b, w2
+            )]))
+        );
+    }
+
+    #[test]
+    fn week_ordering_duplicate() {
+        let mut data = InnerData::default();
+        let period = unsafe { PeriodId::new(1) };
+        let week = unsafe { WeekId::new(2) };
+        data.params
+            .weeks
+            .insert_week_at(week, period, 0, WeekDesc::default());
+        data.params
+            .weeks
+            .forge_ordering_row(period, vec![week, week]);
+        assert_eq!(
+            broken_invariants(&data),
+            Err(BTreeSet::from([LogicError::WeekOrderingDuplicate(week)]))
+        );
+    }
+
+    #[test]
+    fn orphan_week() {
+        let mut data = InnerData::default();
+        let period = unsafe { PeriodId::new(1) };
+        let w1 = unsafe { WeekId::new(2) };
+        let w2 = unsafe { WeekId::new(3) };
+        data.params
+            .weeks
+            .insert_week_at(w1, period, 0, WeekDesc::default());
+        data.params
+            .weeks
+            .insert_week_at(w2, period, 1, WeekDesc::default());
+        // Drop w2 from the ordering: it is left in the week table, un-ordered.
+        data.params.weeks.forge_ordering_row(period, vec![w1]);
+        assert_eq!(
+            broken_invariants(&data),
+            Err(BTreeSet::from([LogicError::OrphanWeek(w2)]))
         );
     }
 
