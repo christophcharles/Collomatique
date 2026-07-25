@@ -92,34 +92,70 @@ impl SlotPairingsUpdateOp {
         match self {
             Self::AddNewSlotPairingRule(rule) => {
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::SlotPairing(
                             collomatique_state_colloscopes::SlotPairingOp::Add(rule.clone()),
                         ),
                         self.get_desc(),
                     )
                     .map_err(|e| {
-                        if let collomatique_state_colloscopes::Error::SlotPairing(pe) = e {
-                            match pe {
-                                collomatique_state_colloscopes::SlotPairingError::InvalidSlotId(
-                                    id,
-                                ) => AddNewSlotPairingRuleError::InvalidSlotId(id),
-                                collomatique_state_colloscopes::SlotPairingError::InvalidPeriodId(
-                                    id,
-                                ) => AddNewSlotPairingRuleError::InvalidPeriodId(id),
-                                collomatique_state_colloscopes::SlotPairingError::SlotsNotInSameSubject(id1, id2) => {
-                                    AddNewSlotPairingRuleError::SlotsNotInSameSubject(id1, id2)
+                        use collomatique_state_colloscopes::{
+                            ApplyError, Convergence, FixableInvariant, PeriodRefSite, Reference,
+                            SlotRefSite,
+                        };
+                        match e {
+                            // The pre-op state was valid, so any break in the set was
+                            // introduced by this Add. Old validator order
+                            // (validate_slot_pairing_rule_internal): antecedent slot,
+                            // then consequent slot, then same-subject, then excluded
+                            // period. Both slot sites map to InvalidSlotId but carry
+                            // different payloads, so the passes stay separate; the
+                            // same-subject convergence carries only the rule id, so
+                            // the two slot ids come from the op payload in scope.
+                            ApplyError::Invariants(set) => {
+                                for inv in &set {
+                                    if let FixableInvariant::DanglingFk(Reference::Slot {
+                                        target,
+                                        site: SlotRefSite::SlotPairingRuleAntecedent(_),
+                                    }) = inv
+                                    {
+                                        return AddNewSlotPairingRuleError::InvalidSlotId(*target);
+                                    }
                                 }
-                                _ => panic!(
-                                    "Unexpected slot pairing error during AddNewSlotPairingRule: {:?}",
-                                    pe
-                                ),
+                                for inv in &set {
+                                    if let FixableInvariant::DanglingFk(Reference::Slot {
+                                        target,
+                                        site: SlotRefSite::SlotPairingRuleConsequent(_),
+                                    }) = inv
+                                    {
+                                        return AddNewSlotPairingRuleError::InvalidSlotId(*target);
+                                    }
+                                }
+                                for inv in &set {
+                                    if let FixableInvariant::Convergence(
+                                        Convergence::PairedSlotsNotInSameSubject(_),
+                                    ) = inv
+                                    {
+                                        return AddNewSlotPairingRuleError::SlotsNotInSameSubject(
+                                            rule.antecedent().slot_id,
+                                            rule.consequent().slot_id,
+                                        );
+                                    }
+                                }
+                                for inv in &set {
+                                    if let FixableInvariant::DanglingFk(Reference::Period {
+                                        target,
+                                        site: PeriodRefSite::SlotPairingRuleExcludedPeriods(_),
+                                    }) = inv
+                                    {
+                                        return AddNewSlotPairingRuleError::InvalidPeriodId(*target);
+                                    }
+                                }
+                                panic!(
+                                    "Unexpected invariant breaks during AddNewSlotPairingRule: {set:?}"
+                                );
                             }
-                        } else {
-                            panic!(
-                                "Unexpected error during AddNewSlotPairingRule: {:?}",
-                                e
-                            );
+                            _ => panic!("Unexpected error during AddNewSlotPairingRule: {e:?}"),
                         }
                     })?;
                 let Some(collomatique_state_colloscopes::NewId::SlotPairingRuleId(new_id)) = result
@@ -130,28 +166,21 @@ impl SlotPairingsUpdateOp {
             }
             Self::DeleteSlotPairingRule(rule_id) => {
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::SlotPairing(
                             collomatique_state_colloscopes::SlotPairingOp::Remove(*rule_id),
                         ),
                         self.get_desc(),
                     )
                     .map_err(|e| {
-                        if let collomatique_state_colloscopes::Error::SlotPairing(pe) = e {
-                            match pe {
-                                collomatique_state_colloscopes::SlotPairingError::InvalidSlotPairingRuleId(id) => {
-                                    DeleteSlotPairingRuleError::InvalidSlotPairingRuleId(id)
-                                }
-                                _ => panic!(
-                                    "Unexpected slot pairing error during DeleteSlotPairingRule: {:?}",
-                                    pe
-                                ),
-                            }
-                        } else {
-                            panic!(
-                                "Unexpected error during DeleteSlotPairingRule: {:?}",
-                                e
-                            );
+                        use collomatique_state_colloscopes::{
+                            ApplyError, PrecheckError, SlotPairingPrecheckError,
+                        };
+                        match e {
+                            ApplyError::Precheck(PrecheckError::SlotPairing(
+                                SlotPairingPrecheckError::InvalidSlotPairingRuleId(id),
+                            )) => DeleteSlotPairingRuleError::InvalidSlotPairingRuleId(id),
+                            _ => panic!("Unexpected error during DeleteSlotPairingRule: {e:?}"),
                         }
                     })?;
 
@@ -161,7 +190,7 @@ impl SlotPairingsUpdateOp {
             }
             Self::UpdateSlotPairingRule(rule_id, rule) => {
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::SlotPairing(
                             collomatique_state_colloscopes::SlotPairingOp::Update(
                                 *rule_id,
@@ -171,30 +200,60 @@ impl SlotPairingsUpdateOp {
                         self.get_desc(),
                     )
                     .map_err(|e| {
-                        if let collomatique_state_colloscopes::Error::SlotPairing(pe) = e {
-                            match pe {
-                                collomatique_state_colloscopes::SlotPairingError::InvalidSlotPairingRuleId(id) => {
-                                    UpdateSlotPairingRuleError::InvalidSlotPairingRuleId(id)
+                        use collomatique_state_colloscopes::{
+                            ApplyError, Convergence, FixableInvariant, PeriodRefSite, PrecheckError,
+                            Reference, SlotPairingPrecheckError, SlotRefSite,
+                        };
+                        match e {
+                            ApplyError::Precheck(PrecheckError::SlotPairing(
+                                SlotPairingPrecheckError::InvalidSlotPairingRuleId(id),
+                            )) => UpdateSlotPairingRuleError::InvalidSlotPairingRuleId(id),
+                            // Old validator order: antecedent slot, then consequent
+                            // slot, then same-subject, then excluded period.
+                            ApplyError::Invariants(set) => {
+                                for inv in &set {
+                                    if let FixableInvariant::DanglingFk(Reference::Slot {
+                                        target,
+                                        site: SlotRefSite::SlotPairingRuleAntecedent(_),
+                                    }) = inv
+                                    {
+                                        return UpdateSlotPairingRuleError::InvalidSlotId(*target);
+                                    }
                                 }
-                                collomatique_state_colloscopes::SlotPairingError::InvalidSlotId(
-                                    id,
-                                ) => UpdateSlotPairingRuleError::InvalidSlotId(id),
-                                collomatique_state_colloscopes::SlotPairingError::InvalidPeriodId(
-                                    id,
-                                ) => UpdateSlotPairingRuleError::InvalidPeriodId(id),
-                                collomatique_state_colloscopes::SlotPairingError::SlotsNotInSameSubject(id1, id2) => {
-                                    UpdateSlotPairingRuleError::SlotsNotInSameSubject(id1, id2)
+                                for inv in &set {
+                                    if let FixableInvariant::DanglingFk(Reference::Slot {
+                                        target,
+                                        site: SlotRefSite::SlotPairingRuleConsequent(_),
+                                    }) = inv
+                                    {
+                                        return UpdateSlotPairingRuleError::InvalidSlotId(*target);
+                                    }
                                 }
-                                _ => panic!(
-                                    "Unexpected slot pairing error during UpdateSlotPairingRule: {:?}",
-                                    pe
-                                ),
+                                for inv in &set {
+                                    if let FixableInvariant::Convergence(
+                                        Convergence::PairedSlotsNotInSameSubject(_),
+                                    ) = inv
+                                    {
+                                        return UpdateSlotPairingRuleError::SlotsNotInSameSubject(
+                                            rule.antecedent().slot_id,
+                                            rule.consequent().slot_id,
+                                        );
+                                    }
+                                }
+                                for inv in &set {
+                                    if let FixableInvariant::DanglingFk(Reference::Period {
+                                        target,
+                                        site: PeriodRefSite::SlotPairingRuleExcludedPeriods(_),
+                                    }) = inv
+                                    {
+                                        return UpdateSlotPairingRuleError::InvalidPeriodId(*target);
+                                    }
+                                }
+                                panic!(
+                                    "Unexpected invariant breaks during UpdateSlotPairingRule: {set:?}"
+                                );
                             }
-                        } else {
-                            panic!(
-                                "Unexpected error during UpdateSlotPairingRule: {:?}",
-                                e
-                            );
+                            _ => panic!("Unexpected error during UpdateSlotPairingRule: {e:?}"),
                         }
                     })?;
 
