@@ -388,25 +388,32 @@ impl StudentsUpdateOp {
         match self {
             Self::AddNewStudent(student) => {
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::Student(
                             collomatique_state_colloscopes::StudentOp::Add(student.clone()),
                         ),
                         self.get_desc(),
                     )
                     .map_err(|e| {
-                        if let collomatique_state_colloscopes::Error::Student(se) = e {
-                            match se {
-                                collomatique_state_colloscopes::StudentError::InvalidPeriodId(
-                                    period_id,
-                                ) => AddNewStudentError::InvalidPeriodId(period_id),
-                                _ => panic!(
-                                    "Unexpected student error during AddNewStudent: {:?}",
-                                    se
-                                ),
+                        use collomatique_state_colloscopes::{
+                            ApplyError, FixableInvariant, PeriodRefSite, Reference,
+                        };
+                        match e {
+                            // Pre-op validity: any period dangle in the set is this
+                            // add's bad excluded-period id.
+                            ApplyError::Invariants(set) => {
+                                for inv in &set {
+                                    if let FixableInvariant::DanglingFk(Reference::Period {
+                                        target,
+                                        site: PeriodRefSite::StudentExcludedPeriods(_),
+                                    }) = inv
+                                    {
+                                        return AddNewStudentError::InvalidPeriodId(*target);
+                                    }
+                                }
+                                panic!("Unexpected invariant breaks during AddNewStudent: {set:?}");
                             }
-                        } else {
-                            panic!("Unexpected error during AddNewStudent: {:?}", e);
+                            _ => panic!("Unexpected error during AddNewStudent: {e:?}"),
                         }
                     })?;
                 let Some(collomatique_state_colloscopes::NewId::StudentId(new_id)) = result else {
@@ -416,7 +423,7 @@ impl StudentsUpdateOp {
             }
             Self::UpdateStudent(student_id, student) => {
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::Student(
                             collomatique_state_colloscopes::StudentOp::Update(
                                 *student_id,
@@ -426,24 +433,39 @@ impl StudentsUpdateOp {
                         self.get_desc(),
                     )
                     .map_err(|e| {
-                        if let collomatique_state_colloscopes::Error::Student(se) = e {
-                            match se {
-                                collomatique_state_colloscopes::StudentError::InvalidStudentId(
-                                    id,
-                                ) => UpdateStudentError::InvalidStudentId(id),
-                                collomatique_state_colloscopes::StudentError::InvalidPeriodId(
-                                    id,
-                                ) => UpdateStudentError::InvalidPeriodId(id),
-                                collomatique_state_colloscopes::StudentError::StudentStillHasNonTrivialAssignments(_, _, _) => {
-                                    panic!("Assignments should be cleaned before updating students");
+                        use collomatique_state_colloscopes::{
+                            ApplyError, Convergence, FixableInvariant, PeriodRefSite,
+                            PrecheckError, Reference, StudentPrecheckError,
+                        };
+                        match e {
+                            ApplyError::Precheck(PrecheckError::Student(
+                                StudentPrecheckError::InvalidStudentId(id),
+                            )) => UpdateStudentError::InvalidStudentId(id),
+                            ApplyError::Invariants(set) => {
+                                // Old order: validate_student (excluded-period ids)
+                                // before the assignment scan.
+                                for inv in &set {
+                                    if let FixableInvariant::DanglingFk(Reference::Period {
+                                        target,
+                                        site: PeriodRefSite::StudentExcludedPeriods(_),
+                                    }) = inv
+                                    {
+                                        return UpdateStudentError::InvalidPeriodId(*target);
+                                    }
                                 }
-                                _ => panic!(
-                                    "Unexpected student error during UpdateStudent: {:?}",
-                                    se
-                                ),
+                                for inv in &set {
+                                    if let FixableInvariant::Convergence(
+                                        Convergence::AssignedStudentNotPresentForPeriod { .. },
+                                    ) = inv
+                                    {
+                                        panic!(
+                                            "Assignments should be cleaned before updating students"
+                                        );
+                                    }
+                                }
+                                panic!("Unexpected invariant breaks during UpdateStudent: {set:?}");
                             }
-                        } else {
-                            panic!("Unexpected error during UpdateStudent: {:?}", e);
+                            _ => panic!("Unexpected error during UpdateStudent: {e:?}"),
                         }
                     })?;
 
@@ -453,34 +475,54 @@ impl StudentsUpdateOp {
             }
             Self::DeleteStudent(student_id) => {
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::Student(
                             collomatique_state_colloscopes::StudentOp::Remove(*student_id),
                         ),
                         self.get_desc(),
                     )
                     .map_err(|e| {
-                        if let collomatique_state_colloscopes::Error::Student(se) = e {
-                            match se {
-                                collomatique_state_colloscopes::StudentError::InvalidStudentId(
-                                    id,
-                                ) => DeleteStudentError::InvalidStudentId(id),
-                                collomatique_state_colloscopes::StudentError::StudentIsStillExcludedByGroupList(_, _) => {
-                                    panic!("Group lists should be cleaned before removing students");
+                        use collomatique_state_colloscopes::{
+                            ApplyError, FixableInvariant, PrecheckError, Reference,
+                            StudentPrecheckError, StudentRefSite,
+                        };
+                        match e {
+                            ApplyError::Precheck(PrecheckError::Student(
+                                StudentPrecheckError::InvalidStudentId(id),
+                            )) => DeleteStudentError::InvalidStudentId(id),
+                            ApplyError::Invariants(set) => {
+                                // Every one of these is a cleaning-contract breach:
+                                // the cleaning phase strips group-list, prefilled and
+                                // assignment references (and colloscope/settings ones)
+                                // before the remove reaches apply.
+                                for inv in &set {
+                                    match inv {
+                                        FixableInvariant::DanglingFk(Reference::Student {
+                                            site: StudentRefSite::GroupListExcludedStudent(_),
+                                            ..
+                                        }) => panic!(
+                                            "Group lists should be cleaned before removing students"
+                                        ),
+                                        FixableInvariant::DanglingFk(Reference::Student {
+                                            site: StudentRefSite::GroupListPrefilledStudent(_),
+                                            ..
+                                        }) => panic!(
+                                            "Prefilled group lists should be cleaned before removing students"
+                                        ),
+                                        FixableInvariant::DanglingFk(Reference::Student {
+                                            site: StudentRefSite::AssignmentsStudent { .. },
+                                            ..
+                                        }) => panic!(
+                                            "Assignments should be cleaned before removing students"
+                                        ),
+                                        _ => {}
+                                    }
                                 }
-                                collomatique_state_colloscopes::StudentError::StudentIsStillReferencedByPrefilledGroupList(_, _) => {
-                                    panic!("Prefilled group lists should be cleaned before removing students");
-                                }
-                                collomatique_state_colloscopes::StudentError::StudentStillHasNonTrivialAssignments(_, _, _) => {
-                                    panic!("Assignments should be cleaned before removing students");
-                                }
-                                _ => panic!(
-                                    "Unexpected teacher error during DeleteStudent: {:?}",
-                                    se
-                                ),
+                                panic!(
+                                    "Unexpected invariant breaks during DeleteStudent: {set:?}"
+                                );
                             }
-                        } else {
-                            panic!("Unexpected error during DeleteStudent: {:?}", e);
+                            _ => panic!("Unexpected error during DeleteStudent: {e:?}"),
                         }
                     })?;
 
