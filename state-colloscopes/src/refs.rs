@@ -379,15 +379,15 @@ fn walk_pairings(params: &Parameters, v: &mut impl RefVisitor) {
     // whole rule. Order — antecedent, consequent, excluded periods — matches the
     // `PairingRule` field declaration order the composed walk would produce.
     for (rule_id, rule) in params.pairings.pairing_rule_map.iter() {
-        rule.antecedent.for_each_ref(&mut |id: NewId| match id {
+        rule.antecedent().for_each_ref(&mut |id: NewId| match id {
             NewId::SubjectId(s) => v.subject_ref(s, SubjectRefSite::PairingRuleAntecedent(rule_id)),
             _ => unreachable!("RulePart only references a subject"),
         });
-        rule.consequent.for_each_ref(&mut |id: NewId| match id {
+        rule.consequent().for_each_ref(&mut |id: NewId| match id {
             NewId::SubjectId(s) => v.subject_ref(s, SubjectRefSite::PairingRuleConsequent(rule_id)),
             _ => unreachable!("RulePart only references a subject"),
         });
-        rule.excluded_periods
+        rule.excluded_periods()
             .for_each_ref(&mut |id: NewId| match id {
                 NewId::PeriodId(p) => {
                     v.period_ref(p, PeriodRefSite::PairingRuleExcludedPeriods(rule_id))

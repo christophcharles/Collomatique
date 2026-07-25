@@ -679,8 +679,8 @@ impl SubjectsUpdateOp {
                     .iter()
                 {
                     let rule_id = &rule_id;
-                    if rule.antecedent.subject_id == *subject_id
-                        || rule.consequent.subject_id == *subject_id
+                    if rule.antecedent().subject_id == *subject_id
+                        || rule.consequent().subject_id == *subject_id
                     {
                         return Some(CleaningOp {
                             warning: SubjectsUpdateWarning::LoosePairingRulesForSubject(

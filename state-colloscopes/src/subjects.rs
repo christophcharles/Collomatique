@@ -411,7 +411,7 @@ impl crate::Data {
                 }
 
                 for (rule_id, rule) in self.inner_data.params.pairings.pairing_rule_map.iter() {
-                    if rule.antecedent.subject_id == *id || rule.consequent.subject_id == *id {
+                    if rule.antecedent().subject_id == *id || rule.consequent().subject_id == *id {
                         return Err(SubjectError::SubjectIsReferencedByPairingRule(*id, rule_id));
                     }
                 }

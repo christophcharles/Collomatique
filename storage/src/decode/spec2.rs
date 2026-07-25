@@ -299,7 +299,7 @@ fn reconstruct(blocks: Blocks) -> Result<InnerData, DecodeError> {
         blocks.group_list_associations.unwrap_or_default(),
     )?;
     let settings = reconstruct_settings(blocks.settings.unwrap_or_default());
-    let pairings = reconstruct_pairings(blocks.pairings.unwrap_or_default());
+    let pairings = reconstruct_pairings(blocks.pairings.unwrap_or_default())?;
     let slot_pairings = reconstruct_slot_pairings(blocks.slot_pairings.unwrap_or_default());
     let balancing = reconstruct_balancing(blocks.balancing.unwrap_or_default());
 
@@ -731,28 +731,31 @@ fn reconstruct_settings(block: format::settings::Settings) -> mem::settings::Set
     }
 }
 
-fn reconstruct_pairings(block: format::pairings::Pairings) -> mem::pairings::Pairings {
-    mem::pairings::Pairings {
-        pairing_rule_map: block
-            .into_inner()
-            .into_iter()
-            .map(|rule| {
-                let part = |part: format::pairings::PairingPart| mem::pairings::RulePart {
-                    subject_id: id(part.subject_id),
-                    should_have: part.should_have,
-                };
-                (
-                    id::<PairingRuleId>(rule.id),
-                    mem::pairings::PairingRule {
-                        antecedent: part(rule.antecedent),
-                        consequent: part(rule.consequent),
-                        excluded_periods: id_set(rule.excluded_periods),
-                        soft: rule.soft,
-                    },
-                )
-            })
-            .collect(),
-    }
+fn reconstruct_pairings(
+    block: format::pairings::Pairings,
+) -> Result<mem::pairings::Pairings, DecodeError> {
+    let pairing_rule_map = block
+        .into_inner()
+        .into_iter()
+        .map(|rule| {
+            let raw_id = rule.id;
+            let part = |part: format::pairings::PairingPart| mem::pairings::RulePart {
+                subject_id: id(part.subject_id),
+                should_have: part.should_have,
+            };
+            // Honest decode: a rule with both parts on one subject is a hard
+            // error here rather than being caught later by layer 3.
+            let value = mem::pairings::PairingRule::new(
+                part(rule.antecedent),
+                part(rule.consequent),
+                id_set(rule.excluded_periods),
+                rule.soft,
+            )
+            .map_err(|_| DecodeError::InconsistentPairingRule(raw_id))?;
+            Ok((id::<PairingRuleId>(raw_id), value))
+        })
+        .collect::<Result<_, DecodeError>>()?;
+    Ok(mem::pairings::Pairings { pairing_rule_map })
 }
 
 fn reconstruct_slot_pairings(

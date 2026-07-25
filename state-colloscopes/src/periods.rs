@@ -291,7 +291,7 @@ impl crate::Data {
                 }
 
                 for (rule_id, rule) in self.inner_data.params.pairings.pairing_rule_map.iter() {
-                    if rule.excluded_periods.contains(period_id) {
+                    if rule.excluded_periods().contains(period_id) {
                         return Err(PeriodError::PeriodIsReferencedByPairingRule(
                             *period_id, rule_id,
                         ));

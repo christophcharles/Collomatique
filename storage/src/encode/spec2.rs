@@ -457,10 +457,10 @@ fn build_pairings(params: &mem::colloscope_params::Parameters) -> format::pairin
                 };
                 format::pairings::Pairing {
                     id: rule_id.inner(),
-                    antecedent: part(&rule.antecedent),
-                    consequent: part(&rule.consequent),
-                    excluded_periods: id_set(&rule.excluded_periods),
-                    soft: rule.soft,
+                    antecedent: part(rule.antecedent()),
+                    consequent: part(rule.consequent()),
+                    excluded_periods: id_set(rule.excluded_periods()),
+                    soft: rule.soft(),
                 }
             })
             .collect(),

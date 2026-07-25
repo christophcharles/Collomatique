@@ -66,8 +66,8 @@ use std::collections::BTreeSet;
 use thiserror::Error;
 
 use crate::ids::{
-    GroupListId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId, SubjectId,
-    TeacherId, WeekId, WeekPatternId,
+    GroupListId, PeriodId, SlotId, SlotPairingRuleId, StudentId, SubjectId, TeacherId, WeekId,
+    WeekPatternId,
 };
 use crate::refs::{
     GroupListRefSite, PeriodRefSite, Reference, SlotRefSite, StudentRefSite, SubjectRefSite,
@@ -134,9 +134,6 @@ pub enum LogicError {
     /// exists iff it holds a placement)
     #[error("colloscope group-list row {0:?} is stored with an empty placement map")]
     EmptyColloscopeGroupListRow(GroupListId),
-    /// A pairing rule whose antecedent and consequent name the same subject
-    #[error("pairing rule {0:?} has its antecedent and consequent on the same subject")]
-    PairingRulePartsShareSubject(PairingRuleId),
     /// A slot pairing rule whose antecedent and consequent name the same slot
     #[error("slot pairing rule {0:?} has its antecedent and consequent on the same slot")]
     SlotPairingRulePartsShareSlot(SlotPairingRuleId),
@@ -359,15 +356,12 @@ impl crate::InnerData {
 
         // (Prefilled group lists cannot violate the count/duplicate invariants:
         // `GroupList::new` enforces them by construction, so no state can hold a
-        // mismatched or duplicate-student filling — there is nothing to sweep.)
+        // mismatched or duplicate-student filling. Likewise a pairing rule cannot
+        // have both parts on one subject: `PairingRule::new` enforces it by
+        // construction — there is nothing to sweep for either.)
 
-        // Parts-share-an-id predicates: a rule whose antecedent and consequent
-        // name the same subject/slot is degenerate.
-        for (id, rule) in self.params.pairings.pairing_rule_map.iter() {
-            if rule.antecedent.subject_id == rule.consequent.subject_id {
-                errors.insert(LogicError::PairingRulePartsShareSubject(id));
-            }
-        }
+        // Parts-share-an-id predicate: a slot pairing rule whose antecedent and
+        // consequent name the same slot is degenerate.
         for (id, rule) in self.params.slot_pairings.slot_pairing_rule_map.iter() {
             if rule.antecedent.slot_id == rule.consequent.slot_id {
                 errors.insert(LogicError::SlotPairingRulePartsShareSlot(id));
@@ -675,9 +669,6 @@ impl LogicError {
             LogicError::EmptyColloscopeGroupListRow(group_list) => {
                 E::ColloscopeError(ColloscopeError::EmptyGroupListRow(*group_list))
             }
-            LogicError::PairingRulePartsShareSubject(_) => {
-                E::Params(InvariantError::InvalidPairingRule)
-            }
             LogicError::SlotPairingRulePartsShareSlot(_) => {
                 E::Params(InvariantError::InvalidSlotPairingRule)
             }
@@ -904,7 +895,7 @@ pub(crate) mod tests {
     use crate::InnerData;
     use crate::balancing::BalancingOptions;
     use crate::group_lists::{GroupList, GroupListFilling, GroupListParameters, PrefilledGroup};
-    use crate::ids::{Id, IncompatId};
+    use crate::ids::{Id, IncompatId, PairingRuleId};
     use crate::incompats::Incompatibility;
     use crate::pairings::{PairingRule, RulePart};
     use crate::periods::Periods;
@@ -1309,7 +1300,6 @@ pub(crate) mod tests {
         let slot = unsafe { SlotId::new(3) };
         let week = unsafe { WeekId::new(4) };
         let group_list = unsafe { GroupListId::new(5) };
-        let pairing_rule = unsafe { PairingRuleId::new(6) };
         let slot_pairing_rule = unsafe { SlotPairingRuleId::new(7) };
         let all = [
             LogicError::DuplicatedId(42),
@@ -1326,7 +1316,6 @@ pub(crate) mod tests {
             LogicError::OrphanWeek(week),
             LogicError::EmptyInterrogationRow(slot, week),
             LogicError::EmptyColloscopeGroupListRow(group_list),
-            LogicError::PairingRulePartsShareSubject(pairing_rule),
             LogicError::SlotPairingRulePartsShareSlot(slot_pairing_rule),
         ];
         // Strict `<`, not is_sorted: equal adjacent values would be a
@@ -1704,39 +1693,6 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn pairing_rule_parts_share_subject() {
-        let mut data = InnerData::default();
-        let rule = unsafe { PairingRuleId::new(1) };
-        let subject = unsafe { SubjectId::new(2) };
-        data.params.pairings.pairing_rule_map.insert(
-            rule,
-            PairingRule {
-                antecedent: RulePart {
-                    subject_id: subject,
-                    should_have: true,
-                },
-                consequent: RulePart {
-                    subject_id: subject,
-                    should_have: false,
-                },
-                excluded_periods: BTreeSet::new(),
-                soft: false,
-            },
-        );
-        assert_eq!(
-            broken_invariants(&data),
-            Err(BTreeSet::from([LogicError::PairingRulePartsShareSubject(
-                rule
-            )]))
-        );
-        // Old-checker image (lenient differential branch): `InvalidPairingRule`.
-        assert_eq!(
-            data.check_invariants(),
-            Err(InnerDataError::Params(InvariantError::InvalidPairingRule))
-        );
-    }
-
-    #[test]
     fn slot_pairing_rule_parts_share_slot() {
         let mut data = InnerData::default();
         let rule = unsafe { SlotPairingRuleId::new(1) };
@@ -1773,8 +1729,11 @@ pub(crate) mod tests {
 
     #[test]
     fn multiple_logic_errors_all_reported() {
-        // A duplicate id, an empty assignments row, and a degenerate pairing rule
-        // in one state: all three surface together.
+        // A duplicate id, an empty assignments row, and an empty slots ordering
+        // row in one state: all three surface together. (The degenerate pairing
+        // rule that used to be the third leg is now unrepresentable after the
+        // `PairingRule` seal, so an `EmptySlotsRow` — forged through the
+        // test-only ordering hatch — stands in.)
         let mut data = InnerData::default();
         data.params
             .students
@@ -1790,29 +1749,16 @@ pub(crate) mod tests {
             .assignments
             .map
             .insert((period, subject), BTreeSet::new());
-        let rule = unsafe { PairingRuleId::new(4) };
-        let shared = unsafe { SubjectId::new(5) };
-        data.params.pairings.pairing_rule_map.insert(
-            rule,
-            PairingRule {
-                antecedent: RulePart {
-                    subject_id: shared,
-                    should_have: true,
-                },
-                consequent: RulePart {
-                    subject_id: shared,
-                    should_have: false,
-                },
-                excluded_periods: BTreeSet::new(),
-                soft: false,
-            },
-        );
+        let empty_row_subject = unsafe { SubjectId::new(5) };
+        data.params
+            .slots
+            .forge_ordering_row(empty_row_subject, vec![]);
         assert_eq!(
             broken_invariants(&data),
             Err(BTreeSet::from([
                 LogicError::DuplicatedId(1),
                 LogicError::EmptyAssignmentsRow(period, subject),
-                LogicError::PairingRulePartsShareSubject(rule),
+                LogicError::EmptySlotsRow(empty_row_subject),
             ]))
         );
     }
@@ -2870,18 +2816,19 @@ pub(crate) mod tests {
             .unwrap();
         data.params.pairings.pairing_rule_map.insert(
             rule,
-            PairingRule {
-                antecedent: RulePart {
+            PairingRule::new(
+                RulePart {
                     subject_id: subject_a,
                     should_have: true,
                 },
-                consequent: RulePart {
+                RulePart {
                     subject_id: subject_b,
                     should_have: false,
                 },
-                excluded_periods: BTreeSet::from([period]),
-                soft: false,
-            },
+                BTreeSet::from([period]),
+                false,
+            )
+            .expect("distinct subjects"),
         );
         assert_dangling_maps(
             &data,
@@ -3046,18 +2993,19 @@ pub(crate) mod tests {
         register_subject(&mut data, subject);
         data.params.pairings.pairing_rule_map.insert(
             rule,
-            PairingRule {
-                antecedent: RulePart {
+            PairingRule::new(
+                RulePart {
                     subject_id: dangling,
                     should_have: true,
                 },
-                consequent: RulePart {
+                RulePart {
                     subject_id: subject,
                     should_have: false,
                 },
-                excluded_periods: BTreeSet::new(),
-                soft: false,
-            },
+                BTreeSet::new(),
+                false,
+            )
+            .expect("distinct subjects"),
         );
         assert_dangling_maps(
             &data,
@@ -3078,18 +3026,19 @@ pub(crate) mod tests {
         register_subject(&mut data, subject);
         data.params.pairings.pairing_rule_map.insert(
             rule,
-            PairingRule {
-                antecedent: RulePart {
+            PairingRule::new(
+                RulePart {
                     subject_id: subject,
                     should_have: true,
                 },
-                consequent: RulePart {
+                RulePart {
                     subject_id: dangling,
                     should_have: false,
                 },
-                excluded_periods: BTreeSet::new(),
-                soft: false,
-            },
+                BTreeSet::new(),
+                false,
+            )
+            .expect("distinct subjects"),
         );
         assert_dangling_maps(
             &data,

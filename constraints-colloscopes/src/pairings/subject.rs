@@ -13,8 +13,8 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
     let mut output = MyBundle::new();
 
     for (rule_id, rule) in env.pairings.pairing_rule_map.iter() {
-        let ant_subject = rule.antecedent.subject_id;
-        let con_subject = rule.consequent.subject_id;
+        let ant_subject = rule.antecedent().subject_id;
+        let con_subject = rule.consequent().subject_id;
 
         let Some(ant_subj) = env.subjects.find_subject(ant_subject) else {
             continue;
@@ -30,7 +30,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         for period_id in env.periods.period_ids() {
             let period_len = env.weeks.week_count_for_period(period_id).unwrap_or(0);
             let period_id = &period_id;
-            if rule.excluded_periods.contains(period_id)
+            if rule.excluded_periods().contains(period_id)
                 || ant_subj.excluded_periods.contains(period_id)
                 || con_subj.excluded_periods.contains(period_id)
             {
@@ -72,7 +72,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                 }
 
                 for &student in &both_students {
-                    if rule.soft {
+                    if rule.soft() {
                         let mut single = MyBundle::new();
                         emit_pairing_constraint(
                             env,
@@ -81,8 +81,8 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                             student,
                             ant_subject,
                             con_subject,
-                            rule.antecedent.should_have,
-                            rule.consequent.should_have,
+                            rule.antecedent().should_have,
+                            rule.consequent().should_have,
                             week,
                         );
                         soft_output = merge_objectified_weighted(
@@ -103,8 +103,8 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                             student,
                             ant_subject,
                             con_subject,
-                            rule.antecedent.should_have,
-                            rule.consequent.should_have,
+                            rule.antecedent().should_have,
+                            rule.consequent().should_have,
                             week,
                         );
                     }

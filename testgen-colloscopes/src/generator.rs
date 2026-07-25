@@ -845,14 +845,14 @@ fn gen_settings(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
 fn gen_pairing(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
     if invalid {
         let op = if !pools.subject_ids.is_empty() && rng.random_bool(0.6) {
-            // Same subject on both sides of the implication
-            let subject_id = pick(rng, &pools.subject_ids);
-            PairingOp::Add(synth::pairing_rule(
-                rng,
-                subject_id,
-                subject_id,
-                &pools.period_ids,
-            ))
+            // Dangling subject in the consequent: `PairingRule::new` accepts the
+            // value (the two ids are distinct), checked apply rejects the op with
+            // `InvalidSubjectId`, and the force path lands a dangling FK. (Before
+            // the seal this arm built a same-subject rule; that value is now
+            // unrepresentable.)
+            let real = pick(rng, &pools.subject_ids);
+            let ghost = unsafe { SubjectId::new(dangling(rng)) };
+            PairingOp::Add(synth::pairing_rule(rng, real, ghost, &pools.period_ids))
         } else {
             PairingOp::Remove(unsafe { PairingRuleId::new(dangling(rng)) })
         };
@@ -1127,9 +1127,9 @@ pub enum CorruptionKind {
     ForceRetarget,
     /// Valid-shaped op whose only obstacle was a stripped invariant guard.
     ForceSemantic,
-    /// Op landing a `LogicError` state (dup-id / prefill-count-mismatch
-    /// `GlobalUpdate`, dup-student `SetFilling`, same-subject pairing part /
-    /// same-slot slot-pairing part).
+    /// Op landing a `LogicError` state (dup-id `GlobalUpdate`, same-slot
+    /// slot-pairing part). The same-subject pairing flavor is gone: the sealed
+    /// `PairingRule` makes that state unrepresentable.
     ForceLogic,
     /// Plain valid op — the forced ≡ checked equivalence probe.
     ForceValid,
@@ -1544,14 +1544,15 @@ fn gen_force_semantic(
 /// (The prefill count/duplicate flavors are gone: `GroupList::new` makes those
 /// states unrepresentable — a mismatched or duplicate-student filling can no
 /// longer be constructed, neither through the op surface nor a `GlobalUpdate`
-/// clone — so there is no such `LogicError` left to forge.)
+/// clone — so there is no such `LogicError` left to forge. Likewise the
+/// same-subject pairing flavor is gone: `PairingRule::new` rejects a rule with
+/// both parts on one subject, so `PairingRulePartsShareSubject` can no longer
+/// be reached and there is nothing to forge.)
 #[derive(Clone, Copy)]
 enum LogicRecipe {
     /// `GlobalUpdate` clone with a duplicated id (kept id max, so the issuer
     /// stays out of the dangling range) → `DuplicatedId`.
     GlobalDup,
-    /// `PairingAdd` with both parts on one subject → `PairingRulePartsShareSubject`.
-    PairingSameSubject,
     /// `SlotPairingAdd` with both parts on one slot → `SlotPairingRulePartsShareSlot`.
     SlotPairingSameSlot,
 }
@@ -1560,7 +1561,6 @@ fn available_logic_recipes(_inner: &InnerData, pools: &Pools) -> Vec<LogicRecipe
     let mut recipes = Vec::new();
     if !pools.subject_ids.is_empty() {
         recipes.push(LogicRecipe::GlobalDup);
-        recipes.push(LogicRecipe::PairingSameSubject);
     }
     if !pools.slot_ids.is_empty() {
         recipes.push(LogicRecipe::SlotPairingSameSlot);
@@ -1584,15 +1584,6 @@ fn gen_force_logic(
                 .student_map
                 .insert(duplicated, Student::default());
             Op::GlobalUpdate(broken)
-        }
-        LogicRecipe::PairingSameSubject => {
-            let subject_id = pick(rng, &pools.subject_ids);
-            Op::Pairing(PairingOp::Add(synth::pairing_rule(
-                rng,
-                subject_id,
-                subject_id,
-                &pools.period_ids,
-            )))
         }
         LogicRecipe::SlotPairingSameSlot => {
             let slot_id = pick(rng, &pools.slot_ids);

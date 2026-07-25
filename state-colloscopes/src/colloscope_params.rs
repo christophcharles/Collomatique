@@ -824,18 +824,15 @@ impl Parameters {
         subject_ids: &BTreeSet<SubjectId>,
         period_ids: &BTreeSet<PeriodId>,
     ) -> Result<(), PairingError> {
-        if rule.antecedent.subject_id == rule.consequent.subject_id {
-            return Err(PairingError::SameSubjectInBothParts(
-                rule.antecedent.subject_id,
-            ));
+        // Same-subject degeneracy is unrepresentable: `PairingRule::new` rejects
+        // it by construction, so there is nothing to check here.
+        if !subject_ids.contains(&rule.antecedent().subject_id) {
+            return Err(PairingError::InvalidSubjectId(rule.antecedent().subject_id));
         }
-        if !subject_ids.contains(&rule.antecedent.subject_id) {
-            return Err(PairingError::InvalidSubjectId(rule.antecedent.subject_id));
+        if !subject_ids.contains(&rule.consequent().subject_id) {
+            return Err(PairingError::InvalidSubjectId(rule.consequent().subject_id));
         }
-        if !subject_ids.contains(&rule.consequent.subject_id) {
-            return Err(PairingError::InvalidSubjectId(rule.consequent.subject_id));
-        }
-        for period_id in &rule.excluded_periods {
+        for period_id in rule.excluded_periods() {
             if !period_ids.contains(period_id) {
                 return Err(PairingError::InvalidPeriodId(*period_id));
             }

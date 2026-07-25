@@ -56,6 +56,8 @@ pub enum DecodeError {
         "Group list id {0} has an internally inconsistent filling (prefill group count or duplicated student)"
     )]
     InconsistentGroupList(u64),
+    #[error("Pairing rule id {0} has its antecedent and consequent on the same subject")]
+    InconsistentPairingRule(u64),
     #[error("generating new IDs is not secure, half the usable IDs have been used already")]
     EndOfTheUniverse,
     #[error("Duplicated ID")]

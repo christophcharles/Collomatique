@@ -699,8 +699,8 @@ fn pairing_subject_names(
     let rule_data = env.pairings.pairing_rule_map.get(&rule);
     match rule_data {
         Some(r) => (
-            subject_name(env, r.antecedent.subject_id),
-            subject_name(env, r.consequent.subject_id),
+            subject_name(env, r.antecedent().subject_id),
+            subject_name(env, r.consequent().subject_id),
         ),
         None => (format!("{:?}", rule), format!("{:?}", rule)),
     }

@@ -92,11 +92,13 @@ impl Dialog {
         &mut self,
         rule: &collomatique_state_colloscopes::pairings::PairingRule,
     ) {
-        self.antecedent_condition_selected = if rule.antecedent.should_have { 0 } else { 1 };
-        self.antecedent_subject_selected = self.subject_id_to_selected(rule.antecedent.subject_id);
-        self.consequent_condition_selected = if rule.consequent.should_have { 0 } else { 1 };
-        self.consequent_subject_selected = self.subject_id_to_selected(rule.consequent.subject_id);
-        self.soft = rule.soft;
+        self.antecedent_condition_selected = if rule.antecedent().should_have { 0 } else { 1 };
+        self.antecedent_subject_selected =
+            self.subject_id_to_selected(rule.antecedent().subject_id);
+        self.consequent_condition_selected = if rule.consequent().should_have { 0 } else { 1 };
+        self.consequent_subject_selected =
+            self.subject_id_to_selected(rule.consequent().subject_id);
+        self.soft = rule.soft();
 
         self.period_data = self
             .periods
@@ -104,7 +106,7 @@ impl Dialog {
             .enumerate()
             .map(|(i, period_id)| PeriodData {
                 period_index: i,
-                enabled: !rule.excluded_periods.contains(&period_id),
+                enabled: !rule.excluded_periods().contains(&period_id),
             })
             .collect();
     }
@@ -131,18 +133,19 @@ impl Dialog {
             })
             .collect();
 
-        collomatique_state_colloscopes::pairings::PairingRule {
-            antecedent: collomatique_state_colloscopes::pairings::RulePart {
+        collomatique_state_colloscopes::pairings::PairingRule::new(
+            collomatique_state_colloscopes::pairings::RulePart {
                 subject_id: self.subject_selected_to_id(self.antecedent_subject_selected),
                 should_have: self.antecedent_condition_selected == 0,
             },
-            consequent: collomatique_state_colloscopes::pairings::RulePart {
+            collomatique_state_colloscopes::pairings::RulePart {
                 subject_id: self.subject_selected_to_id(self.consequent_subject_selected),
                 should_have: self.consequent_condition_selected == 0,
             },
             excluded_periods,
-            soft: self.soft,
-        }
+            self.soft,
+        )
+        .expect("the Valider button is insensitive while both parts share a subject")
     }
 
     fn subjects_are_same(&self) -> bool {

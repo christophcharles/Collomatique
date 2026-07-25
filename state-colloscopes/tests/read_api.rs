@@ -199,18 +199,21 @@ fn build_document(app: &mut AppState<Data, String>) -> Built {
         "add group list"
     );
     let pairing = apply_new!(
-        Op::Pairing(PairingOp::Add(PairingRule {
-            antecedent: RulePart {
-                subject_id: subject,
-                should_have: true,
-            },
-            consequent: RulePart {
-                subject_id: phys,
-                should_have: true,
-            },
-            excluded_periods: BTreeSet::new(),
-            soft: false,
-        })),
+        Op::Pairing(PairingOp::Add(
+            PairingRule::new(
+                RulePart {
+                    subject_id: subject,
+                    should_have: true,
+                },
+                RulePart {
+                    subject_id: phys,
+                    should_have: true,
+                },
+                BTreeSet::new(),
+                false,
+            )
+            .expect("distinct subjects"),
+        )),
         NewId::PairingRuleId,
         "add pairing"
     );
@@ -422,8 +425,8 @@ fn nested_rule_part_composes_through_its_own_view() {
     // whose `subject` field is itself a borrow out of `params`.
     let pairing = params.resolve(ids.pairing);
     let joined = pairing.join(params).expect("validated pairing joins");
-    let antecedent: &JoinedRulePart = &joined.antecedent;
-    let consequent: &JoinedRulePart = &joined.consequent;
+    let antecedent: &JoinedRulePart = joined.antecedent();
+    let consequent: &JoinedRulePart = joined.consequent();
     assert!(std::ptr::eq(
         antecedent.subject,
         params.resolve(ids.subject)

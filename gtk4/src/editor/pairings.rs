@@ -192,18 +192,19 @@ impl Component for Pairings {
                     (Some(a), Some(b)) => (a, b),
                     _ => return, // Need at least 2 subjects
                 };
-                let default_rule = collomatique_state_colloscopes::pairings::PairingRule {
-                    antecedent: collomatique_state_colloscopes::pairings::RulePart {
+                let default_rule = collomatique_state_colloscopes::pairings::PairingRule::new(
+                    collomatique_state_colloscopes::pairings::RulePart {
                         subject_id: ant_id,
                         should_have: true,
                     },
-                    consequent: collomatique_state_colloscopes::pairings::RulePart {
+                    collomatique_state_colloscopes::pairings::RulePart {
                         subject_id: con_id,
                         should_have: true,
                     },
-                    excluded_periods: BTreeSet::new(),
-                    soft: false,
-                };
+                    BTreeSet::new(),
+                    false,
+                )
+                .expect("ant_id and con_id are the first two distinct subjects");
                 self.pairing_params_dialog
                     .sender()
                     .send(pairing_params::DialogInput::Show(

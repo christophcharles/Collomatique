@@ -155,6 +155,10 @@ impl FileLoader {
                 "Le fichier est mal formé et est probablement corrompu.\n(Une liste de groupes est incohérente : nombre de groupes préremplis ou élève en double, id {})",
                 group_list_id
             ),
+            DecodeError::InconsistentPairingRule(rule_id) => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(Une règle d'appariement utilise la même matière des deux côtés, id {})",
+                rule_id
+            ),
             DecodeError::InnerDataError(error) => format!(
                 "Fichier mal formé et est probablement corrompu.\n(Les données ne vérifient pas un invariant : {})",
                 error

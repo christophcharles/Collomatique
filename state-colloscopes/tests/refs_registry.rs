@@ -253,18 +253,21 @@ fn walk_covers_every_site_in_order() {
 
     // Pairing rule Math => Physics, excluded on p1.
     let pairing = apply_new!(
-        Op::Pairing(PairingOp::Add(PairingRule {
-            antecedent: RulePart {
-                subject_id: math,
-                should_have: true,
-            },
-            consequent: RulePart {
-                subject_id: phys,
-                should_have: true,
-            },
-            excluded_periods: BTreeSet::from([p1]),
-            soft: false,
-        })),
+        Op::Pairing(PairingOp::Add(
+            PairingRule::new(
+                RulePart {
+                    subject_id: math,
+                    should_have: true,
+                },
+                RulePart {
+                    subject_id: phys,
+                    should_have: true,
+                },
+                BTreeSet::from([p1]),
+                false,
+            )
+            .expect("distinct subjects"),
+        )),
         NewId::PairingRuleId,
         "add pairing"
     );

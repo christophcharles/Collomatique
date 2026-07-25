@@ -659,18 +659,21 @@ pub fn build_rich_data() -> Data {
     // A pairing rule and a slot pairing rule
     apply(
         &mut state,
-        Op::Pairing(PairingOp::Add(PairingRule {
-            antecedent: RulePart {
-                subject_id: subject_maths,
-                should_have: true,
-            },
-            consequent: RulePart {
-                subject_id: subject_english,
-                should_have: false,
-            },
-            excluded_periods: BTreeSet::from([period2]),
-            soft: true,
-        })),
+        Op::Pairing(PairingOp::Add(
+            PairingRule::new(
+                RulePart {
+                    subject_id: subject_maths,
+                    should_have: true,
+                },
+                RulePart {
+                    subject_id: subject_english,
+                    should_have: false,
+                },
+                BTreeSet::from([period2]),
+                true,
+            )
+            .expect("distinct subjects"),
+        )),
         "pairing rule",
     );
     apply(
