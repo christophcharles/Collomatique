@@ -117,7 +117,7 @@ impl AssignmentsUpdateOp {
         match self {
             Self::Assign(period_id, student_id, subject_id, status) => {
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::Assignment(
                             collomatique_state_colloscopes::AssignmentOp::Assign(
                                 *period_id,
@@ -129,26 +129,57 @@ impl AssignmentsUpdateOp {
                         self.get_desc(),
                     )
                     .map_err(|e| {
-                        if let collomatique_state_colloscopes::Error::Assignment(ae) = e {
-                            match ae {
-                                collomatique_state_colloscopes::AssignmentError::InvalidPeriodId(period_id) => {
-                                    AssignError::InvalidPeriodId(period_id)
+                        use collomatique_state_colloscopes::{
+                            ApplyError, AssignmentPrecheckError, Convergence, FixableInvariant,
+                            PrecheckError,
+                        };
+                        match e {
+                            ApplyError::Precheck(PrecheckError::Assignment(pe)) => match pe {
+                                AssignmentPrecheckError::InvalidPeriodId(id) => {
+                                    AssignError::InvalidPeriodId(id)
                                 }
-                                collomatique_state_colloscopes::AssignmentError::InvalidStudentId(student_id) => {
-                                    AssignError::InvalidStudentId(student_id)
+                                AssignmentPrecheckError::InvalidStudentId(id) => {
+                                    AssignError::InvalidStudentId(id)
                                 }
-                                collomatique_state_colloscopes::AssignmentError::InvalidSubjectId(subject_id) => {
-                                    AssignError::InvalidSubjectId(subject_id)
+                                AssignmentPrecheckError::InvalidSubjectId(id) => {
+                                    AssignError::InvalidSubjectId(id)
                                 }
-                                collomatique_state_colloscopes::AssignmentError::StudentIsNotPresentOnPeriod(student_id, period_id) => {
-                                    AssignError::StudentIsNotPresentOnPeriod(student_id, period_id)
+                            },
+                            // The pre-op state was valid, so any convergence break
+                            // in the set was introduced by this Assign. Old validator
+                            // order (colloscope_params validate): subject-not-running
+                            // before student-not-present.
+                            ApplyError::Invariants(set) => {
+                                for inv in &set {
+                                    if let FixableInvariant::Convergence(
+                                        Convergence::AssignmentForSubjectNotRunningOnPeriod(
+                                            period,
+                                            subject,
+                                        ),
+                                    ) = inv
+                                    {
+                                        return AssignError::SubjectDoesNotRunOnPeriod(
+                                            *subject, *period,
+                                        );
+                                    }
                                 }
-                                collomatique_state_colloscopes::AssignmentError::SubjectDoesNotRunOnPeriod(subject_id, period_id) => {
-                                    AssignError::SubjectDoesNotRunOnPeriod(subject_id, period_id)
+                                for inv in &set {
+                                    if let FixableInvariant::Convergence(
+                                        Convergence::AssignedStudentNotPresentForPeriod {
+                                            period,
+                                            student,
+                                            ..
+                                        },
+                                    ) = inv
+                                    {
+                                        return AssignError::StudentIsNotPresentOnPeriod(
+                                            *student, *period,
+                                        );
+                                    }
                                 }
+                                panic!("Unexpected invariant breaks during Assign: {set:?}");
                             }
-                        } else {
-                            panic!("Unexpected error during Assign: {:?}", e);
+                            _ => panic!("Unexpected error during Assign: {e:?}"),
                         }
                     })?;
 
@@ -224,7 +255,7 @@ impl AssignmentsUpdateOp {
 
                         let previous_status = previous_assigned_students.contains(student_id);
 
-                        data.apply(
+                        data.try_apply(
                             collomatique_state_colloscopes::Op::Assignment(
                                 collomatique_state_colloscopes::AssignmentOp::Assign(
                                     *period_id,
@@ -282,7 +313,7 @@ impl AssignmentsUpdateOp {
                     }
 
                     let result = data
-                        .apply(
+                        .try_apply(
                             collomatique_state_colloscopes::Op::Assignment(
                                 collomatique_state_colloscopes::AssignmentOp::Assign(
                                     *period_id,
