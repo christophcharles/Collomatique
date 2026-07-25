@@ -12,9 +12,10 @@
 
 use collomatique_state::{AppState, InMemoryData, traits::Manager};
 use collomatique_state_colloscopes::{
-    ColloscopeOp, Data, Error, GroupListOp, NewId, NonEmptyRangeInclusive, Op, PeriodOp, SlotOp,
-    Subject, SubjectInterrogationParameters, SubjectOp, SubjectParameters, SubjectPeriodicity,
-    TeacherOp, WeekError, WeekOp, WeekPatternOp,
+    ApplyError, ColloscopeOp, Convergence, Data, FixableInvariant, GroupListOp, NewId,
+    NonEmptyRangeInclusive, Op, PeriodOp, Reference, SlotOp, Subject,
+    SubjectInterrogationParameters, SubjectOp, SubjectParameters, SubjectPeriodicity, TeacherOp,
+    WeekOp, WeekPatternOp, WeekRefSite,
     group_lists::{GroupList, GroupListFilling, GroupListParameters},
     ids::{PeriodId, SlotId, SubjectId, TeacherId, WeekId},
     slots::Slot,
@@ -77,7 +78,7 @@ fn add_period(
         None => PeriodOp::AddFront,
         Some(a) => PeriodOp::AddAfter(a),
     };
-    let period = match app.apply(Op::Period(period_op), "Add period".into()) {
+    let period = match app.try_apply(Op::Period(period_op), "Add period".into()) {
         Ok(Some(NewId::PeriodId(id))) => id,
         other => panic!("adding a period should return a period id, got {other:?}"),
     };
@@ -87,7 +88,7 @@ fn add_period(
             None => WeekOp::AddFront(period, desc),
             Some(w) => WeekOp::AddAfter(w, desc),
         };
-        match app.apply(Op::Week(week_op), "Add week".into()) {
+        match app.try_apply(Op::Week(week_op), "Add week".into()) {
             Ok(Some(NewId::WeekId(w))) => prev = Some(w),
             other => panic!("adding a week should return a week id, got {other:?}"),
         }
@@ -141,7 +142,7 @@ fn remove_week_blocked_by_non_trivial_pattern() {
     let weeks = week_ids_of(&app, period);
 
     // A pattern that skips the middle week.
-    let Ok(Some(NewId::WeekPatternId(_))) = app.apply(
+    let Ok(Some(NewId::WeekPatternId(pattern_id))) = app.try_apply(
         Op::WeekPattern(WeekPatternOp::Add(WeekPattern {
             name: "skip middle".into(),
             excluded_weeks: std::collections::BTreeSet::from([weeks[1]]),
@@ -151,20 +152,23 @@ fn remove_week_blocked_by_non_trivial_pattern() {
         panic!("adding a week pattern should return a week pattern id");
     };
 
-    let result = app.apply(
+    let result = app.try_apply(
         Op::Week(WeekOp::Remove(weeks[1])),
         "Remove middle week".into(),
     );
-    assert!(
-        matches!(
-            result,
-            Err(Error::Week(WeekError::NonTrivialWeekPattern(w, _))) if w == weeks[1]
-        ),
+    assert_eq!(
+        result,
+        Err(ApplyError::Invariants(BTreeSet::from([
+            FixableInvariant::DanglingFk(Reference::Week {
+                target: weeks[1],
+                site: WeekRefSite::WeekPatternExcludedWeek(pattern_id),
+            })
+        ]))),
         "removing a week a pattern skips must fail, got {result:?}",
     );
 
     // The trivially-active outer weeks can still be removed.
-    let Ok(None) = app.apply(
+    let Ok(None) = app.try_apply(
         Op::Week(WeekOp::Remove(weeks[2])),
         "Remove last week".into(),
     ) else {
@@ -198,9 +202,9 @@ fn remove_week_then_undo_restores_identity() {
 
     let (annotated, _) = data.annotate(Op::Week(WeekOp::Remove(middle)));
     let rev = data
-        .apply(&annotated)
+        .try_apply(&annotated)
         .expect("removing the week should succeed");
-    data.apply(&rev)
+    data.try_apply(&rev)
         .expect("the reverse of a successful op must apply");
 
     assert!(data == before, "remove + undo must restore the prior state");
@@ -223,7 +227,7 @@ fn update_week_to_inactive_blocked_by_filled_cell() {
         None,
         vec![WeekDesc::new(true), WeekDesc::new(true)],
     );
-    let Ok(Some(NewId::SubjectId(subject))) = app.apply(
+    let Ok(Some(NewId::SubjectId(subject))) = app.try_apply(
         Op::Subject(SubjectOp::AddAfter(
             None,
             interrogation_subject("Math", BTreeSet::new()),
@@ -232,7 +236,7 @@ fn update_week_to_inactive_blocked_by_filled_cell() {
     ) else {
         panic!("adding a subject should return a subject id");
     };
-    let Ok(Some(NewId::TeacherId(teacher))) = app.apply(
+    let Ok(Some(NewId::TeacherId(teacher))) = app.try_apply(
         Op::Teacher(TeacherOp::Add(Teacher {
             desc: Default::default(),
             subjects: BTreeSet::from([subject]),
@@ -241,13 +245,13 @@ fn update_week_to_inactive_blocked_by_filled_cell() {
     ) else {
         panic!("adding a teacher should return a teacher id");
     };
-    let Ok(Some(NewId::SlotId(slot))) = app.apply(
+    let Ok(Some(NewId::SlotId(slot))) = app.try_apply(
         Op::Slot(SlotOp::AddAfter(None, make_slot(subject, teacher))),
         "Add slot".into(),
     ) else {
         panic!("adding a slot should return a slot id");
     };
-    let Ok(Some(NewId::GroupListId(group_list))) = app.apply(
+    let Ok(Some(NewId::GroupListId(group_list))) = app.try_apply(
         Op::GroupList(GroupListOp::Add(
             GroupList::new(
                 GroupListParameters {
@@ -266,7 +270,7 @@ fn update_week_to_inactive_blocked_by_filled_cell() {
     ) else {
         panic!("adding a group list should return a group list id");
     };
-    let Ok(None) = app.apply(
+    let Ok(None) = app.try_apply(
         Op::GroupList(GroupListOp::AssignToSubject(
             period,
             subject,
@@ -279,7 +283,7 @@ fn update_week_to_inactive_blocked_by_filled_cell() {
 
     let weeks = week_ids_of(&app, period);
     // Fill the cell of the first week.
-    let Ok(None) = app.apply(
+    let Ok(None) = app.try_apply(
         Op::Colloscope(ColloscopeOp::SetInterrogation(
             slot,
             weeks[0],
@@ -291,21 +295,20 @@ fn update_week_to_inactive_blocked_by_filled_cell() {
     };
 
     // Turning the week inactive would silence the non-empty cell.
-    let result = app.apply(
+    let result = app.try_apply(
         Op::Week(WeekOp::Update(weeks[0], WeekDesc::new(false))),
         "Deactivate week".into(),
     );
-    assert!(
-        matches!(
-            result,
-            Err(Error::Week(WeekError::NotCompatibleSlotInColloscope(w, s)))
-                if w == weeks[0] && s == slot
-        ),
+    assert_eq!(
+        result,
+        Err(ApplyError::Invariants(BTreeSet::from([
+            FixableInvariant::Convergence(Convergence::InterrogationOnInactiveWeek(slot, weeks[0]))
+        ]))),
         "deactivating a week with a filled cell must fail, got {result:?}",
     );
 
     // The second week is empty, so it can be deactivated.
-    let Ok(None) = app.apply(
+    let Ok(None) = app.try_apply(
         Op::Week(WeekOp::Update(weeks[1], WeekDesc::new(false))),
         "Deactivate empty week".into(),
     ) else {
@@ -330,7 +333,7 @@ fn move_week_preserves_filled_cell() {
         vec![WeekDesc::new(true), WeekDesc::new(true)],
     );
     // Subject runs on both periods.
-    let Ok(Some(NewId::SubjectId(subject))) = app.apply(
+    let Ok(Some(NewId::SubjectId(subject))) = app.try_apply(
         Op::Subject(SubjectOp::AddAfter(
             None,
             interrogation_subject("Math", BTreeSet::new()),
@@ -339,7 +342,7 @@ fn move_week_preserves_filled_cell() {
     ) else {
         panic!("adding a subject should return a subject id");
     };
-    let Ok(Some(NewId::TeacherId(teacher))) = app.apply(
+    let Ok(Some(NewId::TeacherId(teacher))) = app.try_apply(
         Op::Teacher(TeacherOp::Add(Teacher {
             desc: Default::default(),
             subjects: BTreeSet::from([subject]),
@@ -348,13 +351,13 @@ fn move_week_preserves_filled_cell() {
     ) else {
         panic!("adding a teacher should return a teacher id");
     };
-    let Ok(Some(NewId::SlotId(slot))) = app.apply(
+    let Ok(Some(NewId::SlotId(slot))) = app.try_apply(
         Op::Slot(SlotOp::AddAfter(None, make_slot(subject, teacher))),
         "Add slot".into(),
     ) else {
         panic!("adding a slot should return a slot id");
     };
-    let Ok(Some(NewId::GroupListId(group_list))) = app.apply(
+    let Ok(Some(NewId::GroupListId(group_list))) = app.try_apply(
         Op::GroupList(GroupListOp::Add(
             GroupList::new(
                 GroupListParameters {
@@ -374,7 +377,7 @@ fn move_week_preserves_filled_cell() {
         panic!("adding a group list should return a group list id");
     };
     // Associate on both periods so a filled cell can travel.
-    let Ok(None) = app.apply(
+    let Ok(None) = app.try_apply(
         Op::GroupList(GroupListOp::AssignToSubject(
             period_a,
             subject,
@@ -384,7 +387,7 @@ fn move_week_preserves_filled_cell() {
     ) else {
         panic!("associating on A should succeed");
     };
-    let Ok(None) = app.apply(
+    let Ok(None) = app.try_apply(
         Op::GroupList(GroupListOp::AssignToSubject(
             period_b,
             subject,
@@ -398,7 +401,7 @@ fn move_week_preserves_filled_cell() {
     let weeks_a = week_ids_of(&app, period_a);
     let moved = weeks_a[1];
     // Fill the cell of the moved week.
-    let Ok(None) = app.apply(
+    let Ok(None) = app.try_apply(
         Op::Colloscope(ColloscopeOp::SetInterrogation(
             slot,
             moved,
@@ -410,7 +413,7 @@ fn move_week_preserves_filled_cell() {
     };
 
     // Move the filled week to the front of period B.
-    let Ok(None) = app.apply(
+    let Ok(None) = app.try_apply(
         Op::Week(WeekOp::Move(moved, period_b, 0)),
         "Move week to B".into(),
     ) else {
@@ -453,7 +456,7 @@ fn move_week_blocked_when_destination_lacks_slot() {
         vec![WeekDesc::new(true), WeekDesc::new(true)],
     );
     // Subject runs on A only (excluded from B), so B has no slot for it.
-    let Ok(Some(NewId::SubjectId(subject))) = app.apply(
+    let Ok(Some(NewId::SubjectId(subject))) = app.try_apply(
         Op::Subject(SubjectOp::AddAfter(
             None,
             interrogation_subject("Math", BTreeSet::from([period_b])),
@@ -462,7 +465,7 @@ fn move_week_blocked_when_destination_lacks_slot() {
     ) else {
         panic!("adding a subject should return a subject id");
     };
-    let Ok(Some(NewId::TeacherId(teacher))) = app.apply(
+    let Ok(Some(NewId::TeacherId(teacher))) = app.try_apply(
         Op::Teacher(TeacherOp::Add(Teacher {
             desc: Default::default(),
             subjects: BTreeSet::from([subject]),
@@ -471,13 +474,13 @@ fn move_week_blocked_when_destination_lacks_slot() {
     ) else {
         panic!("adding a teacher should return a teacher id");
     };
-    let Ok(Some(NewId::SlotId(slot))) = app.apply(
+    let Ok(Some(NewId::SlotId(slot))) = app.try_apply(
         Op::Slot(SlotOp::AddAfter(None, make_slot(subject, teacher))),
         "Add slot".into(),
     ) else {
         panic!("adding a slot should return a slot id");
     };
-    let Ok(Some(NewId::GroupListId(group_list))) = app.apply(
+    let Ok(Some(NewId::GroupListId(group_list))) = app.try_apply(
         Op::GroupList(GroupListOp::Add(
             GroupList::new(
                 GroupListParameters {
@@ -496,7 +499,7 @@ fn move_week_blocked_when_destination_lacks_slot() {
     ) else {
         panic!("adding a group list should return a group list id");
     };
-    let Ok(None) = app.apply(
+    let Ok(None) = app.try_apply(
         Op::GroupList(GroupListOp::AssignToSubject(
             period_a,
             subject,
@@ -509,7 +512,7 @@ fn move_week_blocked_when_destination_lacks_slot() {
 
     let weeks_a = week_ids_of(&app, period_a);
     let moved = weeks_a[0];
-    let Ok(None) = app.apply(
+    let Ok(None) = app.try_apply(
         Op::Colloscope(ColloscopeOp::SetInterrogation(
             slot,
             moved,
@@ -520,16 +523,18 @@ fn move_week_blocked_when_destination_lacks_slot() {
         panic!("filling the interrogation should succeed");
     };
 
-    let result = app.apply(
+    let result = app.try_apply(
         Op::Week(WeekOp::Move(moved, period_b, 0)),
         "Move filled week to B".into(),
     );
-    assert!(
-        matches!(
-            result,
-            Err(Error::Week(WeekError::NotCompatibleSlotInColloscope(w, s)))
-                if w == moved && s == slot
-        ),
+    assert_eq!(
+        result,
+        Err(ApplyError::Invariants(BTreeSet::from([
+            FixableInvariant::Convergence(Convergence::InterrogationSlotNotRunningOnPeriod(
+                slot, moved,
+            )),
+            FixableInvariant::Convergence(Convergence::InterrogationGroupOutOfBounds(slot, moved)),
+        ]))),
         "moving a filled week to a period lacking the slot must fail, got {result:?}",
     );
 }
