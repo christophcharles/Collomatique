@@ -706,7 +706,7 @@ impl SubjectsUpdateOp {
         match self {
             Self::AddNewSubject(params) => {
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::Subject(
                             collomatique_state_colloscopes::SubjectOp::AddAfter(
                                 data.get_data()
@@ -743,7 +743,7 @@ impl SubjectsUpdateOp {
                 let excluded_periods = current_subject.excluded_periods.clone();
 
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::Subject(
                             collomatique_state_colloscopes::SubjectOp::Update(
                                 *subject_id,
@@ -763,25 +763,27 @@ impl SubjectsUpdateOp {
             }
             Self::DeleteSubject(subject_id) => {
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::Subject(
                             collomatique_state_colloscopes::SubjectOp::Remove(*subject_id),
                         ),
                         self.get_desc(),
                     )
                     .map_err(|e| {
-                        if let collomatique_state_colloscopes::Error::Subject(se) = e {
-                            match se {
-                                collomatique_state_colloscopes::SubjectError::InvalidSubjectId(
-                                    id,
-                                ) => DeleteSubjectError::InvalidSubjectId(id),
-                                _ => panic!(
-                                    "Unexpected subject error during DeleteSubject: {:?}",
-                                    se
-                                ),
-                            }
-                        } else {
-                            panic!("Unexpected error during DeleteSubject: {:?}", e);
+                        use collomatique_state_colloscopes::{
+                            ApplyError, PrecheckError, SubjectPrecheckError,
+                        };
+                        match e {
+                            ApplyError::Precheck(PrecheckError::Subject(
+                                SubjectPrecheckError::InvalidSubjectId(id),
+                            )) => DeleteSubjectError::InvalidSubjectId(id),
+                            // Every reference to this subject (teacher subjects,
+                            // group-list associations, incompats, slots,
+                            // assignments, balancing options, pairing rules) is
+                            // stripped by get_next_cleaning_op before Remove reaches
+                            // apply, so a leftover dangle here is a cleaning-contract
+                            // breach, not user input.
+                            _ => panic!("Unexpected error during DeleteSubject: {e:?}"),
                         }
                     })?;
 
@@ -803,7 +805,7 @@ impl SubjectsUpdateOp {
                 }
 
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::Subject(
                             collomatique_state_colloscopes::SubjectOp::ChangePosition(
                                 *subject_id,
@@ -841,7 +843,7 @@ impl SubjectsUpdateOp {
                 }
 
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::Subject(
                             collomatique_state_colloscopes::SubjectOp::ChangePosition(
                                 *subject_id,
@@ -884,7 +886,7 @@ impl SubjectsUpdateOp {
                 }
 
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::Subject(
                             collomatique_state_colloscopes::SubjectOp::Update(*subject_id, subject),
                         ),
