@@ -139,25 +139,33 @@ impl TeachersUpdateOp {
         match self {
             Self::AddNewTeacher(teacher) => {
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::Teacher(
                             collomatique_state_colloscopes::TeacherOp::Add(teacher.clone()),
                         ),
                         self.get_desc(),
                     )
                     .map_err(|e| {
-                        if let collomatique_state_colloscopes::Error::Teacher(te) = e {
-                            match te {
-                                collomatique_state_colloscopes::TeacherError::InvalidSubjectId(
-                                    subject_id,
-                                ) => AddNewTeacherError::InvalidSubjectId(subject_id),
-                                _ => panic!(
-                                    "Unexpected teacher error during AddNewTeacher: {:?}",
-                                    te
-                                ),
+                        use collomatique_state_colloscopes::{
+                            ApplyError, FixableInvariant, Reference, SubjectRefSite,
+                        };
+                        match e {
+                            // The pre-op state was valid, so any teacher->subject
+                            // dangle in the set was introduced by this Add; the
+                            // dangling target is the bad input subject id.
+                            ApplyError::Invariants(set) => {
+                                for inv in &set {
+                                    if let FixableInvariant::DanglingFk(Reference::Subject {
+                                        target,
+                                        site: SubjectRefSite::TeacherSubjects(_),
+                                    }) = inv
+                                    {
+                                        return AddNewTeacherError::InvalidSubjectId(*target);
+                                    }
+                                }
+                                panic!("Unexpected invariant breaks during AddNewTeacher: {set:?}");
                             }
-                        } else {
-                            panic!("Unexpected error during AddNewTeacher: {:?}", e);
+                            _ => panic!("Unexpected error during AddNewTeacher: {e:?}"),
                         }
                     })?;
                 let Some(collomatique_state_colloscopes::NewId::TeacherId(new_id)) = result else {
@@ -167,7 +175,7 @@ impl TeachersUpdateOp {
             }
             Self::UpdateTeacher(teacher_id, teacher) => {
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::Teacher(
                             collomatique_state_colloscopes::TeacherOp::Update(
                                 *teacher_id,
@@ -177,24 +185,39 @@ impl TeachersUpdateOp {
                         self.get_desc(),
                     )
                     .map_err(|e| {
-                        if let collomatique_state_colloscopes::Error::Teacher(te) = e {
-                            match te {
-                                collomatique_state_colloscopes::TeacherError::InvalidTeacherId(
-                                    id,
-                                ) => UpdateTeacherError::InvalidTeacherId(id),
-                                collomatique_state_colloscopes::TeacherError::InvalidSubjectId(
-                                    id,
-                                ) => UpdateTeacherError::InvalidSubjectId(id),
-                                collomatique_state_colloscopes::TeacherError::TeacherStillHasAssociatedSlotsInSubject(_, _) => {
-                                    panic!("Slots should be cleaned before updating subjects for teacher");
+                        use collomatique_state_colloscopes::{
+                            ApplyError, Convergence, FixableInvariant, PrecheckError, Reference,
+                            SubjectRefSite, TeacherPrecheckError,
+                        };
+                        match e {
+                            ApplyError::Precheck(PrecheckError::Teacher(
+                                TeacherPrecheckError::InvalidTeacherId(id),
+                            )) => UpdateTeacherError::InvalidTeacherId(id),
+                            ApplyError::Invariants(set) => {
+                                // Old validator order: validate_teacher (subject
+                                // ids) fires before the dropped-subject slot scan.
+                                for inv in &set {
+                                    if let FixableInvariant::DanglingFk(Reference::Subject {
+                                        target,
+                                        site: SubjectRefSite::TeacherSubjects(_),
+                                    }) = inv
+                                    {
+                                        return UpdateTeacherError::InvalidSubjectId(*target);
+                                    }
                                 }
-                                _ => panic!(
-                                    "Unexpected teacher error during UpdateTeacher: {:?}",
-                                    te
-                                ),
+                                for inv in &set {
+                                    if let FixableInvariant::Convergence(
+                                        Convergence::SlotTeacherDoesNotTeachSubject(_),
+                                    ) = inv
+                                    {
+                                        panic!("Slots should be cleaned before updating subjects for teacher");
+                                    }
+                                }
+                                panic!(
+                                    "Unexpected invariant breaks during UpdateTeacher: {set:?}"
+                                );
                             }
-                        } else {
-                            panic!("Unexpected error during UpdateTeacher: {:?}", e);
+                            _ => panic!("Unexpected error during UpdateTeacher: {e:?}"),
                         }
                     })?;
 
@@ -204,28 +227,34 @@ impl TeachersUpdateOp {
             }
             Self::DeleteTeacher(teacher_id) => {
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::Teacher(
                             collomatique_state_colloscopes::TeacherOp::Remove(*teacher_id),
                         ),
                         self.get_desc(),
                     )
                     .map_err(|e| {
-                        if let collomatique_state_colloscopes::Error::Teacher(te) = e {
-                            match te {
-                                collomatique_state_colloscopes::TeacherError::InvalidTeacherId(
-                                    id,
-                                ) => DeleteTeacherError::InvalidTeacherId(id),
-                                collomatique_state_colloscopes::TeacherError::TeacherStillHasAssociatedSlots(_, _) => {
-                                    panic!("Slots should be cleaned before removing teacher");
+                        use collomatique_state_colloscopes::{
+                            ApplyError, FixableInvariant, PrecheckError, Reference,
+                            TeacherPrecheckError, TeacherRefSite,
+                        };
+                        match e {
+                            ApplyError::Precheck(PrecheckError::Teacher(
+                                TeacherPrecheckError::InvalidTeacherId(id),
+                            )) => DeleteTeacherError::InvalidTeacherId(id),
+                            ApplyError::Invariants(set) => {
+                                for inv in &set {
+                                    if let FixableInvariant::DanglingFk(Reference::Teacher {
+                                        site: TeacherRefSite::SlotTeacher(_),
+                                        ..
+                                    }) = inv
+                                    {
+                                        panic!("Slots should be cleaned before removing teacher");
+                                    }
                                 }
-                                _ => panic!(
-                                    "Unexpected teacher error during DeleteTeacher: {:?}",
-                                    te
-                                ),
+                                panic!("Unexpected invariant breaks during DeleteTeacher: {set:?}");
                             }
-                        } else {
-                            panic!("Unexpected error during DeleteTeacher: {:?}", e);
+                            _ => panic!("Unexpected error during DeleteTeacher: {e:?}"),
                         }
                     })?;
 
