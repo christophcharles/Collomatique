@@ -837,7 +837,7 @@ impl GroupListsUpdateOp {
                 )
                 .expect("automatic filling is always consistent");
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::GroupList(
                             collomatique_state_colloscopes::GroupListOp::Add(group_list),
                         ),
@@ -907,7 +907,7 @@ impl GroupListsUpdateOp {
                     .expect("count maintained by construction");
 
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::GroupList(
                             collomatique_state_colloscopes::GroupListOp::Update(
                                 *group_list_id,
@@ -933,20 +933,39 @@ impl GroupListsUpdateOp {
                     return Err(DeleteGroupListError::InvalidGroupListId(*group_list_id).into());
                 };
 
-                let result = match data
-                    .apply(
-                        collomatique_state_colloscopes::Op::GroupList(
-                            collomatique_state_colloscopes::GroupListOp::Remove(*group_list_id),
-                        ),
-                        self.get_desc(),
-                    ) {
-                        Ok(r) => r,
-                        Err(collomatique_state_colloscopes::Error::GroupList(ge)) => match ge {
-                            collomatique_state_colloscopes::GroupListError::RemainingAssociatedSubjects => panic!("Associated subjects should be properly cleaned"),
-                            _ => panic!("Unexpected error when calling GroupListOp::Remove")
+                let result = match data.try_apply(
+                    collomatique_state_colloscopes::Op::GroupList(
+                        collomatique_state_colloscopes::GroupListOp::Remove(*group_list_id),
+                    ),
+                    self.get_desc(),
+                ) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        use collomatique_state_colloscopes::{
+                            ApplyError, FixableInvariant, GroupListRefSite, Reference,
+                        };
+                        // The subject associations referencing this group list are
+                        // stripped by get_next_cleaning_op before Remove reaches
+                        // apply, so a leftover association dangle here is a
+                        // cleaning-contract breach, not user input.
+                        match e {
+                            ApplyError::Invariants(set)
+                                if set.iter().any(|inv| {
+                                    matches!(
+                                        inv,
+                                        FixableInvariant::DanglingFk(Reference::GroupList {
+                                            site: GroupListRefSite::AssociationEntry { .. },
+                                            ..
+                                        })
+                                    )
+                                }) =>
+                            {
+                                panic!("Associated subjects should be properly cleaned: {set:?}")
+                            }
+                            _ => panic!("Unexpected error when calling GroupListOp::Remove: {e:?}"),
                         }
-                        _ => panic!("Unexpected error when calling GroupListOp::Remove")
-                    };
+                    }
+                };
                 assert!(result.is_none());
 
                 Ok(None)
@@ -1024,7 +1043,7 @@ impl GroupListsUpdateOp {
                 .expect("caller guarantees prefill arity");
 
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::GroupList(
                             collomatique_state_colloscopes::GroupListOp::Update(
                                 *group_list_id,
@@ -1090,7 +1109,7 @@ impl GroupListsUpdateOp {
                 }
 
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::GroupList(
                             collomatique_state_colloscopes::GroupListOp::AssignToSubject(
                                 *period_id,
@@ -1171,7 +1190,7 @@ impl GroupListsUpdateOp {
                         previous_period_assignments.get(subject_id).cloned();
 
                     let result = data
-                        .apply(
+                        .try_apply(
                             collomatique_state_colloscopes::Op::GroupList(
                                 collomatique_state_colloscopes::GroupListOp::AssignToSubject(
                                     *period_id,
