@@ -11,7 +11,8 @@ Appendix D. **Step 4 completed July 21 2026** — its session plan is retired (p
 `git show fbc4ae6d:docs/plans/plan_step_4.md`), the delivered state is recorded in
 Appendix E. **Pre-step-5 loose ends completed July 25 2026** — a small consolidation phase
 run before step 5 (periods/weeks module split, sealed `GroupList`, consolidated
-`GroupListOp`, mirror-consistency `LogicError`s); its session plan is retired (pinned at
+`GroupListOp`, mirror-consistency `LogicError`s, sealed `PairingRule`/`SlotPairingRule`);
+its session plan is retired (pinned at
 `git show 25fdc50b:docs/plans/plan_loose_ends.md`), the delivered state is recorded in
 Appendix F. Next up: step 5.
 This doc started as an exploration after phase C of the table-registry plan shipped (item 2's
@@ -446,7 +447,9 @@ step 5 rewires production, so step 5 lands on a cleaner op surface. What changed
   and the elementary `GroupListOp` carries a whole consistent `GroupList` (elementary
   `SetFilling` gone; the high-level `ops/` API is frozen and translated onto `Update`). This
   makes the D.3 empty-first trio unrepresentable: `RemainingFilling`,
-  `PrefillGroupCountMismatch`, `NonEmptyGroupsWhenReducing` are all deleted.
+  `PrefillGroupCountMismatch`, `NonEmptyGroupsWhenReducing` are all deleted. *The same
+  smart-constructor churn was extended to `PairingRule`/`SlotPairingRule` (Appendix F.7);
+  their two parts-share-an-id `LogicError`s are deleted too.*
 - **E.3 (precheck enums)** — `GroupListPrecheckError`/`GroupListError` shrank accordingly.
 - **D.4-F1 unchanged** — checked `apply_*` keeps its guards (incl. `NotEmptyPeriodInColloscope`)
   until step 5; only the force copies lost the invariant guards.
@@ -629,7 +632,9 @@ architecture and each must find its home (tier or encapsulation) under this desi
   colloscope shape/count/week-structure checks, `BadWeekPatternLength`. (The step-1 reshapes
   eliminate most of these.)
 - **Pair-level predicates**: `SameSubjectInBothParts`, `SameSlotInBothParts`,
-  `SlotsNotInSameSubject`.
+  `SlotsNotInSameSubject`. *The two same-id predicates were sealed into the rule values by the
+  pre-step-5 loose ends (Appendix F.7) — unrepresentable now; `SlotsNotInSameSubject` stays
+  (cross-entity, needs the slot→subject map).*
 - **Side-constraints attached to references** (the retired SQL schema encoded these by
   pointing FKs at `subject_interrogation_params` instead of `subjects`): "referenced subject
   must have interrogations" (`TeacherError::SubjectHasNoInterrogation`,
@@ -863,8 +868,9 @@ Classification is **mechanical**, per edge/predicate — the module docs state t
   `GroupList`/`PairingRule`/`SlotPairingRule` behind smart constructors — public-API churn
   step 5 does anyway. Do that churn once, at step 5. *Loose-ends phase (Appendix F): the
   `GroupList` half was done early — `GroupList` is sealed, so the prefill
-  count/duplicate-student shapes are now unrepresentable (variants deleted). `PairingRule`/
-  `SlotPairingRule` remain for step 5.*
+  count/duplicate-student shapes are now unrepresentable (variants deleted). The
+  `PairingRule`/`SlotPairingRule` half was done early too (Appendix F.7): both are sealed, so
+  the parts-share-an-id shapes are unrepresentable (variants deleted).*
 
 ### C.4 Old-checker parity + the legacy bridge
 
@@ -1219,5 +1225,50 @@ only because the solver sees validated states.) Documented on `count_weeks`.
   delete the old checker without leaving any invariant behind. The differential fuzz stayed
   green (100 seeds) throughout — the new `LogicError`s are forge-only, outside its walk space.
 - **Unchanged:** checked `apply_*` keeps all its guards until step 5 (D.4-F1 still holds —
-  `NotEmptyPeriodInColloscope` stays vacuous-but-present); `PairingRule`/`SlotPairingRule`
-  are not yet sealed (their two cross-field `LogicError`s remain for step 5).
+  `NotEmptyPeriodInColloscope` stays vacuous-but-present). *(`PairingRule`/`SlotPairingRule`
+  are now sealed too — see F.7.)*
+
+### F.7 Sealed `PairingRule` / `SlotPairingRule`
+
+Both rule values are sealed exactly like `GroupList` (F.2): private fields, a validating
+`new()` checking the one value-internal fact (antecedent and consequent name distinct
+subjects / distinct slots), read accessors + `into_parts()`, and a private `Raw…` serde
+mirror whose `TryFrom` funnels through `new()` (honest decode, the `NonEmptyRangeInclusive`
+precedent). The wire format is byte-identical — `populated_round_trip` proves it. Storage
+decode is the one external constructor: a self-contradictory rule is a hard
+`DecodeError::{InconsistentPairingRule, InconsistentSlotPairingRule}` rather than a value that
+later trips the checker.
+
+Consequences:
+
+- `LogicError::{PairingRulePartsShareSubject, SlotPairingRulePartsShareSlot}` are **deleted**
+  (unrepresentable), with their sweep loops, `to_legacy` arms, and pinning tests.
+- The state-level `PairingError::SameSubjectInBothParts` /
+  `SlotPairingError::SameSlotInBothParts` and the checked-apply guards that raised them are
+  **deleted**; the remaining `validate_*_rule_internal` checks (subject/slot/period existence,
+  and the cross-entity `SlotsNotInSameSubject`) stay until step 5 retires checked apply.
+- The `ops/` error variants
+  `AddNew/Update{Pairing,SlotPairing}RuleError::Same{Subject,Slot}InBothParts` are **deleted
+  too** — a deliberate divergence from the D.4-F1 "vacuous but present" posture. The seal made
+  them unreachable (the op carries a sealed rule; nothing constructs or matches them), and
+  unlike the rule value's serde format these are ephemeral error *results* crossing the
+  same-build IPC boundary, never persisted, so there is no wire-compat artifact to protect.
+  `NotEmptyPeriodInColloscope` keeps the vacuous-but-present treatment — it is a checked-apply
+  guard on a still-live path, not a dead result variant.
+
+**What stays (cross-entity, not sealable):** `SlotPairingError::SlotsNotInSameSubject`, its
+check inside `validate_slot_pairing_rule_internal`, the `ops/` translation arms, and the
+checker's `Convergence::PairedSlotsNotInSameSubject`. "Both slots share a subject" needs the
+slots→subject map, which a value constructor cannot see; the seal only guarantees the two
+slots differ.
+
+**Testgen:** `LogicRecipe::{PairingSameSubject, SlotPairingSameSlot}` are gone (`GlobalDup` is
+the only `ForceLogic` recipe left); `gen_pairing`/`gen_slot_pairing`'s invalid arms now emit a
+dangling-id Add (distinct ids, so `new()` accepts; checked apply rejects with
+`Invalid{Subject,Slot}Id`; force lands a dangling FK) instead of a same-id Add. gtk4 builds
+both rules through `new().expect(...)` behind the Valider sensitivity guard (accepted panic).
+
+Headline: with both rule values sealed, **no tier-2 `LogicError` is reachable through an
+elementary op anymore** — the remaining ones arise only from external data (decode /
+`GlobalUpdate`) or the `#[cfg(test)]` forge hatch. That op-unreachability is the property
+step 5 stands on.
