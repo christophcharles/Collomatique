@@ -270,7 +270,7 @@ impl WeekPatternsUpdateOp {
         match self {
             Self::AddNewWeekPattern(week_pattern) => {
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::WeekPattern(
                             collomatique_state_colloscopes::WeekPatternOp::Add(
                                 week_pattern.clone(),
@@ -278,22 +278,29 @@ impl WeekPatternsUpdateOp {
                         ),
                         self.get_desc(),
                     )
-                    .map_err(
-                        |e| match e {
-                            collomatique_state_colloscopes::Error::WeekPattern(
-                                wpe
-                            ) => match wpe {
-                                collomatique_state_colloscopes::WeekPatternError::WeekPatternExcludesInvalidWeek(week_id) => {
-                                    AddNewWeekPatternError::WeekPatternExcludesInvalidWeek(week_id)
+                    .map_err(|e| {
+                        use collomatique_state_colloscopes::{
+                            ApplyError, FixableInvariant, Reference, WeekRefSite,
+                        };
+                        match e {
+                            // The pre-op state was valid, so any pattern->week dangle
+                            // in the set was introduced by this Add; the dangling
+                            // target is the bad excluded week id.
+                            ApplyError::Invariants(set) => {
+                                for inv in &set {
+                                    if let FixableInvariant::DanglingFk(Reference::Week {
+                                        target,
+                                        site: WeekRefSite::WeekPatternExcludedWeek(_),
+                                    }) = inv
+                                    {
+                                        return AddNewWeekPatternError::WeekPatternExcludesInvalidWeek(*target);
+                                    }
                                 }
-                                _ => panic!(
-                                    "Unexpected week pattern error during AddNewWeekPattern: {:?}",
-                                    wpe
-                                ),
+                                panic!("Unexpected invariant breaks during AddNewWeekPattern: {set:?}");
                             }
-                            _ => panic!("Unexpected error during AddNewWeekPattern"),
+                            _ => panic!("Unexpected error during AddNewWeekPattern: {e:?}"),
                         }
-                    )?;
+                    })?;
                 let Some(collomatique_state_colloscopes::NewId::WeekPatternId(new_id)) = result
                 else {
                     panic!("Unexpected result from WeekPatternOp::Add");
@@ -302,7 +309,7 @@ impl WeekPatternsUpdateOp {
             }
             Self::UpdateWeekPattern(week_pattern_id, week_pattern) => {
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::WeekPattern(
                             collomatique_state_colloscopes::WeekPatternOp::Update(
                                 *week_pattern_id,
@@ -312,20 +319,27 @@ impl WeekPatternsUpdateOp {
                         self.get_desc(),
                     )
                     .map_err(|e| {
-                        if let collomatique_state_colloscopes::Error::WeekPattern(wpe) = e {
-                            match wpe {
-                                collomatique_state_colloscopes::WeekPatternError::InvalidWeekPatternId(id) =>
-                                    UpdateWeekPatternError::InvalidWeekPatternId(id),
-                                collomatique_state_colloscopes::WeekPatternError::WeekPatternExcludesInvalidWeek(week_id) => {
-                                    UpdateWeekPatternError::WeekPatternExcludesInvalidWeek(week_id)
+                        use collomatique_state_colloscopes::{
+                            ApplyError, FixableInvariant, PrecheckError, Reference,
+                            WeekPatternPrecheckError, WeekRefSite,
+                        };
+                        match e {
+                            ApplyError::Precheck(PrecheckError::WeekPattern(
+                                WeekPatternPrecheckError::InvalidWeekPatternId(id),
+                            )) => UpdateWeekPatternError::InvalidWeekPatternId(id),
+                            ApplyError::Invariants(set) => {
+                                for inv in &set {
+                                    if let FixableInvariant::DanglingFk(Reference::Week {
+                                        target,
+                                        site: WeekRefSite::WeekPatternExcludedWeek(_),
+                                    }) = inv
+                                    {
+                                        return UpdateWeekPatternError::WeekPatternExcludesInvalidWeek(*target);
+                                    }
                                 }
-                                _ => panic!(
-                                    "Unexpected week pattern error during UpdateWeekPattern: {:?}",
-                                    wpe
-                                ),
+                                panic!("Unexpected invariant breaks during UpdateWeekPattern: {set:?}");
                             }
-                        } else {
-                            panic!("Unexpected error during UpdateWeekPattern: {:?}", e);
+                            _ => panic!("Unexpected error during UpdateWeekPattern: {e:?}"),
                         }
                     })?;
 
@@ -335,30 +349,41 @@ impl WeekPatternsUpdateOp {
             }
             Self::DeleteWeekPattern(week_pattern_id) => {
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::WeekPattern(
                             collomatique_state_colloscopes::WeekPatternOp::Remove(*week_pattern_id),
                         ),
                         self.get_desc(),
                     )
                     .map_err(|e| {
-                        if let collomatique_state_colloscopes::Error::WeekPattern(wpe) = e {
-                            match wpe {
-                                collomatique_state_colloscopes::WeekPatternError::InvalidWeekPatternId(id) =>
-                                    DeleteWeekPatternError::InvalidWeekPatternId(id),
-                                collomatique_state_colloscopes::WeekPatternError::WeekPatternStillHasAssociatedIncompat(_, _) => {
-                                    panic!("Incompats should be cleaned before removing week patterns");
+                        use collomatique_state_colloscopes::{
+                            ApplyError, FixableInvariant, PrecheckError, Reference,
+                            WeekPatternPrecheckError, WeekPatternRefSite,
+                        };
+                        match e {
+                            ApplyError::Precheck(PrecheckError::WeekPattern(
+                                WeekPatternPrecheckError::InvalidWeekPatternId(id),
+                            )) => DeleteWeekPatternError::InvalidWeekPatternId(id),
+                            ApplyError::Invariants(set) => {
+                                for inv in &set {
+                                    if let FixableInvariant::DanglingFk(Reference::WeekPattern {
+                                        site,
+                                        ..
+                                    }) = inv
+                                    {
+                                        match site {
+                                            WeekPatternRefSite::IncompatWeekPattern(_) => panic!(
+                                                "Incompats should be cleaned before removing week patterns"
+                                            ),
+                                            WeekPatternRefSite::SlotWeekPattern(_) => panic!(
+                                                "Slots should be cleaned before removing week patterns"
+                                            ),
+                                        }
+                                    }
                                 }
-                                collomatique_state_colloscopes::WeekPatternError::WeekPatternStillHasAssociatedSlots(_, _) => {
-                                    panic!("Slots should be cleaned before removing week patterns");
-                                }
-                                _ => panic!(
-                                    "Unexpected week pattern error during DeleteWeekPattern: {:?}",
-                                    wpe
-                                ),
+                                panic!("Unexpected invariant breaks during DeleteWeekPattern: {set:?}");
                             }
-                        } else {
-                            panic!("Unexpected error during DeleteWeekPattern: {:?}", e);
+                            _ => panic!("Unexpected error during DeleteWeekPattern: {e:?}"),
                         }
                     })?;
 
