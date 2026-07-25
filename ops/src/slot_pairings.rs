@@ -40,13 +40,6 @@ pub enum AddNewSlotPairingRuleError {
     InvalidSlotId(collomatique_state_colloscopes::SlotId),
     #[error("invalid period id ({0:?})")]
     InvalidPeriodId(collomatique_state_colloscopes::PeriodId),
-    /// Antecedent and consequent slots are the same.
-    ///
-    /// Vacuous since the `SlotPairingRule` seal: the op carries a sealed rule,
-    /// so this input cannot be expressed anymore. Kept because this enum is a
-    /// frozen, serialized API (the `NotEmptyPeriodInColloscope` precedent).
-    #[error("same slot in both parts ({0:?})")]
-    SameSlotInBothParts(collomatique_state_colloscopes::SlotId),
     #[error("slots {0:?} and {1:?} do not belong to the same subject")]
     SlotsNotInSameSubject(
         collomatique_state_colloscopes::SlotId,
@@ -68,13 +61,6 @@ pub enum UpdateSlotPairingRuleError {
     InvalidSlotId(collomatique_state_colloscopes::SlotId),
     #[error("invalid period id ({0:?})")]
     InvalidPeriodId(collomatique_state_colloscopes::PeriodId),
-    /// Antecedent and consequent slots are the same.
-    ///
-    /// Vacuous since the `SlotPairingRule` seal: the op carries a sealed rule,
-    /// so this input cannot be expressed anymore. Kept because this enum is a
-    /// frozen, serialized API (the `NotEmptyPeriodInColloscope` precedent).
-    #[error("same slot in both parts ({0:?})")]
-    SameSlotInBothParts(collomatique_state_colloscopes::SlotId),
     #[error("slots {0:?} and {1:?} do not belong to the same subject")]
     SlotsNotInSameSubject(
         collomatique_state_colloscopes::SlotId,

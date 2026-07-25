@@ -40,14 +40,6 @@ pub enum AddNewPairingRuleError {
     InvalidSubjectId(collomatique_state_colloscopes::SubjectId),
     #[error("invalid period id ({0:?})")]
     InvalidPeriodId(collomatique_state_colloscopes::PeriodId),
-    /// Antecedent and consequent subjects are the same.
-    ///
-    /// Vacuous since the `PairingRule` seal: the op carries a sealed rule, so
-    /// this input cannot be expressed anymore and the state layer can never
-    /// return it. Kept because this enum is a frozen, serialized API (the
-    /// `NotEmptyPeriodInColloscope` precedent).
-    #[error("antecedent and consequent subjects are the same ({0:?})")]
-    SameSubjectInBothParts(collomatique_state_colloscopes::SubjectId),
 }
 
 #[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
@@ -64,14 +56,6 @@ pub enum UpdatePairingRuleError {
     InvalidSubjectId(collomatique_state_colloscopes::SubjectId),
     #[error("invalid period id ({0:?})")]
     InvalidPeriodId(collomatique_state_colloscopes::PeriodId),
-    /// Antecedent and consequent subjects are the same.
-    ///
-    /// Vacuous since the `PairingRule` seal: the op carries a sealed rule, so
-    /// this input cannot be expressed anymore and the state layer can never
-    /// return it. Kept because this enum is a frozen, serialized API (the
-    /// `NotEmptyPeriodInColloscope` precedent).
-    #[error("antecedent and consequent subjects are the same ({0:?})")]
-    SameSubjectInBothParts(collomatique_state_colloscopes::SubjectId),
 }
 
 impl PairingsUpdateOp {
