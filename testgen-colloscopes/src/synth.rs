@@ -429,18 +429,19 @@ pub fn slot_pairing_rule(
     consequent: SlotId,
     period_ids: &[PeriodId],
 ) -> SlotPairingRule {
-    SlotPairingRule {
-        antecedent: SlotRulePart {
+    SlotPairingRule::new(
+        SlotRulePart {
             slot_id: antecedent,
             should_have: rng.random_bool(0.7),
         },
-        consequent: SlotRulePart {
+        SlotRulePart {
             slot_id: consequent,
             should_have: rng.random_bool(0.7),
         },
-        excluded_periods: subset(rng, period_ids, 0.15).into_iter().collect(),
-        soft: rng.random_bool(0.5),
-    }
+        subset(rng, period_ids, 0.15).into_iter().collect(),
+        rng.random_bool(0.5),
+    )
+    .expect("testgen callers pass distinct slot ids")
 }
 
 pub fn week_start(rng: &mut ChaCha8Rng) -> WeekStart {

@@ -58,6 +58,8 @@ pub enum DecodeError {
     InconsistentGroupList(u64),
     #[error("Pairing rule id {0} has its antecedent and consequent on the same subject")]
     InconsistentPairingRule(u64),
+    #[error("Slot pairing rule id {0} has its antecedent and consequent on the same slot")]
+    InconsistentSlotPairingRule(u64),
     #[error("generating new IDs is not secure, half the usable IDs have been used already")]
     EndOfTheUniverse,
     #[error("Duplicated ID")]

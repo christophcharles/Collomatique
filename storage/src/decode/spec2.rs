@@ -300,7 +300,7 @@ fn reconstruct(blocks: Blocks) -> Result<InnerData, DecodeError> {
     )?;
     let settings = reconstruct_settings(blocks.settings.unwrap_or_default());
     let pairings = reconstruct_pairings(blocks.pairings.unwrap_or_default())?;
-    let slot_pairings = reconstruct_slot_pairings(blocks.slot_pairings.unwrap_or_default());
+    let slot_pairings = reconstruct_slot_pairings(blocks.slot_pairings.unwrap_or_default())?;
     let balancing = reconstruct_balancing(blocks.balancing.unwrap_or_default());
 
     let params = mem::colloscope_params::Parameters {
@@ -760,30 +760,32 @@ fn reconstruct_pairings(
 
 fn reconstruct_slot_pairings(
     block: format::slot_pairings::SlotPairings,
-) -> mem::slot_pairings::SlotPairings {
-    mem::slot_pairings::SlotPairings {
-        slot_pairing_rule_map: block
-            .into_inner()
-            .into_iter()
-            .map(|rule| {
-                let part = |part: format::slot_pairings::SlotPairingPart| {
-                    mem::slot_pairings::SlotRulePart {
-                        slot_id: id(part.slot_id),
-                        should_have: part.should_have,
-                    }
+) -> Result<mem::slot_pairings::SlotPairings, DecodeError> {
+    let slot_pairing_rule_map = block
+        .into_inner()
+        .into_iter()
+        .map(|rule| {
+            let raw_id = rule.id;
+            let part =
+                |part: format::slot_pairings::SlotPairingPart| mem::slot_pairings::SlotRulePart {
+                    slot_id: id(part.slot_id),
+                    should_have: part.should_have,
                 };
-                (
-                    id::<SlotPairingRuleId>(rule.id),
-                    mem::slot_pairings::SlotPairingRule {
-                        antecedent: part(rule.antecedent),
-                        consequent: part(rule.consequent),
-                        excluded_periods: id_set(rule.excluded_periods),
-                        soft: rule.soft,
-                    },
-                )
-            })
-            .collect(),
-    }
+            // Honest decode: a rule with both parts on one slot is a hard
+            // error here rather than being caught later by layer 3.
+            let value = mem::slot_pairings::SlotPairingRule::new(
+                part(rule.antecedent),
+                part(rule.consequent),
+                id_set(rule.excluded_periods),
+                rule.soft,
+            )
+            .map_err(|_| DecodeError::InconsistentSlotPairingRule(raw_id))?;
+            Ok((id::<SlotPairingRuleId>(raw_id), value))
+        })
+        .collect::<Result<_, DecodeError>>()?;
+    Ok(mem::slot_pairings::SlotPairings {
+        slot_pairing_rule_map,
+    })
 }
 
 fn balancing_options(options: format::balancing::Options) -> mem::balancing::BalancingOptions {

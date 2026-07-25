@@ -159,6 +159,10 @@ impl FileLoader {
                 "Le fichier est mal formé et est probablement corrompu.\n(Une règle d'appariement utilise la même matière des deux côtés, id {})",
                 rule_id
             ),
+            DecodeError::InconsistentSlotPairingRule(rule_id) => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(Un appariement de créneaux utilise le même créneau des deux côtés, id {})",
+                rule_id
+            ),
             DecodeError::InnerDataError(error) => format!(
                 "Fichier mal formé et est probablement corrompu.\n(Les données ne vérifient pas un invariant : {})",
                 error

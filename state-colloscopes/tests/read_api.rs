@@ -218,18 +218,21 @@ fn build_document(app: &mut AppState<Data, String>) -> Built {
         "add pairing"
     );
     let slot_pairing = apply_new!(
-        Op::SlotPairing(SlotPairingOp::Add(SlotPairingRule {
-            antecedent: SlotRulePart {
-                slot_id: slot,
-                should_have: true,
-            },
-            consequent: SlotRulePart {
-                slot_id: slot2,
-                should_have: true,
-            },
-            excluded_periods: BTreeSet::new(),
-            soft: false,
-        })),
+        Op::SlotPairing(SlotPairingOp::Add(
+            SlotPairingRule::new(
+                SlotRulePart {
+                    slot_id: slot,
+                    should_have: true,
+                },
+                SlotRulePart {
+                    slot_id: slot2,
+                    should_have: true,
+                },
+                BTreeSet::new(),
+                false,
+            )
+            .expect("distinct slots"),
+        )),
         NewId::SlotPairingRuleId,
         "add slot pairing"
     );

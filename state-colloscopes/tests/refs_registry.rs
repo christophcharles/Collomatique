@@ -274,18 +274,21 @@ fn walk_covers_every_site_in_order() {
 
     // Slot pairing rule slot1 => slot2 (same subject), excluded on p1.
     let slot_pairing = apply_new!(
-        Op::SlotPairing(SlotPairingOp::Add(SlotPairingRule {
-            antecedent: SlotRulePart {
-                slot_id: slot1,
-                should_have: true,
-            },
-            consequent: SlotRulePart {
-                slot_id: slot2,
-                should_have: true,
-            },
-            excluded_periods: BTreeSet::from([p1]),
-            soft: false,
-        })),
+        Op::SlotPairing(SlotPairingOp::Add(
+            SlotPairingRule::new(
+                SlotRulePart {
+                    slot_id: slot1,
+                    should_have: true,
+                },
+                SlotRulePart {
+                    slot_id: slot2,
+                    should_have: true,
+                },
+                BTreeSet::from([p1]),
+                false,
+            )
+            .expect("distinct slots"),
+        )),
         NewId::SlotPairingRuleId,
         "add slot pairing"
     );

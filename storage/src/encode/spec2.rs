@@ -484,10 +484,10 @@ fn build_slot_pairings(
                 };
                 format::slot_pairings::SlotPairing {
                     id: rule_id.inner(),
-                    antecedent: part(&rule.antecedent),
-                    consequent: part(&rule.consequent),
-                    excluded_periods: id_set(&rule.excluded_periods),
-                    soft: rule.soft,
+                    antecedent: part(rule.antecedent()),
+                    consequent: part(rule.consequent()),
+                    excluded_periods: id_set(rule.excluded_periods()),
+                    soft: rule.soft(),
                 }
             })
             .collect(),

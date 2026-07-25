@@ -401,15 +401,15 @@ fn walk_slot_pairings(params: &Parameters, v: &mut impl RefVisitor) {
     // Antecedent and consequent must yield distinct sites, so each part is
     // sub-walked through its own `References` impl (as in `walk_pairings`).
     for (rule_id, rule) in params.slot_pairings.slot_pairing_rule_map.iter() {
-        rule.antecedent.for_each_ref(&mut |id: NewId| match id {
+        rule.antecedent().for_each_ref(&mut |id: NewId| match id {
             NewId::SlotId(s) => v.slot_ref(s, SlotRefSite::SlotPairingRuleAntecedent(rule_id)),
             _ => unreachable!("SlotRulePart only references a slot"),
         });
-        rule.consequent.for_each_ref(&mut |id: NewId| match id {
+        rule.consequent().for_each_ref(&mut |id: NewId| match id {
             NewId::SlotId(s) => v.slot_ref(s, SlotRefSite::SlotPairingRuleConsequent(rule_id)),
             _ => unreachable!("SlotRulePart only references a slot"),
         });
-        rule.excluded_periods
+        rule.excluded_periods()
             .for_each_ref(&mut |id: NewId| match id {
                 NewId::PeriodId(p) => {
                     v.period_ref(p, PeriodRefSite::SlotPairingRuleExcludedPeriods(rule_id))

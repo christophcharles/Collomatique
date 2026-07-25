@@ -42,20 +42,145 @@ pub struct SlotRulePart {
 ///
 /// Both slots must belong to the same subject. Rules only apply on weeks where
 /// both slots are active.
+///
+/// Sealed: the fields are private and every value is built through
+/// [`SlotPairingRule::new`], which enforces the one value-internal invariant
+/// (the antecedent and consequent must name different slots — an implication
+/// from a slot to itself is meaningless). The cross-entity fact that both slots
+/// belong to the same subject is state-dependent (it needs the slot→subject
+/// map) and stays with the checker/validator. Serialized exactly like the raw
+/// four-field struct via [`RawSlotPairingRule`]; deserializing a rule with both
+/// parts on one slot is a hard error (the
+/// [`crate::non_empty_range::NonEmptyRangeInclusive`] precedent).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References, Join)]
 #[join(error = NewId)]
+#[serde(try_from = "RawSlotPairingRule", into = "RawSlotPairingRule")]
 pub struct SlotPairingRule {
     /// The antecedent of the implication
     #[fk]
-    pub antecedent: SlotRulePart,
+    antecedent: SlotRulePart,
     /// The consequent of the implication
     #[fk]
-    pub consequent: SlotRulePart,
+    consequent: SlotRulePart,
     /// Periods where the rule does NOT apply
     #[fk]
-    pub excluded_periods: BTreeSet<PeriodId>,
+    excluded_periods: BTreeSet<PeriodId>,
     /// Whether this is a soft constraint (best-effort) or hard (strict)
-    pub soft: bool,
+    soft: bool,
+}
+
+/// Private serde mirror of [`SlotPairingRule`]: the transparent four-field
+/// struct. Deserialization funnels through [`SlotPairingRule::new`] (honest
+/// decode); serialization is the plain field dump, so the wire format is
+/// byte-identical to the pre-sealing struct.
+#[derive(Serialize, Deserialize)]
+struct RawSlotPairingRule {
+    antecedent: SlotRulePart,
+    consequent: SlotRulePart,
+    excluded_periods: BTreeSet<PeriodId>,
+    soft: bool,
+}
+
+impl From<SlotPairingRule> for RawSlotPairingRule {
+    fn from(rule: SlotPairingRule) -> Self {
+        RawSlotPairingRule {
+            antecedent: rule.antecedent,
+            consequent: rule.consequent,
+            excluded_periods: rule.excluded_periods,
+            soft: rule.soft,
+        }
+    }
+}
+
+impl TryFrom<RawSlotPairingRule> for SlotPairingRule {
+    type Error = SlotPairingRuleBuildError;
+    fn try_from(raw: RawSlotPairingRule) -> Result<Self, SlotPairingRuleBuildError> {
+        SlotPairingRule::new(
+            raw.antecedent,
+            raw.consequent,
+            raw.excluded_periods,
+            raw.soft,
+        )
+    }
+}
+
+/// Value-internal build failure of [`SlotPairingRule::new`]: a
+/// self-contradictory rule, independent of any state.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum SlotPairingRuleBuildError {
+    /// Antecedent and consequent name the same slot
+    #[error("antecedent and consequent slots are the same ({0:?})")]
+    SameSlotInBothParts(SlotId),
+}
+
+impl SlotPairingRule {
+    /// Build a validated slot pairing rule.
+    ///
+    /// Fails if the antecedent and consequent name the same slot: an
+    /// implication from a slot to itself is meaningless. This is the only
+    /// value-internal invariant; the cross-entity fact that both slots belong
+    /// to the same subject is state-dependent and checked elsewhere.
+    pub fn new(
+        antecedent: SlotRulePart,
+        consequent: SlotRulePart,
+        excluded_periods: BTreeSet<PeriodId>,
+        soft: bool,
+    ) -> Result<Self, SlotPairingRuleBuildError> {
+        if antecedent.slot_id == consequent.slot_id {
+            return Err(SlotPairingRuleBuildError::SameSlotInBothParts(
+                antecedent.slot_id,
+            ));
+        }
+        Ok(SlotPairingRule {
+            antecedent,
+            consequent,
+            excluded_periods,
+            soft,
+        })
+    }
+
+    /// The antecedent of the implication
+    pub fn antecedent(&self) -> &SlotRulePart {
+        &self.antecedent
+    }
+    /// The consequent of the implication
+    pub fn consequent(&self) -> &SlotRulePart {
+        &self.consequent
+    }
+    /// Periods where the rule does NOT apply
+    pub fn excluded_periods(&self) -> &BTreeSet<PeriodId> {
+        &self.excluded_periods
+    }
+    /// Whether this is a soft constraint (best-effort) or hard (strict)
+    pub fn soft(&self) -> bool {
+        self.soft
+    }
+
+    /// Decompose into the owned parts, for callers that need to rebuild.
+    pub fn into_parts(self) -> (SlotRulePart, SlotRulePart, BTreeSet<PeriodId>, bool) {
+        (
+            self.antecedent,
+            self.consequent,
+            self.excluded_periods,
+            self.soft,
+        )
+    }
+}
+
+// The `Join` derive gives [`JoinedSlotPairingRule`] the same field visibility
+// as [`SlotPairingRule`], so sealing the base made the joined view's fields
+// private too. The joined view is a transient read-only borrow (it cannot be
+// turned back into a `SlotPairingRule`), so exposing it does not weaken the
+// seal — these accessors keep the view usable outside the module.
+impl<'a> JoinedSlotPairingRule<'a> {
+    /// The joined antecedent view.
+    pub fn antecedent(&self) -> &JoinedSlotRulePart<'a> {
+        &self.antecedent
+    }
+    /// The joined consequent view.
+    pub fn consequent(&self) -> &JoinedSlotRulePart<'a> {
+        &self.consequent
+    }
 }
 
 /// Errors for slot pairing rule operations
@@ -71,8 +196,6 @@ pub enum SlotPairingError {
     InvalidSlotId(SlotId),
     #[error("invalid period id ({0:?})")]
     InvalidPeriodId(PeriodId),
-    #[error("same slot in both parts ({0:?})")]
-    SameSlotInBothParts(SlotId),
     #[error("slots {0:?} and {1:?} do not belong to the same subject")]
     SlotsNotInSameSubject(SlotId, SlotId),
 }

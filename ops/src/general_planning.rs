@@ -596,9 +596,20 @@ impl GeneralPlanningUpdateOp {
                     .iter()
                 {
                     let rule_id = &rule_id;
-                    if rule.excluded_periods.contains(period_id) {
-                        let mut new_rule = rule.clone();
-                        new_rule.excluded_periods.remove(period_id);
+                    if rule.excluded_periods().contains(period_id) {
+                        let (antecedent, consequent, mut excluded_periods, soft) =
+                            rule.clone().into_parts();
+                        excluded_periods.remove(period_id);
+                        let new_rule =
+                            collomatique_state_colloscopes::slot_pairings::SlotPairingRule::new(
+                                antecedent,
+                                consequent,
+                                excluded_periods,
+                                soft,
+                            )
+                            .expect(
+                                "removing an excluded period preserves the distinct-slot invariant",
+                            );
                         return Some(CleaningOp {
                             warning:
                                 GeneralPlanningUpdateWarning::LooseSlotPairingRuleExclusionForPeriod(
@@ -777,9 +788,20 @@ impl GeneralPlanningUpdateOp {
                     .iter()
                 {
                     let rule_id = &rule_id;
-                    if rule.excluded_periods.contains(period_id) {
-                        let mut new_rule = rule.clone();
-                        new_rule.excluded_periods.remove(period_id);
+                    if rule.excluded_periods().contains(period_id) {
+                        let (antecedent, consequent, mut excluded_periods, soft) =
+                            rule.clone().into_parts();
+                        excluded_periods.remove(period_id);
+                        let new_rule =
+                            collomatique_state_colloscopes::slot_pairings::SlotPairingRule::new(
+                                antecedent,
+                                consequent,
+                                excluded_periods,
+                                soft,
+                            )
+                            .expect(
+                                "removing an excluded period preserves the distinct-slot invariant",
+                            );
                         return Some(CleaningOp {
                             warning:
                                 GeneralPlanningUpdateWarning::LooseSlotPairingRuleExclusionForPeriod(

@@ -678,18 +678,21 @@ pub fn build_rich_data() -> Data {
     );
     apply(
         &mut state,
-        Op::SlotPairing(SlotPairingOp::Add(SlotPairingRule {
-            antecedent: SlotRulePart {
-                slot_id: slot_maths1,
-                should_have: true,
-            },
-            consequent: SlotRulePart {
-                slot_id: slot_maths2,
-                should_have: true,
-            },
-            excluded_periods: BTreeSet::new(),
-            soft: false,
-        })),
+        Op::SlotPairing(SlotPairingOp::Add(
+            SlotPairingRule::new(
+                SlotRulePart {
+                    slot_id: slot_maths1,
+                    should_have: true,
+                },
+                SlotRulePart {
+                    slot_id: slot_maths2,
+                    should_have: true,
+                },
+                BTreeSet::new(),
+                false,
+            )
+            .expect("distinct slots"),
+        )),
         "slot pairing rule",
     );
 

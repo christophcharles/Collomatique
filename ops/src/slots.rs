@@ -243,7 +243,9 @@ impl SlotsUpdateOp {
                     .iter()
                 {
                     let rule_id = &rule_id;
-                    if rule.antecedent.slot_id == *slot_id || rule.consequent.slot_id == *slot_id {
+                    if rule.antecedent().slot_id == *slot_id
+                        || rule.consequent().slot_id == *slot_id
+                    {
                         return Some(CleaningOp {
                             warning: SlotsUpdateWarning::LooseSlotPairingRulesForSlot(
                                 *slot_id, *rule_id,

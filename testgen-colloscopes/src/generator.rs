@@ -905,12 +905,17 @@ fn gen_slot_pairing(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
         .collect();
     if invalid {
         let op = if !pools.slot_ids.is_empty() && rng.random_bool(0.6) {
-            // Same slot on both sides of the implication
-            let slot_id = pick(rng, &pools.slot_ids);
+            // Dangling slot in the consequent: `SlotPairingRule::new` accepts
+            // the value (the two ids are distinct), checked apply rejects the
+            // op with `InvalidSlotId`, and the force path lands a dangling FK.
+            // (Before the seal this arm built a same-slot rule; that value is
+            // now unrepresentable.)
+            let real = pick(rng, &pools.slot_ids);
+            let ghost = unsafe { SlotId::new(dangling(rng)) };
             SlotPairingOp::Add(synth::slot_pairing_rule(
                 rng,
-                slot_id,
-                slot_id,
+                real,
+                ghost,
                 &pools.period_ids,
             ))
         } else {
@@ -1127,9 +1132,9 @@ pub enum CorruptionKind {
     ForceRetarget,
     /// Valid-shaped op whose only obstacle was a stripped invariant guard.
     ForceSemantic,
-    /// Op landing a `LogicError` state (dup-id `GlobalUpdate`, same-slot
-    /// slot-pairing part). The same-subject pairing flavor is gone: the sealed
-    /// `PairingRule` makes that state unrepresentable.
+    /// Op landing a `LogicError` state (dup-id `GlobalUpdate`). The
+    /// same-subject pairing and same-slot slot-pairing flavors are gone: the
+    /// sealed `PairingRule`/`SlotPairingRule` make those states unrepresentable.
     ForceLogic,
     /// Plain valid op — the forced ≡ checked equivalence probe.
     ForceValid,
@@ -1545,25 +1550,22 @@ fn gen_force_semantic(
 /// states unrepresentable — a mismatched or duplicate-student filling can no
 /// longer be constructed, neither through the op surface nor a `GlobalUpdate`
 /// clone — so there is no such `LogicError` left to forge. Likewise the
-/// same-subject pairing flavor is gone: `PairingRule::new` rejects a rule with
-/// both parts on one subject, so `PairingRulePartsShareSubject` can no longer
-/// be reached and there is nothing to forge.)
+/// same-subject pairing and same-slot slot-pairing flavors are gone:
+/// `PairingRule::new`/`SlotPairingRule::new` reject a rule with both parts on
+/// one subject/slot, so `PairingRulePartsShareSubject` and
+/// `SlotPairingRulePartsShareSlot` can no longer be reached and there is
+/// nothing left to forge — `GlobalDup` is the only recipe remaining.)
 #[derive(Clone, Copy)]
 enum LogicRecipe {
     /// `GlobalUpdate` clone with a duplicated id (kept id max, so the issuer
     /// stays out of the dangling range) → `DuplicatedId`.
     GlobalDup,
-    /// `SlotPairingAdd` with both parts on one slot → `SlotPairingRulePartsShareSlot`.
-    SlotPairingSameSlot,
 }
 
 fn available_logic_recipes(_inner: &InnerData, pools: &Pools) -> Vec<LogicRecipe> {
     let mut recipes = Vec::new();
     if !pools.subject_ids.is_empty() {
         recipes.push(LogicRecipe::GlobalDup);
-    }
-    if !pools.slot_ids.is_empty() {
-        recipes.push(LogicRecipe::SlotPairingSameSlot);
     }
     recipes
 }
@@ -1584,15 +1586,6 @@ fn gen_force_logic(
                 .student_map
                 .insert(duplicated, Student::default());
             Op::GlobalUpdate(broken)
-        }
-        LogicRecipe::SlotPairingSameSlot => {
-            let slot_id = pick(rng, &pools.slot_ids);
-            Op::SlotPairing(SlotPairingOp::Add(synth::slot_pairing_rule(
-                rng,
-                slot_id,
-                slot_id,
-                &pools.period_ids,
-            )))
         }
     }
 }

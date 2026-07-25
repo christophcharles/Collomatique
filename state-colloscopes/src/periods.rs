@@ -305,7 +305,7 @@ impl crate::Data {
                     .slot_pairing_rule_map
                     .iter()
                 {
-                    if rule.excluded_periods.contains(period_id) {
+                    if rule.excluded_periods().contains(period_id) {
                         return Err(PeriodError::PeriodIsReferencedBySlotPairingRule(
                             *period_id, rule_id,
                         ));

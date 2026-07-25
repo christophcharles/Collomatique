@@ -40,6 +40,11 @@ pub enum AddNewSlotPairingRuleError {
     InvalidSlotId(collomatique_state_colloscopes::SlotId),
     #[error("invalid period id ({0:?})")]
     InvalidPeriodId(collomatique_state_colloscopes::PeriodId),
+    /// Antecedent and consequent slots are the same.
+    ///
+    /// Vacuous since the `SlotPairingRule` seal: the op carries a sealed rule,
+    /// so this input cannot be expressed anymore. Kept because this enum is a
+    /// frozen, serialized API (the `NotEmptyPeriodInColloscope` precedent).
     #[error("same slot in both parts ({0:?})")]
     SameSlotInBothParts(collomatique_state_colloscopes::SlotId),
     #[error("slots {0:?} and {1:?} do not belong to the same subject")]
@@ -63,6 +68,11 @@ pub enum UpdateSlotPairingRuleError {
     InvalidSlotId(collomatique_state_colloscopes::SlotId),
     #[error("invalid period id ({0:?})")]
     InvalidPeriodId(collomatique_state_colloscopes::PeriodId),
+    /// Antecedent and consequent slots are the same.
+    ///
+    /// Vacuous since the `SlotPairingRule` seal: the op carries a sealed rule,
+    /// so this input cannot be expressed anymore. Kept because this enum is a
+    /// frozen, serialized API (the `NotEmptyPeriodInColloscope` precedent).
     #[error("same slot in both parts ({0:?})")]
     SameSlotInBothParts(collomatique_state_colloscopes::SlotId),
     #[error("slots {0:?} and {1:?} do not belong to the same subject")]
@@ -111,9 +121,6 @@ impl SlotPairingsUpdateOp {
                                 collomatique_state_colloscopes::SlotPairingError::InvalidPeriodId(
                                     id,
                                 ) => AddNewSlotPairingRuleError::InvalidPeriodId(id),
-                                collomatique_state_colloscopes::SlotPairingError::SameSlotInBothParts(id) => {
-                                    AddNewSlotPairingRuleError::SameSlotInBothParts(id)
-                                }
                                 collomatique_state_colloscopes::SlotPairingError::SlotsNotInSameSubject(id1, id2) => {
                                     AddNewSlotPairingRuleError::SlotsNotInSameSubject(id1, id2)
                                 }
@@ -189,9 +196,6 @@ impl SlotPairingsUpdateOp {
                                 collomatique_state_colloscopes::SlotPairingError::InvalidPeriodId(
                                     id,
                                 ) => UpdateSlotPairingRuleError::InvalidPeriodId(id),
-                                collomatique_state_colloscopes::SlotPairingError::SameSlotInBothParts(id) => {
-                                    UpdateSlotPairingRuleError::SameSlotInBothParts(id)
-                                }
                                 collomatique_state_colloscopes::SlotPairingError::SlotsNotInSameSubject(id1, id2) => {
                                     UpdateSlotPairingRuleError::SlotsNotInSameSubject(id1, id2)
                                 }

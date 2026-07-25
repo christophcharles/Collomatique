@@ -879,24 +879,21 @@ impl Parameters {
         slot_subject_map: &BTreeMap<SlotId, SubjectId>,
         period_ids: &BTreeSet<PeriodId>,
     ) -> Result<(), SlotPairingError> {
-        if rule.antecedent.slot_id == rule.consequent.slot_id {
-            return Err(SlotPairingError::SameSlotInBothParts(
-                rule.antecedent.slot_id,
-            ));
-        }
-        let Some(ant_subject) = slot_subject_map.get(&rule.antecedent.slot_id) else {
-            return Err(SlotPairingError::InvalidSlotId(rule.antecedent.slot_id));
+        // Same-slot degeneracy is unrepresentable: `SlotPairingRule::new`
+        // rejects it by construction, so there is nothing to check here.
+        let Some(ant_subject) = slot_subject_map.get(&rule.antecedent().slot_id) else {
+            return Err(SlotPairingError::InvalidSlotId(rule.antecedent().slot_id));
         };
-        let Some(con_subject) = slot_subject_map.get(&rule.consequent.slot_id) else {
-            return Err(SlotPairingError::InvalidSlotId(rule.consequent.slot_id));
+        let Some(con_subject) = slot_subject_map.get(&rule.consequent().slot_id) else {
+            return Err(SlotPairingError::InvalidSlotId(rule.consequent().slot_id));
         };
         if ant_subject != con_subject {
             return Err(SlotPairingError::SlotsNotInSameSubject(
-                rule.antecedent.slot_id,
-                rule.consequent.slot_id,
+                rule.antecedent().slot_id,
+                rule.consequent().slot_id,
             ));
         }
-        for period_id in &rule.excluded_periods {
+        for period_id in rule.excluded_periods() {
             if !period_ids.contains(period_id) {
                 return Err(SlotPairingError::InvalidPeriodId(*period_id));
             }

@@ -205,19 +205,23 @@ pub enum RuleOutput {
 
 impl Rule {
     fn generate_summary(&self) -> String {
-        let ant_desc = self.slot_desc(&self.data.rule.antecedent.slot_id);
-        let con_desc = self.slot_desc(&self.data.rule.consequent.slot_id);
-        let ant_cond = if self.data.rule.antecedent.should_have {
+        let ant_desc = self.slot_desc(&self.data.rule.antecedent().slot_id);
+        let con_desc = self.slot_desc(&self.data.rule.consequent().slot_id);
+        let ant_cond = if self.data.rule.antecedent().should_have {
             "utilisé"
         } else {
             "non utilisé"
         };
-        let con_cond = if self.data.rule.consequent.should_have {
+        let con_cond = if self.data.rule.consequent().should_have {
             "utilisé"
         } else {
             "non utilisé"
         };
-        let soft_text = if self.data.rule.soft { " (souple)" } else { "" };
+        let soft_text = if self.data.rule.soft() {
+            " (souple)"
+        } else {
+            ""
+        };
         format!(
             "[{}] {} \u{27F9} [{}] {}{}",
             ant_cond, ant_desc, con_cond, con_desc, soft_text
@@ -236,7 +240,7 @@ impl Rule {
         let mut excluded_period_list: Vec<_> = self
             .data
             .rule
-            .excluded_periods
+            .excluded_periods()
             .iter()
             .map(|period_id| {
                 self.data
@@ -312,7 +316,7 @@ impl FactoryComponent for Rule {
                 set_label: &self.generate_excluded_periods_info(),
                 set_attributes: Some(&gtk::pango::AttrList::from_string("style italic, scale 0.8").unwrap()),
                 #[watch]
-                set_visible: !self.data.rule.excluded_periods.is_empty(),
+                set_visible: !self.data.rule.excluded_periods().is_empty(),
             },
             gtk::Separator {
                 set_orientation: gtk::Orientation::Vertical,

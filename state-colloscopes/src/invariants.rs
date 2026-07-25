@@ -134,9 +134,6 @@ pub enum LogicError {
     /// exists iff it holds a placement)
     #[error("colloscope group-list row {0:?} is stored with an empty placement map")]
     EmptyColloscopeGroupListRow(GroupListId),
-    /// A slot pairing rule whose antecedent and consequent name the same slot
-    #[error("slot pairing rule {0:?} has its antecedent and consequent on the same slot")]
-    SlotPairingRulePartsShareSlot(SlotPairingRuleId),
 }
 
 /// A predicate over *existing* edges that legitimate ops can break indirectly —
@@ -357,16 +354,10 @@ impl crate::InnerData {
         // (Prefilled group lists cannot violate the count/duplicate invariants:
         // `GroupList::new` enforces them by construction, so no state can hold a
         // mismatched or duplicate-student filling. Likewise a pairing rule cannot
-        // have both parts on one subject: `PairingRule::new` enforces it by
-        // construction — there is nothing to sweep for either.)
-
-        // Parts-share-an-id predicate: a slot pairing rule whose antecedent and
-        // consequent name the same slot is degenerate.
-        for (id, rule) in self.params.slot_pairings.slot_pairing_rule_map.iter() {
-            if rule.antecedent.slot_id == rule.consequent.slot_id {
-                errors.insert(LogicError::SlotPairingRulePartsShareSlot(id));
-            }
-        }
+        // have both parts on one subject, and a slot pairing rule cannot have
+        // both parts on one slot: `PairingRule::new` and `SlotPairingRule::new`
+        // enforce it by construction — there is nothing to sweep for any of
+        // these.)
 
         errors
     }
@@ -537,13 +528,18 @@ impl crate::InnerData {
         }
 
         // ---- Slot pairings: the two paired slots must be on the same subject
-        // (the same-slot degeneracy is layer A). Mirrors
+        // (the same-slot degeneracy is unrepresentable — `SlotPairingRule::new`
+        // enforces it by construction). Mirrors
         // `validate_slot_pairing_rule_internal`. Gated on both slots resolving;
         // the subject ids are only compared, so they do not gate.
         for (rule_id, rule) in params.slot_pairings.slot_pairing_rule_map.iter() {
             if let (Some((ant_subject, _)), Some((con_subject, _))) = (
-                params.slots.find_slot_with_subject(rule.antecedent.slot_id),
-                params.slots.find_slot_with_subject(rule.consequent.slot_id),
+                params
+                    .slots
+                    .find_slot_with_subject(rule.antecedent().slot_id),
+                params
+                    .slots
+                    .find_slot_with_subject(rule.consequent().slot_id),
             ) && ant_subject != con_subject
             {
                 out.insert(Convergence::PairedSlotsNotInSameSubject(rule_id));
@@ -668,9 +664,6 @@ impl LogicError {
             }
             LogicError::EmptyColloscopeGroupListRow(group_list) => {
                 E::ColloscopeError(ColloscopeError::EmptyGroupListRow(*group_list))
-            }
-            LogicError::SlotPairingRulePartsShareSlot(_) => {
-                E::Params(InvariantError::InvalidSlotPairingRule)
             }
         }
     }
@@ -1112,18 +1105,19 @@ pub(crate) mod tests {
         let slot_b = unsafe { SlotId::new(3) };
         data.params.slot_pairings.slot_pairing_rule_map.insert(
             rule,
-            SlotPairingRule {
-                antecedent: SlotRulePart {
+            SlotPairingRule::new(
+                SlotRulePart {
                     slot_id: slot_a,
                     should_have: true,
                 },
-                consequent: SlotRulePart {
+                SlotRulePart {
                     slot_id: slot_b,
                     should_have: false,
                 },
-                excluded_periods: BTreeSet::new(),
-                soft: false,
-            },
+                BTreeSet::new(),
+                false,
+            )
+            .expect("distinct slots"),
         );
         assert_eq!(
             broken_invariants(&data),
@@ -1300,7 +1294,6 @@ pub(crate) mod tests {
         let slot = unsafe { SlotId::new(3) };
         let week = unsafe { WeekId::new(4) };
         let group_list = unsafe { GroupListId::new(5) };
-        let slot_pairing_rule = unsafe { SlotPairingRuleId::new(7) };
         let all = [
             LogicError::DuplicatedId(42),
             LogicError::EmptyAssignmentsRow(period, subject),
@@ -1316,7 +1309,6 @@ pub(crate) mod tests {
             LogicError::OrphanWeek(week),
             LogicError::EmptyInterrogationRow(slot, week),
             LogicError::EmptyColloscopeGroupListRow(group_list),
-            LogicError::SlotPairingRulePartsShareSlot(slot_pairing_rule),
         ];
         // Strict `<`, not is_sorted: equal adjacent values would be a
         // duplicated-variant bug.
@@ -1689,41 +1681,6 @@ pub(crate) mod tests {
             Err(BTreeSet::from([LogicError::EmptyColloscopeGroupListRow(
                 group_list
             )]))
-        );
-    }
-
-    #[test]
-    fn slot_pairing_rule_parts_share_slot() {
-        let mut data = InnerData::default();
-        let rule = unsafe { SlotPairingRuleId::new(1) };
-        let slot = unsafe { SlotId::new(2) };
-        data.params.slot_pairings.slot_pairing_rule_map.insert(
-            rule,
-            SlotPairingRule {
-                antecedent: SlotRulePart {
-                    slot_id: slot,
-                    should_have: true,
-                },
-                consequent: SlotRulePart {
-                    slot_id: slot,
-                    should_have: false,
-                },
-                excluded_periods: BTreeSet::new(),
-                soft: false,
-            },
-        );
-        assert_eq!(
-            broken_invariants(&data),
-            Err(BTreeSet::from([LogicError::SlotPairingRulePartsShareSlot(
-                rule
-            )]))
-        );
-        // Old-checker image (lenient differential branch): `InvalidSlotPairingRule`.
-        assert_eq!(
-            data.check_invariants(),
-            Err(InnerDataError::Params(
-                InvariantError::InvalidSlotPairingRule
-            ))
         );
     }
 
@@ -2303,18 +2260,19 @@ pub(crate) mod tests {
         .unwrap();
         data.params.slot_pairings.slot_pairing_rule_map.insert(
             rule,
-            SlotPairingRule {
-                antecedent: SlotRulePart {
+            SlotPairingRule::new(
+                SlotRulePart {
                     slot_id: slot_a,
                     should_have: true,
                 },
-                consequent: SlotRulePart {
+                SlotRulePart {
                     slot_id: slot_b,
                     should_have: false,
                 },
-                excluded_periods: BTreeSet::new(),
-                soft: false,
-            },
+                BTreeSet::new(),
+                false,
+            )
+            .expect("distinct slots"),
         );
         assert_eq!(
             broken_invariants(&data),
@@ -2867,18 +2825,19 @@ pub(crate) mod tests {
         .unwrap();
         data.params.slot_pairings.slot_pairing_rule_map.insert(
             rule,
-            SlotPairingRule {
-                antecedent: SlotRulePart {
+            SlotPairingRule::new(
+                SlotRulePart {
                     slot_id: slot_a,
                     should_have: true,
                 },
-                consequent: SlotRulePart {
+                SlotRulePart {
                     slot_id: slot_b,
                     should_have: false,
                 },
-                excluded_periods: BTreeSet::from([period]),
-                soft: false,
-            },
+                BTreeSet::from([period]),
+                false,
+            )
+            .expect("distinct slots"),
         );
         assert_dangling_maps(
             &data,

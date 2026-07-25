@@ -190,7 +190,7 @@ impl Component for SlotPairings {
                                 // Check if antecedent slot belongs to this subject
                                 subject_slots
                                     .iter()
-                                    .any(|(slot_id, _)| *slot_id == rule.antecedent.slot_id)
+                                    .any(|(slot_id, _)| *slot_id == rule.antecedent().slot_id)
                             })
                             .map(|(rule_id, rule)| (rule_id, rule.clone()))
                             .collect();
@@ -235,7 +235,7 @@ impl Component for SlotPairings {
                     .expect("Rule ID should be valid")
                     .clone();
                 let subject_id = self
-                    .find_slot_subject(current_rule.antecedent.slot_id)
+                    .find_slot_subject(current_rule.antecedent().slot_id)
                     .expect("Antecedent slot should belong to a subject");
                 let subject_name = self
                     .subjects
@@ -287,18 +287,20 @@ impl Component for SlotPairings {
                     .get(1)
                     .map(|(id, _)| *id)
                     .unwrap_or(first_slot_id);
-                let default_rule = collomatique_state_colloscopes::slot_pairings::SlotPairingRule {
-                    antecedent: collomatique_state_colloscopes::slot_pairings::SlotRulePart {
-                        slot_id: first_slot_id,
-                        should_have: true,
-                    },
-                    consequent: collomatique_state_colloscopes::slot_pairings::SlotRulePart {
-                        slot_id: second_slot_id,
-                        should_have: true,
-                    },
-                    excluded_periods: BTreeSet::new(),
-                    soft: false,
-                };
+                let default_rule =
+                    collomatique_state_colloscopes::slot_pairings::SlotPairingRule::new(
+                        collomatique_state_colloscopes::slot_pairings::SlotRulePart {
+                            slot_id: first_slot_id,
+                            should_have: true,
+                        },
+                        collomatique_state_colloscopes::slot_pairings::SlotRulePart {
+                            slot_id: second_slot_id,
+                            should_have: true,
+                        },
+                        BTreeSet::new(),
+                        false,
+                    )
+                    .expect("the Ajouter button is gated on len() >= 2");
                 self.slot_pairing_params_dialog
                     .sender()
                     .send(slot_pairing_params::DialogInput::Show(

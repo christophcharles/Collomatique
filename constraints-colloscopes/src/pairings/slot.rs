@@ -27,8 +27,8 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
     let mut output = MyBundle::new();
 
     for (rule_id, rule) in env.slot_pairings.slot_pairing_rule_map.iter() {
-        let ant_slot_id = rule.antecedent.slot_id;
-        let con_slot_id = rule.consequent.slot_id;
+        let ant_slot_id = rule.antecedent().slot_id;
+        let con_slot_id = rule.consequent().slot_id;
 
         let Some((subject_id, _)) = env.slots.find_slot_subject_and_position(ant_slot_id) else {
             continue;
@@ -54,7 +54,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
 
         let combined_excluded: BTreeSet<_> = subject
             .excluded_periods
-            .union(&rule.excluded_periods)
+            .union(rule.excluded_periods())
             .copied()
             .collect();
         let ant_weeks: BTreeSet<_> = weeks_for_slot(env, ant_slot_data, &combined_excluded)
@@ -77,13 +77,13 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                 continue;
             }
             let mut single = MyBundle::new();
-            let target = if rule.soft {
+            let target = if rule.soft() {
                 &mut single
             } else {
                 &mut hard_bundle
             };
 
-            match (rule.antecedent.should_have, rule.consequent.should_have) {
+            match (rule.antecedent().should_have, rule.consequent().should_have) {
                 (true, true) => {
                     let ant_count = slot_group_count_expr(env, ant_slot_id, subject_id, week);
                     let con_count = slot_group_count_expr(env, con_slot_id, subject_id, week);
@@ -150,7 +150,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                 }
             }
 
-            if rule.soft {
+            if rule.soft() {
                 soft_output = merge_objectified_weighted(
                     soft_output,
                     single,

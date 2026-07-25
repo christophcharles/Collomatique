@@ -655,7 +655,7 @@ fn slot_pairing_info(
         Some(r) => {
             let subj = env
                 .slots
-                .find_slot_subject_and_position(r.antecedent.slot_id)
+                .find_slot_subject_and_position(r.antecedent().slot_id)
                 .and_then(|(subj_id, _)| {
                     env.subjects
                         .ordered_subject_list
@@ -666,8 +666,8 @@ fn slot_pairing_info(
                 .unwrap_or_else(|| format!("{:?}", rule));
             (
                 subj,
-                slot_teacher_and_time(env, r.antecedent.slot_id),
-                slot_teacher_and_time(env, r.consequent.slot_id),
+                slot_teacher_and_time(env, r.antecedent().slot_id),
+                slot_teacher_and_time(env, r.consequent().slot_id),
             )
         }
         None => (
