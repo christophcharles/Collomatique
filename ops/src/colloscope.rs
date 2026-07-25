@@ -99,7 +99,7 @@ impl ColloscopeUpdateOp {
         match self {
             Self::UpdateColloscopeGroupList(group_list_id, placements) => {
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::Colloscope(
                             collomatique_state_colloscopes::ColloscopeOp::SetGroupList(
                                 *group_list_id,
@@ -109,27 +109,51 @@ impl ColloscopeUpdateOp {
                         self.get_desc()
                     )
                     .map_err(|e| {
-                        if let collomatique_state_colloscopes::Error::Colloscope(ce) = e {
-                            match ce {
-                                collomatique_state_colloscopes::ColloscopeError::InvalidGroupListId(group_list_id) =>
-                                    UpdateColloscopeGroupListError::InvalidGroupListId(group_list_id),
-                                collomatique_state_colloscopes::ColloscopeError::ExcludedStudentInGroupList(
-                                    group_list_id,
-                                    student_id
-                                ) => UpdateColloscopeGroupListError::ExcludedStudentInGroupList(
-                                    group_list_id,
-                                    student_id,
-                                ),
-                                collomatique_state_colloscopes::ColloscopeError::InvalidStudentId(student_id) => {
-                                    UpdateColloscopeGroupListError::InvalidStudentId(student_id)
+                        use collomatique_state_colloscopes::{
+                            ApplyError, ColloscopePrecheckError, Convergence, FixableInvariant,
+                            PrecheckError, Reference, StudentRefSite,
+                        };
+                        match e {
+                            ApplyError::Precheck(PrecheckError::Colloscope(
+                                ColloscopePrecheckError::InvalidGroupListId(id),
+                            )) => UpdateColloscopeGroupListError::InvalidGroupListId(id),
+                            // The pre-op state was valid, so every break in the set was
+                            // introduced by this SetGroupList. Old validator order
+                            // (validate_group_list_placements): excluded student, then
+                            // invalid student id, then group number out of bounds.
+                            ApplyError::Invariants(set) => {
+                                for inv in &set {
+                                    if let FixableInvariant::Convergence(
+                                        Convergence::ColloscopeStudentExcluded(group_list, student),
+                                    ) = inv
+                                    {
+                                        return UpdateColloscopeGroupListError::ExcludedStudentInGroupList(
+                                            *group_list, *student,
+                                        );
+                                    }
                                 }
-                                collomatique_state_colloscopes::ColloscopeError::InvalidGroupNumForStudentInGroupList(group_list_id, student_id) => {
-                                    UpdateColloscopeGroupListError::InvalidGroupNumForStudentInGroupList(group_list_id, student_id)
+                                for inv in &set {
+                                    if let FixableInvariant::DanglingFk(Reference::Student {
+                                        target,
+                                        site: StudentRefSite::ColloscopeGroupListStudent(_),
+                                    }) = inv
+                                    {
+                                        return UpdateColloscopeGroupListError::InvalidStudentId(*target);
+                                    }
                                 }
-                                _ => panic!("Unexpected error on ColloscopeOp::UpdateGroupList: {:?}", ce),
+                                for inv in &set {
+                                    if let FixableInvariant::Convergence(
+                                        Convergence::ColloscopeStudentGroupOutOfBounds(group_list, student),
+                                    ) = inv
+                                    {
+                                        return UpdateColloscopeGroupListError::InvalidGroupNumForStudentInGroupList(
+                                            *group_list, *student,
+                                        );
+                                    }
+                                }
+                                panic!("Unexpected invariant breaks during UpdateColloscopeGroupList: {set:?}");
                             }
-                        } else {
-                            panic!("Unexpected error during UpdateColloscopeGroupList: {:?}", e);
+                            _ => panic!("Unexpected error during UpdateColloscopeGroupList: {e:?}"),
                         }
                     })?;
 
@@ -139,7 +163,7 @@ impl ColloscopeUpdateOp {
             }
             Self::UpdateColloscopeInterrogation(slot_id, week_id, assigned_groups) => {
                 let result = data
-                    .apply(
+                    .try_apply(
                         collomatique_state_colloscopes::Op::Colloscope(
                             collomatique_state_colloscopes::ColloscopeOp::SetInterrogation(
                                 *slot_id,
@@ -150,27 +174,56 @@ impl ColloscopeUpdateOp {
                         self.get_desc(),
                     )
                     .map_err(|e| {
-                        if let collomatique_state_colloscopes::Error::Colloscope(ce) = e {
-                            match ce {
-                                collomatique_state_colloscopes::ColloscopeError::InvalidWeekId(week_id) => {
-                                    UpdateColloscopeInterrogationError::InvalidWeekId(week_id)
+                        use collomatique_state_colloscopes::{
+                            ApplyError, ColloscopePrecheckError, Convergence, FixableInvariant,
+                            PrecheckError,
+                        };
+                        match e {
+                            ApplyError::Precheck(PrecheckError::Colloscope(pe)) => match pe {
+                                ColloscopePrecheckError::InvalidWeekId(id) => {
+                                    UpdateColloscopeInterrogationError::InvalidWeekId(id)
                                 }
-                                collomatique_state_colloscopes::ColloscopeError::InvalidSlotId(slot_id) => {
-                                    UpdateColloscopeInterrogationError::InvalidSlotId(slot_id)
+                                ColloscopePrecheckError::InvalidSlotId(id) => {
+                                    UpdateColloscopeInterrogationError::InvalidSlotId(id)
                                 }
-                                collomatique_state_colloscopes::ColloscopeError::SlotNotRunningOnPeriod(slot_id, week_id) => {
-                                    UpdateColloscopeInterrogationError::SlotNotRunningOnPeriod(slot_id, week_id)
+                                // SetInterrogation carries no group list id, so this
+                                // precheck variant cannot arise here.
+                                ColloscopePrecheckError::InvalidGroupListId(id) => panic!(
+                                    "Unexpected InvalidGroupListId during UpdateColloscopeInterrogation: {id:?}"
+                                ),
+                            },
+                            // The pre-op state was valid, so every break in the set was
+                            // introduced by this SetInterrogation. Old validator order
+                            // (apply_colloscope SetInterrogation): slot-not-running,
+                            // then inactive week, then group number out of bounds.
+                            ApplyError::Invariants(set) => {
+                                for inv in &set {
+                                    if let FixableInvariant::Convergence(
+                                        Convergence::InterrogationSlotNotRunningOnPeriod(slot, week),
+                                    ) = inv
+                                    {
+                                        return UpdateColloscopeInterrogationError::SlotNotRunningOnPeriod(*slot, *week);
+                                    }
                                 }
-                                collomatique_state_colloscopes::ColloscopeError::InterrogationOnInactiveWeek(slot_id, week_id) => {
-                                    UpdateColloscopeInterrogationError::InterrogationOnInactiveWeek(slot_id, week_id)
+                                for inv in &set {
+                                    if let FixableInvariant::Convergence(
+                                        Convergence::InterrogationOnInactiveWeek(slot, week),
+                                    ) = inv
+                                    {
+                                        return UpdateColloscopeInterrogationError::InterrogationOnInactiveWeek(*slot, *week);
+                                    }
                                 }
-                                collomatique_state_colloscopes::ColloscopeError::InvalidGroupNumInInterrogation(..) => {
-                                    UpdateColloscopeInterrogationError::InvalidGroupNumInInterrogation(*slot_id, *week_id)
+                                for inv in &set {
+                                    if let FixableInvariant::Convergence(
+                                        Convergence::InterrogationGroupOutOfBounds(slot, week),
+                                    ) = inv
+                                    {
+                                        return UpdateColloscopeInterrogationError::InvalidGroupNumInInterrogation(*slot, *week);
+                                    }
                                 }
-                                _ => panic!("Unexpected error on ColloscopeOp::SetInterrogation: {:?}", ce),
+                                panic!("Unexpected invariant breaks during UpdateColloscopeInterrogation: {set:?}");
                             }
-                        } else {
-                            panic!("Unexpected error during UpdateColloscopeInterrogation: {:?}", e);
+                            _ => panic!("Unexpected error during UpdateColloscopeInterrogation: {e:?}"),
                         }
                     })?;
 
@@ -190,7 +243,7 @@ impl ColloscopeUpdateOp {
                     .collect();
                 for (slot_id, week_id) in coords {
                     let result = data
-                        .apply(
+                        .try_apply(
                             collomatique_state_colloscopes::Op::Colloscope(
                                 collomatique_state_colloscopes::ColloscopeOp::SetInterrogation(
                                     slot_id,
@@ -218,7 +271,7 @@ impl ColloscopeUpdateOp {
                     .collect();
                 for group_list_id in group_list_ids {
                     let result = data
-                        .apply(
+                        .try_apply(
                             collomatique_state_colloscopes::Op::Colloscope(
                                 collomatique_state_colloscopes::ColloscopeOp::SetGroupList(
                                     group_list_id,
