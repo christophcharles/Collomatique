@@ -1,7 +1,7 @@
 //! Property tests over generated elementary-op sequences
 //!
 //! A deterministic, seed-driven safety net exercising the apply/check/rollback
-//! gate (`Manager::try_apply`, which computes and returns the reverse of every
+//! gate (`Manager::apply`, which computes and returns the reverse of every
 //! op) and the undo/redo machinery. The invariant oracle is the whole-model
 //! checker `InnerData::broken_invariants`: after every successful op it must
 //! report a fully clean document (`Ok(BTreeSet::new())` — no logic errors, no
@@ -9,7 +9,7 @@
 //!
 //! This file absorbs the former `property_ops_broken_invariants.rs` twin
 //! (deleted in the step-5 R1 deactivation commit): once the walk drives
-//! `try_apply` and asserts `broken_invariants` cleanliness op-by-op, the twin's
+//! `apply` and asserts `broken_invariants` cleanliness op-by-op, the twin's
 //! sole job — running the new oracle over the same trajectories — is covered
 //! here, so the two harnesses became one.
 //!
@@ -59,7 +59,7 @@ macro_rules! gen_and_apply {
             CONFIG.invalid_fraction,
         );
         $log.push(category, &op);
-        let ok = $manager.try_apply(op, category.to_string()).is_ok();
+        let ok = $manager.apply(op, category.to_string()).is_ok();
         $stats.record(category, ok);
         if ok {
             assert_clean($manager.get_data().get_inner_data());
@@ -91,7 +91,7 @@ fn invariants_hold_and_errors_are_atomic() {
                 log.push(category, &op);
                 let before = state.get_data().get_inner_data().clone();
 
-                match state.try_apply(op, category.to_string()) {
+                match state.apply(op, category.to_string()) {
                     Ok(_) => {
                         stats.record(category, true);
                         assert_clean(state.get_data().get_inner_data());
@@ -201,9 +201,9 @@ fn random_undo_redo_apply_walk() {
 }
 
 /// Property 4: for every op that applies successfully, applying the
-/// reverse computed and returned by `try_apply` restores the state exactly.
-/// This drives `InMemoryData` directly (in the same annotate → try_apply
-/// order as `Manager::try_apply`) and targets the gate on the accepted path.
+/// reverse computed and returned by `apply` restores the state exactly.
+/// This drives `InMemoryData` directly (in the same annotate → apply
+/// order as `Manager::apply`) and targets the gate on the accepted path.
 #[test]
 fn apply_then_apply_rev_is_identity() {
     use collomatique_state::InMemoryData;
@@ -229,7 +229,7 @@ fn apply_then_apply_rev_is_identity() {
                 let (annotated, _new_id) = data.annotate(op);
                 let before = data.clone();
 
-                let rev = match data.try_apply(&annotated) {
+                let rev = match data.apply(&annotated) {
                     Ok(rev) => rev,
                     Err(_) => {
                         stats.record(category, false);
@@ -243,7 +243,7 @@ fn apply_then_apply_rev_is_identity() {
                 stats.record(category, true);
                 assert_clean(data.get_inner_data());
 
-                data.try_apply(&rev)
+                data.apply(&rev)
                     .expect("the reverse of a successfully applied op must apply");
                 assert!(
                     data == before,
@@ -252,7 +252,7 @@ fn apply_then_apply_rev_is_identity() {
 
                 // Advance: the op is known to apply from this state
                 let rev2 = data
-                    .try_apply(&annotated)
+                    .apply(&annotated)
                     .expect("an op that applied once must apply again after its reverse");
                 assert_eq!(
                     rev2, rev,

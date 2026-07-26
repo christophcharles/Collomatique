@@ -270,7 +270,7 @@ impl WeekPatternsUpdateOp {
         match self {
             Self::AddNewWeekPattern(week_pattern) => {
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::WeekPattern(
                             collomatique_state_colloscopes::WeekPatternOp::Add(
                                 week_pattern.clone(),
@@ -280,13 +280,13 @@ impl WeekPatternsUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            ApplyError, FixableInvariant, Reference, WeekRefSite,
+                            Error, FixableInvariant, Reference, WeekRefSite,
                         };
                         match e {
                             // The pre-op state was valid, so any pattern->week dangle
                             // in the set was introduced by this Add; the dangling
                             // target is the bad excluded week id.
-                            ApplyError::Invariants(set) => {
+                            Error::Invariants(set) => {
                                 for inv in &set {
                                     if let FixableInvariant::DanglingFk(Reference::Week {
                                         target,
@@ -309,7 +309,7 @@ impl WeekPatternsUpdateOp {
             }
             Self::UpdateWeekPattern(week_pattern_id, week_pattern) => {
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::WeekPattern(
                             collomatique_state_colloscopes::WeekPatternOp::Update(
                                 *week_pattern_id,
@@ -320,14 +320,14 @@ impl WeekPatternsUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            ApplyError, FixableInvariant, PrecheckError, Reference,
+                            Error, FixableInvariant, PrecheckError, Reference,
                             WeekPatternPrecheckError, WeekRefSite,
                         };
                         match e {
-                            ApplyError::Precheck(PrecheckError::WeekPattern(
+                            Error::Precheck(PrecheckError::WeekPattern(
                                 WeekPatternPrecheckError::InvalidWeekPatternId(id),
                             )) => UpdateWeekPatternError::InvalidWeekPatternId(id),
-                            ApplyError::Invariants(set) => {
+                            Error::Invariants(set) => {
                                 for inv in &set {
                                     if let FixableInvariant::DanglingFk(Reference::Week {
                                         target,
@@ -349,7 +349,7 @@ impl WeekPatternsUpdateOp {
             }
             Self::DeleteWeekPattern(week_pattern_id) => {
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::WeekPattern(
                             collomatique_state_colloscopes::WeekPatternOp::Remove(*week_pattern_id),
                         ),
@@ -357,14 +357,14 @@ impl WeekPatternsUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            ApplyError, FixableInvariant, PrecheckError, Reference,
+                            Error, FixableInvariant, PrecheckError, Reference,
                             WeekPatternPrecheckError, WeekPatternRefSite,
                         };
                         match e {
-                            ApplyError::Precheck(PrecheckError::WeekPattern(
+                            Error::Precheck(PrecheckError::WeekPattern(
                                 WeekPatternPrecheckError::InvalidWeekPatternId(id),
                             )) => DeleteWeekPatternError::InvalidWeekPatternId(id),
-                            ApplyError::Invariants(set) => {
+                            Error::Invariants(set) => {
                                 for inv in &set {
                                     if let FixableInvariant::DanglingFk(Reference::WeekPattern {
                                         site,

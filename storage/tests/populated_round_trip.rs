@@ -55,7 +55,7 @@ fn deserialized_data_is_still_editable() {
     // The rebuilt IdIssuer must issue fresh ids that do not collide
     // with the ids already present in the loaded document
     let mut state = AppState::<_, String>::new(decoded);
-    let result = state.try_apply(
+    let result = state.apply(
         Op::Student(StudentOp::Add(Student::default())),
         "Add a student after reload".to_string(),
     );

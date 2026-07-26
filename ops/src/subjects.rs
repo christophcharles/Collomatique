@@ -706,7 +706,7 @@ impl SubjectsUpdateOp {
         match self {
             Self::AddNewSubject(params) => {
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::Subject(
                             collomatique_state_colloscopes::SubjectOp::AddAfter(
                                 data.get_data()
@@ -743,7 +743,7 @@ impl SubjectsUpdateOp {
                 let excluded_periods = current_subject.excluded_periods.clone();
 
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::Subject(
                             collomatique_state_colloscopes::SubjectOp::Update(
                                 *subject_id,
@@ -763,7 +763,7 @@ impl SubjectsUpdateOp {
             }
             Self::DeleteSubject(subject_id) => {
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::Subject(
                             collomatique_state_colloscopes::SubjectOp::Remove(*subject_id),
                         ),
@@ -771,10 +771,10 @@ impl SubjectsUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            ApplyError, PrecheckError, SubjectPrecheckError,
+                            Error, PrecheckError, SubjectPrecheckError,
                         };
                         match e {
-                            ApplyError::Precheck(PrecheckError::Subject(
+                            Error::Precheck(PrecheckError::Subject(
                                 SubjectPrecheckError::InvalidSubjectId(id),
                             )) => DeleteSubjectError::InvalidSubjectId(id),
                             // Every reference to this subject (teacher subjects,
@@ -805,7 +805,7 @@ impl SubjectsUpdateOp {
                 }
 
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::Subject(
                             collomatique_state_colloscopes::SubjectOp::ChangePosition(
                                 *subject_id,
@@ -843,7 +843,7 @@ impl SubjectsUpdateOp {
                 }
 
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::Subject(
                             collomatique_state_colloscopes::SubjectOp::ChangePosition(
                                 *subject_id,
@@ -886,7 +886,7 @@ impl SubjectsUpdateOp {
                 }
 
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::Subject(
                             collomatique_state_colloscopes::SubjectOp::Update(*subject_id, subject),
                         ),

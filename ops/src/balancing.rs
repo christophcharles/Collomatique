@@ -72,7 +72,7 @@ impl BalancingUpdateOp {
                 new_balancing.global = options.clone();
 
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::Balancing(
                             collomatique_state_colloscopes::BalancingOp::Update(new_balancing),
                         ),
@@ -100,7 +100,7 @@ impl BalancingUpdateOp {
                 new_balancing.subjects.insert(*subject_id, options.clone());
 
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::Balancing(
                             collomatique_state_colloscopes::BalancingOp::Update(new_balancing),
                         ),
@@ -130,7 +130,7 @@ impl BalancingUpdateOp {
                 }
 
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::Balancing(
                             collomatique_state_colloscopes::BalancingOp::Update(new_balancing),
                         ),

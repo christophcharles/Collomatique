@@ -117,7 +117,7 @@ impl AssignmentsUpdateOp {
         match self {
             Self::Assign(period_id, student_id, subject_id, status) => {
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::Assignment(
                             collomatique_state_colloscopes::AssignmentOp::Assign(
                                 *period_id,
@@ -130,11 +130,11 @@ impl AssignmentsUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            ApplyError, AssignmentPrecheckError, Convergence, FixableInvariant,
+                            AssignmentPrecheckError, Convergence, Error, FixableInvariant,
                             PrecheckError,
                         };
                         match e {
-                            ApplyError::Precheck(PrecheckError::Assignment(pe)) => match pe {
+                            Error::Precheck(PrecheckError::Assignment(pe)) => match pe {
                                 AssignmentPrecheckError::InvalidPeriodId(id) => {
                                     AssignError::InvalidPeriodId(id)
                                 }
@@ -149,7 +149,7 @@ impl AssignmentsUpdateOp {
                             // in the set was introduced by this Assign. Old validator
                             // order (colloscope_params validate): subject-not-running
                             // before student-not-present.
-                            ApplyError::Invariants(set) => {
+                            Error::Invariants(set) => {
                                 for inv in &set {
                                     if let FixableInvariant::Convergence(
                                         Convergence::AssignmentForSubjectNotRunningOnPeriod(
@@ -255,7 +255,7 @@ impl AssignmentsUpdateOp {
 
                         let previous_status = previous_assigned_students.contains(student_id);
 
-                        data.try_apply(
+                        data.apply(
                             collomatique_state_colloscopes::Op::Assignment(
                                 collomatique_state_colloscopes::AssignmentOp::Assign(
                                     *period_id,
@@ -313,7 +313,7 @@ impl AssignmentsUpdateOp {
                     }
 
                     let result = data
-                        .try_apply(
+                        .apply(
                             collomatique_state_colloscopes::Op::Assignment(
                                 collomatique_state_colloscopes::AssignmentOp::Assign(
                                     *period_id,

@@ -81,7 +81,7 @@ impl PairingsUpdateOp {
         match self {
             Self::AddNewPairingRule(rule) => {
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::Pairing(
                             collomatique_state_colloscopes::PairingOp::Add(rule.clone()),
                         ),
@@ -89,7 +89,7 @@ impl PairingsUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            ApplyError, FixableInvariant, PeriodRefSite, Reference, SubjectRefSite,
+                            Error, FixableInvariant, PeriodRefSite, Reference, SubjectRefSite,
                         };
                         match e {
                             // The pre-op state was valid, so any dangle in the set
@@ -98,7 +98,7 @@ impl PairingsUpdateOp {
                             // then consequent subject, then excluded period. Both
                             // subject sites map to InvalidSubjectId but carry
                             // different payloads, so the passes stay separate.
-                            ApplyError::Invariants(set) => {
+                            Error::Invariants(set) => {
                                 for inv in &set {
                                     if let FixableInvariant::DanglingFk(Reference::Subject {
                                         target,
@@ -141,7 +141,7 @@ impl PairingsUpdateOp {
             }
             Self::DeletePairingRule(rule_id) => {
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::Pairing(
                             collomatique_state_colloscopes::PairingOp::Remove(*rule_id),
                         ),
@@ -149,10 +149,10 @@ impl PairingsUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            ApplyError, PairingPrecheckError, PrecheckError,
+                            Error, PairingPrecheckError, PrecheckError,
                         };
                         match e {
-                            ApplyError::Precheck(PrecheckError::Pairing(
+                            Error::Precheck(PrecheckError::Pairing(
                                 PairingPrecheckError::InvalidPairingRuleId(id),
                             )) => DeletePairingRuleError::InvalidPairingRuleId(id),
                             _ => panic!("Unexpected error during DeletePairingRule: {e:?}"),
@@ -165,7 +165,7 @@ impl PairingsUpdateOp {
             }
             Self::UpdatePairingRule(rule_id, rule) => {
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::Pairing(
                             collomatique_state_colloscopes::PairingOp::Update(
                                 *rule_id,
@@ -176,16 +176,16 @@ impl PairingsUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            ApplyError, FixableInvariant, PairingPrecheckError, PeriodRefSite,
+                            Error, FixableInvariant, PairingPrecheckError, PeriodRefSite,
                             PrecheckError, Reference, SubjectRefSite,
                         };
                         match e {
-                            ApplyError::Precheck(PrecheckError::Pairing(
+                            Error::Precheck(PrecheckError::Pairing(
                                 PairingPrecheckError::InvalidPairingRuleId(id),
                             )) => UpdatePairingRuleError::InvalidPairingRuleId(id),
                             // Old validator order: antecedent subject, then
                             // consequent subject, then excluded period.
-                            ApplyError::Invariants(set) => {
+                            Error::Invariants(set) => {
                                 for inv in &set {
                                     if let FixableInvariant::DanglingFk(Reference::Subject {
                                         target,

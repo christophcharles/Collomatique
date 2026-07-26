@@ -903,7 +903,7 @@ impl GeneralPlanningUpdateOp {
         match self {
             GeneralPlanningUpdateOp::DeleteFirstWeek => {
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::Period(
                             collomatique_state_colloscopes::PeriodOp::ChangeStartDate(None),
                         ),
@@ -917,7 +917,7 @@ impl GeneralPlanningUpdateOp {
             }
             GeneralPlanningUpdateOp::UpdateFirstWeek(date) => {
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::Period(
                             collomatique_state_colloscopes::PeriodOp::ChangeStartDate(Some(
                                 date.clone(),
@@ -935,7 +935,7 @@ impl GeneralPlanningUpdateOp {
                 // Create the period empty, then grow it one week at a time so
                 // the week ops are the sole authority on week data.
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::Period(
                             match data
                                 .get_data()
@@ -967,7 +967,7 @@ impl GeneralPlanningUpdateOp {
                         }
                     };
                     let result = data
-                        .try_apply(
+                        .apply(
                             collomatique_state_colloscopes::Op::Week(week_op),
                             self.get_desc(),
                         )
@@ -1034,7 +1034,7 @@ impl GeneralPlanningUpdateOp {
                             ),
                         };
                         let result = data
-                            .try_apply(
+                            .apply(
                                 collomatique_state_colloscopes::Op::Week(week_op),
                                 self.get_desc(),
                             )
@@ -1059,7 +1059,7 @@ impl GeneralPlanningUpdateOp {
                             .week_id_at(*period_id, pos)
                             .expect("position in range");
                         let result = data
-                            .try_apply(
+                            .apply(
                                 collomatique_state_colloscopes::Op::Week(
                                     collomatique_state_colloscopes::WeekOp::Remove(week_id),
                                 ),
@@ -1094,7 +1094,7 @@ impl GeneralPlanningUpdateOp {
                             .week_id_at(*period_id, pos)
                             .expect("position in range");
                         let result = data
-                            .try_apply(
+                            .apply(
                                 collomatique_state_colloscopes::Op::Week(
                                     collomatique_state_colloscopes::WeekOp::Remove(week_id),
                                 ),
@@ -1108,7 +1108,7 @@ impl GeneralPlanningUpdateOp {
                 }
 
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::Period(
                             collomatique_state_colloscopes::PeriodOp::Remove(*period_id),
                         ),
@@ -1148,7 +1148,7 @@ impl GeneralPlanningUpdateOp {
                 // below. Content (colloscope cells + week-pattern bits) travels
                 // with each week, so no save/clean/restore dance is needed.
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::Period(
                             collomatique_state_colloscopes::PeriodOp::AddAfter(*period_id),
                         ),
@@ -1177,7 +1177,7 @@ impl GeneralPlanningUpdateOp {
                         let mut new_subject = subject.clone();
                         new_subject.excluded_periods.insert(new_id);
                         let result = data
-                            .try_apply(
+                            .apply(
                                 collomatique_state_colloscopes::Op::Subject(
                                     collomatique_state_colloscopes::SubjectOp::Update(
                                         subject_id,
@@ -1205,7 +1205,7 @@ impl GeneralPlanningUpdateOp {
                         let mut new_student = student.clone();
                         new_student.excluded_periods.insert(new_id);
                         let result = data
-                            .try_apply(
+                            .apply(
                                 collomatique_state_colloscopes::Op::Student(
                                     collomatique_state_colloscopes::StudentOp::Update(
                                         student_id,
@@ -1233,7 +1233,7 @@ impl GeneralPlanningUpdateOp {
                 for (subject_id, assigned_students) in period_assignments {
                     for student_id in assigned_students {
                         let result = data
-                            .try_apply(
+                            .apply(
                                 collomatique_state_colloscopes::Op::Assignment(
                                     collomatique_state_colloscopes::AssignmentOp::Assign(
                                         new_id, student_id, subject_id, true,
@@ -1262,7 +1262,7 @@ impl GeneralPlanningUpdateOp {
                     .collect();
                 for (subject_id, group_list_id) in period_associations {
                     let result = data
-                        .try_apply(
+                        .apply(
                             collomatique_state_colloscopes::Op::GroupList(
                                 collomatique_state_colloscopes::GroupListOp::AssignToSubject(
                                     new_id,
@@ -1294,7 +1294,7 @@ impl GeneralPlanningUpdateOp {
                     .collect();
                 for (dest_pos, week_id) in tail_week_ids.into_iter().enumerate() {
                     let result = data
-                        .try_apply(
+                        .apply(
                             collomatique_state_colloscopes::Op::Week(
                                 collomatique_state_colloscopes::WeekOp::Move(
                                     week_id, new_id, dest_pos,
@@ -1362,7 +1362,7 @@ impl GeneralPlanningUpdateOp {
                     .collect();
                 for (offset, week_id) in week_ids.into_iter().enumerate() {
                     let result = data
-                        .try_apply(
+                        .apply(
                             collomatique_state_colloscopes::Op::Week(
                                 collomatique_state_colloscopes::WeekOp::Move(
                                     week_id,
@@ -1424,7 +1424,7 @@ impl GeneralPlanningUpdateOp {
                 new_desc.interrogations = *state;
 
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::Week(
                             collomatique_state_colloscopes::WeekOp::Update(week_id, new_desc),
                         ),
@@ -1469,7 +1469,7 @@ impl GeneralPlanningUpdateOp {
                 new_desc.annotation = annotation.clone();
 
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::Week(
                             collomatique_state_colloscopes::WeekOp::Update(week_id, new_desc),
                         ),

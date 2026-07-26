@@ -82,7 +82,7 @@ impl IncompatibilitiesUpdateOp {
         match self {
             Self::AddNewIncompat(incompat) => {
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::Incompat(
                             collomatique_state_colloscopes::IncompatOp::Add(incompat.clone()),
                         ),
@@ -90,14 +90,13 @@ impl IncompatibilitiesUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            ApplyError, FixableInvariant, Reference, SubjectRefSite,
-                            WeekPatternRefSite,
+                            Error, FixableInvariant, Reference, SubjectRefSite, WeekPatternRefSite,
                         };
                         match e {
                             // The pre-op state was valid, so any dangle in the set
                             // was introduced by this Add. Old validator order:
                             // subject id before week pattern id.
-                            ApplyError::Invariants(set) => {
+                            Error::Invariants(set) => {
                                 for inv in &set {
                                     if let FixableInvariant::DanglingFk(Reference::Subject {
                                         target,
@@ -130,7 +129,7 @@ impl IncompatibilitiesUpdateOp {
             }
             Self::UpdateIncompat(incompat_id, incompat) => {
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::Incompat(
                             collomatique_state_colloscopes::IncompatOp::Update(
                                 *incompat_id,
@@ -141,15 +140,15 @@ impl IncompatibilitiesUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            ApplyError, FixableInvariant, IncompatPrecheckError, PrecheckError,
+                            Error, FixableInvariant, IncompatPrecheckError, PrecheckError,
                             Reference, SubjectRefSite, WeekPatternRefSite,
                         };
                         match e {
-                            ApplyError::Precheck(PrecheckError::Incompat(
+                            Error::Precheck(PrecheckError::Incompat(
                                 IncompatPrecheckError::InvalidIncompatId(id),
                             )) => UpdateIncompatError::InvalidIncompatId(id),
                             // Old validator order: subject id before week pattern id.
-                            ApplyError::Invariants(set) => {
+                            Error::Invariants(set) => {
                                 for inv in &set {
                                     if let FixableInvariant::DanglingFk(Reference::Subject {
                                         target,
@@ -182,7 +181,7 @@ impl IncompatibilitiesUpdateOp {
             }
             Self::DeleteIncompat(incompat_id) => {
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::Incompat(
                             collomatique_state_colloscopes::IncompatOp::Remove(*incompat_id),
                         ),
@@ -190,10 +189,10 @@ impl IncompatibilitiesUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            ApplyError, IncompatPrecheckError, PrecheckError,
+                            Error, IncompatPrecheckError, PrecheckError,
                         };
                         match e {
-                            ApplyError::Precheck(PrecheckError::Incompat(
+                            Error::Precheck(PrecheckError::Incompat(
                                 IncompatPrecheckError::InvalidIncompatId(id),
                             )) => DeleteIncompatError::InvalidIncompatId(id),
                             _ => panic!("Unexpected error during DeleteIncompat: {e:?}"),

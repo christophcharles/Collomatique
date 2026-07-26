@@ -313,7 +313,7 @@ impl SlotsUpdateOp {
                 let teacher_id = slot.teacher_id;
 
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::Slot(
                             collomatique_state_colloscopes::SlotOp::AddAfter(last_slot_id, slot),
                         ),
@@ -321,7 +321,7 @@ impl SlotsUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            ApplyError, Convergence, FixableInvariant, Reference, TeacherRefSite,
+                            Convergence, Error, FixableInvariant, Reference, TeacherRefSite,
                             WeekPatternRefSite,
                         };
                         match e {
@@ -333,7 +333,7 @@ impl SlotsUpdateOp {
                             // Old validator order (validate_slot_internal):
                             // teacher-resolves, teacher-teaches, week-pattern, then
                             // day overflow.
-                            ApplyError::Invariants(set) => {
+                            Error::Invariants(set) => {
                                 for inv in &set {
                                     if let FixableInvariant::DanglingFk(Reference::Teacher {
                                         target,
@@ -403,7 +403,7 @@ impl SlotsUpdateOp {
                 let subject_id = slot.subject_id;
 
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::Slot(
                             collomatique_state_colloscopes::SlotOp::Update(*slot_id, slot),
                         ),
@@ -411,11 +411,11 @@ impl SlotsUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            ApplyError, Convergence, FixableInvariant, PrecheckError, Reference,
+                            Convergence, Error, FixableInvariant, PrecheckError, Reference,
                             SlotPrecheckError, TeacherRefSite, WeekPatternRefSite,
                         };
                         match e {
-                            ApplyError::Precheck(PrecheckError::Slot(pe)) => match pe {
+                            Error::Precheck(PrecheckError::Slot(pe)) => match pe {
                                 SlotPrecheckError::InvalidSlotId(id) => {
                                     UpdateSlotError::InvalidSlotId(id)
                                 }
@@ -433,7 +433,7 @@ impl SlotsUpdateOp {
                             // sits between week-pattern and no-interrogations, but
                             // the pinned subject is always valid, so it is
                             // unreachable and omitted.)
-                            ApplyError::Invariants(set) => {
+                            Error::Invariants(set) => {
                                 for inv in &set {
                                     if let FixableInvariant::DanglingFk(Reference::Teacher {
                                         target,
@@ -492,7 +492,7 @@ impl SlotsUpdateOp {
             }
             Self::DeleteSlot(slot_id) => {
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::Slot(
                             collomatique_state_colloscopes::SlotOp::Remove(*slot_id),
                         ),
@@ -500,10 +500,10 @@ impl SlotsUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            ApplyError, PrecheckError, SlotPrecheckError,
+                            Error, PrecheckError, SlotPrecheckError,
                         };
                         match e {
-                            ApplyError::Precheck(PrecheckError::Slot(
+                            Error::Precheck(PrecheckError::Slot(
                                 SlotPrecheckError::InvalidSlotId(id),
                             )) => DeleteSlotError::InvalidSlotId(id),
                             // Colloscope rows and slot-pairing references are
@@ -531,7 +531,7 @@ impl SlotsUpdateOp {
                 }
 
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::Slot(
                             collomatique_state_colloscopes::SlotOp::ChangePosition(
                                 *slot_id,
@@ -569,7 +569,7 @@ impl SlotsUpdateOp {
                 }
 
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::Slot(
                             collomatique_state_colloscopes::SlotOp::ChangePosition(
                                 *slot_id,

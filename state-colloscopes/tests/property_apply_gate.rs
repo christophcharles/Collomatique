@@ -1,10 +1,10 @@
-//! Property fuzz over the apply/check/rollback gate ([`Data::try_apply`]).
+//! Property fuzz over the apply/check/rollback gate ([`Data::apply`]).
 //!
 //! This is the step-5 successor of `differential_force_apply.rs`. The old file
 //! *differential-fuzzed* `force_apply` against the two checkers to earn trust in
 //! the new checker; that job is done, and the old checker retires with step 5.
 //! What survives is the randomized coverage of the exact primitive production
-//! now runs on: the gate `try_apply` = snapshot + `force_apply` +
+//! now runs on: the gate `apply` = snapshot + `force_apply` +
 //! `broken_invariants` + rollback. This file re-expresses the same walk-and-probe
 //! shape as *properties of the gate alone*:
 //!
@@ -14,22 +14,15 @@
 //! * **honesty** — every `Ok` landing is fully valid (`broken_invariants()` is
 //!   `Ok(∅)`), and its returned reverse restores the pre-state exactly;
 //! * **coverage** — every [`CorruptionKind`] is attempted, each corrupting kind
-//!   is rejected at least once, and `ForceLogic` reaches the [`ApplyError::Logic`]
+//!   is rejected at least once, and `ForceLogic` reaches the [`Error::Logic`]
 //!   tier at least once (the external-data route the sealing left standing).
 //!
 //! **Fuzz shape — depth-1 probes off a validated walk.** A validated random walk
 //! (the testgen harness, byte-untouched) is interrupted every [`PROBE_STRIDE`]
 //! successful ops by a corruption probe: snapshot the state, run *one* op through
-//! [`Data::try_apply`], assert the gate properties, then restore the snapshot and
-//! resume. In production `try_apply` only ever runs on a consistent state, so
+//! [`Data::apply`], assert the gate properties, then restore the snapshot and
+//! resume. In production `apply` only ever runs on a consistent state, so
 //! `{valid state} + {one gated op}` is the exact target distribution.
-//!
-//! **Hidden-repair detection is not this file's job.** A force copy silently
-//! fixing what a stripped guard policed is caught by the *canary*
-//! (`canary_try_apply.rs`) until R1, not here: the gate only ever lands
-//! fully-valid states (asserted below), so a valid landing is honest whether it
-//! changed state or was a perfect no-op — this file cannot tell the two apart
-//! and does not try.
 //!
 //! On failure the harness prints the seed and the full op log so the sequence
 //! replays exactly.
@@ -43,7 +36,7 @@ use collomatique_testgen_colloscopes::{generator, harness};
 
 use collomatique_state::InMemoryData;
 use collomatique_state::traits::Manager;
-use collomatique_state_colloscopes::{ApplyError, Data, InnerData};
+use collomatique_state_colloscopes::{Data, Error, InnerData};
 
 use harness::RunConfig;
 
@@ -66,10 +59,10 @@ fn kind_index(kind: CorruptionKind) -> usize {
 }
 
 /// Walk `Data` through the gate (like property 4 of `property_ops.rs`), probing
-/// `try_apply` every [`PROBE_STRIDE`] ops and asserting the gate's atomicity and
+/// `apply` every [`PROBE_STRIDE`] ops and asserting the gate's atomicity and
 /// honesty on the resulting (usually rejected) op.
 #[test]
-fn try_apply_gate_is_atomic_and_honest() {
+fn apply_gate_is_atomic_and_honest() {
     // Cross-seed honesty counters (interior mutability: `for_each_seed` takes a
     // `Fn` closure).
     let landed = Cell::new(0usize); // probes that returned Ok
@@ -79,7 +72,7 @@ fn try_apply_gate_is_atomic_and_honest() {
     let logic_seen = Cell::new(0usize);
 
     harness::for_each_seed(
-        "try_apply_gate_is_atomic_and_honest",
+        "apply_gate_is_atomic_and_honest",
         &CONFIG,
         |rng, log, stats| {
             let (state, _) = harness::bootstrap(rng);
@@ -99,7 +92,7 @@ fn try_apply_gate_is_atomic_and_honest() {
                 let (annotated, _) = data.annotate(op);
                 let before = data.clone();
 
-                match data.try_apply(&annotated) {
+                match data.apply(&annotated) {
                     Ok(_) => {
                         stats.record(category, true);
                         if inner_snapshots.len() < 8 && rng.random_bool(0.02) {
@@ -110,7 +103,7 @@ fn try_apply_gate_is_atomic_and_honest() {
                         stats.record(category, false);
                         assert!(
                             data == before,
-                            "a failed walk try_apply must leave the state unchanged",
+                            "a failed walk apply must leave the state unchanged",
                         );
                         continue;
                     }
@@ -133,23 +126,23 @@ fn try_apply_gate_is_atomic_and_honest() {
                 // carries the already-advanced id issuer, matching production
                 // rollback (which restores the issuer too).
                 let snapshot = data.clone();
-                match data.try_apply(&annotated) {
+                match data.apply(&annotated) {
                     Err(e) => {
                         rejected.set(rejected.get() + 1);
                         rejected_by_kind[i].set(rejected_by_kind[i].get() + 1);
                         // Atomicity: every error arm rolls back to bit-identical.
                         assert!(
                             data == snapshot,
-                            "a rejected try_apply must leave the state unchanged",
+                            "a rejected apply must leave the state unchanged",
                         );
                         match e {
                             // Precheck bounced before any mutation.
-                            ApplyError::Precheck(_) => {}
-                            ApplyError::Logic(set) => {
+                            Error::Precheck(_) => {}
+                            Error::Logic(set) => {
                                 logic_seen.set(logic_seen.get() + 1);
                                 assert!(!set.is_empty(), "a Logic error carries a non-empty set");
                             }
-                            ApplyError::Invariants(set) => {
+                            Error::Invariants(set) => {
                                 assert!(
                                     !set.is_empty(),
                                     "an Invariants error carries a non-empty set",
@@ -163,7 +156,7 @@ fn try_apply_gate_is_atomic_and_honest() {
                         assert_eq!(
                             data.get_inner_data().broken_invariants(),
                             Ok(BTreeSet::new()),
-                            "try_apply returned Ok but the state is not fully valid",
+                            "apply returned Ok but the state is not fully valid",
                         );
                         // The returned reverse restores the pre-state exactly (the
                         // clean-landing reverse pin, carried over from step 4).
@@ -212,6 +205,6 @@ fn try_apply_gate_is_atomic_and_honest() {
 
     assert!(
         logic_seen.get() > 0,
-        "no ForceLogic probe ever reached the ApplyError::Logic tier across all seeds",
+        "no ForceLogic probe ever reached the Error::Logic tier across all seeds",
     );
 }

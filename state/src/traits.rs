@@ -36,8 +36,8 @@ pub trait InMemoryData: Clone + Send + Sync + std::fmt::Debug {
     /// useful for the operation issuer.
     type NewInfo;
 
-    /// Error type for when [Self::try_apply] fails.
-    type ApplyError: std::error::Error + Send + Sync + Clone;
+    /// Error type for when [Self::apply] fails.
+    type Error: std::error::Error + Send + Sync + Clone;
 
     /// Annotate an operation
     ///
@@ -60,10 +60,10 @@ pub trait InMemoryData: Clone + Send + Sync + std::fmt::Debug {
     /// a snapshot. Precheck failures never touch the data; invariant/logic
     /// failures are rolled back. Either way, a failed call leaves the data
     /// strictly unchanged.
-    fn try_apply(
+    fn apply(
         &mut self,
         op: &Self::AnnotatedOperation,
-    ) -> std::result::Result<Self::AnnotatedOperation, Self::ApplyError>;
+    ) -> std::result::Result<Self::AnnotatedOperation, Self::Error>;
 }
 
 use thiserror::Error;
@@ -100,19 +100,19 @@ pub trait Manager: private::ManagerInternal {
     /// Apply an operation through the apply/check/rollback gate and keep the
     /// modification history consistent.
     ///
-    /// Routes the operation through [InMemoryData::try_apply]. A failed op
+    /// Routes the operation through [InMemoryData::apply]. A failed op
     /// leaves the data unchanged and stores nothing in history.
-    fn try_apply(
+    fn apply(
         &mut self,
         op: <<Self as private::ManagerInternal>::Data as InMemoryData>::OriginalOperation,
         desc: <Self as private::ManagerInternal>::Desc,
     ) -> Result<
         <<Self as private::ManagerInternal>::Data as InMemoryData>::NewInfo,
-        <<Self as private::ManagerInternal>::Data as InMemoryData>::ApplyError,
+        <<Self as private::ManagerInternal>::Data as InMemoryData>::Error,
     > {
         let (annotated_op, new_info) = self.get_in_memory_data_mut().annotate(op);
 
-        let backward = self.get_in_memory_data_mut().try_apply(&annotated_op)?;
+        let backward = self.get_in_memory_data_mut().apply(&annotated_op)?;
         let rev_op = crate::history::ReversibleOp {
             forward: annotated_op,
             backward,
@@ -237,14 +237,14 @@ pub(crate) mod private {
     pub fn update_internal_state_with_aggregated<T: ManagerInternal>(
         manager: &mut T,
         aggregated_op: &crate::history::AggregatedOp<<T::Data as InMemoryData>::AnnotatedOperation>,
-    ) -> Result<(), <T::Data as InMemoryData>::ApplyError> {
+    ) -> Result<(), <T::Data as InMemoryData>::Error> {
         let ops = aggregated_op.inner();
 
         let mut error = None;
         let mut count = 0;
 
         for rev_op in ops {
-            match manager.get_in_memory_data_mut().try_apply(&rev_op.forward) {
+            match manager.get_in_memory_data_mut().apply(&rev_op.forward) {
                 Ok(inverse) => {
                     debug_assert_eq!(
                         inverse, rev_op.backward,
@@ -266,7 +266,7 @@ pub(crate) mod private {
 
         let skip_size = ops.len() - count;
         for rev_op in ops.iter().rev().skip(skip_size) {
-            let result = manager.get_in_memory_data_mut().try_apply(&rev_op.backward);
+            let result = manager.get_in_memory_data_mut().apply(&rev_op.backward);
 
             if let Err(e) = result {
                 panic!(
@@ -376,10 +376,10 @@ mod tests {
     }
 
     #[test]
-    fn try_apply_changes_data_and_stores_history() {
+    fn apply_changes_data_and_stores_history() {
         let mut state = new_state(0);
 
-        let result = state.try_apply(FakeOp::Set { old: 0, new: 1 }, "set to 1");
+        let result = state.apply(FakeOp::Set { old: 0, new: 1 }, "set to 1");
 
         assert_eq!(result, Ok(()));
         assert_eq!(state.get_data().value, 1);
@@ -389,10 +389,10 @@ mod tests {
     }
 
     #[test]
-    fn try_apply_failing_leaves_state_untouched_and_stores_nothing() {
+    fn apply_failing_leaves_state_untouched_and_stores_nothing() {
         let mut state = new_state(0);
 
-        let result = state.try_apply(FakeOp::Fail, "never happens");
+        let result = state.apply(FakeOp::Fail, "never happens");
 
         assert_eq!(result, Err(FakeError::ApplyFailed));
         assert_eq!(state.get_data().value, 0);
@@ -401,14 +401,14 @@ mod tests {
     }
 
     #[test]
-    // History written by `try_apply` must replay correctly through undo/redo,
+    // History written by `apply` must replay correctly through undo/redo,
     // which go through `update_internal_state_with_aggregated` — itself now on
-    // `try_apply` (commit 3.0), so the ops it recorded replay through the same
+    // `apply` (commit 3.0), so the ops it recorded replay through the same
     // gate that accepted them.
-    fn try_apply_history_replays_through_undo_redo() {
+    fn apply_history_replays_through_undo_redo() {
         let mut state = new_state(0);
         state
-            .try_apply(FakeOp::Set { old: 0, new: 1 }, "set to 1")
+            .apply(FakeOp::Set { old: 0, new: 1 }, "set to 1")
             .expect("valid op");
 
         state.undo().expect("one op to undo");
@@ -430,10 +430,10 @@ mod tests {
     fn undo_restores_previous_state_and_redo_reapplies() {
         let mut state = new_state(0);
         state
-            .try_apply(FakeOp::Set { old: 0, new: 1 }, "set to 1")
+            .apply(FakeOp::Set { old: 0, new: 1 }, "set to 1")
             .expect("valid op");
         state
-            .try_apply(FakeOp::Set { old: 1, new: 2 }, "set to 2")
+            .apply(FakeOp::Set { old: 1, new: 2 }, "set to 2")
             .expect("valid op");
 
         state.undo().expect("one op to undo");
@@ -452,7 +452,7 @@ mod tests {
     fn undo_panics_if_data_was_corrupted_behind_historys_back() {
         let mut state = new_state(0);
         state
-            .try_apply(FakeOp::Set { old: 0, new: 1 }, "set to 1")
+            .apply(FakeOp::Set { old: 0, new: 1 }, "set to 1")
             .expect("valid op");
 
         // Corrupt the data without going through the history
@@ -465,13 +465,13 @@ mod tests {
     fn get_aggregated_history_flattens_applied_ops() {
         let mut state = new_state(0);
         state
-            .try_apply(FakeOp::Set { old: 0, new: 1 }, "set to 1")
+            .apply(FakeOp::Set { old: 0, new: 1 }, "set to 1")
             .expect("valid op");
         state
-            .try_apply(FakeOp::Set { old: 1, new: 2 }, "set to 2")
+            .apply(FakeOp::Set { old: 1, new: 2 }, "set to 2")
             .expect("valid op");
         state
-            .try_apply(FakeOp::Set { old: 2, new: 3 }, "set to 3")
+            .apply(FakeOp::Set { old: 2, new: 3 }, "set to 3")
             .expect("valid op");
         state.undo().expect("one op to undo");
 

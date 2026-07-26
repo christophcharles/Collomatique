@@ -85,7 +85,7 @@ fn incompat_slot(
 
 fn apply(state: &mut AppState<Data, String>, op: Op, desc: &str) -> Option<NewId> {
     state
-        .try_apply(op, desc.to_string())
+        .apply(op, desc.to_string())
         .unwrap_or_else(|e| panic!("build_rich_data op `{desc}` failed: {e}"))
 }
 

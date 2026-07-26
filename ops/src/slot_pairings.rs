@@ -92,7 +92,7 @@ impl SlotPairingsUpdateOp {
         match self {
             Self::AddNewSlotPairingRule(rule) => {
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::SlotPairing(
                             collomatique_state_colloscopes::SlotPairingOp::Add(rule.clone()),
                         ),
@@ -100,7 +100,7 @@ impl SlotPairingsUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            ApplyError, Convergence, FixableInvariant, PeriodRefSite, Reference,
+                            Error, Convergence, FixableInvariant, PeriodRefSite, Reference,
                             SlotRefSite,
                         };
                         match e {
@@ -112,7 +112,7 @@ impl SlotPairingsUpdateOp {
                             // different payloads, so the passes stay separate; the
                             // same-subject convergence carries only the rule id, so
                             // the two slot ids come from the op payload in scope.
-                            ApplyError::Invariants(set) => {
+                            Error::Invariants(set) => {
                                 for inv in &set {
                                     if let FixableInvariant::DanglingFk(Reference::Slot {
                                         target,
@@ -166,7 +166,7 @@ impl SlotPairingsUpdateOp {
             }
             Self::DeleteSlotPairingRule(rule_id) => {
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::SlotPairing(
                             collomatique_state_colloscopes::SlotPairingOp::Remove(*rule_id),
                         ),
@@ -174,10 +174,10 @@ impl SlotPairingsUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            ApplyError, PrecheckError, SlotPairingPrecheckError,
+                            Error, PrecheckError, SlotPairingPrecheckError,
                         };
                         match e {
-                            ApplyError::Precheck(PrecheckError::SlotPairing(
+                            Error::Precheck(PrecheckError::SlotPairing(
                                 SlotPairingPrecheckError::InvalidSlotPairingRuleId(id),
                             )) => DeleteSlotPairingRuleError::InvalidSlotPairingRuleId(id),
                             _ => panic!("Unexpected error during DeleteSlotPairingRule: {e:?}"),
@@ -190,7 +190,7 @@ impl SlotPairingsUpdateOp {
             }
             Self::UpdateSlotPairingRule(rule_id, rule) => {
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::SlotPairing(
                             collomatique_state_colloscopes::SlotPairingOp::Update(
                                 *rule_id,
@@ -201,16 +201,16 @@ impl SlotPairingsUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            ApplyError, Convergence, FixableInvariant, PeriodRefSite, PrecheckError,
+                            Error, Convergence, FixableInvariant, PeriodRefSite, PrecheckError,
                             Reference, SlotPairingPrecheckError, SlotRefSite,
                         };
                         match e {
-                            ApplyError::Precheck(PrecheckError::SlotPairing(
+                            Error::Precheck(PrecheckError::SlotPairing(
                                 SlotPairingPrecheckError::InvalidSlotPairingRuleId(id),
                             )) => UpdateSlotPairingRuleError::InvalidSlotPairingRuleId(id),
                             // Old validator order: antecedent slot, then consequent
                             // slot, then same-subject, then excluded period.
-                            ApplyError::Invariants(set) => {
+                            Error::Invariants(set) => {
                                 for inv in &set {
                                     if let FixableInvariant::DanglingFk(Reference::Slot {
                                         target,

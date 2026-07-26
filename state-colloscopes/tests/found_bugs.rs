@@ -8,11 +8,10 @@
 
 use collomatique_state::{AppState, traits::Manager};
 use collomatique_state_colloscopes::{
-    ApplyError, ColloscopeOp, Convergence, Data, FixableInvariant, GroupListOp,
-    GroupListPrecheckError, NewId, NonEmptyRangeInclusive, Op, PeriodOp, PrecheckError, Reference,
-    SettingsOp, SlotOp, SlotPrecheckError, StudentOp, StudentRefSite, Subject,
-    SubjectInterrogationParameters, SubjectOp, SubjectParameters, SubjectPeriodicity, TeacherOp,
-    WeekOp,
+    ColloscopeOp, Convergence, Data, Error, FixableInvariant, GroupListOp, GroupListPrecheckError,
+    NewId, NonEmptyRangeInclusive, Op, PeriodOp, PrecheckError, Reference, SettingsOp, SlotOp,
+    SlotPrecheckError, StudentOp, StudentRefSite, Subject, SubjectInterrogationParameters,
+    SubjectOp, SubjectParameters, SubjectPeriodicity, TeacherOp, WeekOp,
     group_lists::{GroupList, GroupListFilling, GroupListParameters, PrefilledGroup},
     ids::PeriodId,
     settings::{Limits, Settings},
@@ -27,7 +26,7 @@ use std::num::NonZeroU32;
 /// Creates a front period with `weeks` trivially-active weeks, spliced in one
 /// at a time via the `WeekOp` family — periods are created empty.
 fn add_active_period(app: &mut AppState<Data, String>, weeks: usize) -> PeriodId {
-    let period = match app.try_apply(Op::Period(PeriodOp::AddFront), "Add period".into()) {
+    let period = match app.apply(Op::Period(PeriodOp::AddFront), "Add period".into()) {
         Ok(Some(NewId::PeriodId(id))) => id,
         other => panic!("adding a period should return a period id, got {other:?}"),
     };
@@ -37,7 +36,7 @@ fn add_active_period(app: &mut AppState<Data, String>, weeks: usize) -> PeriodId
             None => WeekOp::AddFront(period, WeekDesc::new(true)),
             Some(w) => WeekOp::AddAfter(w, WeekDesc::new(true)),
         };
-        match app.try_apply(Op::Week(op), "Add week".into()) {
+        match app.apply(Op::Week(op), "Add week".into()) {
             Ok(Some(NewId::WeekId(w))) => prev = Some(w),
             other => panic!("adding a week should return a week id, got {other:?}"),
         }
@@ -55,7 +54,7 @@ fn add_active_period(app: &mut AppState<Data, String>, weeks: usize) -> PeriodId
 fn remove_student_with_settings_is_rejected() {
     let mut app_state = AppState::<_, String>::new(Data::new());
 
-    let Ok(Some(NewId::StudentId(student_id))) = app_state.try_apply(
+    let Ok(Some(NewId::StudentId(student_id))) = app_state.apply(
         Op::Student(StudentOp::Add(Student::default())),
         "Add student".into(),
     ) else {
@@ -63,7 +62,7 @@ fn remove_student_with_settings_is_rejected() {
     };
 
     // Per-student settings entry referencing the student
-    let Ok(None) = app_state.try_apply(
+    let Ok(None) = app_state.apply(
         Op::Settings(SettingsOp::Update(Settings {
             global: Limits::default(),
             students: BTreeMap::from([(student_id, Limits::default())]).into(),
@@ -74,13 +73,13 @@ fn remove_student_with_settings_is_rejected() {
     };
 
     // Removing the student must fail while the settings entry exists
-    let result = app_state.try_apply(
+    let result = app_state.apply(
         Op::Student(StudentOp::Remove(student_id)),
         "Remove student".into(),
     );
     assert_eq!(
         result,
-        Err(ApplyError::Invariants(BTreeSet::from([
+        Err(Error::Invariants(BTreeSet::from([
             FixableInvariant::DanglingFk(Reference::Student {
                 target: student_id,
                 site: StudentRefSite::SettingsStudentKey,
@@ -90,13 +89,13 @@ fn remove_student_with_settings_is_rejected() {
     );
 
     // Once the settings entry is gone, the removal succeeds
-    let Ok(None) = app_state.try_apply(
+    let Ok(None) = app_state.apply(
         Op::Settings(SettingsOp::Update(Settings::default())),
         "Clear per-student settings".into(),
     ) else {
         panic!("Unexpected result after clearing settings");
     };
-    let Ok(None) = app_state.try_apply(
+    let Ok(None) = app_state.apply(
         Op::Student(StudentOp::Remove(student_id)),
         "Remove student".into(),
     ) else {
@@ -114,13 +113,13 @@ fn remove_student_with_settings_is_rejected() {
 fn set_filling_excluding_placed_student_is_rejected() {
     let mut app_state = AppState::<_, String>::new(Data::new());
 
-    let Ok(Some(NewId::StudentId(placed_student))) = app_state.try_apply(
+    let Ok(Some(NewId::StudentId(placed_student))) = app_state.apply(
         Op::Student(StudentOp::Add(Student::default())),
         "Add first student".into(),
     ) else {
         panic!("Unexpected result after adding the first student");
     };
-    let Ok(Some(NewId::StudentId(other_student))) = app_state.try_apply(
+    let Ok(Some(NewId::StudentId(other_student))) = app_state.apply(
         Op::Student(StudentOp::Add(Student::default())),
         "Add second student".into(),
     ) else {
@@ -128,7 +127,7 @@ fn set_filling_excluding_placed_student_is_rejected() {
     };
 
     // Automatic (default) filling: the list has a colloscope entry
-    let Ok(Some(NewId::GroupListId(group_list_id))) = app_state.try_apply(
+    let Ok(Some(NewId::GroupListId(group_list_id))) = app_state.apply(
         Op::GroupList(GroupListOp::Add(
             GroupList::new(GroupListParameters::default(), GroupListFilling::default()).unwrap(),
         )),
@@ -138,7 +137,7 @@ fn set_filling_excluding_placed_student_is_rejected() {
     };
 
     // Place the first student in group 0 of the colloscope entry
-    let Ok(None) = app_state.try_apply(
+    let Ok(None) = app_state.apply(
         Op::Colloscope(ColloscopeOp::SetGroupList(
             group_list_id,
             BTreeMap::from([(placed_student, 0)]),
@@ -149,7 +148,7 @@ fn set_filling_excluding_placed_student_is_rejected() {
     };
 
     // Excluding the placed student must fail (whole-value update keeping params)
-    let result = app_state.try_apply(
+    let result = app_state.apply(
         Op::GroupList(GroupListOp::Update(
             group_list_id,
             GroupList::new(
@@ -164,7 +163,7 @@ fn set_filling_excluding_placed_student_is_rejected() {
     );
     assert_eq!(
         result,
-        Err(ApplyError::Invariants(BTreeSet::from([
+        Err(Error::Invariants(BTreeSet::from([
             FixableInvariant::Convergence(Convergence::ColloscopeStudentExcluded(
                 group_list_id,
                 placed_student,
@@ -173,7 +172,7 @@ fn set_filling_excluding_placed_student_is_rejected() {
     );
 
     // Excluding a student that is not placed still works
-    let Ok(None) = app_state.try_apply(
+    let Ok(None) = app_state.apply(
         Op::GroupList(GroupListOp::Update(
             group_list_id,
             GroupList::new(
@@ -201,7 +200,7 @@ fn update_shrinking_group_names_below_assigned_group_is_rejected() {
 
     let period_id = add_active_period(&mut app_state, 2);
 
-    let Ok(Some(NewId::SubjectId(subject_id))) = app_state.try_apply(
+    let Ok(Some(NewId::SubjectId(subject_id))) = app_state.apply(
         Op::Subject(SubjectOp::AddAfter(
             None,
             Subject {
@@ -231,7 +230,7 @@ fn update_shrinking_group_names_below_assigned_group_is_rejected() {
         panic!("Unexpected result after adding the subject");
     };
 
-    let Ok(Some(NewId::TeacherId(teacher_id))) = app_state.try_apply(
+    let Ok(Some(NewId::TeacherId(teacher_id))) = app_state.apply(
         Op::Teacher(TeacherOp::Add(Teacher {
             desc: Default::default(),
             subjects: BTreeSet::from([subject_id]),
@@ -241,7 +240,7 @@ fn update_shrinking_group_names_below_assigned_group_is_rejected() {
         panic!("Unexpected result after adding the teacher");
     };
 
-    let Ok(Some(NewId::SlotId(slot_id))) = app_state.try_apply(
+    let Ok(Some(NewId::SlotId(slot_id))) = app_state.apply(
         Op::Slot(SlotOp::AddAfter(
             None,
             Slot {
@@ -265,7 +264,7 @@ fn update_shrinking_group_names_below_assigned_group_is_rejected() {
     };
 
     // Group list with 4 groups, associated with the subject
-    let Ok(Some(NewId::GroupListId(group_list_id))) = app_state.try_apply(
+    let Ok(Some(NewId::GroupListId(group_list_id))) = app_state.apply(
         Op::GroupList(GroupListOp::Add(
             GroupList::new(
                 GroupListParameters {
@@ -284,7 +283,7 @@ fn update_shrinking_group_names_below_assigned_group_is_rejected() {
     ) else {
         panic!("Unexpected result after adding the group list");
     };
-    let Ok(None) = app_state.try_apply(
+    let Ok(None) = app_state.apply(
         Op::GroupList(GroupListOp::AssignToSubject(
             period_id,
             subject_id,
@@ -303,7 +302,7 @@ fn update_shrinking_group_names_below_assigned_group_is_rejected() {
         .weeks
         .week_id_at(period_id, 0)
         .expect("period has a first week");
-    let Ok(None) = app_state.try_apply(
+    let Ok(None) = app_state.apply(
         Op::Colloscope(ColloscopeOp::SetInterrogation(
             slot_id,
             week0,
@@ -315,7 +314,7 @@ fn update_shrinking_group_names_below_assigned_group_is_rejected() {
     };
 
     // Shrinking group_names to 2 groups (max valid group number 1) must fail
-    let result = app_state.try_apply(
+    let result = app_state.apply(
         Op::GroupList(GroupListOp::Update(
             group_list_id,
             GroupList::new(
@@ -335,7 +334,7 @@ fn update_shrinking_group_names_below_assigned_group_is_rejected() {
     );
     assert_eq!(
         result,
-        Err(ApplyError::Invariants(BTreeSet::from([
+        Err(Error::Invariants(BTreeSet::from([
             FixableInvariant::Convergence(Convergence::InterrogationGroupOutOfBounds(
                 slot_id, week0,
             ))
@@ -343,7 +342,7 @@ fn update_shrinking_group_names_below_assigned_group_is_rejected() {
     );
 
     // Shrinking to 3 groups keeps group number 2 valid and succeeds
-    let Ok(None) = app_state.try_apply(
+    let Ok(None) = app_state.apply(
         Op::GroupList(GroupListOp::Update(
             group_list_id,
             GroupList::new(
@@ -376,7 +375,7 @@ fn remove_prefilled_group_list_round_trips_on_reverse() {
 
     let mut app_state = AppState::<_, String>::new(Data::new());
 
-    let Ok(Some(NewId::GroupListId(group_list_id))) = app_state.try_apply(
+    let Ok(Some(NewId::GroupListId(group_list_id))) = app_state.apply(
         Op::GroupList(GroupListOp::Add(
             GroupList::new(GroupListParameters::default(), GroupListFilling::default()).unwrap(),
         )),
@@ -385,7 +384,7 @@ fn remove_prefilled_group_list_round_trips_on_reverse() {
         panic!("Unexpected result after adding the group list");
     };
     let group_count = 16; // GroupListParameters::default() has 16 groups
-    let Ok(None) = app_state.try_apply(
+    let Ok(None) = app_state.apply(
         Op::GroupList(GroupListOp::Update(
             group_list_id,
             GroupList::new(
@@ -407,9 +406,9 @@ fn remove_prefilled_group_list_round_trips_on_reverse() {
 
     let (annotated, _new_id) = data.annotate(Op::GroupList(GroupListOp::Remove(group_list_id)));
     let rev = data
-        .try_apply(&annotated)
+        .apply(&annotated)
         .expect("removing an empty prefilled group list should succeed");
-    data.try_apply(&rev)
+    data.apply(&rev)
         .expect("the reverse of a successfully applied op must apply");
 
     assert!(
@@ -429,7 +428,7 @@ fn assign_to_subject_with_dangling_group_list_id_errors() {
 
     let period_id = add_active_period(&mut app_state, 2);
 
-    let Ok(Some(NewId::SubjectId(subject_id))) = app_state.try_apply(
+    let Ok(Some(NewId::SubjectId(subject_id))) = app_state.apply(
         Op::Subject(SubjectOp::AddAfter(
             None,
             Subject {
@@ -460,7 +459,7 @@ fn assign_to_subject_with_dangling_group_list_id_errors() {
     };
 
     // A removed group list leaves a dangling id
-    let Ok(Some(NewId::GroupListId(group_list_id))) = app_state.try_apply(
+    let Ok(Some(NewId::GroupListId(group_list_id))) = app_state.apply(
         Op::GroupList(GroupListOp::Add(
             GroupList::new(GroupListParameters::default(), GroupListFilling::default()).unwrap(),
         )),
@@ -468,14 +467,14 @@ fn assign_to_subject_with_dangling_group_list_id_errors() {
     ) else {
         panic!("Unexpected result after adding the group list");
     };
-    let Ok(None) = app_state.try_apply(
+    let Ok(None) = app_state.apply(
         Op::GroupList(GroupListOp::Remove(group_list_id)),
         "Remove group list".into(),
     ) else {
         panic!("Unexpected result after removing the group list");
     };
 
-    let result = app_state.try_apply(
+    let result = app_state.apply(
         Op::GroupList(GroupListOp::AssignToSubject(
             period_id,
             subject_id,
@@ -485,7 +484,7 @@ fn assign_to_subject_with_dangling_group_list_id_errors() {
     );
     assert_eq!(
         result,
-        Err(ApplyError::Precheck(PrecheckError::GroupList(
+        Err(Error::Precheck(PrecheckError::GroupList(
             GroupListPrecheckError::InvalidGroupListId(group_list_id)
         ))),
     );
@@ -525,13 +524,13 @@ fn slot_update_changing_subject_is_rejected() {
         excluded_periods: BTreeSet::new(),
     };
 
-    let Ok(Some(NewId::SubjectId(subject_a))) = app_state.try_apply(
+    let Ok(Some(NewId::SubjectId(subject_a))) = app_state.apply(
         Op::Subject(SubjectOp::AddAfter(None, interrogation_subject("Math"))),
         "Add subject A".into(),
     ) else {
         panic!("Unexpected result after adding subject A");
     };
-    let Ok(Some(NewId::SubjectId(subject_b))) = app_state.try_apply(
+    let Ok(Some(NewId::SubjectId(subject_b))) = app_state.apply(
         Op::Subject(SubjectOp::AddAfter(
             Some(subject_a),
             interrogation_subject("Physics"),
@@ -543,7 +542,7 @@ fn slot_update_changing_subject_is_rejected() {
 
     // A teacher that teaches in both subjects, so the update would pass
     // teacher validation and only the subject-change guard can reject it.
-    let Ok(Some(NewId::TeacherId(teacher_id))) = app_state.try_apply(
+    let Ok(Some(NewId::TeacherId(teacher_id))) = app_state.apply(
         Op::Teacher(TeacherOp::Add(Teacher {
             desc: Default::default(),
             subjects: BTreeSet::from([subject_a, subject_b]),
@@ -568,7 +567,7 @@ fn slot_update_changing_subject_is_rejected() {
         cost: 0,
     };
 
-    let Ok(Some(NewId::SlotId(slot_id))) = app_state.try_apply(
+    let Ok(Some(NewId::SlotId(slot_id))) = app_state.apply(
         Op::Slot(SlotOp::AddAfter(None, slot(subject_a))),
         "Add slot to subject A".into(),
     ) else {
@@ -576,13 +575,13 @@ fn slot_update_changing_subject_is_rejected() {
     };
 
     // Updating the slot with a different (but otherwise valid) subject must fail.
-    let result = app_state.try_apply(
+    let result = app_state.apply(
         Op::Slot(SlotOp::Update(slot_id, slot(subject_b))),
         "Move slot to subject B".into(),
     );
     assert_eq!(
         result,
-        Err(ApplyError::Precheck(PrecheckError::Slot(
+        Err(Error::Precheck(PrecheckError::Slot(
             SlotPrecheckError::CannotChangeSubject(slot_id, subject_a, subject_b)
         ))),
     );

@@ -51,13 +51,13 @@ impl InMemoryData for FakeData {
     // FakeData has no invariants to check, so the gate is a plain state-dependent
     // apply that reuses `FakeError`. The trait does not require a distinct error
     // type; this exercises that flexibility.
-    type ApplyError = FakeError;
+    type Error = FakeError;
 
     fn annotate(&self, op: FakeOp) -> (FakeOp, ()) {
         (op, ())
     }
 
-    fn try_apply(&mut self, op: &FakeOp) -> Result<FakeOp, FakeError> {
+    fn apply(&mut self, op: &FakeOp) -> Result<FakeOp, FakeError> {
         match op {
             FakeOp::Set { old, new } => {
                 if self.value != *old {

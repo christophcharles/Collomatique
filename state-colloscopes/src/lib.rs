@@ -238,14 +238,14 @@ pub enum PrecheckError {
     ExportConfig(#[from] ExportConfigPrecheckError),
 }
 
-/// Error surface of the apply/check/rollback gate ([Data::try_apply]).
+/// Error surface of the apply/check/rollback gate ([Data::apply]).
 ///
-/// Three tiers. [ApplyError::Precheck] is bad op input caught before any
-/// mutation (the state was never touched). [ApplyError::Logic] and
-/// [ApplyError::Invariants] are reported after a forced apply and a rollback,
+/// Three tiers. [Error::Precheck] is bad op input caught before any
+/// mutation (the state was never touched). [Error::Logic] and
+/// [Error::Invariants] are reported after a forced apply and a rollback,
 /// so the state is left bit-identical to before the op.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum ApplyError {
+pub enum Error {
     /// Bad op input (no-clobber, dangling target, bad position/anchor).
     /// The state was never touched.
     #[error(transparent)]
@@ -290,7 +290,7 @@ impl InMemoryData for Data {
     type OriginalOperation = Op;
     type AnnotatedOperation = AnnotatedOp;
     type NewInfo = Option<NewId>;
-    type ApplyError = ApplyError;
+    type Error = Error;
 
     fn annotate(&self, op: Op) -> (AnnotatedOp, Option<NewId>) {
         let mut guard = self.id_issuer.lock().unwrap();
@@ -308,15 +308,15 @@ impl InMemoryData for Data {
     /// `IdIssuer::skip_to_id`. Its only trigger is an [AnnotatedOp] transplanted
     /// from another [Data] instance through this raw entry point — a caller bug,
     /// hence a panic rather than an error arm.
-    fn try_apply(
+    fn apply(
         &mut self,
         op: &Self::AnnotatedOperation,
-    ) -> std::result::Result<Self::AnnotatedOperation, Self::ApplyError> {
+    ) -> std::result::Result<Self::AnnotatedOperation, Self::Error> {
         // Snapshot everything an op could conceivably touch. `force_apply` never
         // uses the id issuer today (ids are issued in `annotate`), but the issuer
         // is a single counter — snapshotting it keeps rollback total even if a
         // later change to a `force_apply_*` copy starts touching it. Note what it
-        // must *not* undo: `annotate` runs before `try_apply` and its issued ids
+        // must *not* undo: `annotate` runs before `apply` and its issued ids
         // stay burned on failure, exactly as today — history ids are never reused.
         let snapshot = self.inner_data.clone();
         let issuer_snapshot = self.id_issuer.lock().unwrap().clone();
@@ -329,12 +329,12 @@ impl InMemoryData for Data {
             Err(logic) => {
                 self.inner_data = snapshot;
                 *self.id_issuer.lock().unwrap() = issuer_snapshot;
-                Err(ApplyError::Logic(logic))
+                Err(Error::Logic(logic))
             }
             Ok(fixable) if !fixable.is_empty() => {
                 self.inner_data = snapshot;
                 *self.id_issuer.lock().unwrap() = issuer_snapshot;
-                Err(ApplyError::Invariants(fixable))
+                Err(Error::Invariants(fixable))
             }
             Ok(_empty) => {
                 self.assert_id_issuer_high_water();
@@ -356,7 +356,7 @@ impl Data {
     /// domain writer). The `GlobalUpdate` arm has no invariant pre-gate — this
     /// *is* the force door — and there is no trailing panic net, since the state
     /// is allowed to be invalid here. It is the force half of the
-    /// apply/check/rollback gate ([Data::try_apply]).
+    /// apply/check/rollback gate ([Data::apply]).
     pub fn force_apply(
         &mut self,
         op: &AnnotatedOp,
@@ -404,7 +404,7 @@ impl Data {
     ///
     /// This is [Data]-level state (the issuer is deliberately not part of
     /// [InnerData]), so it cannot live in [InnerData::broken_invariants]; it is
-    /// the surviving companion the apply/check/rollback gate ([Data::try_apply])
+    /// the surviving companion the apply/check/rollback gate ([Data::apply])
     /// runs on the accepted path.
     fn assert_id_issuer_high_water(&self) {
         let max_id = self.inner_data.ids().max();
@@ -482,8 +482,8 @@ mod force_apply_tests {
     //! R1.5: carve-out guards still fire (leaving the state unchanged),
     //! stripped invariant guards let a forced op land an *invalid* state that
     //! [InnerData::broken_invariants] reports, and a forced *valid* op is
-    //! byte-identical to the gated [Data::try_apply] (the standing anti-drift
-    //! pin on the thin copies). `tests/property_try_apply.rs` generalises these.
+    //! byte-identical to the gated [Data::apply] (the standing anti-drift
+    //! pin on the thin copies). `tests/property_apply_gate.rs` generalises these.
 
     use crate::ids::{Id, PeriodId, StudentId, SubjectId, WeekPatternId};
     use crate::ops::{
@@ -504,7 +504,7 @@ mod force_apply_tests {
     /// so callers can read back the freshly issued ids.
     fn apply(data: &mut Data, op: Op) -> AnnotatedOp {
         let (annotated, _) = data.annotate(op);
-        data.try_apply(&annotated).expect("valid op should apply");
+        data.apply(&annotated).expect("valid op should apply");
         annotated
     }
 
@@ -603,7 +603,7 @@ mod force_apply_tests {
         let mut data = Data::default();
 
         // A corrupt inner: a student and a week pattern sharing the same raw id
-        // — a duplicated-id LogicError that the try_apply gate rejects and rolls
+        // — a duplicated-id LogicError that the apply gate rejects and rolls
         // back. `force_apply` has no gate, so the corrupt state lands.
         let mut corrupt = InnerData::default();
         let student = unsafe { StudentId::new(1) };
@@ -633,13 +633,13 @@ mod force_apply_tests {
     }
 
     #[test]
-    fn forced_valid_student_add_equals_try_apply() {
+    fn forced_valid_student_add_equals_apply() {
         let data = Data::default();
         let (add, _) = data.annotate(Op::Student(StudentOp::Add(Student::default())));
 
         let mut gated = data.clone();
         let mut forced = data.clone();
-        let gated_rev = gated.try_apply(&add).expect("valid op");
+        let gated_rev = gated.apply(&add).expect("valid op");
         let forced_rev = forced.force_apply(&add).expect("valid op");
 
         assert_eq!(gated.get_inner_data(), forced.get_inner_data());
@@ -647,7 +647,7 @@ mod force_apply_tests {
     }
 
     #[test]
-    fn forced_valid_week_add_equals_try_apply() {
+    fn forced_valid_week_add_equals_apply() {
         // Weeks exercise the copied helpers (`force_add_week` &c.), the highest
         // drift-risk spot (F2). Build a period, then compare the two paths on a
         // week AddFront.
@@ -660,7 +660,7 @@ mod force_apply_tests {
         let (add_week, _) = data.annotate(Op::Week(WeekOp::AddFront(period, WeekDesc::default())));
         let mut gated = data.clone();
         let mut forced = data.clone();
-        let gated_rev = gated.try_apply(&add_week).expect("valid op");
+        let gated_rev = gated.apply(&add_week).expect("valid op");
         let forced_rev = forced.force_apply(&add_week).expect("valid op");
 
         assert_eq!(gated.get_inner_data(), forced.get_inner_data());
@@ -669,11 +669,11 @@ mod force_apply_tests {
 }
 
 #[cfg(test)]
-mod try_apply_tests {
-    //! Step-5 commit 1 pins for [Data::try_apply]: the apply/check/rollback gate
+mod apply_tests {
+    //! Step-5 commit 1 pins for [Data::apply]: the apply/check/rollback gate
     //! rolls a broken landing back to a bit-identical pre-op state and reports it
     //! precisely; a `GlobalUpdate` carrying logically impossible (duplicated-id)
-    //! data comes back as [ApplyError::Logic], rolled back.
+    //! data comes back as [Error::Logic], rolled back.
 
     use crate::ids::{Id, StudentId, WeekPatternId};
     use crate::ops::{
@@ -683,7 +683,7 @@ mod try_apply_tests {
     use crate::students::Student;
     use crate::subjects::Subject;
     use crate::week_patterns::WeekPattern;
-    use crate::{ApplyError, Data, FixableInvariant, InnerData};
+    use crate::{Data, Error, FixableInvariant, InnerData};
     use collomatique_state::InMemoryData;
     use std::collections::BTreeSet;
 
@@ -691,7 +691,7 @@ mod try_apply_tests {
     /// so callers can read back the freshly issued ids.
     fn apply(data: &mut Data, op: Op) -> AnnotatedOp {
         let (annotated, _) = data.annotate(op);
-        data.try_apply(&annotated).expect("valid op should apply");
+        data.apply(&annotated).expect("valid op should apply");
         annotated
     }
 
@@ -722,7 +722,7 @@ mod try_apply_tests {
     }
 
     #[test]
-    fn try_apply_invariant_breaking_op_rolls_back_and_reports() {
+    fn apply_invariant_breaking_op_rolls_back_and_reports() {
         let (mut data, student) = data_with_assignment();
         let before = data.clone();
 
@@ -730,10 +730,10 @@ mod try_apply_tests {
         // (the Remove scans are stripped in `force_apply`); the gate must roll the
         // state back and report it as an Invariants error.
         let (remove, _) = data.annotate(Op::Student(StudentOp::Remove(student)));
-        let err = data.try_apply(&remove).unwrap_err();
+        let err = data.apply(&remove).unwrap_err();
 
         match err {
-            ApplyError::Invariants(set) => assert!(
+            Error::Invariants(set) => assert!(
                 set.iter()
                     .any(|f| matches!(f, FixableInvariant::DanglingFk(_))),
                 "expected a dangling-FK report, got {set:?}"
@@ -742,18 +742,18 @@ mod try_apply_tests {
         }
         assert!(
             data == before,
-            "a rolled-back try_apply must leave the state bit-identical"
+            "a rolled-back apply must leave the state bit-identical"
         );
     }
 
     #[test]
-    fn try_apply_global_update_with_duplicated_id_errors_logic_and_rolls_back() {
+    fn apply_global_update_with_duplicated_id_errors_logic_and_rolls_back() {
         let mut data = Data::default();
         let before = data.clone();
 
         // A corrupt inner: a student and a week pattern sharing raw id 1 — a
         // duplicated-id LogicError. Through the gate this rolls back and surfaces
-        // as ApplyError::Logic (post-sealing the only route into that arm).
+        // as Error::Logic (post-sealing the only route into that arm).
         let mut corrupt = InnerData::default();
         let student = unsafe { StudentId::new(1) };
         let pattern = unsafe { WeekPatternId::new(1) };
@@ -771,10 +771,10 @@ mod try_apply_tests {
         );
 
         let op = AnnotatedOp::GlobalUpdate(corrupt);
-        let err = data.try_apply(&op).unwrap_err();
+        let err = data.apply(&op).unwrap_err();
 
         assert!(
-            matches!(err, ApplyError::Logic(ref set) if !set.is_empty()),
+            matches!(err, Error::Logic(ref set) if !set.is_empty()),
             "expected a non-empty Logic error, got {err:?}"
         );
         assert!(

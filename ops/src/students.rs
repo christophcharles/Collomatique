@@ -388,7 +388,7 @@ impl StudentsUpdateOp {
         match self {
             Self::AddNewStudent(student) => {
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::Student(
                             collomatique_state_colloscopes::StudentOp::Add(student.clone()),
                         ),
@@ -396,12 +396,12 @@ impl StudentsUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            ApplyError, FixableInvariant, PeriodRefSite, Reference,
+                            Error, FixableInvariant, PeriodRefSite, Reference,
                         };
                         match e {
                             // Pre-op validity: any period dangle in the set is this
                             // add's bad excluded-period id.
-                            ApplyError::Invariants(set) => {
+                            Error::Invariants(set) => {
                                 for inv in &set {
                                     if let FixableInvariant::DanglingFk(Reference::Period {
                                         target,
@@ -423,7 +423,7 @@ impl StudentsUpdateOp {
             }
             Self::UpdateStudent(student_id, student) => {
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::Student(
                             collomatique_state_colloscopes::StudentOp::Update(
                                 *student_id,
@@ -434,14 +434,14 @@ impl StudentsUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            ApplyError, Convergence, FixableInvariant, PeriodRefSite,
-                            PrecheckError, Reference, StudentPrecheckError,
+                            Convergence, Error, FixableInvariant, PeriodRefSite, PrecheckError,
+                            Reference, StudentPrecheckError,
                         };
                         match e {
-                            ApplyError::Precheck(PrecheckError::Student(
+                            Error::Precheck(PrecheckError::Student(
                                 StudentPrecheckError::InvalidStudentId(id),
                             )) => UpdateStudentError::InvalidStudentId(id),
-                            ApplyError::Invariants(set) => {
+                            Error::Invariants(set) => {
                                 // Old order: validate_student (excluded-period ids)
                                 // before the assignment scan.
                                 for inv in &set {
@@ -475,7 +475,7 @@ impl StudentsUpdateOp {
             }
             Self::DeleteStudent(student_id) => {
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::Student(
                             collomatique_state_colloscopes::StudentOp::Remove(*student_id),
                         ),
@@ -483,14 +483,14 @@ impl StudentsUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            ApplyError, FixableInvariant, PrecheckError, Reference,
+                            Error, FixableInvariant, PrecheckError, Reference,
                             StudentPrecheckError, StudentRefSite,
                         };
                         match e {
-                            ApplyError::Precheck(PrecheckError::Student(
+                            Error::Precheck(PrecheckError::Student(
                                 StudentPrecheckError::InvalidStudentId(id),
                             )) => DeleteStudentError::InvalidStudentId(id),
-                            ApplyError::Invariants(set) => {
+                            Error::Invariants(set) => {
                                 // Every one of these is a cleaning-contract breach:
                                 // the cleaning phase strips group-list, prefilled and
                                 // assignment references (and colloscope/settings ones)

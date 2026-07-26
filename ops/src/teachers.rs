@@ -139,7 +139,7 @@ impl TeachersUpdateOp {
         match self {
             Self::AddNewTeacher(teacher) => {
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::Teacher(
                             collomatique_state_colloscopes::TeacherOp::Add(teacher.clone()),
                         ),
@@ -147,13 +147,13 @@ impl TeachersUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            ApplyError, FixableInvariant, Reference, SubjectRefSite,
+                            Error, FixableInvariant, Reference, SubjectRefSite,
                         };
                         match e {
                             // The pre-op state was valid, so any teacher->subject
                             // dangle in the set was introduced by this Add; the
                             // dangling target is the bad input subject id.
-                            ApplyError::Invariants(set) => {
+                            Error::Invariants(set) => {
                                 for inv in &set {
                                     if let FixableInvariant::DanglingFk(Reference::Subject {
                                         target,
@@ -175,7 +175,7 @@ impl TeachersUpdateOp {
             }
             Self::UpdateTeacher(teacher_id, teacher) => {
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::Teacher(
                             collomatique_state_colloscopes::TeacherOp::Update(
                                 *teacher_id,
@@ -186,14 +186,14 @@ impl TeachersUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            ApplyError, Convergence, FixableInvariant, PrecheckError, Reference,
+                            Error, Convergence, FixableInvariant, PrecheckError, Reference,
                             SubjectRefSite, TeacherPrecheckError,
                         };
                         match e {
-                            ApplyError::Precheck(PrecheckError::Teacher(
+                            Error::Precheck(PrecheckError::Teacher(
                                 TeacherPrecheckError::InvalidTeacherId(id),
                             )) => UpdateTeacherError::InvalidTeacherId(id),
-                            ApplyError::Invariants(set) => {
+                            Error::Invariants(set) => {
                                 // Old validator order: validate_teacher (subject
                                 // ids) fires before the dropped-subject slot scan.
                                 for inv in &set {
@@ -227,7 +227,7 @@ impl TeachersUpdateOp {
             }
             Self::DeleteTeacher(teacher_id) => {
                 let result = data
-                    .try_apply(
+                    .apply(
                         collomatique_state_colloscopes::Op::Teacher(
                             collomatique_state_colloscopes::TeacherOp::Remove(*teacher_id),
                         ),
@@ -235,14 +235,14 @@ impl TeachersUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            ApplyError, FixableInvariant, PrecheckError, Reference,
+                            Error, FixableInvariant, PrecheckError, Reference,
                             TeacherPrecheckError, TeacherRefSite,
                         };
                         match e {
-                            ApplyError::Precheck(PrecheckError::Teacher(
+                            Error::Precheck(PrecheckError::Teacher(
                                 TeacherPrecheckError::InvalidTeacherId(id),
                             )) => DeleteTeacherError::InvalidTeacherId(id),
-                            ApplyError::Invariants(set) => {
+                            Error::Invariants(set) => {
                                 for inv in &set {
                                     if let FixableInvariant::DanglingFk(Reference::Teacher {
                                         site: TeacherRefSite::SlotTeacher(_),

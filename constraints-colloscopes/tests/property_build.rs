@@ -137,7 +137,7 @@ fn model_builds_never_panic_along_random_walks() {
                 );
                 log.push(category, &op);
 
-                match state.try_apply(op, category.to_string()) {
+                match state.apply(op, category.to_string()) {
                     Ok(_) => {
                         stats.record(category, true);
                         let inner = state.get_data().get_inner_data();

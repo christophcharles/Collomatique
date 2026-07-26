@@ -144,7 +144,7 @@ pub fn bootstrap(rng: &mut ChaCha8Rng) -> (AppState<Data, String>, Vec<Data>) {
                  desc: &str|
      -> Option<NewId> {
         let new_id = state
-            .try_apply(op, desc.to_string())
+            .apply(op, desc.to_string())
             .unwrap_or_else(|e| panic!("bootstrap op `{desc}` failed: {e}"));
         snapshots.push(state.get_data().clone());
         new_id

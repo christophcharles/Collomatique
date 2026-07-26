@@ -364,8 +364,7 @@ impl Component for Dialog {
                             collomatique_ops::OpCategory::None,
                             String::from("Mise à jour globale"),
                         );
-                        match collomatique_state::traits::Manager::try_apply(app_session, op, desc)
-                        {
+                        match collomatique_state::traits::Manager::apply(app_session, op, desc) {
                             Ok(_) => {
                                 self.send_response(ResultMsg::Ack(None));
                             }
