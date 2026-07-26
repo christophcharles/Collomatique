@@ -14,7 +14,11 @@ run before step 5 (periods/weeks module split, sealed `GroupList`, consolidated
 `GroupListOp`, mirror-consistency `LogicError`s, sealed `PairingRule`/`SlotPairingRule`);
 its session plan is retired (pinned at
 `git show 25fdc50b:docs/plans/plan_loose_ends.md`), the delivered state is recorded in
-Appendix F. Next up: step 5.
+Appendix F. **Step 5 completed July 26 2026** — production switched to the
+apply/check/rollback gate and the old checked-apply world was deleted; its session plan is
+retired (pinned at `git show b6f7bdbc:docs/plans/plan_step_5.md`; sub-plans
+`plan_step_5_commit_5.md` / `plan_step_5_r1_5.md` at the same pin), the delivered state is
+recorded in Appendix G. Next up: step 6 (the cascade).
 This doc started as an exploration after phase C of the table-registry plan shipped (item 2's
 detailed plan, since delivered in full and retired; pinned at
 `git show 77695338:docs/table_registry_plan.md`); it now
@@ -109,6 +113,10 @@ Invariants split into **three kinds**, and the split dictates the machinery:
 
 ## 4. Elementary ops: apply / check / restore
 
+*Delivered at step 5 (Appendix G): the gate is `InMemoryData::apply` = snapshot →
+`force_apply` → `broken_invariants` → rollback; the checker name landed as
+`broken_invariants` (Appendix C), the carve-out below as `PrecheckError` (Appendix E.3).*
+
 Each elementary op:
 
 1. Snapshot (clone `InnerData` — trivial at this scale).
@@ -142,7 +150,8 @@ remains after the step-1 reshapes — a safety net over the most fragile, least-
 ## 5. The cascade (settled July 15 2026)
 
 The cascade never force-applies and never lets an invalid state escape a single elementary
-`try_apply`: **discovery happens through failure**. It is a retry queue (in practice a stack —
+`try_apply` (the migration-window name — delivered at step 5 as plain `apply`, Appendix G):
+**discovery happens through failure**. It is a retry queue (in practice a stack —
 new work goes to the front, so resolution is depth-first):
 
 ```text
@@ -458,13 +467,36 @@ step 5 rewires production, so step 5 lands on a cleaner op surface. What changed
   "fail-fast panic"), so the old checker can retire at step 5 without leaving validation
   behind.
 
-**Step 5 — switch elementary ops to apply/check/restore (§4).** `apply` becomes
-`force_apply` + new checker + rollback — the same primitives step 4 built. The item-1 canary
-pattern: one commit runs old validation and the new gate side by side with the property harness
-asserting verdict agreement across generated valid+invalid ops; the next commit deletes
-candidate validation and delete-blocking. The per-op error enums collapse into the precise
-`InvariantError` + the §4 carve-out errors; `found_bugs.rs` exact-variant asserts and any
-gtk4/python error matching migrate in the same change.
+**Step 5 — switch elementary ops to apply/check/restore (§4) — COMPLETED July 26 2026.**
+Production runs on the gate: `InMemoryData::apply` (named `try_apply` during the migration
+window, renamed back at R3 so the lasting API carries no migration scars) is snapshot →
+`force_apply` → `broken_invariants` → rollback, and the whole old world — the 16 checked
+`apply_*` bodies, the 17 per-domain `*Error` enums, both old checkers, the legacy bridge,
+the differential fuzz — is deleted. One wording of the original sketch did not survive
+design: the per-op enums did **not** "collapse into the precise `InvariantError`" (that
+type died with the old checker); the delivered surface is the three-tier
+`Error { Precheck(PrecheckError), Logic(BTreeSet<LogicError>),
+Invariants(BTreeSet<FixableInvariant>) }` — E.3 prechecks + the Appendix C vocabulary.
+`found_bugs.rs` exact-variant asserts, gtk4's two `GlobalUpdate` sites, and the decode
+path migrated in the same step; `ops/`'s public `UpdateError` vocabulary stayed frozen.
+The session plan (translation doctrine, per-module mapping tables, coexistence contract,
+decision ledger) is retired; pinned at `git show b6f7bdbc:docs/plans/plan_step_5.md`
+(sub-plans `plan_step_5_commit_5.md` / `plan_step_5_r1_5.md`, same pin). **The delivered
+state steps 6–7 build on is Appendix G.**
+
+  Commits as landed (the item-1 canary pattern, executed as planned): 1 parallel API
+  (`cefc9919`); 2/2.5 canary + its relaxation to the one-directional agreement contract
+  (`537951cc`/`35fcb46b`); 3.0 replay path onto the gate *before* any consumer
+  (`65ee6ac8`); 3.1–3.12 the ops modules, one per commit (`3cc89017`…`38b35b82`);
+  4 gtk4 `GlobalUpdate` sites (`aaceda78`); 5.1–5.4 test migration + the gate-property
+  fuzz (`048a82d6`…`042c2a45`); 6 decode onto `broken_invariants` (`4b203ff1`);
+  R1 deactivate (`cb13427d`); R1.5 old-checker test scaffolding retired (`b1d7a4dd`);
+  R1.6 leftover scaffold callers (`feeeebfa`); R2 remove the old world (`56510199`);
+  R3 mechanical rename (`13612048`); rider: stale old-world comment purge (`b6f7bdbc`).
+
+  ★ End-of-step gate: full workspace suite, 500-seed cranks, byte-stability + hogwarts
+  pristine, contract scripts + gtk4 smoke all passed (July 26 2026). Noted: test coverage
+  is not exhaustive — widening it is a standing future-work item.
 
 **Step 6 — the cascade (§5).** Resolution map + retry queue + no-progress guard; the compound
 reverse feeds the history stack; a confluence pin test freezes the emitted op list on a
@@ -504,7 +536,9 @@ an op-list rendering layer replaces the warning texts.
   the class disappears at step 7.
 - **The safety net** — the property harness stays the oracle throughout and gains the step-4
   differential fuzz; `found_bugs.rs` keeps its regression *scenarios* but its exact-variant
-  asserts are rewritten at step 5 to the new error vocabulary.
+  asserts are rewritten at step 5 to the new error vocabulary. *(Done: at step 5 the
+  differential retired into the gate-property fuzz `property_apply_gate.rs` and the asserts
+  became exact-set pins — G.6.)*
 - **Storage — the frozen format does not move.** Every step-1 reshape is byte-stable by
   construction (the format is already sparse/positional where the memory model changes);
   byte-stability tests + the golden fixture gate every reshape commit.
@@ -1272,3 +1306,137 @@ Headline: with both rule values sealed, **no tier-2 `LogicError` is reachable th
 elementary op anymore** — the remaining ones arise only from external data (decode /
 `GlobalUpdate`) or the `#[cfg(test)]` forge hatch. That op-unreachability is the property
 step 5 stands on.
+
+## Appendix G — step 5 as delivered (July 26 2026)
+
+Commit span `cefc9919`…`13612048` plus the comment-purge rider `b6f7bdbc`; session plan
+retired, pinned `git show b6f7bdbc:docs/plans/plan_step_5.md` (with its two sub-plans
+`plan_step_5_commit_5.md` — the commit-5 test-migration split — and `plan_step_5_r1_5.md`
+— the R1.5 scaffolding pass + the R1.6 gap discovery — at the same pin). ★ end-of-step
+gate passed in full July 26 2026 (§8). This appendix records the delivered state steps
+6–7 build on; the per-module translation tables and the coexistence-window reasoning live
+only in the pin.
+
+### G.1 The gate
+
+The final surface carries no migration names: `InMemoryData::{type Error, fn apply}`,
+`Manager::apply`, and the enum `collomatique_state_colloscopes::Error`. `Data`'s `apply`
+(lib.rs) is the §4 primitive:
+
+- **snapshot** — clone of `InnerData` *and* of the `IdIssuer` (the issuer is one `u64`;
+  the clone is defensive insurance so rollback stays total even if a `force_apply_*` copy
+  ever starts touching it). What the snapshot deliberately does **not** undo: ids issued
+  by `annotate` stay burned on failure — history ids are never reused.
+- **`force_apply`** — precheck failures (`Error::Precheck`) return before any mutation;
+  the `GlobalUpdate` arm is the force door (no pre-gate, infallible).
+- **`broken_invariants`** — `Err(logic)` → rollback + `Error::Logic`; non-empty fixable
+  set → rollback + `Error::Invariants`; clean → `assert_id_issuer_high_water()` +
+  `Ok(backward)`. A failed op leaves the state bit-identical and stores nothing in
+  history; a successful op is guaranteed fully valid.
+- **The id-issuer high-water check stays a panic**, not an error arm (plan decision 10):
+  `annotate` fuses id issuance (the `GlobalUpdate` annotate arm absorbs foreign payload
+  ids via `IdIssuer::skip_to_id`), so through the `Manager` surface it cannot fire; its
+  only trigger is a cross-instance `AnnotatedOp` transplant through raw `apply` — a
+  caller bug.
+
+The **replay path** (undo/redo, `AppSession::cancel` —
+`update_internal_state_with_aggregated`) runs through the same gate; commit 3.0 moved it
+first, before any consumer migrated, which is what made the migration window honest.
+
+### G.2 The error surface
+
+`Error` is three-tiered; the two set-carrying arms pass the checker's `BTreeSet`s through
+**untouched** — the canonical `Ord` is step 6's confluence raw material. `Display`
+itemizes sets through each entry's own `Display` (`format_error_set`), so gtk4's
+`e.to_string()` dialogs surface meaningful text without learning the vocabulary
+(vocabulary-aware UI is step 7's debt). `Logic` is reachable **only** from external data
+(decode, `GlobalUpdate` payloads) — F.7's op-unreachability held through the whole
+migration.
+
+One deliberate acceptance-domain widening survives (the step-4 divergence, canary-proved
+to be the *only* one): harmless clears the old checked `apply` rejected (e.g. clearing a
+group-list association on a non-interrogation subject, old `SubjectHasNoInterrogation`)
+now land as **perfect no-ops** — `Ok`, state unchanged, no-op reverse. Every
+state-changing old-`Err`/new-`Ok` and every old-`Ok`/new-`Err` was a fatal canary failure
+for the life of the migration (plan decision 11).
+
+### G.3 The ops translation (frozen `UpdateError` preserved)
+
+`ops/` kept its public vocabulary byte-for-byte; only the `map_err` translations changed,
+under three rules (plan §7.1): carve-out guards arrive as `Error::Precheck` and translate
+variant-for-variant; stripped guards arrive as `Error::Invariants`, and because **the
+pre-op state is always valid** (it passed the same gate), every set entry is attributable
+to the op at hand — the ops layer synthesizes its typed error from set membership, with
+missing payloads taken from the op in scope, and preserves the old validator's
+first-error precedence via explicit priority passes over the set. Cleaning-contract
+`panic!` arms stay panics (printing the set); `Logic` sits in every catch-all panic arm
+(ops never issues `GlobalUpdate`). The four `.expect`-only modules just re-pointed their
+expects. The ops-layer pre-cleaning (`get_next_cleaning_op` etc.) is **untouched** —
+replacing it with the cascade is step 6/7 territory.
+
+### G.4 The decode contract
+
+Loading validates **once, at the end, on the full `InnerData`**:
+`Data::from_inner_data` runs `broken_invariants` and hard-errors on *any* non-clean
+result (`FromInnerDataError::{IdError, Logic, BrokenInvariants}`) — a loaded file must be
+fully valid, because broken states never exist outside the gate. The mid-decode
+params-only gate is deleted; reconstruction was verified total on unvalidated params, so
+the acceptance domain is unchanged (only diagnostic *ordering* differs on multiply-corrupt
+files). `DecodeError` grew `LogicError`/`BrokenInvariants` plus the decoder-owned
+`UnknownPeriodInAssignments`: an *empty* assignments row keyed by an unknown period is
+dropped by the canonical-absent rule before the final gate could see it, so the decoder
+reports it itself (and the raw id travels).
+
+### G.5 What was deleted
+
+R2 (`56510199`, −4108 lines) removed, verified caller-free: the 16 checked `apply_*`
+bodies plus two factored-out checked helpers the plan's tables had assumed inline
+(weeks.rs `add/remove/update/move_week` — the shared `*_entry` mutators stay — and
+group_lists.rs `check_interrogations_group_bound`); old `InMemoryData::{type Error, fn
+apply}` + `Manager::apply` + the coexistence twin tests; the top-level `Error` and all 17
+per-domain `*Error` enums (nothing survived out of them — every variant either had a
+precheck twin already or died as a stripped guard; D.4-F1's vacuous
+`NotEmptyPeriodInColloscope` and the F2 `WeekMove` drift-risk died here as Appendix F
+predicted); `InnerData::check_invariants` + `check_no_duplicate_ids` + `InnerDataError`;
+`Parameters::check_invariants` + `InvariantError` + the `check_*_data_consistency` family
++ the `validate_*`/`*_internal` Result-returning validators (the pub `validate_*_id`
+u64-promotion helpers are a different family and stay); colloscopes
+`validate_against_params` + sub-validators + `ColloscopeError`; and the whole legacy
+bridge (`to_legacy` ×2, `dangling_to_legacy`, `convergence_to_legacy`,
+`is_necessarily_logic_error`, `assert_differential`). R1 had already deleted the canary
+and the step-4 differential fuzz file. R3 (`13612048`) renamed `try_apply`→`apply` and
+`ApplyError`→`Error` everywhere (done-check: workspace grep for either token is empty).
+The rider `b6f7bdbc` purged the remaining present-tense old-world references from
+comments and rustdoc (module headers now cite `broken_invariants`; provenance notes are
+past-tense; deliberately-historical lineage notes stay).
+
+### G.6 Tests as delivered
+
+- **`tests/property_apply_gate.rs`** (born `property_try_apply.rs`, commit 5.4) — the
+  gate-property fuzz, successor of the differential: depth-1 corruption probes off a
+  validated walk assert **atomicity** (every `Err` arm leaves the state bit-identical;
+  rolled-back arms carry non-empty sets), **honesty** (`Ok` ⇒ `broken_invariants()` is
+  `Ok(∅)` and the reverse restores the snapshot exactly), and **coverage** (every
+  `CorruptionKind` attempted, each corrupting kind rejected ≥1, `ForceLogic` reaches
+  `Error::Logic` ≥1 — the external-data route).
+- **`property_ops`** commits its walk through the gate with the
+  `broken_invariants() == Ok(∅)` oracle (`property_ops_broken_invariants.rs` merged into
+  it at R1); `constraints-colloscopes/property_build` uses the same oracle.
+- **The canary** (`canary_try_apply.rs`, commits 2/2.5) verified the one-directional
+  old↔new agreement contract op-by-op for the life of the migration and was deleted at
+  R1 by design — its job ended the moment the old API lost authority.
+- Migrated scenario tests (`found_bugs`, `week_ops`, `period_consistency_in_subjects`,
+  the invariants fixtures) assert **exact sets** — stronger pins than the old
+  single-variant matches — including the two-entry `week_ops` pin of the F5/D.4 bound-0
+  rule. The two step-4 anti-drift pins retargeted as `apply`-happy-path ≡
+  `force_apply`-on-a-twin.
+- Noted at the gate: coverage is not exhaustive; widening it is a standing future-work
+  item.
+
+### G.7 What steps 6–7 build on
+
+The gate is *the* primitive: the step-6 cascade wraps the same snapshot/rollback around a
+retry queue, consumes `Error::Invariants` sets in canonical order as its resolution
+input, and never sees a broken state escape (§5, with `try_apply` read as `apply`). Still
+standing for step 7: the ops-layer cleaning phases and `Warning` machinery, and gtk4's
+itemized-`Display`-only error dialogs.
