@@ -925,15 +925,13 @@ pub(crate) mod tests {
         }
     }
 
-    /// Runs [assert_differential] on `data`, then returns its
-    /// [crate::InnerData::broken_invariants]. Every fixture below asserts on the
-    /// checker *through this wrapper*, so the differential contract is verified
-    /// on each fixture's state without touching the fixtures themselves.
-    #[track_caller]
+    /// Shorthand for [crate::InnerData::broken_invariants]: every fixture below
+    /// asserts on the checker through this wrapper. (Until step-5 R1.5 it also
+    /// ran the old-vs-new differential on each fixture's state; the old checker
+    /// retired with step 5.)
     fn broken_invariants(
         data: &InnerData,
     ) -> Result<BTreeSet<FixableInvariant>, BTreeSet<LogicError>> {
-        assert_differential(data);
         data.broken_invariants()
     }
 
@@ -2678,28 +2676,23 @@ pub(crate) mod tests {
         assert_eq!(broken_invariants(&fx.data), Ok(BTreeSet::new()));
     }
 
-    // ---- Stage 7: per-site legacy coverage ----
+    // ---- Stage 7: per-site dangling coverage ----
     //
     // One single-corruption fixture per DanglingFk site not already exercised by
-    // a stage-3/5 fixture, each pinning both the exact new output *and* the exact
-    // old first-error. Together with `assert_differential` (run by the
-    // `broken_invariants` wrapper), the two assertions are the operational proof
-    // of that §6 table row: the old checker's first error for the single dangle
-    // is exactly `to_legacy` of the reported reference. `Period@WeekPeriodFk`
-    // became representable when the force path dropped the `PeriodStillHasWeeks`
-    // guard, so it now has a fixture
-    // (`dangling_period_from_forced_removal_maps_to_legacy`).
+    // a stage-3/5 fixture, each pinning the exact new-checker output. (Until
+    // step-5 R1.5 these fixtures also pinned the old checker's first error per
+    // site — the operational proof of the legacy-bridge tables; that half
+    // retired with the old checker.) `Period@WeekPeriodFk` became representable
+    // when the force path dropped the `PeriodStillHasWeeks` guard, so it has a
+    // fixture (`dangling_period_from_forced_removal_is_reported`).
 
-    /// Asserts that `data` has exactly the one dangling reference `reference`
-    /// (new checker) and that the old checker's first error is `old`. The
-    /// `broken_invariants` wrapper additionally runs the full differential.
+    /// Asserts that `data` has exactly the one dangling reference `reference`.
     #[track_caller]
-    fn assert_dangling_maps(data: &InnerData, reference: Reference, old: InnerDataError) {
+    fn assert_single_dangling_fk(data: &InnerData, reference: Reference) {
         assert_eq!(
             broken_invariants(data),
             Ok(BTreeSet::from([FixableInvariant::DanglingFk(reference)])),
         );
-        assert_eq!(data.check_invariants(), Err(old));
     }
 
     /// Registers a default subject at position 0 (a common scaffold below).
@@ -2712,7 +2705,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn dangling_period_in_subject_exclusions_maps_to_legacy() {
+    fn dangling_period_in_subject_exclusions_is_reported() {
         let mut data = InnerData::default();
         let subject = unsafe { SubjectId::new(1) };
         let period = unsafe { PeriodId::new(2) };
@@ -2728,18 +2721,17 @@ pub(crate) mod tests {
                 },
             )
             .unwrap();
-        assert_dangling_maps(
+        assert_single_dangling_fk(
             &data,
             Reference::Period {
                 target: period,
                 site: PeriodRefSite::SubjectExcludedPeriods(subject),
             },
-            InnerDataError::Params(InvariantError::InvalidSubject),
         );
     }
 
     #[test]
-    fn dangling_period_from_forced_removal_maps_to_legacy() {
+    fn dangling_period_from_forced_removal_is_reported() {
         // A period holding one week, then force-removed. `force_apply_period`
         // Remove now drops the `PeriodStillHasWeeks` guard, so its only mutation
         // is `ordered_period_list.remove_at(position)`: the `week_map` entry and
@@ -2749,18 +2741,17 @@ pub(crate) mod tests {
         let mut data = InnerData::default();
         (data.params.periods, data.params.weeks) = test_periods(period, week, WeekDesc::default());
         data.params.periods.ordered_period_list.remove_at(0);
-        assert_dangling_maps(
+        assert_single_dangling_fk(
             &data,
             Reference::Period {
                 target: period,
                 site: PeriodRefSite::WeekPeriodFk(week),
             },
-            InnerDataError::Params(InvariantError::InvalidWeek),
         );
     }
 
     #[test]
-    fn dangling_period_in_pairing_rule_maps_to_legacy() {
+    fn dangling_period_in_pairing_rule_is_reported() {
         let mut data = InnerData::default();
         let subject_a = unsafe { SubjectId::new(1) };
         let subject_b = unsafe { SubjectId::new(2) };
@@ -2788,18 +2779,17 @@ pub(crate) mod tests {
             )
             .expect("distinct subjects"),
         );
-        assert_dangling_maps(
+        assert_single_dangling_fk(
             &data,
             Reference::Period {
                 target: period,
                 site: PeriodRefSite::PairingRuleExcludedPeriods(rule),
             },
-            InnerDataError::Params(InvariantError::InvalidPairingRule),
         );
     }
 
     #[test]
-    fn dangling_period_in_slot_pairing_rule_maps_to_legacy() {
+    fn dangling_period_in_slot_pairing_rule_is_reported() {
         let mut data = InnerData::default();
         let subject = unsafe { SubjectId::new(1) };
         let teacher = unsafe { TeacherId::new(2) };
@@ -2839,18 +2829,17 @@ pub(crate) mod tests {
             )
             .expect("distinct slots"),
         );
-        assert_dangling_maps(
+        assert_single_dangling_fk(
             &data,
             Reference::Period {
                 target: period,
                 site: PeriodRefSite::SlotPairingRuleExcludedPeriods(rule),
             },
-            InnerDataError::Params(InvariantError::InvalidSlotPairingRule),
         );
     }
 
     #[test]
-    fn dangling_period_in_association_maps_to_legacy() {
+    fn dangling_period_in_association_is_reported() {
         let mut data = InnerData::default();
         let subject = unsafe { SubjectId::new(1) };
         let group_list = unsafe { GroupListId::new(2) };
@@ -2864,20 +2853,17 @@ pub(crate) mod tests {
             .group_lists
             .subjects_associations
             .insert((period, subject), group_list);
-        assert_dangling_maps(
+        assert_single_dangling_fk(
             &data,
             Reference::Period {
                 target: period,
                 site: PeriodRefSite::AssociationEntry { subject },
             },
-            InnerDataError::Params(
-                InvariantError::WrongPeriodCountInSubjectAssociationsForGroupLists,
-            ),
         );
     }
 
     #[test]
-    fn dangling_period_in_assignments_key_maps_to_legacy() {
+    fn dangling_period_in_assignments_key_is_reported() {
         let mut data = InnerData::default();
         let subject = unsafe { SubjectId::new(1) };
         let student = unsafe { StudentId::new(2) };
@@ -2891,35 +2877,33 @@ pub(crate) mod tests {
             .assignments
             .map
             .insert((period, subject), BTreeSet::from([student]));
-        assert_dangling_maps(
+        assert_single_dangling_fk(
             &data,
             Reference::Period {
                 target: period,
                 site: PeriodRefSite::AssignmentsKey { subject },
             },
-            InnerDataError::Params(InvariantError::InvalidPeriodIdInAssignements),
         );
     }
 
     #[test]
-    fn dangling_week_in_interrogation_key_maps_to_legacy() {
+    fn dangling_week_in_interrogation_key_is_reported() {
         let mut fx = colloscope_fixture();
         let week = unsafe { WeekId::new(99) };
         fx.data
             .colloscope
             .set_interrogation(fx.slot, week, BTreeSet::from([0]));
-        assert_dangling_maps(
+        assert_single_dangling_fk(
             &fx.data,
             Reference::Week {
                 target: week,
                 site: WeekRefSite::ColloscopeInterrogation { slot: fx.slot },
             },
-            InnerDataError::ColloscopeError(ColloscopeError::InvalidWeekId(week)),
         );
     }
 
     #[test]
-    fn dangling_subject_in_incompat_maps_to_legacy() {
+    fn dangling_subject_in_incompat_is_reported() {
         let mut data = InnerData::default();
         let incompat = unsafe { IncompatId::new(1) };
         let subject = unsafe { SubjectId::new(2) };
@@ -2933,18 +2917,17 @@ pub(crate) mod tests {
                 week_pattern_id: None,
             },
         );
-        assert_dangling_maps(
+        assert_single_dangling_fk(
             &data,
             Reference::Subject {
                 target: subject,
                 site: SubjectRefSite::IncompatSubject(incompat),
             },
-            InnerDataError::Params(InvariantError::InvalidIncompat),
         );
     }
 
     #[test]
-    fn dangling_subject_in_pairing_antecedent_maps_to_legacy() {
+    fn dangling_subject_in_pairing_antecedent_is_reported() {
         let mut data = InnerData::default();
         let subject = unsafe { SubjectId::new(1) };
         let dangling = unsafe { SubjectId::new(2) };
@@ -2966,18 +2949,17 @@ pub(crate) mod tests {
             )
             .expect("distinct subjects"),
         );
-        assert_dangling_maps(
+        assert_single_dangling_fk(
             &data,
             Reference::Subject {
                 target: dangling,
                 site: SubjectRefSite::PairingRuleAntecedent(rule),
             },
-            InnerDataError::Params(InvariantError::InvalidPairingRule),
         );
     }
 
     #[test]
-    fn dangling_subject_in_pairing_consequent_maps_to_legacy() {
+    fn dangling_subject_in_pairing_consequent_is_reported() {
         let mut data = InnerData::default();
         let subject = unsafe { SubjectId::new(1) };
         let dangling = unsafe { SubjectId::new(2) };
@@ -2999,36 +2981,34 @@ pub(crate) mod tests {
             )
             .expect("distinct subjects"),
         );
-        assert_dangling_maps(
+        assert_single_dangling_fk(
             &data,
             Reference::Subject {
                 target: dangling,
                 site: SubjectRefSite::PairingRuleConsequent(rule),
             },
-            InnerDataError::Params(InvariantError::InvalidPairingRule),
         );
     }
 
     #[test]
-    fn dangling_subject_in_balancing_maps_to_legacy() {
+    fn dangling_subject_in_balancing_is_reported() {
         let mut data = InnerData::default();
         let subject = unsafe { SubjectId::new(1) };
         data.params
             .balancing
             .subjects
             .insert(subject, BalancingOptions::default());
-        assert_dangling_maps(
+        assert_single_dangling_fk(
             &data,
             Reference::Subject {
                 target: subject,
                 site: SubjectRefSite::BalancingSubjectKey,
             },
-            InnerDataError::Params(InvariantError::InvalidSubjectIdInBalancing),
         );
     }
 
     #[test]
-    fn dangling_subject_in_association_maps_to_legacy() {
+    fn dangling_subject_in_association_is_reported() {
         let mut data = InnerData::default();
         let period = unsafe { PeriodId::new(1) };
         let week = unsafe { WeekId::new(2) };
@@ -3043,18 +3023,17 @@ pub(crate) mod tests {
             .group_lists
             .subjects_associations
             .insert((period, subject), group_list);
-        assert_dangling_maps(
+        assert_single_dangling_fk(
             &data,
             Reference::Subject {
                 target: subject,
                 site: SubjectRefSite::AssociationEntry { period },
             },
-            InnerDataError::Params(InvariantError::InvalidSubjectIdInSubjectAssociations),
         );
     }
 
     #[test]
-    fn dangling_group_list_in_association_maps_to_legacy() {
+    fn dangling_group_list_in_association_is_reported() {
         let mut data = InnerData::default();
         let period = unsafe { PeriodId::new(1) };
         let week = unsafe { WeekId::new(2) };
@@ -3066,18 +3045,17 @@ pub(crate) mod tests {
             .group_lists
             .subjects_associations
             .insert((period, subject), group_list);
-        assert_dangling_maps(
+        assert_single_dangling_fk(
             &data,
             Reference::GroupList {
                 target: group_list,
                 site: GroupListRefSite::AssociationEntry { period, subject },
             },
-            InnerDataError::Params(InvariantError::InvalidGroupListIdInSubjectAssociations),
         );
     }
 
     #[test]
-    fn dangling_student_in_prefilled_group_maps_to_legacy() {
+    fn dangling_student_in_prefilled_group_is_reported() {
         let mut data = InnerData::default();
         let group_list = unsafe { GroupListId::new(1) };
         let student = unsafe { StudentId::new(2) };
@@ -3099,18 +3077,17 @@ pub(crate) mod tests {
             )
             .expect("consistent prefilled list (student existence is not checked here)"),
         );
-        assert_dangling_maps(
+        assert_single_dangling_fk(
             &data,
             Reference::Student {
                 target: student,
                 site: StudentRefSite::GroupListPrefilledStudent(group_list),
             },
-            InnerDataError::Params(InvariantError::InvalidGroupList),
         );
     }
 
     #[test]
-    fn dangling_student_in_excluded_set_maps_to_legacy() {
+    fn dangling_student_in_excluded_set_is_reported() {
         let mut data = InnerData::default();
         let group_list = unsafe { GroupListId::new(1) };
         let student = unsafe { StudentId::new(2) };
@@ -3127,18 +3104,17 @@ pub(crate) mod tests {
             )
             .expect("automatic filling is always consistent"),
         );
-        assert_dangling_maps(
+        assert_single_dangling_fk(
             &data,
             Reference::Student {
                 target: student,
                 site: StudentRefSite::GroupListExcludedStudent(group_list),
             },
-            InnerDataError::Params(InvariantError::InvalidGroupList),
         );
     }
 
     #[test]
-    fn dangling_student_in_assignments_cell_maps_to_legacy() {
+    fn dangling_student_in_assignments_cell_is_reported() {
         let mut data = InnerData::default();
         let period = unsafe { PeriodId::new(1) };
         let week = unsafe { WeekId::new(2) };
@@ -3150,18 +3126,17 @@ pub(crate) mod tests {
             .assignments
             .map
             .insert((period, subject), BTreeSet::from([student]));
-        assert_dangling_maps(
+        assert_single_dangling_fk(
             &data,
             Reference::Student {
                 target: student,
                 site: StudentRefSite::AssignmentsStudent { period, subject },
             },
-            InnerDataError::Params(InvariantError::InvalidStudentIdInAssignments),
         );
     }
 
     #[test]
-    fn dangling_student_in_colloscope_group_list_maps_to_legacy() {
+    fn dangling_student_in_colloscope_group_list_is_reported() {
         let mut data = InnerData::default();
         let group_list = unsafe { GroupListId::new(1) };
         let student = unsafe { StudentId::new(2) };
@@ -3171,18 +3146,17 @@ pub(crate) mod tests {
             .insert(group_list, automatic_group_list(2));
         data.colloscope
             .set_group_list(group_list, BTreeMap::from([(student, 0)]));
-        assert_dangling_maps(
+        assert_single_dangling_fk(
             &data,
             Reference::Student {
                 target: student,
                 site: StudentRefSite::ColloscopeGroupListStudent(group_list),
             },
-            InnerDataError::ColloscopeError(ColloscopeError::InvalidStudentId(student)),
         );
     }
 
     #[test]
-    fn dangling_week_pattern_in_incompat_maps_to_legacy() {
+    fn dangling_week_pattern_in_incompat_is_reported() {
         let mut data = InnerData::default();
         let incompat = unsafe { IncompatId::new(1) };
         let subject = unsafe { SubjectId::new(2) };
@@ -3198,31 +3172,26 @@ pub(crate) mod tests {
                 week_pattern_id: Some(pattern),
             },
         );
-        assert_dangling_maps(
+        assert_single_dangling_fk(
             &data,
             Reference::WeekPattern {
                 target: pattern,
                 site: WeekPatternRefSite::IncompatWeekPattern(incompat),
             },
-            InnerDataError::Params(InvariantError::InvalidIncompat),
         );
     }
 
     // ---- Stage 7: compound states ----
     //
-    // States with more than one corruption, pinning the differential contract's
-    // *lenient* branch (decision 8, requirement 2) and membership under
-    // multiplicity (requirement 3). Each asserts the exact new *and* old output,
-    // then runs `assert_differential` explicitly to document the branch taken.
+    // States with more than one corruption, pinning the checker's short-circuit
+    // precedence (layer-A logic errors beat fixable breaks) and exact multi-entry
+    // sets under multiplicity.
 
     #[test]
     fn compound_row_both_empty_and_not_running() {
-        // One assignments row that is *both* empty (a layer-A logic error) and on
-        // a subject that excludes the period (a convergence). The new checker
-        // short-circuits on the logic error; the old checker's subject-runs check
-        // (colloscope_params.rs:465) fires *before* its empty-row check (:469), so
-        // the old error is the (non-logic-classified) convergence image — the
-        // differential's lenient branch, verdicts still agreeing.
+        // One assignments row that is *both* empty (a layer-A logic error) and
+        // on a subject that excludes the period (a convergence). The checker
+        // short-circuits on the logic error.
         let mut data = InnerData::default();
         let period = unsafe { PeriodId::new(1) };
         let week = unsafe { WeekId::new(2) };
@@ -3250,22 +3219,14 @@ pub(crate) mod tests {
                 period, subject
             )]))
         );
-        assert_eq!(
-            data.check_invariants(),
-            Err(InnerDataError::Params(
-                InvariantError::AssignmentForSubjectNotRunningOnPeriod
-            ))
-        );
-        assert_differential(&data);
     }
 
     #[test]
-    fn compound_logic_error_with_earlier_fixable() {
+    fn compound_logic_error_with_unrelated_fixable() {
         // A two-corruption state: an empty assignments row (layer-A logic error)
-        // and, unrelated, a dangling subject in a teacher's `subjects`. The new
-        // checker short-circuits on the logic error; the old checker meets the
-        // dangle first (teachers are swept before assignments) and reports the
-        // non-logic-classified `InvalidTeacher` — again the lenient branch.
+        // and, unrelated, a dangling subject in a teacher's `subjects`. The
+        // checker short-circuits on the logic error and does not report the
+        // dangle alongside it.
         let mut data = InnerData::default();
         let teacher = unsafe { TeacherId::new(1) };
         let dangling_subject = unsafe { SubjectId::new(99) };
@@ -3288,20 +3249,13 @@ pub(crate) mod tests {
                 period, subject
             )]))
         );
-        assert_eq!(
-            data.check_invariants(),
-            Err(InnerDataError::Params(InvariantError::InvalidTeacher))
-        );
-        assert_differential(&data);
     }
 
     #[test]
     fn compound_duplicate_id_with_dangling_ref() {
         // A raw id shared by a student and a teacher (logic error) *plus* a
-        // dangling period in that student's exclusions. Both checkers prioritise
-        // the id collision (the old checker's duplicate-id gate runs before every
-        // helper; the new checker's layer A short-circuits), so the old error is
-        // logic-classified and membership must hold.
+        // dangling period in that student's exclusions. Layer A short-circuits
+        // on the id collision.
         let mut data = InnerData::default();
         let dangling_period = unsafe { PeriodId::new(50) };
         data.params.students.student_map.insert(
@@ -3319,17 +3273,12 @@ pub(crate) mod tests {
             broken_invariants(&data),
             Err(BTreeSet::from([LogicError::DuplicatedId(1)]))
         );
-        assert_eq!(data.check_invariants(), Err(InnerDataError::DuplicateIds));
-        assert_differential(&data);
     }
 
     #[test]
     fn compound_two_fixable_breaks() {
-        // Two independent dangling references — a teacher in a slot and a student
-        // in `settings` — so the new checker's `Ok` payload has two entries. The
-        // old checker reports the slots sweep first (`InvalidSlot`, before
-        // settings), which must be the legacy image of *one* of the two
-        // (requirement 3 membership with |F| > 1).
+        // Two independent dangling references — a teacher in a slot and a
+        // student in `settings` — so the `Ok` payload has two entries.
         let mut data = InnerData::default();
         let subject = unsafe { SubjectId::new(1) };
         let slot = unsafe { SlotId::new(2) };
@@ -3360,19 +3309,13 @@ pub(crate) mod tests {
                 }),
             ]))
         );
-        assert_eq!(
-            data.check_invariants(),
-            Err(InnerDataError::Params(InvariantError::InvalidSlot))
-        );
-        assert_differential(&data);
     }
 
     #[test]
     fn compound_convergence_with_dangling() {
-        // A clean fixture twisted into a day-overflowing slot (a convergence) with
-        // an added dangling student in `settings`. The new checker reports both,
-        // as `Ok`; the old checker stops at the slots sweep (`InvalidSlot`, before
-        // settings), the legacy image of the convergence entry.
+        // A clean fixture twisted into a day-overflowing slot (a convergence)
+        // with an added dangling student in `settings`. The checker reports
+        // both, as `Ok`.
         let mut fx = colloscope_fixture();
         let dangling_student = unsafe { StudentId::new(99) };
         // 23:30 + the default 60-minute interrogation crosses midnight.
@@ -3396,153 +3339,5 @@ pub(crate) mod tests {
                 FixableInvariant::Convergence(Convergence::SlotOverflowsDay(fx.slot)),
             ]))
         );
-        assert_eq!(
-            fx.data.check_invariants(),
-            Err(InnerDataError::Params(InvariantError::InvalidSlot))
-        );
-        assert_differential(&fx.data);
-    }
-
-    // ---- Stage 7: legacy bridge ----
-    //
-    // `to_legacy` and `is_necessarily_logic_error` are unit-checked here for
-    // classification and payload transport; the *operational* proof that each
-    // arm names the variant the old checker really emits first is the
-    // differential harness (`assert_differential`, wired through every fixture)
-    // plus the per-site coverage tests.
-
-    #[test]
-    fn is_necessarily_logic_error_classification() {
-        let slot = unsafe { SlotId::new(1) };
-        let week = unsafe { WeekId::new(2) };
-        let group_list = unsafe { GroupListId::new(3) };
-
-        // The six variants whose every cause is a tier-2 logic error.
-        for e in [
-            InnerDataError::DuplicateIds,
-            InnerDataError::Params(InvariantError::DuplicatedId),
-            InnerDataError::Params(InvariantError::EmptyAssignmentRow),
-            InnerDataError::Params(InvariantError::EmptySlotsRow),
-            InnerDataError::ColloscopeError(ColloscopeError::EmptyInterrogationRow(slot, week)),
-            InnerDataError::ColloscopeError(ColloscopeError::EmptyGroupListRow(group_list)),
-        ] {
-            assert!(e.is_necessarily_logic_error(), "{e:?} should classify true");
-        }
-
-        // The decision-8 coarse variants (a legitimate op could produce them),
-        // plus a couple of representative fixable images.
-        for e in [
-            InnerDataError::Params(InvariantError::InvalidPairingRule),
-            InnerDataError::Params(InvariantError::InvalidGroupList),
-            InnerDataError::Params(InvariantError::InvalidSlotPairingRule),
-            InnerDataError::Params(InvariantError::InvalidWeek),
-            InnerDataError::Params(InvariantError::InvalidSlot),
-            InnerDataError::ColloscopeError(ColloscopeError::InvalidWeekId(week)),
-        ] {
-            assert!(
-                !e.is_necessarily_logic_error(),
-                "{e:?} should classify false"
-            );
-        }
-    }
-
-    #[test]
-    fn to_legacy_payload_plumbing() {
-        let slot = unsafe { SlotId::new(1) };
-        let week = unsafe { WeekId::new(2) };
-        let group_list = unsafe { GroupListId::new(3) };
-        let student = unsafe { StudentId::new(4) };
-
-        // Logic errors that carry the payload straight through.
-        assert_eq!(
-            LogicError::EmptyInterrogationRow(slot, week).to_legacy(),
-            InnerDataError::ColloscopeError(ColloscopeError::EmptyInterrogationRow(slot, week)),
-        );
-        assert_eq!(
-            LogicError::EmptyColloscopeGroupListRow(group_list).to_legacy(),
-            InnerDataError::ColloscopeError(ColloscopeError::EmptyGroupListRow(group_list)),
-        );
-
-        // Dangling colloscope references: the *target* becomes the old error's
-        // payload (the site is dropped — the old checker keys on the target id).
-        assert_eq!(
-            FixableInvariant::DanglingFk(Reference::Week {
-                target: week,
-                site: WeekRefSite::ColloscopeInterrogation { slot },
-            })
-            .to_legacy(),
-            InnerDataError::ColloscopeError(ColloscopeError::InvalidWeekId(week)),
-        );
-        assert_eq!(
-            FixableInvariant::DanglingFk(Reference::Slot {
-                target: slot,
-                site: SlotRefSite::ColloscopeInterrogation { week },
-            })
-            .to_legacy(),
-            InnerDataError::ColloscopeError(ColloscopeError::InvalidSlotId(slot)),
-        );
-        assert_eq!(
-            FixableInvariant::DanglingFk(Reference::Student {
-                target: student,
-                site: StudentRefSite::ColloscopeGroupListStudent(group_list),
-            })
-            .to_legacy(),
-            InnerDataError::ColloscopeError(ColloscopeError::InvalidStudentId(student)),
-        );
-        assert_eq!(
-            FixableInvariant::DanglingFk(Reference::GroupList {
-                target: group_list,
-                site: GroupListRefSite::ColloscopeGroupListKey,
-            })
-            .to_legacy(),
-            InnerDataError::ColloscopeError(ColloscopeError::InvalidGroupListId(group_list)),
-        );
-
-        // The six payload-carrying convergence rows.
-        let convergence_cases = [
-            (
-                Convergence::InterrogationSlotNotRunningOnPeriod(slot, week),
-                InnerDataError::ColloscopeError(ColloscopeError::SlotNotRunningOnPeriod(
-                    slot, week,
-                )),
-            ),
-            (
-                Convergence::InterrogationOnInactiveWeek(slot, week),
-                InnerDataError::ColloscopeError(ColloscopeError::InterrogationOnInactiveWeek(
-                    slot, week,
-                )),
-            ),
-            (
-                Convergence::InterrogationGroupOutOfBounds(slot, week),
-                InnerDataError::ColloscopeError(ColloscopeError::InvalidGroupNumInInterrogation(
-                    slot, week,
-                )),
-            ),
-            (
-                Convergence::ColloscopeGroupListPrefilled(group_list),
-                InnerDataError::ColloscopeError(ColloscopeError::PrefilledGroupListInColloscope(
-                    group_list,
-                )),
-            ),
-            (
-                Convergence::ColloscopeStudentExcluded(group_list, student),
-                InnerDataError::ColloscopeError(ColloscopeError::ExcludedStudentInGroupList(
-                    group_list, student,
-                )),
-            ),
-            (
-                Convergence::ColloscopeStudentGroupOutOfBounds(group_list, student),
-                InnerDataError::ColloscopeError(
-                    ColloscopeError::InvalidGroupNumForStudentInGroupList(group_list, student),
-                ),
-            ),
-        ];
-        for (convergence, expected) in convergence_cases {
-            assert_eq!(
-                FixableInvariant::Convergence(convergence).to_legacy(),
-                expected,
-                "convergence {convergence:?} mapped wrong",
-            );
-        }
     }
 }

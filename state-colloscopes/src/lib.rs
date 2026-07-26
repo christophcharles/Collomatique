@@ -642,14 +642,14 @@ impl Data {
 
 #[cfg(test)]
 mod force_apply_tests {
-    //! Step-4 commit 2.2 pins for [Data::force_apply]: carve-out guards still
-    //! fire (leaving the state unchanged), stripped invariant guards let a
-    //! forced op land an *invalid* state that both checkers agree on, and a
-    //! forced *valid* op is byte-identical to the checked `apply` (the standing
-    //! anti-drift pin on the thin copies). The step-4 fuzz generalises these.
+    //! Step-4 commit 2.2 pins for [Data::force_apply], retargeted at step-5
+    //! R1.5: carve-out guards still fire (leaving the state unchanged),
+    //! stripped invariant guards let a forced op land an *invalid* state that
+    //! [InnerData::broken_invariants] reports, and a forced *valid* op is
+    //! byte-identical to the gated [Data::try_apply] (the standing anti-drift
+    //! pin on the thin copies). `tests/property_try_apply.rs` generalises these.
 
     use crate::ids::{Id, PeriodId, StudentId, SubjectId, WeekPatternId};
-    use crate::invariants::assert_differential;
     use crate::ops::{
         AnnotatedOp, AnnotatedPeriodOp, AnnotatedStudentOp, AnnotatedSubjectOp, AssignmentOp, Op,
         PeriodOp, StudentOp, SubjectOp, WeekOp,
@@ -658,15 +658,17 @@ mod force_apply_tests {
     use crate::subjects::Subject;
     use crate::week_patterns::WeekPattern;
     use crate::weeks::WeekDesc;
-    use crate::{Data, FixableInvariant, InnerData, PrecheckError, StudentPrecheckError};
+    use crate::{
+        Data, FixableInvariant, InnerData, LogicError, PrecheckError, StudentPrecheckError,
+    };
     use collomatique_state::InMemoryData;
     use std::collections::BTreeSet;
 
-    /// Applies a (valid) op through the checked path and returns its annotated
-    /// form, so callers can read back the freshly issued ids.
+    /// Applies a (valid) op through the gate and returns its annotated form,
+    /// so callers can read back the freshly issued ids.
     fn apply(data: &mut Data, op: Op) -> AnnotatedOp {
         let (annotated, _) = data.annotate(op);
-        data.apply(&annotated).expect("valid op should apply");
+        data.try_apply(&annotated).expect("valid op should apply");
         annotated
     }
 
@@ -700,8 +702,9 @@ mod force_apply_tests {
     #[test]
     fn force_remove_referenced_student_lands_a_dangling_fk() {
         let (mut data, _period, _subject, student) = data_with_assignment();
-        assert!(
-            data.get_inner_data().check_invariants().is_ok(),
+        assert_eq!(
+            data.get_inner_data().broken_invariants(),
+            Ok(BTreeSet::new()),
             "the built state is valid"
         );
 
@@ -712,17 +715,11 @@ mod force_apply_tests {
         data.force_apply(&remove)
             .expect("forced remove of a live student succeeds (scans stripped)");
 
-        // Both checkers must see the now-dangling reference, and the three-part
-        // differential must agree on it.
-        assert_differential(data.get_inner_data());
+        // The checker must see the now-dangling reference.
         let broken = data.get_inner_data().broken_invariants();
         assert!(
             matches!(&broken, Ok(set) if set.iter().any(|f| matches!(f, FixableInvariant::DanglingFk(_)))),
             "expected a dangling-FK report, got {broken:?}"
-        );
-        assert!(
-            data.get_inner_data().check_invariants().is_err(),
-            "the old checker must also reject the dangling state"
         );
     }
 
@@ -770,8 +767,8 @@ mod force_apply_tests {
         let mut data = Data::default();
 
         // A corrupt inner: a student and a week pattern sharing the same raw id
-        // — a duplicated-id LogicError that `apply`'s GlobalUpdate pre-gate would
-        // reject. `force_apply` drops that gate, so the corrupt state lands.
+        // — a duplicated-id LogicError that the try_apply gate rejects and rolls
+        // back. `force_apply` has no gate, so the corrupt state lands.
         let mut corrupt = InnerData::default();
         let student = unsafe { StudentId::new(1) };
         let pattern = unsafe { WeekPatternId::new(1) };
@@ -792,29 +789,29 @@ mod force_apply_tests {
         data.force_apply(&op)
             .expect("forced GlobalUpdate is infallible (no pre-gate)");
 
-        assert!(
-            data.get_inner_data().check_invariants().is_err(),
-            "the duplicated-id state is invalid"
+        assert_eq!(
+            data.get_inner_data().broken_invariants(),
+            Err(BTreeSet::from([LogicError::DuplicatedId(1)])),
+            "the duplicated-id state is logically impossible"
         );
-        assert_differential(data.get_inner_data());
     }
 
     #[test]
-    fn forced_valid_student_add_equals_checked_apply() {
+    fn forced_valid_student_add_equals_try_apply() {
         let data = Data::default();
         let (add, _) = data.annotate(Op::Student(StudentOp::Add(Student::default())));
 
-        let mut checked = data.clone();
+        let mut gated = data.clone();
         let mut forced = data.clone();
-        let checked_rev = checked.apply(&add).expect("valid op");
+        let gated_rev = gated.try_apply(&add).expect("valid op");
         let forced_rev = forced.force_apply(&add).expect("valid op");
 
-        assert_eq!(checked.get_inner_data(), forced.get_inner_data());
-        assert_eq!(checked_rev, forced_rev);
+        assert_eq!(gated.get_inner_data(), forced.get_inner_data());
+        assert_eq!(gated_rev, forced_rev);
     }
 
     #[test]
-    fn forced_valid_week_add_equals_checked_apply() {
+    fn forced_valid_week_add_equals_try_apply() {
         // Weeks exercise the copied helpers (`force_add_week` &c.), the highest
         // drift-risk spot (F2). Build a period, then compare the two paths on a
         // week AddFront.
@@ -825,13 +822,13 @@ mod force_apply_tests {
         };
 
         let (add_week, _) = data.annotate(Op::Week(WeekOp::AddFront(period, WeekDesc::default())));
-        let mut checked = data.clone();
+        let mut gated = data.clone();
         let mut forced = data.clone();
-        let checked_rev = checked.apply(&add_week).expect("valid op");
+        let gated_rev = gated.try_apply(&add_week).expect("valid op");
         let forced_rev = forced.force_apply(&add_week).expect("valid op");
 
-        assert_eq!(checked.get_inner_data(), forced.get_inner_data());
-        assert_eq!(checked_rev, forced_rev);
+        assert_eq!(gated.get_inner_data(), forced.get_inner_data());
+        assert_eq!(gated_rev, forced_rev);
     }
 }
 
@@ -854,11 +851,11 @@ mod try_apply_tests {
     use collomatique_state::InMemoryData;
     use std::collections::BTreeSet;
 
-    /// Applies a (valid) op through the checked path and returns its annotated
-    /// form, so callers can read back the freshly issued ids.
+    /// Applies a (valid) op through the gate and returns its annotated form,
+    /// so callers can read back the freshly issued ids.
     fn apply(data: &mut Data, op: Op) -> AnnotatedOp {
         let (annotated, _) = data.annotate(op);
-        data.apply(&annotated).expect("valid op should apply");
+        data.try_apply(&annotated).expect("valid op should apply");
         annotated
     }
 

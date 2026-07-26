@@ -556,10 +556,11 @@ impl crate::Data {
 mod tests {
     use super::*;
     use crate::ids::Id;
-    use crate::{InnerData, InnerDataError};
+    use crate::refs::{Reference, SlotRefSite, WeekRefSite};
+    use crate::{FixableInvariant, InnerData, LogicError};
 
     /// Stage-6 backfill: a stored empty interrogation row — unreachable through
-    /// any public path — is rejected by the old checker.
+    /// any public path — is a tier-2 logic error.
     #[test]
     fn empty_interrogation_row_rejected() {
         let mut data = InnerData::default();
@@ -568,15 +569,15 @@ mod tests {
         data.colloscope
             .forge_interrogation_row(slot, week, BTreeSet::new());
         assert_eq!(
-            data.check_invariants(),
-            Err(InnerDataError::ColloscopeError(
-                ColloscopeError::EmptyInterrogationRow(slot, week)
-            ))
+            data.broken_invariants(),
+            Err(BTreeSet::from([LogicError::EmptyInterrogationRow(
+                slot, week
+            )]))
         );
-        crate::invariants::assert_differential(&data);
     }
 
-    /// Stage-6 backfill: a stored empty group-list row is likewise rejected.
+    /// Stage-6 backfill: a stored empty group-list row is likewise a tier-2
+    /// logic error.
     #[test]
     fn empty_group_list_row_rejected() {
         let mut data = InnerData::default();
@@ -584,16 +585,16 @@ mod tests {
         data.colloscope
             .forge_group_list_row(group_list, BTreeMap::new());
         assert_eq!(
-            data.check_invariants(),
-            Err(InnerDataError::ColloscopeError(
-                ColloscopeError::EmptyGroupListRow(group_list)
-            ))
+            data.broken_invariants(),
+            Err(BTreeSet::from([LogicError::EmptyColloscopeGroupListRow(
+                group_list
+            )]))
         );
-        crate::invariants::assert_differential(&data);
     }
 
-    /// Precedence: emptiness fires before id resolution, but a non-empty row
-    /// with dangling coordinates still reports the dangling id.
+    /// A non-empty forged row with dangling coordinates reports *both* dangling
+    /// ids — and nothing else: the convergence checks on the cell all skip when
+    /// the slot or week fails to resolve.
     #[test]
     fn non_empty_forged_row_reports_dangling_ids() {
         let mut data = InnerData::default();
@@ -602,11 +603,17 @@ mod tests {
         data.colloscope
             .forge_interrogation_row(slot, week, BTreeSet::from([0]));
         assert_eq!(
-            data.check_invariants(),
-            Err(InnerDataError::ColloscopeError(
-                ColloscopeError::InvalidWeekId(week)
-            ))
+            data.broken_invariants(),
+            Ok(BTreeSet::from([
+                FixableInvariant::DanglingFk(Reference::Week {
+                    target: week,
+                    site: WeekRefSite::ColloscopeInterrogation { slot },
+                }),
+                FixableInvariant::DanglingFk(Reference::Slot {
+                    target: slot,
+                    site: SlotRefSite::ColloscopeInterrogation { week },
+                }),
+            ]))
         );
-        crate::invariants::assert_differential(&data);
     }
 }
