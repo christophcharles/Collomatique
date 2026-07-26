@@ -1,13 +1,22 @@
 //! Property tests over generated elementary-op sequences
 //!
-//! Phase 0 of the state consolidation plan (docs/state_consolidation_plan.md §3):
-//! a deterministic, seed-driven safety net exercising `Data::apply` (which
-//! computes and returns the reverse of every op) and the undo/redo
-//! machinery, using the explicit `InnerData::check_invariants` oracle
-//! (which stays valid once Phase 2 demotes the internal panicking check).
+//! A deterministic, seed-driven safety net exercising the apply/check/rollback
+//! gate (`Manager::try_apply`, which computes and returns the reverse of every
+//! op) and the undo/redo machinery. The invariant oracle is the whole-model
+//! checker `InnerData::broken_invariants`: after every successful op it must
+//! report a fully clean document (`Ok(BTreeSet::new())` — no logic errors, no
+//! dangling references, no convergence breaks).
+//!
+//! This file absorbs the former `property_ops_broken_invariants.rs` twin
+//! (deleted in the step-5 R1 deactivation commit): once the walk drives
+//! `try_apply` and asserts `broken_invariants` cleanliness op-by-op, the twin's
+//! sole job — running the new oracle over the same trajectories — is covered
+//! here, so the two harnesses became one.
 //!
 //! On failure, the seed and the full op log are printed: re-running the
 //! same test binary reproduces the exact same sequence.
+
+use std::collections::BTreeSet;
 
 use collomatique_testgen_colloscopes::rand::Rng;
 use collomatique_testgen_colloscopes::{generator, harness};
@@ -29,7 +38,18 @@ const CONFIG: RunConfig = RunConfig {
     invalid_fraction: 0.15,
 };
 
-/// Generates one op, applies it on any manager, records the outcome
+/// The invariant oracle: the whole-model checker must report a fully clean
+/// document (no logic errors, no dangling references, no convergence breaks)
+/// after every successful op.
+fn assert_clean(inner: &InnerData) {
+    assert_eq!(
+        inner.broken_invariants(),
+        Ok(BTreeSet::new()),
+        "the new checker must report a clean document here",
+    );
+}
+
+/// Generates one op, applies it on any manager through the gate, records the outcome
 macro_rules! gen_and_apply {
     ($manager:expr, $rng:expr, $log:expr, $stats:expr, $snapshots:expr) => {{
         let (category, op) = generator::gen_op(
@@ -39,14 +59,18 @@ macro_rules! gen_and_apply {
             CONFIG.invalid_fraction,
         );
         $log.push(category, &op);
-        let ok = $manager.apply(op, category.to_string()).is_ok();
+        let ok = $manager.try_apply(op, category.to_string()).is_ok();
         $stats.record(category, ok);
+        if ok {
+            assert_clean($manager.get_data().get_inner_data());
+        }
         ok
     }};
 }
 
-/// Property 1: after every successful op the explicit invariants hold,
-/// and every failed op leaves the state exactly unchanged (error atomicity).
+/// Property 1: after every successful op the new checker reports a clean
+/// document, and every failed op leaves the state exactly unchanged (error
+/// atomicity).
 #[test]
 fn invariants_hold_and_errors_are_atomic() {
     harness::for_each_seed(
@@ -54,6 +78,7 @@ fn invariants_hold_and_errors_are_atomic() {
         &CONFIG,
         |rng, log, stats| {
             let (mut state, _) = harness::bootstrap(rng);
+            assert_clean(state.get_data().get_inner_data());
             let mut snapshots: Vec<InnerData> = vec![state.get_data().get_inner_data().clone()];
 
             for _ in 0..CONFIG.ops_per_run {
@@ -66,14 +91,10 @@ fn invariants_hold_and_errors_are_atomic() {
                 log.push(category, &op);
                 let before = state.get_data().get_inner_data().clone();
 
-                match state.apply(op, category.to_string()) {
+                match state.try_apply(op, category.to_string()) {
                     Ok(_) => {
                         stats.record(category, true);
-                        state
-                            .get_data()
-                            .get_inner_data()
-                            .check_invariants()
-                            .expect("invariants must hold after a successful op");
+                        assert_clean(state.get_data().get_inner_data());
                         if snapshots.len() < 8 && rng.random_bool(0.02) {
                             snapshots.push(state.get_data().get_inner_data().clone());
                         }
@@ -101,6 +122,7 @@ fn undo_all_and_redo_all_round_trip() {
         &CONFIG,
         |rng, log, stats| {
             let (mut state, mut snapshots) = harness::bootstrap(rng);
+            assert_clean(state.get_data().get_inner_data());
             let mut inner_snapshots: Vec<InnerData> = vec![];
 
             for _ in 0..CONFIG.ops_per_run {
@@ -142,6 +164,7 @@ fn undo_all_and_redo_all_round_trip() {
 fn random_undo_redo_apply_walk() {
     harness::for_each_seed("random_undo_redo_apply_walk", &CONFIG, |rng, log, stats| {
         let (mut state, mut snapshots) = harness::bootstrap(rng);
+        assert_clean(state.get_data().get_inner_data());
         let mut pos = snapshots.len() - 1;
         let mut inner_snapshots: Vec<InnerData> = vec![];
 
@@ -178,9 +201,9 @@ fn random_undo_redo_apply_walk() {
 }
 
 /// Property 4: for every op that applies successfully, applying the
-/// reverse computed and returned by `apply` restores the state exactly.
-/// This drives `InMemoryData` directly (in the same annotate → apply
-/// order as `Manager::apply`) and targets the large `apply_*` family.
+/// reverse computed and returned by `try_apply` restores the state exactly.
+/// This drives `InMemoryData` directly (in the same annotate → try_apply
+/// order as `Manager::try_apply`) and targets the gate on the accepted path.
 #[test]
 fn apply_then_apply_rev_is_identity() {
     use collomatique_state::InMemoryData;
@@ -191,6 +214,7 @@ fn apply_then_apply_rev_is_identity() {
         |rng, log, stats| {
             let (state, _) = harness::bootstrap(rng);
             let mut data: Data = state.get_data().clone();
+            assert_clean(data.get_inner_data());
             let mut inner_snapshots: Vec<InnerData> = vec![];
 
             for _ in 0..CONFIG.ops_per_run {
@@ -205,7 +229,7 @@ fn apply_then_apply_rev_is_identity() {
                 let (annotated, _new_id) = data.annotate(op);
                 let before = data.clone();
 
-                let rev = match data.apply(&annotated) {
+                let rev = match data.try_apply(&annotated) {
                     Ok(rev) => rev,
                     Err(_) => {
                         stats.record(category, false);
@@ -217,8 +241,9 @@ fn apply_then_apply_rev_is_identity() {
                     }
                 };
                 stats.record(category, true);
+                assert_clean(data.get_inner_data());
 
-                data.apply(&rev)
+                data.try_apply(&rev)
                     .expect("the reverse of a successfully applied op must apply");
                 assert!(
                     data == before,
@@ -227,7 +252,7 @@ fn apply_then_apply_rev_is_identity() {
 
                 // Advance: the op is known to apply from this state
                 let rev2 = data
-                    .apply(&annotated)
+                    .try_apply(&annotated)
                     .expect("an op that applied once must apply again after its reverse");
                 assert_eq!(
                     rev2, rev,
@@ -253,6 +278,7 @@ fn sessions_commit_and_cancel_randomly() {
         &CONFIG,
         |rng, log, stats| {
             let (mut state, _) = harness::bootstrap(rng);
+            assert_clean(state.get_data().get_inner_data());
             let mut inner_snapshots: Vec<InnerData> = vec![];
             let mut ops_done = 0usize;
 

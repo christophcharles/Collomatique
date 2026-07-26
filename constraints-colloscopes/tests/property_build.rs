@@ -13,6 +13,8 @@
 //! On failure the harness prints the seed and the full op log, so re-running
 //! the binary reproduces the exact walk.
 
+use std::collections::BTreeSet;
+
 use collomatique_testgen_colloscopes::rand::Rng;
 use collomatique_testgen_colloscopes::{ChaCha8Rng, generator, harness};
 
@@ -142,9 +144,11 @@ fn model_builds_never_panic_along_random_walks() {
                         // Re-check the state invariants so a corrupt-state build
                         // failure is attributed to the state layer, not blamed
                         // on the builder. Trivially cheap next to a build.
-                        inner
-                            .check_invariants()
-                            .expect("invariants must hold after a successful op");
+                        assert_eq!(
+                            inner.broken_invariants(),
+                            Ok(BTreeSet::new()),
+                            "invariants must hold after a successful op",
+                        );
                         if snapshots.len() < 8 && rng.random_bool(0.02) {
                             snapshots.push(inner.clone());
                         }
