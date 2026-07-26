@@ -135,7 +135,7 @@ fn walk_covers_every_site_in_order() {
 
     macro_rules! apply_new {
         ($op:expr, $variant:path, $msg:expr) => {{
-            let Ok(Some($variant(id))) = app.apply($op, $msg.into()) else {
+            let Ok(Some($variant(id))) = app.try_apply($op, $msg.into()) else {
                 panic!(concat!("unexpected result: ", $msg));
             };
             id
@@ -143,7 +143,7 @@ fn walk_covers_every_site_in_order() {
     }
     macro_rules! apply_none {
         ($op:expr, $msg:expr) => {{
-            let Ok(None) = app.apply($op, $msg.into()) else {
+            let Ok(None) = app.try_apply($op, $msg.into()) else {
                 panic!(concat!("unexpected result: ", $msg));
             };
         }};

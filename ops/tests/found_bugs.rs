@@ -31,7 +31,7 @@ fn desc(text: &str) -> Desc {
 /// Creates a front period with `weeks` trivially-active weeks, spliced in one
 /// at a time via the `WeekOp` family — periods are created empty.
 fn add_active_period(app: &mut AppState<Data, Desc>, weeks: usize) -> PeriodId {
-    let period = match app.apply(Op::Period(PeriodOp::AddFront), desc("Add period")) {
+    let period = match app.try_apply(Op::Period(PeriodOp::AddFront), desc("Add period")) {
         Ok(Some(NewId::PeriodId(id))) => id,
         other => panic!("adding a period should return a period id, got {other:?}"),
     };
@@ -41,7 +41,7 @@ fn add_active_period(app: &mut AppState<Data, Desc>, weeks: usize) -> PeriodId {
             None => WeekOp::AddFront(period, WeekDesc::new(true)),
             Some(w) => WeekOp::AddAfter(w, WeekDesc::new(true)),
         };
-        match app.apply(Op::Week(op), desc("Add week")) {
+        match app.try_apply(Op::Week(op), desc("Add week")) {
             Ok(Some(NewId::WeekId(w))) => prev = Some(w),
             other => panic!("adding a week should return a week id, got {other:?}"),
         }
@@ -67,7 +67,7 @@ fn shrinking_a_period_cleans_colloscope_on_removed_weeks() {
     // put a non-empty interrogation on the third (doomed) week.
     let period_id = add_active_period(&mut app_state, 3);
 
-    let Ok(Some(NewId::SubjectId(subject_id))) = app_state.apply(
+    let Ok(Some(NewId::SubjectId(subject_id))) = app_state.try_apply(
         Op::Subject(SubjectOp::AddAfter(
             None,
             Subject {
@@ -97,7 +97,7 @@ fn shrinking_a_period_cleans_colloscope_on_removed_weeks() {
         panic!("Unexpected result after adding the subject");
     };
 
-    let Ok(Some(NewId::TeacherId(teacher_id))) = app_state.apply(
+    let Ok(Some(NewId::TeacherId(teacher_id))) = app_state.try_apply(
         Op::Teacher(TeacherOp::Add(Teacher {
             desc: Default::default(),
             subjects: BTreeSet::from([subject_id]),
@@ -107,7 +107,7 @@ fn shrinking_a_period_cleans_colloscope_on_removed_weeks() {
         panic!("Unexpected result after adding the teacher");
     };
 
-    let Ok(Some(NewId::SlotId(slot_id))) = app_state.apply(
+    let Ok(Some(NewId::SlotId(slot_id))) = app_state.try_apply(
         Op::Slot(SlotOp::AddAfter(
             None,
             Slot {
@@ -132,7 +132,7 @@ fn shrinking_a_period_cleans_colloscope_on_removed_weeks() {
 
     // A group list associated with the subject so that group number 0 is
     // a valid assignment in an interrogation.
-    let Ok(Some(NewId::GroupListId(group_list_id))) = app_state.apply(
+    let Ok(Some(NewId::GroupListId(group_list_id))) = app_state.try_apply(
         Op::GroupList(GroupListOp::Add(
             GroupList::new(GroupListParameters::default(), GroupListFilling::default()).unwrap(),
         )),
@@ -140,7 +140,7 @@ fn shrinking_a_period_cleans_colloscope_on_removed_weeks() {
     ) else {
         panic!("Unexpected result after adding the group list");
     };
-    let Ok(None) = app_state.apply(
+    let Ok(None) = app_state.try_apply(
         Op::GroupList(GroupListOp::AssignToSubject(
             period_id,
             subject_id,
@@ -160,7 +160,7 @@ fn shrinking_a_period_cleans_colloscope_on_removed_weeks() {
         .weeks
         .week_id_at(period_id, 2)
         .expect("period has a third week");
-    let Ok(None) = app_state.apply(
+    let Ok(None) = app_state.try_apply(
         Op::Colloscope(ColloscopeOp::SetInterrogation(
             slot_id,
             week2,
@@ -252,7 +252,7 @@ fn removing_interrogations_from_zero_slot_subject_does_not_panic() {
     let period_id = add_active_period(&mut app_state, 2);
     let _ = period_id;
 
-    let Ok(Some(NewId::SubjectId(subject_id))) = app_state.apply(
+    let Ok(Some(NewId::SubjectId(subject_id))) = app_state.try_apply(
         Op::Subject(SubjectOp::AddAfter(
             None,
             Subject {
@@ -287,7 +287,7 @@ fn excluding_zero_slot_subject_from_period_does_not_panic() {
 
     let period_id = add_active_period(&mut app_state, 2);
 
-    let Ok(Some(NewId::SubjectId(subject_id))) = app_state.apply(
+    let Ok(Some(NewId::SubjectId(subject_id))) = app_state.try_apply(
         Op::Subject(SubjectOp::AddAfter(
             None,
             Subject {

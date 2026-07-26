@@ -112,7 +112,7 @@ struct Built {
 fn build_document(app: &mut AppState<Data, String>) -> Built {
     macro_rules! apply_new {
         ($op:expr, $variant:path, $msg:expr) => {{
-            let Ok(Some($variant(id))) = app.apply($op, $msg.into()) else {
+            let Ok(Some($variant(id))) = app.try_apply($op, $msg.into()) else {
                 panic!(concat!("unexpected result: ", $msg));
             };
             id
@@ -120,7 +120,7 @@ fn build_document(app: &mut AppState<Data, String>) -> Built {
     }
     macro_rules! apply_ok {
         ($op:expr, $msg:expr) => {{
-            app.apply($op, $msg.into()).expect($msg);
+            app.try_apply($op, $msg.into()).expect($msg);
         }};
     }
 

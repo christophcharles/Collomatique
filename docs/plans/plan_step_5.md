@@ -225,6 +225,7 @@ The **canary test** (§6) re-verifies this whole contract continuously, op-by-op
 | R1 | Deactivate: property harness oracles switch; canary + old-fuzz deleted; old API caller-free (replay path already moved in 3.0) | state, state-colloscopes, constraints-colloscopes |
 | — | **Testing pause** (user-run: full suite once to scratchpad, 500-seed crank, smoke, contract scripts) | |
 | R1.5 | Retire the old-checker test scaffolding (invariants fixtures, colloscopes.rs stage-6, lib.rs force_apply_tests) — deferred out of commit 5, see `plan_step_5_commit_5.md` §6 | state-colloscopes |
+| R1.6 | Migrate the remaining scaffold `apply` callers onto `try_apply` (gap: the parent sweep tracked only the error vocabulary, not the happy-path scaffolds) | testgen-colloscopes, state-colloscopes (tests), ops (tests), storage (tests), state, constraints-colloscopes (tests) |
 | R2 | Remove: checked `apply_*`, old `Error` + per-domain enums, old checkers, legacy bridge, old trait members | state, state-colloscopes |
 | — | **Testing pause** | |
 | R3 | Mechanical rename: `try_apply` → `apply`, `ApplyError` → `Error` everywhere | workspace |
@@ -611,7 +612,20 @@ Deferred out of commit 5 (ruling of Jul 25 2026: the test-migration commits do n
 2. `colloscopes.rs` :571-610: the three stage-6 corruption tests become new-checker asserts on the same forged states (`Err({EmptyInterrogationRow})`, `Err({EmptyColloscopeGroupListRow})`, and the forged-row test asserts the exact two-entry `DanglingFk` set); the `assert_differential` calls are dropped.
 3. `lib.rs` force_apply_tests (:538-731): drop the old-checker asserts and `assert_differential` calls; the two `forced_valid_*_equals_checked_apply` anti-drift pins retarget as `try_apply` happy-path pins (valid op through `try_apply` equals `force_apply`-on-a-twin in state and reverse) — after R3 they read naturally as `apply` happy-path tests.
 
-R1.5 gets its own detailed snippet-level pass when reached (line anchors above are against `aaceda78`).
+R1.5 got its own detailed snippet-level pass in `plan_step_5_r1_5.md` (against tree `cb13427d`); landed as `6c33375d`.
+
+### R1.6 — migrate the remaining scaffold `apply` callers
+
+A gap discovered while planning R1.5 (detailed in `plan_step_5_r1_5.md` §6): R2 deletes `Manager::apply` and `InMemoryData::apply` themselves, but the parent-plan sweep only tracked the dying *error vocabulary*, so it missed the happy-path scaffolds that call old `apply` purely to build state (`Ok` expected, panic otherwise). These are pure method swaps — no assert rewrites — and without them R2 does not compile. R1.6 migrates every such caller onto `try_apply`:
+
+- `testgen-colloscopes/src/harness.rs` — `bootstrap`'s internal closure (the shared dev-dependency of every property harness) and its doc comment.
+- `state-colloscopes/tests/` — the scaffold macros in `read_api.rs`, `colloscope_surface.rs`, `refs_registry.rs`.
+- `ops/tests/` — the `Manager::apply` scaffold calls in `general_planning_content.rs` and `found_bugs.rs` (the ops-layer `UpdateOp::apply(&mut app_state)` calls, distinguished by their `(&mut app_state)` argument, are the frozen surface and stay untouched).
+- `storage/tests/populated_round_trip.rs` + `populated_round_trip/builder.rs` — the post-reload id-issuer probe and the `build_rich_data` helper.
+- `state/src/state.rs` and `state/src/traits.rs` test modules — the `FakeData`-driven history/undo/redo scaffolds (the two coexistence twin tests `apply_changes_data_and_stores_history` / `apply_failing_leaves_state_untouched` stay on old `apply` — they die with the API in R2).
+- `constraints-colloscopes/tests/property_build.rs` — the walk's commit call (R1 swapped only its `broken_invariants` oracle, leaving the `apply` call as a leftover this commit clears).
+
+The two `constraints-colloscopes` and `state/src/traits.rs` non-twin sites were not in the `plan_step_5_r1_5.md` §6 enumeration but are the same class of leftover; migrating them here keeps R2's "old API caller-free" precondition genuinely true. Landed as R1.6.
 
 ### R2 — remove
 

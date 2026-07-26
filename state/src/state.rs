@@ -185,9 +185,9 @@ mod tests {
             AppState::<_, &'static str>::with_max_history_size(FakeData::new(0), Some(2));
         assert_eq!(state.get_max_history_size(), Some(2));
 
-        state.apply(set(0, 1), "set to 1").expect("valid op");
-        state.apply(set(1, 2), "set to 2").expect("valid op");
-        state.apply(set(2, 3), "set to 3").expect("valid op");
+        state.try_apply(set(0, 1), "set to 1").expect("valid op");
+        state.try_apply(set(1, 2), "set to 2").expect("valid op");
+        state.try_apply(set(2, 3), "set to 3").expect("valid op");
 
         // Oldest op was forgotten: only two undos are possible
         state.undo().expect("one op to undo");
@@ -199,9 +199,9 @@ mod tests {
     #[test]
     fn set_max_history_size_shrinks_existing_history() {
         let mut state = new_state(0);
-        state.apply(set(0, 1), "set to 1").expect("valid op");
-        state.apply(set(1, 2), "set to 2").expect("valid op");
-        state.apply(set(2, 3), "set to 3").expect("valid op");
+        state.try_apply(set(0, 1), "set to 1").expect("valid op");
+        state.try_apply(set(1, 2), "set to 2").expect("valid op");
+        state.try_apply(set(2, 3), "set to 3").expect("valid op");
 
         state.set_max_history_size(Some(1));
 
@@ -213,11 +213,11 @@ mod tests {
     #[test]
     fn session_cancel_restores_state_and_leaves_parent_history_untouched() {
         let mut state = new_state(0);
-        state.apply(set(0, 1), "set to 1").expect("valid op");
+        state.try_apply(set(0, 1), "set to 1").expect("valid op");
 
         let mut session = AppSession::<_, &'static str>::new(state);
-        session.apply(set(1, 2), "set to 2").expect("valid op");
-        session.apply(set(2, 3), "set to 3").expect("valid op");
+        session.try_apply(set(1, 2), "set to 2").expect("valid op");
+        session.try_apply(set(2, 3), "set to 3").expect("valid op");
 
         let state = session.cancel();
 
@@ -229,12 +229,12 @@ mod tests {
     #[test]
     fn session_commit_is_a_single_atomic_parent_slot() {
         let mut state = new_state(0);
-        state.apply(set(0, 1), "set to 1").expect("valid op");
+        state.try_apply(set(0, 1), "set to 1").expect("valid op");
 
         let mut session = AppSession::<_, &'static str>::new(state);
-        session.apply(set(1, 2), "set to 2").expect("valid op");
-        session.apply(set(2, 3), "set to 3").expect("valid op");
-        session.apply(set(3, 4), "set to 4").expect("valid op");
+        session.try_apply(set(1, 2), "set to 2").expect("valid op");
+        session.try_apply(set(2, 3), "set to 3").expect("valid op");
+        session.try_apply(set(3, 4), "set to 4").expect("valid op");
 
         let mut state = session.commit("batch");
 
@@ -255,8 +255,8 @@ mod tests {
         let state = new_state(0);
 
         let mut session = AppSession::<_, &'static str>::new(state);
-        session.apply(set(0, 1), "set to 1").expect("valid op");
-        session.apply(set(1, 2), "set to 2").expect("valid op");
+        session.try_apply(set(0, 1), "set to 1").expect("valid op");
+        session.try_apply(set(1, 2), "set to 2").expect("valid op");
         session.undo().expect("one op to undo");
 
         let mut state = session.commit("batch");
@@ -287,10 +287,10 @@ mod tests {
         let state = new_state(0);
 
         let mut outer = AppSession::<_, &'static str>::new(state);
-        outer.apply(set(0, 1), "set to 1").expect("valid op");
+        outer.try_apply(set(0, 1), "set to 1").expect("valid op");
 
         let mut inner = AppSession::<_, &'static str>::new(outer);
-        inner.apply(set(1, 2), "set to 2").expect("valid op");
+        inner.try_apply(set(1, 2), "set to 2").expect("valid op");
 
         let outer = inner.commit("inner batch");
         assert_eq!(outer.get_data().value, 2);
@@ -305,10 +305,10 @@ mod tests {
         let state = new_state(0);
 
         let mut outer = AppSession::<_, &'static str>::new(state);
-        outer.apply(set(0, 1), "set to 1").expect("valid op");
+        outer.try_apply(set(0, 1), "set to 1").expect("valid op");
 
         let mut inner = AppSession::<_, &'static str>::new(outer);
-        inner.apply(set(1, 2), "set to 2").expect("valid op");
+        inner.try_apply(set(1, 2), "set to 2").expect("valid op");
 
         let outer = inner.commit("inner batch");
         let mut state = outer.commit("outer batch");

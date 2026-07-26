@@ -127,7 +127,7 @@ pub fn for_each_seed(
     );
 }
 
-/// Builds a small but non-degenerate document through the checked op path
+/// Builds a small but non-degenerate document through the gated op path
 ///
 /// Returns the state and one [Data] snapshot per history position
 /// (starting with the empty document), so undo/redo walks can compare
@@ -144,7 +144,7 @@ pub fn bootstrap(rng: &mut ChaCha8Rng) -> (AppState<Data, String>, Vec<Data>) {
                  desc: &str|
      -> Option<NewId> {
         let new_id = state
-            .apply(op, desc.to_string())
+            .try_apply(op, desc.to_string())
             .unwrap_or_else(|e| panic!("bootstrap op `{desc}` failed: {e}"));
         snapshots.push(state.get_data().clone());
         new_id

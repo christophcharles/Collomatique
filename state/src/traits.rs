@@ -496,10 +496,10 @@ mod tests {
     fn undo_restores_previous_state_and_redo_reapplies() {
         let mut state = new_state(0);
         state
-            .apply(FakeOp::Set { old: 0, new: 1 }, "set to 1")
+            .try_apply(FakeOp::Set { old: 0, new: 1 }, "set to 1")
             .expect("valid op");
         state
-            .apply(FakeOp::Set { old: 1, new: 2 }, "set to 2")
+            .try_apply(FakeOp::Set { old: 1, new: 2 }, "set to 2")
             .expect("valid op");
 
         state.undo().expect("one op to undo");
@@ -518,7 +518,7 @@ mod tests {
     fn undo_panics_if_data_was_corrupted_behind_historys_back() {
         let mut state = new_state(0);
         state
-            .apply(FakeOp::Set { old: 0, new: 1 }, "set to 1")
+            .try_apply(FakeOp::Set { old: 0, new: 1 }, "set to 1")
             .expect("valid op");
 
         // Corrupt the data without going through the history
@@ -531,13 +531,13 @@ mod tests {
     fn get_aggregated_history_flattens_applied_ops() {
         let mut state = new_state(0);
         state
-            .apply(FakeOp::Set { old: 0, new: 1 }, "set to 1")
+            .try_apply(FakeOp::Set { old: 0, new: 1 }, "set to 1")
             .expect("valid op");
         state
-            .apply(FakeOp::Set { old: 1, new: 2 }, "set to 2")
+            .try_apply(FakeOp::Set { old: 1, new: 2 }, "set to 2")
             .expect("valid op");
         state
-            .apply(FakeOp::Set { old: 2, new: 3 }, "set to 3")
+            .try_apply(FakeOp::Set { old: 2, new: 3 }, "set to 3")
             .expect("valid op");
         state.undo().expect("one op to undo");
 
