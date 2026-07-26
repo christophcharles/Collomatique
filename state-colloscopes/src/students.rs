@@ -11,7 +11,7 @@ use thiserror::Error;
 use collomatique_state::{Join, References};
 
 use crate::Table;
-use crate::ids::{GroupListId, NewId, PeriodId, StudentId, SubjectId};
+use crate::ids::{NewId, PeriodId, StudentId};
 use crate::ops::AnnotatedStudentOp;
 
 /// Description of the students
@@ -34,53 +34,12 @@ pub struct Student {
     pub excluded_periods: BTreeSet<PeriodId>,
 }
 
-/// Errors for students operations
-///
-/// These errors can be returned when trying to modify [crate::Data] with a student op.
-#[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum StudentError {
-    /// A student id is invalid
-    #[error("invalid student id ({0:?})")]
-    InvalidStudentId(StudentId),
-
-    /// The student id already exists
-    #[error("student id ({0:?}) already exists")]
-    StudentIdAlreadyExists(StudentId),
-
-    /// A period id is invalid
-    #[error("invalid period id ({0:?})")]
-    InvalidPeriodId(PeriodId),
-
-    /// Some non-default assignments are still present for the student
-    #[error(
-        "student id {0:?} has non-default assignments for subject id {1:?} in period id ({0:?}) and cannot be removed or updated"
-    )]
-    StudentStillHasNonTrivialAssignments(StudentId, SubjectId, PeriodId),
-
-    /// Student is still excluded by a group list
-    #[error("student id {0:?} is still excluded by a group list {1:?}")]
-    StudentIsStillExcludedByGroupList(StudentId, GroupListId),
-
-    /// Student is still referenced by a pre-filled group list
-    #[error("student id {0:?} is still referenced by a pre-filled group list {1:?}")]
-    StudentIsStillReferencedByPrefilledGroupList(StudentId, GroupListId),
-
-    /// Student is referenced in a colloscope group list
-    #[error("student id {0:?} is referenced in a colloscope group list ({1:?})")]
-    StudentIsReferencedInColloscopeGroupList(StudentId, GroupListId),
-
-    /// Student still has per-student settings
-    #[error("student id {0:?} still has per-student settings")]
-    StudentStillHasSettings(StudentId),
-}
-
 /// Precondition errors of the forced student ops — the carve-out subset
 /// (step-3 survey Table 2, pinned `git show 26d88024:docs/plans/plan_step_3.md`).
 ///
 /// This is the error surface that survives step 5: [crate::Data::force_apply]
 /// keeps only the transition/input guards (no-clobber, op-target existence) and
-/// strips every invariant guard. Variant names and messages are copied verbatim
-/// from [StudentError].
+/// strips every invariant guard.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum StudentPrecheckError {
     /// A student id is invalid
@@ -93,121 +52,9 @@ pub enum StudentPrecheckError {
 }
 
 impl crate::Data {
-    /// Used internally
-    ///
-    /// Apply student operations
-    pub(crate) fn apply_student(
-        &mut self,
-        student_op: &AnnotatedStudentOp,
-    ) -> std::result::Result<AnnotatedStudentOp, StudentError> {
-        match student_op {
-            AnnotatedStudentOp::Add(new_id, student) => {
-                if self.inner_data.params.students.student_map.contains(new_id) {
-                    return Err(StudentError::StudentIdAlreadyExists(*new_id));
-                }
-                self.inner_data.params.validate_student(student)?;
-
-                self.inner_data
-                    .params
-                    .students
-                    .student_map
-                    .insert(*new_id, student.clone());
-
-                Ok(AnnotatedStudentOp::Remove(*new_id))
-            }
-            AnnotatedStudentOp::Remove(id) => {
-                let Some(current_student) = self.inner_data.params.students.student_map.get(id)
-                else {
-                    return Err(StudentError::InvalidStudentId(*id));
-                };
-
-                for (group_list_id, groups_for_students) in
-                    self.inner_data.colloscope.group_lists_iter()
-                {
-                    if groups_for_students.contains_key(id) {
-                        return Err(StudentError::StudentIsReferencedInColloscopeGroupList(
-                            *id,
-                            group_list_id,
-                        ));
-                    }
-                }
-
-                for (group_list_id, group_list) in
-                    self.inner_data.params.group_lists.group_list_map.iter()
-                {
-                    if group_list.filling().excluded_students().contains(id) {
-                        return Err(StudentError::StudentIsStillExcludedByGroupList(
-                            *id,
-                            group_list_id,
-                        ));
-                    }
-                    if group_list.filling().contains_student(*id) {
-                        return Err(StudentError::StudentIsStillReferencedByPrefilledGroupList(
-                            *id,
-                            group_list_id,
-                        ));
-                    }
-                }
-
-                for (period_id, subject_id, assigned_students) in
-                    self.inner_data.params.assignments.iter()
-                {
-                    if current_student.excluded_periods.contains(&period_id) {
-                        continue;
-                    }
-                    if assigned_students.contains(id) {
-                        return Err(StudentError::StudentStillHasNonTrivialAssignments(
-                            *id, subject_id, period_id,
-                        ));
-                    }
-                }
-
-                if self.inner_data.params.settings.students.contains(id) {
-                    return Err(StudentError::StudentStillHasSettings(*id));
-                }
-
-                let old_student = self
-                    .inner_data
-                    .params
-                    .students
-                    .student_map
-                    .remove(id)
-                    .expect("Student ID was checked above");
-
-                Ok(AnnotatedStudentOp::Add(*id, old_student))
-            }
-            AnnotatedStudentOp::Update(id, new_student) => {
-                self.inner_data.params.validate_student(new_student)?;
-                let Some(current_student) = self.inner_data.params.students.student_map.get_mut(id)
-                else {
-                    return Err(StudentError::InvalidStudentId(*id));
-                };
-
-                for (period_id, subject_id, assigned_students) in
-                    self.inner_data.params.assignments.iter()
-                {
-                    if current_student.excluded_periods.contains(&period_id)
-                        || !new_student.excluded_periods.contains(&period_id)
-                    {
-                        continue;
-                    }
-                    if assigned_students.contains(id) {
-                        return Err(StudentError::StudentStillHasNonTrivialAssignments(
-                            *id, subject_id, period_id,
-                        ));
-                    }
-                }
-
-                let old_student = std::mem::replace(current_student, new_student.clone());
-
-                Ok(AnnotatedStudentOp::Update(*id, old_student))
-            }
-        }
-    }
-
     /// Used internally by [crate::Data::force_apply]
     ///
-    /// Thin copy of [Self::apply_student]: carve-out guards kept (returned as
+    /// Force-applies a student op: carve-out guards kept (returned as
     /// [StudentPrecheckError]), invariant guards stripped (step-3 survey Table 1).
     /// May leave the state invalid; the caller owns checking and rollback.
     pub(crate) fn force_apply_student(

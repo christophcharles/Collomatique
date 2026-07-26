@@ -36,9 +36,6 @@ pub trait InMemoryData: Clone + Send + Sync + std::fmt::Debug {
     /// useful for the operation issuer.
     type NewInfo;
 
-    /// Error type for when [Self::apply] fails.
-    type Error: std::error::Error + Send + Sync + Clone;
-
     /// Error type for when [Self::try_apply] fails.
     type ApplyError: std::error::Error + Send + Sync + Clone;
 
@@ -54,28 +51,15 @@ pub trait InMemoryData: Clone + Send + Sync + std::fmt::Debug {
     /// accordingly.
     fn annotate(&self, op: Self::OriginalOperation) -> (Self::AnnotatedOperation, Self::NewInfo);
 
-    /// Apply an operation to the data and return its inverse
-    ///
-    /// The inverse operation is computed from the state as it was
-    /// *before* the operation was applied (the old value is captured
-    /// while it is still in hand).
-    ///
-    /// In case of failure, the data must be left strictly unchanged
-    /// (validate first, mutate after) and the error type [Self::Error]
-    /// is returned.
-    fn apply(
-        &mut self,
-        op: &Self::AnnotatedOperation,
-    ) -> std::result::Result<Self::AnnotatedOperation, Self::Error>;
-
     /// Apply an operation through the apply/check/rollback gate and return its
     /// inverse.
     ///
-    /// Unlike [Self::apply] (which validates first, then mutates), this method
-    /// forces the operation through and then checks the resulting state: on any
-    /// breakage the data is rolled back from a snapshot. Precheck failures never
-    /// touch the data; invariant/logic failures are rolled back. Either way, a
-    /// failed call leaves the data strictly unchanged.
+    /// The inverse operation is computed from the state as it was *before* the
+    /// operation was applied. This method forces the operation through and then
+    /// checks the resulting state: on any breakage the data is rolled back from
+    /// a snapshot. Precheck failures never touch the data; invariant/logic
+    /// failures are rolled back. Either way, a failed call leaves the data
+    /// strictly unchanged.
     fn try_apply(
         &mut self,
         op: &Self::AnnotatedOperation,
@@ -113,35 +97,10 @@ pub trait Manager: private::ManagerInternal {
         self.get_in_memory_data()
     }
 
-    /// Apply an operation and keep the modification history consistent
-    fn apply(
-        &mut self,
-        op: <<Self as private::ManagerInternal>::Data as InMemoryData>::OriginalOperation,
-        desc: <Self as private::ManagerInternal>::Desc,
-    ) -> Result<
-        <<Self as private::ManagerInternal>::Data as InMemoryData>::NewInfo,
-        <<Self as private::ManagerInternal>::Data as InMemoryData>::Error,
-    > {
-        let (annotated_op, new_info) = self.get_in_memory_data_mut().annotate(op);
-
-        let backward = self.get_in_memory_data_mut().apply(&annotated_op)?;
-        let rev_op = crate::history::ReversibleOp {
-            forward: annotated_op,
-            backward,
-        };
-
-        let aggregated_op = crate::history::AggregatedOp::new(vec![rev_op]);
-        self.get_modification_history_mut()
-            .store(aggregated_op, desc);
-
-        Ok(new_info)
-    }
-
     /// Apply an operation through the apply/check/rollback gate and keep the
     /// modification history consistent.
     ///
-    /// Mirrors [Manager::apply], but routes the operation through
-    /// [InMemoryData::try_apply] instead of [InMemoryData::apply]. A failed op
+    /// Routes the operation through [InMemoryData::try_apply]. A failed op
     /// leaves the data unchanged and stores nothing in history.
     fn try_apply(
         &mut self,
@@ -414,31 +373,6 @@ mod tests {
         let aggregated = AggregatedOp::new(vec![broken_backward, rev_set(5, 9)]);
 
         let _ = private::update_internal_state_with_aggregated(&mut state, &aggregated);
-    }
-
-    #[test]
-    fn apply_changes_data_and_stores_history() {
-        let mut state = new_state(0);
-
-        let result = state.apply(FakeOp::Set { old: 0, new: 1 }, "set to 1");
-
-        assert_eq!(result, Ok(()));
-        assert_eq!(state.get_data().value, 1);
-        assert!(state.can_undo());
-        assert!(!state.can_redo());
-        assert_eq!(state.get_undo_name(), Some(&"set to 1"));
-    }
-
-    #[test]
-    fn apply_failing_leaves_state_untouched() {
-        let mut state = new_state(0);
-
-        let result = state.apply(FakeOp::Fail, "never happens");
-
-        assert_eq!(result, Err(FakeError::ApplyFailed));
-        assert_eq!(state.get_data().value, 0);
-        assert!(!state.can_undo());
-        assert_eq!(state.get_last_op(), None);
     }
 
     #[test]

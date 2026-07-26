@@ -45,16 +45,6 @@ pub struct Limits {
     pub max_interrogations_per_day: Option<SoftParam<NonZeroU32>>,
 }
 
-/// Errors for settings operations
-///
-/// These errors can be returned when trying to modify [crate::Data] with a settings op.
-#[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum SettingsError {
-    /// student id is invalid
-    #[error("invalid student id ({0:?})")]
-    InvalidStudentId(StudentId),
-}
-
 /// Precondition errors of the forced settings op — the carve-out subset
 /// (step-3 survey Table 2). The settings op has no transition/input guards
 /// (only `validate_settings`, which strips), so this enum is empty; kept for
@@ -63,26 +53,9 @@ pub enum SettingsError {
 pub enum SettingsPrecheckError {}
 
 impl crate::Data {
-    /// Used internally
-    ///
-    /// Apply settings operations
-    pub(crate) fn apply_settings(
-        &mut self,
-        settings_op: &AnnotatedSettingsOp,
-    ) -> std::result::Result<AnnotatedSettingsOp, SettingsError> {
-        match settings_op {
-            AnnotatedSettingsOp::Update(new_settings) => {
-                self.inner_data.params.validate_settings(new_settings)?;
-                let old_settings =
-                    std::mem::replace(&mut self.inner_data.params.settings, new_settings.clone());
-                Ok(AnnotatedSettingsOp::Update(old_settings))
-            }
-        }
-    }
-
     /// Used internally by [crate::Data::force_apply]
     ///
-    /// Thin copy of [Self::apply_settings]: the only guard (`validate_settings`)
+    /// Force-applies a settings op: the only guard (`validate_settings`)
     /// is an invariant guard and is stripped (step-3 survey Table 1), so this
     /// copy is guard-free and its [SettingsPrecheckError] is empty. May leave the
     /// state invalid; the caller owns checking and rollback.

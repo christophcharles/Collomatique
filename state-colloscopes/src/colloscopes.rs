@@ -102,8 +102,8 @@ impl Colloscope {
     /// Test-only corruption: inserts an interrogation row verbatim, bypassing
     /// the canonicalizing [Self::set_interrogation] — a stored empty row is
     /// exactly the [crate::invariants::LogicError::EmptyInterrogationRow] (new
-    /// checker) / [ColloscopeError::EmptyInterrogationRow] (old checker) the
-    /// invariant checkers must detect, and no production surface can produce it.
+    /// checker) the invariant checker must detect, and no production surface can
+    /// produce it.
     #[cfg(test)]
     pub(crate) fn forge_interrogation_row(
         &mut self,
@@ -117,8 +117,7 @@ impl Colloscope {
     /// Test-only corruption: inserts a group-list row verbatim, bypassing the
     /// canonicalizing [Self::set_group_list] — a stored empty row is exactly
     /// the [crate::invariants::LogicError::EmptyColloscopeGroupListRow] (new
-    /// checker) / [ColloscopeError::EmptyGroupListRow] (old checker) the
-    /// invariant checkers must detect.
+    /// checker) the invariant checker must detect.
     #[cfg(test)]
     pub(crate) fn forge_group_list_row(
         &mut self,
@@ -129,196 +128,12 @@ impl Colloscope {
     }
 }
 
-impl Colloscope {
-    /// Validates every stored row against the parameters, row by row (there is
-    /// no skeleton to reconstruct or count against — mirrors
-    /// `check_assignments_data_consistency`). On canonical, validated data
-    /// every row resolves; a surviving invalid row is a bug.
-    pub(crate) fn validate_against_params(
-        &self,
-        params: &super::colloscope_params::Parameters,
-    ) -> Result<(), ColloscopeError> {
-        // Interrogation rows: the row must be canonically non-empty, the
-        // coordinate must be a possible interrogation cell and the assigned
-        // groups must fit the `(period, subject)` association bound.
-        for ((slot_id, week_id), assigned_groups) in self.interrogations.iter() {
-            if assigned_groups.is_empty() {
-                return Err(ColloscopeError::EmptyInterrogationRow(slot_id, week_id));
-            }
-            let Some((period_id, _)) = params.weeks.week_position(week_id) else {
-                return Err(ColloscopeError::InvalidWeekId(week_id));
-            };
-
-            let Some((subject_id, slot)) = params.slots.find_slot_with_subject(slot_id) else {
-                return Err(ColloscopeError::InvalidSlotId(slot_id));
-            };
-            let subject = params
-                .subjects
-                .find_subject(subject_id)
-                .expect("subject id from a live slot is valid");
-            if subject.parameters.interrogation_parameters.is_none()
-                || subject.excluded_periods.contains(&period_id)
-            {
-                return Err(ColloscopeError::SlotNotRunningOnPeriod(slot_id, week_id));
-            }
-
-            if !params.is_week_active(week_id, slot.week_pattern) {
-                return Err(ColloscopeError::InterrogationOnInactiveWeek(
-                    slot_id, week_id,
-                ));
-            }
-
-            let first_forbidden_value: u32 = params
-                .group_lists
-                .subjects_associations
-                .get(&(period_id, subject_id))
-                .map(|group_list_id| {
-                    params
-                        .group_lists
-                        .group_list_map
-                        .get(group_list_id)
-                        .expect("association references a live group list")
-                        .params()
-                        .group_names
-                        .len() as u32
-                })
-                .unwrap_or(0);
-            for group_num in assigned_groups {
-                if *group_num >= first_forbidden_value {
-                    return Err(ColloscopeError::InvalidGroupNumInInterrogation(
-                        slot_id, week_id,
-                    ));
-                }
-            }
-        }
-
-        // Group-list rows: the row must be canonically non-empty, the id must
-        // resolve to a non-prefilled group list and its placements must be
-        // consistent with the params (excluded/invalid students, group numbers).
-        for (group_list_id, placements) in self.group_lists.iter() {
-            if placements.is_empty() {
-                return Err(ColloscopeError::EmptyGroupListRow(group_list_id));
-            }
-            let Some(params_group_list) = params.group_lists.group_list_map.get(&group_list_id)
-            else {
-                return Err(ColloscopeError::InvalidGroupListId(group_list_id));
-            };
-            if params_group_list.is_prefilled() {
-                return Err(ColloscopeError::PrefilledGroupListInColloscope(
-                    group_list_id,
-                ));
-            }
-            validate_group_list_placements(
-                group_list_id,
-                placements,
-                params_group_list.params(),
-                params_group_list.filling(),
-                &params.students,
-            )?;
-        }
-
-        Ok(())
-    }
-}
-
-/// Validates a raw student→group placement map for one group list against its
-/// params, filling and the students table. Operates on the sparse surface value
-/// (`Colloscope::group_list`).
-pub(crate) fn validate_group_list_placements(
-    group_list_id: GroupListId,
-    groups_for_students: &BTreeMap<StudentId, u32>,
-    group_list_params: &super::group_lists::GroupListParameters,
-    group_list_filling: &super::group_lists::GroupListFilling,
-    students: &super::students::Students,
-) -> Result<(), ColloscopeError> {
-    let first_forbidden_value = group_list_params.group_names.len() as u32;
-    let excluded_students = group_list_filling.excluded_students();
-
-    for (student_id, group_num) in groups_for_students {
-        if excluded_students.contains(student_id) {
-            return Err(ColloscopeError::ExcludedStudentInGroupList(
-                group_list_id,
-                *student_id,
-            ));
-        }
-
-        if !students.student_map.contains(student_id) {
-            return Err(ColloscopeError::InvalidStudentId(*student_id));
-        }
-
-        if *group_num >= first_forbidden_value {
-            return Err(ColloscopeError::InvalidGroupNumForStudentInGroupList(
-                group_list_id,
-                *student_id,
-            ));
-        }
-    }
-
-    Ok(())
-}
-
-/// Errors for colloscopes operations
-///
-/// These errors can be returned when trying to modify [crate::Data] with a colloscope op.
-#[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum ColloscopeError {
-    /// Student original id is invalid
-    #[error("invalid student id ({0:?})")]
-    InvalidStudentId(StudentId),
-
-    /// Slot original id is invalid
-    #[error("invalid slot id ({0:?})")]
-    InvalidSlotId(SlotId),
-
-    /// Group list original id is invalid
-    #[error("invalid group list id ({0:?})")]
-    InvalidGroupListId(GroupListId),
-
-    /// A group number in an interrogation row is out of range for the slot's
-    /// `(period, subject)` group-list association
-    #[error("invalid group number in interrogation on slot {0:?}, week {1:?}")]
-    InvalidGroupNumInInterrogation(SlotId, WeekId),
-
-    #[error("excluded student in group list")]
-    ExcludedStudentInGroupList(GroupListId, StudentId),
-
-    #[error("Invalid group number for student")]
-    InvalidGroupNumForStudentInGroupList(GroupListId, StudentId),
-
-    #[error("Prefilled group list {0:?} should not be in colloscope")]
-    PrefilledGroupListInColloscope(GroupListId),
-
-    /// The week id in a colloscope op does not resolve to any period
-    #[error("invalid week id ({0:?})")]
-    InvalidWeekId(WeekId),
-
-    /// The slot's subject does not run interrogations on the week's period
-    #[error("slot {0:?} does not run on the period of week {1:?}")]
-    SlotNotRunningOnPeriod(SlotId, WeekId),
-
-    /// The week is inactive for the slot (excluded by pattern or not an
-    /// interrogation week)
-    #[error("interrogation on inactive week {1:?} for slot {0:?}")]
-    InterrogationOnInactiveWeek(SlotId, WeekId),
-
-    /// A stored interrogation row with an empty group set — canonically
-    /// unrepresentable (the sparse surface drops empty writes); only in-crate
-    /// corruption can produce it. Stage-6 backfill for old-checker completeness.
-    #[error("empty interrogation row stored for slot {0:?}, week {1:?}")]
-    EmptyInterrogationRow(SlotId, WeekId),
-
-    /// A stored colloscope group-list row with an empty placement map — same
-    /// canonical-absent contract as [Self::EmptyInterrogationRow].
-    #[error("empty group-list row stored for group list {0:?}")]
-    EmptyGroupListRow(GroupListId),
-}
-
 /// Precondition errors of the forced colloscope ops — the carve-out subset
 /// (step-3 survey Table 2). Kept: the `SetGroupList` target existence
 /// ([Self::InvalidGroupListId]) and the `SetInterrogation` coordinate existence
 /// ([Self::InvalidWeekId] / [Self::InvalidSlotId]). The `SetGroupList`
 /// prefilled/placement guards and all three `SetInterrogation` semantic guards
-/// are stripped. Variants copied verbatim from [ColloscopeError].
+/// are stripped.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum ColloscopePrecheckError {
     /// Group list original id is invalid
@@ -335,136 +150,9 @@ pub enum ColloscopePrecheckError {
 }
 
 impl crate::Data {
-    /// Used internally
-    ///
-    /// Apply colloscope operations
-    pub(crate) fn apply_colloscope(
-        &mut self,
-        colloscope_op: &AnnotatedColloscopeOp,
-    ) -> std::result::Result<AnnotatedColloscopeOp, ColloscopeError> {
-        match colloscope_op {
-            AnnotatedColloscopeOp::SetGroupList(group_list_id, placements) => {
-                let Some(params_group_list) = self
-                    .inner_data
-                    .params
-                    .group_lists
-                    .group_list_map
-                    .get(group_list_id)
-                else {
-                    return Err(ColloscopeError::InvalidGroupListId(*group_list_id));
-                };
-
-                // Prefilled group lists have a params entry but no colloscope
-                // row: the op targets them by mistake. Rejecting via the params
-                // `is_prefilled` flag keeps this check meaningful under the
-                // sparse tables.
-                if params_group_list.is_prefilled() {
-                    return Err(ColloscopeError::InvalidGroupListId(*group_list_id));
-                }
-
-                // Same validation the dense wrapper ran, against the raw payload.
-                validate_group_list_placements(
-                    *group_list_id,
-                    placements,
-                    params_group_list.params(),
-                    params_group_list.filling(),
-                    &self.inner_data.params.students,
-                )?;
-
-                // Read the prior placements for the reverse op, then write.
-                let old_placements = self
-                    .inner_data
-                    .colloscope
-                    .group_list(*group_list_id)
-                    .cloned()
-                    .unwrap_or_default();
-                self.inner_data
-                    .colloscope
-                    .set_group_list(*group_list_id, placements.clone());
-
-                Ok(AnnotatedColloscopeOp::SetGroupList(
-                    *group_list_id,
-                    old_placements,
-                ))
-            }
-            AnnotatedColloscopeOp::SetInterrogation(slot_id, week_id, assigned_groups) => {
-                let params = &self.inner_data.params;
-
-                // Resolve the week to its (period, position) coordinate.
-                let Some((period_id, _)) = params.weeks.week_position(*week_id) else {
-                    return Err(ColloscopeError::InvalidWeekId(*week_id));
-                };
-
-                // The slot must exist and its subject must run interrogations on
-                // this period.
-                let Some((subject_id, slot)) = params.slots.find_slot_with_subject(*slot_id) else {
-                    return Err(ColloscopeError::InvalidSlotId(*slot_id));
-                };
-                let subject = params
-                    .subjects
-                    .find_subject(subject_id)
-                    .expect("subject id from a live slot is valid");
-                if subject.parameters.interrogation_parameters.is_none()
-                    || subject.excluded_periods.contains(&period_id)
-                {
-                    return Err(ColloscopeError::SlotNotRunningOnPeriod(*slot_id, *week_id));
-                }
-
-                // The week must be active for the slot's pattern.
-                if !params.is_week_active(*week_id, slot.week_pattern) {
-                    return Err(ColloscopeError::InterrogationOnInactiveWeek(
-                        *slot_id, *week_id,
-                    ));
-                }
-
-                // Group numbers are bounded by the group list associated to the
-                // slot's subject on this period (no association => no valid group).
-                let first_forbidden_value: u32 = params
-                    .group_lists
-                    .subjects_associations
-                    .get(&(period_id, subject_id))
-                    .map(|group_list_id| {
-                        params
-                            .group_lists
-                            .group_list_map
-                            .get(group_list_id)
-                            .expect("association references a live group list")
-                            .params()
-                            .group_names
-                            .len() as u32
-                    })
-                    .unwrap_or(0);
-                for group_num in assigned_groups {
-                    if *group_num >= first_forbidden_value {
-                        return Err(ColloscopeError::InvalidGroupNumInInterrogation(
-                            *slot_id, *week_id,
-                        ));
-                    }
-                }
-
-                // Read the prior groups for the reverse op, then write.
-                let old_groups = self
-                    .inner_data
-                    .colloscope
-                    .interrogation(*slot_id, *week_id)
-                    .cloned()
-                    .unwrap_or_default();
-                self.inner_data.colloscope.set_interrogation(
-                    *slot_id,
-                    *week_id,
-                    assigned_groups.clone(),
-                );
-
-                Ok(AnnotatedColloscopeOp::SetInterrogation(
-                    *slot_id, *week_id, old_groups,
-                ))
-            }
-        }
-    }
-
     /// Used internally by [crate::Data::force_apply]
     ///
-    /// Thin copy of [Self::apply_colloscope]: the coordinate-existence carve-outs
+    /// Force-applies a colloscope op: the coordinate-existence carve-outs
     /// are kept (returned as [ColloscopePrecheckError] — `SetGroupList` target,
     /// `SetInterrogation` week + slot), the `SetGroupList` prefilled/placement
     /// guards and the three `SetInterrogation` semantic guards are stripped

@@ -10,7 +10,7 @@ use thiserror::Error;
 use collomatique_state::References;
 
 use crate::Table;
-use crate::ids::{IncompatId, SlotId, WeekId, WeekPatternId};
+use crate::ids::{WeekId, WeekPatternId};
 use crate::ops::AnnotatedWeekPatternOp;
 
 /// Description of the week patterns
@@ -67,40 +67,9 @@ impl WeekPatterns {
     }
 }
 
-/// Errors for week pattern operations
-///
-/// These errors can be returned when trying to modify [crate::Data] with a week pattern op.
-#[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum WeekPatternError {
-    /// A week pattern id is invalid
-    #[error("invalid week pattern id ({0:?})")]
-    InvalidWeekPatternId(WeekPatternId),
-
-    /// The week pattern id already exists
-    #[error("week pattern id ({0:?}) already exists")]
-    WeekPatternIdAlreadyExists(WeekPatternId),
-
-    /// The week pattern is referenced by a slot
-    #[error("week pattern id ({0:?}) is referenced by a slot ({1:?})")]
-    WeekPatternStillHasAssociatedSlots(WeekPatternId, SlotId),
-
-    /// The week pattern is referenced by a schedule incompatibility
-    #[error("week pattern id ({0:?}) is referenced by an incompat ({1:?})")]
-    WeekPatternStillHasAssociatedIncompat(WeekPatternId, IncompatId),
-
-    /// The week pattern excludes a week that does not exist
-    #[error("week pattern excludes an invalid week ({0:?})")]
-    WeekPatternExcludesInvalidWeek(WeekId),
-
-    /// The slot in colloscope is incompatible with the new week pattern
-    #[error("slot {0:?} in colloscope is not compatible with the new week pattern")]
-    NotCompatibleSlotInColloscope(SlotId),
-}
-
 /// Precondition errors of the forced week-pattern ops — the carve-out subset
 /// (step-3 survey Table 2). Only no-clobber and op-target existence survive;
-/// `validate_week_pattern` and the reference scans are stripped. Variants
-/// copied verbatim from [WeekPatternError].
+/// `validate_week_pattern` and the reference scans are stripped.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum WeekPatternPrecheckError {
     /// A week pattern id is invalid
@@ -113,136 +82,9 @@ pub enum WeekPatternPrecheckError {
 }
 
 impl crate::Data {
-    /// Used internally
-    ///
-    /// Apply week pattern operations
-    pub(crate) fn apply_week_pattern(
-        &mut self,
-        week_pattern_op: &AnnotatedWeekPatternOp,
-    ) -> std::result::Result<AnnotatedWeekPatternOp, WeekPatternError> {
-        match week_pattern_op {
-            AnnotatedWeekPatternOp::Add(new_id, week_pattern) => {
-                if self
-                    .inner_data
-                    .params
-                    .week_patterns
-                    .week_pattern_map
-                    .contains(new_id)
-                {
-                    return Err(WeekPatternError::WeekPatternIdAlreadyExists(*new_id));
-                }
-
-                self.inner_data.params.validate_week_pattern(week_pattern)?;
-
-                self.inner_data
-                    .params
-                    .week_patterns
-                    .week_pattern_map
-                    .insert(*new_id, week_pattern.clone());
-
-                Ok(AnnotatedWeekPatternOp::Remove(*new_id))
-            }
-            AnnotatedWeekPatternOp::Remove(id) => {
-                if !self
-                    .inner_data
-                    .params
-                    .week_patterns
-                    .week_pattern_map
-                    .contains(id)
-                {
-                    return Err(WeekPatternError::InvalidWeekPatternId(*id));
-                }
-
-                for (slot_id, slot) in self.inner_data.params.slots.all_slots() {
-                    if let Some(week_pattern_id) = &slot.week_pattern
-                        && *id == *week_pattern_id
-                    {
-                        return Err(WeekPatternError::WeekPatternStillHasAssociatedSlots(
-                            *id, *slot_id,
-                        ));
-                    }
-                }
-
-                for (incompat_id, incompat) in self.inner_data.params.incompats.incompat_map.iter()
-                {
-                    if let Some(week_pattern_id) = &incompat.week_pattern_id
-                        && *id == *week_pattern_id
-                    {
-                        return Err(WeekPatternError::WeekPatternStillHasAssociatedIncompat(
-                            *id,
-                            incompat_id,
-                        ));
-                    }
-                }
-
-                let old_week_pattern = self
-                    .inner_data
-                    .params
-                    .week_patterns
-                    .week_pattern_map
-                    .remove(id)
-                    .expect("Week pattern ID was checked above");
-
-                Ok(AnnotatedWeekPatternOp::Add(*id, old_week_pattern))
-            }
-            AnnotatedWeekPatternOp::Update(id, new_week_pattern) => {
-                self.inner_data
-                    .params
-                    .validate_week_pattern(new_week_pattern)?;
-
-                if !self
-                    .inner_data
-                    .params
-                    .week_patterns
-                    .week_pattern_map
-                    .contains(id)
-                {
-                    return Err(WeekPatternError::InvalidWeekPatternId(*id));
-                }
-
-                // Guard: for every slot bound to this pattern, no colloscope row
-                // may sit on a week the new pattern would silence — that would
-                // strand an interrogation on an inactive week. A week is active
-                // under the new pattern iff it runs interrogations and is not in
-                // the new exclusion set. Rows key on the week id, so nothing else
-                // needs to move; reject before mutating.
-                for (slot_id, slot) in self.inner_data.params.slots.all_slots() {
-                    if slot.week_pattern != Some(*id) {
-                        continue;
-                    }
-                    for (week, _groups) in
-                        self.inner_data.colloscope.interrogations_for_slot(*slot_id)
-                    {
-                        let week_runs = self
-                            .inner_data
-                            .params
-                            .weeks
-                            .find_week(week)
-                            .is_some_and(|w| w.interrogations);
-                        if !week_runs || new_week_pattern.excluded_weeks.contains(&week) {
-                            return Err(WeekPatternError::NotCompatibleSlotInColloscope(*slot_id));
-                        }
-                    }
-                }
-
-                let current_week_pattern = self
-                    .inner_data
-                    .params
-                    .week_patterns
-                    .week_pattern_map
-                    .get_mut(id)
-                    .expect("week pattern id checked above");
-                let old_week_pattern =
-                    std::mem::replace(current_week_pattern, new_week_pattern.clone());
-
-                Ok(AnnotatedWeekPatternOp::Update(*id, old_week_pattern))
-            }
-        }
-    }
-
     /// Used internally by [crate::Data::force_apply]
     ///
-    /// Thin copy of [Self::apply_week_pattern]: carve-out guards kept (returned
+    /// Force-applies a week-pattern op: carve-out guards kept (returned
     /// as [WeekPatternPrecheckError]), invariant guards stripped (step-3 survey
     /// Table 1). May leave the state invalid; the caller owns checking and
     /// rollback.

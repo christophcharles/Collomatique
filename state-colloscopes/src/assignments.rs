@@ -49,37 +49,10 @@ impl Assignments {
     }
 }
 
-/// Errors for assignment operations
-///
-/// These errors can be returned when trying to modify [crate::Data] with a assignment op.
-#[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum AssignmentError {
-    /// A period id is invalid
-    #[error("invalid period id ({0:?})")]
-    InvalidPeriodId(PeriodId),
-
-    /// A subject id is invalid
-    #[error("invalid subject id ({0:?})")]
-    InvalidSubjectId(SubjectId),
-
-    /// A student id is invalid
-    #[error("invalid student id ({0:?})")]
-    InvalidStudentId(StudentId),
-
-    /// Subject does not run on given period
-    #[error("invalid subject id {0:?} for period {1:?}")]
-    SubjectDoesNotRunOnPeriod(SubjectId, PeriodId),
-
-    /// Student is not present on given period
-    #[error("invalid subject id {0:?} for period {1:?}")]
-    StudentIsNotPresentOnPeriod(StudentId, PeriodId),
-}
-
 /// Precondition errors of the forced assignment op — the carve-out subset
 /// (step-3 survey Table 2). The three coordinate-existence checks are
 /// dual-listed (also invariant twins) and kept per Appendix D.3; the two
-/// semantic guards (subject-runs / student-present) are stripped. Variants
-/// copied verbatim from [AssignmentError].
+/// semantic guards (subject-runs / student-present) are stripped.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum AssignmentPrecheckError {
     /// A period id is invalid
@@ -96,86 +69,9 @@ pub enum AssignmentPrecheckError {
 }
 
 impl crate::Data {
-    /// Used internally
-    ///
-    /// Apply assignment operations
-    pub(crate) fn apply_assignment(
-        &mut self,
-        assignment_op: &AnnotatedAssignmentOp,
-    ) -> std::result::Result<AnnotatedAssignmentOp, AssignmentError> {
-        match assignment_op {
-            AnnotatedAssignmentOp::Assign(period_id, student_id, subject_id, status) => {
-                if self
-                    .inner_data
-                    .params
-                    .periods
-                    .find_period_position(*period_id)
-                    .is_none()
-                {
-                    return Err(AssignmentError::InvalidPeriodId(*period_id));
-                }
-
-                let Some(subject) = self.inner_data.params.subjects.find_subject(*subject_id)
-                else {
-                    return Err(AssignmentError::InvalidSubjectId(*subject_id));
-                };
-
-                // "Subject runs on period" is a property of the subject's
-                // excluded-period set, not of the assignments key set: consult
-                // it directly rather than probing for a `(period, subject)` row.
-                if subject.excluded_periods.contains(period_id) {
-                    return Err(AssignmentError::SubjectDoesNotRunOnPeriod(
-                        *subject_id,
-                        *period_id,
-                    ));
-                }
-
-                let Some(student_desc) =
-                    self.inner_data.params.students.student_map.get(student_id)
-                else {
-                    return Err(AssignmentError::InvalidStudentId(*student_id));
-                };
-
-                if student_desc.excluded_periods.contains(period_id) {
-                    return Err(AssignmentError::StudentIsNotPresentOnPeriod(
-                        *student_id,
-                        *period_id,
-                    ));
-                }
-
-                // Sparse canonical form: a `(period, subject)` row exists iff
-                // its student set is non-empty. Assigning creates the row on
-                // demand; de-assigning drops the row once it empties.
-                let map = &mut self.inner_data.params.assignments.map;
-                let key = (*period_id, *subject_id);
-                let previous_status = map.get(&key).is_some_and(|s| s.contains(student_id));
-
-                if *status {
-                    if let Some(assigned_students) = map.get_mut(&key) {
-                        assigned_students.insert(*student_id);
-                    } else {
-                        map.insert(key, BTreeSet::from([*student_id]));
-                    }
-                } else if let Some(assigned_students) = map.get_mut(&key) {
-                    assigned_students.remove(student_id);
-                    if assigned_students.is_empty() {
-                        map.remove(&key);
-                    }
-                }
-
-                Ok(AnnotatedAssignmentOp::Assign(
-                    *period_id,
-                    *student_id,
-                    *subject_id,
-                    previous_status,
-                ))
-            }
-        }
-    }
-
     /// Used internally by [crate::Data::force_apply]
     ///
-    /// Thin copy of [Self::apply_assignment]: the three coordinate-existence
+    /// Force-applies an assignment op: the three coordinate-existence
     /// checks are kept (dual-listed carve-outs, returned as
     /// [AssignmentPrecheckError]); the two semantic guards (subject-runs /
     /// student-present) are stripped (step-3 survey Table 1). Write-time

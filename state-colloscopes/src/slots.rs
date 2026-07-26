@@ -8,7 +8,7 @@ use thiserror::Error;
 use collomatique_state::{Join, References};
 
 use crate::Table;
-use crate::ids::{NewId, PeriodId, SlotId, SlotPairingRuleId, SubjectId, TeacherId, WeekPatternId};
+use crate::ids::{NewId, SlotId, SubjectId, TeacherId, WeekPatternId};
 use crate::ops::AnnotatedSlotOp;
 
 /// Description of the interrogation slots
@@ -322,75 +322,13 @@ impl Slots {
     }
 }
 
-/// Errors for interrogation slot operations
-///
-/// These errors can be returned when trying to modify [crate::Data] with a slot op.
-#[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum SlotError {
-    /// A slot id is invalid
-    #[error("invalid slot id ({0:?})")]
-    InvalidSlotId(SlotId),
-
-    /// The slot id already exists
-    #[error("slot id ({0:?}) already exists")]
-    SlotIdAlreadyExists(SlotId),
-
-    /// A position is outside of bounds
-    #[error("Position {0} is outside the list (size = {1})")]
-    PositionOutOfBounds(usize, usize),
-
-    /// The previous slot given is not for the same subject
-    #[error("Slot {0:?} to be previous slot is not for subject {1:?}")]
-    PreviousSlotIsNotInRightSubject(SlotId, SubjectId),
-
-    /// subject id is invalid
-    #[error("invalid subject id ({0:?})")]
-    InvalidSubjectId(SubjectId),
-
-    /// subject has no interrogations
-    #[error("subject ({0:?}) does not have interrogations")]
-    SubjectHasNoInterrogation(SubjectId),
-
-    /// An update tried to move the slot to a different subject
-    #[error("slot ({0:?}) cannot change subject (from {1:?} to {2:?})")]
-    CannotChangeSubject(SlotId, SubjectId, SubjectId),
-
-    /// teacher id is invalid
-    #[error("invalid teacher id ({0:?})")]
-    InvalidTeacherId(TeacherId),
-
-    /// week pattern id is invalid
-    #[error("invalid week pattern id ({0:?})")]
-    InvalidWeekPatternId(WeekPatternId),
-
-    /// Provided teacher does not teach in the corresponding subject
-    #[error("Provided teacher ({0:?}) does not teach in subject ({1:?})")]
-    TeacherDoesNotTeachInSubject(TeacherId, SubjectId),
-
-    /// Slot overlaps with next day
-    #[error("The slot start time is too late and the slot overlaps with the next day")]
-    SlotOverlapsWithNextDay,
-
-    /// The slot is not empty in colloscope
-    #[error("slot {0:?} in colloscope is not empty for period {1:?}")]
-    NotEmptySlotInColloscope(SlotId, PeriodId),
-
-    /// The slot in colloscope is incomaptible with the new week pattern
-    #[error("slot {0:?} in colloscope is not compatible with the new week pattern {1:?}")]
-    NotCompatibleSlotInColloscope(SlotId, Option<WeekPatternId>),
-
-    /// The slot is referenced by a slot pairing rule
-    #[error("slot id ({0:?}) is referenced by a slot pairing rule ({1:?})")]
-    SlotIsReferencedBySlotPairingRule(SlotId, SlotPairingRuleId),
-}
-
 /// Precondition errors of the forced slot ops — the carve-out subset
 /// (step-3 survey Table 2). Kept: no-clobber, op-target existence
 /// ([Self::InvalidSlotId]), the `AddAfter` same-subject anchor
 /// ([Self::PreviousSlotIsNotInRightSubject]), position bounds, and the
 /// subject-immutability guard ([Self::CannotChangeSubject]). `validate_slot`,
 /// the Remove colloscope/pairing scans and the Update pattern guard are
-/// stripped. Variants copied verbatim from [SlotError].
+/// stripped.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum SlotPrecheckError {
     /// A slot id is invalid
@@ -415,191 +353,9 @@ pub enum SlotPrecheckError {
 }
 
 impl crate::Data {
-    /// Used internally
-    ///
-    /// Apply slot operations
-    pub(crate) fn apply_slot(
-        &mut self,
-        slot_op: &AnnotatedSlotOp,
-    ) -> std::result::Result<AnnotatedSlotOp, SlotError> {
-        match slot_op {
-            AnnotatedSlotOp::AddAfter(new_id, after_id, slot) => {
-                // The subject is authoritative from the slot itself.
-                let subject_id = slot.subject_id;
-
-                if self.inner_data.params.slots.find_slot(*new_id).is_some() {
-                    return Err(SlotError::SlotIdAlreadyExists(*new_id));
-                }
-                self.inner_data.params.validate_slot(slot)?;
-
-                let position = match after_id {
-                    Some(id) => {
-                        let (sub_id, after_pos) = self
-                            .inner_data
-                            .params
-                            .slots
-                            .find_slot_subject_and_position(*id)
-                            .ok_or(SlotError::InvalidSlotId(*id))?;
-                        if sub_id != subject_id {
-                            return Err(SlotError::PreviousSlotIsNotInRightSubject(
-                                *id, subject_id,
-                            ));
-                        }
-
-                        after_pos + 1
-                    }
-                    None => 0,
-                };
-
-                // `validate_slot` above already rejected a subject without
-                // interrogation parameters (`SubjectHasNoInterrogation`), so no
-                // separate ordering-presence guard is needed: the sparse row is
-                // created on demand by `insert_slot_at`.
-                self.inner_data
-                    .params
-                    .slots
-                    .insert_slot_at(*new_id, slot.clone(), position);
-
-                // A fresh slot has no colloscope rows (keyed by `(slot, week)`,
-                // an absent row is an empty cell), so nothing is seeded.
-
-                Ok(AnnotatedSlotOp::Remove(*new_id))
-            }
-            AnnotatedSlotOp::ChangePosition(id, new_pos) => {
-                let Some((subject_id, old_pos)) = self
-                    .inner_data
-                    .params
-                    .slots
-                    .find_slot_subject_and_position(*id)
-                else {
-                    return Err(SlotError::InvalidSlotId(*id));
-                };
-
-                let count = self
-                    .inner_data
-                    .params
-                    .slots
-                    .slot_count_for_subject(subject_id)
-                    .expect("Subject id should be valid at this point");
-                if *new_pos >= count {
-                    return Err(SlotError::PositionOutOfBounds(*new_pos, count));
-                }
-
-                self.inner_data.params.slots.move_slot(*id, *new_pos);
-
-                Ok(AnnotatedSlotOp::ChangePosition(*id, old_pos))
-            }
-            AnnotatedSlotOp::Remove(id) => {
-                let Some((subject_id, old_pos)) = self
-                    .inner_data
-                    .params
-                    .slots
-                    .find_slot_subject_and_position(*id)
-                else {
-                    return Err(SlotError::InvalidSlotId(*id));
-                };
-
-                // Canonical-absent surface: a slot blocks removal iff it holds
-                // any interrogation row. Report the period of the first such row.
-                if let Some(period_id) = self
-                    .inner_data
-                    .colloscope
-                    .interrogations_for_slot(*id)
-                    .next()
-                    .and_then(|(week, _groups)| {
-                        self.inner_data
-                            .params
-                            .weeks
-                            .week_position(week)
-                            .map(|(period_id, _pos)| period_id)
-                    })
-                {
-                    return Err(SlotError::NotEmptySlotInColloscope(*id, period_id));
-                }
-
-                for (rule_id, rule) in self
-                    .inner_data
-                    .params
-                    .slot_pairings
-                    .slot_pairing_rule_map
-                    .iter()
-                {
-                    if rule.antecedent().slot_id == *id || rule.consequent().slot_id == *id {
-                        return Err(SlotError::SlotIsReferencedBySlotPairingRule(*id, rule_id));
-                    }
-                }
-
-                // Capture the previous slot in the subject ordering before removing.
-                let previous_id = if old_pos > 0 {
-                    self.inner_data
-                        .params
-                        .slots
-                        .slots_for_subject(subject_id)
-                        .expect("Subject id should be valid at this point")
-                        .nth(old_pos - 1)
-                        .map(|(slot_id, _)| *slot_id)
-                } else {
-                    None
-                };
-                let (_old_pos, old_slot) = self.inner_data.params.slots.remove_slot(*id);
-                // The removal guard above already rejected the op if any
-                // colloscope row referenced this slot, so no rows remain to drop.
-
-                Ok(AnnotatedSlotOp::AddAfter(*id, previous_id, old_slot))
-            }
-            AnnotatedSlotOp::Update(slot_id, new_slot) => {
-                let Some((subject_id, _position)) = self
-                    .inner_data
-                    .params
-                    .slots
-                    .find_slot_subject_and_position(*slot_id)
-                else {
-                    return Err(SlotError::InvalidSlotId(*slot_id));
-                };
-
-                // A slot cannot be moved to a different subject.
-                if new_slot.subject_id != subject_id {
-                    return Err(SlotError::CannotChangeSubject(
-                        *slot_id,
-                        subject_id,
-                        new_slot.subject_id,
-                    ));
-                }
-
-                self.inner_data.params.validate_slot(new_slot)?;
-
-                // If the new week pattern would silence a week that currently
-                // holds a colloscope row for this slot, the row would strand an
-                // interrogation on an inactive week. Reject before mutating.
-                // Rows key on the week id, so nothing else needs to move.
-                for (week, _groups) in self.inner_data.colloscope.interrogations_for_slot(*slot_id)
-                {
-                    if !self
-                        .inner_data
-                        .params
-                        .is_week_active(week, new_slot.week_pattern)
-                    {
-                        return Err(SlotError::NotCompatibleSlotInColloscope(
-                            *slot_id,
-                            new_slot.week_pattern,
-                        ));
-                    }
-                }
-
-                let old_slot = self
-                    .inner_data
-                    .params
-                    .slots
-                    .replace_slot(*slot_id, new_slot.clone());
-
-                Ok(AnnotatedSlotOp::Update(*slot_id, old_slot))
-            }
-        }
-    }
-
     /// Used internally by [crate::Data::force_apply]
     ///
-    /// Thin copy of [Self::apply_slot]: carve-out guards kept (returned as
+    /// Force-applies a slot op: carve-out guards kept (returned as
     /// [SlotPrecheckError] — no-clobber, target existence, `AddAfter` same-subject
     /// anchor, position bounds, subject immutability), invariant guards stripped
     /// (step-3 survey Table 1). May leave the state invalid; the caller owns

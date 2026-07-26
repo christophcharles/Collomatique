@@ -180,105 +180,17 @@ impl Default for ExportConfig {
     }
 }
 
-/// Errors for export configuration operations
-///
-/// These errors can be returned when trying to modify [crate::Data] with an export config op.
-#[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum ExportConfigError {}
-
 /// Precondition errors of the forced export-config op — the carve-out subset
 /// (step-3 survey Table 2). Export config is pure value data with no guards of
-/// any kind, so this enum is empty (as is [ExportConfigError]); kept for
+/// any kind, so this enum is empty; kept for
 /// uniformity across the [crate::PrecheckError] family.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum ExportConfigPrecheckError {}
 
 impl crate::Data {
-    /// Used internally
-    ///
-    /// Apply export configuration operations
-    pub(crate) fn apply_export_config(
-        &mut self,
-        export_config_op: &AnnotatedExportConfigOp,
-    ) -> std::result::Result<AnnotatedExportConfigOp, ExportConfigError> {
-        let backward = match export_config_op {
-            AnnotatedExportConfigOp::UpdateGlobalConfig(v) => {
-                let old = std::mem::replace(&mut self.inner_data.export_config.global, v.clone());
-                AnnotatedExportConfigOp::UpdateGlobalConfig(old)
-            }
-            AnnotatedExportConfigOp::UpdateColloscopeEnabled(v) => {
-                let old =
-                    std::mem::replace(&mut self.inner_data.export_config.colloscope_enabled, *v);
-                AnnotatedExportConfigOp::UpdateColloscopeEnabled(old)
-            }
-            AnnotatedExportConfigOp::UpdateAllGroupsEnabled(v) => {
-                let old =
-                    std::mem::replace(&mut self.inner_data.export_config.all_groups_enabled, *v);
-                AnnotatedExportConfigOp::UpdateAllGroupsEnabled(old)
-            }
-            AnnotatedExportConfigOp::UpdatePrefilledGroupsEnabled(v) => {
-                let old = std::mem::replace(
-                    &mut self.inner_data.export_config.prefilled_groups_enabled,
-                    *v,
-                );
-                AnnotatedExportConfigOp::UpdatePrefilledGroupsEnabled(old)
-            }
-            AnnotatedExportConfigOp::UpdateAutomaticGroupsEnabled(v) => {
-                let old = std::mem::replace(
-                    &mut self.inner_data.export_config.automatic_groups_enabled,
-                    *v,
-                );
-                AnnotatedExportConfigOp::UpdateAutomaticGroupsEnabled(old)
-            }
-            AnnotatedExportConfigOp::UpdatePerGroupListEnabled(v) => {
-                let old = std::mem::replace(
-                    &mut self.inner_data.export_config.per_group_list_enabled,
-                    *v,
-                );
-                AnnotatedExportConfigOp::UpdatePerGroupListEnabled(old)
-            }
-            AnnotatedExportConfigOp::UpdateColloscopeConfig(v) => {
-                let old = std::mem::replace(
-                    &mut self.inner_data.export_config.colloscope_config,
-                    v.clone(),
-                );
-                AnnotatedExportConfigOp::UpdateColloscopeConfig(old)
-            }
-            AnnotatedExportConfigOp::UpdateAllGroupsConfig(v) => {
-                let old = std::mem::replace(
-                    &mut self.inner_data.export_config.all_groups_config,
-                    v.clone(),
-                );
-                AnnotatedExportConfigOp::UpdateAllGroupsConfig(old)
-            }
-            AnnotatedExportConfigOp::UpdatePrefilledGroupsConfig(v) => {
-                let old = std::mem::replace(
-                    &mut self.inner_data.export_config.prefilled_groups_config,
-                    v.clone(),
-                );
-                AnnotatedExportConfigOp::UpdatePrefilledGroupsConfig(old)
-            }
-            AnnotatedExportConfigOp::UpdateAutomaticGroupsConfig(v) => {
-                let old = std::mem::replace(
-                    &mut self.inner_data.export_config.automatic_groups_config,
-                    v.clone(),
-                );
-                AnnotatedExportConfigOp::UpdateAutomaticGroupsConfig(old)
-            }
-            AnnotatedExportConfigOp::UpdatePerGroupListConfig(v) => {
-                let old = std::mem::replace(
-                    &mut self.inner_data.export_config.per_group_list_config,
-                    v.clone(),
-                );
-                AnnotatedExportConfigOp::UpdatePerGroupListConfig(old)
-            }
-        };
-        Ok(backward)
-    }
-
     /// Used internally by [crate::Data::force_apply]
     ///
-    /// Thin copy of [Self::apply_export_config]. Export config is pure value data
+    /// Force-applies an export-config op. Export config is pure value data
     /// with no guards of any kind, so this copy is byte-identical to the original
     /// and its [ExportConfigPrecheckError] is empty; kept for uniformity across
     /// the force_apply family.

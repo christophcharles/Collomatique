@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use collomatique_state::{InMemoryData, Operation, tools};
-use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
 /// Internal re-export of the generic table containers.
@@ -59,25 +58,8 @@ pub mod teachers;
 pub mod week_patterns;
 pub mod weeks;
 
-pub use assignments::AssignmentError;
-pub use balancing::BalancingError;
-pub use colloscope_params::InvariantError;
-pub use colloscopes::ColloscopeError;
-pub use export_config::ExportConfigError;
-pub use group_lists::GroupListError;
-pub use incompats::IncompatError;
 pub use invariants::{Convergence, FixableInvariant, LogicError};
 pub use non_empty_range::{EmptyRangeError, NonEmptyRangeInclusive};
-pub use pairings::PairingError;
-pub use periods::PeriodError;
-pub use settings::SettingsError;
-pub use slot_pairings::SlotPairingError;
-pub use slots::SlotError;
-pub use students::StudentError;
-pub use subjects::SubjectError;
-pub use teachers::TeacherError;
-pub use week_patterns::WeekPatternError;
-pub use weeks::WeekError;
 
 // Per-domain precheck error enums for [Data::force_apply] — the carve-out
 // subset of each domain's error surface (step-3 survey Table 2). Introduced in
@@ -166,42 +148,9 @@ pub struct InnerData {
     pub export_config: export_config::ExportConfig,
 }
 
-#[derive(Debug, Error, PartialEq, Eq, Clone)]
-pub enum InnerDataError {
-    #[error("Duplicate ids")]
-    DuplicateIds,
-    #[error("Error in paramters: {0}")]
-    Params(#[from] InvariantError),
-    #[error("Error in colloscope: {0}")]
-    ColloscopeError(#[from] ColloscopeError),
-}
-
 impl InnerData {
     fn ids(&self) -> impl Iterator<Item = u64> {
         self.params.ids()
-    }
-
-    fn check_no_duplicate_ids(&self) -> bool {
-        let mut ids_so_far = BTreeSet::new();
-
-        for id in self.ids() {
-            if !ids_so_far.insert(id) {
-                return false;
-            }
-        }
-
-        true
-    }
-
-    pub fn check_invariants(&self) -> Result<(), InnerDataError> {
-        if !self.check_no_duplicate_ids() {
-            return Err(InnerDataError::DuplicateIds);
-        }
-
-        self.params.check_invariants()?;
-        self.colloscope.validate_against_params(&self.params)?;
-
-        Ok(())
     }
 }
 
@@ -244,56 +193,15 @@ impl PartialEq for Data {
 
 impl Eq for Data {}
 
-/// Errors for colloscopes modification
-///
-/// These errors can be returned when trying to modify [Data].
-#[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum Error {
-    #[error(transparent)]
-    Student(#[from] StudentError),
-    #[error(transparent)]
-    Period(#[from] PeriodError),
-    #[error(transparent)]
-    Week(#[from] WeekError),
-    #[error(transparent)]
-    Subject(#[from] SubjectError),
-    #[error(transparent)]
-    Teacher(#[from] TeacherError),
-    #[error(transparent)]
-    Assignment(#[from] AssignmentError),
-    #[error(transparent)]
-    WeekPattern(#[from] WeekPatternError),
-    #[error(transparent)]
-    Slot(#[from] SlotError),
-    #[error(transparent)]
-    Incompat(#[from] IncompatError),
-    #[error(transparent)]
-    GroupList(#[from] GroupListError),
-    #[error(transparent)]
-    Settings(#[from] SettingsError),
-    #[error(transparent)]
-    Pairing(#[from] PairingError),
-    #[error(transparent)]
-    SlotPairing(#[from] SlotPairingError),
-    #[error(transparent)]
-    Balancing(#[from] BalancingError),
-    #[error(transparent)]
-    Colloscope(#[from] ColloscopeError),
-    #[error(transparent)]
-    ExportConfig(#[from] ExportConfigError),
-    #[error(transparent)]
-    GlobalUpdate(#[from] InnerDataError),
-}
-
 /// Errors of [Data::force_apply]: only op preconditions (the carve-out subset —
 /// no-clobber, op-target existence, positions/anchors, empty-first protocol),
-/// never invariants. Invariant breaks are the caller's business via a checker
-/// (`InnerData::check_invariants` / `broken_invariants`) plus rollback.
+/// never invariants. Invariant breaks are the caller's business via
+/// [InnerData::broken_invariants] plus rollback.
 ///
-/// Mirrors [Error] 1:1 with `#[from]` transparency, minus the `GlobalUpdate`
-/// arm: the forced `GlobalUpdate` drops the pre-gate and is infallible. Each
-/// arm wraps a per-domain `*PrecheckError` (the carve-out subset of the
-/// matching `*Error`); the three value-only domains carry empty enums.
+/// The forced `GlobalUpdate` drops the pre-gate and is infallible, so this enum
+/// has no `GlobalUpdate` arm. Each arm wraps a per-domain `*PrecheckError` (the
+/// carve-out subset of op preconditions); the three value-only domains carry
+/// empty enums.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum PrecheckError {
     #[error(transparent)]
@@ -382,69 +290,11 @@ impl InMemoryData for Data {
     type OriginalOperation = Op;
     type AnnotatedOperation = AnnotatedOp;
     type NewInfo = Option<NewId>;
-    type Error = Error;
     type ApplyError = ApplyError;
 
     fn annotate(&self, op: Op) -> (AnnotatedOp, Option<NewId>) {
         let mut guard = self.id_issuer.lock().unwrap();
         AnnotatedOp::annotate(op, &mut guard)
-    }
-
-    fn apply(
-        &mut self,
-        op: &Self::AnnotatedOperation,
-    ) -> std::result::Result<Self::AnnotatedOperation, Self::Error> {
-        let backward = match op {
-            AnnotatedOp::Student(student_op) => {
-                AnnotatedOp::Student(self.apply_student(student_op)?)
-            }
-            AnnotatedOp::Period(period_op) => AnnotatedOp::Period(self.apply_period(period_op)?),
-            AnnotatedOp::Week(week_op) => AnnotatedOp::Week(self.apply_week(week_op)?),
-            AnnotatedOp::Subject(subject_op) => {
-                AnnotatedOp::Subject(self.apply_subject(subject_op)?)
-            }
-            AnnotatedOp::Teacher(teacher_op) => {
-                AnnotatedOp::Teacher(self.apply_teacher(teacher_op)?)
-            }
-            AnnotatedOp::Assignment(assignment_op) => {
-                AnnotatedOp::Assignment(self.apply_assignment(assignment_op)?)
-            }
-            AnnotatedOp::WeekPattern(week_pattern_op) => {
-                AnnotatedOp::WeekPattern(self.apply_week_pattern(week_pattern_op)?)
-            }
-            AnnotatedOp::Slot(slot_op) => AnnotatedOp::Slot(self.apply_slot(slot_op)?),
-            AnnotatedOp::Incompat(incompat_op) => {
-                AnnotatedOp::Incompat(self.apply_incompat(incompat_op)?)
-            }
-            AnnotatedOp::Pairing(pairing_op) => {
-                AnnotatedOp::Pairing(self.apply_pairing(pairing_op)?)
-            }
-            AnnotatedOp::SlotPairing(slot_pairing_op) => {
-                AnnotatedOp::SlotPairing(self.apply_slot_pairing(slot_pairing_op)?)
-            }
-            AnnotatedOp::GroupList(group_list_op) => {
-                AnnotatedOp::GroupList(self.apply_group_list(group_list_op)?)
-            }
-            AnnotatedOp::Settings(settings_op) => {
-                AnnotatedOp::Settings(self.apply_settings(settings_op)?)
-            }
-            AnnotatedOp::Balancing(balancing_op) => {
-                AnnotatedOp::Balancing(self.apply_balancing(balancing_op)?)
-            }
-            AnnotatedOp::Colloscope(colloscope_op) => {
-                AnnotatedOp::Colloscope(self.apply_colloscope(colloscope_op)?)
-            }
-            AnnotatedOp::ExportConfig(export_config_op) => {
-                AnnotatedOp::ExportConfig(self.apply_export_config(export_config_op)?)
-            }
-            AnnotatedOp::GlobalUpdate(new_inner_data) => {
-                new_inner_data.check_invariants()?;
-                let old = std::mem::replace(&mut self.inner_data, new_inner_data.clone());
-                AnnotatedOp::GlobalUpdate(old)
-            }
-        };
-        self.check_invariants();
-        Ok(backward)
     }
 
     /// The apply/check/rollback gate: snapshot, [Data::force_apply], check with
@@ -499,16 +349,14 @@ impl Data {
     /// hold (no-clobber, op-target existence, positions/anchors, empty-first
     /// protocol) and surface as [PrecheckError]; a failed call leaves the state
     /// unchanged. A *successful* call may leave the state invalid: the caller
-    /// owns running a checker ([InnerData::check_invariants] /
-    /// [InnerData::broken_invariants]) and restoring a snapshot on failure.
+    /// owns running the checker ([InnerData::broken_invariants]) and restoring a
+    /// snapshot on failure.
     ///
-    /// This is an independent thin copy of [InMemoryData::apply] (each arm calls
-    /// `force_apply_*`, the carve-out-only twin of `apply_*`). Three differences
-    /// from `apply`: errors land in [PrecheckError]; the `GlobalUpdate` arm drops
-    /// the `check_invariants()?` pre-gate (this *is* the force door); and the
-    /// trailing `check_invariants()` panic net is omitted (the state is allowed
-    /// to be invalid here). It is the step-5 apply/check/restore primitive; today
-    /// the step-4 differential fuzz exercises it.
+    /// Each arm calls the corresponding `force_apply_*` (the carve-out-only
+    /// domain writer). The `GlobalUpdate` arm has no invariant pre-gate — this
+    /// *is* the force door — and there is no trailing panic net, since the state
+    /// is allowed to be invalid here. It is the force half of the
+    /// apply/check/rollback gate ([Data::try_apply]).
     pub fn force_apply(
         &mut self,
         op: &AnnotatedOp,
@@ -555,9 +403,9 @@ impl Data {
     /// issued id can never collide with an existing one.
     ///
     /// This is [Data]-level state (the issuer is deliberately not part of
-    /// [InnerData]), so it cannot live in [InnerData::check_invariants] or
-    /// [InnerData::broken_invariants]; it is the surviving companion the
-    /// apply/check/rollback gate ([Data::try_apply]) runs on the accepted path.
+    /// [InnerData]), so it cannot live in [InnerData::broken_invariants]; it is
+    /// the surviving companion the apply/check/rollback gate ([Data::try_apply])
+    /// runs on the accepted path.
     fn assert_id_issuer_high_water(&self) {
         let max_id = self.inner_data.ids().max();
 
@@ -567,18 +415,6 @@ impl Data {
                 panic!("IdIssuer internal counter is not greater than all internal ids");
             }
         }
-    }
-
-    /// USED INTERNALLY
-    ///
-    /// Checks all the invariants of data (the old-checker panic net, kept for the
-    /// checked [InMemoryData::apply] path during the step-5 migration window).
-    fn check_invariants(&self) {
-        self.assert_id_issuer_high_water();
-
-        self.inner_data
-            .check_invariants()
-            .expect("Invariants should be valid in Data");
     }
 }
 

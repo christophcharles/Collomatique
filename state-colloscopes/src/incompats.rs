@@ -52,32 +52,9 @@ pub struct Incompatibility {
     pub week_pattern_id: Option<WeekPatternId>,
 }
 
-/// Errors for schedule incompatibility operations
-///
-/// These errors can be returned when trying to modify [crate::Data] with an incompat op.
-#[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum IncompatError {
-    /// A incompat id is invalid
-    #[error("invalid incompat id ({0:?})")]
-    InvalidIncompatId(IncompatId),
-
-    /// The incompat id already exists
-    #[error("incompat id ({0:?}) already exists")]
-    IncompatIdAlreadyExists(IncompatId),
-
-    /// subject id is invalid
-    #[error("invalid subject id ({0:?})")]
-    InvalidSubjectId(SubjectId),
-
-    /// week pattern id is invalid
-    #[error("invalid week pattern id ({0:?})")]
-    InvalidWeekPatternId(WeekPatternId),
-}
-
 /// Precondition errors of the forced incompat ops — the carve-out subset
 /// (step-3 survey Table 2). Only no-clobber and op-target existence survive;
-/// `validate_incompat` is stripped. Variants copied verbatim from
-/// [IncompatError].
+/// `validate_incompat` is stripped.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum IncompatPrecheckError {
     /// A incompat id is invalid
@@ -90,65 +67,9 @@ pub enum IncompatPrecheckError {
 }
 
 impl crate::Data {
-    /// Used internally
-    ///
-    /// Apply incompat operations
-    pub(crate) fn apply_incompat(
-        &mut self,
-        incompat_op: &AnnotatedIncompatOp,
-    ) -> std::result::Result<AnnotatedIncompatOp, IncompatError> {
-        match incompat_op {
-            AnnotatedIncompatOp::Add(new_id, incompat) => {
-                if self
-                    .inner_data
-                    .params
-                    .incompats
-                    .incompat_map
-                    .contains(new_id)
-                {
-                    return Err(IncompatError::IncompatIdAlreadyExists(*new_id));
-                }
-                self.inner_data.params.validate_incompat(incompat)?;
-
-                self.inner_data
-                    .params
-                    .incompats
-                    .incompat_map
-                    .insert(*new_id, incompat.clone());
-
-                Ok(AnnotatedIncompatOp::Remove(*new_id))
-            }
-            AnnotatedIncompatOp::Remove(id) => {
-                let Some(old_incompat) = self.inner_data.params.incompats.incompat_map.remove(id)
-                else {
-                    return Err(IncompatError::InvalidIncompatId(*id));
-                };
-
-                Ok(AnnotatedIncompatOp::Add(*id, old_incompat))
-            }
-            AnnotatedIncompatOp::Update(incompat_id, new_incompat) => {
-                self.inner_data.params.validate_incompat(new_incompat)?;
-
-                let Some(incompat) = self
-                    .inner_data
-                    .params
-                    .incompats
-                    .incompat_map
-                    .get_mut(incompat_id)
-                else {
-                    return Err(IncompatError::InvalidIncompatId(*incompat_id));
-                };
-
-                let old_incompat = std::mem::replace(incompat, new_incompat.clone());
-
-                Ok(AnnotatedIncompatOp::Update(*incompat_id, old_incompat))
-            }
-        }
-    }
-
     /// Used internally by [crate::Data::force_apply]
     ///
-    /// Thin copy of [Self::apply_incompat]: carve-out guards kept (returned as
+    /// Force-applies an incompat op: carve-out guards kept (returned as
     /// [IncompatPrecheckError]), invariant guards stripped (step-3 survey Table 1).
     /// May leave the state invalid; the caller owns checking and rollback.
     pub(crate) fn force_apply_incompat(

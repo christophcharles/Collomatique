@@ -9,7 +9,7 @@ use thiserror::Error;
 use collomatique_state::{Join, References};
 
 use crate::Table;
-use crate::ids::{NewId, PeriodId, SlotId, WeekId, WeekPatternId};
+use crate::ids::{NewId, PeriodId, WeekId};
 use crate::ops::AnnotatedWeekOp;
 use crate::periods::Periods;
 
@@ -501,43 +501,12 @@ impl Weeks {
     }
 }
 
-/// Errors for week operations
-///
-/// These errors can be returned when trying to modify [crate::Data] with a week op.
-#[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum WeekError {
-    /// A period id is invalid
-    #[error("invalid period id ({0:?})")]
-    InvalidPeriodId(PeriodId),
-
-    /// A week id is invalid
-    #[error("invalid week id ({0:?})")]
-    InvalidWeekId(WeekId),
-
-    /// The week id already exists
-    #[error("week id ({0:?}) already exists")]
-    WeekIdAlreadyExists(WeekId),
-
-    /// The target position is out of range for the destination period
-    #[error("invalid position ({1}) in period ({0:?})")]
-    InvalidPosition(PeriodId, usize),
-
-    /// A week pattern is not trivial on the week to be removed
-    #[error("week pattern {1:?} is not trivial on week {0:?}")]
-    NonTrivialWeekPattern(WeekId, WeekPatternId),
-
-    /// A slot in the colloscope blocks the operation on the week
-    #[error("slot {1:?} in colloscope blocks the operation on week {0:?}")]
-    NotCompatibleSlotInColloscope(WeekId, SlotId),
-}
-
 /// Precondition errors of the forced week ops — the carve-out subset
 /// (step-3 survey Table 2). Kept: no-clobber, op-target existence
 /// ([Self::InvalidWeekId]), destination-period existence for add/move
 /// ([Self::InvalidPeriodId]), and position bounds. The Remove reference scans,
 /// the Update silencing guard, and both `WeekMove` semantic guards (the F2
-/// inline re-implementations) are stripped. Variants copied verbatim from
-/// [WeekError].
+/// inline re-implementations) are stripped.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum WeekPrecheckError {
     /// A period id is invalid
@@ -558,279 +527,9 @@ pub enum WeekPrecheckError {
 }
 
 impl crate::Data {
-    /// Used internally
-    ///
-    /// Apply week operations.
-    ///
-    /// Weeks are standalone [Week] entities. Week patterns key their exclusions
-    /// by week id and the colloscope keys its rows by `(slot, week)`, so neither
-    /// needs positional maintenance when a week is spliced in or out — the only
-    /// bookkeeping left is the guards that reject an op which would strand a
-    /// colloscope row on an inactive week.
-    pub(crate) fn apply_week(
-        &mut self,
-        week_op: &AnnotatedWeekOp,
-    ) -> std::result::Result<AnnotatedWeekOp, WeekError> {
-        match week_op {
-            AnnotatedWeekOp::AddFront(week_id, period_id, desc) => {
-                self.add_week(*week_id, *period_id, 0, desc)?;
-                Ok(AnnotatedWeekOp::Remove(*week_id))
-            }
-            AnnotatedWeekOp::AddAfter(week_id, after_id, desc) => {
-                let Some((period_id, after_pos)) =
-                    self.inner_data.params.weeks.week_position(*after_id)
-                else {
-                    return Err(WeekError::InvalidWeekId(*after_id));
-                };
-                self.add_week(*week_id, period_id, after_pos + 1, desc)?;
-                Ok(AnnotatedWeekOp::Remove(*week_id))
-            }
-            AnnotatedWeekOp::Remove(week_id) => self.remove_week(*week_id),
-            AnnotatedWeekOp::Update(week_id, desc) => self.update_week(*week_id, desc),
-            AnnotatedWeekOp::Move(week_id, dest_period, dest_pos) => {
-                self.move_week(*week_id, *dest_period, *dest_pos)
-            }
-        }
-    }
-
-    /// Splices a week into `period_id` at per-period position `per_pos`.
-    ///
-    /// The new week's id belongs to no pattern's exclusion set, so patterns
-    /// need no maintenance; and the colloscope keys rows by `(slot, week)`, so a
-    /// fresh week simply has no rows yet (an absent row is an empty cell).
-    fn add_week(
-        &mut self,
-        week_id: WeekId,
-        period_id: PeriodId,
-        per_pos: usize,
-        desc: &WeekDesc,
-    ) -> Result<(), WeekError> {
-        if self.inner_data.params.weeks.find_week(week_id).is_some() {
-            return Err(WeekError::WeekIdAlreadyExists(week_id));
-        }
-
-        // Existence and bounds are separate: an existing period with no weeks
-        // has no ordering row, so `week_count_for_period` is `None` there — that
-        // must read as length 0, not "invalid period".
-        if self
-            .inner_data
-            .params
-            .periods
-            .find_period_position(period_id)
-            .is_none()
-        {
-            return Err(WeekError::InvalidPeriodId(period_id));
-        }
-        let period_len = self
-            .inner_data
-            .params
-            .weeks
-            .week_count_for_period(period_id)
-            .unwrap_or(0);
-        if per_pos > period_len {
-            return Err(WeekError::InvalidPosition(period_id, per_pos));
-        }
-
-        self.inner_data
-            .params
-            .weeks
-            .insert_week_at(week_id, period_id, per_pos, desc.clone());
-
-        Ok(())
-    }
-
-    /// Removes an existing week.
-    ///
-    /// Requires no week pattern to exclude the week (so undo restores its
-    /// membership exactly) and every colloscope cell to be empty. The reverse
-    /// re-adds the week at the same spot with the same id.
-    fn remove_week(&mut self, week_id: WeekId) -> Result<AnnotatedWeekOp, WeekError> {
-        let Some((period_id, per_pos)) = self.inner_data.params.weeks.week_position(week_id) else {
-            return Err(WeekError::InvalidWeekId(week_id));
-        };
-
-        for (week_pattern_id, week_pattern) in
-            self.inner_data.params.week_patterns.week_pattern_map.iter()
-        {
-            if week_pattern.excluded_weeks.contains(&week_id) {
-                return Err(WeekError::NonTrivialWeekPattern(week_id, week_pattern_id));
-            }
-        }
-
-        // Canonical-absent surface: any interrogation row on this week (for any
-        // slot) blocks removal. Report the first such slot in surface order.
-        if let Some(slot_id) = self
-            .inner_data
-            .colloscope
-            .iter()
-            .find(|((_slot_id, week), _groups)| *week == week_id)
-            .map(|((slot_id, _week), _groups)| slot_id)
-        {
-            return Err(WeekError::NotCompatibleSlotInColloscope(week_id, slot_id));
-        }
-
-        // Compute the reverse op before mutating.
-        let prev_week_id = if per_pos > 0 {
-            self.inner_data
-                .params
-                .weeks
-                .week_id_at(period_id, per_pos - 1)
-        } else {
-            None
-        };
-
-        let (_removed_period, _removed_pos, removed_desc) =
-            self.inner_data.params.weeks.remove_week_entry(week_id);
-
-        Ok(match prev_week_id {
-            None => AnnotatedWeekOp::AddFront(week_id, period_id, removed_desc),
-            Some(prev) => AnnotatedWeekOp::AddAfter(week_id, prev, removed_desc),
-        })
-    }
-
-    /// Updates a week's description (status / annotation) in place.
-    ///
-    /// The week keeps its id and position, so colloscope rows (keyed by
-    /// `(slot, week)`) stay put. Only a `true → false` interrogation flip can
-    /// invalidate a row — it would strand an interrogation on a now-inactive
-    /// week — which is rejected before mutating.
-    fn update_week(
-        &mut self,
-        week_id: WeekId,
-        new_desc: &WeekDesc,
-    ) -> Result<AnnotatedWeekOp, WeekError> {
-        if self
-            .inner_data
-            .params
-            .weeks
-            .week_position(week_id)
-            .is_none()
-        {
-            return Err(WeekError::InvalidWeekId(week_id));
-        }
-
-        // Silencing the week (interrogations flipping off) would leave any
-        // colloscope row on it stranded on an inactive week. Reject before
-        // mutating. A `false → true` flip only activates weeks, so it can never
-        // invalidate an existing row.
-        if !new_desc.interrogations
-            && let Some(slot_id) = self
-                .inner_data
-                .colloscope
-                .iter()
-                .find(|((_slot, week), _groups)| *week == week_id)
-                .map(|((slot, _week), _groups)| slot)
-        {
-            return Err(WeekError::NotCompatibleSlotInColloscope(week_id, slot_id));
-        }
-
-        let old_desc = self
-            .inner_data
-            .params
-            .weeks
-            .replace_week_desc(week_id, new_desc.clone());
-
-        Ok(AnnotatedWeekOp::Update(week_id, old_desc))
-    }
-
-    /// Moves a week to `dest_pos` in `dest_period`, carrying its content.
-    ///
-    /// The week keeps its id, so its pattern exclusions and its colloscope rows
-    /// (keyed by `(slot, week)`) travel with it automatically — nothing is
-    /// re-spliced. The one thing that can change is the destination period: a
-    /// non-empty row may only land in a period that runs the slot's subject, and
-    /// only if its groups fit the destination association bound. Both are
-    /// checked before mutating so an invalid move is rejected cleanly.
-    fn move_week(
-        &mut self,
-        week_id: WeekId,
-        dest_period: PeriodId,
-        dest_pos: usize,
-    ) -> Result<AnnotatedWeekOp, WeekError> {
-        let Some((src_period, src_pos)) = self.inner_data.params.weeks.week_position(week_id)
-        else {
-            return Err(WeekError::InvalidWeekId(week_id));
-        };
-        if self
-            .inner_data
-            .params
-            .periods
-            .find_period_position(dest_period)
-            .is_none()
-        {
-            return Err(WeekError::InvalidPeriodId(dest_period));
-        }
-
-        // Destination length once the week is detached from its current spot.
-        let dest_len_post = self
-            .inner_data
-            .params
-            .weeks
-            .week_count_for_period(dest_period)
-            .unwrap_or(0)
-            - if dest_period == src_period { 1 } else { 0 };
-        if dest_pos > dest_len_post {
-            return Err(WeekError::InvalidPosition(dest_period, dest_pos));
-        }
-
-        // Guard: every colloscope row on the moving week must be able to live in
-        // the destination period. The week's activity for a slot is unchanged
-        // (pattern exclusion and the week's interrogation flag both key on the
-        // preserved id), so only the destination period matters — the slot's
-        // subject must run there and the assigned groups must fit the
-        // destination association bound.
-        let params = &self.inner_data.params;
-        for ((slot_id, week), groups) in self.inner_data.colloscope.iter() {
-            if week != week_id {
-                continue;
-            }
-            let (subject_id, _pos) = params
-                .slots
-                .find_slot_subject_and_position(slot_id)
-                .expect("slot id from colloscope is valid");
-            let subject = params
-                .subjects
-                .find_subject(subject_id)
-                .expect("subject id from a live slot is valid");
-            if subject.parameters.interrogation_parameters.is_none()
-                || subject.excluded_periods.contains(&dest_period)
-            {
-                return Err(WeekError::NotCompatibleSlotInColloscope(week_id, slot_id));
-            }
-            let bound = params
-                .group_lists
-                .subjects_associations
-                .get(&(dest_period, subject_id))
-                .map(|group_list_id| {
-                    params
-                        .group_lists
-                        .group_list_map
-                        .get(group_list_id)
-                        .expect("association references a live group list")
-                        .params()
-                        .group_names
-                        .len() as u32
-                })
-                .unwrap_or(0);
-            if groups.iter().any(|g| *g >= bound) {
-                return Err(WeekError::NotCompatibleSlotInColloscope(week_id, slot_id));
-            }
-        }
-
-        // Move the week entry (ordering slot + owning period). Patterns and the
-        // colloscope need no maintenance: both key on the week id, which the
-        // move preserves, so every exclusion and every row travels with it.
-        self.inner_data
-            .params
-            .weeks
-            .move_week_entry(week_id, dest_period, dest_pos);
-
-        Ok(AnnotatedWeekOp::Move(week_id, src_period, src_pos))
-    }
-
     /// Used internally by [crate::Data::force_apply]
     ///
-    /// Thin copy of [Self::apply_week]: carve-out guards kept (returned as
+    /// Force-applies a week op: carve-out guards kept (returned as
     /// [WeekPrecheckError] — no-clobber, target existence, destination-period
     /// existence, position bounds), invariant guards stripped (step-3 survey
     /// Table 1). May leave the state invalid; the caller owns checking and
@@ -861,7 +560,7 @@ impl crate::Data {
         }
     }
 
-    /// Thin copy of [Self::add_week]: no invariant guard exists here, so every
+    /// Force-applies a week add: no invariant guard exists here, so every
     /// carve-out guard (no-clobber, destination-period existence, position
     /// bounds) is kept.
     fn force_add_week(
@@ -903,7 +602,7 @@ impl crate::Data {
         Ok(())
     }
 
-    /// Thin copy of [Self::remove_week]: target existence kept; the
+    /// Force-applies a week removal: target existence kept; the
     /// pattern-exclusion and colloscope-row scans (invariant guards) stripped.
     fn force_remove_week(&mut self, week_id: WeekId) -> Result<AnnotatedWeekOp, WeekPrecheckError> {
         let Some((period_id, per_pos)) = self.inner_data.params.weeks.week_position(week_id) else {
@@ -931,7 +630,7 @@ impl crate::Data {
         })
     }
 
-    /// Thin copy of [Self::update_week]: target existence kept; the silencing
+    /// Force-applies a week update: target existence kept; the silencing
     /// colloscope guard (invariant guard) stripped.
     fn force_update_week(
         &mut self,
@@ -959,7 +658,7 @@ impl crate::Data {
         Ok(AnnotatedWeekOp::Update(week_id, old_desc))
     }
 
-    /// Thin copy of [Self::move_week]: target existence, destination-period
+    /// Force-applies a week move: target existence, destination-period
     /// existence and position bounds kept; both `WeekMove` semantic guards (the
     /// F2 inline re-implementations) stripped.
     fn force_move_week(

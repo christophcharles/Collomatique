@@ -183,27 +183,9 @@ impl<'a> JoinedSlotPairingRule<'a> {
     }
 }
 
-/// Errors for slot pairing rule operations
-///
-/// These errors can be returned when trying to modify [crate::Data] with a slot pairing op.
-#[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum SlotPairingError {
-    #[error("invalid slot pairing rule id ({0:?})")]
-    InvalidSlotPairingRuleId(SlotPairingRuleId),
-    #[error("slot pairing rule id ({0:?}) already exists")]
-    SlotPairingRuleIdAlreadyExists(SlotPairingRuleId),
-    #[error("invalid slot id ({0:?})")]
-    InvalidSlotId(SlotId),
-    #[error("invalid period id ({0:?})")]
-    InvalidPeriodId(PeriodId),
-    #[error("slots {0:?} and {1:?} do not belong to the same subject")]
-    SlotsNotInSameSubject(SlotId, SlotId),
-}
-
 /// Precondition errors of the forced slot-pairing ops — the carve-out subset
 /// (step-3 survey Table 2). Only no-clobber and op-target existence survive;
-/// `validate_slot_pairing_rule` is stripped. Variants copied verbatim from
-/// [SlotPairingError].
+/// `validate_slot_pairing_rule` is stripped.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum SlotPairingPrecheckError {
     #[error("invalid slot pairing rule id ({0:?})")]
@@ -213,71 +195,9 @@ pub enum SlotPairingPrecheckError {
 }
 
 impl crate::Data {
-    pub(crate) fn apply_slot_pairing(
-        &mut self,
-        slot_pairing_op: &AnnotatedSlotPairingOp,
-    ) -> Result<AnnotatedSlotPairingOp, SlotPairingError> {
-        let backward = match slot_pairing_op {
-            AnnotatedSlotPairingOp::Add(new_id, rule) => {
-                if self
-                    .inner_data
-                    .params
-                    .slot_pairings
-                    .slot_pairing_rule_map
-                    .contains(new_id)
-                {
-                    return Err(SlotPairingError::SlotPairingRuleIdAlreadyExists(*new_id));
-                }
-
-                self.inner_data.params.validate_slot_pairing_rule(rule)?;
-
-                self.inner_data
-                    .params
-                    .slot_pairings
-                    .slot_pairing_rule_map
-                    .insert(*new_id, rule.clone());
-
-                AnnotatedSlotPairingOp::Remove(*new_id)
-            }
-            AnnotatedSlotPairingOp::Remove(id) => {
-                let Some(old_rule) = self
-                    .inner_data
-                    .params
-                    .slot_pairings
-                    .slot_pairing_rule_map
-                    .remove(id)
-                else {
-                    return Err(SlotPairingError::InvalidSlotPairingRuleId(*id));
-                };
-
-                AnnotatedSlotPairingOp::Add(*id, old_rule)
-            }
-            AnnotatedSlotPairingOp::Update(id, new_rule) => {
-                self.inner_data
-                    .params
-                    .validate_slot_pairing_rule(new_rule)?;
-
-                let Some(rule) = self
-                    .inner_data
-                    .params
-                    .slot_pairings
-                    .slot_pairing_rule_map
-                    .get_mut(id)
-                else {
-                    return Err(SlotPairingError::InvalidSlotPairingRuleId(*id));
-                };
-
-                let old_rule = std::mem::replace(rule, new_rule.clone());
-
-                AnnotatedSlotPairingOp::Update(*id, old_rule)
-            }
-        };
-        Ok(backward)
-    }
-
     /// Used internally by [crate::Data::force_apply]
     ///
-    /// Thin copy of [Self::apply_slot_pairing]: carve-out guards kept (returned
+    /// Force-applies a slot pairing op: carve-out guards kept (returned
     /// as [SlotPairingPrecheckError]), invariant guards stripped (step-3 survey
     /// Table 1). May leave the state invalid; the caller owns checking and
     /// rollback.

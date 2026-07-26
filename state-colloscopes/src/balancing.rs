@@ -72,19 +72,6 @@ impl Default for BalancingOptions {
     }
 }
 
-/// Errors for balancing operations
-///
-/// These errors can be returned when trying to modify [crate::Data] with a balancing op.
-#[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum BalancingError {
-    /// A subject id is invalid
-    #[error("invalid subject id ({0:?})")]
-    InvalidSubjectId(SubjectId),
-    /// Subject does not have interrogations
-    #[error("subject id ({0:?}) does not have interrogations")]
-    SubjectHasNoInterrogation(SubjectId),
-}
-
 /// Precondition errors of the forced balancing op — the carve-out subset
 /// (step-3 survey Table 2). The balancing op has no transition/input guards
 /// (only `validate_balancing`, which strips), so this enum is empty; kept for
@@ -93,26 +80,9 @@ pub enum BalancingError {
 pub enum BalancingPrecheckError {}
 
 impl crate::Data {
-    /// Used internally
-    ///
-    /// Apply balancing operations
-    pub(crate) fn apply_balancing(
-        &mut self,
-        balancing_op: &AnnotatedBalancingOp,
-    ) -> std::result::Result<AnnotatedBalancingOp, BalancingError> {
-        match balancing_op {
-            AnnotatedBalancingOp::Update(new_balancing) => {
-                self.inner_data.params.validate_balancing(new_balancing)?;
-                let old_balancing =
-                    std::mem::replace(&mut self.inner_data.params.balancing, new_balancing.clone());
-                Ok(AnnotatedBalancingOp::Update(old_balancing))
-            }
-        }
-    }
-
     /// Used internally by [crate::Data::force_apply]
     ///
-    /// Thin copy of [Self::apply_balancing]: the only guard (`validate_balancing`)
+    /// Force-applies a balancing op: the only guard (`validate_balancing`)
     /// is an invariant guard and is stripped (step-3 survey Table 1), so this
     /// copy is guard-free and its [BalancingPrecheckError] is empty. May leave the
     /// state invalid; the caller owns checking and rollback.
