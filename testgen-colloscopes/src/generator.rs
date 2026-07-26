@@ -343,10 +343,10 @@ fn gen_period(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
     let add_w = if n < 4 { 4 } else { 1 };
     let remove_w = if n > 0 { 2 } else { 0 };
     // Periods are created empty (weeks are spliced in by the WeekOp family,
-    // driven by `gen_week`). This is the valid walk, applied through *checked*
-    // `apply`, which still guards `PeriodOp::Remove` with `PeriodStillHasWeeks`:
-    // removing a week-non-empty period bounces here — a legitimate error the
-    // harness tolerates like any other. (The force path dropped that guard; the
+    // driven by `gen_week`). This is the valid walk, applied through the gate:
+    // removing a week-non-empty period bounces as `Error::Invariants` (the
+    // weeks' `period_id` FKs would dangle) — a legitimate error the harness
+    // tolerates like any other. (The force path lands those dangles; the
     // corruption arm exploits it to reach the dangling landing — see
     // `gen_corruption_op`.)
     let op = match weighted(rng, &[2, add_w, remove_w]) {
@@ -846,10 +846,10 @@ fn gen_pairing(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
     if invalid {
         let op = if !pools.subject_ids.is_empty() && rng.random_bool(0.6) {
             // Dangling subject in the consequent: `PairingRule::new` accepts the
-            // value (the two ids are distinct), checked apply rejects the op with
-            // `InvalidSubjectId`, and the force path lands a dangling FK. (Before
-            // the seal this arm built a same-subject rule; that value is now
-            // unrepresentable.)
+            // value (the two ids are distinct), the gate rejects the op with
+            // `Error::Invariants` (a dangling subject FK), and the force path
+            // lands that dangle. (Before the seal this arm built a same-subject
+            // rule; that value is now unrepresentable.)
             let real = pick(rng, &pools.subject_ids);
             let ghost = unsafe { SubjectId::new(dangling(rng)) };
             PairingOp::Add(synth::pairing_rule(rng, real, ghost, &pools.period_ids))
@@ -906,10 +906,10 @@ fn gen_slot_pairing(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
     if invalid {
         let op = if !pools.slot_ids.is_empty() && rng.random_bool(0.6) {
             // Dangling slot in the consequent: `SlotPairingRule::new` accepts
-            // the value (the two ids are distinct), checked apply rejects the
-            // op with `InvalidSlotId`, and the force path lands a dangling FK.
-            // (Before the seal this arm built a same-slot rule; that value is
-            // now unrepresentable.)
+            // the value (the two ids are distinct), the gate rejects the op
+            // with `Error::Invariants` (a dangling slot FK), and the force path
+            // lands that dangle. (Before the seal this arm built a same-slot
+            // rule; that value is now unrepresentable.)
             let real = pick(rng, &pools.slot_ids);
             let ghost = unsafe { SlotId::new(dangling(rng)) };
             SlotPairingOp::Add(synth::slot_pairing_rule(
@@ -1113,17 +1113,18 @@ fn gen_global_update(
 }
 
 // ============================================================================
-// Step-4 differential fuzz: the corruption generator
+// Gate-property fuzz: the corruption generator (born as the step-4
+// differential fuzz)
 // ============================================================================
 
-/// Probe kinds for the step-4 differential fuzz.
+/// Probe kinds for the gate-property fuzz (`property_apply_gate.rs`).
 ///
 /// Every probe op is *carve-out-clean*: it targets a live entity, uses fresh
 /// (dangling) or duplicated ids and in-bounds positions, so `force_apply` lands
 /// it rather than bouncing off a kept precheck guard. All but [`Self::ForceValid`]
 /// additionally aim at a *stripped* invariant, so the landed state is (usually)
-/// broken — the depth-1 probe distribution the fuzz asserts the two checkers
-/// agree on.
+/// broken — the depth-1 probe distribution the apply gate must reject and roll
+/// back.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CorruptionKind {
     /// `Remove` of an existing (likely referenced) entity → dangling FKs.
@@ -1136,7 +1137,7 @@ pub enum CorruptionKind {
     /// same-subject pairing and same-slot slot-pairing flavors are gone: the
     /// sealed `PairingRule`/`SlotPairingRule` make those states unrepresentable.
     ForceLogic,
-    /// Plain valid op — the forced ≡ checked equivalence probe.
+    /// Plain valid op — the clean-landing probe.
     ForceValid,
 }
 
@@ -1169,7 +1170,7 @@ impl CorruptionKind {
     }
 }
 
-/// Generates one probe op for the differential fuzz.
+/// Generates one probe op for the gate-property fuzz.
 ///
 /// A [`CorruptionKind`] is chosen uniformly among the kinds that have material
 /// in the current state (retarget and valid are always available); the returned

@@ -15,8 +15,8 @@ use crate::ops::AnnotatedSlotOp;
 ///
 /// The backend is a flat id-keyed [Table] of slots (each slot carries its
 /// subject as a foreign key) plus an explicit per-subject ordering sidecar.
-/// The two must stay consistent; the invariant is checked in
-/// `check_slots_data_consistency`:
+/// The two must stay consistent; the invariant is checked by the slot-ordering
+/// `LogicError`s in `InnerData::broken_invariants`:
 /// - `ordering` is sparse: a row is present exactly when the subject has at
 ///   least one slot (canonical form — no empty rows), and that subject exists
 ///   and has interrogations, and

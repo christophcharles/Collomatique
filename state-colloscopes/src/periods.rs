@@ -19,7 +19,8 @@ use crate::ops::AnnotatedPeriodOp;
 ///
 /// The cross-container consistency (every `ordering` row names a live period,
 /// the row is non-empty, every week names its period, no week is left
-/// un-ordered) is checked in `Parameters::check_weeks_data_consistency`.
+/// un-ordered) is checked by the week-ordering `LogicError`s in
+/// `InnerData::broken_invariants`.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Periods {
     /// Start date for the colloscope
@@ -143,7 +144,8 @@ impl crate::Data {
                     return Err(PeriodPrecheckError::PeriodIdAlreadyExists(*period_id));
                 }
 
-                // Periods are created week-less (see [Self::apply_period]).
+                // Periods are created week-less; weeks are spliced in by the
+                // week ops afterwards.
                 self.inner_data
                     .params
                     .periods
@@ -214,13 +216,13 @@ impl crate::Data {
                     .periods
                     .ordered_period_list
                     .remove_at(position);
-                // stripped: the association-row cleanup of [Self::apply_period].
-                // There it is dead code (the stripped
-                // PeriodStillHasNonTrivialGroupListAssociation guard rejects the
-                // removal while any row exists); alive here it would silently
-                // repair the would-be-dangling rows, landing a VALID state on an
-                // op the checked apply rejects — and irreversibly, since the
-                // reverse only re-adds the period. force_apply never fixes
+                // stripped: the association-row cleanup the retired checked
+                // apply_period carried. There it was dead code (the also-retired
+                // PeriodStillHasNonTrivialGroupListAssociation guard rejected
+                // the removal while any row existed); alive here it would
+                // silently repair the would-be-dangling rows, landing a VALID
+                // state on an op the gate must reject — and irreversibly, since
+                // the reverse only re-adds the period. force_apply never fixes
                 // anything: the dangling rows are the checker's to report.
 
                 Ok(match previous_id {

@@ -79,17 +79,17 @@ pub enum PeriodOp {
     /// Add a new (empty) period at the beginning
     ///
     /// Periods are always created week-less; weeks are then spliced in with the
-    /// [WeekOp] family. This is what makes `apply_week` the single writer of
-    /// week data.
+    /// [WeekOp] family. This is what makes `force_apply_week` the single writer
+    /// of week data.
     AddFront,
     /// Add a new (empty) period after an existing period
     AddAfter(PeriodId),
     /// Remove an existing period
     ///
-    /// Checked `apply` requires the period to be week-empty (empty it first with
-    /// [WeekOp::Remove]). Forced apply drops that guard: removing a period that
-    /// still has weeks leaves their `Week::period_id` FKs dangling for the
-    /// cascade.
+    /// The apply/check/rollback gate rejects the removal of a week-non-empty
+    /// period with `Error::Invariants` (the weeks' `Week::period_id` FKs would
+    /// dangle) — empty it first with [WeekOp::Remove]. `force_apply` lands the
+    /// removal anyway and leaves the dangling FKs for the checker/cascade.
     Remove(PeriodId),
 }
 

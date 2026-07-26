@@ -51,8 +51,9 @@
 //!
 //! ## Documented exclusions
 //!
-//! - `SubjectStillHasNonEmptySlotInColloscope` (update-only, and indirect via
-//!   slot → subject): handled later as a wrapper (item 3), not a reference site.
+//! - `SubjectStillHasNonEmptySlotInColloscope` (retired guard; update-only, and
+//!   indirect via slot → subject): handled later as a wrapper (item 3), not a
+//!   reference site.
 //! - `slots.ordering` keys *and* row values: a pure mirror of `slot_map` (a row
 //!   exists iff the subject has ≥1 slot, canonical-absent, and the key matches
 //!   each slot's `subject_id`), so the keys add nothing over the per-slot
@@ -63,7 +64,7 @@
 //!   matches each week's `period_id`), so the keys add nothing over the per-week
 //!   `WeekPeriodFk` sites — a force-removed period leaves the row keyed by the
 //!   absent period, but every week in it already dangles at `WeekPeriodFk`; the
-//!   values are covered by `check_weeks_data_consistency`.
+//!   values are covered by the structural no-orphan/count checks.
 //! - *transitive* references are not materialized. A week pattern references a
 //!   period only through the weeks it excludes; that edge is derivable from
 //!   `WeekPatternExcludedWeek` (pattern → week) composed with `WeekPeriodFk`

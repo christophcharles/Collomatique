@@ -256,10 +256,10 @@ impl crate::InnerData {
     fn logic_errors(&self) -> BTreeSet<LogicError> {
         let mut errors = BTreeSet::new();
 
-        // Duplicate raw ids across the shared `u64` namespace. The old check
-        // (`InnerData::check_no_duplicate_ids`) is a bool; here each colliding
-        // raw id is reported (an id reused three times still yields one entry —
-        // the set dedups).
+        // Duplicate raw ids across the shared `u64` namespace. The retired old
+        // check (`InnerData::check_no_duplicate_ids`) was a bool; here each
+        // colliding raw id is reported (an id reused three times still yields
+        // one entry — the set dedups).
         let mut seen = BTreeSet::new();
         for id in self.ids() {
             if !seen.insert(id) {
@@ -465,8 +465,9 @@ impl crate::InnerData {
         }
 
         // ---- Assignments rows: the subject runs on the period, and every
-        // assigned student is present for it. Mirrors
-        // `check_assignments_data_consistency` (the empty-row case is layer A).
+        // assigned student is present for it. Mirrors what the retired
+        // `check_assignments_data_consistency` checked (the empty-row case is
+        // layer A).
         for (period_id, subject_id, students) in params.assignments.iter() {
             if let Some(subject) = params.subjects.find_subject(subject_id)
                 && subject.excluded_periods.contains(&period_id)
@@ -490,8 +491,9 @@ impl crate::InnerData {
         }
 
         // ---- Association rows: the subject runs interrogations and is not
-        // excluded on the period. Mirrors `check_group_lists_data_consistency`;
-        // both predicates accumulate (the old checker stops at the first).
+        // excluded on the period. Mirrors what the retired
+        // `check_group_lists_data_consistency` checked; both predicates
+        // accumulate (the old checker stopped at the first).
         for ((period_id, subject_id), _group_list_id) in
             params.group_lists.subjects_associations.iter()
         {
@@ -542,9 +544,10 @@ impl crate::InnerData {
             }
         }
 
-        // ---- Colloscope interrogation rows. Mirrors `validate_against_params`:
-        // the slot's subject runs on the week's period, the week is active for
-        // the slot's pattern, and every group number fits the association bound.
+        // ---- Colloscope interrogation rows. Mirrors what the retired
+        // `validate_against_params` checked: the slot's subject runs on the
+        // week's period, the week is active for the slot's pattern, and every
+        // group number fits the association bound.
         for ((slot_id, week_id), groups) in self.colloscope.iter() {
             let period = params.weeks.week_position(week_id).map(|(p, _pos)| p);
             let slot = params.slots.find_slot_with_subject(slot_id);
@@ -570,9 +573,9 @@ impl crate::InnerData {
                 out.insert(Convergence::InterrogationOnInactiveWeek(slot_id, week_id));
             }
 
-            // Group-number bound. A missing association means bound 0 (old
-            // `.unwrap_or(0)`); an association to a *dangling* group list is
-            // skipped — the old code `.expect`s it live, we cannot.
+            // Group-number bound. A missing association means bound 0 (the old
+            // code's `.unwrap_or(0)`); an association to a *dangling* group
+            // list is skipped — the old code `.expect`ed it live, we cannot.
             if let (Some(period_id), Some((subject_id, _))) = (period, slot) {
                 let bound = match params
                     .group_lists
@@ -594,9 +597,10 @@ impl crate::InnerData {
             }
         }
 
-        // ---- Colloscope group-list rows. Mirrors `validate_against_params` +
-        // `validate_group_list_placements`: the list must not be prefilled, and
-        // every placement must name a non-excluded student in an in-bounds group.
+        // ---- Colloscope group-list rows. Mirrors what the retired
+        // `validate_against_params` + `validate_group_list_placements` checked:
+        // the list must not be prefilled, and every placement must name a
+        // non-excluded student in an in-bounds group.
         for (group_list_id, placements) in self.colloscope.group_lists_iter() {
             let Some(group_list) = params.group_lists.group_list_map.get(&group_list_id) else {
                 continue;
@@ -1017,8 +1021,8 @@ pub(crate) mod tests {
             // rustc instantiate this crate twice in the lib-test build, so the
             // `InnerData` reachable through `testgen` is a distinct instance from
             // this module's. It resolves the checker as a method (on its own
-            // instance) but cannot feed the local `broken_invariants` wrapper;
-            // this clean sanity check does not need the differential anyway.
+            // instance) but cannot feed the local `broken_invariants` wrapper —
+            // this clean sanity check asserts on the method directly.
             assert_eq!(
                 state.get_data().get_inner_data().broken_invariants(),
                 Ok(BTreeSet::new()),
@@ -1905,7 +1909,7 @@ pub(crate) mod tests {
     #[test]
     fn association_row_accumulates_both_breaks() {
         // Off subject that *also* excludes the period: both association
-        // predicates fire (the old checker stops at the first).
+        // predicates fire (the old checker stopped at the first).
         let mut data = InnerData::default();
         let period = unsafe { PeriodId::new(1) };
         let week = unsafe { WeekId::new(2) };

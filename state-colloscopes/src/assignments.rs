@@ -18,7 +18,8 @@ use crate::ops::AnnotatedAssignmentOp;
 /// assigned (the canonical form — ops never leave an empty row behind).
 /// Whether a subject *runs* on a period is not encoded here; consult
 /// [`crate::subjects::Subject::excluded_periods`] instead. Canonical absence
-/// is checked in `check_assignments_data_consistency`.
+/// is checked by `LogicError::EmptyAssignmentsRow` in
+/// `InnerData::broken_invariants`.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Assignments {
     /// Attending students for each `(period, subject)` pair with ≥1 student

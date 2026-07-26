@@ -194,8 +194,8 @@ impl PartialEq for Data {
 impl Eq for Data {}
 
 /// Errors of [Data::force_apply]: only op preconditions (the carve-out subset —
-/// no-clobber, op-target existence, positions/anchors, empty-first protocol),
-/// never invariants. Invariant breaks are the caller's business via
+/// no-clobber, op-target existence, positions/anchors), never invariants.
+/// Invariant breaks are the caller's business via
 /// [InnerData::broken_invariants] plus rollback.
 ///
 /// The forced `GlobalUpdate` drops the pre-gate and is infallible, so this enum
@@ -346,8 +346,8 @@ impl InMemoryData for Data {
 
 impl Data {
     /// Applies `op` without checking invariants. Carve-out preconditions still
-    /// hold (no-clobber, op-target existence, positions/anchors, empty-first
-    /// protocol) and surface as [PrecheckError]; a failed call leaves the state
+    /// hold (no-clobber, op-target existence, positions/anchors) and surface
+    /// as [PrecheckError]; a failed call leaves the state
     /// unchanged. A *successful* call may leave the state invalid: the caller
     /// owns running the checker ([InnerData::broken_invariants]) and restoring a
     /// snapshot on failure.
@@ -385,7 +385,7 @@ impl Data {
                 AnnotatedOp::ExportConfig(self.force_apply_export_config(o)?)
             }
             AnnotatedOp::GlobalUpdate(new_inner_data) => {
-                // no check_invariants pre-gate: this is the force door
+                // no invariant pre-gate: this is the force door
                 let old = std::mem::replace(&mut self.inner_data, new_inner_data.clone());
                 AnnotatedOp::GlobalUpdate(old)
             }

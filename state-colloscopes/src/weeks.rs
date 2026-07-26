@@ -17,8 +17,8 @@ use crate::periods::Periods;
 ///
 /// The backend is a flat id-keyed [Table] of weeks (each week carries its
 /// owning period as a foreign key) plus an explicit per-period ordering
-/// sidecar. The two must stay consistent; the invariant is checked in
-/// `check_weeks_data_consistency`:
+/// sidecar. The two must stay consistent; the invariant is checked by the
+/// week-ordering `LogicError`s in `InnerData::broken_invariants`:
 /// - `ordering` is sparse: a row is present exactly when the period has at
 ///   least one week (canonical form — no empty rows), and that period exists,
 ///   and

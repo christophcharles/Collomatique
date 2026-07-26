@@ -2,7 +2,7 @@
 //!
 //! This is the step-5 successor of `differential_force_apply.rs`. The old file
 //! *differential-fuzzed* `force_apply` against the two checkers to earn trust in
-//! the new checker; that job is done, and the old checker retires with step 5.
+//! the new checker; that job is done, and the old checker retired with step 5.
 //! What survives is the randomized coverage of the exact primitive production
 //! now runs on: the gate `apply` = snapshot + `force_apply` +
 //! `broken_invariants` + rollback. This file re-expresses the same walk-and-probe
@@ -171,8 +171,9 @@ fn apply_gate_is_atomic_and_honest() {
                         // there is no "hidden repair" to detect here (the gate only
                         // ever lands fully-valid states, asserted just above). A
                         // valid landing is honest whether it changed state or was a
-                        // perfect no-op; the canary still guards force-path drift
-                        // until R1.
+                        // perfect no-op. (The migration-window canary guarded
+                        // force-path drift until it retired with the old world
+                        // at R1.)
                     }
                 }
 
