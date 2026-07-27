@@ -57,6 +57,11 @@ the design doc's §8):
 - **Commit 5** — enrich `Convergence::InterrogationGroupOutOfBounds` with the offending
   group number (the one information-poor variant found by the review's error survey), so
   its fix can trim minimally instead of clearing the whole cell.
+- **Commit 5.99** — split the balancing elementary op: `BalancingOp::Update(Balancing)`
+  (which ships a whole `Table` value through the op surface) becomes
+  `SetGlobal(BalancingOptions)` + `SetSubject(SubjectId, Option<BalancingOptions>)`.
+  Adopted during the commit-6 review (July 27 2026); numbered 5.99 because it is a
+  prerequisite of the map's two balancing arms, not a part of commit 5.
 - **Commit 6** — the colloscope resolution map: `impl Fixable for Data` in
   `state-colloscopes/src/resolution.rs`, total over `FixableInvariant`.
 - **Commit 7** — colloscope integration tests (`state-colloscopes/tests/cascade.rs`):
@@ -899,6 +904,120 @@ fixture's expected set gains the `2` payload), `tests/week_ops.rs:536`,
 third binding; note that a multi-group bad op can now put *several* instances in the set —
 the existing first-match loop shape still translates correctly).
 
+## 7bis. Commit 5.99 — split the balancing elementary op
+
+Adopted during the July 27 2026 review of the map (§8). The trigger is the
+`BalancingSubjectKey` arm: it needs "drop this one per-subject override", and the only
+elementary op available is `BalancingOp::Update(Balancing)`, a whole-value rewrite. That op
+is also the last place a `Table` value travels through the op surface out of `state/` — the
+house rule (`feedback_no_table_outside_state`) says a `Table` stays inside `state/`, and
+consumers see `BTreeMap`-shaped or targeted values instead. Splitting the op fixes both at
+once, and the split is not invented: the `ops/`-level vocabulary already has exactly this
+shape and fakes it by cloning the whole `Balancing`.
+
+**Old** (`state-colloscopes/src/ops.rs:268-271`, and the same in `AnnotatedBalancingOp`):
+
+```rust
+pub enum BalancingOp {
+    /// Update the balancing configuration
+    Update(balancing::Balancing),
+}
+```
+
+**New**:
+
+```rust
+pub enum BalancingOp {
+    /// Replace the global balancing options
+    SetGlobal(balancing::BalancingOptions),
+    /// Set or clear the per-subject override. `None` removes the entry.
+    SetSubject(SubjectId, Option<balancing::BalancingOptions>),
+}
+```
+
+Two variants rather than three (no separate `RemoveSubject`): the `Option` payload is the
+same canonical-absent row shape as the neighbouring
+`GroupListOp::AssignToSubject(period, subject, Option<GroupListId>)`, so it introduces no new
+idiom. The two variants are orthogonal — neither can touch the other's material — and both
+have a content-carrying inverse, the `SetRow` pattern: `SetGlobal(new)` reverses to
+`SetGlobal(old)`, and `SetSubject(s, new)` to `SetSubject(s, old_option)` where the old
+option is the entry read before the write (`None` when there was none).
+
+**Prechecks** (`force_apply_balancing`, `state-colloscopes/src/balancing.rs:88-99`, currently
+infallible): `SetSubject` checks that the subject exists, uniformly for `Some` and `None` —
+the same choice `force_apply_assignment`'s `SetRow` already makes (it prechecks the period and
+the subject even when the incoming set is empty and the op only removes a row). This keeps the
+coordinate carve-out uniform per op variant rather than conditional on the payload.
+`BalancingPrecheckError` gains `InvalidSubjectId(SubjectId)`; `SetGlobal` stays infallible.
+
+**Old** force_apply body:
+
+```rust
+AnnotatedBalancingOp::Update(new_balancing) => {
+    let old_balancing = std::mem::replace(&mut self.inner_data.params.balancing, new_balancing.clone());
+    Ok(AnnotatedBalancingOp::Update(old_balancing))
+}
+```
+
+**New** (shape):
+
+```rust
+AnnotatedBalancingOp::SetGlobal(new_options) => {
+    let old_options = std::mem::replace(
+        &mut self.inner_data.params.balancing.global,
+        new_options.clone(),
+    );
+    Ok(AnnotatedBalancingOp::SetGlobal(old_options))
+}
+AnnotatedBalancingOp::SetSubject(subject_id, new_options) => {
+    if self.inner_data.params.subjects.find_subject(*subject_id).is_none() {
+        return Err(BalancingPrecheckError::InvalidSubjectId(*subject_id));
+    }
+    let subjects = &mut self.inner_data.params.balancing.subjects;
+    let old_options = match new_options {
+        Some(options) => subjects.insert(*subject_id, options.clone()),
+        None => subjects.remove(subject_id),
+    };
+    Ok(AnnotatedBalancingOp::SetSubject(*subject_id, old_options))
+}
+```
+
+**Consumer sweep.** The `ops/` public vocabulary (`BalancingUpdateOp::UpdateGlobalOptions` /
+`UpdateSubjectOptions` / `RemoveSubjectOptions`, and their error enums) is **unchanged**, so
+nothing above `ops/` moves — this is an internal re-plumbing, the same doctrine as commit 4.
+Inside `ops/src/balancing.rs:69-140`, each of the three arms currently clones the whole
+`Balancing`, edits one field and pushes it back; each becomes a single targeted apply. For
+example `UpdateGlobalOptions`:
+
+```rust
+// old
+let mut new_balancing = data.get_data().get_inner_data().params.balancing.clone();
+new_balancing.global = options.clone();
+let result = data.apply(Op::Balancing(BalancingOp::Update(new_balancing)), self.get_desc())
+    .expect("BalancingOp::Update should never fail");
+
+// new
+let result = data.apply(Op::Balancing(BalancingOp::SetGlobal(options.clone())), self.get_desc())
+    .expect("BalancingOp::SetGlobal should never fail");
+```
+
+`RemoveSubjectOptions` keeps its own `NoOptionsForSubject` error: it reads the current
+override first (`params.balancing.subjects.get(subject_id)`), returns that error when absent,
+and otherwise applies `SetSubject(*subject_id, None)`. `UpdateSubjectOptions` keeps its
+`InvalidSubjectId` pre-check as today (so its `.expect` on the gate still holds) and applies
+`SetSubject(*subject_id, Some(options.clone()))`.
+
+The remaining op-construction sites, all mechanical: `testgen-colloscopes/src/generator.rs:983`
+and `:1321` (the generated balancing op — build a `SetSubject` / `SetGlobal` instead of
+synthesising a whole `Balancing`), `storage/tests/populated_round_trip/builder.rs:638`, and
+`state-colloscopes/tests/refs_registry.rs:353`.
+
+**Out of scope**: the read side. gtk4 (`gtk4/src/editor/balancing.rs:245`),
+`storage/src/encode/spec2.rs:538` and the constraints test still read
+`params.balancing.subjects` / `.global` directly. That is reading through the inherent
+`Table` API inside a snapshot, not shipping a `Table` value through an op, so it is left
+alone.
+
 ## 8. Commit 6 — the colloscope resolution map
 
 New file `state-colloscopes/src/resolution.rs` (`mod resolution;` in `lib.rs`; nothing new
@@ -921,12 +1040,50 @@ with one private helper per family, each an exhaustive match (no wildcard arm �
 the compiler's business). The arms construct `AnnotatedOp` variants directly (D2/D6): every
 op the map emits is deletive, and the deletive ops' annotated forms are payload-identical
 to their plain forms, so this is plain construction, no annotate call and no issued id.
-Every arm follows the D2 doctrine: it checks the **presence of the
-material it would remove** in the current state and returns `Some(op)` if present, `None`
-otherwise — it never re-evaluates the invariant's predicate. The table cells below give the
-op inside the `Some(...)` in the plain-op spelling for readability; the presence check is
-implied (e.g. "the row exists", "the element
-is in the set"). The full table, every arm settled (rationale tags refer to D5):
+
+**The whole job of an arm** (settled at the July 27 2026 review): *can I remove, from the
+current state, the thing the invariant complains about?* If yes, `Some(op)`; if no, `None`.
+No more, no less. The arm is entirely **local** — what the engine then does with `None`
+(convict the target, or panic when the invariant came from a fix) is the engine's business
+and no arm needs to reason about it.
+
+Three consequences, each of which the tables below rely on:
+
+1. **Presence, never predicate** (the D2 doctrine). An arm asks whether the material it would
+   remove is *there*; it never re-evaluates the invariant's own condition, which may depend
+   on the failing op's payload. Worked example — `InterrogationGroupOutOfBounds(slot, week, 3)`:
+   the arm asks "is group `3` still in the cell `(slot, week)`?", **not** "is `3 >= the group
+   count?". The predicate form would be wrong: after a group-list shrink is itself repaired,
+   the count read from the state can be back above `3` while group `3` still has to go.
+2. **No `expect` on a state lookup — a miss is `None`.** The invariant set the engine hands
+   the map was computed on `self` *plus the op that just failed*, and that op was rolled back.
+   So a row named by a site may simply not exist in `self`. Concretely: `PairingOp::Add(rule)`
+   with an `excluded_periods` entry naming a non-existent period lands (the `Add` precheck only
+   checks that the new id is free — `pairings.rs:210-228`, the semantic validation is stripped),
+   the checker reports `DanglingFk(Period, PairingRuleExcludedPeriods(new_id))`, the gate rolls
+   back, and the map is asked to fix it — with the rule row absent from `self`. Every arm is
+   therefore a chain of lookups where any miss short-circuits to `None`:
+   `let rule = self.…pairing_rule_map.get(rule_id)?;`. The only `expect` allowed anywhere in
+   the map is on a **sealed constructor** rebuild, where the failure is provably impossible
+   from the value alone (see the `PairingRule::new` case below). *(This corrects the first
+   draft of this section, which wrote the lookup as
+   `.expect("a dangling excluded-period entry implies the rule row exists")` — a false premise.)*
+3. **`self` is always a valid state at fix time**, so the ids a fix op names are alive. Every
+   op that ever landed — target or fix — passed the full apply/check/rollback gate, and the
+   entry document was validated on decode; a valid state has no dangling reference. This is
+   what makes the row-clearing fixes legal even though the target of the dangling reference is
+   "gone": it is *not* gone in `self`. When `PeriodOp::Remove(P)` fails, the data was rolled
+   back, `P` is still in the table, and `SetRow(P, subject, ∅)` — whose precheck demands that
+   the period exist (`assignments.rs:87-95`) — applies cleanly. The hole only appears once the
+   retried target finally lands, by which time every row that would have dangled is already
+   gone. The same argument covers `AssignToSubject` (period + subject prechecks,
+   `group_lists.rs:450-468`), `SetInterrogation` (week + slot, `colloscopes.rs:196-217`) and
+   `SetGroupList` (group list, `colloscopes.rs:166-176`).
+
+The table cells below give the op inside the `Some(...)` in the plain-op spelling for
+readability; the presence check is implied (e.g. "the row exists", "the element is in the
+set"), and per point 2 so is the `None` on any failed lookup. The full table, every arm
+settled (rationale tags refer to D5):
 
 ### 8.1 `DanglingFk(Reference)` — by target kind and site
 
@@ -947,22 +1104,24 @@ constructor is the only door, and removing a period cannot trip its only build e
 is about the two parts sharing a subject):
 
 ```rust
-let rule = self.inner_data.params.pairings.pairing_rule_map.get(rule_id)
-    .expect("a dangling excluded-period entry implies the rule row exists");
-let mut excluded = rule.excluded_periods().clone();
+// Any miss is `None` (frame point 2): the row may not exist in `self`…
+let rule = self.inner_data.params.pairings.pairing_rule_map.get(rule_id)?;
+// …and the rule may exist without excluding this period.
+if !rule.excluded_periods().contains(&period) {
+    return None;
+}
+let (antecedent, consequent, mut excluded, soft) = rule.clone().into_parts();
 excluded.remove(&period);
-let rebuilt = PairingRule::new(
-    rule.antecedent().clone(),
-    rule.consequent().clone(),
-    excluded,
-    rule.soft(),
-)
-.expect("removing an excluded period cannot make the parts share a subject");
+let rebuilt = PairingRule::new(antecedent, consequent, excluded, soft)
+    .expect("removing an excluded period cannot make the parts share a subject");
 Some(Op::Pairing(PairingOp::Update(*rule_id, rebuilt)))
 ```
 
-(with, before the rebuild, the D2 presence check: `if
-!rule.excluded_periods().contains(&period) { return None; }`.)
+`PairingRule::into_parts` (`pairings.rs:159`) exists precisely for callers that rebuild, so
+the rebuild goes through it rather than cloning four accessors. The lone `.expect` is the
+sealed-constructor exception of frame point 2 and is honest: `PairingRule::new`'s only
+failure is `SameSubjectInBothParts` (`pairings.rs:107-131`), and the two parts are moved
+across untouched. `SlotPairingRule` is the exact twin.
 
 **Target: a week `W`** (`WeekRefSite`):
 
@@ -979,15 +1138,39 @@ Some(Op::Pairing(PairingOp::Update(*rule_id, rebuilt)))
 | `SlotSubject(slot)` | `[Slot(SlotOp::Remove(slot))]` | `Slot::subject_id` is mandatory and authoritative (`SlotOp::Update` rejects changing it) — the slot cannot survive |
 | `IncompatSubject(incompat)` | `[Incompat(IncompatOp::Remove(incompat))]` | `Incompatibility::subject_id` is mandatory |
 | `PairingRuleAntecedent(rule)` / `PairingRuleConsequent(rule)` | `[Pairing(PairingOp::Remove(rule))]` | a rule needs both parts; no half-rule exists |
-| `BalancingSubjectKey` | `[Balancing(BalancingOp::Update(balancing minus S))]` | whole-value minus keyed entry (`Balancing { global, subjects: Table }`) |
+| `BalancingSubjectKey` | `[Balancing(BalancingOp::SetSubject(S, None))]` | drops the per-subject override; the subject falls back to `balancing.global` (needs commit 5.99, §7bis) |
 | `AssignmentsKey { period }` | `[Assignment(AssignmentOp::SetRow(period, S, BTreeSet::new()))]` | single row-clearing op; presence = the row exists |
 | `AssociationEntry { period }` | `[GroupList(GroupListOp::AssignToSubject(period, S, None))]` | targeted op |
+
+Settled at the review, and it applies to every `AssociationEntry` row in this section:
+unassigning leaves the `GroupList` row it pointed at in place, possibly referenced by nothing.
+That is a legal state — no invariant demands that a group list be assigned — and group lists
+are edited independently of their associations, so the map deliberately does **not** delete
+it. Removing it would be destruction the invariant never asked for.
 
 **Target: a teacher `T`** (`TeacherRefSite`):
 
 | Site | Fix | Rule |
 |---|---|---|
-| `SlotTeacher(slot)` | `[Slot(SlotOp::Remove(slot))]` | `teacher_id` mandatory; a substitute would be invented data |
+| `SlotTeacher(slot)` | `[Slot(SlotOp::Remove(slot))]` | `teacher_id` is mandatory (`slots.rs:56-57`, no `Option`), so there is no teacher-less slot to fall back to; naming a substitute teacher would be invented data |
+
+Note the contrast with `SlotSubject`, which removes the slot too but for a different reason:
+there `SlotOp::Update` *cannot* express the change (`CannotChangeSubject`), here it can — the
+teacher field is freely editable — and the map declines on the invented-data rule. Presence
+check: the slot row exists. This is also the most explosive fix in the table: one teacher
+removal takes every one of their slots, and each slot removal then cascades to that slot's
+colloscope cells and to any `SlotPairingRule` naming it (commit-7 fixture 3).
+
+> ## ⛔ REVIEW STOPPED HERE — July 27 2026
+>
+> Everything **above** this banner has been walked arm by arm with the user and is
+> confirmed: the §8 frame, and the period, week, subject and teacher targets of §8.1. The
+> findings of that review are the frame's three points (arm-locality, no-`expect`-on-a-lookup,
+> `self`-is-always-valid) and commit 5.99 (§7bis).
+>
+> Everything **below** it — the student, week-pattern, slot and group-list targets of §8.1,
+> and the whole of §8.2 (`Convergence`) — is still **unreviewed first-draft material**.
+> Resume the review at the `StudentRefSite` table immediately below.
 
 **Target: a student `St`** (`StudentRefSite`):
 
@@ -1038,7 +1221,7 @@ now-invalid data (design doc §3, tier 3 — lossy by nature).
 | `AssignedStudentNotPresentForPeriod { period, subject, student }` | `SetRow(period, subject, row minus student)`; `None` if the student is not in the current row | minimal; the `None` arm is the round-one self-caused rejection (D4) |
 | `AssociationForSubjectWithoutInterrogations(period, subject)` | `[GroupList(GroupListOp::AssignToSubject(period, subject, None))]` | |
 | `AssociationForSubjectNotRunningOnPeriod(period, subject)` | `[GroupList(GroupListOp::AssignToSubject(period, subject, None))]` | |
-| `BalancingForSubjectWithoutInterrogations(subject)` | `[Balancing(BalancingOp::Update(balancing minus subject))]` | |
+| `BalancingForSubjectWithoutInterrogations(subject)` | `[Balancing(BalancingOp::SetSubject(subject, None))]` | needs commit 5.99 (§7bis) |
 | `PairedSlotsNotInSameSubject(rule)` | `[SlotPairing(SlotPairingOp::Remove(rule))]` | which slot is "wrong" is undecidable; the rule goes |
 | `InterrogationSlotNotRunningOnPeriod(slot, week)` | `[Colloscope(SetInterrogation(slot, week, ∅))]` | whole cell |
 | `InterrogationOnInactiveWeek(slot, week)` | `[Colloscope(SetInterrogation(slot, week, ∅))]` | whole cell; matches the legacy week-exclusion cleaning |
