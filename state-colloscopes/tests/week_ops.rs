@@ -533,7 +533,9 @@ fn move_week_blocked_when_destination_lacks_slot() {
             FixableInvariant::Convergence(Convergence::InterrogationSlotNotRunningOnPeriod(
                 slot, moved,
             )),
-            FixableInvariant::Convergence(Convergence::InterrogationGroupOutOfBounds(slot, moved)),
+            FixableInvariant::Convergence(Convergence::InterrogationGroupOutOfBounds(
+                slot, moved, 0,
+            )),
         ]))),
         "moving a filled week to a period lacking the slot must fail, got {result:?}",
     );

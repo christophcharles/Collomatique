@@ -185,9 +185,9 @@ pub enum Convergence {
     #[error("interrogation ({0:?}, {1:?}) is on an inactive week")]
     InterrogationOnInactiveWeek(SlotId, WeekId),
     /// An interrogation assigning a group number ≥ the associated group list's
-    /// group count
-    #[error("interrogation ({0:?}, {1:?}) assigns an out-of-bounds group number")]
-    InterrogationGroupOutOfBounds(SlotId, WeekId),
+    /// group count — one entry per offending group number
+    #[error("interrogation ({0:?}, {1:?}) assigns out-of-bounds group number {2}")]
+    InterrogationGroupOutOfBounds(SlotId, WeekId, u32),
     /// A colloscope row for a prefilled group list
     #[error("colloscope holds a row for prefilled group list {0:?}")]
     ColloscopeGroupListPrefilled(GroupListId),
@@ -589,10 +589,14 @@ impl crate::InnerData {
                         .get(group_list_id)
                         .map(|gl| gl.params().group_names.len() as u32),
                 };
-                if let Some(bound) = bound
-                    && groups.iter().any(|&group_num| group_num >= bound)
-                {
-                    out.insert(Convergence::InterrogationGroupOutOfBounds(slot_id, week_id));
+                if let Some(bound) = bound {
+                    for &group_num in groups {
+                        if group_num >= bound {
+                            out.insert(Convergence::InterrogationGroupOutOfBounds(
+                                slot_id, week_id, group_num,
+                            ));
+                        }
+                    }
                 }
             }
         }
@@ -1071,6 +1075,7 @@ pub(crate) mod tests {
         let teacher = unsafe { TeacherId::new(6) };
         let student = unsafe { StudentId::new(7) };
         let slot_pairing_rule = unsafe { SlotPairingRuleId::new(8) };
+        let group = 9u32;
         let all = [
             Convergence::SlotTeacherDoesNotTeachSubject(slot),
             Convergence::TeacherSubjectWithoutInterrogations(teacher, subject),
@@ -1088,7 +1093,7 @@ pub(crate) mod tests {
             Convergence::PairedSlotsNotInSameSubject(slot_pairing_rule),
             Convergence::InterrogationSlotNotRunningOnPeriod(slot, week),
             Convergence::InterrogationOnInactiveWeek(slot, week),
-            Convergence::InterrogationGroupOutOfBounds(slot, week),
+            Convergence::InterrogationGroupOutOfBounds(slot, week, group),
             Convergence::ColloscopeGroupListPrefilled(group_list),
             Convergence::ColloscopeStudentExcluded(group_list, student),
             Convergence::ColloscopeStudentGroupOutOfBounds(group_list, student),
@@ -2109,7 +2114,7 @@ pub(crate) mod tests {
         assert_eq!(
             broken_invariants(&fx.data),
             Ok(BTreeSet::from([FixableInvariant::Convergence(
-                Convergence::InterrogationGroupOutOfBounds(fx.slot, fx.week)
+                Convergence::InterrogationGroupOutOfBounds(fx.slot, fx.week, 2)
             )]))
         );
 
@@ -2137,7 +2142,7 @@ pub(crate) mod tests {
         assert_eq!(
             broken_invariants(&fx.data),
             Ok(BTreeSet::from([FixableInvariant::Convergence(
-                Convergence::InterrogationGroupOutOfBounds(fx.slot, fx.week)
+                Convergence::InterrogationGroupOutOfBounds(fx.slot, fx.week, 0)
             )]))
         );
     }

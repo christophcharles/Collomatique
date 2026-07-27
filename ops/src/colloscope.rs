@@ -215,7 +215,7 @@ impl ColloscopeUpdateOp {
                                 }
                                 for inv in &set {
                                     if let FixableInvariant::Convergence(
-                                        Convergence::InterrogationGroupOutOfBounds(slot, week),
+                                        Convergence::InterrogationGroupOutOfBounds(slot, week, _),
                                     ) = inv
                                     {
                                         return UpdateColloscopeInterrogationError::InvalidGroupNumInInterrogation(*slot, *week);
