@@ -138,3 +138,182 @@ pub fn apply_cascade<T: Fixable>(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::{
+        EvilMode, EvilQuoteData, QuoteData, QuoteInvalidOp, QuoteInvariant, QuoteOp,
+    };
+    use std::collections::BTreeSet;
+
+    fn quote_data(students: &[u64], quotes: &[(u64, u64)]) -> QuoteData {
+        QuoteData {
+            students: students.iter().copied().collect(),
+            quotes: quotes.iter().copied().collect(),
+        }
+    }
+
+    /// The forward op of every landed step, in order.
+    fn forward_ops(applied: &AggregatedOp<QuoteOp>) -> Vec<QuoteOp> {
+        applied.inner().iter().map(|r| r.inner().clone()).collect()
+    }
+
+    // 1. Two quotes by one student; removing the student cascades over two
+    //    repair rounds (canonical pick order) to exactly the quote removals
+    //    then the student removal.
+    #[test]
+    fn happy_cascade_repairs_in_canonical_order() {
+        let mut data = quote_data(&[1], &[(10, 1), (20, 1)]);
+        // The caller annotates the target itself — identity for the toy.
+        let (target, ()) = data.annotate(QuoteOp::RemoveStudent(1));
+
+        let applied = apply_cascade(&mut data, target).expect("cascade resolves");
+
+        assert_eq!(
+            forward_ops(&applied),
+            vec![
+                QuoteOp::RemoveQuote(10),
+                QuoteOp::RemoveQuote(20),
+                QuoteOp::RemoveStudent(1),
+            ],
+        );
+        assert!(data.students.is_empty());
+        assert!(data.quotes.is_empty());
+    }
+
+    // 2. Replaying the landed steps' backwards, in reverse order, returns the
+    //    exact original state (the compound reverse works stepwise, §5).
+    #[test]
+    fn undo_replays_backwards_to_the_original_state() {
+        let original = quote_data(&[1], &[(10, 1), (20, 1)]);
+        let mut data = original.clone();
+        let (target, ()) = data.annotate(QuoteOp::RemoveStudent(1));
+
+        let applied = apply_cascade(&mut data, target).expect("cascade resolves");
+        for rev_op in applied.inner().iter().rev() {
+            data.apply(&rev_op.backward).expect("backward op applies");
+        }
+
+        assert_eq!(data, original);
+    }
+
+    // 3. A target that breaks nothing lands alone.
+    #[test]
+    fn a_target_that_breaks_nothing_lands_alone() {
+        let mut data = quote_data(&[1], &[]);
+        let (target, ()) = data.annotate(QuoteOp::AddStudent(2));
+
+        let applied = apply_cascade(&mut data, target).expect("valid op");
+
+        assert_eq!(applied.inner().len(), 1);
+        assert!(data.students.contains(&2));
+    }
+
+    // 4. An invalid target (precheck failure) is rejected, state untouched,
+    //    nothing applied.
+    #[test]
+    fn an_invalid_target_is_rejected_untouched() {
+        let mut data = quote_data(&[1], &[(10, 1)]);
+        let before = data.clone();
+        let (target, ()) = data.annotate(QuoteOp::RemoveStudent(7));
+
+        let err = apply_cascade(&mut data, target).unwrap_err();
+
+        assert_eq!(
+            err,
+            ApplyError::InvalidOp(QuoteInvalidOp::UnknownStudent(7)),
+        );
+        assert_eq!(data, before);
+    }
+
+    // 5. A self-caused break: the canonical arm sees no such quote row in the
+    //    pre-op state, returns None -> the target is rejected with its own
+    //    broken-invariant set, state bit-identical, no fix ever applied.
+    #[test]
+    fn a_self_caused_break_the_map_cannot_fix_is_returned() {
+        let mut data = quote_data(&[1], &[]);
+        let before = data.clone();
+        // Author 2 does not exist; there is no quote 99 to remove -> None.
+        let (target, ()) = data.annotate(QuoteOp::SetQuote {
+            quote: 99,
+            author: 2,
+        });
+
+        let err = apply_cascade(&mut data, target).unwrap_err();
+
+        assert_eq!(
+            err,
+            ApplyError::BrokenInvariants(BTreeSet::from([QuoteInvariant::DanglingQuoteAuthor(99)])),
+        );
+        assert_eq!(data, before);
+    }
+
+    // 6. A no-op fix is a map-contract violation regardless of who requested
+    //    it: blind mode returns Some(RemoveQuote(99)) against a quote 99 that
+    //    does not exist, so the fix applies as a perfect no-op.
+    #[test]
+    #[should_panic(expected = "strict-monotonicity")]
+    fn a_no_op_fix_panics() {
+        let mut data = EvilQuoteData(quote_data(&[1], &[]), EvilMode::Blind);
+        let (target, ()) = data.annotate(QuoteOp::SetQuote {
+            quote: 99,
+            author: 2,
+        });
+
+        let _ = apply_cascade(&mut data, target);
+    }
+
+    // 7. Mid-cascade restore is real: the evil map destroys innocent quotes
+    //    round after round, then says None with the target as the failing op;
+    //    the snapshot restore actually runs, so every innocent quote is back
+    //    despite a non-empty applied prefix.
+    #[test]
+    fn a_mid_cascade_failure_restores_every_innocent_change() {
+        let original = quote_data(&[1, 2], &[(10, 1), (20, 2), (30, 2)]);
+        let mut data = EvilQuoteData(original.clone(), EvilMode::WrongTargetElseNone);
+        let (target, ()) = data.annotate(QuoteOp::RemoveStudent(1));
+
+        let err = apply_cascade(&mut data, target).unwrap_err();
+
+        assert_eq!(
+            err,
+            ApplyError::BrokenInvariants(BTreeSet::from([QuoteInvariant::DanglingQuoteAuthor(10)])),
+        );
+        // Quotes 20 and 30 were destroyed mid-cascade; the restore brought them
+        // back bit-identically.
+        assert_eq!(data.0, original);
+    }
+
+    // 8. A fix op rejected as invalid is a map bug -> panic.
+    #[test]
+    #[should_panic(expected = "rejected as invalid")]
+    fn a_fix_that_fails_precheck_panics() {
+        let mut data = EvilQuoteData(quote_data(&[1], &[(10, 1)]), EvilMode::InvalidFix);
+        let (target, ()) = data.annotate(QuoteOp::RemoveStudent(1));
+
+        let _ = apply_cascade(&mut data, target);
+    }
+
+    // 9. A fix that breaks a fresh invariant the map then disowns: the failing
+    //    op is a fix, not the target, so None -> panic.
+    #[test]
+    #[should_panic(expected = "unfixable")]
+    fn a_none_for_a_fix_created_invariant_panics() {
+        let mut data = EvilQuoteData(
+            quote_data(&[], &[]),
+            EvilMode::CreateThenDisown {
+                fresh_quote: 20,
+                fresh_author: 6,
+            },
+        );
+        // Target breaks DanglingQuoteAuthor(10); the map "fixes" it by creating
+        // a fresh dangling quote 20, then disowns DanglingQuoteAuthor(20).
+        let (target, ()) = data.annotate(QuoteOp::SetQuote {
+            quote: 10,
+            author: 5,
+        });
+
+        let _ = apply_cascade(&mut data, target);
+    }
+}
