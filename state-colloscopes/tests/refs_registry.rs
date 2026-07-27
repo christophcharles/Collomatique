@@ -363,7 +363,7 @@ fn walk_covers_every_site_in_order() {
     // sparse assignments no other rows exist (nobody else is assigned), so the
     // walker emits exactly this one assignment mirror site.
     apply_none!(
-        Op::Assignment(AssignmentOp::Assign(p0, st2, math, true)),
+        Op::Assignment(AssignmentOp::SetRow(p0, math, BTreeSet::from([st2]))),
         "assign st2 to math on p0"
     );
 

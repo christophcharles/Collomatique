@@ -1231,21 +1231,21 @@ impl GeneralPlanningUpdateOp {
                     .collect();
 
                 for (subject_id, assigned_students) in period_assignments {
-                    for student_id in assigned_students {
-                        let result = data
-                            .apply(
-                                collomatique_state_colloscopes::Op::Assignment(
-                                    collomatique_state_colloscopes::AssignmentOp::Assign(
-                                        new_id, student_id, subject_id, true,
-                                    ),
+                    let result = data
+                        .apply(
+                            collomatique_state_colloscopes::Op::Assignment(
+                                collomatique_state_colloscopes::AssignmentOp::SetRow(
+                                    new_id,
+                                    subject_id,
+                                    assigned_students,
                                 ),
-                                self.get_desc(),
-                            )
-                            .expect("All data should be valid at this point");
+                            ),
+                            self.get_desc(),
+                        )
+                        .expect("All data should be valid at this point");
 
-                        if result.is_some() {
-                            panic!("Unexpected result! {:?}", result);
-                        }
+                    if result.is_some() {
+                        panic!("Unexpected result! {:?}", result);
                     }
                 }
 

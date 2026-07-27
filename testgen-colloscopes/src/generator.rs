@@ -493,11 +493,11 @@ fn gen_teacher(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
 fn gen_assignment(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invalid: bool) -> Op {
     let period_id = pick(rng, &pools.period_ids);
     if invalid {
-        let op = AssignmentOp::Assign(
+        // A dangling student id inside the row trips the coordinate precheck.
+        let op = AssignmentOp::SetRow(
             period_id,
-            unsafe { StudentId::new(dangling(rng)) },
             pick(rng, &pools.subject_ids),
-            rng.random_bool(0.5),
+            BTreeSet::from([unsafe { StudentId::new(dangling(rng)) }]),
         );
         return Op::Assignment(op);
     }
@@ -528,12 +528,19 @@ fn gen_assignment(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invali
     } else {
         pick(rng, &period_students)
     };
-    Op::Assignment(AssignmentOp::Assign(
-        period_id,
-        student_id,
-        subject_id,
-        rng.random_bool(0.6),
-    ))
+    // Current row ± the picked student (keeps today's assign/deassign mix).
+    let mut new_row = inner
+        .params
+        .assignments
+        .students(period_id, subject_id)
+        .cloned()
+        .unwrap_or_default();
+    if rng.random_bool(0.6) {
+        new_row.insert(student_id);
+    } else {
+        new_row.remove(&student_id);
+    }
+    Op::Assignment(AssignmentOp::SetRow(period_id, subject_id, new_row))
 }
 
 fn gen_week_pattern(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
@@ -1488,12 +1495,14 @@ fn gen_force_semantic(
             } else {
                 pick(rng, &running)
             };
-            Op::Assignment(AssignmentOp::Assign(
-                period_id,
-                *student_id,
-                subject_id,
-                true,
-            ))
+            let mut new_row = inner
+                .params
+                .assignments
+                .students(period_id, subject_id)
+                .cloned()
+                .unwrap_or_default();
+            new_row.insert(*student_id);
+            Op::Assignment(AssignmentOp::SetRow(period_id, subject_id, new_row))
         }
         SemanticRecipe::TeacherDrop => {
             let slot_id = pick(rng, &pools.slot_ids);

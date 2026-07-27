@@ -543,7 +543,11 @@ mod force_apply_tests {
         };
         apply(
             &mut data,
-            Op::Assignment(AssignmentOp::Assign(period, student, subject, true)),
+            Op::Assignment(AssignmentOp::SetRow(
+                period,
+                subject,
+                BTreeSet::from([student]),
+            )),
         );
         (data, period, subject, student)
     }
@@ -729,7 +733,11 @@ mod apply_tests {
         };
         apply(
             &mut data,
-            Op::Assignment(AssignmentOp::Assign(period, student, subject, true)),
+            Op::Assignment(AssignmentOp::SetRow(
+                period,
+                subject,
+                BTreeSet::from([student]),
+            )),
         );
         (data, student)
     }

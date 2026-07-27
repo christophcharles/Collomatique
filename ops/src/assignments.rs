@@ -116,14 +116,30 @@ impl AssignmentsUpdateOp {
     ) -> Result<(), AssignmentsUpdateError> {
         match self {
             Self::Assign(period_id, student_id, subject_id, status) => {
+                // Build the whole target row from the current one (the rest of
+                // it came from a valid state, so the only id `SetRow` can reject
+                // as invalid is this op's own student).
+                let mut new_row = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .assignments
+                    .students(*period_id, *subject_id)
+                    .cloned()
+                    .unwrap_or_default();
+                if *status {
+                    new_row.insert(*student_id);
+                } else {
+                    new_row.remove(student_id);
+                }
+
                 let result = data
                     .apply(
                         collomatique_state_colloscopes::Op::Assignment(
-                            collomatique_state_colloscopes::AssignmentOp::Assign(
+                            collomatique_state_colloscopes::AssignmentOp::SetRow(
                                 *period_id,
-                                *student_id,
                                 *subject_id,
-                                *status,
+                                new_row,
                             ),
                         ),
                         self.get_desc(),
@@ -214,13 +230,13 @@ impl AssignmentsUpdateOp {
                     .periods
                     .period_id_at(position - 1)
                     .expect("position > 0 checked above");
-                let current_subjects: Vec<_> = data
+                let current_period_assignments: std::collections::BTreeMap<_, _> = data
                     .get_data()
                     .get_inner_data()
                     .params
                     .assignments
                     .subjects_for_period(*period_id)
-                    .map(|(subject_id, _students)| subject_id)
+                    .map(|(subject_id, students)| (subject_id, students.clone()))
                     .collect();
                 let previous_period_assignments: std::collections::BTreeMap<_, _> = data
                     .get_data()
@@ -239,37 +255,42 @@ impl AssignmentsUpdateOp {
                     .student_map
                     .clone();
 
-                for (student_id, student) in student_map.iter() {
-                    let student_id = &student_id;
-                    if student.excluded_periods.contains(period_id) {
+                // One SetRow per current-period subject that also has a
+                // previous-period row: non-excluded students copy the previous
+                // period's membership; students excluded from either period keep
+                // their current status. Same observable result as the old
+                // per-(student, subject) loop, one history entry per subject.
+                for (subject_id, current_students) in &current_period_assignments {
+                    let Some(previous_students) = previous_period_assignments.get(subject_id)
+                    else {
                         continue;
-                    }
-                    if student.excluded_periods.contains(&previous_period_id) {
-                        continue;
-                    }
+                    };
 
-                    for subject_id in &current_subjects {
-                        let Some(previous_assigned_students) =
-                            previous_period_assignments.get(subject_id)
-                        else {
-                            continue;
+                    let mut new_row = std::collections::BTreeSet::new();
+                    for (student_id, student) in student_map.iter() {
+                        let excluded = student.excluded_periods.contains(period_id)
+                            || student.excluded_periods.contains(&previous_period_id);
+                        let assigned = if excluded {
+                            current_students.contains(&student_id)
+                        } else {
+                            previous_students.contains(&student_id)
                         };
-
-                        let previous_status = previous_assigned_students.contains(student_id);
-
-                        data.apply(
-                            collomatique_state_colloscopes::Op::Assignment(
-                                collomatique_state_colloscopes::AssignmentOp::Assign(
-                                    *period_id,
-                                    *student_id,
-                                    *subject_id,
-                                    previous_status,
-                                ),
-                            ),
-                            self.get_desc(),
-                        )
-                        .expect("All data should be valid at this point");
+                        if assigned {
+                            new_row.insert(student_id);
+                        }
                     }
+
+                    data.apply(
+                        collomatique_state_colloscopes::Op::Assignment(
+                            collomatique_state_colloscopes::AssignmentOp::SetRow(
+                                *period_id,
+                                *subject_id,
+                                new_row,
+                            ),
+                        ),
+                        self.get_desc(),
+                    )
+                    .expect("All data should be valid at this point");
                 }
 
                 Ok(())
@@ -302,34 +323,38 @@ impl AssignmentsUpdateOp {
                     );
                 }
 
-                let student_map = data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .students
-                    .student_map
-                    .clone();
-                for (student_id, student) in student_map.iter() {
-                    if student.excluded_periods.contains(period_id) {
-                        continue;
-                    }
+                // One SetRow for the whole row: every non-excluded student for
+                // `status == true`, the empty set (row removal) for `false` —
+                // every assigned student in a valid state is non-excluded, so
+                // clearing them all is exactly the row's removal.
+                let new_row: std::collections::BTreeSet<_> = if *status {
+                    data.get_data()
+                        .get_inner_data()
+                        .params
+                        .students
+                        .student_map
+                        .iter()
+                        .filter(|(_, student)| !student.excluded_periods.contains(period_id))
+                        .map(|(student_id, _)| student_id)
+                        .collect()
+                } else {
+                    std::collections::BTreeSet::new()
+                };
 
-                    let result = data
-                        .apply(
-                            collomatique_state_colloscopes::Op::Assignment(
-                                collomatique_state_colloscopes::AssignmentOp::Assign(
-                                    *period_id,
-                                    student_id,
-                                    *subject_id,
-                                    *status,
-                                ),
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::Assignment(
+                            collomatique_state_colloscopes::AssignmentOp::SetRow(
+                                *period_id,
+                                *subject_id,
+                                new_row,
                             ),
-                            self.get_desc(),
-                        )
-                        .expect("All data should be valid at this point");
+                        ),
+                        self.get_desc(),
+                    )
+                    .expect("All data should be valid at this point");
 
-                    assert!(result.is_none());
-                }
+                assert!(result.is_none());
 
                 Ok(())
             }

@@ -152,8 +152,10 @@ pub enum TeacherOp {
 /// assignments of students we can do on a [Data]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AssignmentOp {
-    /// Assign (or deassign) a student to a subject on a given period
-    Assign(PeriodId, StudentId, SubjectId, bool),
+    /// Sets the whole assignments row for a `(period, subject)` pair.
+    /// An empty set removes the row (rows are canonical-absent: a row exists
+    /// iff at least one student is assigned).
+    SetRow(PeriodId, SubjectId, BTreeSet<StudentId>),
 }
 
 /// Week pattern operation enumeration
@@ -552,8 +554,10 @@ pub enum AnnotatedTeacherOp {
 /// See [collomatique_state::history] for a complete discussion of the problem.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AnnotatedAssignmentOp {
-    /// Assign (or deassign) a student to a subject on a given period
-    Assign(PeriodId, StudentId, SubjectId, bool),
+    /// Sets the whole assignments row for a `(period, subject)` pair.
+    /// An empty set removes the row (rows are canonical-absent: a row exists
+    /// iff at least one student is assigned).
+    SetRow(PeriodId, SubjectId, BTreeSet<StudentId>),
 }
 
 /// Week pattern operation enumeration
@@ -955,8 +959,8 @@ impl AnnotatedAssignmentOp {
     /// Annotates the subcategory of operations [AssignmentOp].
     fn annotate(assignment_op: AssignmentOp) -> AnnotatedAssignmentOp {
         match assignment_op {
-            AssignmentOp::Assign(period_id, student_id, subject_id, status) => {
-                AnnotatedAssignmentOp::Assign(period_id, student_id, subject_id, status)
+            AssignmentOp::SetRow(period_id, subject_id, students) => {
+                AnnotatedAssignmentOp::SetRow(period_id, subject_id, students)
             }
         }
     }

@@ -359,32 +359,40 @@ pub fn build_rich_data() -> Data {
         TeacherId
     );
 
-    // Assignments, including a `false` toggle that removes one
-    for (period, student, subject, desc) in [
-        (period1, student1, subject_maths, "assign 1"),
-        (period1, student2, subject_maths, "assign 2"),
-        (period1, student3, subject_maths, "assign 3"),
-        (period1, student1, subject_physics, "assign 4"),
-        (period1, student4, subject_english, "assign 5"),
-        (period2, student1, subject_maths, "assign 6"),
-        (period1, student4, subject_maths, "assign 7"),
+    // Assignments, set wholesale as rows (SetRow). student4 lands on english,
+    // and is deliberately kept off the period-1 maths row.
+    for (period, subject, students, desc) in [
+        (
+            period1,
+            subject_maths,
+            BTreeSet::from([student1, student2, student3]),
+            "maths on period 1",
+        ),
+        (
+            period1,
+            subject_physics,
+            BTreeSet::from([student1]),
+            "physics on period 1",
+        ),
+        (
+            period1,
+            subject_english,
+            BTreeSet::from([student4]),
+            "english on period 1",
+        ),
+        (
+            period2,
+            subject_maths,
+            BTreeSet::from([student1]),
+            "maths on period 2",
+        ),
     ] {
         apply(
             &mut state,
-            Op::Assignment(AssignmentOp::Assign(period, student, subject, true)),
+            Op::Assignment(AssignmentOp::SetRow(period, subject, students)),
             desc,
         );
     }
-    apply(
-        &mut state,
-        Op::Assignment(AssignmentOp::Assign(
-            period1,
-            student4,
-            subject_maths,
-            false,
-        )),
-        "deassign 7",
-    );
 
     // Week patterns over the 7 weeks of the two periods. Snapshot the week ids
     // in walk order so the fortnight pattern can exclude the even-index weeks.

@@ -83,7 +83,7 @@ impl crate::Data {
         assignment_op: &AnnotatedAssignmentOp,
     ) -> std::result::Result<AnnotatedAssignmentOp, AssignmentPrecheckError> {
         match assignment_op {
-            AnnotatedAssignmentOp::Assign(period_id, student_id, subject_id, status) => {
+            AnnotatedAssignmentOp::SetRow(period_id, subject_id, students) => {
                 if self
                     .inner_data
                     .params
@@ -106,43 +106,38 @@ impl crate::Data {
 
                 // stripped: SubjectDoesNotRunOnPeriod semantic guard
 
-                if !self
-                    .inner_data
-                    .params
-                    .students
-                    .student_map
-                    .contains(student_id)
-                {
-                    return Err(AssignmentPrecheckError::InvalidStudentId(*student_id));
+                // Every id in the incoming row must exist (coordinate carve-out).
+                for student_id in students {
+                    if !self
+                        .inner_data
+                        .params
+                        .students
+                        .student_map
+                        .contains(student_id)
+                    {
+                        return Err(AssignmentPrecheckError::InvalidStudentId(*student_id));
+                    }
                 }
 
                 // stripped: StudentIsNotPresentOnPeriod semantic guard
 
                 // Sparse canonical form: a `(period, subject)` row exists iff
-                // its student set is non-empty. Assigning creates the row on
-                // demand; de-assigning drops the row once it empties.
+                // its student set is non-empty. An empty incoming set removes
+                // the row; a non-empty one replaces it wholesale.
                 let map = &mut self.inner_data.params.assignments.map;
                 let key = (*period_id, *subject_id);
-                let previous_status = map.get(&key).is_some_and(|s| s.contains(student_id));
+                let previous_row = map.get(&key).cloned().unwrap_or_default();
 
-                if *status {
-                    if let Some(assigned_students) = map.get_mut(&key) {
-                        assigned_students.insert(*student_id);
-                    } else {
-                        map.insert(key, BTreeSet::from([*student_id]));
-                    }
-                } else if let Some(assigned_students) = map.get_mut(&key) {
-                    assigned_students.remove(student_id);
-                    if assigned_students.is_empty() {
-                        map.remove(&key);
-                    }
+                if students.is_empty() {
+                    map.remove(&key);
+                } else {
+                    map.insert(key, students.clone());
                 }
 
-                Ok(AnnotatedAssignmentOp::Assign(
+                Ok(AnnotatedAssignmentOp::SetRow(
                     *period_id,
-                    *student_id,
                     *subject_id,
-                    previous_status,
+                    previous_row,
                 ))
             }
         }
