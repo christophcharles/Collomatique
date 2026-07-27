@@ -5,6 +5,7 @@
 //! This should allow for implementation of different
 //! UIs all using the same state code.
 
+pub mod cascade;
 pub mod history;
 pub mod ids;
 pub mod join;
@@ -22,6 +23,7 @@ pub mod traits;
 #[cfg(feature = "derive")]
 pub use collomatique_state_derive::{EntityId, Join, References};
 
+pub use cascade::{Fixable, apply_cascade};
 pub use ids::Id;
 pub use join::{Join, Joinable, Lookup};
 pub use refs::References;
