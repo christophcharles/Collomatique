@@ -498,9 +498,34 @@ state steps 6–7 build on is Appendix G.**
   pristine, contract scripts + gtk4 smoke all passed (July 26 2026). Noted: test coverage
   is not exhaustive — widening it is a standing future-work item.
 
-**Step 6 — the cascade (§5).** Resolution map + retry queue + no-progress guard; the compound
+**Step 6 — the cascade (§5).** Resolution map + retry queue; the compound
 reverse feeds the history stack; a confluence pin test freezes the emitted op list on a
-hand-built document.
+hand-built document. Planned July 26–27 2026 — `docs/plans/plan_step_6.md` is the
+authority; among its recorded deviations from the §5 sketch, the no-progress guard
+originally listed here is retired (under one-step fixes, re-picking the same
+(op, invariant) pair across rounds is a legitimate path), replaced by the conviction
+rules and the monotonicity contract below.
+
+**Step 6.5 — monotonicity checking (added July 27 2026).** The cascade's termination proof
+is the engraved map contract: states form a partial order whose universal minimal element
+is `Default::default()` (the empty document), and every fix must land **strictly below**
+the current state — the map returns `None` or a strictly-decreasing op, never an
+equivalent one. Step 6 enforces the contract only partially in-flight: `None` convictions
+and the no-op-fix panic catch every removal-shaped violation, but a map bug that keeps
+*growing* the state is undetectable without the order itself, and the step-6 engine
+deliberately has **no round fuse** (no meaningful bound exists; a bound loose enough to be
+safe detects nothing in useful time) — such a map makes the cascade loop forever. Step 6.5
+closes that hole by materializing the order: require `PartialOrd` on `Fixable`
+implementors (only there — generic `InMemoryData` is not touched), comparing states up to
+equivalence classes modulo the id issuer if the issuer gets in the way, and assert in the
+cascade loop, after every fix apply, that the new state is strictly below the pre-fix
+state — catching a growing map in-flight as a loud panic instead of a hang. Two fuzz tests
+come with it: (a) `Default::default()` is ≤ every reachable state (it really is the
+universal minimum); (b) over generated broken states, every `fix_invariant` answer is
+`None` or an op whose applied result sits strictly below the pre-fix state — never above,
+never equivalent (`Some(equivalent)` is a map bug by contract, already a panic at
+step 6). Until 6.5 lands, the guard against a production hang is the step-6 cascade fuzz
+plus the per-arm audit against the contract.
 
 **Step 7 — migrate `ops/` (the remaster).** Each natural op becomes: open a session, run
 `apply_cascade`, present the extra ops to the user (dry-run preview, §5), commit or cancel.
