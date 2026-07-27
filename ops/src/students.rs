@@ -401,7 +401,7 @@ impl StudentsUpdateOp {
                         match e {
                             // Pre-op validity: any period dangle in the set is this
                             // add's bad excluded-period id.
-                            Error::Invariants(set) => {
+                            Error::BrokenInvariants(set) => {
                                 for inv in &set {
                                     if let FixableInvariant::DanglingFk(Reference::Period {
                                         target,
@@ -434,14 +434,14 @@ impl StudentsUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            Convergence, Error, FixableInvariant, PeriodRefSite, PrecheckError,
-                            Reference, StudentPrecheckError,
+                            Convergence, Error, FixableInvariant, InvalidOp, PeriodRefSite,
+                            PrecheckError, Reference, StudentPrecheckError,
                         };
                         match e {
-                            Error::Precheck(PrecheckError::Student(
+                            Error::InvalidOp(InvalidOp::Precheck(PrecheckError::Student(
                                 StudentPrecheckError::InvalidStudentId(id),
-                            )) => UpdateStudentError::InvalidStudentId(id),
-                            Error::Invariants(set) => {
+                            ))) => UpdateStudentError::InvalidStudentId(id),
+                            Error::BrokenInvariants(set) => {
                                 // Old order: validate_student (excluded-period ids)
                                 // before the assignment scan.
                                 for inv in &set {
@@ -483,14 +483,14 @@ impl StudentsUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            Error, FixableInvariant, PrecheckError, Reference,
+                            Error, FixableInvariant, InvalidOp, PrecheckError, Reference,
                             StudentPrecheckError, StudentRefSite,
                         };
                         match e {
-                            Error::Precheck(PrecheckError::Student(
+                            Error::InvalidOp(InvalidOp::Precheck(PrecheckError::Student(
                                 StudentPrecheckError::InvalidStudentId(id),
-                            )) => DeleteStudentError::InvalidStudentId(id),
-                            Error::Invariants(set) => {
+                            ))) => DeleteStudentError::InvalidStudentId(id),
+                            Error::BrokenInvariants(set) => {
                                 // Every one of these is a cleaning-contract breach:
                                 // the cleaning phase strips group-list, prefilled and
                                 // assignment references (and colloscope/settings ones)

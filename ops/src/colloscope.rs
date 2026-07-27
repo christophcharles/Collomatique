@@ -111,17 +111,17 @@ impl ColloscopeUpdateOp {
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
                             Error, ColloscopePrecheckError, Convergence, FixableInvariant,
-                            PrecheckError, Reference, StudentRefSite,
+                            InvalidOp, PrecheckError, Reference, StudentRefSite,
                         };
                         match e {
-                            Error::Precheck(PrecheckError::Colloscope(
+                            Error::InvalidOp(InvalidOp::Precheck(PrecheckError::Colloscope(
                                 ColloscopePrecheckError::InvalidGroupListId(id),
-                            )) => UpdateColloscopeGroupListError::InvalidGroupListId(id),
+                            ))) => UpdateColloscopeGroupListError::InvalidGroupListId(id),
                             // The pre-op state was valid, so every break in the set was
                             // introduced by this SetGroupList. Old validator order
                             // (validate_group_list_placements): excluded student, then
                             // invalid student id, then group number out of bounds.
-                            Error::Invariants(set) => {
+                            Error::BrokenInvariants(set) => {
                                 for inv in &set {
                                     if let FixableInvariant::Convergence(
                                         Convergence::ColloscopeStudentExcluded(group_list, student),
@@ -176,10 +176,10 @@ impl ColloscopeUpdateOp {
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
                             Error, ColloscopePrecheckError, Convergence, FixableInvariant,
-                            PrecheckError,
+                            InvalidOp, PrecheckError,
                         };
                         match e {
-                            Error::Precheck(PrecheckError::Colloscope(pe)) => match pe {
+                            Error::InvalidOp(InvalidOp::Precheck(PrecheckError::Colloscope(pe))) => match pe {
                                 ColloscopePrecheckError::InvalidWeekId(id) => {
                                     UpdateColloscopeInterrogationError::InvalidWeekId(id)
                                 }
@@ -196,7 +196,7 @@ impl ColloscopeUpdateOp {
                             // introduced by this SetInterrogation. Old validator order
                             // (apply_colloscope SetInterrogation): slot-not-running,
                             // then inactive week, then group number out of bounds.
-                            Error::Invariants(set) => {
+                            Error::BrokenInvariants(set) => {
                                 for inv in &set {
                                     if let FixableInvariant::Convergence(
                                         Convergence::InterrogationSlotNotRunningOnPeriod(slot, week),

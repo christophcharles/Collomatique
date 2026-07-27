@@ -112,7 +112,7 @@ impl SlotPairingsUpdateOp {
                             // different payloads, so the passes stay separate; the
                             // same-subject convergence carries only the rule id, so
                             // the two slot ids come from the op payload in scope.
-                            Error::Invariants(set) => {
+                            Error::BrokenInvariants(set) => {
                                 for inv in &set {
                                     if let FixableInvariant::DanglingFk(Reference::Slot {
                                         target,
@@ -174,12 +174,12 @@ impl SlotPairingsUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            Error, PrecheckError, SlotPairingPrecheckError,
+                            Error, InvalidOp, PrecheckError, SlotPairingPrecheckError,
                         };
                         match e {
-                            Error::Precheck(PrecheckError::SlotPairing(
+                            Error::InvalidOp(InvalidOp::Precheck(PrecheckError::SlotPairing(
                                 SlotPairingPrecheckError::InvalidSlotPairingRuleId(id),
-                            )) => DeleteSlotPairingRuleError::InvalidSlotPairingRuleId(id),
+                            ))) => DeleteSlotPairingRuleError::InvalidSlotPairingRuleId(id),
                             _ => panic!("Unexpected error during DeleteSlotPairingRule: {e:?}"),
                         }
                     })?;
@@ -201,16 +201,16 @@ impl SlotPairingsUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            Error, Convergence, FixableInvariant, PeriodRefSite, PrecheckError,
-                            Reference, SlotPairingPrecheckError, SlotRefSite,
+                            Error, Convergence, FixableInvariant, InvalidOp, PeriodRefSite,
+                            PrecheckError, Reference, SlotPairingPrecheckError, SlotRefSite,
                         };
                         match e {
-                            Error::Precheck(PrecheckError::SlotPairing(
+                            Error::InvalidOp(InvalidOp::Precheck(PrecheckError::SlotPairing(
                                 SlotPairingPrecheckError::InvalidSlotPairingRuleId(id),
-                            )) => UpdateSlotPairingRuleError::InvalidSlotPairingRuleId(id),
+                            ))) => UpdateSlotPairingRuleError::InvalidSlotPairingRuleId(id),
                             // Old validator order: antecedent slot, then consequent
                             // slot, then same-subject, then excluded period.
-                            Error::Invariants(set) => {
+                            Error::BrokenInvariants(set) => {
                                 for inv in &set {
                                     if let FixableInvariant::DanglingFk(Reference::Slot {
                                         target,

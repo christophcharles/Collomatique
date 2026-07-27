@@ -238,29 +238,36 @@ pub enum PrecheckError {
     ExportConfig(#[from] ExportConfigPrecheckError),
 }
 
-/// Error surface of the apply/check/rollback gate ([Data::apply]).
+/// The unresolvable tier of the gate's error surface: bad op input. Both the
+/// carve-out prechecks (design doc §4) and the logic tier live here — an op
+/// whose payload would land logically impossible rows is an invalid op.
 ///
-/// Three tiers. [Error::Precheck] is bad op input caught before any
-/// mutation (the state was never touched). [Error::Logic] and
-/// [Error::Invariants] are reported after a forced apply and a rollback,
-/// so the state is left bit-identical to before the op.
+/// [InvalidOp::Logic] stays reachable only from data built outside this crate
+/// (`GlobalUpdate` payloads, decode): ordinary elementary ops cannot construct
+/// logically impossible rows since the value types were sealed.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum Error {
+pub enum InvalidOp {
     /// Bad op input (no-clobber, dangling target, bad position/anchor).
     /// The state was never touched.
     #[error(transparent)]
     Precheck(#[from] PrecheckError),
     /// The op would land logically impossible rows; rolled back.
-    ///
-    /// Only reachable from data built outside this crate (`GlobalUpdate`
-    /// payloads, decode): ordinary elementary ops cannot construct logically
-    /// impossible rows since the value types were sealed.
     #[error("the operation would leave logically impossible data: {}", format_error_set(.0))]
     Logic(BTreeSet<LogicError>),
-    /// The op would break fixable invariants; rolled back. At step 6 this is
-    /// what the cascade resolves; at step 5 it is simply an error.
-    #[error("the operation would break data invariants: {}", format_error_set(.0))]
-    Invariants(BTreeSet<FixableInvariant>),
+}
+
+/// Error surface of the apply/check/rollback gate ([Data::apply]): the shared
+/// two-tier [collomatique_state::ApplyError] instantiated with this crate's
+/// vocabulary. [collomatique_state::ApplyError::InvalidOp] is bad op input
+/// (never resolvable); [collomatique_state::ApplyError::BrokenInvariants] is
+/// what the cascade resolves (at step 5 it is simply an error).
+pub type Error = collomatique_state::ApplyError<InvalidOp, FixableInvariant>;
+
+/// Lets the gate keep writing `self.force_apply(op)?`.
+impl From<PrecheckError> for Error {
+    fn from(e: PrecheckError) -> Self {
+        collomatique_state::ApplyError::InvalidOp(InvalidOp::Precheck(e))
+    }
 }
 
 /// Itemises a set of errors through each entry's own [std::fmt::Display] so a
@@ -290,7 +297,8 @@ impl InMemoryData for Data {
     type OriginalOperation = Op;
     type AnnotatedOperation = AnnotatedOp;
     type NewInfo = Option<NewId>;
-    type Error = Error;
+    type InvalidOp = InvalidOp;
+    type Invariant = FixableInvariant;
 
     fn annotate(&self, op: Op) -> (AnnotatedOp, Option<NewId>) {
         let mut guard = self.id_issuer.lock().unwrap();
@@ -311,7 +319,10 @@ impl InMemoryData for Data {
     fn apply(
         &mut self,
         op: &Self::AnnotatedOperation,
-    ) -> std::result::Result<Self::AnnotatedOperation, Self::Error> {
+    ) -> std::result::Result<
+        Self::AnnotatedOperation,
+        collomatique_state::ApplyError<Self::InvalidOp, Self::Invariant>,
+    > {
         // Snapshot everything an op could conceivably touch. `force_apply` never
         // uses the id issuer today (ids are issued in `annotate`), but the issuer
         // is a single counter — snapshotting it keeps rollback total even if a
@@ -329,12 +340,14 @@ impl InMemoryData for Data {
             Err(logic) => {
                 self.inner_data = snapshot;
                 *self.id_issuer.lock().unwrap() = issuer_snapshot;
-                Err(Error::Logic(logic))
+                Err(collomatique_state::ApplyError::InvalidOp(InvalidOp::Logic(
+                    logic,
+                )))
             }
             Ok(fixable) if !fixable.is_empty() => {
                 self.inner_data = snapshot;
                 *self.id_issuer.lock().unwrap() = issuer_snapshot;
-                Err(Error::Invariants(fixable))
+                Err(collomatique_state::ApplyError::BrokenInvariants(fixable))
             }
             Ok(_empty) => {
                 self.assert_id_issuer_high_water();
@@ -673,7 +686,7 @@ mod apply_tests {
     //! Step-5 commit 1 pins for [Data::apply]: the apply/check/rollback gate
     //! rolls a broken landing back to a bit-identical pre-op state and reports it
     //! precisely; a `GlobalUpdate` carrying logically impossible (duplicated-id)
-    //! data comes back as [Error::Logic], rolled back.
+    //! data comes back as [InvalidOp::Logic], rolled back.
 
     use crate::ids::{Id, StudentId, WeekPatternId};
     use crate::ops::{
@@ -683,7 +696,7 @@ mod apply_tests {
     use crate::students::Student;
     use crate::subjects::Subject;
     use crate::week_patterns::WeekPattern;
-    use crate::{Data, Error, FixableInvariant, InnerData};
+    use crate::{Data, Error, FixableInvariant, InnerData, InvalidOp};
     use collomatique_state::InMemoryData;
     use std::collections::BTreeSet;
 
@@ -733,12 +746,12 @@ mod apply_tests {
         let err = data.apply(&remove).unwrap_err();
 
         match err {
-            Error::Invariants(set) => assert!(
+            Error::BrokenInvariants(set) => assert!(
                 set.iter()
                     .any(|f| matches!(f, FixableInvariant::DanglingFk(_))),
                 "expected a dangling-FK report, got {set:?}"
             ),
-            other => panic!("expected Invariants, got {other:?}"),
+            other => panic!("expected BrokenInvariants, got {other:?}"),
         }
         assert!(
             data == before,
@@ -753,7 +766,7 @@ mod apply_tests {
 
         // A corrupt inner: a student and a week pattern sharing raw id 1 — a
         // duplicated-id LogicError. Through the gate this rolls back and surfaces
-        // as Error::Logic (post-sealing the only route into that arm).
+        // as InvalidOp::Logic (post-sealing the only route into that arm).
         let mut corrupt = InnerData::default();
         let student = unsafe { StudentId::new(1) };
         let pattern = unsafe { WeekPatternId::new(1) };
@@ -774,7 +787,7 @@ mod apply_tests {
         let err = data.apply(&op).unwrap_err();
 
         assert!(
-            matches!(err, Error::Logic(ref set) if !set.is_empty()),
+            matches!(err, Error::InvalidOp(InvalidOp::Logic(ref set)) if !set.is_empty()),
             "expected a non-empty Logic error, got {err:?}"
         );
         assert!(

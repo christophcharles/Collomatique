@@ -87,7 +87,7 @@ pub enum PeriodOp {
     /// Remove an existing period
     ///
     /// The apply/check/rollback gate rejects the removal of a week-non-empty
-    /// period with `Error::Invariants` (the weeks' `Week::period_id` FKs would
+    /// period with `Error::BrokenInvariants` (the weeks' `Week::period_id` FKs would
     /// dangle) — empty it first with [WeekOp::Remove]. `force_apply` lands the
     /// removal anyway and leaves the dangling FKs for the checker/cascade.
     Remove(PeriodId),

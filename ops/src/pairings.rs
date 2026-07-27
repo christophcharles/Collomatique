@@ -98,7 +98,7 @@ impl PairingsUpdateOp {
                             // then consequent subject, then excluded period. Both
                             // subject sites map to InvalidSubjectId but carry
                             // different payloads, so the passes stay separate.
-                            Error::Invariants(set) => {
+                            Error::BrokenInvariants(set) => {
                                 for inv in &set {
                                     if let FixableInvariant::DanglingFk(Reference::Subject {
                                         target,
@@ -149,12 +149,12 @@ impl PairingsUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            Error, PairingPrecheckError, PrecheckError,
+                            Error, InvalidOp, PairingPrecheckError, PrecheckError,
                         };
                         match e {
-                            Error::Precheck(PrecheckError::Pairing(
+                            Error::InvalidOp(InvalidOp::Precheck(PrecheckError::Pairing(
                                 PairingPrecheckError::InvalidPairingRuleId(id),
-                            )) => DeletePairingRuleError::InvalidPairingRuleId(id),
+                            ))) => DeletePairingRuleError::InvalidPairingRuleId(id),
                             _ => panic!("Unexpected error during DeletePairingRule: {e:?}"),
                         }
                     })?;
@@ -176,16 +176,16 @@ impl PairingsUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            Error, FixableInvariant, PairingPrecheckError, PeriodRefSite,
-                            PrecheckError, Reference, SubjectRefSite,
+                            Error, FixableInvariant, InvalidOp, PairingPrecheckError,
+                            PeriodRefSite, PrecheckError, Reference, SubjectRefSite,
                         };
                         match e {
-                            Error::Precheck(PrecheckError::Pairing(
+                            Error::InvalidOp(InvalidOp::Precheck(PrecheckError::Pairing(
                                 PairingPrecheckError::InvalidPairingRuleId(id),
-                            )) => UpdatePairingRuleError::InvalidPairingRuleId(id),
+                            ))) => UpdatePairingRuleError::InvalidPairingRuleId(id),
                             // Old validator order: antecedent subject, then
                             // consequent subject, then excluded period.
-                            Error::Invariants(set) => {
+                            Error::BrokenInvariants(set) => {
                                 for inv in &set {
                                     if let FixableInvariant::DanglingFk(Reference::Subject {
                                         target,

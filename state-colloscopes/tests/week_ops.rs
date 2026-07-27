@@ -158,7 +158,7 @@ fn remove_week_blocked_by_non_trivial_pattern() {
     );
     assert_eq!(
         result,
-        Err(Error::Invariants(BTreeSet::from([
+        Err(Error::BrokenInvariants(BTreeSet::from([
             FixableInvariant::DanglingFk(Reference::Week {
                 target: weeks[1],
                 site: WeekRefSite::WeekPatternExcludedWeek(pattern_id),
@@ -301,7 +301,7 @@ fn update_week_to_inactive_blocked_by_filled_cell() {
     );
     assert_eq!(
         result,
-        Err(Error::Invariants(BTreeSet::from([
+        Err(Error::BrokenInvariants(BTreeSet::from([
             FixableInvariant::Convergence(Convergence::InterrogationOnInactiveWeek(slot, weeks[0]))
         ]))),
         "deactivating a week with a filled cell must fail, got {result:?}",
@@ -529,7 +529,7 @@ fn move_week_blocked_when_destination_lacks_slot() {
     );
     assert_eq!(
         result,
-        Err(Error::Invariants(BTreeSet::from([
+        Err(Error::BrokenInvariants(BTreeSet::from([
             FixableInvariant::Convergence(Convergence::InterrogationSlotNotRunningOnPeriod(
                 slot, moved,
             )),

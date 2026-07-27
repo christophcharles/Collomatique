@@ -83,7 +83,7 @@ fn add_subject_referencing_period_then_remove_period() {
 
     assert_eq!(
         result,
-        Err(Error::Invariants(BTreeSet::from([
+        Err(Error::BrokenInvariants(BTreeSet::from([
             FixableInvariant::DanglingFk(Reference::Period {
                 target: id2,
                 site: PeriodRefSite::SubjectExcludedPeriods(subject_id),

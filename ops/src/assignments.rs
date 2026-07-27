@@ -131,10 +131,12 @@ impl AssignmentsUpdateOp {
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
                             AssignmentPrecheckError, Convergence, Error, FixableInvariant,
-                            PrecheckError,
+                            InvalidOp, PrecheckError,
                         };
                         match e {
-                            Error::Precheck(PrecheckError::Assignment(pe)) => match pe {
+                            Error::InvalidOp(InvalidOp::Precheck(PrecheckError::Assignment(
+                                pe,
+                            ))) => match pe {
                                 AssignmentPrecheckError::InvalidPeriodId(id) => {
                                     AssignError::InvalidPeriodId(id)
                                 }
@@ -149,7 +151,7 @@ impl AssignmentsUpdateOp {
                             // in the set was introduced by this Assign. Old validator
                             // order (colloscope_params validate): subject-not-running
                             // before student-not-present.
-                            Error::Invariants(set) => {
+                            Error::BrokenInvariants(set) => {
                                 for inv in &set {
                                     if let FixableInvariant::Convergence(
                                         Convergence::AssignmentForSubjectNotRunningOnPeriod(

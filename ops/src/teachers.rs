@@ -153,7 +153,7 @@ impl TeachersUpdateOp {
                             // The pre-op state was valid, so any teacher->subject
                             // dangle in the set was introduced by this Add; the
                             // dangling target is the bad input subject id.
-                            Error::Invariants(set) => {
+                            Error::BrokenInvariants(set) => {
                                 for inv in &set {
                                     if let FixableInvariant::DanglingFk(Reference::Subject {
                                         target,
@@ -186,14 +186,14 @@ impl TeachersUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            Error, Convergence, FixableInvariant, PrecheckError, Reference,
-                            SubjectRefSite, TeacherPrecheckError,
+                            Error, Convergence, FixableInvariant, InvalidOp, PrecheckError,
+                            Reference, SubjectRefSite, TeacherPrecheckError,
                         };
                         match e {
-                            Error::Precheck(PrecheckError::Teacher(
+                            Error::InvalidOp(InvalidOp::Precheck(PrecheckError::Teacher(
                                 TeacherPrecheckError::InvalidTeacherId(id),
-                            )) => UpdateTeacherError::InvalidTeacherId(id),
-                            Error::Invariants(set) => {
+                            ))) => UpdateTeacherError::InvalidTeacherId(id),
+                            Error::BrokenInvariants(set) => {
                                 // Old validator order: validate_teacher (subject
                                 // ids) fires before the dropped-subject slot scan.
                                 for inv in &set {
@@ -235,14 +235,14 @@ impl TeachersUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            Error, FixableInvariant, PrecheckError, Reference,
+                            Error, FixableInvariant, InvalidOp, PrecheckError, Reference,
                             TeacherPrecheckError, TeacherRefSite,
                         };
                         match e {
-                            Error::Precheck(PrecheckError::Teacher(
+                            Error::InvalidOp(InvalidOp::Precheck(PrecheckError::Teacher(
                                 TeacherPrecheckError::InvalidTeacherId(id),
-                            )) => DeleteTeacherError::InvalidTeacherId(id),
-                            Error::Invariants(set) => {
+                            ))) => DeleteTeacherError::InvalidTeacherId(id),
+                            Error::BrokenInvariants(set) => {
                                 for inv in &set {
                                     if let FixableInvariant::DanglingFk(Reference::Teacher {
                                         site: TeacherRefSite::SlotTeacher(_),

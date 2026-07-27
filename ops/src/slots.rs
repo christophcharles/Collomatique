@@ -333,7 +333,7 @@ impl SlotsUpdateOp {
                             // Old validator order (validate_slot_internal):
                             // teacher-resolves, teacher-teaches, week-pattern, then
                             // day overflow.
-                            Error::Invariants(set) => {
+                            Error::BrokenInvariants(set) => {
                                 for inv in &set {
                                     if let FixableInvariant::DanglingFk(Reference::Teacher {
                                         target,
@@ -411,20 +411,24 @@ impl SlotsUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            Convergence, Error, FixableInvariant, PrecheckError, Reference,
-                            SlotPrecheckError, TeacherRefSite, WeekPatternRefSite,
+                            Convergence, Error, FixableInvariant, InvalidOp, PrecheckError,
+                            Reference, SlotPrecheckError, TeacherRefSite, WeekPatternRefSite,
                         };
                         match e {
-                            Error::Precheck(PrecheckError::Slot(pe)) => match pe {
-                                SlotPrecheckError::InvalidSlotId(id) => {
-                                    UpdateSlotError::InvalidSlotId(id)
+                            Error::InvalidOp(InvalidOp::Precheck(PrecheckError::Slot(pe))) => {
+                                match pe {
+                                    SlotPrecheckError::InvalidSlotId(id) => {
+                                        UpdateSlotError::InvalidSlotId(id)
+                                    }
+                                    // The subject is pinned to the slot's current
+                                    // subject above, so CannotChangeSubject cannot
+                                    // arise here; the remaining precheck variants are
+                                    // add/move-only.
+                                    _ => {
+                                        panic!("Unexpected slot precheck during UpdateSlot: {pe:?}")
+                                    }
                                 }
-                                // The subject is pinned to the slot's current
-                                // subject above, so CannotChangeSubject cannot
-                                // arise here; the remaining precheck variants are
-                                // add/move-only.
-                                _ => panic!("Unexpected slot precheck during UpdateSlot: {pe:?}"),
-                            },
+                            }
                             // The pre-op state was valid, so every break in the set
                             // was introduced by this update. Old validator order
                             // (validate_slot_internal): teacher-resolves,
@@ -433,7 +437,7 @@ impl SlotsUpdateOp {
                             // sits between week-pattern and no-interrogations, but
                             // the pinned subject is always valid, so it is
                             // unreachable and omitted.)
-                            Error::Invariants(set) => {
+                            Error::BrokenInvariants(set) => {
                                 for inv in &set {
                                     if let FixableInvariant::DanglingFk(Reference::Teacher {
                                         target,
@@ -500,12 +504,12 @@ impl SlotsUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            Error, PrecheckError, SlotPrecheckError,
+                            Error, InvalidOp, PrecheckError, SlotPrecheckError,
                         };
                         match e {
-                            Error::Precheck(PrecheckError::Slot(
+                            Error::InvalidOp(InvalidOp::Precheck(PrecheckError::Slot(
                                 SlotPrecheckError::InvalidSlotId(id),
-                            )) => DeleteSlotError::InvalidSlotId(id),
+                            ))) => DeleteSlotError::InvalidSlotId(id),
                             // Colloscope rows and slot-pairing references are
                             // cleared by the cleaning phase before this runs, so
                             // their stripped-guard breaks are unreachable here.

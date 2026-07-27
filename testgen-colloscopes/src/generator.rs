@@ -344,7 +344,7 @@ fn gen_period(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
     let remove_w = if n > 0 { 2 } else { 0 };
     // Periods are created empty (weeks are spliced in by the WeekOp family,
     // driven by `gen_week`). This is the valid walk, applied through the gate:
-    // removing a week-non-empty period bounces as `Error::Invariants` (the
+    // removing a week-non-empty period bounces as `Error::BrokenInvariants` (the
     // weeks' `period_id` FKs would dangle) — a legitimate error the harness
     // tolerates like any other. (The force path lands those dangles; the
     // corruption arm exploits it to reach the dangling landing — see
@@ -847,7 +847,7 @@ fn gen_pairing(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
         let op = if !pools.subject_ids.is_empty() && rng.random_bool(0.6) {
             // Dangling subject in the consequent: `PairingRule::new` accepts the
             // value (the two ids are distinct), the gate rejects the op with
-            // `Error::Invariants` (a dangling subject FK), and the force path
+            // `Error::BrokenInvariants` (a dangling subject FK), and the force path
             // lands that dangle. (Before the seal this arm built a same-subject
             // rule; that value is now unrepresentable.)
             let real = pick(rng, &pools.subject_ids);
@@ -907,7 +907,7 @@ fn gen_slot_pairing(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
         let op = if !pools.slot_ids.is_empty() && rng.random_bool(0.6) {
             // Dangling slot in the consequent: `SlotPairingRule::new` accepts
             // the value (the two ids are distinct), the gate rejects the op
-            // with `Error::Invariants` (a dangling slot FK), and the force path
+            // with `Error::BrokenInvariants` (a dangling slot FK), and the force path
             // lands that dangle. (Before the seal this arm built a same-slot
             // rule; that value is now unrepresentable.)
             let real = pick(rng, &pools.slot_ids);

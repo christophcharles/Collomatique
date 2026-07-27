@@ -949,7 +949,7 @@ impl GroupListsUpdateOp {
                         // apply, so a leftover association dangle here is a
                         // cleaning-contract breach, not user input.
                         match e {
-                            Error::Invariants(set)
+                            Error::BrokenInvariants(set)
                                 if set.iter().any(|inv| {
                                     matches!(
                                         inv,

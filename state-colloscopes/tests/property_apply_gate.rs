@@ -14,8 +14,9 @@
 //! * **honesty** — every `Ok` landing is fully valid (`broken_invariants()` is
 //!   `Ok(∅)`), and its returned reverse restores the pre-state exactly;
 //! * **coverage** — every [`CorruptionKind`] is attempted, each corrupting kind
-//!   is rejected at least once, and `ForceLogic` reaches the [`Error::Logic`]
-//!   tier at least once (the external-data route the sealing left standing).
+//!   is rejected at least once, and `ForceLogic` reaches the
+//!   [`InvalidOp::Logic`] tier at least once (the external-data route the
+//!   sealing left standing).
 //!
 //! **Fuzz shape — depth-1 probes off a validated walk.** A validated random walk
 //! (the testgen harness, byte-untouched) is interrupted every [`PROBE_STRIDE`]
@@ -36,7 +37,7 @@ use collomatique_testgen_colloscopes::{generator, harness};
 
 use collomatique_state::InMemoryData;
 use collomatique_state::traits::Manager;
-use collomatique_state_colloscopes::{Data, Error, InnerData};
+use collomatique_state_colloscopes::{Data, Error, InnerData, InvalidOp};
 
 use harness::RunConfig;
 
@@ -137,12 +138,12 @@ fn apply_gate_is_atomic_and_honest() {
                         );
                         match e {
                             // Precheck bounced before any mutation.
-                            Error::Precheck(_) => {}
-                            Error::Logic(set) => {
+                            Error::InvalidOp(InvalidOp::Precheck(_)) => {}
+                            Error::InvalidOp(InvalidOp::Logic(set)) => {
                                 logic_seen.set(logic_seen.get() + 1);
                                 assert!(!set.is_empty(), "a Logic error carries a non-empty set");
                             }
-                            Error::Invariants(set) => {
+                            Error::BrokenInvariants(set) => {
                                 assert!(
                                     !set.is_empty(),
                                     "an Invariants error carries a non-empty set",
@@ -206,6 +207,6 @@ fn apply_gate_is_atomic_and_honest() {
 
     assert!(
         logic_seen.get() > 0,
-        "no ForceLogic probe ever reached the Error::Logic tier across all seeds",
+        "no ForceLogic probe ever reached the InvalidOp::Logic tier across all seeds",
     );
 }

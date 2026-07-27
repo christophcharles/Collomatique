@@ -36,8 +36,13 @@ pub trait InMemoryData: Clone + Send + Sync + std::fmt::Debug {
     /// useful for the operation issuer.
     type NewInfo;
 
-    /// Error type for when [Self::apply] fails.
-    type Error: std::error::Error + Send + Sync + Clone;
+    /// The unresolvable tier of [ApplyError]: bad op input (including op
+    /// payloads that would land logically impossible data).
+    type InvalidOp: std::error::Error + Send + Sync + Clone;
+
+    /// The resolvable tier of [ApplyError]: one broken invariant. `Ord` is the
+    /// canonical order the cascade's deterministic pick relies on.
+    type Invariant: Send + Sync + Clone + Ord + std::fmt::Debug + std::fmt::Display;
 
     /// Annotate an operation
     ///
@@ -63,12 +68,46 @@ pub trait InMemoryData: Clone + Send + Sync + std::fmt::Debug {
     fn apply(
         &mut self,
         op: &Self::AnnotatedOperation,
-    ) -> std::result::Result<Self::AnnotatedOperation, Self::Error>;
+    ) -> std::result::Result<Self::AnnotatedOperation, ApplyError<Self::InvalidOp, Self::Invariant>>;
 }
 
 use thiserror::Error;
 
 use crate::history::AggregatedOp;
+
+/// Error surface of the apply/check/rollback gate, shared by every
+/// [InMemoryData] implementor.
+///
+/// Two tiers. [ApplyError::InvalidOp] means the op cannot be made sense of
+/// against the current state (bad input: no-clobber, dangling op target, bad
+/// anchor — or an op payload that would land logically impossible data). It is
+/// never resolvable. [ApplyError::BrokenInvariants] means the op is
+/// well-formed but the state does not satisfy what it needs: the payload is
+/// the exact set of broken invariants, in the canonical `Ord`. At step 6 this
+/// is what the cascade resolves; outside the cascade it is simply an error.
+///
+/// Either way the failed `apply` left the data strictly unchanged.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum ApplyError<InvalidOp, Invariant>
+where
+    InvalidOp: std::error::Error,
+    Invariant: std::fmt::Debug + std::fmt::Display + Ord,
+{
+    /// Bad op input; never resolvable.
+    #[error(transparent)]
+    InvalidOp(InvalidOp),
+    /// The op needs these invariants fixed first; resolvable by the cascade.
+    #[error("the operation would break data invariants: {}", format_error_set(.0))]
+    BrokenInvariants(std::collections::BTreeSet<Invariant>),
+}
+
+/// Itemises a set of errors through each entry's own [std::fmt::Display] so a
+/// UI dialog can surface a meaningful message without learning the vocabulary.
+/// (Moved up from `state-colloscopes`, which keeps its own private copy for
+/// its remaining local enums.)
+fn format_error_set<T: std::fmt::Display>(set: &std::collections::BTreeSet<T>) -> String {
+    set.iter().map(T::to_string).collect::<Vec<_>>().join("; ")
+}
 
 /// Error for [Manager::redo] and [Manager::undo]
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
@@ -108,7 +147,10 @@ pub trait Manager: private::ManagerInternal {
         desc: <Self as private::ManagerInternal>::Desc,
     ) -> Result<
         <<Self as private::ManagerInternal>::Data as InMemoryData>::NewInfo,
-        <<Self as private::ManagerInternal>::Data as InMemoryData>::Error,
+        ApplyError<
+            <<Self as private::ManagerInternal>::Data as InMemoryData>::InvalidOp,
+            <<Self as private::ManagerInternal>::Data as InMemoryData>::Invariant,
+        >,
     > {
         let (annotated_op, new_info) = self.get_in_memory_data_mut().annotate(op);
 
@@ -237,7 +279,10 @@ pub(crate) mod private {
     pub fn update_internal_state_with_aggregated<T: ManagerInternal>(
         manager: &mut T,
         aggregated_op: &crate::history::AggregatedOp<<T::Data as InMemoryData>::AnnotatedOperation>,
-    ) -> Result<(), <T::Data as InMemoryData>::Error> {
+    ) -> Result<
+        (),
+        ApplyError<<T::Data as InMemoryData>::InvalidOp, <T::Data as InMemoryData>::Invariant>,
+    > {
         let ops = aggregated_op.inner();
 
         let mut error = None;
@@ -350,10 +395,10 @@ mod tests {
 
         assert_eq!(
             result,
-            Err(FakeError::ValueMismatch {
+            Err(ApplyError::InvalidOp(FakeError::ValueMismatch {
                 expected: 5,
                 found: 1
-            })
+            }))
         );
         assert_eq!(state.get_data().value, 0);
     }
@@ -394,7 +439,7 @@ mod tests {
 
         let result = state.apply(FakeOp::Fail, "never happens");
 
-        assert_eq!(result, Err(FakeError::ApplyFailed));
+        assert_eq!(result, Err(ApplyError::InvalidOp(FakeError::ApplyFailed)));
         assert_eq!(state.get_data().value, 0);
         assert!(!state.can_undo());
         assert_eq!(state.get_last_op(), None);

@@ -771,12 +771,12 @@ impl SubjectsUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            Error, PrecheckError, SubjectPrecheckError,
+                            Error, InvalidOp, PrecheckError, SubjectPrecheckError,
                         };
                         match e {
-                            Error::Precheck(PrecheckError::Subject(
+                            Error::InvalidOp(InvalidOp::Precheck(PrecheckError::Subject(
                                 SubjectPrecheckError::InvalidSubjectId(id),
-                            )) => DeleteSubjectError::InvalidSubjectId(id),
+                            ))) => DeleteSubjectError::InvalidSubjectId(id),
                             // Every reference to this subject (teacher subjects,
                             // group-list associations, incompats, slots,
                             // assignments, balancing options, pairing rules) is

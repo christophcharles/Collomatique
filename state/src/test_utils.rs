@@ -6,7 +6,7 @@
 //! aggregated operations and session commit/cancel semantics.
 
 use crate::history::ReversibleOp;
-use crate::traits::{InMemoryData, Operation};
+use crate::traits::{ApplyError, InMemoryData, Operation};
 
 use thiserror::Error;
 
@@ -48,23 +48,27 @@ impl InMemoryData for FakeData {
     type OriginalOperation = FakeOp;
     type AnnotatedOperation = FakeOp;
     type NewInfo = ();
-    // FakeData has no invariants to check, so the gate is a plain state-dependent
-    // apply that reuses `FakeError`. The trait does not require a distinct error
-    // type; this exercises that flexibility.
-    type Error = FakeError;
+    // FakeData has no invariants: the resolvable tier is uninhabited, so
+    // `ApplyError::BrokenInvariants` is unrepresentable for it (its `Invariant`
+    // is `Infallible`).
+    type InvalidOp = FakeError;
+    type Invariant = std::convert::Infallible;
 
     fn annotate(&self, op: FakeOp) -> (FakeOp, ()) {
         (op, ())
     }
 
-    fn apply(&mut self, op: &FakeOp) -> Result<FakeOp, FakeError> {
+    fn apply(
+        &mut self,
+        op: &FakeOp,
+    ) -> Result<FakeOp, ApplyError<FakeError, std::convert::Infallible>> {
         match op {
             FakeOp::Set { old, new } => {
                 if self.value != *old {
-                    return Err(FakeError::ValueMismatch {
+                    return Err(ApplyError::InvalidOp(FakeError::ValueMismatch {
                         expected: *old,
                         found: self.value,
-                    });
+                    }));
                 }
                 self.value = *new;
                 Ok(FakeOp::Set {
@@ -72,7 +76,7 @@ impl InMemoryData for FakeData {
                     new: *old,
                 })
             }
-            FakeOp::Fail => Err(FakeError::ApplyFailed),
+            FakeOp::Fail => Err(ApplyError::InvalidOp(FakeError::ApplyFailed)),
         }
     }
 }

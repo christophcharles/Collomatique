@@ -9,8 +9,8 @@
 use collomatique_state::{AppState, traits::Manager};
 use collomatique_state_colloscopes::{
     ColloscopeOp, Convergence, Data, Error, FixableInvariant, GroupListOp, GroupListPrecheckError,
-    NewId, NonEmptyRangeInclusive, Op, PeriodOp, PrecheckError, Reference, SettingsOp, SlotOp,
-    SlotPrecheckError, StudentOp, StudentRefSite, Subject, SubjectInterrogationParameters,
+    InvalidOp, NewId, NonEmptyRangeInclusive, Op, PeriodOp, PrecheckError, Reference, SettingsOp,
+    SlotOp, SlotPrecheckError, StudentOp, StudentRefSite, Subject, SubjectInterrogationParameters,
     SubjectOp, SubjectParameters, SubjectPeriodicity, TeacherOp, WeekOp,
     group_lists::{GroupList, GroupListFilling, GroupListParameters, PrefilledGroup},
     ids::PeriodId,
@@ -79,7 +79,7 @@ fn remove_student_with_settings_is_rejected() {
     );
     assert_eq!(
         result,
-        Err(Error::Invariants(BTreeSet::from([
+        Err(Error::BrokenInvariants(BTreeSet::from([
             FixableInvariant::DanglingFk(Reference::Student {
                 target: student_id,
                 site: StudentRefSite::SettingsStudentKey,
@@ -163,7 +163,7 @@ fn set_filling_excluding_placed_student_is_rejected() {
     );
     assert_eq!(
         result,
-        Err(Error::Invariants(BTreeSet::from([
+        Err(Error::BrokenInvariants(BTreeSet::from([
             FixableInvariant::Convergence(Convergence::ColloscopeStudentExcluded(
                 group_list_id,
                 placed_student,
@@ -334,7 +334,7 @@ fn update_shrinking_group_names_below_assigned_group_is_rejected() {
     );
     assert_eq!(
         result,
-        Err(Error::Invariants(BTreeSet::from([
+        Err(Error::BrokenInvariants(BTreeSet::from([
             FixableInvariant::Convergence(Convergence::InterrogationGroupOutOfBounds(
                 slot_id, week0,
             ))
@@ -484,8 +484,8 @@ fn assign_to_subject_with_dangling_group_list_id_errors() {
     );
     assert_eq!(
         result,
-        Err(Error::Precheck(PrecheckError::GroupList(
-            GroupListPrecheckError::InvalidGroupListId(group_list_id)
+        Err(Error::InvalidOp(InvalidOp::Precheck(
+            PrecheckError::GroupList(GroupListPrecheckError::InvalidGroupListId(group_list_id))
         ))),
     );
 }
@@ -581,8 +581,8 @@ fn slot_update_changing_subject_is_rejected() {
     );
     assert_eq!(
         result,
-        Err(Error::Precheck(PrecheckError::Slot(
+        Err(Error::InvalidOp(InvalidOp::Precheck(PrecheckError::Slot(
             SlotPrecheckError::CannotChangeSubject(slot_id, subject_a, subject_b)
-        ))),
+        )))),
     );
 }

@@ -96,7 +96,7 @@ impl IncompatibilitiesUpdateOp {
                             // The pre-op state was valid, so any dangle in the set
                             // was introduced by this Add. Old validator order:
                             // subject id before week pattern id.
-                            Error::Invariants(set) => {
+                            Error::BrokenInvariants(set) => {
                                 for inv in &set {
                                     if let FixableInvariant::DanglingFk(Reference::Subject {
                                         target,
@@ -140,15 +140,15 @@ impl IncompatibilitiesUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            Error, FixableInvariant, IncompatPrecheckError, PrecheckError,
-                            Reference, SubjectRefSite, WeekPatternRefSite,
+                            Error, FixableInvariant, IncompatPrecheckError, InvalidOp,
+                            PrecheckError, Reference, SubjectRefSite, WeekPatternRefSite,
                         };
                         match e {
-                            Error::Precheck(PrecheckError::Incompat(
+                            Error::InvalidOp(InvalidOp::Precheck(PrecheckError::Incompat(
                                 IncompatPrecheckError::InvalidIncompatId(id),
-                            )) => UpdateIncompatError::InvalidIncompatId(id),
+                            ))) => UpdateIncompatError::InvalidIncompatId(id),
                             // Old validator order: subject id before week pattern id.
-                            Error::Invariants(set) => {
+                            Error::BrokenInvariants(set) => {
                                 for inv in &set {
                                     if let FixableInvariant::DanglingFk(Reference::Subject {
                                         target,
@@ -189,12 +189,12 @@ impl IncompatibilitiesUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            Error, IncompatPrecheckError, PrecheckError,
+                            Error, IncompatPrecheckError, InvalidOp, PrecheckError,
                         };
                         match e {
-                            Error::Precheck(PrecheckError::Incompat(
+                            Error::InvalidOp(InvalidOp::Precheck(PrecheckError::Incompat(
                                 IncompatPrecheckError::InvalidIncompatId(id),
-                            )) => DeleteIncompatError::InvalidIncompatId(id),
+                            ))) => DeleteIncompatError::InvalidIncompatId(id),
                             _ => panic!("Unexpected error during DeleteIncompat: {e:?}"),
                         }
                     })?;
