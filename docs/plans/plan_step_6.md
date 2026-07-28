@@ -2675,7 +2675,9 @@ And two from 7.5h, both about what a **coordinate-shaped** arm can and cannot be
   second is what the fixture's three new rows are for: `(other_period, subject)` and
   `(period, excluded_subject)` in the assignments, `(period, other_subject)` in the
   associations. Row 5's twin sits at `(other_period, excluded_subject)` and now has a neighbour
-  on both halves; row 8's twin likewise.
+  on both halves; row 8's twin likewise. Row 6 needs the same treatment one axis over — its
+  witness is a *member*, not a row, so `excluded_student` was added to the fixture's first
+  assignments row, where she is present and therefore innocent.
 
   A first draft of this finding covered only the period half of row 5 and argued the gap away:
   `Assignments` exposes `subjects_for_period` but no subject-keyed lookup, so — the argument
@@ -2687,18 +2689,29 @@ And two from 7.5h, both about what a **coordinate-shaped** arm can and cannot be
   less than the paragraph written to excuse its absence. The general rule for the two remaining
   blocks: **cover both halves, and if one genuinely cannot be covered, the reason must be a
   proof, not a plausibility argument** (row 7 below is what a proof looks like).
-- ★ **Row 7's subject half has no innocent witness, and provably cannot have one.** A live
-  neighbour for it would be a second association naming a subject whose interrogations are
-  disabled — and that association *is* row 7, so no valid document can hold one. The offending
-  predicate is a property of the subject alone, so the subject half has nothing innocent to
-  compare against, at any fixture. This is the first stated coverage limit of the series, and
-  it generalises: **whenever a `Convergence` predicate depends only on one half of the
-  coordinate, that half is untestable this way.** Row 8 escapes it because its predicate is
-  relational — a subject that excludes one period may be associated on another — which is why
-  row 8's twin has neighbours on both halves and row 7's on one. Making row 8 reachable at all
-  is what the third fixture change bought: `other_subject` now excludes `other_period`, making
-  it the fixture's only subject that runs interrogations and does not run everywhere, which is
-  exactly the combination that fires row 8 without dragging row 7 in.
+- ★ **The coverage limit, and the rule it comes from: whichever coordinate the predicate depends
+  on, that half has no innocent witness — and cannot have one at any fixture.** This is the
+  series' first stated limit, and it has two instances in this block, which is what makes it a
+  rule rather than an accident.
+
+  *Row 7.* A witness for its subject half would be a second association naming a subject whose
+  interrogations are disabled. That association **is** row 7, so no valid document can hold one.
+  The predicate is a property of the subject alone.
+
+  *Row 6.* Same shape, one coordinate over. Its twin puts the absent student in the row on
+  `other_period`; a witness for the **period** half would be another row on `other_period`
+  holding her, and that row **is** row 6. Here the predicate is a property of the pair
+  `(student, period)`, so the subject is the only thing a valid document may vary — and the
+  witness on the subject axis is the one the fixture now carries (she is assigned on `period`,
+  where she is present).
+
+  Row 8 escapes the limit entirely because its predicate is *relational*: a subject that
+  excludes one period may be associated on another, so both halves have witnesses. That is the
+  test to apply to the twelve rows still to come — **ask which coordinates the predicate reads;
+  those halves are uncoverable, the rest must be covered.** Making row 8 reachable at all is
+  what one fixture change bought: `other_subject` now excludes `other_period`, making it the
+  fixture's only subject that runs interrogations and does not run everywhere, which is exactly
+  the combination that fires row 8 without dragging row 7 in.
 
 ## 9ter. Commit 7.6 — the self-caused rejection fixtures (`tests/cascade.rs`)
 

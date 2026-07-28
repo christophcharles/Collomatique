@@ -302,7 +302,9 @@ pub(super) struct ValidDocument {
     /// The bystander: everywhere `student` is, so a rebuild has something to
     /// keep.
     other_student: StudentId,
-    /// Excludes `other_period`, and is excluded by `excluding_group_list`.
+    /// Excludes `other_period`, and is excluded by `excluding_group_list`. She
+    /// is assigned on `period`, where she is present — the innocent witness
+    /// §8.2 row 6 needs.
     excluded_student: StudentId,
     /// Automatic, associated to `(period, subject)`, and carrying the colloscope
     /// placements row.
@@ -586,12 +588,19 @@ pub(super) fn build_valid_document() -> (Data, ValidDocument) {
         )),
         "filling the colloscope cell",
     );
+    // `excluded_student` is in this row on purpose. She is absent for the
+    // *second* period only, so taking this subject in the first one is ordinary
+    // data — and it is what §8.2 row 6's twin needs: that twin puts her in the
+    // row on `other_period`, so the valid document must hold her somewhere
+    // else, or an arm that searched every row for the named student instead of
+    // reading the named coordinate would find nothing and pass for the wrong
+    // reason.
     apply(
         &mut data,
         Op::Assignment(AssignmentOp::SetRow(
             period,
             subject,
-            BTreeSet::from([student, other_student]),
+            BTreeSet::from([student, other_student, excluded_student]),
         )),
         "filling the assignments row",
     );
@@ -1631,9 +1640,16 @@ fn assignments_student_arm_spares_a_row_of_live_students() {
     let (valid, doc) = build_valid_document();
 
     let mut corrupt = valid.get_inner_data().clone();
+    // Every live member is carried across, so the edit really is "one member
+    // added" rather than a rewritten row.
     corrupt.params.assignments.map.insert(
         (doc.period, doc.subject),
-        BTreeSet::from([doc.student, doc.other_student, doc.dead_student]),
+        BTreeSet::from([
+            doc.student,
+            doc.other_student,
+            doc.excluded_student,
+            doc.dead_student,
+        ]),
     );
 
     assert_arm_finds_nothing(
@@ -2416,6 +2432,17 @@ fn assignment_for_subject_not_running_on_period_arm_spares_a_missing_row() {
 /// fixture's row on `other_period`. So the arm's lookup **succeeds** on the
 /// valid document and finds a real row with real members — only the membership
 /// test stands between an innocent student and being silently unassigned.
+///
+/// She is also a member of the fixture's row on `period`, where she is present.
+/// That is the innocent witness for the *other* bug shape: an arm that searched
+/// every row for the named student, rather than reading the named coordinate,
+/// would find that row and unassign her from a term nobody complained about.
+///
+/// **The subject half of the coordinate has no innocent witness**, and the
+/// proof is the same shape as row 7's: a witness would be a row on
+/// `other_period` holding her, and that row *is* this invariant. The predicate
+/// depends on the pair `(student, period)` alone — the subject plays no part —
+/// so the period is the only half a valid document can vary.
 ///
 /// **Exactly one break**: the row's subject excludes no period, so row 5 stays
 /// quiet, and the two students already in the row exclude nothing.
