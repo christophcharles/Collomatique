@@ -2426,12 +2426,13 @@ Three rules for the series:
   corruption, not the document. The builder belongs in 7.5a and is written to be reused —
   do not copy a fixture per test.
 
-**Status: 7.5a** (`b04bdcaf`) **and 7.5b** (`362dde77`) **have landed**, so
+**Status: 7.5a** (`b04bdcaf`)**, 7.5b** (`362dde77`) **and 7.5c** (`acaab2fb`) **have landed**, so
 `src/resolution/innocent_tests.rs` exists with its `#[cfg(test)] mod innocent_tests;` line in
-`resolution.rs`, the shared builder, and eight tests — the `SlotTeacher` arm and all seven
-`PeriodRefSite` arms. Every one passed on its first run, hand-derived one-element set and all; no
-map bug has surfaced. Eight commits remain (7.5c–7.5f and the four `Convergence` ones). Four
-things settled while writing 7.5a, all of them things the rest of the series inherits:
+`resolution.rs`, the shared builder, and sixteen tests — the `SlotTeacher` arm, all seven
+`PeriodRefSite` arms and all eight `SubjectRefSite` ones. Every one passed on its first run, with
+its hand-derived set; no map bug has surfaced. Seven commits remain (7.5d–7.5f and the four
+`Convergence` ones). Four things settled while writing 7.5a, all of them things the rest of the
+series inherits:
 
 - ★ **The in-crate equivalent of "through `Manager::apply`" is `Data::annotate` + `Data::apply`.**
   §9bis's step-1 sketch says "ops through `Manager::apply`, then `get_data().clone()`", which is
@@ -2487,6 +2488,30 @@ merely green:
   singles out as needing a **two-element** set cannot use it, since they select the element under
   test out of the set rather than taking the only one; its doc comment says so, so the next
   implementer does not try to generalise it.
+
+And two from 7.5c, the commit that carried the first of the two two-element exceptions:
+
+- ★ **The `SlotSubject` exception is confirmed exactly as §9bis predicted, and the second element
+  is selected by *shape*, not by `set.first()`.** The checker's own comment
+  (`invariants.rs:415-421`) states the rule the exception follows: a predicate skips when a lookup
+  it needs to *read data* fails, but an id used only as a *compared value* does not gate. The
+  teacher-teaches check reads the teacher and compares the subject id, so a dead subject leaves it
+  firing — `SlotTeacherDoesNotTeachSubject(slot, teacher, dead_subject)` sits beside the dangle,
+  and the expected literal is a two-element set. Step 4 then picks the dangle with
+  `.find(|i| matches!(i, FixableInvariant::DanglingFk(_)))`. The derived `Ord` happens to put it
+  first, so `set.first()` would work today — which is exactly why it must not be used: it would
+  make this test quietly depend on pick order, which is fixture `1a`'s job and nothing else's.
+  That same gating rule is what keeps the other seven subject arms at one break, and it is worth
+  reading before hand-deriving any later set: `find_subject` behind `let … else { continue }`
+  (teachers, associations, balancing) or `if let` (assignments, slots) means a dead subject makes
+  the predicate skip.
+- ★ **The shared fixture gained a `lone_slot`.** It is a third slot on the running subject that is
+  referenced by *nothing* — no week pattern, no colloscope cell, no pairing rule. `SlotSubject`'s
+  corruption changes what a slot *is*, and doing that to either of the two existing slots would
+  also break `PairedSlotsNotInSameSubject` (both slots resolve, and their subjects now differ) and
+  the cell's group bound (a dead subject has no association, so every group number is
+  out of bounds). The rule generalises: **a corruption that moves a row between owners needs a row
+  that owns nothing else.** 7.5f's `ColloscopeInterrogation` arms are the next place it will bite.
 
 ## 9ter. Commit 7.6 — the self-caused rejection fixtures (`tests/cascade.rs`)
 
