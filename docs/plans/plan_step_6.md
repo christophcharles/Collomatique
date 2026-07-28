@@ -2426,11 +2426,12 @@ Three rules for the series:
   corruption, not the document. The builder belongs in 7.5a and is written to be reused —
   do not copy a fixture per test.
 
-**Status: 7.5a** (`b04bdcaf`)**, 7.5b** (`362dde77`) **and 7.5c** (`acaab2fb`) **have landed**, so
-`src/resolution/innocent_tests.rs` exists with its `#[cfg(test)] mod innocent_tests;` line in
-`resolution.rs`, the shared builder, and sixteen tests — the `SlotTeacher` arm, all seven
-`PeriodRefSite` arms and all eight `SubjectRefSite` ones. Every one passed on its first run, with
-its hand-derived set; no map bug has surfaced. Seven commits remain (7.5d–7.5f and the four
+**Status: 7.5a** (`b04bdcaf`)**, 7.5b** (`362dde77`)**, 7.5c** (`acaab2fb`) **and 7.5d**
+(`cba1a8b2`) **have landed**, so `src/resolution/innocent_tests.rs` exists with its
+`#[cfg(test)] mod innocent_tests;` line in `resolution.rs`, the shared builder, and twenty-one
+tests — the `SlotTeacher` arm, all seven `PeriodRefSite` arms, all eight `SubjectRefSite` ones and
+all five `StudentRefSite` ones. Every one passed on its first run, with
+its hand-derived set; no map bug has surfaced. Six commits remain (7.5e, 7.5f and the four
 `Convergence` ones). Four things settled while writing 7.5a, all of them things the rest of the
 series inherits:
 
@@ -2512,6 +2513,35 @@ And two from 7.5c, the commit that carried the first of the two two-element exce
   the cell's group bound (a dead subject has no association, so every group number is
   out of bounds). The rule generalises: **a corruption that moves a row between owners needs a row
   that owns nothing else.** 7.5f's `ColloscopeInterrogation` arms are the next place it will bite.
+
+Two more from 7.5d:
+
+- ★ **The student block is the one where no arm deletes a row — and that changes what a missing
+  identity test *costs*, not whether it matters.** All five arms drop the student out of something
+  that survives (a prefilled group, an excluded set, an assignments row, a colloscope placements
+  row) or clear an override entry keyed by the student. So the failure mode here is not the
+  destroyed row of §8.1's deleting arms; it is an innocent student silently unassigned or
+  unplaced, leaving a document that is still perfectly well-formed and in which nothing looks
+  wrong. That is worth stating because the reflex from 7.5c is that the deleting arms are the
+  dangerous ones. Four of the five emit an op that does not name the student
+  (`GroupListOp::Update`, `AssignmentOp::SetRow`, `ColloscopeOp::SetGroupList` all carry the
+  rebuilt row, never the member being removed), so rule 4 asks each of them for a real identity
+  test; the fifth, `SettingsStudentKey`, names its target, and what it needs — and what the test
+  pins — is the presence test that keeps it from emitting a perfect no-op.
+- ★ **All five sets are one-element for one uniform reason: `convergence_breaks` reads student
+  membership in exactly two loops.** The assignments loop (`invariants.rs:495-506`) is gated on
+  the student lookup, so a dead student makes it skip. The colloscope group-list loop
+  (`invariants.rs:637-651`) iterates the **colloscope's** rows, not `group_list_map` — a group
+  list that carries no colloscope row is invisible to layer C entirely. Both group-list
+  corruptions were therefore put on lists with no colloscope row (`prefilled_group_list` and
+  `excluding_group_list`), which turns that half of the derivation into "the loop does not run"
+  instead of a case analysis over exclusions and bounds. The one corruption that *does* touch the
+  colloscope row places the dead student in group 0, in bounds for the list's two groups, on a
+  list whose excluded set is empty — so neither `ColloscopeStudentExcluded` nor
+  `ColloscopeStudentGroupOutOfBounds` joins the dangle. **The shared fixture needed no change at
+  all for this commit**, the first in the series where that held: every corruption either adds a
+  member to an existing set or adds an entry keyed by the dead student, and none moves a row
+  between owners, so 7.5c's `lone_slot` lesson did not have to be applied again.
 
 ## 9ter. Commit 7.6 — the self-caused rejection fixtures (`tests/cascade.rs`)
 
