@@ -24,24 +24,27 @@
 
 use collomatique_state::{AppState, InMemoryData, apply_cascade, traits::Manager};
 use collomatique_state_colloscopes::{
-    BalancingOp, ColloscopeOp, Data, GroupListOp, NewId, NonEmptyRangeInclusive, Op, PairingOp,
-    PeriodOp, SlotOp, SlotPairingOp, StudentOp, Subject, SubjectInterrogationParameters, SubjectOp,
-    SubjectParameters, SubjectPeriodicity, TeacherOp, WeekOp, WeekPatternOp,
+    AssignmentOp, BalancingOp, ColloscopeOp, Data, GroupListOp, NewId, NonEmptyRangeInclusive, Op,
+    PairingOp, PeriodOp, SettingsOp, SlotOp, SlotPairingOp, StudentOp, Subject,
+    SubjectInterrogationParameters, SubjectOp, SubjectParameters, SubjectPeriodicity, TeacherOp,
+    WeekOp, WeekPatternOp,
     balancing::BalancingOptions,
-    group_lists::{GroupList, GroupListFilling, GroupListParameters},
+    group_lists::{GroupList, GroupListFilling, GroupListParameters, PrefilledGroup},
     ids::{
         GroupListId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId, SubjectId,
         TeacherId, WeekId, WeekPatternId,
     },
     ops::{
         AnnotatedAssignmentOp, AnnotatedBalancingOp, AnnotatedColloscopeOp, AnnotatedGroupListOp,
-        AnnotatedOp, AnnotatedPairingOp, AnnotatedPeriodOp, AnnotatedSlotOp,
+        AnnotatedOp, AnnotatedPairingOp, AnnotatedPeriodOp, AnnotatedSettingsOp, AnnotatedSlotOp,
         AnnotatedSlotPairingOp, AnnotatedStudentOp, AnnotatedSubjectOp, AnnotatedTeacherOp,
         AnnotatedWeekOp, AnnotatedWeekPatternOp,
     },
     pairings::{PairingRule, RulePart},
+    settings::Limits,
     slot_pairings::{SlotPairingRule, SlotRulePart},
     slots::Slot,
+    soft_param::SoftParam,
     students::Student,
     teachers::Teacher,
     week_patterns::WeekPattern,
@@ -195,6 +198,25 @@ fn automatic_group_list(
         GroupListFilling::Automatic { excluded_students },
     )
     .expect("`GroupList::new` validates the prefilled branch only")
+}
+
+/// A prefilled group list holding exactly `groups`, one `group_names` entry per
+/// group (the count match is `GroupList::new`'s first value-internal invariant).
+fn prefilled_group_list(name: &str, groups: Vec<BTreeSet<StudentId>>) -> GroupList {
+    GroupList::new(
+        GroupListParameters {
+            name: name.into(),
+            group_names: vec![None; groups.len()],
+            ..Default::default()
+        },
+        GroupListFilling::Prefilled {
+            groups: groups
+                .into_iter()
+                .map(|students| PrefilledGroup { students })
+                .collect(),
+        },
+    )
+    .expect("the group count matches and no student sits in two groups")
 }
 
 /// The forward op of every landed step, in order.
@@ -1476,5 +1498,247 @@ fn fixture_3_a_rejected_fix_cascades_through_convergence_breaks() {
         inner.params.subjects.find_subject(other_subject),
         Some(&interrogation_subject("Physique", BTreeSet::new())),
         "the innocent subject is untouched"
+    );
+}
+
+/// Fixture `4` — **full site coverage for the student**, and the only fixture
+/// that reaches a group list at all.
+///
+/// `StudentRefSite` has five variants (`refs.rs:154-169`) and this document
+/// holds all five at once, so `StudentOp::Remove(st)` breaks five references in
+/// a single round and every fix hangs flat off the target. Six ops land.
+///
+/// Covering the five needs **three** group lists, because a filling is either
+/// `Prefilled` or `Automatic` and one list cannot play two of the roles:
+///
+/// - `gl1`, **prefilled**, one of whose groups holds `st` →
+///   `GroupListPrefilledStudent`;
+/// - `gl2`, **automatic**, excluding `st` → `GroupListExcludedStudent`;
+/// - `gl3`, **automatic**, *not* excluding `st`, carrying a colloscope row that
+///   places them → `ColloscopeGroupListStudent`. It has to be a third list:
+///   placing `st` in `gl2` would break `ColloscopeStudentExcluded`, and in `gl1`
+///   would break `ColloscopeGroupListPrefilled`, so either would be testing
+///   something else by accident;
+///
+/// plus a per-student settings override (`SettingsStudentKey`) and an
+/// assignments row holding `st` (`AssignmentsStudent { period, subject }`).
+///
+/// **Why the fixture is worth its weight: `gl1` and `gl2`.** Their two arms are
+/// the sealed `GroupList::new` rebuilds of §8.1, each carrying an `.expect`.
+/// Commit 7.5 tests only their `None` branch, and no other fixture in this file
+/// reaches a group list at all — so without this one those two `.expect`s are
+/// never executed by any test in the suite. (`1c` covers the other two sealed
+/// rebuilds, `PairingRule` and `SlotPairingRule`.) It is also the only fixture
+/// exercising `SettingsOp::SetStudent`, the elementary op split out in commit
+/// 5.98.
+///
+/// **A second student `st2`**, sitting in the *same* prefilled group, the *same*
+/// assignments row and the *same* colloscope row. Three of the five fixes carry
+/// a rebuilt collection inside the op, and the ops are compared whole, so `st2`
+/// still being in each of them is what separates "the offending element left"
+/// from "the collection was cleared". The other two fixes need no bystander: the
+/// settings fix names its key in the op itself, and `gl2`'s excluded set has
+/// only `st` in it by construction.
+///
+/// Content, not sequence: five simultaneous breaks means the engine genuinely
+/// picks, and pinning that pick is `1a`'s job.
+#[test]
+fn fixture_4_student_removal_covers_all_five_student_sites() {
+    let mut app = AppState::<Data, String>::new(Data::new());
+
+    let period: PeriodId = apply_new!(
+        app,
+        Op::Period(PeriodOp::AddFront),
+        NewId::PeriodId,
+        "adding a period"
+    );
+    let subject: SubjectId = apply_new!(
+        app,
+        Op::Subject(SubjectOp::AddAfter(
+            None,
+            interrogation_subject("Math", BTreeSet::new())
+        )),
+        NewId::SubjectId,
+        "adding a subject"
+    );
+    let student: StudentId = apply_new!(
+        app,
+        Op::Student(StudentOp::Add(plain_student(BTreeSet::new()))),
+        NewId::StudentId,
+        "adding the student to remove"
+    );
+    let other_student: StudentId = apply_new!(
+        app,
+        Op::Student(StudentOp::Add(plain_student(BTreeSet::new()))),
+        NewId::StudentId,
+        "adding the innocent student"
+    );
+
+    // Site 1: a prefilled group holding the student — and the bystander with
+    // them, so the rebuilt list has something to keep.
+    let gl1: GroupListId = apply_new!(
+        app,
+        Op::GroupList(GroupListOp::Add(prefilled_group_list(
+            "Prérempli",
+            vec![BTreeSet::from([student, other_student]), BTreeSet::new()]
+        ))),
+        NewId::GroupListId,
+        "adding the prefilled group list"
+    );
+    // Site 2: an automatic list excluding the student.
+    let gl2: GroupListId = apply_new!(
+        app,
+        Op::GroupList(GroupListOp::Add(automatic_group_list(
+            "Exclusions",
+            2,
+            BTreeSet::from([student])
+        ))),
+        NewId::GroupListId,
+        "adding the excluding group list"
+    );
+    // Site 5: an automatic list that excludes nobody, so it can carry a
+    // colloscope row placing the student.
+    let gl3: GroupListId = apply_new!(
+        app,
+        Op::GroupList(GroupListOp::Add(automatic_group_list(
+            "Colloscope",
+            2,
+            BTreeSet::new()
+        ))),
+        NewId::GroupListId,
+        "adding the placed group list"
+    );
+    apply_ok(
+        &mut app,
+        Op::Colloscope(ColloscopeOp::SetGroupList(
+            gl3,
+            BTreeMap::from([(student, 0), (other_student, 1)]),
+        )),
+        "placing both students in the colloscope group list",
+    );
+
+    // Site 3: a per-student settings override. Deliberately not the default
+    // `Limits`, so that clearing it is a visible change and the global limits
+    // can be asserted untouched at the end.
+    let override_limits = Limits {
+        interrogations_per_week_max: Some(SoftParam {
+            soft: false,
+            value: 3,
+        }),
+        ..Default::default()
+    };
+    apply_ok(
+        &mut app,
+        Op::Settings(SettingsOp::SetStudent(
+            student,
+            Some(override_limits.clone()),
+        )),
+        "setting the per-student limits",
+    );
+    // Site 4: an assignments row holding the student, and the bystander.
+    apply_ok(
+        &mut app,
+        Op::Assignment(AssignmentOp::SetRow(
+            period,
+            subject,
+            BTreeSet::from([student, other_student]),
+        )),
+        "filling the assignments row",
+    );
+
+    let global_limits = app
+        .get_data()
+        .get_inner_data()
+        .params
+        .settings
+        .global
+        .clone();
+    let innocent_student = app
+        .get_data()
+        .get_inner_data()
+        .params
+        .students
+        .student_map
+        .get(&other_student)
+        .expect("the innocent student is there")
+        .clone();
+
+    let mut data = app.get_data().clone();
+    let (target, _new_info) = data.annotate(Op::Student(StudentOp::Remove(student)));
+
+    let applied = apply_cascade(&mut data, target).expect("the cascade repairs all five sites");
+
+    let expected = vec![
+        AnnotatedOp::from(AnnotatedGroupListOp::Update(
+            gl1,
+            prefilled_group_list(
+                "Prérempli",
+                vec![BTreeSet::from([other_student]), BTreeSet::new()],
+            ),
+        )),
+        AnnotatedOp::from(AnnotatedGroupListOp::Update(
+            gl2,
+            automatic_group_list("Exclusions", 2, BTreeSet::new()),
+        )),
+        AnnotatedOp::from(AnnotatedSettingsOp::SetStudent(student, None)),
+        AnnotatedOp::from(AnnotatedAssignmentOp::SetRow(
+            period,
+            subject,
+            BTreeSet::from([other_student]),
+        )),
+        AnnotatedOp::from(AnnotatedColloscopeOp::SetGroupList(
+            gl3,
+            BTreeMap::from([(other_student, 1)]),
+        )),
+        AnnotatedOp::from(AnnotatedStudentOp::Remove(student)),
+    ];
+    assert_same_ops(&forward_ops(&applied), &expected);
+
+    assert_clean(&data);
+    let inner = data.get_inner_data();
+    assert!(
+        inner.params.students.student_map.get(&student).is_none(),
+        "the target student is gone"
+    );
+    assert_eq!(
+        inner.params.group_lists.group_list_map.get(&gl1),
+        Some(&prefilled_group_list(
+            "Prérempli",
+            vec![BTreeSet::from([other_student]), BTreeSet::new()]
+        )),
+        "the prefilled group lost the student and kept the other one"
+    );
+    assert_eq!(
+        inner.params.group_lists.group_list_map.get(&gl2),
+        Some(&automatic_group_list("Exclusions", 2, BTreeSet::new())),
+        "the excluding list no longer excludes them"
+    );
+    assert!(
+        inner.params.settings.students.get(&student).is_none(),
+        "the per-student settings override is gone"
+    );
+    assert_eq!(
+        inner.params.settings.global, global_limits,
+        "and the global limits are untouched"
+    );
+    assert_eq!(
+        inner.params.assignments.students(period, subject),
+        Some(&BTreeSet::from([other_student])),
+        "the assignments row lost the student and kept the other one"
+    );
+    assert_eq!(
+        inner.colloscope.group_list(gl3),
+        Some(&BTreeMap::from([(other_student, 1)])),
+        "and so did the colloscope row, the other student keeping their group"
+    );
+    assert_eq!(
+        inner
+            .params
+            .students
+            .student_map
+            .get(&other_student)
+            .cloned(),
+        Some(innocent_student),
+        "the innocent student is byte-identical, not merely present"
     );
 }
