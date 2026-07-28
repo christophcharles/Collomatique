@@ -60,7 +60,7 @@ use crate::ops::{
     SettingsOp, SlotOp, SlotPairingOp, StudentOp, SubjectOp, TeacherOp, WeekOp, WeekPatternOp,
 };
 use crate::pairings::{PairingRule, RulePart};
-use crate::refs::{Reference, TeacherRefSite};
+use crate::refs::{PeriodRefSite, Reference, TeacherRefSite};
 use crate::settings::Limits;
 use crate::slot_pairings::{SlotPairingRule, SlotRulePart};
 use crate::slots::Slot;
@@ -72,7 +72,7 @@ use crate::subjects::{
 use crate::teachers::Teacher;
 use crate::week_patterns::WeekPattern;
 use crate::weeks::WeekDesc;
-use crate::{Data, NonEmptyRangeInclusive};
+use crate::{Data, InnerData, NonEmptyRangeInclusive};
 
 // ---- Building the valid document ----
 
@@ -709,6 +709,35 @@ pub(super) fn build_valid_document() -> (Data, ValidDocument) {
     (data, doc)
 }
 
+/// Steps 3 and 4, shared by every one-break test here.
+///
+/// Step 3 derives the invariant from the twin instead of hand-writing it, so
+/// the test cannot drift away from the checker, and pins the *whole* set: that
+/// is what makes the corruption surgical — one edit, one broken shape. Step 4
+/// then asks the untouched document, and `why` says in one sentence what makes
+/// it innocent.
+///
+/// Arms whose corruption provably co-breaks a second invariant (§9bis names
+/// two) cannot use this helper: they pin a two-element set and then select the
+/// element under test, which is not always `set.first()`.
+fn assert_arm_finds_nothing(
+    valid: &Data,
+    corrupt: &InnerData,
+    expected: FixableInvariant,
+    why: &str,
+) {
+    let set = corrupt
+        .broken_invariants()
+        .expect("the corruption is fixable, not a logic error");
+    assert_eq!(set, BTreeSet::from([expected]));
+    let invariant = set
+        .into_iter()
+        .next()
+        .expect("the set was just asserted to hold one element");
+
+    assert_eq!(valid.fix_invariant(&invariant), None, "{why}");
+}
+
 // ---- The arms ----
 
 /// `TeacherRefSite::SlotTeacher` — the arm that produced frame point 5.
@@ -750,24 +779,273 @@ fn slot_teacher_arm_spares_a_slot_whose_teacher_is_live() {
         },
     );
 
-    let set = corrupt
-        .broken_invariants()
-        .expect("the corruption is fixable, not a logic error");
-    assert_eq!(
-        set,
-        BTreeSet::from([FixableInvariant::DanglingFk(Reference::Teacher {
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::DanglingFk(Reference::Teacher {
             target: doc.dead_teacher,
             site: TeacherRefSite::SlotTeacher(doc.slot),
-        })])
+        }),
+        "the live slot's teacher is not the dead one, so the arm has nothing to remove",
     );
-    let invariant = set
-        .into_iter()
-        .next()
-        .expect("the set was just asserted to hold one element");
+}
 
-    assert_eq!(
-        valid.fix_invariant(&invariant),
-        None,
-        "the live slot's teacher is not the dead one, so the arm has nothing to remove"
+// ---- Target: a period (`PeriodRefSite`) ----
+//
+// Seven arms, and they split cleanly in two. The first five hold the period
+// inside a row — as a bare FK or as a member of an excluded set — so the fix
+// names only the row and the arm needs an explicit identity test; the fixture's
+// innocent counterpart is a row naming a *live* period, and the test is that
+// the arm compares. The last two hold the period in a **row key**, so the fix
+// carries it and no identity test is possible: there the whole content is the
+// lookup, and the fixture is built so that a live row for the same subject
+// exists on another period — an arm that keyed on the subject alone would find
+// it and fire.
+
+/// `PeriodRefSite::WeekPeriodFk` — the one arm here that *removes* a row.
+///
+/// The corruption moves a week into the dead period. It goes through
+/// `move_week_entry` rather than raw fields: the week ordering is a type-level
+/// mirror of `week_map`, and a desynced mirror is a `LogicError` that
+/// short-circuits the checker, so a hand-built twin would die at step 3 with
+/// `WeekOrderingWrongPeriod` instead of yielding the dangle. The mutator
+/// rewrites both together, and the sidecar's row keys are not liveness-checked.
+///
+/// **Exactly one break**: the moved week is `other_week`, which carries no
+/// colloscope cell, so none of the interrogation-versus-period variants have
+/// anything to say about it. (Its week pattern excludes it, but that is a
+/// property of the pattern and says nothing about which period it sits in.)
+///
+/// The arm is asked about a document where that week sits in a live period, and
+/// must not delete it.
+#[test]
+fn week_period_fk_arm_spares_a_week_whose_period_is_live() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    corrupt
+        .params
+        .weeks
+        .move_week_entry(doc.other_week, doc.dead_period, 0);
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::DanglingFk(Reference::Period {
+            target: doc.dead_period,
+            site: PeriodRefSite::WeekPeriodFk(doc.other_week),
+        }),
+        "the live week belongs to a live period, so the arm has no week to remove",
+    );
+}
+
+/// `PeriodRefSite::SubjectExcludedPeriods`.
+///
+/// The corruption swaps the excluded period for the dead one, rather than
+/// adding it: keeping the set a singleton is what makes the twin surgical, and
+/// it also keeps the subject inert. The subject chosen runs no interrogations
+/// and is referenced by nothing else, so no `Convergence` variant can join in.
+///
+/// The arm is asked about a document where that subject excludes a *live*
+/// period, and must not rewrite it.
+#[test]
+fn subject_excluded_periods_arm_spares_a_subject_excluding_a_live_period() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    corrupt
+        .params
+        .subjects
+        .ordered_subject_list
+        .get_mut(&doc.excluded_subject)
+        .expect("the fixture's excluding subject is there")
+        .excluded_periods = BTreeSet::from([doc.dead_period]);
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::DanglingFk(Reference::Period {
+            target: doc.dead_period,
+            site: PeriodRefSite::SubjectExcludedPeriods(doc.excluded_subject),
+        }),
+        "the live subject excludes a live period, so the arm has no element to drop",
+    );
+}
+
+/// `PeriodRefSite::StudentExcludedPeriods` — the student twin of the arm above.
+///
+/// The student chosen sits in no assignments row, so
+/// `AssignedStudentNotPresentForPeriod` has nothing to say about the swap.
+#[test]
+fn student_excluded_periods_arm_spares_a_student_excluding_a_live_period() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    corrupt
+        .params
+        .students
+        .student_map
+        .get_mut(&doc.excluded_student)
+        .expect("the fixture's excluding student is there")
+        .excluded_periods = BTreeSet::from([doc.dead_period]);
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::DanglingFk(Reference::Period {
+            target: doc.dead_period,
+            site: PeriodRefSite::StudentExcludedPeriods(doc.excluded_student),
+        }),
+        "the live student excludes a live period, so the arm has no element to drop",
+    );
+}
+
+/// `PeriodRefSite::PairingRuleExcludedPeriods`.
+///
+/// `PairingRule`'s fields are private, so the twin is rebuilt through
+/// `into_parts` and the validating constructor — the same door the arm itself
+/// uses — and written back over its own id. The two parts are carried across
+/// untouched, so the rebuild cannot fail.
+#[test]
+fn pairing_rule_excluded_periods_arm_spares_a_rule_excluding_a_live_period() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    let (antecedent, consequent, _excluded, soft) = corrupt
+        .params
+        .pairings
+        .pairing_rule_map
+        .get(&doc.pairing)
+        .expect("the fixture's pairing rule is there")
+        .clone()
+        .into_parts();
+    corrupt.params.pairings.pairing_rule_map.insert(
+        doc.pairing,
+        PairingRule::new(
+            antecedent,
+            consequent,
+            BTreeSet::from([doc.dead_period]),
+            soft,
+        )
+        .expect("the parts are carried across untouched, so they still name distinct subjects"),
+    );
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::DanglingFk(Reference::Period {
+            target: doc.dead_period,
+            site: PeriodRefSite::PairingRuleExcludedPeriods(doc.pairing),
+        }),
+        "the live rule excludes a live period, so the arm has no element to drop",
+    );
+}
+
+/// `PeriodRefSite::SlotPairingRuleExcludedPeriods` — the exact twin of the arm
+/// above, on the slot-level rule.
+#[test]
+fn slot_pairing_rule_excluded_periods_arm_spares_a_rule_excluding_a_live_period() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    let (antecedent, consequent, _excluded, soft) = corrupt
+        .params
+        .slot_pairings
+        .slot_pairing_rule_map
+        .get(&doc.slot_pairing)
+        .expect("the fixture's slot pairing rule is there")
+        .clone()
+        .into_parts();
+    corrupt.params.slot_pairings.slot_pairing_rule_map.insert(
+        doc.slot_pairing,
+        SlotPairingRule::new(
+            antecedent,
+            consequent,
+            BTreeSet::from([doc.dead_period]),
+            soft,
+        )
+        .expect("the parts are carried across untouched, so they still name distinct slots"),
+    );
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::DanglingFk(Reference::Period {
+            target: doc.dead_period,
+            site: PeriodRefSite::SlotPairingRuleExcludedPeriods(doc.slot_pairing),
+        }),
+        "the live rule excludes a live period, so the arm has no element to drop",
+    );
+}
+
+/// `PeriodRefSite::AssignmentsKey` — the period is half the row key, so the fix
+/// carries it and there is no identity test to write. The arm's whole content is
+/// the lookup, and this is the test that it is keyed on the *pair*.
+///
+/// The corruption adds a row on the dead period **for the subject that already
+/// has one on a live period**. So the valid document does hold an assignments
+/// row for that subject; what it does not hold is one on the dead period. An arm
+/// that looked the subject up and ignored the period would find that row, answer
+/// `Some`, and clear a row nothing complained about.
+///
+/// **Exactly one break**: the row's subject excludes no period and its students
+/// exclude none either, so neither `AssignmentForSubjectNotRunningOnPeriod` nor
+/// `AssignedStudentNotPresentForPeriod` fires beside the dangle.
+#[test]
+fn assignments_key_arm_spares_a_row_on_another_period() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    corrupt.params.assignments.map.insert(
+        (doc.dead_period, doc.subject),
+        BTreeSet::from([doc.student, doc.other_student]),
+    );
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::DanglingFk(Reference::Period {
+            target: doc.dead_period,
+            site: PeriodRefSite::AssignmentsKey {
+                subject: doc.subject,
+            },
+        }),
+        "the subject's only live row sits on another period, so the arm has no row to clear",
+    );
+}
+
+/// `PeriodRefSite::AssociationEntry` — the key-half twin of the arm above, and
+/// the same trap: the corruption associates a group list to the dead period for
+/// the subject that is *already* associated on a live one.
+///
+/// The live association is left in place on purpose. It is what makes the cell
+/// in the colloscope legal (an unassociated `(period, subject)` bounds every
+/// group number by 0), and it is what an arm keyed on the subject alone would
+/// wrongly find.
+///
+/// **Exactly one break**: the subject runs interrogations and excludes no
+/// period, so neither `AssociationForSubjectWithoutInterrogations` nor
+/// `AssociationForSubjectNotRunningOnPeriod` joins the dangle.
+#[test]
+fn association_entry_arm_spares_an_entry_on_another_period() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    corrupt
+        .params
+        .group_lists
+        .subjects_associations
+        .insert((doc.dead_period, doc.subject), doc.group_list);
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::DanglingFk(Reference::Period {
+            target: doc.dead_period,
+            site: PeriodRefSite::AssociationEntry {
+                subject: doc.subject,
+            },
+        }),
+        "the subject's only live association sits on another period, so there is nothing to unassign",
     );
 }
