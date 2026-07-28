@@ -2426,11 +2426,12 @@ Three rules for the series:
   corruption, not the document. The builder belongs in 7.5a and is written to be reused —
   do not copy a fixture per test.
 
-**Status: 7.5a has landed** (`b04bdcaf`), so `src/resolution/innocent_tests.rs` exists with its
-`#[cfg(test)] mod innocent_tests;` line in `resolution.rs`, the shared builder, and the
-`SlotTeacher` test. It passed on its first run, hand-derived one-element set and all; no map bug
-surfaced. Nine commits remain (7.5b–7.5f and the four `Convergence` ones). Four things settled
-while writing it, all of them things 7.5b–f inherit:
+**Status: 7.5a** (`b04bdcaf`) **and 7.5b** (`362dde77`) **have landed**, so
+`src/resolution/innocent_tests.rs` exists with its `#[cfg(test)] mod innocent_tests;` line in
+`resolution.rs`, the shared builder, and eight tests — the `SlotTeacher` arm and all seven
+`PeriodRefSite` arms. Every one passed on its first run, hand-derived one-element set and all; no
+map bug has surfaced. Eight commits remain (7.5c–7.5f and the four `Convergence` ones). Four
+things settled while writing 7.5a, all of them things the rest of the series inherits:
 
 - ★ **The in-crate equivalent of "through `Manager::apply`" is `Data::annotate` + `Data::apply`.**
   §9bis's step-1 sketch says "ops through `Manager::apply`, then `get_data().clone()`", which is
@@ -2461,6 +2462,31 @@ while writing it, all of them things 7.5b–f inherit:
   `insert_slot_at` for `SlotSubject`, `move_week_entry` for `WeekPeriodFk`) belong to 7.5c and
   7.5e and can be written there, inline, in the test that needs them. A helper is worth extracting
   only once two tests want the same one.
+
+And two more from 7.5b, which are about what makes a test in this series *strong* rather than
+merely green:
+
+- ★ **A key-half arm has no identity test, so the corruption must be an addition, not a move.**
+  §8.1 splits the sites two ways: those that hold the target inside a row (an FK field, a member
+  of an excluded set), where the fix names only the row and the arm therefore carries an explicit
+  identity test; and those that hold it in a **row key** (`AssignmentsKey`, `AssociationEntry`,
+  `ColloscopeInterrogation`, `ColloscopeGroupListKey`), where the fix carries the target and no
+  identity test is expressible. For the second group the arm's whole content is one lookup, and a
+  test that merely corrupts by *moving* the live row onto the dead id proves nothing: the valid
+  document is then innocent for the trivial reason that it has no such row at all, and an arm that
+  keyed on the other half of the pair alone would pass. So the corruption **adds** a row on the
+  dead id for an entity that *already* has a live row of the same kind. The valid document then
+  really does hold a row for that subject/slot/group list — just not on the dead coordinate — and
+  an arm that dropped half the key would find it, answer `Some`, and clear something nothing
+  complained about. 7.5b does this for both of its key-half arms; 7.5c, 7.5d and 7.5f each have
+  more, and should do the same.
+- ★ **Steps 3 and 4 are factored into `assert_arm_finds_nothing(valid, corrupt, expected, why)`.**
+  Seven identical tails in one commit was the point at which the helper earned itself; before
+  that (7.5a, one test) it would have been premature. Each test now reads: build, corrupt, assert
+  — with the interesting content in the corruption and in the `why` sentence. The two arms §9bis
+  singles out as needing a **two-element** set cannot use it, since they select the element under
+  test out of the set rather than taking the only one; its doc comment says so, so the next
+  implementer does not try to generalise it.
 
 ## 9ter. Commit 7.6 — the self-caused rejection fixtures (`tests/cascade.rs`)
 
