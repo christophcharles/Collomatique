@@ -2426,14 +2426,16 @@ Three rules for the series:
   corruption, not the document. The builder belongs in 7.5a and is written to be reused —
   do not copy a fixture per test.
 
-**Status: 7.5a** (`b04bdcaf`)**, 7.5b** (`362dde77`)**, 7.5c** (`acaab2fb`)**, 7.5d**
-(`cba1a8b2`) **and 7.5e** (`332ef6a6`) **have landed**, so `src/resolution/innocent_tests.rs`
-exists with its `#[cfg(test)] mod innocent_tests;` line in `resolution.rs`, the shared builder,
-and twenty-five tests — the `SlotTeacher` arm, all seven `PeriodRefSite` arms, all eight
-`SubjectRefSite` ones, all five `StudentRefSite` ones, both `WeekRefSite` ones and both
-`WeekPatternRefSite` ones. Every one passed on its first run, with
-its hand-derived set; no map bug has surfaced. Five commits remain (7.5f and the four
-`Convergence` ones). Four things settled while writing 7.5a, all of them things the rest of the
+**Status: the whole dangling-FK half has landed** — 7.5a (`b04bdcaf`), 7.5b (`362dde77`),
+7.5c (`acaab2fb`), 7.5d (`cba1a8b2`), 7.5e (`332ef6a6`) and 7.5f (`3d9deb0b`). So
+`src/resolution/innocent_tests.rs` exists with its `#[cfg(test)] mod innocent_tests;` line in
+`resolution.rs`, the shared builder, and **thirty tests, one per §8.1 arm**: the `SlotTeacher`
+arm, all seven `PeriodRefSite` arms, all eight `SubjectRefSite` ones, all five `StudentRefSite`
+ones, both `WeekRefSite` ones, both `WeekPatternRefSite` ones, all three `SlotRefSite` ones and
+both `GroupListRefSite` ones. Every one passed on its first run, with
+its hand-derived set; **no map bug has surfaced anywhere in §8.1**. Four commits remain, all of
+them the `Convergence` ones. The shared fixture was touched exactly once across the six commits
+(7.5c's `lone_slot`). Four things settled while writing 7.5a, all of them things the rest of the
 series inherits:
 
 - ★ **The in-crate equivalent of "through `Manager::apply`" is `Data::annotate` + `Data::apply`.**
@@ -2570,6 +2572,37 @@ And two from 7.5e:
   itself — the cleanest one-break derivation in the series, and the reason the third key-half
   site needed no fixture care at all. (The fourth arm is free for a blunter reason: no
   `Convergence` variant mentions an incompatibility.) The fixture again needed no change.
+
+And two from 7.5f, which closed the half:
+
+- ★ **The catalogue of key shapes, complete now that all thirty arms exist. The corruption recipe
+  follows mechanically from which shape a site has**, and this is the paragraph to read before
+  writing any further twin (it is 7.5b's key-half finding, generalised):
+  - **Target in the row key** — `AssignmentsKey`, `AssociationEntry` (the period and subject
+    variants), both `ColloscopeInterrogation` halves, `ColloscopeGroupListKey`,
+    `SettingsStudentKey`, `BalancingSubjectKey`. The emitted op carries the key, so a wrong
+    target is not expressible and **no identity test exists to write**; what the arm needs, and
+    what the test pins, is the presence test that keeps it from emitting a perfect no-op. The
+    corruption must *add* a row on the dead coordinate beside a live one — otherwise the valid
+    document is innocent for the trivial reason that it holds no such row at all, and an arm
+    keyed on the other half would sail through.
+  - **Target as an entry's value** — `GroupListRefSite::AssociationEntry`, and it is the only
+    one in the map. The op carries the key but not the value, so the identity test is the only
+    thing tying the fix to the target. The corruption *replaces* the live value, and the valid
+    document answers `None` by comparing two live ids.
+  - **Target as a field inside the row** — everything else. Replace likewise; the comparison is
+    real either way.
+- ★ **7.5c's `lone_slot` rule did not bite at 7.5f, and the reason sharpens it.** The 7.5c
+  finding predicted the two `ColloscopeInterrogation` arms as the next place a corruption would
+  need a row that owns nothing else. It was not needed: those are *key* sites, so their recipe
+  **adds** a row on a dead coordinate rather than **moving** an existing row between owners, and
+  an added row drags no other row's invariants with it. The rule as written already says
+  "moves a row between owners" — the prediction simply misapplied it. Where it will really bite
+  again is any `Convergence` twin that retargets an existing row. Relatedly, 7.5f is the third
+  commit running whose one-element sets rest on a documented **checker** choice rather than on
+  the fixture: here it is the group-number bound treating an association to a *dangling* list as
+  unknown and skipping (`invariants.rs:596-611`) instead of falling back to a bound of 0, which
+  is what lets the association twin leave the fixture's colloscope cell alone.
 
 ## 9ter. Commit 7.6 — the self-caused rejection fixtures (`tests/cascade.rs`)
 
