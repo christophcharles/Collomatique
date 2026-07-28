@@ -1845,8 +1845,9 @@ Fixture style: build a document through the public surface
 `Data::annotate`, and drive `apply_cascade` on it directly.
 
 **Status (July 28 2026).** Landed: `1a` (`32b64bb8`), `1b`–`1e` (`df9357a2`), `2`
-(`a9201341`), `3` (`ba82ac5b`), `4` (`ea73e700`), `5a`/`5b` (`cd2eb958`). Every one passed on
-its first run, so no map bug has surfaced yet. Remaining: scenario 6.
+(`a9201341`), `3` (`ba82ac5b`), `4` (`ea73e700`), `5a`/`5b` (`cd2eb958`), `6` (`62816871`).
+**§9 is complete.** Every fixture passed on its first run, so no map bug surfaced anywhere in
+the scenario suite. What remains of commit 7 is §9bis (commit 7.5) and §9ter (commit 7.6).
 
 Three descriptions below needed correcting, all marked **★ CORRECTION** in place. Two were
 found at implementation: `1b`'s document is not constructible as described, and scenario 2
@@ -2244,6 +2245,17 @@ Scenarios:
    perfect no-ops (the G.2 widening). Turn that line into an unconditional `data.clone()` and
    every no-op target starts panicking — and today no test would notice. The toy tests do not
    cover it, and `property_apply_gate.rs` exercises the gate, not the cascade.
+
+   **★ VERIFIED at implementation (commit `62816871`, July 28 2026).** The paragraph above is
+   an argument about a mutation, so it was run rather than trusted. Replacing line 83 with
+   `Some(data.clone())` makes this fixture — and only this fixture — fail, with the
+   strict-monotonicity panic quoted verbatim; the other ten fixtures in the file and the 56
+   unit tests of `collomatique-state` all still pass. The reason no other test can notice is
+   stronger than "they exercise something else": `apply_cascade` is called from exactly two
+   places in the repository, `state/src/cascade.rs`'s own toy tests and
+   `state-colloscopes/tests/cascade.rs`. Every other suite, `property_apply_gate.rs` included,
+   is structurally incapable of reaching the carve-out. The mutation was reverted before the
+   fixture was committed.
 
    An identical `Slot` is the right op for it: unambiguously a no-op, and clear of the
    canonical-absent rules that make an emptying colloscope or assignments write a real change.
