@@ -24,21 +24,22 @@
 
 use collomatique_state::{AppState, InMemoryData, apply_cascade, traits::Manager};
 use collomatique_state_colloscopes::{
-    AssignmentOp, BalancingOp, ColloscopeOp, Data, GroupListOp, NewId, NonEmptyRangeInclusive, Op,
-    PairingOp, PeriodOp, SettingsOp, SlotOp, SlotPairingOp, StudentOp, Subject,
-    SubjectInterrogationParameters, SubjectOp, SubjectParameters, SubjectPeriodicity, TeacherOp,
-    WeekOp, WeekPatternOp,
+    AssignmentOp, BalancingOp, ColloscopeOp, Data, GroupListOp, IncompatOp, NewId,
+    NonEmptyRangeInclusive, Op, PairingOp, PeriodOp, SettingsOp, SlotOp, SlotPairingOp, StudentOp,
+    Subject, SubjectInterrogationParameters, SubjectOp, SubjectParameters, SubjectPeriodicity,
+    TeacherOp, WeekOp, WeekPatternOp,
     balancing::BalancingOptions,
     group_lists::{GroupList, GroupListFilling, GroupListParameters, PrefilledGroup},
     ids::{
-        GroupListId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId, SubjectId,
-        TeacherId, WeekId, WeekPatternId,
+        GroupListId, IncompatId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId,
+        SubjectId, TeacherId, WeekId, WeekPatternId,
     },
+    incompats::Incompatibility,
     ops::{
         AnnotatedAssignmentOp, AnnotatedBalancingOp, AnnotatedColloscopeOp, AnnotatedGroupListOp,
-        AnnotatedOp, AnnotatedPairingOp, AnnotatedPeriodOp, AnnotatedSettingsOp, AnnotatedSlotOp,
-        AnnotatedSlotPairingOp, AnnotatedStudentOp, AnnotatedSubjectOp, AnnotatedTeacherOp,
-        AnnotatedWeekOp, AnnotatedWeekPatternOp,
+        AnnotatedIncompatOp, AnnotatedOp, AnnotatedPairingOp, AnnotatedPeriodOp,
+        AnnotatedSettingsOp, AnnotatedSlotOp, AnnotatedSlotPairingOp, AnnotatedStudentOp,
+        AnnotatedSubjectOp, AnnotatedTeacherOp, AnnotatedWeekOp, AnnotatedWeekPatternOp,
     },
     pairings::{PairingRule, RulePart},
     settings::Limits,
@@ -1740,5 +1741,446 @@ fn fixture_4_student_removal_covers_all_five_student_sites() {
             .cloned(),
         Some(innocent_student),
         "the innocent student is byte-identical, not merely present"
+    );
+}
+
+/// The document shared by fixtures `5a` and `5b`.
+struct WeekPatternDocument {
+    /// The pattern both targets act on. Excludes `blocked_week`.
+    pattern: WeekPatternId,
+    /// The innocent bystander pattern, worn by `other_slot` and
+    /// `other_incompat`.
+    other_pattern: WeekPatternId,
+    /// Carries the colloscope cell. `pattern` allows it.
+    cell_week: WeekId,
+    /// Excluded by `pattern`: the week `slot` gets back when `pattern` dies.
+    blocked_week: WeekId,
+    /// Wears `pattern`, and carries the cell on `cell_week`.
+    slot: SlotId,
+    /// Wears `other_pattern`.
+    other_slot: SlotId,
+    /// Wears `pattern`.
+    incompat: IncompatId,
+    /// Wears `other_pattern`.
+    other_incompat: IncompatId,
+}
+
+/// Builds the document both `5a` and `5b` use.
+///
+/// A pattern `WP` excluding one week, worn by one slot and one
+/// incompatibility; the slot carries a colloscope cell on a week `WP` allows;
+/// and a second pattern `WP2` with its own slot and its own incompatibility.
+///
+/// The slot and the incompatibility are given **non-default field values**
+/// (`extra_info`, `cost`, a name, a `minimum_free_slots` of 2). Both arms
+/// rebuild the whole row to clear one field, and `5a` compares the resulting
+/// ops whole — but a rebuild that reset a field to its default would be
+/// invisible against a row whose fields were already at their defaults.
+fn build_week_pattern_document(app: &mut AppState<Data, String>) -> WeekPatternDocument {
+    let period: PeriodId = apply_new!(
+        app,
+        Op::Period(PeriodOp::AddFront),
+        NewId::PeriodId,
+        "adding a period"
+    );
+    let cell_week: WeekId = apply_new!(
+        app,
+        Op::Week(WeekOp::AddFront(period, WeekDesc::default())),
+        NewId::WeekId,
+        "adding the week that carries the cell"
+    );
+    let blocked_week: WeekId = apply_new!(
+        app,
+        Op::Week(WeekOp::AddAfter(cell_week, WeekDesc::default())),
+        NewId::WeekId,
+        "adding the week the pattern blocks"
+    );
+    let subject: SubjectId = apply_new!(
+        app,
+        Op::Subject(SubjectOp::AddAfter(
+            None,
+            interrogation_subject("Math", BTreeSet::new())
+        )),
+        NewId::SubjectId,
+        "adding a subject"
+    );
+    let teacher: TeacherId = apply_new!(
+        app,
+        Op::Teacher(TeacherOp::Add(Teacher {
+            desc: Default::default(),
+            subjects: BTreeSet::from([subject]),
+        })),
+        NewId::TeacherId,
+        "adding a teacher"
+    );
+
+    let pattern: WeekPatternId = apply_new!(
+        app,
+        Op::WeekPattern(WeekPatternOp::Add(WeekPattern {
+            name: "Semaines A".into(),
+            excluded_weeks: BTreeSet::from([blocked_week]),
+        })),
+        NewId::WeekPatternId,
+        "adding the target pattern"
+    );
+    let other_pattern: WeekPatternId = apply_new!(
+        app,
+        Op::WeekPattern(WeekPatternOp::Add(WeekPattern {
+            name: "Semaines B".into(),
+            excluded_weeks: BTreeSet::from([cell_week]),
+        })),
+        NewId::WeekPatternId,
+        "adding the innocent pattern"
+    );
+
+    let mut slot_value = make_slot(subject, teacher, Some(pattern), 8);
+    slot_value.extra_info = "salle 12".into();
+    slot_value.cost = 7;
+    let slot: SlotId = apply_new!(
+        app,
+        Op::Slot(SlotOp::AddAfter(None, slot_value)),
+        NewId::SlotId,
+        "adding the slot wearing the target pattern"
+    );
+    let mut other_slot_value = make_slot(subject, teacher, Some(other_pattern), 10);
+    other_slot_value.extra_info = "salle 4".into();
+    other_slot_value.cost = -3;
+    let other_slot: SlotId = apply_new!(
+        app,
+        Op::Slot(SlotOp::AddAfter(Some(slot), other_slot_value)),
+        NewId::SlotId,
+        "adding the innocent slot"
+    );
+
+    let incompat: IncompatId = apply_new!(
+        app,
+        Op::Incompat(IncompatOp::Add(Incompatibility {
+            subject_id: subject,
+            name: "Sport".into(),
+            slots: vec![],
+            minimum_free_slots: NonZeroU32::new(2).unwrap(),
+            week_pattern_id: Some(pattern),
+        })),
+        NewId::IncompatId,
+        "adding the incompatibility wearing the target pattern"
+    );
+    let other_incompat: IncompatId = apply_new!(
+        app,
+        Op::Incompat(IncompatOp::Add(Incompatibility {
+            subject_id: subject,
+            name: "Musique".into(),
+            slots: vec![],
+            minimum_free_slots: NonZeroU32::new(3).unwrap(),
+            week_pattern_id: Some(other_pattern),
+        })),
+        NewId::IncompatId,
+        "adding the innocent incompatibility"
+    );
+
+    // Forced by the group-number bound, exactly as in `1b`: with no association
+    // on `(period, subject)` the bound is 0 and no cell can be filled at all.
+    let group_list: GroupListId = apply_new!(
+        app,
+        Op::GroupList(GroupListOp::Add(automatic_group_list(
+            "Liste",
+            2,
+            BTreeSet::new()
+        ))),
+        NewId::GroupListId,
+        "adding a group list"
+    );
+    apply_ok(
+        app,
+        Op::GroupList(GroupListOp::AssignToSubject(
+            period,
+            subject,
+            Some(group_list),
+        )),
+        "associating the group list",
+    );
+    apply_ok(
+        app,
+        Op::Colloscope(ColloscopeOp::SetInterrogation(
+            slot,
+            cell_week,
+            BTreeSet::from([0]),
+        )),
+        "filling the colloscope cell",
+    );
+
+    WeekPatternDocument {
+        pattern,
+        other_pattern,
+        cell_week,
+        blocked_week,
+        slot,
+        other_slot,
+        incompat,
+        other_incompat,
+    }
+}
+
+/// Fixture `5a` — **the deliberate divergence from the legacy cleaning**
+/// (design-doc D5.4).
+///
+/// Target: `WeekPatternOp::Remove(WP)`. Both sites hold the pattern in an
+/// `Option` whose `None` is a legal, documented value, so the reference can go
+/// alone and the row stays. The legacy cleaning deleted both rows
+/// (`ops/src/week_patterns.rs:229-256`); the map clears the field instead.
+///
+/// One round, two breaks — `SlotWeekPattern(slot)` and
+/// `IncompatWeekPattern(incompat)` — whose fixes are independent. Content, not
+/// sequence: the order here would teach nothing `1a` does not already pin.
+/// Three ops, and that length is the concrete form of §8.1's argument that
+/// clearing to `None` can only ever *remove* instances of
+/// `InterrogationOnInactiveWeek`, never create one. If a future change made
+/// widening break something, the length is where it would surface.
+///
+/// The two fix ops are compared **whole**. `SlotOp::Update` carries an entire
+/// `Slot`, so the exact op pins that *only* `week_pattern` moved — an arm that
+/// rebuilt the row from something else, or reset another field on the way, is
+/// caught here. "The row survives intact" is the whole claim of the divergence,
+/// so the test checks the whole row rather than one field. The builder gives
+/// both rows non-default fields precisely so that this comparison has teeth.
+///
+/// **The semantic assertion is a before/after flip, not a final value.**
+/// Asserting `slot.week_pattern == None` would say a field moved; it would not
+/// say the slot got *wider*, which is what the divergence claims. So the fixture
+/// takes `blocked_week` — a week `WP` excluded — and checks that
+/// `is_interrogation_possible(slot, blocked_week)` is `false` before the cascade
+/// and `true` after. A bare "true at the end" could pass for the wrong reason;
+/// the flip cannot.
+///
+/// (Note what `None` does *not* mean. `is_week_active` is a conjunction: the
+/// week must run interrogations **and** not be excluded by the slot's pattern.
+/// Clearing the pattern drops the second conjunct only. Whether the first
+/// conjunct still gates is `colloscope_params`' business, not the cascade's, so
+/// this fixture does not test it.)
+///
+/// `WP2`, its slot and its incompatibility are the innocent bystanders. Both
+/// arms test `slot.week_pattern == Some(WP)` (resp. `incompat.week_pattern_id`)
+/// before clearing. If every pattern-bearing row in the document pointed at
+/// `WP`, that comparison would pass trivially and a map that cleared *every*
+/// row's pattern would pass the fixture. This is the same move as scenario 2's
+/// second teacher and scenario 4's second student.
+#[test]
+fn fixture_5a_week_pattern_removal_widens_its_rows_instead_of_deleting_them() {
+    let mut app = AppState::<Data, String>::new(Data::new());
+    let doc = build_week_pattern_document(&mut app);
+
+    let before = app.get_data().get_inner_data();
+    let slot_before = before
+        .params
+        .slots
+        .find_slot(doc.slot)
+        .expect("the slot is there")
+        .clone();
+    let incompat_before = before
+        .params
+        .incompats
+        .incompat_map
+        .get(&doc.incompat)
+        .expect("the incompatibility is there")
+        .clone();
+    let other_pattern_before = before
+        .params
+        .week_patterns
+        .week_pattern_map
+        .get(&doc.other_pattern)
+        .expect("the innocent pattern is there")
+        .clone();
+    let other_slot_before = before
+        .params
+        .slots
+        .find_slot(doc.other_slot)
+        .expect("the innocent slot is there")
+        .clone();
+    let other_incompat_before = before
+        .params
+        .incompats
+        .incompat_map
+        .get(&doc.other_incompat)
+        .expect("the innocent incompatibility is there")
+        .clone();
+    // The first half of the flip: while `WP` lives, it blocks the slot here.
+    assert!(
+        !before
+            .params
+            .is_interrogation_possible(doc.slot, doc.blocked_week),
+        "the pattern blocks the slot on that week to begin with"
+    );
+
+    let mut data = app.get_data().clone();
+    let (target, _new_info) = data.annotate(Op::WeekPattern(WeekPatternOp::Remove(doc.pattern)));
+
+    let applied = apply_cascade(&mut data, target).expect("the cascade clears both references");
+
+    let mut widened_slot = slot_before.clone();
+    widened_slot.week_pattern = None;
+    let mut widened_incompat = incompat_before.clone();
+    widened_incompat.week_pattern_id = None;
+    let expected = vec![
+        AnnotatedOp::from(AnnotatedSlotOp::Update(doc.slot, widened_slot.clone())),
+        AnnotatedOp::from(AnnotatedIncompatOp::Update(
+            doc.incompat,
+            widened_incompat.clone(),
+        )),
+        AnnotatedOp::from(AnnotatedWeekPatternOp::Remove(doc.pattern)),
+    ];
+    assert_same_ops(&forward_ops(&applied), &expected);
+
+    assert_clean(&data);
+    let inner = data.get_inner_data();
+    assert!(
+        inner
+            .params
+            .week_patterns
+            .week_pattern_map
+            .get(&doc.pattern)
+            .is_none(),
+        "the target pattern is gone"
+    );
+    // The divergence itself: legacy deleted these two rows.
+    assert_eq!(
+        inner.params.slots.find_slot(doc.slot),
+        Some(&widened_slot),
+        "the slot survives, with only its pattern cleared"
+    );
+    assert_eq!(
+        inner.params.incompats.incompat_map.get(&doc.incompat),
+        Some(&widened_incompat),
+        "and so does the incompatibility"
+    );
+    // The second half of the flip: the week the dead pattern used to block is
+    // available again.
+    assert!(
+        inner
+            .params
+            .is_interrogation_possible(doc.slot, doc.blocked_week),
+        "clearing the pattern widens the slot onto the week it used to block"
+    );
+    assert!(
+        inner
+            .colloscope
+            .interrogation(doc.slot, doc.cell_week)
+            .is_some(),
+        "widening destroys nothing: the cell is still there"
+    );
+    assert_eq!(
+        inner
+            .params
+            .week_patterns
+            .week_pattern_map
+            .get(&doc.other_pattern),
+        Some(&other_pattern_before),
+        "the innocent pattern is byte-identical"
+    );
+    assert_eq!(
+        inner.params.slots.find_slot(doc.other_slot),
+        Some(&other_slot_before),
+        "and so is its slot — the arm's identity test is doing its job"
+    );
+    assert_eq!(
+        inner.params.incompats.incompat_map.get(&doc.other_incompat),
+        Some(&other_incompat_before),
+        "and so is its incompatibility"
+    );
+}
+
+/// Fixture `5b` — the **legacy-agreement** case, and the only commit-7 fixture
+/// that reaches §8.2 row 12.
+///
+/// Target: `WeekPatternOp::Update(WP, excluded_weeks + cell_week)`, with the
+/// slot's colloscope cell sitting on `cell_week`. One break,
+/// `InterrogationOnInactiveWeek(slot, cell_week)`; the fix clears the cell; then
+/// the update lands. Two ops.
+///
+/// It sits next to `5a` on purpose. When the pattern *narrows*, the map does
+/// what the legacy cleaning did — `UpdateWeekPattern`
+/// (`ops/src/week_patterns.rs:200-226`) clears exactly the newly excluded cells,
+/// one at a time. When the pattern *disappears*, the map deliberately does not
+/// (`5a`). A reader who finds `5a` strange gets the contrast here.
+///
+/// `1b` and `1e` also clear colloscope cells, but through the
+/// `ColloscopeInterrogation` dangling-FK arm on week removal, which is a
+/// different arm entirely. Without this fixture §8.2 row 12 is covered only by
+/// commit 7.5's `None` branch and by whatever commit 8's random walk happens to
+/// hit.
+///
+/// The mirror of `5a`'s flip closes the pair: narrowing makes the cell's week
+/// impossible for the slot, where removing the pattern made a blocked week
+/// possible.
+#[test]
+fn fixture_5b_week_pattern_update_clears_the_newly_inactive_cell() {
+    let mut app = AppState::<Data, String>::new(Data::new());
+    let doc = build_week_pattern_document(&mut app);
+
+    let before = app.get_data().get_inner_data();
+    let slot_before = before
+        .params
+        .slots
+        .find_slot(doc.slot)
+        .expect("the slot is there")
+        .clone();
+    assert!(
+        before
+            .params
+            .is_interrogation_possible(doc.slot, doc.cell_week),
+        "the cell's week is possible for the slot to begin with"
+    );
+
+    let narrowed = WeekPattern {
+        name: "Semaines A".into(),
+        excluded_weeks: BTreeSet::from([doc.blocked_week, doc.cell_week]),
+    };
+    let mut data = app.get_data().clone();
+    let (target, _new_info) = data.annotate(Op::WeekPattern(WeekPatternOp::Update(
+        doc.pattern,
+        narrowed.clone(),
+    )));
+
+    let applied = apply_cascade(&mut data, target).expect("the cascade clears the stranded cell");
+
+    let expected = vec![
+        AnnotatedOp::from(AnnotatedColloscopeOp::SetInterrogation(
+            doc.slot,
+            doc.cell_week,
+            BTreeSet::new(),
+        )),
+        AnnotatedOp::from(AnnotatedWeekPatternOp::Update(
+            doc.pattern,
+            narrowed.clone(),
+        )),
+    ];
+    assert_same_ops(&forward_ops(&applied), &expected);
+
+    assert_clean(&data);
+    let inner = data.get_inner_data();
+    assert_eq!(
+        inner
+            .params
+            .week_patterns
+            .week_pattern_map
+            .get(&doc.pattern),
+        Some(&narrowed),
+        "the target landed: the pattern now excludes the cell's week too"
+    );
+    assert!(
+        inner
+            .colloscope
+            .interrogation(doc.slot, doc.cell_week)
+            .is_none(),
+        "the cell the narrowing stranded is gone"
+    );
+    assert_eq!(
+        inner.params.slots.find_slot(doc.slot),
+        Some(&slot_before),
+        "the slot itself is untouched: the map cleared the cell, not the row"
+    );
+    assert!(
+        !inner
+            .params
+            .is_interrogation_possible(doc.slot, doc.cell_week),
+        "and the week is now impossible for the slot — the mirror of 5a's flip"
     );
 }
