@@ -83,8 +83,9 @@ the design doc's §8):
 - **Commit 6** — the colloscope resolution map: `impl Fixable for Data` in
   `state-colloscopes/src/resolution.rs`, total over `FixableInvariant`.
 - **Commit 7** — colloscope integration tests (`state-colloscopes/tests/cascade.rs`):
-  deep-cascade fixtures, self-caused-rejection fixtures, the confluence pin test, undo
-  round-trips.
+  the period-removal family (order / depth / breadth / confluence-on-one-op / flagship),
+  teacher / subject-update / student-removal cascades, self-caused-rejection fixtures,
+  the week-pattern divergence pin and the collateral-damage identity pins.
 - **Commit 7.5** — the innocent-state `None` tests
   (`state-colloscopes/src/resolution/innocent_tests.rs`): one test per invariant variant,
   asserting that an arm handed an invariant its own state does *not* cause returns `None`.
@@ -703,7 +704,9 @@ Points worth restating in the module docs (and holding during review):
   normal path, not a bug signature.
 - **Determinism / confluence**: the checker's set is canonically ordered, the pick is
   `first()`, and `fix_invariant` is a pure function of `(&self, invariant)` — the emitted op
-  list is a function of (state, target op). The commit-7 pin test freezes one instance.
+  list is a function of (state, target op). Commit 7's fixture `1a` freezes the pick order on
+  the one minimal case where a choice is genuinely made; `1d` shows the complementary
+  property, two breaks whose arms agree on a single op.
 - **Cost note**: one `data.clone()` at entry (the failure snapshot) plus one per fix round
   (the no-op check), on top of the gate's own snapshot, and one failed target apply per
   repair round. Linear overhead, fine at document scale; the property test watches the
@@ -1508,7 +1511,7 @@ strips `validate_slot`, with no teacher-existence carve-out (`slots.rs:455-483`)
 `SlotTeacher`, the gate rolls back — and without the test the arm would delete a slot whose
 live teacher is perfectly valid. This is also the most explosive fix in the table: one teacher
 removal takes every one of their slots, and each slot removal then cascades to that slot's
-colloscope cells and to any `SlotPairingRule` naming it (commit-7 fixture 3).
+colloscope cells and to any `SlotPairingRule` naming it (commit-7 fixture 2).
 
 **Target: a student `St`** (`StudentRefSite`):
 
@@ -1619,6 +1622,17 @@ fields (`slots.rs:46-74`): the offending value cannot leave on its own, so the r
 `Teacher.subjects` is a `BTreeSet<SubjectId>` (`teachers.rs:33-34`): one element can leave
 and the teacher stays valid, so only the element goes. `Teacher` is not sealed, so that
 rebuild is a plain clone-and-edit — no `into_parts`.
+
+**Row 3's `Some` branch is structurally shadowed** (found July 28 2026 while tracing commit
+7's fixture 3 by hand). Any state where `SlotForSubjectWithoutInterrogations` fires holds a
+slot whose subject has interrogations disabled. That slot's teacher either teaches the subject
+— and then `TeacherSubjectWithoutInterrogations` also fires, declared *earlier* — or does not,
+and then `SlotTeacherDoesNotTeachSubject` fires, declared earlier still. There is no third
+case, and the engine picks only `set.first()` with no fallback, so row 3 can never be the pick.
+This holds through `Op::GlobalUpdate` too, since the argument is about the state, not the op.
+Exactly as for row 10 below, that is **not** a reason to weaken the arm or to skip its shape
+test — see frame point 5's closing ruling. It is recorded here so nobody spends an afternoon
+trying to write a fixture that reaches it.
 
 The repairs going the other way are all excluded by D5.1: granting the teacher the subject,
 enabling interrogations on the subject, shortening the interrogation duration or moving the
@@ -1755,24 +1769,213 @@ Implementation notes:
 Fixture style: build a document through the public surface
 (`AppState::<Data, String>::new(Data::new())` plus `Manager::apply`, the `read_api.rs` /
 `week_ops.rs` idiom), then take `app.get_data().clone()`, annotate the target through
-`Data::annotate`, and drive `apply_cascade` on it directly. Scenarios:
+`Data::annotate`, and drive `apply_cascade` on it directly.
 
-1. **The flagship deep cascade (and the confluence pin).** A document with one period, two
-   weeks, an interrogation subject with a teacher and a slot on a week pattern, assignments,
-   a group-list association, and colloscope cells. Target: `PeriodOp::Remove`. Assert
-   `Ok`; assert the **exact** `applied.inner()` op list, literally, in order (this is the
-   design-doc §8 confluence pin — it freezes the canonical pick order and the map against
-   refactor drift); assert the final state is clean (`broken_invariants() == Ok(∅)` via a fresh
-   `from_inner_data` round or direct call) and the period, its weeks, and every referencing
-   row are gone.
-2. **Undo round-trip.** Replay scenario 1's reverses in reverse order through `apply`;
-   assert the exact original `InnerData` returns.
-3. **Teacher removal.** A teacher with two slots (one carrying colloscope cells, one paired
-   by a `SlotPairingRule`): removal cascades slot removals, which cascade cell clears and
-   the pairing-rule removal.
-4. **Subject update turning interrogations off.** Assert the cascade trims the teacher's
-   subject list, removes the subject's slots, clears balancing override and associations —
-   the `*WithoutInterrogations` family end-to-end.
+Three rules apply to the whole section, settled at the July 28 2026 review.
+
+**Expected op lists are written by hand first.** Every fixture below asserts something about
+the ops that landed. That expected list must be derived on paper from the §8.1 / §8.2 tables
+*before* the test is run, and only then compared with what the engine actually produced. If
+the two differ, the difference is a finding to explain — possibly a map bug — never a value to
+paste. Running the test first and pasting its output turns every one of these fixtures from a
+correctness pin into a regression pin that freezes whatever happens to be there, right or
+wrong.
+
+**Sequence versus content.** An assertion on the *order* of the landed ops is only meaningful
+where a choice was actually made, i.e. where a single failing apply reported more than one
+broken invariant and the engine picked `set.first()` out of the `BTreeSet`. Where every round
+reports exactly one break, the sequence is forced by the data and asserting it pins depth, not
+order. So: fixtures 1a and 1b assert the literal sequence, for those two different reasons;
+every other fixture asserts **content** — the exact length of `applied.inner()` plus a
+`contains` for each expected op — and is deliberately blind to order. `AnnotatedOp` derives
+only `Debug, Clone, PartialEq, Eq` (`ops.rs:311`), so a sorted-vector comparison is not
+available and `Ord` is not worth adding for a test; length plus `contains` catches an extra,
+a missing and a wrong op, and the one case it misses (a duplicate paired with an omission)
+cannot occur — a fix landing twice would be a perfect no-op and the engine would panic first.
+
+This is a reversal of the first draft, which had the flagship assert its full sequence
+literally and called that "the design-doc §8 confluence pin". It is not one. Confluence means
+*the final state does not depend on which break is picked first*, and a frozen path does not
+test that; the engine hardcodes `set.first()`, so confluence cannot be varied and tested
+directly at all. What an ordered list really buys is a tripwire on the derived `Ord` of
+`FixableInvariant` — a reorder, or a new variant inserted in the middle during step 7, changes
+the picks. Fixture 1a provides that tripwire on two ops, where the failure is readable in five
+seconds. The flagship's version of the same signal is a twelve-line diff whose only practical
+response is to paste the new list, which is precisely the failure mode the first rule forbids.
+
+**A known coverage limit, stated as a decision.** Commit 7.5 (§9bis) tests the `None` branch
+of *every* arm, systematically, one test per arm. Nothing tests the `Some` branch
+systematically. The `Some` branches are covered by whichever fixtures below happen to walk
+through them, plus whatever commit 8's random walk happens to hit. A second forty-six-test
+series mirroring 7.5 was considered and rejected as more weight than it buys. The asymmetry is
+recorded here so that it is a decision rather than an oversight.
+
+Scenarios:
+
+1. **The period-removal family.** The first draft had a single "flagship deep cascade" fixture
+   carrying order, depth and breadth at once. It is split into five, so that a failure names
+   its own cause; the flagship remains as the integration test that catches interactions the
+   other four isolate away.
+
+   1. **Order** (`1a`). The minimal fixture in which the engine genuinely *chooses*: a period
+      `P` excluded by one subject and by one student, and referenced by nothing else. One
+      round, two simultaneous breaks — `SubjectExcludedPeriods` and `StudentExcludedPeriods` —
+      whose fixes are two *different* ops. Assert `Ok` and the **literal sequence**
+      `[Subject(Update(.., minus P)), Student(Update(.., minus P)), Period(Remove(P))]` or its
+      transposition, whichever the enum's declaration order dictates. This fixture, and only
+      this one, pins the canonical pick order.
+   2. **Depth** (`1b`). The minimal chain: a period with exactly **one** week (two would give
+      two simultaneous breaks and drag order back in), one slot with one colloscope cell on
+      that week, and no week pattern excluding it. Round 1: `PeriodOp::Remove` breaks
+      `WeekPeriodFk(w)`, one break, fix `Week(Remove(w))`. Round 2: that fix breaks
+      `ColloscopeInterrogation { slot }`, one break, fix `SetInterrogation(slot, w, ∅)`. Round
+      3: the clear lands, the week removal is retried and lands, the period is retried and
+      lands. Assert the literal sequence
+      `[Colloscope(SetInterrogation(slot, w, ∅)), Week(Remove(w)), Period(Remove(P))]`. This is
+      a fix of a fix of the target — depth three, which no engine test reaches (the toy tests
+      stop at depth two). Because each round has a single break, the sequence is forced and
+      only a real stack or arm bug can change it.
+   3. **Breadth** (`1c`). A period referenced from **all seven** of its sites at once
+      (`WeekPeriodFk`, `SubjectExcludedPeriods`, `StudentExcludedPeriods`,
+      `PairingRuleExcludedPeriods`, `SlotPairingRuleExcludedPeriods`, `AssignmentsKey`,
+      `AssociationEntry`). Assert `Ok`, content (not sequence), a clean final state, and that
+      every referencing row is gone or updated. Note what this does *not* catch: an arm missing
+      from the map is a compile error already, since the match is total with no wildcard. What
+      it catches is an arm that wrongly answers `None`, or emits the wrong op — including the
+      two sealed rebuilds (`PairingRule` / `SlotPairingRule`), whose `.expect` is exercised here
+      for the first time.
+   4. **Confluence on one op** (`1d`). Two different broken invariants whose arms emit the
+      *same* fix. `invariants.rs:617-628` runs two independent `if`s over the same placement,
+      with no `else`, so one `GroupListOp::Update(gl, new_list)` that both shrinks
+      `params().group_names` **and** adds a student to `excluded_students` makes both
+      `ColloscopeStudentExcluded(gl, st)` and `ColloscopeStudentGroupOutOfBounds(gl, st, g)`
+      fire against a live colloscope row placing `st` at group `g`. Per §8.2 both arms emit
+      `SetGroupList(gl, placements minus st)`. Assert `Ok` and exactly two landed ops,
+      `[SetGroupList, target]` — whichever break is picked, one fix kills both, the retry
+      succeeds, and no second fix is ever requested. That last point is the reason the fixture
+      earns its place: a redundant second fix would apply as a perfect no-op and the engine
+      would panic.
+   5. **The flagship** (`1e`). `1c`'s document, plus depth: the weeks carry colloscope cells,
+      the subject has a teacher and a slot on a week pattern, and there are assignments and a
+      group-list association. Target `PeriodOp::Remove`. Assert `Ok`; assert **content** —
+      length plus `contains`, order-insensitively, per the rule above; assert the final state
+      is clean (`broken_invariants() == Ok(∅)`, direct call) and that the period, its weeks and
+      every referencing row are gone.
+   *(An undo round-trip fixture stood here in the first two drafts and was dropped at the
+   July 28 2026 review, deliberately and with nothing kept in its place. It tested only that
+   the collected reverses replay in reverse order, and every part of that is already pinned
+   elsewhere: `property_ops.rs`'s Property 4 (`apply_then_apply_rev_is_identity`, `:208`) and
+   Property 2 (`undo_all_and_redo_all_round_trip`, `:119`) cover per-op reversal and whole-
+   history composed undo at 100 seeds × 1000 ops against real colloscope data; `history.rs:494`
+   pins `AggregatedOp::rev`'s ordering; fixtures `1a`/`1b` pin the order of `applied` itself;
+   and the `forward`/`backward` pairing in `cascade.rs:97-100` is generic engine code already
+   covered by the `QuoteData` toy test. The two residues we looked for do not exist either: a
+   mispaired reverse is caught by that toy test, and the undo path revisits exactly the forward
+   run's intermediate states in reverse, every one of which the gate already validated.)*
+2. **Teacher removal.** A teacher with two slots, one carrying colloscope cells and one paired
+   by a `SlotPairingRule`. Target: `TeacherOp::Remove`. Removal cascades to two slot removals,
+   each of which opens its own sub-cascade — cell clears for the first, the pairing-rule
+   removal for the second.
+
+   This is not a duplicate of `1c`, and the difference is worth stating because it is not
+   obvious. `1c` is breadth **at the root**: seven fixes hanging directly off the target, all
+   flat. This is breadth **below** the root: one break round yields two `SlotTeacher` fixes,
+   and each of those slot removals then fans out again. The stack gets wider at depth two,
+   which neither `1b` (one break per round by construction) nor `1c` (all fixes flat) ever
+   does.
+
+   It also completes the site coverage of two more target kinds, checked against `refs.rs`
+   rather than against the §8.1 tables. `TeacherRefSite` has exactly one variant,
+   `SlotTeacher(SlotId)` (`refs.rs:147-150`), and `SlotRefSite` exactly three —
+   `SlotPairingRuleAntecedent`, `SlotPairingRuleConsequent`, `ColloscopeInterrogation { week }`
+   (`refs.rs:182-191`). So this fixture covers every teacher site and every slot site, provided
+   the removed teacher's slots appear once as an antecedent and once as a consequent. Together
+   with `1c` (all seven period sites) that gives the suite full site coverage for three target
+   kinds.
+
+   Assertions, the same four as elsewhere: `Ok`; **content**, not sequence (two simultaneous
+   `SlotTeacher` breaks mean the engine genuinely picks, and pinning that pick is `1a`'s job);
+   a clean final state; and the specific rows gone — both slots, their cells, the rule.
+
+   Two construction details, both load-bearing.
+
+   Give the fixture a **second teacher with their own slot**, and assert that slot is still
+   there at the end. §8.1 calls `SlotTeacher` the most explosive fix in the map — one op
+   deleting a whole teacher's timetable — and when a fix is that destructive the thing worth
+   pinning is what it leaves alone as much as what it removes. This comes almost free: let the
+   `SlotPairingRule` pair *our* teacher's slot with the *second* teacher's slot. One entity then
+   buys both the pairing-rule cascade and the innocent-bystander assertion.
+
+   Do **not** pair the removed teacher's two slots with each other. The first slot removal
+   would take the rule with it, and by the time the second slot is removed there would be no
+   rule left to break — the two-arm coverage would collapse to one arm, silently and with the
+   test still green.
+3. **Subject update turning interrogations off.** A subject with interrogations enabled, a
+   teacher who teaches it, a slot on it, a group-list association and a balancing override.
+   Target: `SubjectOp::Update` turning interrogations off.
+
+   Every fixture before this one walks `DanglingFk` sites. This one walks a `Convergence`
+   family, which is a different axis of the map: nothing dangles, every reference is live, and
+   what is wrong is a *relation* between two live rows.
+
+   **The round-by-round trace, done by hand as the section's first rule demands — and it does
+   not match the first draft's one-line description.** `Convergence`'s declaration order is the
+   canonical pick order (`invariants.rs:141-142` states this) and runs
+   `SlotTeacherDoesNotTeachSubject`, `TeacherSubjectWithoutInterrogations`,
+   `SlotForSubjectWithoutInterrogations`, `SlotOverflowsDay`, …,
+   `AssociationForSubjectWithoutInterrogations`, …, `BalancingForSubjectWithoutInterrogations`.
+
+   - **Round 1.** The target breaks four invariants. `SlotTeacherDoesNotTeachSubject` does *not*
+     fire — the teacher still teaches the subject. So the pick is
+     `TeacherSubjectWithoutInterrogations`, and the fix is `Teacher(Update(t, minus S))`.
+   - **Round 2.** That fix is applied and **fails the gate itself**: with the subject gone from
+     the teacher, the slot's teacher no longer teaches the slot's subject, so
+     `SlotTeacherDoesNotTeachSubject` breaks. Its arm removes the slot.
+   - **Round 3 onward.** The slot removal lands; the teacher trim is retried and lands; the
+     target is retried, and the association and balancing breaks clear one per round in
+     declaration order; then the target lands.
+
+   Two consequences, and the first is the reason to keep this fixture.
+
+   It is the suite's only **fix op that is itself rejected and cascades further**, and the chain
+   is `Convergence → Convergence`. `1b` and fixture 2 both cascade through dangling references.
+   The intermediate state here — a teacher who has dropped a subject while a slot of theirs
+   still runs on it — is one no user action can produce directly, which is exactly where a map
+   bug would hide.
+
+   And `SlotForSubjectWithoutInterrogations` is **never picked**: the slot is already gone,
+   removed by a different arm. That is not an artefact of this fixture but structural, and
+   §8.2's row 3 now records the argument.
+
+   Assertions: `Ok`; **content**, not sequence (round 1 has four simultaneous breaks, so the
+   engine genuinely picks, and pinning that pick is `1a`'s job); a clean final state; and the
+   landed set is **five** ops, not four — the extra one being the slot removal attributed to
+   `SlotTeacherDoesNotTeachSubject`. This is the first fixture that requires **commit 5.99**
+   (§7quater): `BalancingOp::SetSubject(subject, None)` does not exist before it.
+4. **Student removal** (added July 28 2026). Target: `StudentOp::Remove`. `StudentRefSite`
+   (`refs.rs:152-…`) has five variants and this fixture covers all five at once, which needs
+   three group lists — a filling is either `Prefilled` or `Automatic`, so one list cannot play
+   two of the roles:
+
+   - `gl1`, **prefilled**, one of whose groups contains the student → `GroupListPrefilledStudent`;
+   - `gl2`, **automatic**, excluding the student → `GroupListExcludedStudent`;
+   - `gl3`, **automatic**, *not* excluding the student, carrying a colloscope row that places
+     them → `ColloscopeGroupListStudent`. It must be a third list: placing the student in `gl2`
+     would break `ColloscopeStudentExcluded`, and in `gl1` would break
+     `ColloscopeGroupListPrefilled`, so either would test something else by accident.
+   - a per-student settings override → `SettingsStudentKey`;
+   - an assignments row holding the student → `AssignmentsStudent { period, subject }`.
+
+   The reason this fixture is worth its weight is `gl1` and `gl2`. Their arms are the two
+   **sealed `GroupList::new` rebuilds** of §8.1, each carrying an `.expect`. Commit 7.5 tests
+   only their `None` branch, and no other fixture reaches a group list at all — so without this
+   one, those two `.expect`s are never executed by any test in the suite. (`1c` covers the other
+   two sealed rebuilds, `PairingRule` and `SlotPairingRule`.) It is also the only fixture
+   exercising `SettingsOp::SetStudent` from **commit 5.98**, so it requires that commit as well.
+
+   Assertions: `Ok`; **content** (five simultaneous breaks); a clean final state; the student
+   gone from all five places; and a **second student**, present in the same prefilled group, the
+   same assignments row and the same colloscope row, still there and untouched at the end.
 5. **Self-caused rejections** (each asserts `Err(Error::BrokenInvariants(..))` with the
    expected variant *and* a bit-identical state):
    - `SlotOp::Update` moving a slot's start so it overflows the day — round-one `None` from
