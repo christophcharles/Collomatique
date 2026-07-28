@@ -57,13 +57,15 @@ the design doc's §8):
 - **Commit 5** — enrich `Convergence::InterrogationGroupOutOfBounds` with the offending
   group number (the one information-poor variant found by the review's error survey), so
   its fix can trim minimally instead of clearing the whole cell.
-- **Commit 5.97** — enrich three more `Convergence` variants so their arms can pin the
+- **Commit 5.97** — enrich four more `Convergence` variants so their arms can pin the
   offending *shape* and not merely the row's existence (frame point 5):
   `SlotTeacherDoesNotTeachSubject` gains the teacher and the subject,
-  `SlotForSubjectWithoutInterrogations` gains the subject, and `SlotOverflowsDay` becomes a
-  struct variant carrying the start time and the duration. Adopted during the commit-6
-  review (July 28 2026); it is the collection point for every further payload enrichment
-  §8.2 turns up, so it lands **after** the map is fully reviewed.
+  `SlotForSubjectWithoutInterrogations` gains the subject, `SlotOverflowsDay` becomes a
+  struct variant carrying the start time and the duration, and
+  `ColloscopeStudentGroupOutOfBounds` gains the offending group number. Adopted during the
+  commit-6 review (July 28 2026); it was the collection point for every payload enrichment
+  §8.2 turned up, so it lands **after** the map is fully reviewed. The review is now
+  finished and the list is closed at these four.
 - **Commit 5.98** — split the settings elementary op: `SettingsOp::Update(Settings)`
   (which ships a whole `Table` value through the op surface) becomes
   `SetGlobal(Limits)` + `SetStudent(StudentId, Option<Limits>)`. Adopted during the
@@ -952,22 +954,24 @@ fixture's expected set gains the `2` payload), `tests/week_ops.rs:536`,
 third binding; note that a multi-group bad op can now put *several* instances in the set —
 the existing first-match loop shape still translates correctly).
 
-## 7bis. Commit 5.97 — enrich three more `Convergence` variants
+## 7bis. Commit 5.97 — enrich four more `Convergence` variants
 
-Adopted during the July 28 2026 review of §8.2, rows 1, 3 and 4. Same kind of work as
+Adopted during the July 28 2026 review of §8.2, rows 1, 3, 4 and 16. Same kind of work as
 commit 5 and for the same reason, one level deeper: an arm cannot pin the offending *shape*
 (frame point 5) if the invariant does not name it. This commit is the **collection point**
 for every payload enrichment the map review turns up, so it is written once §8.2 is
 reviewed to the end — if a later row needs another field, it joins this commit rather than
-starting a new one.
+starting a new one. The review is now finished and the collection is closed at four
+variants: three from the slot/pairing block and one from the colloscope block (row 16).
 
-**Old** (`state-colloscopes/src/invariants.rs:144-156` and `:180`):
+**Old** (`state-colloscopes/src/invariants.rs:144-156`, `:180` and `:199`):
 
 ```rust
 SlotTeacherDoesNotTeachSubject(SlotId),
 SlotForSubjectWithoutInterrogations(SlotId),
 SlotOverflowsDay(SlotId),
 PairedSlotsNotInSameSubject(SlotPairingRuleId),
+ColloscopeStudentGroupOutOfBounds(GroupListId, StudentId),
 ```
 
 **New**:
@@ -986,6 +990,9 @@ SlotOverflowsDay {
 },
 /// A slot pairing rule whose two slots are on different subjects
 PairedSlotsNotInSameSubject(SlotPairingRuleId, SlotId, SlotId),
+/// A placed student with a group number ≥ the list's group count —
+/// the third field is that offending group number
+ColloscopeStudentGroupOutOfBounds(GroupListId, StudentId, u32),
 ```
 
 Why each:
@@ -1010,9 +1017,20 @@ Why each:
   would be unreadable. `duration` is not needed by the test — it is there so the error reads
   on its own ("slot X starts at 18:30 and lasts 90 min") — and per frame point 5's corollary
   the arm must **not** test it.
+- **`ColloscopeStudentGroupOutOfBounds`** — the group number, exactly as `SlotOverflowsDay`
+  takes the start time. The fix removes the entry *student → group* from the placement map,
+  so the group number is half of what the fix destroys, and it is the only thing separating
+  a legitimate route from a bad one. Legitimate: the list shrinks from 5 groups to 2 and the
+  stored `student → 3` must go. Bad: a `SetGroupList` writes `student → 99` over an innocent
+  stored `student → 0`. Without the number the arm sees a present student in both cases,
+  deletes a valid placement in the second, and only errs one round later when the retry
+  fires the same invariant again on a state where the student is gone. The final answer is
+  `Err` either way — this is precision, not a bug fix — but it is one field, already in
+  scope, and it makes the arm honest.
 
-The producer side is four literal edits: the three slot arms (`invariants.rs:427-450`) and
-the pairing arm (`:533-546`) already have every value in scope.
+The producer side is five literal edits: the three slot arms (`invariants.rs:427-450`), the
+pairing arm (`:533-546`) and the colloscope placement arm (`:624-629`, where `group_num` is
+the loop variable) already have every value in scope.
 
 `collomatique_time::SlotStart` (`time/src/lib.rs:530`) is `Clone` but not `Copy`, so
 `Convergence` and `FixableInvariant` **lose their `Copy` derive** and keep `Clone`. That is
@@ -1023,14 +1041,20 @@ the compiler finds every `*invariant` site inside `state-colloscopes`. Adding `C
 for small things only (user ruling, July 28 2026), and the time crate is not this step's
 business.
 
-Sweep (every site naming the four variants, all of which match with `(_)` today and need
-`(_, _, _)` or `{ .. }`):
+Sweep (every site naming the five variants; each matches on fewer fields today and needs one
+more, `(_, _, _)` or `{ .. }`):
 
-- inside the checker — the all-variants `Ord`-pin list (`invariants.rs:1080-1093`), the
+- inside the checker — the all-variants `Ord`-pin list (`invariants.rs:1080-1099`), the
   `FixableInvariant` pin at `:1114`, and the unit tests at `:1656`, `:1715`, `:2031`,
-  `:2380`;
+  `:2235`, `:2380`;
 - in `ops/` — `slots.rs:348`, `:452`, `:471`, `:481` and `:368`; `teachers.rs:210`;
-  `slot_pairings.rs:136` and `:234`.
+  `slot_pairings.rs:136` and `:234`; `colloscope.rs:146`.
+
+`ops/src/colloscope.rs:146` is the one site that needs a thought rather than an extra `_`:
+it translates the invariant into
+`UpdateColloscopeGroupListError::InvalidGroupNumForStudentInGroupList(group_list, student)`,
+whose payload is frozen. Bind the new field as `_` there — the translation stays
+byte-identical.
 
 **A bonus in `ops/src/slots.rs`.** The `AddNewSlot` translation captures the teacher id out
 of the op payload before the op is moved, with the comment *"the
@@ -1235,6 +1259,20 @@ synthesising a whole `Balancing`), `storage/tests/populated_round_trip/builder.r
 alone.
 
 ## 8. Commit 6 — the colloscope resolution map
+
+> **✅ REVIEW COMPLETE — July 28 2026.** This whole section has now been walked arm by arm
+> with the user: the frame, all eight target kinds of §8.1, and all sixteen variants of
+> §8.2. What the review produced is recorded in place — the frame's five points
+> (arm-locality, no-`expect`-on-a-lookup, `self`-is-always-valid,
+> presence-names-the-target with its audit criterion, and pin-the-shape-not-just-the-row);
+> the D5.3 sharpening (remove the reference, and remove the row only when the reference
+> cannot go alone) with its one deliberate legacy divergence in D5.4; a per-row presence /
+> shape test column in both tables; and four new commits, 5.97 (§7bis), 5.98 (§7ter), 5.99
+> (§7quater) and 7.5 (§9bis). §8.1 was re-audited end to end against frame point 4 after
+> that point was discovered mid-table: five rows were missing their identity test —
+> `SlotTeacher`, `IncompatSubject` and both `PairingRule` parts (all reachable), plus
+> `SlotSubject` and `WeekPeriodFk` (unreachable, added defensively). Commit-7 scenario 7
+> pins the three reachable ones.
 
 New file `state-colloscopes/src/resolution.rs` (`mod resolution;` in `lib.rs`; nothing new
 is exported — the map surfaces through the `Fixable` impl). The impl reads the pre-op state
@@ -1645,36 +1683,55 @@ same when a slot's own pattern changes. The only difference anywhere in this blo
 granularity — legacy unassigns one student per cleaning op where commit 4's `SetRow` clears
 the row in one.
 
-> ## ⛔ REVIEW STOPPED HERE — July 28 2026
->
-> Everything **above** this banner has been walked arm by arm with the user and is
-> confirmed: the §8 frame, the whole of §8.1 (`DanglingFk`, all eight target kinds) and
-> rows 1-12 of §8.2. The findings of that review are the frame's five points (arm-locality,
-> no-`expect`-on-a-lookup, `self`-is-always-valid, presence-names-the-target with its audit
-> criterion, and pin-the-shape-not-just-the-row), the D5.3 sharpening (remove the reference;
-> remove the row only when the reference cannot go alone) and its one deliberate legacy
-> divergence in D5.4, and commits 5.97 (§7bis), 5.98 (§7ter), 5.99 (§7quater) and 7.5
-> (§9bis).
->
-> §8.1 was then re-audited end to end against frame point 4 (July 28 2026), since that point
-> was discovered mid-table: five rows were missing their identity test — `SlotTeacher`,
-> `IncompatSubject` and both `PairingRule` parts (all reachable), plus `SlotSubject` and
-> `WeekPeriodFk` (unreachable, added defensively). All are now in the tables, and commit-7
-> scenario 7 pins the three reachable ones.
->
-> Everything **below** it — §8.2 rows 13-16 — is still **unreviewed first-draft material**,
-> and in particular **no row below carries its shape test yet**: each one must be re-read
-> against frame point 5, and any variant lacking the payload to write that test joins
-> commit 5.97. Resume the review at the table immediately below.
+**Rows 13-16 — the colloscope block** (reviewed July 28 2026; row 16's payload is the
+post-commit-5.97 one). Three facts hold for all four rows, and every arm below rests on
+them.
 
-**Rows 13-16 — unreviewed first draft:**
+The colloscope is sparse and canonical (`colloscopes.rs:20-28` and `:84-100`): a row exists
+**iff** it is non-empty. So `colloscope.interrogation(slot, week)` and
+`colloscope.group_list(gl)` return `Some` only for a non-empty row, and a write of an empty
+set or map removes the row. Presence therefore already means "non-empty", and an emptying
+write can never be a no-op — no arm here can trip the contract panic that way.
 
-| Variant | Fix | Notes |
+Both writers keep a coordinate precheck (`colloscopes.rs:131-140`): `SetGroupList` needs a
+live group-list id, `SetInterrogation` a live slot and week. That is safe, because colloscope
+rows are walked by the refs registry (`refs.rs:497-515`) — a valid `self` cannot hold a row
+keyed by a dead id, so a passing presence test guarantees a passing precheck.
+
+The shape test is the presence test in all four rows, and never touches the params side. The
+reasoning is worth stating once, because at first sight frame point 5 seems to ask for more.
+Take row 14: the offending configuration is "the list is prefilled **and** a row exists", and
+two different edits can create it. If the op writes a row onto an already-prefilled list, the
+pre-op state has no row, the test fails, and the engine convicts the op — the right answer.
+If the op flips the list to prefilled while a row exists, the pre-op row is a real, innocent
+row, the arm clears it, and the retry succeeds — which is exactly what legacy does
+(`ops/src/group_lists.rs:651-675`). So testing prefilled-ness on `self` would be *wrong*: it
+would reject an edit legacy accepts. Rows 15 and 16 have the same two routes. The rule that
+keeps all of them honest is the one already engraved in the frame — pin what the fix
+destroys, never the predicate that makes it offending (D2).
+
+| Variant | Fix | Presence / shape test on `self` |
 |---|---|---|
-| `InterrogationGroupOutOfBounds(slot, week, group)` | `Colloscope(SetInterrogation(slot, week, cell minus group))` if `group` is in the current cell; `None` otherwise (an emptied result = canonical-absent row removal) | minimal trim, enabled by the commit-5 payload; the arm must **not** re-check the bound (a group-list shrink legitimately needs the trim even though the group is in-bounds against the current count — the D2 presence-not-predicate doctrine); when self-caused, the group is absent from the pre-op cell → round-one `None` rejection (D4 trace 2) |
-| `ColloscopeGroupListPrefilled(gl)` | `[Colloscope(SetGroupList(gl, ∅))]` | prefilled lists carry their filling in params; the colloscope row is wholly invalid |
-| `ColloscopeStudentExcluded(gl, student)` | `[Colloscope(SetGroupList(gl, placements minus student))]` | minimal, matches legacy |
-| `ColloscopeStudentGroupOutOfBounds(gl, student)` | `[Colloscope(SetGroupList(gl, placements minus student))]` | minimal, matches the legacy group-list-shrink cleaning (`ops/src/group_lists.rs`) |
+| `InterrogationGroupOutOfBounds(slot, week, group)` | `Colloscope(SetInterrogation(slot, week, cell minus group))` | `interrogation(slot, week)` is `Some(cell)` **and** `cell.contains(&group)` |
+| `ColloscopeGroupListPrefilled(gl)` | `Colloscope(SetGroupList(gl, ∅))` | `group_list(gl).is_some()` — presence is the whole test |
+| `ColloscopeStudentExcluded(gl, student)` | `Colloscope(SetGroupList(gl, placements minus student))` | `group_list(gl)` is `Some(p)` **and** `p.contains_key(&student)` |
+| `ColloscopeStudentGroupOutOfBounds(gl, student, group)` | `Colloscope(SetGroupList(gl, placements minus student))` | `group_list(gl)` is `Some(p)` **and** `p.get(&student) == Some(&group)` |
+
+Row by row:
+
+- **Row 13** needs no enrichment — commit 5 already put the `u32` there. The arm must **not**
+  re-check the bound: a group-list shrink legitimately needs this trim even though the group
+  was in bounds a moment ago (D2 again). If the trim empties the set the row disappears,
+  which is what we want.
+- **Row 14** clears the row in a single op where legacy removes the students one at a time
+  (`group_lists.rs:651-675`). Deliberate divergence, same fixpoint, fewer rounds, and a
+  shorter op list to show the user. There is no single element to blame here — for a
+  prefilled list the offending thing *is* the whole row.
+- **Row 15** must not look at the filling's excluded set. Adding a student to that set has to
+  clean the placement (legacy: `group_lists.rs:618-648`); placing an already-excluded student
+  has to be rejected. The presence test gives both.
+- **Row 16** matches the legacy shrink cleaning (`group_lists.rs:374-389`) and is the fourth
+  variant of commit 5.97 — see §7bis for why the group number is needed and what it buys.
 
 Implementation notes:
 
@@ -1859,7 +1916,7 @@ step in this plan blocks on it.
 **Close-out ritual** (after the user's gate): record the delivered state as **Appendix H**
 of the design doc — the `ApplyError` reshaping of the G.2 error surface (G stays as the
 historical step-5 record), the `SetRow` op swap and the invariant-payload enrichments
-(`InterrogationGroupOutOfBounds`, then commit 5.97's three), the engine contract and its
+(`InterrogationGroupOutOfBounds`, then commit 5.97's four), the engine contract and its
 deviations from the §5 pseudocode (the
 annotated-op surface; one-step `Option` fixes recomputed per round; the engraved
 strict-monotonicity contract with `Default::default()` as the minimum; the `None`
