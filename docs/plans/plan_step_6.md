@@ -85,19 +85,19 @@ the design doc's §8):
 - **Commit 7** — colloscope integration tests (`state-colloscopes/tests/cascade.rs`), the
   half that asserts `Ok`: the period-removal family (order / depth / breadth /
   confluence-on-one-op / flagship), teacher / subject-update / student-removal cascades,
-  the week-pattern divergence pin, the collateral-damage identity pins and the
-  benign-target-lands-alone pin.
+  the week-pattern family (the D5.4 divergence pin plus the legacy-agreement update pin)
+  and the no-op-target pin.
 - **Commit 7.5** — the innocent-state `None` tests
   (`state-colloscopes/src/resolution/innocent_tests.rs`): one test per invariant variant,
   asserting that an arm handed an invariant its own state does *not* cause returns `None`.
   This is the mechanical detector for frame point 5. Adopted during the commit-6 review
   (July 28 2026). It is **46 tests, so it ships as ten commits** — 7.5a … 7.5f for the
   dangling-FK arms, then four for the `Convergence` blocks; see §9bis.
-- **Commit 7.6** — the self-caused rejection fixtures, back in
-  `state-colloscopes/tests/cascade.rs`: the half of commit 7 that asserts `Err`, split out
-  and sequenced **after** 7.5 (★ user ruling, July 28 2026) because a rejection fixture only
-  means something once the `None` branch it rests on has been tested arm by arm. Four
-  fixtures; see §9ter.
+- **Commit 7.6** — the rejection fixtures, back in `state-colloscopes/tests/cascade.rs`: the
+  half of commit 7 that asserts `Err`, split out and sequenced **after** 7.5 (★ user ruling,
+  July 28 2026) because a rejection fixture only means something once the `None` branch it
+  rests on has been tested arm by arm. Two families — the self-caused rejections and the
+  collateral-damage identity pins — eight fixtures in all; see §9ter.
 - **Commit 8** — the cascade property test (`state-colloscopes/tests/property_cascade.rs`):
   random valid walks driven through `apply_cascade`; no panic, `Ok` ⇒ clean, `Err` ⇒
   bit-identical state.
@@ -1281,8 +1281,8 @@ alone.
 > (§7quater) and 7.5 (§9bis). §8.1 was re-audited end to end against frame point 4 after
 > that point was discovered mid-table: five rows were missing their identity test —
 > `SlotTeacher`, `IncompatSubject` and both `PairingRule` parts (all reachable), plus
-> `SlotSubject` and `WeekPeriodFk` (unreachable, added defensively). Commit-7 scenario 6
-> pins the three reachable ones.
+> `SlotSubject` and `WeekPeriodFk` (unreachable, added defensively). Commit 7.6's identity
+> fixtures (§9ter.4) pin the reachable ones.
 
 New file `state-colloscopes/src/resolution.rs` (`mod resolution;` in `lib.rs`; nothing new
 is exported — the map surfaces through the `Fixable` impl). The impl reads the pre-op state
@@ -1982,35 +1982,117 @@ Scenarios:
    Assertions: `Ok`; **content** (five simultaneous breaks); a clean final state; the student
    gone from all five places; and a **second student**, present in the same prefilled group, the
    same assignments row and the same colloscope row, still there and untouched at the end.
-5. **Week-pattern removal** (added July 28 2026, because this is the map's one deliberate
-   divergence from the legacy cleaning — D5.4). A pattern used by one slot and one incompat.
-   Target: `WeekPatternOp::Remove`. Assert `Ok`, and assert that the slot and the incompat are
-   both **still there** with their pattern field cleared to `None` — the legacy cleaning would
-   have deleted both. Since the divergence forecloses a differential fuzz against `ops/`, this
-   fixture is the only thing pinning the behaviour.
-6. **Identity tests: the collateral-damage pins** (added July 28 2026; frame point 4). Three
-   short fixtures, each a target that rewrites a row's reference to a dead id while the live
-   row names a *live* one — the route that a missing identity test turns into silent
-   over-deletion. In each case assert `Err` with the expected `DanglingFk`, a bit-identical
-   state, and — the actual point — that the innocent row is **still there**:
-   - `SlotOp::Update` giving a slot a dead `teacher_id`, with the slot's real teacher alive:
-     the `SlotTeacher` arm must return `None`, not delete the slot;
-   - `IncompatOp::Update` giving an incompat a dead `subject_id`;
-   - `PairingOp::Update` giving a rule's antecedent a dead `subject_id`, the consequent's
-     subject alive: the antecedent arm returns `None`, and the consequent arm must not fire
-     at all.
+5. **The week-pattern family** (added July 28 2026, detailed at the review of the same day).
+   Two targets on one document: `WeekPatternOp::Remove`, which is the map's one deliberate
+   divergence from the legacy cleaning (D5.4), and `WeekPatternOp::Update`, which is the
+   legacy-agreement case. They are kept in one scenario precisely so the two sit side by side:
+   *when the pattern narrows the map does what legacy does; when the pattern disappears it
+   deliberately does not.* A reader who wonders why the removal case looks strange gets the
+   answer in the next paragraph.
 
-   These are the end-to-end form of the defence; the systematic one, variant by variant, is
-   commit 7.5 below. Neither is visible to the commit-8 property test, which sees a valid
-   state and an `Ok` cascade.
-7. **Clean target lands alone**: a benign op cascades to exactly `[itself]`.
+   **The document.** A week pattern `WP` excluding some weeks, used by one slot and one
+   incompatibility. The slot carries a colloscope cell on a week `WP` allows. And — the part
+   the first draft was missing — a **second pattern `WP2`**, with its own slot and its own
+   incompatibility.
 
-A fourth scenario stood here through the first three drafts — the **self-caused rejections**,
-the fixtures in which the target is convicted and nothing lands. They were moved out at the
-July 28 2026 review, into their own commit 7.6 (§9ter), because they read the `None` branch
-of an arm end to end and that branch is only trustworthy once commit 7.5 has tested it
-systematically. Scenario 6 above rests on the same `None` branch and will very likely follow
-them; that is left open until it is reviewed in its turn.
+   `WP2` is the innocent bystander, and without it the fixture is much weaker than it looks.
+   Both arms test `slot.week_pattern == Some(WP)` (resp. `incompat.week_pattern_id`) before
+   clearing, per frame point 4. If every pattern-bearing row in the document points at `WP`,
+   that comparison passes trivially and the fixture cannot see it at all: a map that ignored
+   the test and cleared *every* row's pattern would pass. This is the same move as scenario 2's
+   second teacher and scenario 4's second student.
+
+   **Target A — `WeekPatternOp::Remove(WP)`.** Two breaks in one round, `SlotWeekPattern(slot)`
+   and `IncompatWeekPattern(incompat)`, whose fixes are independent. **Content, not sequence** —
+   the order here would teach nothing that `1a` does not already pin. Assertions:
+
+   - `Ok`, and `applied.inner()` of length **exactly three**. Depth one, breadth two, nothing
+     deeper. That length is the concrete form of §8.1's argument that clearing to `None` can
+     only ever *remove* instances of `InterrogationOnInactiveWeek`, never create one; if a
+     future change made widening break something, this is where it surfaces.
+   - the two fix ops, compared **whole**. `SlotOp::Update` carries an entire `Slot` value, so
+     asserting the exact op pins that *only* `week_pattern` moved — an arm that rebuilt the
+     slot from something else, or reset another field on the way, is caught here. Same for the
+     incompat. "The row survives intact" is the whole claim of the divergence, so the test has
+     to check the whole row, not one field.
+   - the slot and the incompat both **still present**, with the field `None`. The legacy
+     cleaning would have deleted both (`ops/src/week_patterns.rs:229-256`).
+   - `WP2`, its slot and its incompatibility **byte-identical** at the end.
+   - the colloscope cell **still there**: widening destroys nothing.
+   - the semantics, not merely the field: `is_interrogation_possible(slot, w)` is now `true`
+     for a week `w` that `WP` excluded (`colloscope_params.rs:59`; the underlying
+     `is_week_active(week, None)` is `:45`). The divergence was argued on what `None` *means*,
+     so it is the meaning that should be pinned. If `None` ever stopped meaning "every week",
+     this assertion is the one that should scream.
+
+   **Target B — `WeekPatternOp::Update(WP, excluded_weeks + w)`**, with the slot's colloscope
+   cell sitting on `w`. One break, `InterrogationOnInactiveWeek(slot, w)` (§8.2 row 12), fix
+   `SetInterrogation(slot, w, ∅)`, then the update lands. Assert `Ok`, two ops, the cell gone
+   and the pattern updated.
+
+   Target B is here because **no other commit-7 fixture reaches §8.2 row 12** — checked scenario
+   by scenario at the review. `1b` and `1e` do clear colloscope cells, but through the
+   `ColloscopeInterrogation` dangling-FK arm on week removal, which is a different arm
+   entirely. Without target B the row is covered only by commit 7.5's `None` branch and by
+   whatever commit 8's random walk happens to hit. It is also the legacy-agreement pin:
+   `UpdateWeekPattern` (`ops/src/week_patterns.rs:200-226`) clears exactly the newly excluded
+   cells, one at a time, which is what the map does.
+
+   **Why this scenario carries more weight than its size suggests.** Everywhere else in the map
+   a future differential fuzz against `ops/` could catch a drift. Target A's behaviour disagrees
+   with legacy on purpose, so that check is foreclosed forever. This fixture is the only thing
+   standing between the D5.4 decision and a quiet regression back to deletion.
+6. **A no-op target lands, and does not panic** (rewritten July 28 2026). Target:
+   `SlotOp::Update(slot, the identical slot)`. Assert `Ok`, `applied.inner()` of length 1, and
+   the document unchanged.
+
+   This replaces a one-line "clean target lands alone" fixture — a benign op cascading to
+   exactly `[itself]` — which was dropped at the review as testing nothing new. When the target
+   breaks nothing the map is **never consulted**, so that fixture never touched the code commit
+   6 adds; the engine's fast path is already toy test 3 (§5), and "an ordinary edit does not
+   trip the checker" is what `property_apply_gate.rs` and the rest of the suite do all day.
+
+   What is left is worth keeping, because it guards a deliberate carve-out that nothing else
+   touches. `cascade.rs` computes the no-op snapshot only for fixes:
+
+   ```rust
+   // Snapshot for the no-op-fix panic; only fix ops are held to it (a
+   // no-op *target* is a legitimate perfect no-op, G.2).
+   let before = (!is_target).then(|| data.clone());
+   ```
+
+   The strict-monotonicity panic is skipped for the target on purpose, because the gate accepts
+   perfect no-ops (the G.2 widening). Turn that line into an unconditional `data.clone()` and
+   every no-op target starts panicking — and today no test would notice. The toy tests do not
+   cover it, and `property_apply_gate.rs` exercises the gate, not the cascade.
+
+   An identical `Slot` is the right op for it: unambiguously a no-op, and clear of the
+   canonical-absent rules that make an emptying colloscope or assignments write a real change.
+
+**Open item, to settle in one pass once the scenarios are reviewed.** Two coverage gaps turned
+up while tracing scenarios by hand, and both were deliberately **not** bolted onto whichever
+scenario happened to be under review:
+
+- §8.2 **row 11**, `InterrogationSlotNotRunningOnPeriod`. It needs a subject update that
+  *excludes a period*, which is neither scenario 3 (that one disables interrogations) nor
+  scenario 5. Row 12 got a home in scenario 5 only because the week-pattern document was
+  already the right place for it; row 11 has no such natural host.
+- **`SubjectOp::Remove` appears in no fixture at all.** Scenario 3 is a subject *update*; `1c`
+  and `1e` are period sites. Subject is the widest target kind in §8.1 — eight sites, more than
+  any other — and `BalancingSubjectKey`, `AssignmentsKey`, `AssociationEntry` and both
+  `PairingRule` parts are reached by nothing in commit 7. (The §9ter.4 identity pins touch two
+  of those arms, but only their `None` branch.)
+
+Once the last scenario is reviewed, do one coverage sweep over §8.1 and §8.2 together, list
+every arm no fixture reaches, and decide the whole set at once. The §9 coverage decision above
+(7.5 covers every `None` branch; `Some` branches are covered by whatever the fixtures happen to
+walk through) is what that sweep is measured against — not a licence to skip it.
+
+Two scenarios stood here through the earlier drafts and were moved out at the July 28 2026
+review, into their own commit 7.6 (§9ter): the **self-caused rejections** and the
+**collateral-damage identity pins**. Both convict the target and land nothing, both read the
+`None` branch of an arm end to end, and that branch is only trustworthy once commit 7.5 has
+tested it systematically. What is left in §9 is exactly the fixtures that assert `Ok`.
 
 ## 9bis. Commit 7.5 — the innocent-state `None` tests
 
@@ -2144,6 +2226,11 @@ has been tested arm by arm, and that is commit 7.5. So the order is **7 → 7.5 
 The file is the same `tests/cascade.rs`, the fixture style is the one at the head of §9, and
 the three shared rules there apply here too.
 
+The commit holds **two families**, both of which convict the target through the same engine
+path: the **self-caused rejections** (§9ter.3), where the op's payload is bad in itself, and
+the **collateral-damage identity pins** (§9ter.4), where the op points an otherwise fine row at
+a dead id. They were reviewed a day apart and moved here for the same reason.
+
 ### 9ter.1 What is being tested
 
 Every fixture here sends a single op that is bad **on its own terms**. The document is valid
@@ -2163,8 +2250,8 @@ engine restores the snapshot and reports the break.
 
 This is the production-visible half of frame point 5. If any of these arms answered `Some`
 instead, the cascade would quietly repair the state, `apply` would return `Ok`, and the user
-would be told an edit succeeded that was in fact refused. Two of the three also keep a live
-`ops/`-layer translation alive: `UpdateColloscopeInterrogationError::InvalidGroupNumInInterrogation`
+would be told an edit succeeded that was in fact refused. Two of the §9ter.3 fixtures also keep
+a live `ops/`-layer translation alive: `UpdateColloscopeInterrogationError::InvalidGroupNumInInterrogation`
 (`ops/src/colloscope.rs:216-223`) and `UpdateSlotError::SlotOverlapsWithNextDay`
 (`ops/src/slots.rs:481`) both read a `BrokenInvariants` error that would never arrive.
 
@@ -2179,14 +2266,18 @@ A fixture must be built so that every conjunct passes except the last one. Other
 that dropped the last conjunct entirely would still return `None`, and the test would go green
 for the wrong reason.
 
-Concretely, for fixture 3 below: do **not** write the out-of-bounds group into a cell that did
-not exist before. Then the *presence* half already fails and the membership half is never
+Concretely, for §9ter.3's fixture 3: do **not** write the out-of-bounds group into a cell that
+did not exist before. Then the *presence* half already fails and the membership half is never
 reached. Start from a cell that already holds a valid group, and add the bad one to it. Same
-for fixture 2: the assignments row must already exist and already hold a different, legitimate
-student. Fixture 1a needs no such care — the slot obviously exists, so only the `start_time`
+for its fixture 2: the assignments row must already exist and already hold a different,
+legitimate student. Fixture 1a needs no such care — the slot obviously exists, so only the `start_time`
 comparison can fail.
 
-### 9ter.3 The fixtures
+The rule applies to §9ter.4 as well, and there it is satisfied for free: those fixtures always
+keep the row alive and only make its *reference* wrong, so the presence conjunct passes by
+construction and the identity conjunct is the one that decides.
+
+### 9ter.3 The self-caused rejection fixtures
 
 Each asserts four things: `Err(Error::BrokenInvariants(set))` with `set` compared against a
 **hand-derived exact set** (not a `contains` — the first shared rule of §9); the document
@@ -2248,7 +2339,72 @@ subject, and a colloscope cell at `(slot, week)` already holding group `0`. Targ
 does not contain `7` — `None`, target convicted. The enrichment this needs is **commit 5**,
 already landed.
 
-### 9ter.4 One engine branch these fixtures do not reach
+### 9ter.4 The collateral-damage identity pins
+
+Four fixtures, moved here from commit 7 at the July 28 2026 review (they assert `Err` and read
+the same `None` branch, so the criterion that created 7.6 applies to them unchanged).
+
+**Where they come from.** These are not a general idea, they are the residue of one audit. Frame
+point 4 — *the presence test names the target* — was discovered mid-way through the §8.1 review,
+and §8.1 was then re-read from the top against it. Five rows were missing their identity test.
+Two (`SlotSubject`, `WeekPeriodFk`) proved unreachable and got the test defensively; the other
+three are reachable, and these fixtures are their end-to-end pins.
+
+**Reachable is meant precisely**, and §8.1 established it row by row: `force_apply_slot`'s
+`Update` has no teacher-existence guard (`slots.rs:455-483`), `force_apply_incompat`'s `Update`
+replaces the row with no field guards (`incompats.rs:108-124`), and `force_apply_pairing`'s
+`Update` likewise (`pairings.rs:237-247`). So the bad op really lands, the checker really
+reports the dangle, and the gate really rolls it back. The arm is then asked, on the restored
+state, and that is the moment being tested.
+
+**What the failure would look like.** Suppose the `SlotTeacher` arm skipped its identity test and
+answered `Some(Slot::Remove(slot))` merely because the slot exists. A user pointing a slot at a
+teacher who no longer exists — typically a stale UI view, or a script racing another edit —
+would have a slot deleted whose real, live teacher was perfectly fine, and the target would
+land afterwards, so the operation would report success. That is why the assertion that carries
+the weight is not the `Err`; it is **the innocent row is still there**.
+
+**The dead-id recipe, shared by all four.** Every fixture needs a `TeacherId` or a `SubjectId`
+that is *not* live, and an integration test cannot fabricate one: the id types are opaque and
+carry no public constructor. The route is **create-then-remove** — add a teacher (or subject)
+that nothing references, remove it, keep the id. The removal cascades to nothing and lands
+alone. Write this helper once and share it; it is three lines, but it is the step someone
+implementing from this plan will otherwise stall on.
+
+**The expected set is exactly one break in all four**, which matters because §9's first rule
+requires the expected set to be derived by hand. For the slot fixture the reason is in the
+checker: the teacher-teaches predicate sits behind `if let Some(teacher) = …`
+(`invariants.rs:428`), so a dead teacher makes it *skip* rather than fire —
+`SlotTeacherDoesNotTeachSubject` does **not** accompany the dangle. For the other three it is
+simpler still: no `Convergence` variant mentions an incompatibility or a `PairingRule` at all.
+
+The fixtures:
+
+1. **`SlotOp::Update`** giving a slot a dead `teacher_id`, the slot's real teacher alive.
+   Expected: `DanglingFk(Teacher { target: dead, site: SlotTeacher(slot) })`. The `SlotTeacher`
+   arm must return `None`, not delete the slot.
+2. **`IncompatOp::Update`** giving an incompatibility a dead `subject_id`, its real subject
+   alive. Expected: `DanglingFk(Subject { target: dead, site: IncompatSubject(incompat) })`.
+3. **`PairingOp::Update`** giving the rule's **antecedent** a dead `subject_id`.
+4. **`PairingOp::Update`** giving the rule's **consequent** a dead `subject_id`.
+
+Fixtures 3 and 4 are a pair, and the first draft had only the first of them, described as "the
+antecedent arm returns `None`, and the consequent arm must not fire at all". The second half of
+that sentence is not an assertion a test can make: with only the antecedent's subject dead the
+checker reports only the antecedent site, so the consequent arm is never called and that
+fixture tests it in no way whatsoever. §8.1 insists these are **two arms, not one**; the mirror
+fixture is what makes that true of the test suite as well, and it costs three lines.
+
+Both build their rule through `PairingRule::new(...).expect(..)` — the sealed constructor is the
+only door, and it accepts these payloads because its single failure is the two parts *sharing*
+a subject, which a dead id on one side cannot cause. Same pattern the gtk4 dialogs use.
+
+Assertions, per fixture: `Err(Error::BrokenInvariants(set))` with `set` the exact one-element
+set above; the document unchanged, with the §9ter.3 reading of "unchanged" (`inner_data` only —
+none of these targets issues an id either); and, spelled out separately because it is the
+actual point, the referencing row **still present and unmodified**.
+
+### 9ter.5 One engine branch these fixtures do not reach
 
 `cascade.rs:124-131` holds a second conviction route: the target fails on broken invariants, a
 fix lands, the target is retried, and *that* attempt fails its **precheck** because a fix
