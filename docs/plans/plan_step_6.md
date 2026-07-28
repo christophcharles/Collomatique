@@ -57,20 +57,23 @@ the design doc's §8):
 - **Commit 5** — enrich `Convergence::InterrogationGroupOutOfBounds` with the offending
   group number (the one information-poor variant found by the review's error survey), so
   its fix can trim minimally instead of clearing the whole cell.
-- **Commit 5.97** — enrich four more `Convergence` variants so their arms can pin the
-  offending *shape* and not merely the row's existence (frame point 5):
+- **Commit 5.97** (landed, `4c36d824`) — enrich five more `Convergence` variants so their
+  arms can pin the offending *shape* and not merely the row's existence (frame point 5):
   `SlotTeacherDoesNotTeachSubject` gains the teacher and the subject,
   `SlotForSubjectWithoutInterrogations` gains the subject, `SlotOverflowsDay` becomes a
-  struct variant carrying the start time and the duration, and
+  struct variant carrying the start time and the duration, `PairedSlotsNotInSameSubject`
+  gains the two slot ids, and
   `ColloscopeStudentGroupOutOfBounds` gains the offending group number. Adopted during the
   commit-6 review (July 28 2026); it was the collection point for every payload enrichment
   §8.2 turned up, so it lands **after** the map is fully reviewed. The review is now
-  finished and the list is closed at these four.
-- **Commit 5.98** — split the settings elementary op: `SettingsOp::Update(Settings)`
+  finished and the list is closed at these five.
+- **Commit 5.98** (landed, `c60eba70`) — split the settings elementary op:
+  `SettingsOp::Update(Settings)`
   (which ships a whole `Table` value through the op surface) becomes
   `SetGlobal(Limits)` + `SetStudent(StudentId, Option<Limits>)`. Adopted during the
   commit-6 review (July 28 2026), on the `SettingsStudentKey` arm.
-- **Commit 5.99** — split the balancing elementary op: `BalancingOp::Update(Balancing)`
+- **Commit 5.99** (landed, `bccfe224`) — split the balancing elementary op:
+  `BalancingOp::Update(Balancing)`
   (which ships a whole `Table` value through the op surface) becomes
   `SetGlobal(BalancingOptions)` + `SetSubject(SubjectId, Option<BalancingOptions>)`.
   Adopted during the commit-6 review (July 27 2026), on the `BalancingSubjectKey` arm.
@@ -964,15 +967,15 @@ fixture's expected set gains the `2` payload), `tests/week_ops.rs:536`,
 third binding; note that a multi-group bad op can now put *several* instances in the set —
 the existing first-match loop shape still translates correctly).
 
-## 7bis. Commit 5.97 — enrich four more `Convergence` variants
+## 7bis. Commit 5.97 — enrich five more `Convergence` variants
 
-Adopted during the July 28 2026 review of §8.2, rows 1, 3, 4 and 16. Same kind of work as
-commit 5 and for the same reason, one level deeper: an arm cannot pin the offending *shape*
-(frame point 5) if the invariant does not name it. This commit is the **collection point**
-for every payload enrichment the map review turns up, so it is written once §8.2 is
+Adopted during the July 28 2026 review of §8.2, rows 1, 3, 4, 10 and 16. Same kind of work
+as commit 5 and for the same reason, one level deeper: an arm cannot pin the offending
+*shape* (frame point 5) if the invariant does not name it. This commit is the **collection
+point** for every payload enrichment the map review turns up, so it is written once §8.2 is
 reviewed to the end — if a later row needs another field, it joins this commit rather than
-starting a new one. The review is now finished and the collection is closed at four
-variants: three from the slot/pairing block and one from the colloscope block (row 16).
+starting a new one. The review is now finished and the collection is closed at five
+variants: four from the slot/pairing block and one from the colloscope block (row 16).
 
 **Old** (`state-colloscopes/src/invariants.rs:144-156`, `:180` and `:199`):
 
@@ -1054,9 +1057,17 @@ business.
 Sweep (every site naming the five variants; each matches on fewer fields today and needs one
 more, `(_, _, _)` or `{ .. }`):
 
-- inside the checker — the all-variants `Ord`-pin list (`invariants.rs:1080-1099`), the
-  `FixableInvariant` pin at `:1114`, and the unit tests at `:1656`, `:1715`, `:2031`,
-  `:2235`, `:2380`;
+- inside the checker (`state-colloscopes/src/invariants.rs`) — the all-variants `Ord`-pin
+  list in `convergence_declaration_order_is_canonical`, the `FixableInvariant` pin in
+  `dangling_fk_sorts_before_convergence`, and **seven** unit tests, named rather than
+  numbered because the line numbers drift with every edit to the file:
+  `slot_teacher_does_not_teach_subject`, `slot_for_subject_without_interrogations`,
+  `slot_overflows_day`, `paired_slots_not_in_same_subject`,
+  `colloscope_student_group_out_of_bounds`, `slot_teacher_check_runs_when_subject_dangles`
+  and `compound_convergence_with_dangling`. (The July 28 2026 draft of this list named only
+  five, by line number, and missed `slot_overflows_day` and
+  `compound_convergence_with_dangling`; both are mechanical, and the implementation found
+  them by compiling.)
 - in `ops/` — `slots.rs:348`, `:452`, `:471`, `:481` and `:368`; `teachers.rs:210`;
   `slot_pairings.rs:136` and `:234`; `colloscope.rs:146`.
 
@@ -1066,12 +1077,20 @@ it translates the invariant into
 whose payload is frozen. Bind the new field as `_` there — the translation stays
 byte-identical.
 
-**A bonus in `ops/src/slots.rs`.** The `AddNewSlot` translation captures the teacher id out
+**A bonus in `ops/`.** The `AddNewSlot` translation captures the teacher id out
 of the op payload before the op is moved, with the comment *"the
 SlotTeacherDoesNotTeachSubject convergence carries only the slot id, so the reported
 (teacher, subject) pair is synthesized from the op payload in scope"* (`:306-313`). The
-enrichment removes that need: the pair can be read straight off the invariant. Same at
-`:452`. Do the simplification here, and delete the stale comment.
+enrichment removes that need: the pair can be read straight off the invariant. Do the
+simplification, and delete the stale comment.
+
+It is **five arms, not two**. In `slots.rs`: `AddNewSlot`, and *both* of `UpdateSlot`'s
+arms — the teacher one at `:452` and the `SlotForSubjectWithoutInterrogations` one, which
+reads the same captured `subject_id` local, so leaving it would keep the local alive and
+defeat the simplification. In `slot_pairings.rs`: both `PairedSlotsNotInSameSubject` arms
+(`:136` and `:234`), whose comment clause *"the same-subject convergence carries only the
+rule id, so the two slot ids come from the op payload in scope"* becomes false the moment
+the rule's two slot ids join the payload.
 
 ## 7ter. Commit 5.98 — split the settings elementary op
 
@@ -1145,10 +1164,26 @@ targeted apply. `UpdateStudentLimits` and `RemoveStudentLimits` keep their exist
 `RemoveStudentLimits` keeps reading the entry first to raise `NoLimitsForStudent` before
 applying `SetStudent(*student_id, None)`.
 
-The remaining op-construction sites, all mechanical: `testgen-colloscopes/src/generator.rs:849`
-and `:1314`, `storage/tests/populated_round_trip/builder.rs:604`,
-`state-colloscopes/tests/refs_registry.rs:344`, and
-`state-colloscopes/tests/found_bugs.rs:66` and `:93`.
+The fixture sites are mechanical: `storage/tests/populated_round_trip/builder.rs:604` and
+`state-colloscopes/tests/refs_registry.rs:344` (each whole-value `Update` becomes one
+`SetGlobal` and/or one `SetStudent`), and `state-colloscopes/tests/found_bugs.rs:66` and
+`:93` (the second is the *clearing* apply, which becomes `SetStudent(student, None)`).
+
+**The two testgen sites are not both mechanical**, contrary to the first draft of this
+paragraph. `gen_settings` (`generator.rs:849`) is: it draws between `SetGlobal` and
+`SetStudent`, both directions of the sparse form, and its invalid arm keeps the dangling
+student key — which now bounces at the precheck tier rather than landing as a dangling FK,
+the same flavor of invalidity `gen_student`'s `Remove(dangling)` arm already produces.
+`gen_force_retarget` (`:1314`) is **not**. That recipe's whole job is to hand `force_apply`
+an op that *lands* a dangling FK, and settings could only ever do that because the
+whole-value `Update` shipped an arbitrary `students` table past a stripped validator. With
+the per-student key a prechecked coordinate, no settings op can land a dangling FK at all,
+so the candidate is deleted rather than re-spelled. Balancing still makes the candidate set
+non-empty after this commit; §7quater has to deal with losing that guarantee.
+
+`synth::settings` has no callers once both sites are rewritten, so it retires with the
+whole-value op it fed. The generator still needs the per-entry half it was built from, so
+`synth::limits` becomes `pub`.
 
 **Out of scope**: the read side (`Settings::limits_for` and every snapshot reader), for the
 same reason as balancing — reading through the inherent `Table` API inside a snapshot is not
@@ -1257,10 +1292,36 @@ and otherwise applies `SetSubject(*subject_id, None)`. `UpdateSubjectOptions` ke
 `InvalidSubjectId` pre-check as today (so its `.expect` on the gate still holds) and applies
 `SetSubject(*subject_id, Some(options.clone()))`.
 
-The remaining op-construction sites, all mechanical: `testgen-colloscopes/src/generator.rs:983`
-and `:1321` (the generated balancing op — build a `SetSubject` / `SetGlobal` instead of
-synthesising a whole `Balancing`), `storage/tests/populated_round_trip/builder.rs:638`, and
+The fixture sites are mechanical: `storage/tests/populated_round_trip/builder.rs:638` and
 `state-colloscopes/tests/refs_registry.rs:353`.
+
+`gen_balancing` (`generator.rs:983`) is mechanical too, and keeps *both* flavors of its
+invalid arm — they now land in different tiers. An override on a live subject that has no
+interrogations still applies cleanly and is caught by the checker as
+`BalancingForSubjectWithoutInterrogations`; a dangling subject key bounces at the
+`SetSubject` precheck.
+
+**`gen_force_retarget` (`:1321`) is the one site that is not mechanical**, and this commit
+is where the bill comes due. Settings and balancing were its two *unconditional* candidates
+— the reason its doc comment could say "the candidate set is never empty" — and both were
+unconditional only because a whole-value `Update` could ship an arbitrary `Table` past a
+stripped validator. Commit 5.98 removed the first; this one removes the second, and every
+remaining candidate is gated on a pool. So:
+
+- `gen_force_retarget` returns `Option<Op>`, `None` on an empty state, exactly like
+  `gen_force_remove`;
+- a new `retargetable_present(inner, pools)` mirrors its pool gates, the way
+  `removable_present` mirrors `gen_force_remove`'s;
+- `gen_corruption_op` pushes `CorruptionKind::ForceRetarget` onto `eligible` only when that
+  predicate holds, and its doc comment loses "retarget and valid are always available".
+
+Without this, a probe fired at a state with no students, subjects, teachers, incompats,
+slots or group lists panics inside `rng.random_range(0..0)`. The cross-seed
+`attempted[ForceRetarget] > 0` assertion still holds comfortably: `retargetable_present` is
+a strict subset of `removable_present`, which already gates `ForceRemove` today.
+
+`synth::balancing` retires the same way `synth::settings` did in 5.98, and
+`synth::balancing_options` becomes `pub`.
 
 **Out of scope**: the read side. gtk4 (`gtk4/src/editor/balancing.rs:245`),
 `storage/src/encode/spec2.rs:538` and the constraints test still read
@@ -2511,11 +2572,12 @@ moves is spelling forced from below.
 - commit 4 — the `SetRow` translation rewrite, an op-surface adaptation;
 - commit 5 (landed) — `InterrogationGroupOutOfBounds` gained a field, matched at
   `ops/src/colloscope.rs:218`;
-- commit 5.97 — every one of the four enriched variants is matched in `ops/`:
+- commit 5.97 (landed) — every one of the five enriched variants is matched in `ops/`:
   `SlotTeacherDoesNotTeachSubject` (three sites), `SlotOverflowsDay` (two),
-  `PairedSlotsNotInSameSubject` (two), `SlotForSubjectWithoutInterrogations` (one);
-- commits 5.98 and 5.99 — `ops/src/settings.rs` and `ops/src/balancing.rs` each construct the
-  op being split at three sites.
+  `PairedSlotsNotInSameSubject` (two), `SlotForSubjectWithoutInterrogations` (one),
+  `ColloscopeStudentGroupOutOfBounds` (one, `colloscope.rs:146`, bound as `_`);
+- commits 5.98 and 5.99 (both landed) — `ops/src/settings.rs` and `ops/src/balancing.rs` each
+  construct the op being split at three sites.
 
 **"No storage change" means the format.** `storage/tests/populated_round_trip/builder.rs:604`
 and `:638` build `SettingsOp::Update` and `BalancingOp::Update`, so commits 5.98 and 5.99
@@ -2539,6 +2601,16 @@ to hold, not "untouched", which is already false three times over: commit 1 re-s
 vocabulary in `testgen-colloscopes/src/generator.rs` (`:849`, `:985`, `:1314`, `:1321`) which
 feeds *both* existing harnesses, and commit 8 adds a third. What must not change is seeds,
 op counts, `invalid_fraction`, or what any of them assert.
+
+Two clarifications the 5.98/5.99 implementation forced, since "keep the oracles" could be
+read as forbidding both. First, **the generated op sequences drift and that is unavoidable**:
+`gen_settings` and `gen_balancing` draw different numbers of RNG values than the whole-value
+builders did, so a given seed now walks a different path. The seed *numbers*, the op counts
+and `invalid_fraction` are what stay fixed. Second, **`gen_corruption_op`'s eligibility rule
+is not an oracle**: 5.99 makes `ForceRetarget` conditional on material being present. The
+oracles are what `property_apply_gate.rs` asserts — atomicity on rejection, full validity on
+`Ok`, the reverse restoring the pre-state, and every `CorruptionKind` being both attempted
+and (if corrupting) rejected at least once across seeds. None of those moved.
 
 One per-commit obligation lives outside this section and is repeated here because it is easy
 to lose: **within the 7.5 series, a failing test is a map bug**, and the house rule applies —
