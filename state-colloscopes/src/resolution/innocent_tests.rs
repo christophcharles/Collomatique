@@ -60,7 +60,10 @@ use crate::ops::{
     SettingsOp, SlotOp, SlotPairingOp, StudentOp, SubjectOp, TeacherOp, WeekOp, WeekPatternOp,
 };
 use crate::pairings::{PairingRule, RulePart};
-use crate::refs::{PeriodRefSite, Reference, StudentRefSite, SubjectRefSite, TeacherRefSite};
+use crate::refs::{
+    PeriodRefSite, Reference, StudentRefSite, SubjectRefSite, TeacherRefSite, WeekPatternRefSite,
+    WeekRefSite,
+};
 use crate::settings::Limits;
 use crate::slot_pairings::{SlotPairingRule, SlotRulePart};
 use crate::slots::Slot;
@@ -1619,5 +1622,170 @@ fn colloscope_group_list_student_arm_spares_a_row_of_live_placements() {
             site: StudentRefSite::ColloscopeGroupListStudent(doc.group_list),
         }),
         "the live row places only live students, so the arm has no placement to remove",
+    );
+}
+
+// ---- Targets: a week and a week pattern (`WeekRefSite`, `WeekPatternRefSite`) ----
+//
+// Two arms each, merged into one commit because they share a shape: all four
+// clear a reference out of a row that survives, and none of them removes
+// anything. The two week-pattern arms are the map's one deliberate divergence
+// from the legacy cleaning, which deleted the slot and the incompatibility
+// outright: here the field is an `Option` whose `None` is a legal, documented
+// value meaning "every week", so the reference can leave on its own. That makes
+// their identity test the only thing between a live pattern and a slot quietly
+// losing it — and the loss is invisible, because a slot with no pattern is a
+// perfectly ordinary slot that simply runs every week.
+//
+// The `ColloscopeInterrogation` arm is the third key-half site in the series,
+// after 7.5b's and 7.5c's, and is corrupted the same way: the row is *added* on
+// the dead week for a slot that already carries a live row.
+
+/// `WeekRefSite::WeekPatternExcludedWeek`.
+///
+/// The corruption swaps the excluded week for the dead one rather than adding
+/// it, keeping the set a singleton — and keeping the pattern's meaning innocent
+/// in the one place it is read. `is_week_active` is consulted for the fixture's
+/// colloscope cell, which sits on `week`; the pattern excluded `other_week`
+/// before and excludes `dead_week` after, so `week` is active either way and
+/// `InterrogationOnInactiveWeek` stays quiet. **Exactly one break.**
+///
+/// The arm is asked about a document where the pattern excludes a *live* week,
+/// and must not rewrite it.
+#[test]
+fn week_pattern_excluded_week_arm_spares_a_pattern_excluding_a_live_week() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    corrupt
+        .params
+        .week_patterns
+        .week_pattern_map
+        .get_mut(&doc.week_pattern)
+        .expect("the fixture's week pattern is there")
+        .excluded_weeks = BTreeSet::from([doc.dead_week]);
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::DanglingFk(Reference::Week {
+            target: doc.dead_week,
+            site: WeekRefSite::WeekPatternExcludedWeek(doc.week_pattern),
+        }),
+        "the live pattern excludes a live week, so the arm has no element to drop",
+    );
+}
+
+/// `WeekRefSite::ColloscopeInterrogation` — a key-half site: the week is half of
+/// the `(slot, week)` key and the slot is the payload, so
+/// `SetInterrogation(slot, week, {})` carries both and no identity test is
+/// expressible. The arm's whole content is the lookup, and this is the test that
+/// it is keyed on the *pair*.
+///
+/// The corruption adds a row on the dead week **for the slot that already
+/// carries one on a live week**. So the valid document does hold a colloscope
+/// row for that slot; what it does not hold is one on the dead week. An arm that
+/// looked the slot up and ignored the week would find that row, answer `Some`,
+/// and clear a cell nothing complained about — which for a colloscope means
+/// losing a placement the user made by hand.
+///
+/// **Exactly one break**: all three predicates of the interrogation loop are
+/// gated on the week resolving to a period (`invariants.rs:572`, then `if let
+/// (Some(period_id), …)` twice and `period.is_some()` once), and a dead week has
+/// no position, so none of them runs. The row's slot is live, so the `Slot`
+/// reference the same row emits does not dangle either.
+#[test]
+fn colloscope_interrogation_week_arm_spares_a_cell_on_another_week() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    // Non-empty: rows are canonical-absent, so an empty one is a `LogicError`
+    // that would short-circuit the checker before it reaches the dangle.
+    corrupt
+        .colloscope
+        .set_interrogation(doc.slot, doc.dead_week, BTreeSet::from([0]));
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::DanglingFk(Reference::Week {
+            target: doc.dead_week,
+            site: WeekRefSite::ColloscopeInterrogation { slot: doc.slot },
+        }),
+        "the slot's only live cell sits on another week, so the arm has no row to clear",
+    );
+}
+
+/// `WeekPatternRefSite::SlotWeekPattern`.
+///
+/// The corruption is done with `replace_slot` rather than raw field access: the
+/// subject is unchanged, so the ordering mirror stays consistent and step 3 sees
+/// the dangle instead of a `LogicError`. It targets `slot`, the one slot that
+/// *wears* a pattern — so in the valid document the arm finds a live pattern
+/// there, not an empty field, and the comparison it makes is the real one.
+///
+/// **Exactly one break**: the checker treats a dangling pattern as excluding
+/// nothing (`is_week_active`, `invariants.rs:587-594`), matching the old
+/// checker, so the fixture's cell stays on an active week and
+/// `InterrogationOnInactiveWeek` does not fire. The slot's teacher and subject
+/// are untouched, so the slots loop stays quiet too.
+#[test]
+fn slot_week_pattern_arm_spares_a_slot_wearing_a_live_pattern() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    let live_slot = corrupt
+        .params
+        .slots
+        .find_slot(doc.slot)
+        .expect("the fixture's patterned slot is there")
+        .clone();
+    corrupt.params.slots.replace_slot(
+        doc.slot,
+        Slot {
+            week_pattern: Some(doc.dead_week_pattern),
+            ..live_slot
+        },
+    );
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::DanglingFk(Reference::WeekPattern {
+            target: doc.dead_week_pattern,
+            site: WeekPatternRefSite::SlotWeekPattern(doc.slot),
+        }),
+        "the live slot wears a live pattern, so the arm has no field to clear",
+    );
+}
+
+/// `WeekPatternRefSite::IncompatWeekPattern` — the incompatibility twin of the
+/// arm above, and the one whose divergence from the legacy cleaning is the
+/// starkest: the old code deleted the whole incompatibility, this one clears a
+/// field and keeps the row.
+///
+/// **Exactly one break**: no `Convergence` variant mentions an incompatibility
+/// at all, so nothing in layer C can react to the swap.
+#[test]
+fn incompat_week_pattern_arm_spares_an_incompat_wearing_a_live_pattern() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    corrupt
+        .params
+        .incompats
+        .incompat_map
+        .get_mut(&doc.incompat)
+        .expect("the fixture's incompatibility is there")
+        .week_pattern_id = Some(doc.dead_week_pattern);
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::DanglingFk(Reference::WeekPattern {
+            target: doc.dead_week_pattern,
+            site: WeekPatternRefSite::IncompatWeekPattern(doc.incompat),
+        }),
+        "the live incompatibility wears a live pattern, so the arm has no field to clear",
     );
 }
