@@ -2123,13 +2123,22 @@ fn colloscope_group_list_key_arm_spares_a_row_of_a_live_list() {
 // layer C: the two sides of a `Convergence` predicate are not
 // interchangeable. One of them is the row the fix destroys, and that is the
 // side an innocent-state test must vary.
+//
+// **The unit is one test per comparison, not one per arm.** A twin varies one
+// field, and the arm then answers `None` because of that one field — so any
+// second comparison the arm makes is left untouched, and a version of the arm
+// that dropped it would pass. Row 1 compares two fields and therefore gets two
+// tests. Rows 2, 3 and 4 compare one each. (Row 10 in the next block and row 16
+// in the last one compare two as well; §8.1 had the same situation with pairing
+// rules and solved it by making the two parts two separate *sites*, which is
+// why they already have a test each.)
 
-/// `Convergence::SlotTeacherDoesNotTeachSubject` — §8.2 row 1.
+/// `Convergence::SlotTeacherDoesNotTeachSubject` — §8.2 row 1, **teacher half**.
 ///
 /// The fix is `Slot::Remove(slot)`, which names only the slot, so both of the
-/// arm's comparisons are pure identity tests. This test pins the **teacher**
-/// one, which §8.2 calls the load-bearing comparison — the subject one is
-/// defensive.
+/// arm's comparisons are pure identity tests and each needs its own twin. This
+/// one varies the teacher, which §8.2 calls the load-bearing comparison; the
+/// next test varies the subject.
 ///
 /// The corruption is row 1's reachable route, reached here by surgery: the slot
 /// is pointed at `other_teacher`, who is alive and teaches `other_subject`
@@ -2175,6 +2184,57 @@ fn slot_teacher_does_not_teach_subject_arm_spares_a_slot_whose_teacher_teaches_i
             doc.subject,
         )),
         "the live slot's teacher is not the named one, so the arm has no slot to remove",
+    );
+}
+
+/// `Convergence::SlotTeacherDoesNotTeachSubject` — §8.2 row 1, **subject half**.
+///
+/// The twin above leaves the arm's second comparison untested: it varies the
+/// teacher, so an arm that had dropped the `subject_id` comparison would still
+/// answer `None` and pass. This twin closes that. It moves the slot onto
+/// `other_subject`, which `teacher` does not teach, and leaves the teacher
+/// alone — so in the valid document the teacher matches the invariant exactly,
+/// and `None` can only come from the subject comparison.
+///
+/// §8.2 calls that comparison defensive, and on today's code it is: a slot's
+/// subject cannot change through an op, so the invariant can only carry a
+/// mismatched subject via `Op::GlobalUpdate`. That is a statement about how
+/// reachable the route is, not a reason to leave the comparison unpinned — the
+/// module docs already settle the same argument for arms whose `Some` branch
+/// cannot fire, and testing follows the arm.
+///
+/// The move changes what subject the slot belongs to, so it goes through
+/// `remove_slot` + `insert_slot_at` like row 3's twin: the slot ordering is
+/// keyed by subject, and a raw write would desync the mirror.
+///
+/// **Exactly one break**: `other_subject` runs interrogations, so row 3 stays
+/// quiet; an hour from 16:00 does not overflow the day, so row 4 does; and
+/// `lone_slot` sits in no pairing rule and no colloscope cell.
+#[test]
+fn slot_teacher_does_not_teach_subject_arm_spares_a_slot_on_another_subject() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    let (_position, live_slot) = corrupt.params.slots.remove_slot(doc.lone_slot);
+    corrupt.params.slots.insert_slot_at(
+        doc.lone_slot,
+        Slot {
+            subject_id: doc.other_subject,
+            ..live_slot
+        },
+        0,
+    );
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::Convergence(Convergence::SlotTeacherDoesNotTeachSubject(
+            doc.lone_slot,
+            doc.teacher,
+            doc.other_subject,
+        )),
+        "the live slot's teacher matches, but its subject is not the named one, \
+         so the arm has no slot to remove",
     );
 }
 

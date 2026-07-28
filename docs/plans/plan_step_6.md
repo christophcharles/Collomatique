@@ -2386,6 +2386,16 @@ One test per arm means **46 tests**: 30 for §8.1 (a two-part site such as
 `PairingRuleAntecedent` / `Consequent` is *two* arms and therefore two tests) and 16 for
 §8.2. That is far too much for one commit, so it ships as ten (★ user ruling, July 28 2026).
 
+**Corrected while writing 7.5g/7.5h: the unit is one test per *comparison*, not per arm, and
+the real total is 49** (★ user, July 28 2026 — see the counting finding below). A twin varies
+one field and the arm then answers `None` because of that one field, so every further
+comparison the arm makes is left untouched and a version that dropped it would pass. Three
+§8.2 arms compare two fields: row 1 (`teacher_id` and `subject_id`), row 10 (the antecedent
+and the consequent slot) and row 16 (the student is placed, and placed in *that* group). Each
+gets two tests. §8.1 is unaffected — it hit the same situation with pairing rules and solved
+it structurally, by making the two parts two separate **sites**, so each already has its own
+arm and its own test.
+
 The arms are spread very unevenly across the eight target kinds — period 7, subject 8,
 student 5, slot 3, week 2, week pattern 2, group list 2, teacher 1 — so "one commit per
 target kind" is kept as the rule, but the four smallest kinds are merged in pairs rather than
@@ -2412,9 +2422,10 @@ arms of a common shape: 7.5e is four arms that clear a reference out of a patter
 pattern out of a row; 7.5f is five arms that clear colloscope rows or remove pairing rules.
 
 **The `Convergence` half — four commits, one per review block**: rows 1-4 (the slot and
-teacher block), rows 5-8, rows 9-12, and rows 13-16 (the colloscope block). Four tests each,
-and each commit lines up exactly with one chunk of the §8.2 table, so a reviewer can read the
-commit beside the paragraph that justifies it.
+teacher block), rows 5-8, rows 9-12, and rows 13-16 (the colloscope block). Each commit lines
+up exactly with one chunk of the §8.2 table, so a reviewer can read the commit beside the
+paragraph that justifies it. Four tests each **except where an arm compares two fields**: rows
+1-4 carry five (row 1 twice), rows 9-12 five (row 10 twice), rows 13-16 five (row 16 twice).
 
 The two `GlobalUpdate` policy pins fold into the last of those four rather than getting a
 commit of their own: one or two tests, a different idiom (`lib.rs:620`, `:780`), and nothing
@@ -2438,10 +2449,11 @@ it** — 7.5a (`b04bdcaf`), 7.5b (`362dde77`), 7.5c (`acaab2fb`), 7.5d (`cba1a8b
 §8.2 rows 5-8; the letters are this document's, the split table above numbers only the six
 dangling-FK commits). So
 `src/resolution/innocent_tests.rs` exists with its `#[cfg(test)] mod innocent_tests;` line in
-`resolution.rs`, the shared builder, and **thirty-eight tests**: one per §8.1 arm — the
+`resolution.rs`, the shared builder, and **thirty-nine tests**: one per §8.1 arm — the
 `SlotTeacher` arm, all seven `PeriodRefSite` arms, all eight `SubjectRefSite` ones, all five
 `StudentRefSite` ones, both `WeekRefSite` ones, both `WeekPatternRefSite` ones, all three
-`SlotRefSite` ones and both `GroupListRefSite` ones — plus §8.2 rows 1-8. Every one passed on
+`SlotRefSite` ones and both `GroupListRefSite` ones — plus §8.2 rows 1-8, with row 1 carrying
+two (one per comparison). Every one passed on
 its first run, with its hand-derived set; **no map bug has surfaced anywhere in §8.1, nor in the
 first two §8.2 blocks**. Two commits remain, both `Convergence`: rows 9-12, and rows 13-16
 with the two `GlobalUpdate` policy pins folded in. The shared fixture has been touched three
@@ -2731,6 +2743,34 @@ And two from 7.5h, both about what a **coordinate-shaped** arm can and cannot be
   what one fixture change bought: `other_subject` now excludes `other_period`, making it the
   fixture's only subject that runs interrogations and does not run everywhere, which is exactly
   the combination that fires row 8 without dragging row 7 in.
+
+And one that came out of surveying rows 1-4 against the two findings above, and that changes
+the shape of the series (★ user, July 28 2026):
+
+- ★ **The unit is one test per *comparison*, not one per arm — three §8.2 arms compare two
+  fields, so the series is 49 tests, not 46.** A twin varies one field; the arm then answers
+  `None` because of that field; every further comparison it makes is untouched, and a version of
+  the arm that had dropped one would pass. Row 1 is where this surfaced: it compares
+  `slot.teacher_id` **and** `slot.subject_id` (`resolution.rs:516`), 7.5g's twin varied only the
+  teacher, and an arm missing the subject comparison would have sailed through. The second twin
+  moves `lone_slot` onto `other_subject` and leaves the teacher alone, so the teacher matches the
+  invariant exactly and `None` can come from nowhere but the subject comparison. The two others
+  are **row 10** (antecedent slot and consequent slot, `:607-608`) and **row 16**
+  (`placements.get(student) != Some(group)`, `:663` — one expression asserting two things: she is
+  placed, and placed in *that* group). Rows 2, 3, 4, 13 and 15 compare one field each and are
+  complete with one test.
+
+  Two things worth carrying forward. First, **"defensive" is not a reason to leave a comparison
+  unpinned**: §8.2 calls row 1's subject comparison defensive because a slot's subject cannot
+  change through an op, so only `Op::GlobalUpdate` can produce a mismatch — but that is a
+  statement about reachability, and the module docs already settle the same argument for arms
+  whose `Some` branch cannot fire (they carry their tests anyway, because the guards making them
+  unreachable are not obliged to stay). Testing follows the arm. Second, **§8.1 never had this
+  problem because it solved it structurally**: the two-part pairing rules became two separate
+  *sites*, so each part has its own arm, its own identity test and its own test. Row 10 keeps
+  both parts inside one variant, so there the split has to happen in the tests instead. When a
+  future variant carries two ids, splitting the site is the better fix; splitting the test is
+  the fallback.
 
 ## 9ter. Commit 7.6 — the self-caused rejection fixtures (`tests/cascade.rs`)
 
