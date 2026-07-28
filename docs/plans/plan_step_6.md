@@ -2426,12 +2426,13 @@ Three rules for the series:
   corruption, not the document. The builder belongs in 7.5a and is written to be reused —
   do not copy a fixture per test.
 
-**Status: 7.5a** (`b04bdcaf`)**, 7.5b** (`362dde77`)**, 7.5c** (`acaab2fb`) **and 7.5d**
-(`cba1a8b2`) **have landed**, so `src/resolution/innocent_tests.rs` exists with its
-`#[cfg(test)] mod innocent_tests;` line in `resolution.rs`, the shared builder, and twenty-one
-tests — the `SlotTeacher` arm, all seven `PeriodRefSite` arms, all eight `SubjectRefSite` ones and
-all five `StudentRefSite` ones. Every one passed on its first run, with
-its hand-derived set; no map bug has surfaced. Six commits remain (7.5e, 7.5f and the four
+**Status: 7.5a** (`b04bdcaf`)**, 7.5b** (`362dde77`)**, 7.5c** (`acaab2fb`)**, 7.5d**
+(`cba1a8b2`) **and 7.5e** (`332ef6a6`) **have landed**, so `src/resolution/innocent_tests.rs`
+exists with its `#[cfg(test)] mod innocent_tests;` line in `resolution.rs`, the shared builder,
+and twenty-five tests — the `SlotTeacher` arm, all seven `PeriodRefSite` arms, all eight
+`SubjectRefSite` ones, all five `StudentRefSite` ones, both `WeekRefSite` ones and both
+`WeekPatternRefSite` ones. Every one passed on its first run, with
+its hand-derived set; no map bug has surfaced. Five commits remain (7.5f and the four
 `Convergence` ones). Four things settled while writing 7.5a, all of them things the rest of the
 series inherits:
 
@@ -2462,7 +2463,9 @@ series inherits:
   surgery is two lines — read the live slot, `replace_slot` it with one field changed — and
   factoring that would obscure it. The surgeries §9bis names explicitly (`remove_slot` +
   `insert_slot_at` for `SlotSubject`, `move_week_entry` for `WeekPeriodFk`) belong to 7.5c and
-  7.5e and can be written there, inline, in the test that needs them. A helper is worth extracting
+  7.5b — **this sentence originally said 7.5e, which was wrong**: `WeekPeriodFk` is a
+  `PeriodRefSite` variant, so its test is in the period commit, not in the week one. It can be
+  written inline, in the test that needs it. A helper is worth extracting
   only once two tests want the same one.
 
 And two more from 7.5b, which are about what makes a test in this series *strong* rather than
@@ -2542,6 +2545,31 @@ Two more from 7.5d:
   all for this commit**, the first in the series where that held: every corruption either adds a
   member to an existing set or adds an entry keyed by the dead student, and none moves a row
   between owners, so 7.5c's `lone_slot` lesson did not have to be applied again.
+
+And two from 7.5e:
+
+- ★ **Both `WeekPatternRefSite` arms clear an `Option` and keep the row, and that makes their
+  identity test the quietest one in the map to get wrong.** This is the divergence
+  `fix_week_pattern_ref`'s doc comment already claims — the legacy cleaning deleted the slot and
+  the incompatibility, the map clears a field — and the tests are what pin the other half of it:
+  the field is only cleared when it really names the dead pattern. A slot that wrongly lost its
+  pattern is still a valid slot; it simply runs every week from then on, and nothing in the
+  document looks wrong. The `SlotWeekPattern` twin deliberately corrupts `slot`, the one slot
+  that *wears* a pattern, so the valid document answers `None` by comparing two live patterns
+  rather than by finding an empty field — corrupting `other_slot` (whose field is `None`) would
+  have passed for the weaker reason.
+- ★ **Two of the four one-element sets are downstream of documented checker choices, not of the
+  fixture's shape** — worth knowing before hand-deriving a set that touches the colloscope.
+  First, `is_week_active` treats a **dangling** pattern as excluding nothing
+  (`invariants.rs:587-594`, matching the old checker), which is what keeps the fixture's
+  colloscope cell on an active week when `slot`'s pattern is pointed at a dead one; had the
+  checker instead skipped the row or treated the dangle as excluding everything,
+  `InterrogationOnInactiveWeek` would have joined that set. Second, every predicate in the
+  interrogation loop gates on `weeks.week_position(week)` resolving to a period
+  (`invariants.rs:572`), so a row keyed on a **dead week** disables the whole loop body for
+  itself — the cleanest one-break derivation in the series, and the reason the third key-half
+  site needed no fixture care at all. (The fourth arm is free for a blunter reason: no
+  `Convergence` variant mentions an incompatibility.) The fixture again needed no change.
 
 ## 9ter. Commit 7.6 — the self-caused rejection fixtures (`tests/cascade.rs`)
 
