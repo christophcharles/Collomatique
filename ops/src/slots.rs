@@ -306,11 +306,6 @@ impl SlotsUpdateOp {
                 // The state op takes the subject from the slot itself.
                 let mut slot = slot.clone();
                 slot.subject_id = *subject_id;
-                // Capture the teacher id before `slot` is moved into the op:
-                // the SlotTeacherDoesNotTeachSubject convergence carries only the
-                // slot id, so the reported (teacher, subject) pair is synthesized
-                // from the op payload in scope.
-                let teacher_id = slot.teacher_id;
 
                 let result = data
                     .apply(
@@ -345,12 +340,15 @@ impl SlotsUpdateOp {
                                 }
                                 for inv in &set {
                                     if let FixableInvariant::Convergence(
-                                        Convergence::SlotTeacherDoesNotTeachSubject(_),
+                                        Convergence::SlotTeacherDoesNotTeachSubject(
+                                            _,
+                                            teacher,
+                                            subject,
+                                        ),
                                     ) = inv
                                     {
                                         return AddNewSlotError::TeacherDoesNotTeachInSubject(
-                                            teacher_id,
-                                            *subject_id,
+                                            *teacher, *subject,
                                         );
                                     }
                                 }
@@ -365,7 +363,7 @@ impl SlotsUpdateOp {
                                 }
                                 for inv in &set {
                                     if let FixableInvariant::Convergence(
-                                        Convergence::SlotOverflowsDay(_),
+                                        Convergence::SlotOverflowsDay { .. },
                                     ) = inv
                                     {
                                         return AddNewSlotError::SlotOverlapsWithNextDay;
@@ -396,11 +394,6 @@ impl SlotsUpdateOp {
                 {
                     slot.subject_id = subject_id;
                 }
-                // Sources for the reduced convergence variants (both carry only
-                // the slot id). On the Invariants path the slot existed (else the
-                // InvalidSlotId precheck fires first), so the subject is pinned.
-                let teacher_id = slot.teacher_id;
-                let subject_id = slot.subject_id;
 
                 let result = data
                     .apply(
@@ -449,11 +442,15 @@ impl SlotsUpdateOp {
                                 }
                                 for inv in &set {
                                     if let FixableInvariant::Convergence(
-                                        Convergence::SlotTeacherDoesNotTeachSubject(_),
+                                        Convergence::SlotTeacherDoesNotTeachSubject(
+                                            _,
+                                            teacher,
+                                            subject,
+                                        ),
                                     ) = inv
                                     {
                                         return UpdateSlotError::TeacherDoesNotTeachInSubject(
-                                            teacher_id, subject_id,
+                                            *teacher, *subject,
                                         );
                                     }
                                 }
@@ -468,17 +465,20 @@ impl SlotsUpdateOp {
                                 }
                                 for inv in &set {
                                     if let FixableInvariant::Convergence(
-                                        Convergence::SlotForSubjectWithoutInterrogations(_),
+                                        Convergence::SlotForSubjectWithoutInterrogations(
+                                            _,
+                                            subject,
+                                        ),
                                     ) = inv
                                     {
                                         return UpdateSlotError::SubjectHasNoInterrogation(
-                                            subject_id,
+                                            *subject,
                                         );
                                     }
                                 }
                                 for inv in &set {
                                     if let FixableInvariant::Convergence(
-                                        Convergence::SlotOverflowsDay(_),
+                                        Convergence::SlotOverflowsDay { .. },
                                     ) = inv
                                     {
                                         return UpdateSlotError::SlotOverlapsWithNextDay;

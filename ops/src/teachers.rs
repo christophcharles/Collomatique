@@ -207,7 +207,7 @@ impl TeachersUpdateOp {
                                 }
                                 for inv in &set {
                                     if let FixableInvariant::Convergence(
-                                        Convergence::SlotTeacherDoesNotTeachSubject(_),
+                                        Convergence::SlotTeacherDoesNotTeachSubject(_, _, _),
                                     ) = inv
                                     {
                                         panic!("Slots should be cleaned before updating subjects for teacher");

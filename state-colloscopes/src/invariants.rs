@@ -139,21 +139,25 @@ pub enum LogicError {
 /// already reports that.
 ///
 /// Declaration order is the canonical order (derived `Ord`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Error)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Error)]
 pub enum Convergence {
     /// The slot's teacher's `subjects` set lacks the slot's subject
-    #[error("the teacher of slot {0:?} does not teach the slot's subject")]
-    SlotTeacherDoesNotTeachSubject(SlotId),
+    #[error("teacher {1:?} of slot {0:?} does not teach the slot's subject {2:?}")]
+    SlotTeacherDoesNotTeachSubject(SlotId, TeacherId, SubjectId),
     /// A teacher references a subject whose interrogations are disabled
     #[error("teacher {0:?} references subject {1:?} which has interrogations disabled")]
     TeacherSubjectWithoutInterrogations(TeacherId, SubjectId),
     /// A slot on a subject whose interrogations are disabled
-    #[error("slot {0:?} is on a subject with interrogations disabled")]
-    SlotForSubjectWithoutInterrogations(SlotId),
+    #[error("slot {0:?} is on subject {1:?} which has interrogations disabled")]
+    SlotForSubjectWithoutInterrogations(SlotId, SubjectId),
     /// The slot's start time plus its subject's interrogation duration
     /// overflows the day
-    #[error("slot {0:?} overflows its day given the subject's interrogation duration")]
-    SlotOverflowsDay(SlotId),
+    #[error("slot {slot:?} starts at {start} and lasts {duration}, overflowing its day")]
+    SlotOverflowsDay {
+        slot: SlotId,
+        start: collomatique_time::SlotStart,
+        duration: collomatique_time::NonZeroMinutes,
+    },
     /// An assignments row whose subject excludes the row's period
     #[error("assignments row ({0:?}, {1:?}): the subject does not run on the period")]
     AssignmentForSubjectNotRunningOnPeriod(PeriodId, SubjectId),
@@ -176,8 +180,8 @@ pub enum Convergence {
     #[error("balancing entry for subject {0:?} which has interrogations disabled")]
     BalancingForSubjectWithoutInterrogations(SubjectId),
     /// A slot pairing rule whose two slots are on different subjects
-    #[error("slot pairing rule {0:?} pairs slots of different subjects")]
-    PairedSlotsNotInSameSubject(SlotPairingRuleId),
+    #[error("slot pairing rule {0:?} pairs slots {1:?} and {2:?} of different subjects")]
+    PairedSlotsNotInSameSubject(SlotPairingRuleId, SlotId, SlotId),
     /// An interrogation whose slot's subject excludes the week's period
     #[error("interrogation ({0:?}, {1:?}): the slot's subject does not run on the week's period")]
     InterrogationSlotNotRunningOnPeriod(SlotId, WeekId),
@@ -194,9 +198,10 @@ pub enum Convergence {
     /// A placed student who is in the automatic filling's excluded set
     #[error("colloscope group list {0:?} places excluded student {1:?}")]
     ColloscopeStudentExcluded(GroupListId, StudentId),
-    /// A placed student with a group number ≥ the list's group count
-    #[error("colloscope group list {0:?} places student {1:?} in an out-of-bounds group")]
-    ColloscopeStudentGroupOutOfBounds(GroupListId, StudentId),
+    /// A placed student with a group number ≥ the list's group count —
+    /// the third field is that offending group number
+    #[error("colloscope group list {0:?} places student {1:?} in out-of-bounds group {2}")]
+    ColloscopeStudentGroupOutOfBounds(GroupListId, StudentId, u32),
 }
 
 /// A broken invariant the *data* is responsible for — the `Ok` payload of the
@@ -207,7 +212,7 @@ pub enum Convergence {
 /// [FixableInvariant::DanglingFk] is declared first so that when a row is both
 /// dangling and convergence-broken, `BTreeSet::first()` picks the precise
 /// row-removal fix over the lossy one (derived `Ord`, declaration order).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Error)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Error)]
 pub enum FixableInvariant {
     /// A reference whose target id does not resolve
     #[error("dangling reference: {0:?}")]
@@ -428,12 +433,19 @@ impl crate::InnerData {
             if let Some(teacher) = params.teachers.teacher_map.get(&slot.teacher_id)
                 && !teacher.subjects.contains(&slot.subject_id)
             {
-                out.insert(Convergence::SlotTeacherDoesNotTeachSubject(slot_id));
+                out.insert(Convergence::SlotTeacherDoesNotTeachSubject(
+                    slot_id,
+                    slot.teacher_id,
+                    slot.subject_id,
+                ));
             }
             if let Some(subject) = params.subjects.find_subject(slot.subject_id) {
                 match &subject.parameters.interrogation_parameters {
                     None => {
-                        out.insert(Convergence::SlotForSubjectWithoutInterrogations(slot_id));
+                        out.insert(Convergence::SlotForSubjectWithoutInterrogations(
+                            slot_id,
+                            slot.subject_id,
+                        ));
                     }
                     Some(interrogation_params) => {
                         if collomatique_time::SlotWithDuration::new(
@@ -442,7 +454,11 @@ impl crate::InnerData {
                         )
                         .is_none()
                         {
-                            out.insert(Convergence::SlotOverflowsDay(slot_id));
+                            out.insert(Convergence::SlotOverflowsDay {
+                                slot: slot_id,
+                                start: slot.start_time.clone(),
+                                duration: interrogation_params.duration,
+                            });
                         }
                     }
                 }
@@ -540,7 +556,11 @@ impl crate::InnerData {
                     .find_slot_with_subject(rule.consequent().slot_id),
             ) && ant_subject != con_subject
             {
-                out.insert(Convergence::PairedSlotsNotInSameSubject(rule_id));
+                out.insert(Convergence::PairedSlotsNotInSameSubject(
+                    rule_id,
+                    rule.antecedent().slot_id,
+                    rule.consequent().slot_id,
+                ));
             }
         }
 
@@ -625,6 +645,7 @@ impl crate::InnerData {
                     out.insert(Convergence::ColloscopeStudentGroupOutOfBounds(
                         group_list_id,
                         student_id,
+                        group_num,
                     ));
                 }
             }
@@ -1076,11 +1097,21 @@ pub(crate) mod tests {
         let student = unsafe { StudentId::new(7) };
         let slot_pairing_rule = unsafe { SlotPairingRuleId::new(8) };
         let group = 9u32;
+        let start = SlotStart {
+            weekday: chrono::Weekday::Mon.into(),
+            start_time: WholeMinuteTime::new(chrono::NaiveTime::from_hms_opt(23, 0, 0).unwrap())
+                .unwrap(),
+        };
+        let duration = collomatique_time::NonZeroMinutes::new(90).unwrap();
         let all = [
-            Convergence::SlotTeacherDoesNotTeachSubject(slot),
+            Convergence::SlotTeacherDoesNotTeachSubject(slot, teacher, subject),
             Convergence::TeacherSubjectWithoutInterrogations(teacher, subject),
-            Convergence::SlotForSubjectWithoutInterrogations(slot),
-            Convergence::SlotOverflowsDay(slot),
+            Convergence::SlotForSubjectWithoutInterrogations(slot, subject),
+            Convergence::SlotOverflowsDay {
+                slot,
+                start,
+                duration,
+            },
             Convergence::AssignmentForSubjectNotRunningOnPeriod(period, subject),
             Convergence::AssignedStudentNotPresentForPeriod {
                 period,
@@ -1090,13 +1121,13 @@ pub(crate) mod tests {
             Convergence::AssociationForSubjectWithoutInterrogations(period, subject),
             Convergence::AssociationForSubjectNotRunningOnPeriod(period, subject),
             Convergence::BalancingForSubjectWithoutInterrogations(subject),
-            Convergence::PairedSlotsNotInSameSubject(slot_pairing_rule),
+            Convergence::PairedSlotsNotInSameSubject(slot_pairing_rule, slot, slot),
             Convergence::InterrogationSlotNotRunningOnPeriod(slot, week),
             Convergence::InterrogationOnInactiveWeek(slot, week),
             Convergence::InterrogationGroupOutOfBounds(slot, week, group),
             Convergence::ColloscopeGroupListPrefilled(group_list),
             Convergence::ColloscopeStudentExcluded(group_list, student),
-            Convergence::ColloscopeStudentGroupOutOfBounds(group_list, student),
+            Convergence::ColloscopeStudentGroupOutOfBounds(group_list, student, group),
         ];
         assert!(all.windows(2).all(|w| w[0] < w[1]));
     }
@@ -1111,9 +1142,11 @@ pub(crate) mod tests {
             site: GroupListRefSite::ColloscopeGroupListKey,
         });
         let smallest_convergence =
-            FixableInvariant::Convergence(Convergence::SlotTeacherDoesNotTeachSubject(unsafe {
-                SlotId::new(0)
-            }));
+            FixableInvariant::Convergence(Convergence::SlotTeacherDoesNotTeachSubject(
+                unsafe { SlotId::new(0) },
+                unsafe { TeacherId::new(0) },
+                unsafe { SubjectId::new(0) },
+            ));
         assert!(biggest_dangling < smallest_convergence);
     }
 
@@ -1653,7 +1686,7 @@ pub(crate) mod tests {
         assert_eq!(
             broken_invariants(&data),
             Ok(BTreeSet::from([FixableInvariant::Convergence(
-                Convergence::SlotTeacherDoesNotTeachSubject(slot)
+                Convergence::SlotTeacherDoesNotTeachSubject(slot, teacher, subject)
             )]))
         );
     }
@@ -1713,7 +1746,7 @@ pub(crate) mod tests {
                     teacher, subject
                 )),
                 FixableInvariant::Convergence(Convergence::SlotForSubjectWithoutInterrogations(
-                    slot
+                    slot, subject
                 )),
             ]))
         );
@@ -1744,7 +1777,11 @@ pub(crate) mod tests {
         assert_eq!(
             broken_invariants(&data),
             Ok(BTreeSet::from([FixableInvariant::Convergence(
-                Convergence::SlotOverflowsDay(slot)
+                Convergence::SlotOverflowsDay {
+                    slot,
+                    start: slot_at(subject, teacher, 23, 30).start_time,
+                    duration: collomatique_time::NonZeroMinutes::new(60).unwrap(),
+                }
             )]))
         );
     }
@@ -2028,7 +2065,7 @@ pub(crate) mod tests {
         assert_eq!(
             broken_invariants(&data),
             Ok(BTreeSet::from([FixableInvariant::Convergence(
-                Convergence::PairedSlotsNotInSameSubject(rule)
+                Convergence::PairedSlotsNotInSameSubject(rule, slot_a, slot_b)
             )]))
         );
     }
@@ -2232,7 +2269,7 @@ pub(crate) mod tests {
         assert_eq!(
             broken_invariants(&data),
             Ok(BTreeSet::from([FixableInvariant::Convergence(
-                Convergence::ColloscopeStudentGroupOutOfBounds(group_list, student)
+                Convergence::ColloscopeStudentGroupOutOfBounds(group_list, student, 5)
             )]))
         );
     }
@@ -2377,7 +2414,11 @@ pub(crate) mod tests {
                     target: forged_subject,
                     site: SubjectRefSite::SlotSubject(slot),
                 }),
-                FixableInvariant::Convergence(Convergence::SlotTeacherDoesNotTeachSubject(slot)),
+                FixableInvariant::Convergence(Convergence::SlotTeacherDoesNotTeachSubject(
+                    slot,
+                    teacher,
+                    forged_subject,
+                )),
             ]))
         );
     }
@@ -3089,7 +3130,11 @@ pub(crate) mod tests {
                     target: dangling_student,
                     site: StudentRefSite::SettingsStudentKey,
                 }),
-                FixableInvariant::Convergence(Convergence::SlotOverflowsDay(fx.slot)),
+                FixableInvariant::Convergence(Convergence::SlotOverflowsDay {
+                    slot: fx.slot,
+                    start: slot_at(fx.subject, fx.teacher, 23, 30).start_time,
+                    duration: collomatique_time::NonZeroMinutes::new(60).unwrap(),
+                }),
             ]))
         );
     }

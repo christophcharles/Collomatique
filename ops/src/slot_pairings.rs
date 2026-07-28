@@ -109,9 +109,7 @@ impl SlotPairingsUpdateOp {
                             // (validate_slot_pairing_rule_internal): antecedent slot,
                             // then consequent slot, then same-subject, then excluded
                             // period. Both slot sites map to InvalidSlotId but carry
-                            // different payloads, so the passes stay separate; the
-                            // same-subject convergence carries only the rule id, so
-                            // the two slot ids come from the op payload in scope.
+                            // different payloads, so the passes stay separate.
                             Error::BrokenInvariants(set) => {
                                 for inv in &set {
                                     if let FixableInvariant::DanglingFk(Reference::Slot {
@@ -133,12 +131,16 @@ impl SlotPairingsUpdateOp {
                                 }
                                 for inv in &set {
                                     if let FixableInvariant::Convergence(
-                                        Convergence::PairedSlotsNotInSameSubject(_),
+                                        Convergence::PairedSlotsNotInSameSubject(
+                                            _,
+                                            antecedent,
+                                            consequent,
+                                        ),
                                     ) = inv
                                     {
                                         return AddNewSlotPairingRuleError::SlotsNotInSameSubject(
-                                            rule.antecedent().slot_id,
-                                            rule.consequent().slot_id,
+                                            *antecedent,
+                                            *consequent,
                                         );
                                     }
                                 }
@@ -231,12 +233,16 @@ impl SlotPairingsUpdateOp {
                                 }
                                 for inv in &set {
                                     if let FixableInvariant::Convergence(
-                                        Convergence::PairedSlotsNotInSameSubject(_),
+                                        Convergence::PairedSlotsNotInSameSubject(
+                                            _,
+                                            antecedent,
+                                            consequent,
+                                        ),
                                     ) = inv
                                     {
                                         return UpdateSlotPairingRuleError::SlotsNotInSameSubject(
-                                            rule.antecedent().slot_id,
-                                            rule.consequent().slot_id,
+                                            *antecedent,
+                                            *consequent,
                                         );
                                     }
                                 }

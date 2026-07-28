@@ -143,7 +143,9 @@ impl ColloscopeUpdateOp {
                                 }
                                 for inv in &set {
                                     if let FixableInvariant::Convergence(
-                                        Convergence::ColloscopeStudentGroupOutOfBounds(group_list, student),
+                                        // The offending group number is not part of
+                                        // the frozen `ops/` error payload.
+                                        Convergence::ColloscopeStudentGroupOutOfBounds(group_list, student, _),
                                     ) = inv
                                     {
                                         return UpdateColloscopeGroupListError::InvalidGroupNumForStudentInGroupList(
