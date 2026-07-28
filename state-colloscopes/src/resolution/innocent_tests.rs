@@ -273,7 +273,8 @@ pub(super) struct ValidDocument {
     /// Runs interrogations; hosts both slots, the association, the assignments
     /// row, the incompatibility and the balancing override.
     subject: SubjectId,
-    /// Runs interrogations too, and is the pairing rule's consequent.
+    /// Runs interrogations too, and is the pairing rule's consequent. It
+    /// excludes `other_period`, and is associated to a group list on `period`.
     other_subject: SubjectId,
     /// Excludes `other_period`, and runs no interrogations.
     excluded_subject: SubjectId,
@@ -369,11 +370,15 @@ pub(super) fn build_valid_document() -> (Data, ValidDocument) {
         NewId::SubjectId,
         "adding the running subject"
     );
+    // It excludes `other_period` — the one subject in the fixture that runs
+    // interrogations *and* does not run everywhere. §8.2 row 8 needs exactly
+    // that combination: a subject excluded on a period fires row 8 alone, where
+    // a subject without interrogations would fire row 7 as well.
     let other_subject = apply_new!(
         data,
         Op::Subject(SubjectOp::AddAfter(
             Some(subject),
-            interrogation_subject("Physique", BTreeSet::new())
+            interrogation_subject("Physique", BTreeSet::from([other_period]))
         )),
         NewId::SubjectId,
         "adding the second running subject"
@@ -547,6 +552,19 @@ pub(super) fn build_valid_document() -> (Data, ValidDocument) {
         )),
         "associating the group list",
     );
+    // A second association, on the *other* subject and the same period. It is
+    // what an arm keyed on the subject alone would wrongly find when §8.2 row
+    // 8's twin puts an entry at `(other_period, other_subject)`, and it keeps
+    // the association map from being a singleton.
+    apply(
+        &mut data,
+        Op::GroupList(GroupListOp::AssignToSubject(
+            period,
+            other_subject,
+            Some(excluding_group_list),
+        )),
+        "associating the second group list",
+    );
     // Only an *automatic* list may carry a colloscope row
     // (`ColloscopeGroupListPrefilled`), so the placements go on `group_list`.
     apply(
@@ -576,6 +594,22 @@ pub(super) fn build_valid_document() -> (Data, ValidDocument) {
             BTreeSet::from([student, other_student]),
         )),
         "filling the assignments row",
+    );
+    // A second row, same subject on the *other* period. `Assignments` offers a
+    // period-keyed lookup (`subjects_for_period`), so an arm that keyed on the
+    // period alone is a bug a test can really express — this row is what such
+    // an arm would wrongly find when §8.2 row 5's twin puts a row at
+    // `(other_period, excluded_subject)`. It is also the row §8.2 row 6's twin
+    // adds an excluded student to, so that arm's lookup succeeds and its
+    // membership test is what the test is really about.
+    apply(
+        &mut data,
+        Op::Assignment(AssignmentOp::SetRow(
+            other_period,
+            subject,
+            BTreeSet::from([student, other_student]),
+        )),
+        "filling the second assignments row",
     );
 
     // Both overrides are deliberately *different* from the global values, so
@@ -2285,5 +2319,190 @@ fn slot_overflows_day_arm_spares_a_slot_that_starts_elsewhere() {
             duration: collomatique_time::NonZeroMinutes::new(60).unwrap(),
         }),
         "the live slot starts hours earlier, so the arm has no overflowing slot to remove",
+    );
+}
+
+// ---- `Convergence`, rows 5-8: assignments rows and group-list associations ----
+//
+// Four rows, and §8.2 calls three of them coordinate-shaped: the invariant
+// names a coordinate, the fix op carries that same coordinate, and the fix
+// removes the whole thing sitting at it. So there is no field left to compare
+// and no identity test to write — the arm's entire content is the lookup, and
+// the offending shape simply *is* the presence of the row or the entry. Row 6
+// is the one variation, and its membership test is an identity test that comes
+// for free (frame point 4).
+//
+// Rows 7 and 8 share a single match arm, since both name the same offending
+// configuration and both clear it. They still get a test each: what differs is
+// which predicate the *checker* fires, and a twin that produced the wrong one
+// would be asserting about an invariant nobody meant.
+//
+// The block-1 rule applies unchanged — vary the row, not the predicate's other
+// side — and it bites hardest here, because for a coordinate-shaped arm the
+// only bug a `None` test can catch is a mis-keyed or missing lookup. Two
+// fixture rows were added for exactly that: a second assignments row on the
+// other period, and a second association on the other subject. Without a live
+// neighbour sharing one half of the corrupt coordinate, an arm that dropped
+// the other half would sail through every test in this block.
+//
+// One coverage limit is worth stating rather than leaving to be rediscovered:
+// **row 7's subject half cannot be covered at all.** A live neighbour for it
+// would be a second association naming `excluded_subject`, and that association
+// is itself row 7 — no valid document can hold one. The offending predicate is
+// a property of the subject, so the subject half has no innocent witness. Row
+// 8 has no such problem, because a subject that excludes one period may be
+// associated on another.
+
+/// `Convergence::AssignmentForSubjectNotRunningOnPeriod` — §8.2 row 5.
+///
+/// The twin puts a row at `(other_period, excluded_subject)`, a coordinate
+/// where the subject already excludes the period. That is the corruption the
+/// block-1 rule asks for: the offending configuration is "a row exists **and**
+/// the subject excludes the period", and adding the row varies the side the arm
+/// tests. Widening the subject's exclusions instead would leave the fixture's
+/// own row offending and make the valid document guilty.
+///
+/// The valid document holds no row at that coordinate — but it does hold one
+/// on `other_period`, for `subject`. `Assignments::subjects_for_period` makes a
+/// period-keyed lookup a bug an arm could really have, and that row is what
+/// such an arm would find before clearing a row nobody complained about.
+///
+/// **Exactly one break**: the row's students exclude no period, so row 6 does
+/// not join, and every id in it is live.
+#[test]
+fn assignment_for_subject_not_running_on_period_arm_spares_a_missing_row() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    corrupt.params.assignments.map.insert(
+        (doc.other_period, doc.excluded_subject),
+        BTreeSet::from([doc.student, doc.other_student]),
+    );
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::Convergence(Convergence::AssignmentForSubjectNotRunningOnPeriod(
+            doc.other_period,
+            doc.excluded_subject,
+        )),
+        "the live document has no row at that coordinate, so the arm has nothing to clear",
+    );
+}
+
+/// `Convergence::AssignedStudentNotPresentForPeriod` — §8.2 row 6, and the one
+/// row of this block whose fix keeps the row alive.
+///
+/// The op is `SetRow(period, subject, rebuilt)`: it names the row but not the
+/// member being dropped, so rule 4 asks for an identity test, and the
+/// membership test the element-removal rebuild needs already is one. This test
+/// is that the arm makes it.
+///
+/// The twin adds `excluded_student`, who excludes `other_period`, to the
+/// fixture's row on `other_period`. So the arm's lookup **succeeds** on the
+/// valid document and finds a real row with real members — only the membership
+/// test stands between an innocent student and being silently unassigned.
+///
+/// **Exactly one break**: the row's subject excludes no period, so row 5 stays
+/// quiet, and the two students already in the row exclude nothing.
+#[test]
+fn assigned_student_not_present_for_period_arm_spares_a_row_of_present_students() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    corrupt.params.assignments.map.insert(
+        (doc.other_period, doc.subject),
+        BTreeSet::from([doc.student, doc.other_student, doc.excluded_student]),
+    );
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::Convergence(Convergence::AssignedStudentNotPresentForPeriod {
+            period: doc.other_period,
+            subject: doc.subject,
+            student: doc.excluded_student,
+        }),
+        "the live row does not hold the named student, so the arm has nobody to unassign",
+    );
+}
+
+/// `Convergence::AssociationForSubjectWithoutInterrogations` — §8.2 row 7.
+///
+/// The twin associates a group list to `(period, excluded_subject)`: the entry
+/// is what is added, and the subject's interrogations — the other side of the
+/// predicate — are left exactly as the fixture built them.
+///
+/// The valid document holds no entry at that coordinate, and this is the arm's
+/// whole content: `AssignToSubject(period, subject, None)` carries the
+/// coordinate, so no identity test is expressible and the lookup is the only
+/// thing keeping the arm from unassigning a live association or emitting a
+/// perfect no-op.
+///
+/// **The subject half of the coordinate has no innocent witness**, and cannot
+/// have one: a live association naming a subject without interrogations *is*
+/// this invariant. The period half does — the fixture holds two entries on
+/// `period` — so that is the half this test pins.
+///
+/// **Exactly one break**: `excluded_subject` excludes `other_period`, not
+/// `period`, so row 8 does not join; the list associated has no colloscope row,
+/// so the colloscope block stays out of it.
+#[test]
+fn association_for_subject_without_interrogations_arm_spares_a_missing_entry() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    corrupt
+        .params
+        .group_lists
+        .subjects_associations
+        .insert((doc.period, doc.excluded_subject), doc.excluding_group_list);
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::Convergence(Convergence::AssociationForSubjectWithoutInterrogations(
+            doc.period,
+            doc.excluded_subject,
+        )),
+        "the live document has no entry at that coordinate, so the arm has nothing to unassign",
+    );
+}
+
+/// `Convergence::AssociationForSubjectNotRunningOnPeriod` — §8.2 row 8, which
+/// shares its match arm with row 7 and is tested separately because the
+/// *checker* is what tells the two apart.
+///
+/// The twin associates a group list to `(other_period, other_subject)`, the one
+/// coordinate in the fixture where a subject that runs interrogations is
+/// excluded on the period. That is what keeps row 7 out of the set: a subject
+/// with interrogations disabled would fire both.
+///
+/// Unlike row 7, this coordinate has a live neighbour on **both** halves — the
+/// fixture's `(period, subject)` and `(period, other_subject)` entries — so an
+/// arm that dropped either half of the key would find one of them and clear an
+/// association nothing complained about.
+///
+/// **Exactly one break**: `other_subject` runs interrogations, so row 7 stays
+/// quiet, and it hosts no slot, so nothing in the colloscope block is
+/// downstream of the entry.
+#[test]
+fn association_for_subject_not_running_on_period_arm_spares_a_missing_entry() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    corrupt.params.group_lists.subjects_associations.insert(
+        (doc.other_period, doc.other_subject),
+        doc.excluding_group_list,
+    );
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::Convergence(Convergence::AssociationForSubjectNotRunningOnPeriod(
+            doc.other_period,
+            doc.other_subject,
+        )),
+        "the live document has no entry at that coordinate, so the arm has nothing to unassign",
     );
 }
