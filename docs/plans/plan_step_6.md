@@ -1845,12 +1845,17 @@ Fixture style: build a document through the public surface
 `Data::annotate`, and drive `apply_cascade` on it directly.
 
 **Status (July 28 2026).** Landed: `1a` (`32b64bb8`), `1b`–`1e` (`df9357a2`), `2`
-(`a9201341`). Every one passed on its first run, so no map bug has surfaced yet. Remaining:
-scenarios 3, 4, 5, 6. Two scenario descriptions below turned out to be wrong when
+(`a9201341`), `3` (`ba82ac5b`). Every one passed on its first run, so no map bug has surfaced
+yet. Remaining: scenarios 4, 5, 6. Two scenario descriptions below turned out to be wrong when
 implemented, and both are corrected in place and marked **★ CORRECTION** — `1b`'s document is
 not constructible as described, and scenario 2 needs two slot pairing rules rather than one.
 Read those before writing the remaining fixtures: the `1b` one states a constraint that binds
-scenarios 3 and 5 as well.
+scenario 5 as well. (It was written as binding scenario 3 too; it does not. The constraint is
+about *colloscope cells*, and scenario 3 has none — its association is there because the
+scenario asks for one, not because a cell forces it.)
+
+Scenario 3's description held up as written: it landed with no ★ CORRECTION, and the only
+changes are the two **★ ADDITION**s recorded under it.
 
 Three rules apply to the whole section, settled at the July 28 2026 review.
 
@@ -2083,6 +2088,33 @@ Scenarios:
    landed set is **five** ops, not four — the extra one being the slot removal attributed to
    `SlotTeacherDoesNotTeachSubject`. This is the first fixture that requires **commit 5.99**
    (§7quater): `BalancingOp::SetSubject(subject, None)` does not exist before it.
+
+   **★ ADDITION, made at implementation (commit `ba82ac5b`, July 28 2026).** The trace above
+   was confirmed on the first run, against the op list derived by hand from the §8.2 table
+   beforehand, so nothing in the description needed correcting. The document grew by two rows
+   all the same, and neither of them touches the trace: they are both about what the
+   assertions can *see*.
+
+   - **A second subject `S2`, also taught by the teacher `t`.** It keeps its interrogations, so
+     it fires nothing and takes no part in the chain. What it buys is the shape of the teacher
+     fix. §8.2's row 2 claims the offending *element* leaves and the teacher survives —
+     `Teacher::subjects` is a set — but with a single-subject teacher the fix produces the
+     empty set, which is indistinguishable from an arm that cleared the whole thing. The
+     expected `AnnotatedTeacherOp::Update` is compared whole, so `S2` still sitting in it is
+     the assertion that separates the two readings. This is the same move as scenario 2's
+     second teacher and scenario 5's `WP2`, applied to a *field* rather than to a row.
+   - **A balancing override that is not `BalancingOptions::default()`.** With the default
+     value the override is byte-equal to the global options, so clearing it changes nothing
+     observable and `options_for(subject)` returns the same thing before and after. A distinct
+     override makes the removal a real change, lets the global options be asserted untouched
+     (the fix is `SetSubject`, not `SetGlobal`), and lets the *semantics* be asserted rather
+     than the table entry: the subject falls back to the global options at the end.
+
+   One more thing worth recording, since the paragraph above predicted it and the fixture is
+   where it shows: `SlotForSubjectWithoutInterrogations` does fire in round 1 and is never
+   picked, because by the time the engine could reach it the slot is already gone. The fixture
+   asserts a landed set of exactly five, so an arm that started emitting a second slot removal
+   would fail here — which is the closest thing §8.2 row 3's shadowing argument has to a test.
 4. **Student removal** (added July 28 2026). Target: `StudentOp::Remove`. `StudentRefSite`
    (`refs.rs:152-…`) has five variants and this fixture covers all five at once, which needs
    three group lists — a filling is either `Prefilled` or `Automatic`, so one list cannot play
