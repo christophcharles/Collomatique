@@ -2627,7 +2627,10 @@ remain:
   still teaching that subject and the slot still sitting on it, so the *valid* document carries
   the very shape the arm tests for and `Some` is the right answer. That corruption produces a
   **guilty** document, and a `None` test written on it would fail for a reason that has nothing
-  to do with the map. The twin must move the **row** instead: give the slot another teacher, put
+  to do with the map. Said the short way (★ user, July 28 2026): disabling a subject's
+  interrogations **is the cascade route this whole step exists for**. A document on that route
+  is by definition one the map is supposed to repair, so it can never serve as the innocent half
+  of anything. The twin must move the **row** instead: give the slot another teacher, put
   it on another subject, move its start time, add a subject to the teacher's set. Three of this
   block's four rows needed exactly that, and 7.5f's closing prediction — that `lone_slot`'s rule
   ("a corruption that moves a row between owners needs a row that owns nothing else") would bite
@@ -2640,8 +2643,20 @@ remain:
   teacher teach such a subject — that is row 2 itself, and the fixture would not have built —
   so the slot's live teacher cannot be teaching the destination subject, and the teacher-teaches
   check is **guaranteed** to fire beside row 3. The set is still two elements, and row 3 is
-  still selected out of it by shape: it is *not* `set.first()` here, since row 1 is declared
-  first, which is the pick-order independence the `SlotSubject` test only claimed to have.
+  still selected out of it by shape.
+
+  **Why the companion's identity matters, and where it does not** (★ user, July 28 2026, after
+  a first draft of this finding overreached). These tests call `fix_invariant` directly, with
+  an element the test picks. Nothing here runs the engine, so *nothing here depends on
+  canonical pick order at all* — whether the element under test happens to sort first, last or
+  in the middle changes nothing about the test. Selecting by shape already makes every
+  two-element test order-independent, and that was as true of `SlotSubject` in 7.5c as it is
+  here; the earlier claim that this test has some pick-order independence 7.5c "only claimed to
+  have" was simply wrong. The companion's identity is load-bearing for exactly one narrow
+  reason: the expected literal is `assert_eq!`d on the **whole** set, so it has to name whatever
+  else fires. That is the only reason to derive it, and it is reason enough — getting it wrong
+  is a red test.
+
   The fixture change this block needed is the second and last so far, and it is smaller than the
   one §9bis foresaw: a **second teacher**, on `other_subject` and teaching no slot at all. It
   exists so row 1's twin can point a slot at a *live* teacher who does not teach that slot's

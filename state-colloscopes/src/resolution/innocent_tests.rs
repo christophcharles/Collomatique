@@ -2032,8 +2032,10 @@ fn colloscope_group_list_key_arm_spares_a_row_of_a_live_list() {
 // rows. Turning a subject's interrogations off does make rows 2 and 3 fire —
 // but it leaves the teacher still teaching that subject and the slot still
 // sitting on it, so the *valid* document carries the very shape the arm tests
-// for, and `Some` is the right answer there. Such a corruption produces a
-// guilty document, not an innocent one. The twin has to move the **row**
+// for, and `Some` is the right answer there. Said the short way: disabling a
+// subject's interrogations is the cascade route this whole step exists for, so
+// a document on it is by definition one the map is *supposed* to repair — it
+// can never be the innocent half of anything. The twin has to move the **row**
 // instead: give the slot another teacher, put it on another subject, move its
 // start time, add a subject to the teacher's set.
 //
@@ -2153,14 +2155,21 @@ fn teacher_subject_without_interrogations_arm_spares_a_teacher_of_live_subjects(
 /// shadowing argument, and it holds on a corrupted twin exactly as it does on a
 /// live state. So the expected literal is a **two-element set**, still
 /// hand-derived and still `assert_eq!`d whole, and step 4 runs on the element
-/// the test is about, picked out by shape rather than by `set.first()` — which
-/// here is the *other* element.
+/// the test is about, picked out by shape.
+///
+/// Deriving the companion is worth the trouble for one reason only: the set is
+/// asserted *whole*, so the literal has to name it. Nothing here depends on
+/// which of the two sorts first — this test calls `fix_invariant` directly on
+/// the element it picked, and the canonical pick is the engine's business, which
+/// no test in this module touches.
 ///
 /// **The companion is row 1, and it cannot be anything else.** §9bis predicted
 /// row 2 and prescribed "turn the subject's `interrogation_parameters` to
-/// `None`"; that recipe does not produce an innocent state at all, since it
-/// leaves the slot sitting on the very subject the invariant names and the arm
-/// rightly answers `Some`. An innocent twin has to move the slot onto a
+/// `None`". That recipe does not produce an innocent state at all: disabling a
+/// subject's interrogations is the legitimate cascade route itself, so the
+/// document it makes is one the map is *supposed* to repair — the slot still
+/// sits on the very subject the invariant names, and the arm rightly answers
+/// `Some`. An innocent twin has to move the slot onto a
 /// *different* subject that runs no interrogations — and no valid document ever
 /// lets a teacher teach such a subject, so the teacher-teaches check is
 /// guaranteed to fire beside row 3. The slot's teacher is kept live, which
