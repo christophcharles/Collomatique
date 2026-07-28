@@ -54,13 +54,13 @@ use crate::ids::{
     SubjectId, TeacherId, WeekId, WeekPatternId,
 };
 use crate::incompats::Incompatibility;
-use crate::invariants::FixableInvariant;
+use crate::invariants::{Convergence, FixableInvariant};
 use crate::ops::{
     AssignmentOp, BalancingOp, ColloscopeOp, GroupListOp, IncompatOp, Op, PairingOp, PeriodOp,
     SettingsOp, SlotOp, SlotPairingOp, StudentOp, SubjectOp, TeacherOp, WeekOp, WeekPatternOp,
 };
 use crate::pairings::{PairingRule, RulePart};
-use crate::refs::{PeriodRefSite, Reference, TeacherRefSite};
+use crate::refs::{PeriodRefSite, Reference, SubjectRefSite, TeacherRefSite};
 use crate::settings::Limits;
 use crate::slot_pairings::{SlotPairingRule, SlotRulePart};
 use crate::slots::Slot;
@@ -282,6 +282,10 @@ pub(super) struct ValidDocument {
     slot: SlotId,
     /// Same subject as `slot` (the slot pairing rule demands it), no pattern.
     other_slot: SlotId,
+    /// Same subject again, but referenced by nothing else at all: no pattern, no
+    /// colloscope cell, no pairing rule. The slot to corrupt when the corruption
+    /// changes what a slot *is*.
+    lone_slot: SlotId,
     incompat: IncompatId,
     pairing: PairingRuleId,
     slot_pairing: SlotPairingRuleId,
@@ -417,6 +421,19 @@ pub(super) fn build_valid_document() -> (Data, ValidDocument) {
         )),
         NewId::SlotId,
         "adding the second slot"
+    );
+    // A third slot, deliberately in nothing: no week pattern, no colloscope
+    // cell, no pairing rule. Moving *this* slot to another subject breaks only
+    // what the move is about; moving either of the two above would drag in
+    // `PairedSlotsNotInSameSubject` and the cell's group bound as well.
+    let lone_slot = apply_new!(
+        data,
+        Op::Slot(SlotOp::AddAfter(
+            Some(other_slot),
+            make_slot(subject, teacher, None, 16)
+        )),
+        NewId::SlotId,
+        "adding the lone slot"
     );
     let incompat = apply_new!(
         data,
@@ -688,6 +705,7 @@ pub(super) fn build_valid_document() -> (Data, ValidDocument) {
         week_pattern,
         slot,
         other_slot,
+        lone_slot,
         incompat,
         pairing,
         slot_pairing,
@@ -1047,5 +1065,334 @@ fn association_entry_arm_spares_an_entry_on_another_period() {
             },
         }),
         "the subject's only live association sits on another period, so there is nothing to unassign",
+    );
+}
+
+// ---- Target: a subject (`SubjectRefSite`) ----
+//
+// Eight arms, and the widest spread of consequences in the map: three of them
+// *delete* a row outright (a slot, an incompatibility, a pairing rule), so a
+// missing identity test here does not merely widen something — it destroys
+// data. Two of the three are also **reachable on today's code**: nothing in
+// `force_apply_incompat`'s or `force_apply_pairing`'s `Update` guards the
+// subject field, so a user really can leave a live row pointing at a dead
+// subject and have the arm asked about it.
+//
+// The corruptions all gate the same way in the checker, which is what keeps
+// seven of the eight at one break: every `Convergence` predicate that would
+// have something to say about these rows reads the subject first
+// (`find_subject` behind a `let … else { continue }` or an `if let`), and a
+// dead subject makes it skip. `SlotSubject` is the exception, and it is the
+// documented one.
+
+/// `SubjectRefSite::TeacherSubjects`.
+///
+/// The corruption *adds* the dead subject to the teacher's set rather than
+/// replacing what is there. Replacing would take `subject` out of the set, and
+/// the teacher's three slots are all on `subject` — so
+/// `SlotTeacherDoesNotTeachSubject` would fire three times over and bury the
+/// dangle. Adding leaves every slot happy.
+///
+/// **Exactly one break**: `TeacherSubjectWithoutInterrogations` reads the
+/// subject behind a `let … else { continue }` (`invariants.rs:472`), so a dead
+/// one makes it skip.
+#[test]
+fn teacher_subjects_arm_spares_a_teacher_teaching_only_live_subjects() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    corrupt
+        .params
+        .teachers
+        .teacher_map
+        .get_mut(&doc.teacher)
+        .expect("the fixture's teacher is there")
+        .subjects
+        .insert(doc.dead_subject);
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::DanglingFk(Reference::Subject {
+            target: doc.dead_subject,
+            site: SubjectRefSite::TeacherSubjects(doc.teacher),
+        }),
+        "the live teacher teaches only live subjects, so the arm has no element to drop",
+    );
+}
+
+/// `SubjectRefSite::SlotSubject` — **the two-element exception** (§9bis).
+///
+/// No state where a slot's subject dangles breaks only one invariant. The
+/// teacher-teaches check gates on the *teacher* lookup alone — the subject id is
+/// a compared value, and a compared value deliberately does not gate
+/// (`invariants.rs:433-441`) — so a live teacher never `contains` the dead
+/// subject and `SlotTeacherDoesNotTeachSubject` fires beside the dangle. Killing
+/// the teacher too would only swap that companion for the `SlotTeacher` dangle.
+/// So the fixture keeps the teacher live and teaching, which makes the companion
+/// the deterministic one, and the expected literal is a **two-element set** —
+/// still hand-derived, still `assert_eq!`d whole.
+///
+/// Step 4 then runs on the element the test is about, picked out of the set by
+/// shape. It is *not* `set.first()`: that happens to be the dangle here, but
+/// relying on the derived `Ord` would make this test quietly about pick order
+/// instead of about the arm.
+///
+/// The slot corrupted is the one referenced by nothing else, and the surgery
+/// goes through `remove_slot` + `insert_slot_at` rather than a field write:
+/// the slot ordering is keyed *by subject*, so a raw write would leave the slot
+/// filed under its old subject and the twin would die at step 3 with a
+/// `LogicError`. `insert_slot_at` creates the dead subject's ordering row on
+/// demand, and those row keys are not liveness-checked.
+#[test]
+fn slot_subject_arm_spares_a_slot_whose_subject_is_live() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    let (_position, live_slot) = corrupt.params.slots.remove_slot(doc.lone_slot);
+    corrupt.params.slots.insert_slot_at(
+        doc.lone_slot,
+        Slot {
+            subject_id: doc.dead_subject,
+            ..live_slot
+        },
+        0,
+    );
+
+    let set = corrupt
+        .broken_invariants()
+        .expect("the corruption is fixable, not a logic error");
+    assert_eq!(
+        set,
+        BTreeSet::from([
+            FixableInvariant::DanglingFk(Reference::Subject {
+                target: doc.dead_subject,
+                site: SubjectRefSite::SlotSubject(doc.lone_slot),
+            }),
+            FixableInvariant::Convergence(Convergence::SlotTeacherDoesNotTeachSubject(
+                doc.lone_slot,
+                doc.teacher,
+                doc.dead_subject,
+            )),
+        ])
+    );
+    let invariant = set
+        .into_iter()
+        .find(|invariant| matches!(invariant, FixableInvariant::DanglingFk(_)))
+        .expect("the set was just asserted to hold the dangle");
+
+    assert_eq!(
+        valid.fix_invariant(&invariant),
+        None,
+        "the live slot's subject is not the dead one, so the arm has no slot to remove"
+    );
+}
+
+/// `SubjectRefSite::IncompatSubject` — **reachable on today's code**.
+///
+/// `force_apply_incompat`'s `Update` replaces the whole row with no field guards
+/// (`incompats.rs:108-124`), so `IncompatOp::Update(incompat, row naming a dead
+/// subject)` really lands, the checker really reports this dangle, and the gate
+/// really rolls it back. Without the arm's identity test the answer would be
+/// `Some(Incompat::Remove(incompat))` merely because the row exists — and the
+/// user would lose an incompatibility whose live subject was fine.
+///
+/// **Exactly one break**: no `Convergence` variant mentions an incompatibility
+/// at all.
+#[test]
+fn incompat_subject_arm_spares_an_incompat_whose_subject_is_live() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    corrupt
+        .params
+        .incompats
+        .incompat_map
+        .get_mut(&doc.incompat)
+        .expect("the fixture's incompatibility is there")
+        .subject_id = doc.dead_subject;
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::DanglingFk(Reference::Subject {
+            target: doc.dead_subject,
+            site: SubjectRefSite::IncompatSubject(doc.incompat),
+        }),
+        "the live incompatibility names a live subject, so the arm has no row to remove",
+    );
+}
+
+/// `SubjectRefSite::PairingRuleAntecedent` — **reachable**, like the arm above:
+/// `force_apply_pairing`'s `Update` has no field guards
+/// (`pairings.rs:237-247`).
+///
+/// The two parts get separate arms even though both emit the same `Remove`,
+/// which is exactly what this test and the next one pin: an arm testing neither
+/// part — or testing the wrong one — would delete a rule whose two parts are
+/// both live. Here only the **antecedent** is corrupted, so only the antecedent
+/// arm is asked; the consequent's own test is the next one.
+///
+/// `PairingRule`'s fields are private, so the twin goes through `into_parts` and
+/// the validating constructor. The dead subject is not the consequent's, so the
+/// rebuild cannot trip the one build error.
+#[test]
+fn pairing_rule_antecedent_arm_spares_a_rule_whose_antecedent_is_live() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    let (mut antecedent, consequent, excluded_periods, soft) = corrupt
+        .params
+        .pairings
+        .pairing_rule_map
+        .get(&doc.pairing)
+        .expect("the fixture's pairing rule is there")
+        .clone()
+        .into_parts();
+    antecedent.subject_id = doc.dead_subject;
+    corrupt.params.pairings.pairing_rule_map.insert(
+        doc.pairing,
+        PairingRule::new(antecedent, consequent, excluded_periods, soft)
+            .expect("the dead subject is not the consequent's, so the parts stay distinct"),
+    );
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::DanglingFk(Reference::Subject {
+            target: doc.dead_subject,
+            site: SubjectRefSite::PairingRuleAntecedent(doc.pairing),
+        }),
+        "the live rule's antecedent names a live subject, so the arm has no rule to remove",
+    );
+}
+
+/// `SubjectRefSite::PairingRuleConsequent` — the mirror of the arm above, and
+/// the reason the two are separate arms rather than one.
+#[test]
+fn pairing_rule_consequent_arm_spares_a_rule_whose_consequent_is_live() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    let (antecedent, mut consequent, excluded_periods, soft) = corrupt
+        .params
+        .pairings
+        .pairing_rule_map
+        .get(&doc.pairing)
+        .expect("the fixture's pairing rule is there")
+        .clone()
+        .into_parts();
+    consequent.subject_id = doc.dead_subject;
+    corrupt.params.pairings.pairing_rule_map.insert(
+        doc.pairing,
+        PairingRule::new(antecedent, consequent, excluded_periods, soft)
+            .expect("the dead subject is not the antecedent's, so the parts stay distinct"),
+    );
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::DanglingFk(Reference::Subject {
+            target: doc.dead_subject,
+            site: SubjectRefSite::PairingRuleConsequent(doc.pairing),
+        }),
+        "the live rule's consequent names a live subject, so the arm has no rule to remove",
+    );
+}
+
+/// `SubjectRefSite::BalancingSubjectKey` — a pure key site: the subject *is* the
+/// key, so there is no other half to drop and no identity test to write. The
+/// arm's whole content is one `contains`.
+///
+/// The fixture already carries a per-subject override for a live subject, and
+/// the corruption adds one for the dead subject beside it. So the valid document
+/// is not innocent by being empty: an arm that asked "are there any overrides at
+/// all" would find one and answer `Some` — and emit `SetSubject(dead, None)`,
+/// which against a state with no such entry is a perfect no-op, which the engine
+/// answers with a panic.
+///
+/// **Exactly one break**: `BalancingForSubjectWithoutInterrogations` reads the
+/// subject behind a `let … else { continue }` (`invariants.rs:534`).
+#[test]
+fn balancing_subject_key_arm_spares_an_override_on_a_live_subject() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    corrupt
+        .params
+        .balancing
+        .subjects
+        .insert(doc.dead_subject, BalancingOptions::default());
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::DanglingFk(Reference::Subject {
+            target: doc.dead_subject,
+            site: SubjectRefSite::BalancingSubjectKey,
+        }),
+        "the only live override is on a live subject, so the arm has no entry to drop",
+    );
+}
+
+/// `SubjectRefSite::AssignmentsKey` — the subject half of the key whose period
+/// half 7.5b tested, and corrupted the same way: the row is *added* on the dead
+/// subject for the period that already carries a live row.
+///
+/// So the valid document really does hold an assignments row on that period, and
+/// an arm that keyed on the period alone would find it and clear a row nothing
+/// complained about.
+///
+/// **Exactly one break**: `AssignmentForSubjectNotRunningOnPeriod` reads the
+/// subject behind an `if let` (`invariants.rs:488`), and the assigned student
+/// excludes no period.
+#[test]
+fn assignments_key_arm_spares_a_row_on_another_subject() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    corrupt.params.assignments.map.insert(
+        (doc.period, doc.dead_subject),
+        BTreeSet::from([doc.student]),
+    );
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::DanglingFk(Reference::Subject {
+            target: doc.dead_subject,
+            site: SubjectRefSite::AssignmentsKey { period: doc.period },
+        }),
+        "the period's only live row is on another subject, so the arm has no row to clear",
+    );
+}
+
+/// `SubjectRefSite::AssociationEntry` — the key-half twin of the arm above.
+///
+/// The live association on `(period, subject)` is left in place: it is what an
+/// arm keyed on the period alone would wrongly find, and it is also what keeps
+/// the fixture's colloscope cell legal.
+///
+/// **Exactly one break**: both association predicates read the subject behind a
+/// `let … else { continue }` (`invariants.rs:516`).
+#[test]
+fn association_entry_arm_spares_an_entry_on_another_subject() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    corrupt
+        .params
+        .group_lists
+        .subjects_associations
+        .insert((doc.period, doc.dead_subject), doc.group_list);
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::DanglingFk(Reference::Subject {
+            target: doc.dead_subject,
+            site: SubjectRefSite::AssociationEntry { period: doc.period },
+        }),
+        "the period's only live association is on another subject, so there is nothing to unassign",
     );
 }
