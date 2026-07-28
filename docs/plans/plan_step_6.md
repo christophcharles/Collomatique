@@ -1382,11 +1382,13 @@ Five consequences, each of which the tables below rely on:
    is one comparison that cannot be wrong, and uniformity is what makes the criterion above
    checkable by shape instead of by argument. It is also a cheap net against a plain bug.
 
-   **What catches a missing identity test**: the criterion above applied by eye, a fixture
-   asserting the *exact* op list (commit-7 scenarios 1 and 7), and — mechanically, one test
-   per variant — the **commit-7.5 `None` tests** (§9bis), which call `fix_invariant` directly
-   on a *valid* document with an invariant derived from a corrupted twin. The commit-8
-   property test cannot see it. Point 5 says the rest: do not spend review time deciding what
+   **What catches a missing identity test**: the criterion above applied by eye, the
+   commit-7.6 identity pins (§9ter.4 — end to end: `Err`, and the innocent row still there),
+   and — mechanically, one test per variant — the **commit-7.5 `None` tests** (§9bis), which
+   call `fix_invariant` directly on a *valid* document with an invariant derived from a
+   corrupted twin. (The `Ok`-route fixtures cannot see it: on a legitimate route the target
+   id *equals* the live field, so the exact op list comes out the same with or without the
+   test.) The commit-8 property test cannot see it either. Point 5 says the rest: do not spend review time deciding what
    a given missing test would lead to — write it.
 
    Where the reference is part of the row's identity there is nothing to compare (a
@@ -1633,8 +1635,12 @@ rebuild is a plain clone-and-edit — no `into_parts`.
 7's fixture 3 by hand). Any state where `SlotForSubjectWithoutInterrogations` fires holds a
 slot whose subject has interrogations disabled. That slot's teacher either teaches the subject
 — and then `TeacherSubjectWithoutInterrogations` also fires, declared *earlier* — or does not,
-and then `SlotTeacherDoesNotTeachSubject` fires, declared earlier still. There is no third
-case, and the engine picks only `set.first()` with no fallback, so row 3 can never be the pick.
+and then `SlotTeacherDoesNotTeachSubject` fires, declared earlier still. The third case — the
+slot's teacher id itself dangles — makes the teacher-teaches check *skip* (`invariants.rs:428`
+gates on the teacher lookup), but then the `SlotTeacher` dangle fires instead, and
+`DanglingFk` is declared before every `Convergence` (`invariants.rs:207-209`). In every case
+something declared earlier is in the set, and the engine picks only `set.first()` with no
+fallback, so row 3 can never be the pick.
 This holds through `Op::GlobalUpdate` too, since the argument is about the state, not the op.
 Exactly as for row 10 below, that is **not** a reason to weaken the arm or to skip its shape
 test — see frame point 5's closing ruling. It is recorded here so nobody spends an afternoon
@@ -2069,25 +2075,6 @@ Scenarios:
    An identical `Slot` is the right op for it: unambiguously a no-op, and clear of the
    canonical-absent rules that make an emptying colloscope or assignments write a real change.
 
-**Open item, to settle in one pass once the scenarios are reviewed.** Two coverage gaps turned
-up while tracing scenarios by hand, and both were deliberately **not** bolted onto whichever
-scenario happened to be under review:
-
-- §8.2 **row 11**, `InterrogationSlotNotRunningOnPeriod`. It needs a subject update that
-  *excludes a period*, which is neither scenario 3 (that one disables interrogations) nor
-  scenario 5. Row 12 got a home in scenario 5 only because the week-pattern document was
-  already the right place for it; row 11 has no such natural host.
-- **`SubjectOp::Remove` appears in no fixture at all.** Scenario 3 is a subject *update*; `1c`
-  and `1e` are period sites. Subject is the widest target kind in §8.1 — eight sites, more than
-  any other — and `BalancingSubjectKey`, `AssignmentsKey`, `AssociationEntry` and both
-  `PairingRule` parts are reached by nothing in commit 7. (The §9ter.4 identity pins touch two
-  of those arms, but only their `None` branch.)
-
-Once the last scenario is reviewed, do one coverage sweep over §8.1 and §8.2 together, list
-every arm no fixture reaches, and decide the whole set at once. The §9 coverage decision above
-(7.5 covers every `None` branch; `Some` branches are covered by whatever the fixtures happen to
-walk through) is what that sweep is measured against — not a licence to skip it.
-
 Two scenarios stood here through the earlier drafts and were moved out at the July 28 2026
 review, into their own commit 7.6 (§9ter): the **self-caused rejections** and the
 **collateral-damage identity pins**. Both convict the target and land nothing, both read the
@@ -2132,6 +2119,26 @@ Why this shape:
 - **`assert_eq!` on the whole set, not `contains`.** It pins that the corruption is
   *surgical*: one edit, one broken shape. A corruption that breaks two things at once makes
   a muddy test.
+
+  **Two arms cannot meet the one-element form, and get a stated exception** (found at the
+  July 28 2026 second review). For `SlotSubject`, *any* state where `slot.subject_id`
+  dangles co-breaks something: the teacher-teaches check gates only on the *teacher*
+  lookup — an id used as a compared value deliberately does not gate
+  (`invariants.rs:410-414`) — so a live teacher never `contains` the dead subject and
+  `SlotTeacherDoesNotTeachSubject` fires beside the dangle; making the teacher dead
+  instead merely swaps that companion for the `SlotTeacher` dangle. And for
+  `SlotForSubjectWithoutInterrogations`, §8.2 row 3's shadowing argument applies to the
+  corrupted twin exactly as it does to live states: row 2 (or row 1, or a dangle) always
+  fires with it. For these two tests the expected literal is a **two-element set, still
+  hand-derived and still `assert_eq!`'d whole**. Keep the slot's teacher live and teaching
+  so the companion is the deterministic one: for `SlotSubject` the set is the dangle plus
+  `SlotTeacherDoesNotTeachSubject(slot, teacher, dead_subject)`; for row 3 (corrupt by
+  turning the subject's `interrogation_parameters` to `None`) it is row 3 plus row 2,
+  `TeacherSubjectWithoutInterrogations(teacher, subject)` — and that fixture's subject
+  must carry no association and no balancing override, or rows 7 and 9 join the set.
+  Step 4 then runs on the element the test is about, selected from the set — not on
+  `set.first()`. Every other arm keeps the one-element form; a future arm that cannot is a
+  finding to record here, never a licence to fall back to `contains`.
 - **The twin is built by direct field surgery, not by an op.** `force_apply` cannot reach
   several of these shapes — it keeps the coordinate carve-out prechecks, so
   `CannotChangeSubject` blocks a slot's subject (`slots.rs:465-471`), `force_add_week` and
@@ -2146,6 +2153,25 @@ Why this shape:
 `state-colloscopes/src/resolution/innocent_tests.rs`, declared `#[cfg(test)] mod
 innocent_tests;` from `resolution.rs` — beside the map it audits, and following the house
 `foo.rs` + `foo/` layout.
+
+**Two surgeries must go through the sidecar helpers, not raw fields** (settled at the
+July 28 2026 second review). `Slots` and `Weeks` both carry a type-level ordering mirror,
+and the mirror LogicErrors short-circuit `broken_invariants()` (`invariants.rs:234-246`):
+a twin whose mirror is desynced dies at step 3 with `SlotOrderingWrongSubject` /
+`WeekOrderingWrongPeriod` instead of yielding the invariant. Their fields are
+module-private, but the `pub(crate)` compound mutators are reachable from this module
+(`invariants.rs`'s own tests already use them) and keep the mirror consistent — and the
+ordering sidecar's *row keys* are deliberately not liveness-checked, which is exactly the
+hole these twins need:
+
+- `SlotSubject`: `remove_slot(id)`, then `insert_slot_at(dead_subject, modified_slot, 0)`
+  — the ordering row for the dead subject is created on demand.
+- `WeekPeriodFk`: `move_week_entry(week_id, dead_period, 0)` (`weeks.rs:452-491`) — it
+  does not check that the destination period exists, and rewrites the sidecar and
+  `week_map[week].period_id` together in one call.
+- Do **not** reach for `replace_slot` with a changed subject: it is a bare `mem::replace`
+  on `slot_map` ("subject unchanged" is a doc promise, not a check) and desyncs the
+  mirror.
 
 **The negative half only.** These tests say the arm does *not* fire on an innocent document.
 The positive half — the arm *does* fire when the offending shape really is in the live state
@@ -2291,11 +2317,19 @@ restores with `*data = snapshot` on the whole value, so recycling cannot regress
 from `Clone`.
 
 **1a — `SlotOverflowsDay`, rejected.** A subject with a 60-minute interrogation and a slot
-starting at 22:00. Target: `SlotOp::Update(slot, same slot at 23:30)`. Post-op,
-`SlotWithDuration::new(23:30, 60)` is `None` and the checker reports
+starting at 23:00 — a valid document, because a slot ending *exactly* at midnight does not
+overflow (`SlotWithDuration::new` accepts it; its doctest pins `22:00 + 2h = 00:00` as
+`Some`, `time/src/lib.rs:639-656`). Target: `SlotOp::Update(slot, same slot at 23:30)`.
+Post-op, `SlotWithDuration::new(23:30, 60)` is `None` and the checker reports
 `SlotOverflowsDay { slot, start: 23:30, duration: 60 }` (`invariants.rs:438-446`). The gate
 rolls back. The arm compares the invariant's `start` with the live `slot.start_time`, which is
-still 22:00 — mismatch, `None`, target convicted.
+still 23:00 — mismatch, `None`, target convicted.
+
+The 23:00 start is load-bearing for the *pair*, not just for 1a (fixed at the July 28 2026
+second review — an earlier draft had the slot at 22:00). 1b below reuses this document and
+grows the interrogation to 90 minutes; from 22:00 that ends at 23:30 and does not overflow,
+so 1b would silently fire nothing. From 23:00 both halves overflow: 23:30 + 60 for 1a,
+23:00 + 90 for 1b.
 
 This fixture is unwritable before **commit 5.97**. On today's payload the variant carries only
 a `SlotId`, so the arm has no second conjunct at all: the slot exists, and the only possible
@@ -2304,7 +2338,8 @@ deletes it. 1a is the end-to-end reason 5.97 exists.
 
 **1b — `SlotOverflowsDay`, accepted.** The mirror of 1a, and the pair is worth more than
 either half. Same document, but the target is `SubjectOp::Update(S, interrogation duration
-90)` with the slot left at 23:00. The same invariant fires on the same slot — but this time
+90)` with the slot left at 23:00 (90 minutes from 23:00 ends at 00:30 — overflow). The same
+invariant fires on the same slot — but this time
 the slot's `start_time` is exactly what the invariant names, the shape test passes, the arm
 answers `Some(Slot::Remove(slot))`, the fix lands and the target lands after it. Assert `Ok`,
 `applied.inner()` of length 2, and the slot gone.
@@ -2554,6 +2589,4 @@ out rather than left to "the tests we wrote":
   and can never be the pick; and the engine's `InvalidOp`-with-remembered-break conviction
   route (`cascade.rs:124-131`) is reached by no test, with no colloscope target known for it
   (§9ter.5). Both recorded as facts, neither used as a licence to weaken an arm.
-- **the outcome of the coverage sweep** that the open item at the foot of §9 requires, and
-  which must be run before the plan is retired.
 - and why the contract panic is **not** counted as a safety net.
