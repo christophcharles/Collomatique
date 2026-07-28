@@ -24,19 +24,20 @@
 
 use collomatique_state::{AppState, InMemoryData, apply_cascade, traits::Manager};
 use collomatique_state_colloscopes::{
-    ColloscopeOp, Data, GroupListOp, NewId, NonEmptyRangeInclusive, Op, PairingOp, PeriodOp,
-    SlotOp, SlotPairingOp, StudentOp, Subject, SubjectInterrogationParameters, SubjectOp,
+    BalancingOp, ColloscopeOp, Data, GroupListOp, NewId, NonEmptyRangeInclusive, Op, PairingOp,
+    PeriodOp, SlotOp, SlotPairingOp, StudentOp, Subject, SubjectInterrogationParameters, SubjectOp,
     SubjectParameters, SubjectPeriodicity, TeacherOp, WeekOp, WeekPatternOp,
+    balancing::BalancingOptions,
     group_lists::{GroupList, GroupListFilling, GroupListParameters},
     ids::{
         GroupListId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId, SubjectId,
         TeacherId, WeekId, WeekPatternId,
     },
     ops::{
-        AnnotatedAssignmentOp, AnnotatedColloscopeOp, AnnotatedGroupListOp, AnnotatedOp,
-        AnnotatedPairingOp, AnnotatedPeriodOp, AnnotatedSlotOp, AnnotatedSlotPairingOp,
-        AnnotatedStudentOp, AnnotatedSubjectOp, AnnotatedTeacherOp, AnnotatedWeekOp,
-        AnnotatedWeekPatternOp,
+        AnnotatedAssignmentOp, AnnotatedBalancingOp, AnnotatedColloscopeOp, AnnotatedGroupListOp,
+        AnnotatedOp, AnnotatedPairingOp, AnnotatedPeriodOp, AnnotatedSlotOp,
+        AnnotatedSlotPairingOp, AnnotatedStudentOp, AnnotatedSubjectOp, AnnotatedTeacherOp,
+        AnnotatedWeekOp, AnnotatedWeekPatternOp,
     },
     pairings::{PairingRule, RulePart},
     slot_pairings::{SlotPairingRule, SlotRulePart},
@@ -1250,5 +1251,230 @@ fn fixture_2_teacher_removal_fans_out_below_the_root() {
         inner.params.slots.find_slot(slot_c),
         Some(&innocent_slot),
         "and their slot is byte-identical, not merely present"
+    );
+}
+
+/// Fixture `3` — a **fix that is itself rejected and cascades further**, along a
+/// chain of `Convergence` breaks.
+///
+/// Every fixture before this one walks `DanglingFk` sites: something is removed
+/// and the references to it are repaired. This one walks a different axis of the
+/// map. Nothing dangles here — every reference resolves — and what is wrong is a
+/// *relation* between two live rows.
+///
+/// A subject `S` with interrogations enabled, a teacher `t` who teaches it, a
+/// slot on `S` taught by `t`, a group-list association on `(P, S)` and a
+/// balancing override on `S`. Target:
+/// `SubjectOp::Update(S, the same subject with interrogations off)`.
+///
+/// The trace, derived from §8.2's table and not from a run. `Convergence`'s
+/// declaration order is the canonical pick order.
+///
+/// - **Round 1.** The target applies and breaks **four** invariants at once:
+///   `TeacherSubjectWithoutInterrogations`, `SlotForSubjectWithoutInterrogations`,
+///   `AssociationForSubjectWithoutInterrogations` and
+///   `BalancingForSubjectWithoutInterrogations`.
+///   `SlotTeacherDoesNotTeachSubject` — declared before all of them — does *not*
+///   fire: the teacher still teaches the subject. So the pick is
+///   `TeacherSubjectWithoutInterrogations` and the fix is
+///   `Teacher(Update(t, minus S))`.
+/// - **Round 2.** That fix is applied over the rolled-back document, and **fails
+///   the gate itself**: with `S` gone from the teacher, the slot's teacher no
+///   longer teaches the slot's subject, so `SlotTeacherDoesNotTeachSubject`
+///   breaks. Its arm removes the slot.
+/// - **Round 3 onward.** The slot removal lands; the teacher trim is retried and
+///   lands; the target is retried and now reports only the association and the
+///   balancing breaks, which clear one per round in declaration order; then the
+///   target lands.
+///
+/// Five ops, not four — the extra one is the slot removal, attributed to
+/// `SlotTeacherDoesNotTeachSubject` rather than to the arm one would expect. The
+/// intermediate state that produces it — a teacher who has dropped a subject
+/// while a slot of theirs still runs on it — is one no user action can reach
+/// directly, which is exactly where a map bug would hide.
+///
+/// Note what is *not* in the landed set: `SlotForSubjectWithoutInterrogations`
+/// is never picked, even though it fires in round 1. Its slot is already gone,
+/// removed by a different arm. That is structural rather than an artefact of
+/// this document — §8.2's row 3 carries the argument — and this fixture is where
+/// it shows.
+///
+/// **A second subject `S2`, also taught by `t`**, is the innocent bystander. It
+/// keeps its interrogations, so it takes no part in the trace; what it buys is
+/// the shape of the teacher fix. `Teacher::subjects` is a set, so §8.2's row 2
+/// claims the offending *element* leaves and the teacher survives — and with a
+/// single-subject teacher the resulting empty set is indistinguishable from an
+/// arm that cleared the whole thing. The expected op is compared whole, so `S2`
+/// still being in it is the assertion that separates the two.
+///
+/// Content, not sequence: round 1 has four simultaneous breaks, so the engine
+/// genuinely picks, and pinning that pick is `1a`'s job.
+#[test]
+fn fixture_3_a_rejected_fix_cascades_through_convergence_breaks() {
+    let mut app = AppState::<Data, String>::new(Data::new());
+
+    let period: PeriodId = apply_new!(
+        app,
+        Op::Period(PeriodOp::AddFront),
+        NewId::PeriodId,
+        "adding a period"
+    );
+    let subject: SubjectId = apply_new!(
+        app,
+        Op::Subject(SubjectOp::AddAfter(
+            None,
+            interrogation_subject("Math", BTreeSet::new())
+        )),
+        NewId::SubjectId,
+        "adding the subject to turn off"
+    );
+    // The innocent bystander: it keeps its interrogations, and its only job is
+    // to be still there in the teacher the fix rebuilds.
+    let other_subject: SubjectId = apply_new!(
+        app,
+        Op::Subject(SubjectOp::AddAfter(
+            Some(subject),
+            interrogation_subject("Physique", BTreeSet::new())
+        )),
+        NewId::SubjectId,
+        "adding the innocent subject"
+    );
+    let teacher: TeacherId = apply_new!(
+        app,
+        Op::Teacher(TeacherOp::Add(Teacher {
+            desc: Default::default(),
+            subjects: BTreeSet::from([subject, other_subject]),
+        })),
+        NewId::TeacherId,
+        "adding the teacher"
+    );
+    let slot: SlotId = apply_new!(
+        app,
+        Op::Slot(SlotOp::AddAfter(None, make_slot(subject, teacher, None, 8))),
+        NewId::SlotId,
+        "adding the slot"
+    );
+    let group_list: GroupListId = apply_new!(
+        app,
+        Op::GroupList(GroupListOp::Add(automatic_group_list(
+            "Liste",
+            2,
+            BTreeSet::new()
+        ))),
+        NewId::GroupListId,
+        "adding a group list"
+    );
+    apply_ok(
+        &mut app,
+        Op::GroupList(GroupListOp::AssignToSubject(
+            period,
+            subject,
+            Some(group_list),
+        )),
+        "associating the group list",
+    );
+    // Deliberately *not* the default options: the entry has to be visibly
+    // different from the global ones, so that its removal is a real change and
+    // the global ones can be checked untouched at the end.
+    let override_options = BalancingOptions {
+        avoid_twice_in_a_row: false,
+        year_teacher_rotation: true,
+        ..Default::default()
+    };
+    apply_ok(
+        &mut app,
+        Op::Balancing(BalancingOp::SetSubject(
+            subject,
+            Some(override_options.clone()),
+        )),
+        "setting the balancing override",
+    );
+
+    let global_balancing = app
+        .get_data()
+        .get_inner_data()
+        .params
+        .balancing
+        .global
+        .clone();
+
+    let subject_off = plain_subject("Math", BTreeSet::new());
+    let mut data = app.get_data().clone();
+    let (target, _new_info) =
+        data.annotate(Op::Subject(SubjectOp::Update(subject, subject_off.clone())));
+
+    let applied = apply_cascade(&mut data, target).expect("the cascade resolves the chain");
+
+    let expected = vec![
+        AnnotatedOp::from(AnnotatedSlotOp::Remove(slot)),
+        AnnotatedOp::from(AnnotatedTeacherOp::Update(
+            teacher,
+            Teacher {
+                desc: Default::default(),
+                subjects: BTreeSet::from([other_subject]),
+            },
+        )),
+        AnnotatedOp::from(AnnotatedGroupListOp::AssignToSubject(period, subject, None)),
+        AnnotatedOp::from(AnnotatedBalancingOp::SetSubject(subject, None)),
+        AnnotatedOp::from(AnnotatedSubjectOp::Update(subject, subject_off.clone())),
+    ];
+    assert_same_ops(&forward_ops(&applied), &expected);
+
+    assert_clean(&data);
+    let inner = data.get_inner_data();
+    assert_eq!(
+        inner.params.subjects.find_subject(subject),
+        Some(&subject_off),
+        "the target landed: the subject runs no interrogations any more"
+    );
+    assert!(
+        inner.params.slots.find_slot(slot).is_none(),
+        "the slot went with the teacher's trim, not with the target"
+    );
+    // §8.2 row 2: the offending element leaves, the teacher stays — and `S2` is
+    // what tells that apart from a cleared set.
+    assert_eq!(
+        inner.params.teachers.teacher_map.get(&teacher),
+        Some(&Teacher {
+            desc: Default::default(),
+            subjects: BTreeSet::from([other_subject]),
+        }),
+        "the teacher survives, having lost exactly the one subject"
+    );
+    assert!(
+        inner
+            .params
+            .group_lists
+            .subjects_associations
+            .get(&(period, subject))
+            .is_none(),
+        "the association is cleared"
+    );
+    assert!(
+        inner
+            .params
+            .group_lists
+            .group_list_map
+            .get(&group_list)
+            .is_some(),
+        "unassigning leaves the group list itself in place"
+    );
+    assert!(
+        inner.params.balancing.subjects.get(&subject).is_none(),
+        "the balancing override is cleared"
+    );
+    assert_eq!(
+        inner.params.balancing.global, global_balancing,
+        "and the global balancing options are untouched"
+    );
+    assert_eq!(
+        inner.params.balancing.options_for(subject),
+        &global_balancing,
+        "so the subject falls back to the global options"
+    );
+    assert_eq!(
+        inner.params.subjects.find_subject(other_subject),
+        Some(&interrogation_subject("Physique", BTreeSet::new())),
+        "the innocent subject is untouched"
     );
 }
