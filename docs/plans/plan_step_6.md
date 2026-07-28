@@ -2432,19 +2432,21 @@ Three rules for the series:
   corruption, not the document. The builder belongs in 7.5a and is written to be reused —
   do not copy a fixture per test.
 
-**Status: the whole dangling-FK half has landed, and the first `Convergence` commit with it** —
-7.5a (`b04bdcaf`), 7.5b (`362dde77`), 7.5c (`acaab2fb`), 7.5d (`cba1a8b2`), 7.5e (`332ef6a6`),
-7.5f (`3d9deb0b`) and 7.5g (`e73d6572`, §8.2 rows 1-4; the letter is this document's, the split
-table above numbers only the six dangling-FK commits). So
+**Status: the whole dangling-FK half has landed, and the first two `Convergence` commits with
+it** — 7.5a (`b04bdcaf`), 7.5b (`362dde77`), 7.5c (`acaab2fb`), 7.5d (`cba1a8b2`),
+7.5e (`332ef6a6`), 7.5f (`3d9deb0b`), 7.5g (`e73d6572`, §8.2 rows 1-4) and 7.5h (`1c350820`,
+§8.2 rows 5-8; the letters are this document's, the split table above numbers only the six
+dangling-FK commits). So
 `src/resolution/innocent_tests.rs` exists with its `#[cfg(test)] mod innocent_tests;` line in
-`resolution.rs`, the shared builder, and **thirty-four tests**: one per §8.1 arm — the
+`resolution.rs`, the shared builder, and **thirty-eight tests**: one per §8.1 arm — the
 `SlotTeacher` arm, all seven `PeriodRefSite` arms, all eight `SubjectRefSite` ones, all five
 `StudentRefSite` ones, both `WeekRefSite` ones, both `WeekPatternRefSite` ones, all three
-`SlotRefSite` ones and both `GroupListRefSite` ones — plus §8.2 rows 1-4. Every one passed on
+`SlotRefSite` ones and both `GroupListRefSite` ones — plus §8.2 rows 1-8. Every one passed on
 its first run, with its hand-derived set; **no map bug has surfaced anywhere in §8.1, nor in the
-first §8.2 block**. Three commits remain, all `Convergence`: rows 5-8, rows 9-12, and rows 13-16
-with the two `GlobalUpdate` policy pins folded in. The shared fixture has been touched exactly
-twice across the seven commits (7.5c's `lone_slot`, 7.5g's `other_teacher`). Four things settled
+first two §8.2 blocks**. Two commits remain, both `Convergence`: rows 9-12, and rows 13-16
+with the two `GlobalUpdate` policy pins folded in. The shared fixture has been touched three
+times across the eight commits (7.5c's `lone_slot`, 7.5g's `other_teacher`, 7.5h's second
+assignments row and second association). Four things settled
 while writing 7.5a, all of them things the rest of the series inherits:
 
 - ★ **The in-crate equivalent of "through `Manager::apply`" is `Data::annotate` + `Data::apply`.**
@@ -2662,6 +2664,35 @@ remain:
   exists so row 1's twin can point a slot at a *live* teacher who does not teach that slot's
   subject — §8.2 row 1's reachable route, and the only way to pin the teacher comparison, which
   §8.2 calls the load-bearing one, instead of settling for the defensive subject comparison.
+
+And two from 7.5h, both about what a **coordinate-shaped** arm can and cannot be tested for:
+
+- ★ **For a coordinate-shaped arm the lookup is the only thing there is, so the corrupt
+  coordinate needs a live neighbour on each half — and the container's own API says which
+  halves are worth the trouble.** Rows 5, 7 and 8 have no identity test to write: the op carries
+  the coordinate, so a wrong target is not expressible. That leaves exactly two bugs a `None`
+  test can catch — an arm that skipped the lookup (which the engine would answer with the no-op
+  panic) and an arm that keyed on half the coordinate. Guarding the second is what the fixture's
+  two new rows are for: `(other_period, subject)` in the assignments, `(period, other_subject)`
+  in the associations. The choice of which halves to cover is not a matter of taste — it follows
+  the container. `Assignments` exposes `subjects_for_period`, so a period-keyed arm is a bug
+  that can really be written and the period half is worth a neighbour; there is no
+  subject-keyed lookup, so that half was deliberately left uncovered rather than paying for a
+  third row. `subjects_associations` is a plain `Table` keyed by the pair with no half-keyed
+  lookup at all, so there the neighbours mainly keep the map from being a singleton. Record the
+  reasoning with the fixture rows, not just the rows.
+- ★ **Row 7's subject half has no innocent witness, and provably cannot have one.** A live
+  neighbour for it would be a second association naming a subject whose interrogations are
+  disabled — and that association *is* row 7, so no valid document can hold one. The offending
+  predicate is a property of the subject alone, so the subject half has nothing innocent to
+  compare against, at any fixture. This is the first stated coverage limit of the series, and
+  it generalises: **whenever a `Convergence` predicate depends only on one half of the
+  coordinate, that half is untestable this way.** Row 8 escapes it because its predicate is
+  relational — a subject that excludes one period may be associated on another — which is why
+  row 8's twin has neighbours on both halves and row 7's on one. Making row 8 reachable at all
+  is what the third fixture change bought: `other_subject` now excludes `other_period`, making
+  it the fixture's only subject that runs interrogations and does not run everywhere, which is
+  exactly the combination that fires row 8 without dragging row 7 in.
 
 ## 9ter. Commit 7.6 — the self-caused rejection fixtures (`tests/cascade.rs`)
 
