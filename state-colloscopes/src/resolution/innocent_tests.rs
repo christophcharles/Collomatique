@@ -60,7 +60,7 @@ use crate::ops::{
     SettingsOp, SlotOp, SlotPairingOp, StudentOp, SubjectOp, TeacherOp, WeekOp, WeekPatternOp,
 };
 use crate::pairings::{PairingRule, RulePart};
-use crate::refs::{PeriodRefSite, Reference, SubjectRefSite, TeacherRefSite};
+use crate::refs::{PeriodRefSite, Reference, StudentRefSite, SubjectRefSite, TeacherRefSite};
 use crate::settings::Limits;
 use crate::slot_pairings::{SlotPairingRule, SlotRulePart};
 use crate::slots::Slot;
@@ -1394,5 +1394,230 @@ fn association_entry_arm_spares_an_entry_on_another_subject() {
             site: SubjectRefSite::AssociationEntry { period: doc.period },
         }),
         "the period's only live association is on another subject, so there is nothing to unassign",
+    );
+}
+
+// ---- Target: a student (`StudentRefSite`) ----
+//
+// Five arms, and not one of them deletes a row: a student is always dropped
+// *out* of something that survives — a prefilled group, an excluded set, an
+// assignments row, a colloscope placements row — or an override entry keyed by
+// the student is cleared. So a missing identity test here does not destroy a
+// row; it silently drops an innocent student out of one, which is worse in a
+// different way, because nothing about the resulting document looks wrong.
+//
+// Four of the five emit an op that does **not** name the student
+// (`GroupListOp::Update`, `AssignmentOp::SetRow`, `ColloscopeOp::SetGroupList`
+// all carry the rebuilt row, never the member being removed), so rule 4 asks
+// each of them for an explicit identity test. The fifth,
+// `SettingsStudentKey`, emits `SetStudent(student, None)`, which does carry the
+// target — there the test under scrutiny is the *presence* one, which exists to
+// keep the arm from emitting a perfect no-op.
+//
+// Two of the four are also the arms whose presence test doubles as a
+// variant test: a group list is prefilled or automatic, never both, so
+// `contains_student` is `false` on an automatic list and the excluded arm
+// matches `GroupListFilling::Automatic` explicitly. The fixture holds one list
+// of each kind, so an arm that forgot which it was looking at has something to
+// trip over.
+
+/// `StudentRefSite::GroupListPrefilledStudent`.
+///
+/// The corruption puts the dead student in the prefilled list's *second* group,
+/// leaving the first exactly as built — so the valid document still holds the
+/// innocent counterpart, a prefilled list whose members are all live.
+///
+/// **Exactly one break**: no `Convergence` predicate reads `group_list_map` at
+/// all. The colloscope group-list loop is the only one that looks at group-list
+/// membership (`invariants.rs:628`), and it iterates over the *colloscope*'s
+/// rows, which this list has none of.
+#[test]
+fn group_list_prefilled_student_arm_spares_a_list_of_live_members() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    let (params, filling) = corrupt
+        .params
+        .group_lists
+        .group_list_map
+        .get(&doc.prefilled_group_list)
+        .expect("the fixture's prefilled group list is there")
+        .clone()
+        .into_parts();
+    let GroupListFilling::Prefilled { mut groups } = filling else {
+        panic!("the fixture's prefilled group list is prefilled");
+    };
+    groups[1].students.insert(doc.dead_student);
+    corrupt.params.group_lists.group_list_map.insert(
+        doc.prefilled_group_list,
+        GroupList::new(params, GroupListFilling::Prefilled { groups })
+            .expect("the group count is unchanged and the dead student sits in one group only"),
+    );
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::DanglingFk(Reference::Student {
+            target: doc.dead_student,
+            site: StudentRefSite::GroupListPrefilledStudent(doc.prefilled_group_list),
+        }),
+        "the live list holds only live students, so the arm has no member to drop",
+    );
+}
+
+/// `StudentRefSite::GroupListExcludedStudent`.
+///
+/// The corruption swaps the excluded student for the dead one rather than adding
+/// it, keeping the set a singleton — the same choice the two
+/// `*ExcludedPeriods` arms above make, and for the same reason: a singleton is
+/// the surgical edit. The valid document's counterpart is still a list that
+/// excludes *somebody*, so the arm cannot pass by finding an empty set.
+///
+/// **Exactly one break**, for the same reason as the arm above: nothing in
+/// `convergence_breaks` reads an excluded set except through a colloscope row,
+/// and this list has none.
+#[test]
+fn group_list_excluded_student_arm_spares_a_list_excluding_a_live_student() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    let (params, _filling) = corrupt
+        .params
+        .group_lists
+        .group_list_map
+        .get(&doc.excluding_group_list)
+        .expect("the fixture's excluding group list is there")
+        .clone()
+        .into_parts();
+    corrupt.params.group_lists.group_list_map.insert(
+        doc.excluding_group_list,
+        GroupList::new(
+            params,
+            GroupListFilling::Automatic {
+                excluded_students: BTreeSet::from([doc.dead_student]),
+            },
+        )
+        .expect("`GroupList::new` validates the prefilled branch only"),
+    );
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::DanglingFk(Reference::Student {
+            target: doc.dead_student,
+            site: StudentRefSite::GroupListExcludedStudent(doc.excluding_group_list),
+        }),
+        "the live list excludes a live student, so the arm has no element to drop",
+    );
+}
+
+/// `StudentRefSite::SettingsStudentKey` — a pure key site, the student twin of
+/// `BalancingSubjectKey`. The op names the student, so a wrong target is not
+/// expressible; what the arm needs, and what this pins, is the *presence* test.
+///
+/// The corruption adds an override for the dead student beside the fixture's
+/// live one. So the valid document is not innocent by being empty: an arm that
+/// asked "are there any per-student overrides at all" would find one and emit
+/// `SetStudent(dead_student, None)`, which against a state with no such entry is
+/// a perfect no-op — and the engine answers a no-op fix with a panic.
+///
+/// **Exactly one break**: no `Convergence` predicate mentions
+/// `settings.students`.
+#[test]
+fn settings_student_key_arm_spares_an_override_on_a_live_student() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    corrupt
+        .params
+        .settings
+        .students
+        .insert(doc.dead_student, Limits::default());
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::DanglingFk(Reference::Student {
+            target: doc.dead_student,
+            site: StudentRefSite::SettingsStudentKey,
+        }),
+        "the only live override is on a live student, so the arm has no entry to drop",
+    );
+}
+
+/// `StudentRefSite::AssignmentsStudent` — the site whose payload is a whole
+/// *key*, `{period, subject}`, neither component of which is the target. The op
+/// is `SetRow(period, subject, rebuilt)`, which names the row but not the member
+/// being removed, so the identity test is the only thing standing between an
+/// innocent student and being unassigned.
+///
+/// The corruption adds the dead student to the fixture's live row rather than
+/// building a row of its own: the arm is meant to be asked about a row that
+/// really exists and really has members, and to answer `None` because none of
+/// them is the one named.
+///
+/// **Exactly one break**: `AssignedStudentNotPresentForPeriod` reads the student
+/// behind a `let … else { continue }` (`invariants.rs:496`), so a dead one makes
+/// it skip, and the row's subject excludes no period.
+#[test]
+fn assignments_student_arm_spares_a_row_of_live_students() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    corrupt.params.assignments.map.insert(
+        (doc.period, doc.subject),
+        BTreeSet::from([doc.student, doc.other_student, doc.dead_student]),
+    );
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::DanglingFk(Reference::Student {
+            target: doc.dead_student,
+            site: StudentRefSite::AssignmentsStudent {
+                period: doc.period,
+                subject: doc.subject,
+            },
+        }),
+        "the live row assigns only live students, so the arm has no member to drop",
+    );
+}
+
+/// `StudentRefSite::ColloscopeGroupListStudent`.
+///
+/// The corruption places the dead student in the fixture's colloscope row, in
+/// group 0. The group number matters: the row's list has two groups, so 0 is in
+/// bounds and `ColloscopeStudentGroupOutOfBounds` stays quiet, and the list is
+/// automatic with an empty excluded set, so `ColloscopeStudentExcluded` does
+/// too. **Exactly one break.**
+///
+/// The arm answers `None` on three counts, and this test pins the third: a
+/// missing row, a live row that does not place the student, and — the one under
+/// test here — a live row that places somebody else entirely. All three would
+/// otherwise produce a `SetGroupList` that either changes nothing at all (the
+/// no-op panic again) or quietly unplaces an innocent student.
+#[test]
+fn colloscope_group_list_student_arm_spares_a_row_of_live_placements() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    let mut placements = corrupt
+        .colloscope
+        .group_list(doc.group_list)
+        .expect("the fixture's colloscope group-list row is there")
+        .clone();
+    placements.insert(doc.dead_student, 0);
+    corrupt
+        .colloscope
+        .set_group_list(doc.group_list, placements);
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::DanglingFk(Reference::Student {
+            target: doc.dead_student,
+            site: StudentRefSite::ColloscopeGroupListStudent(doc.group_list),
+        }),
+        "the live row places only live students, so the arm has no placement to remove",
     );
 }
