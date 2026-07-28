@@ -2426,6 +2426,42 @@ Three rules for the series:
   corruption, not the document. The builder belongs in 7.5a and is written to be reused —
   do not copy a fixture per test.
 
+**Status: 7.5a has landed** (`b04bdcaf`), so `src/resolution/innocent_tests.rs` exists with its
+`#[cfg(test)] mod innocent_tests;` line in `resolution.rs`, the shared builder, and the
+`SlotTeacher` test. It passed on its first run, hand-derived one-element set and all; no map bug
+surfaced. Nine commits remain (7.5b–7.5f and the four `Convergence` ones). Four things settled
+while writing it, all of them things 7.5b–f inherit:
+
+- ★ **The in-crate equivalent of "through `Manager::apply`" is `Data::annotate` + `Data::apply`.**
+  §9bis's step-1 sketch says "ops through `Manager::apply`, then `get_data().clone()`", which is
+  the *integration*-test idiom of `tests/cascade.rs`. In-crate there is no reason to wrap the
+  document in an `AppState` at all: `AppState::apply` delegates to `Data::apply`, which *is* the
+  apply/check/rollback gate, and `Data::annotate` hands back the `Option<NewId>` the fixture needs
+  to read fresh ids. The builder is therefore a plain `Data::default()` plus a local `apply`
+  helper that panics on rejection, and the neighbouring `apply_tests` module (`lib.rs:691`) was
+  already doing exactly this. Validity is still by construction, which is the only property the
+  sketch was really asking for.
+- ★ **The dead-id recipe is create-then-remove here too, *not* `unsafe { Id::new(n) }`.** The
+  forging idiom is used right next door (`invariants.rs`'s own tests, which build their states
+  by hand and have no live entities to collide with), so an implementer will be tempted. Do not:
+  this module's fixture is a *populated* document, and a forged number can name a live row, which
+  would silently turn an innocent-state test into something else. Adding an entity and removing
+  it again is three lines, cannot collide, and leaves the document otherwise untouched. 7.5a
+  builds one dead id of every kind (period, week, subject, teacher, student, week pattern, slot,
+  group list) at the very end of the builder, so the later commits have theirs ready.
+- ★ **`ValidDocument` carries `#[allow(dead_code)]` for the duration of the series.** The struct
+  is built whole in 7.5a but each commit reads only the fields its own arms need, so without the
+  attribute 7.5a alone would emit two dozen unread-field warnings. Recorded as a decision rather
+  than left to be rediscovered: the attribute comes off once the tenth commit has landed, and
+  taking it off is the cheap check that the fixture has no field nobody ever needed.
+- ★ **No general "surgery helpers" turned out to be needed for 7.5a.** §9bis.1 describes 7.5a as
+  carrying "the shared valid-fixture builder and the surgery helpers", but the `SlotTeacher`
+  surgery is two lines — read the live slot, `replace_slot` it with one field changed — and
+  factoring that would obscure it. The surgeries §9bis names explicitly (`remove_slot` +
+  `insert_slot_at` for `SlotSubject`, `move_week_entry` for `WeekPeriodFk`) belong to 7.5c and
+  7.5e and can be written there, inline, in the test that needs them. A helper is worth extracting
+  only once two tests want the same one.
+
 ## 9ter. Commit 7.6 — the self-caused rejection fixtures (`tests/cascade.rs`)
 
 Split out of commit 7 at the July 28 2026 review (★ user ruling). Commit 7's fixtures all
