@@ -34,8 +34,9 @@ use collomatique_state_colloscopes::{
     },
     ops::{
         AnnotatedAssignmentOp, AnnotatedColloscopeOp, AnnotatedGroupListOp, AnnotatedOp,
-        AnnotatedPairingOp, AnnotatedPeriodOp, AnnotatedSlotPairingOp, AnnotatedStudentOp,
-        AnnotatedSubjectOp, AnnotatedWeekOp, AnnotatedWeekPatternOp,
+        AnnotatedPairingOp, AnnotatedPeriodOp, AnnotatedSlotOp, AnnotatedSlotPairingOp,
+        AnnotatedStudentOp, AnnotatedSubjectOp, AnnotatedTeacherOp, AnnotatedWeekOp,
+        AnnotatedWeekPatternOp,
     },
     pairings::{PairingRule, RulePart},
     slot_pairings::{SlotPairingRule, SlotRulePart},
@@ -1010,5 +1011,244 @@ fn fixture_1e_the_flagship_period_removal() {
             .map(|p| p.excluded_weeks.clone()),
         Some(BTreeSet::new()),
         "the pattern survives, emptied of the week it excluded"
+    );
+}
+
+/// Fixture `2` — **breadth below the root**, and full site coverage for two
+/// more target kinds.
+///
+/// A teacher `t1` owning two slots. `TeacherRefSite` has the single variant
+/// `SlotTeacher(SlotId)`, so `TeacherOp::Remove(t1)` breaks it twice at once
+/// and each fix is the map's most destructive one, `Slot(Remove(..))`. Each of
+/// those two slot removals then opens its *own* sub-cascade — which is what
+/// separates this fixture from `1c`. `1c` is breadth at the root: seven fixes
+/// hanging directly off the target, every one of them flat. Here the stack gets
+/// wider at depth two, which neither `1b` (one break per round) nor `1c` (all
+/// fixes flat) ever does.
+///
+/// `SlotRefSite` has exactly three variants and the document covers all three:
+/// `slot_a` is the antecedent of one slot pairing rule and carries the
+/// colloscope cell, `slot_b` is the consequent of a second rule. With `1c`'s
+/// seven period sites that gives the suite full site coverage for three target
+/// kinds — period, teacher and slot.
+///
+/// Two construction choices, both load-bearing and both taken from §9.
+///
+/// **A second teacher `t2`, with a slot of their own.** When a fix is as
+/// explosive as "delete a whole teacher's timetable", what it leaves alone is
+/// worth as much as what it removes, and the arm's identity test
+/// (`slot.teacher_id != teacher` → `None`) is invisible to a document where
+/// every slot belongs to the target. `slot_c` comes almost free, because it is
+/// also the far end of both pairing rules.
+///
+/// **The two rules do not pair `t1`'s slots with each other.** They each pair
+/// one of them with `slot_c`. Pairing two slots of the same teacher is
+/// perfectly legal — only pairing a slot with *itself* is refused — so this is
+/// a coverage choice, not a validity one. Were `slot_a` and `slot_b` paired
+/// together by a single rule, the first slot removal would take that rule with
+/// it, the second would find no rule left to break, and the two-arm coverage
+/// would silently collapse to one arm with the test still green. Two rules are
+/// what keep both arms reachable.
+///
+/// The trace, derived from the tables. Round 1 reports two `SlotTeacher`
+/// breaks; the engine picks one — say `slot_a` — and its removal fails with two
+/// dangling slot references. `SlotRefSite` declares `SlotPairingRuleAntecedent`
+/// before `ColloscopeInterrogation`, so the rule goes first, then the cell,
+/// then the slot; then the target is retried, `slot_b` is picked, its rule
+/// goes, the slot goes, and the teacher lands. Six ops. Which of the two slots
+/// is picked first is not asserted — that is `1a`'s job — so this fixture
+/// checks content, not sequence.
+#[test]
+fn fixture_2_teacher_removal_fans_out_below_the_root() {
+    let mut app = AppState::<Data, String>::new(Data::new());
+
+    let period: PeriodId = apply_new!(
+        app,
+        Op::Period(PeriodOp::AddFront),
+        NewId::PeriodId,
+        "adding a period"
+    );
+    let week: WeekId = apply_new!(
+        app,
+        Op::Week(WeekOp::AddFront(period, WeekDesc::default())),
+        NewId::WeekId,
+        "adding a week"
+    );
+    // One subject for all three slots: a slot pairing rule whose two slots sit
+    // on different subjects breaks `PairedSlotsNotInSameSubject`.
+    let subject: SubjectId = apply_new!(
+        app,
+        Op::Subject(SubjectOp::AddAfter(
+            None,
+            interrogation_subject("Math", BTreeSet::new())
+        )),
+        NewId::SubjectId,
+        "adding a subject"
+    );
+    let teacher: TeacherId = apply_new!(
+        app,
+        Op::Teacher(TeacherOp::Add(Teacher {
+            desc: Default::default(),
+            subjects: BTreeSet::from([subject]),
+        })),
+        NewId::TeacherId,
+        "adding the teacher to remove"
+    );
+    let other_teacher: TeacherId = apply_new!(
+        app,
+        Op::Teacher(TeacherOp::Add(Teacher {
+            desc: Default::default(),
+            subjects: BTreeSet::from([subject]),
+        })),
+        NewId::TeacherId,
+        "adding the innocent teacher"
+    );
+    let slot_a: SlotId = apply_new!(
+        app,
+        Op::Slot(SlotOp::AddAfter(None, make_slot(subject, teacher, None, 8))),
+        NewId::SlotId,
+        "adding the first slot of the removed teacher"
+    );
+    let slot_b: SlotId = apply_new!(
+        app,
+        Op::Slot(SlotOp::AddAfter(
+            Some(slot_a),
+            make_slot(subject, teacher, None, 10)
+        )),
+        NewId::SlotId,
+        "adding the second slot of the removed teacher"
+    );
+    let slot_c: SlotId = apply_new!(
+        app,
+        Op::Slot(SlotOp::AddAfter(
+            Some(slot_b),
+            make_slot(subject, other_teacher, None, 12)
+        )),
+        NewId::SlotId,
+        "adding the innocent teacher's slot"
+    );
+    // `slot_a` on the antecedent side, `slot_b` on the consequent side: one
+    // rule per arm of `SlotRefSite`, and `slot_c` on the far end of both.
+    let rule_ac: SlotPairingRuleId = apply_new!(
+        app,
+        Op::SlotPairing(SlotPairingOp::Add(slot_pairing_rule(
+            slot_a,
+            slot_c,
+            BTreeSet::new()
+        ))),
+        NewId::SlotPairingRuleId,
+        "adding the antecedent-side rule"
+    );
+    let rule_cb: SlotPairingRuleId = apply_new!(
+        app,
+        Op::SlotPairing(SlotPairingOp::Add(slot_pairing_rule(
+            slot_c,
+            slot_b,
+            BTreeSet::new()
+        ))),
+        NewId::SlotPairingRuleId,
+        "adding the consequent-side rule"
+    );
+    // Forced by the group-number bound, exactly as in `1b`: with no association
+    // on `(period, subject)` the bound is 0 and no cell can be filled at all.
+    let group_list: GroupListId = apply_new!(
+        app,
+        Op::GroupList(GroupListOp::Add(automatic_group_list(
+            "Liste",
+            2,
+            BTreeSet::new()
+        ))),
+        NewId::GroupListId,
+        "adding a group list"
+    );
+    apply_ok(
+        &mut app,
+        Op::GroupList(GroupListOp::AssignToSubject(
+            period,
+            subject,
+            Some(group_list),
+        )),
+        "associating the group list",
+    );
+    apply_ok(
+        &mut app,
+        Op::Colloscope(ColloscopeOp::SetInterrogation(
+            slot_a,
+            week,
+            BTreeSet::from([0]),
+        )),
+        "filling the colloscope cell",
+    );
+
+    let innocent_slot = app
+        .get_data()
+        .get_inner_data()
+        .params
+        .slots
+        .find_slot(slot_c)
+        .expect("the innocent slot is there")
+        .clone();
+
+    let mut data = app.get_data().clone();
+    let (target, _new_info) = data.annotate(Op::Teacher(TeacherOp::Remove(teacher)));
+
+    let applied = apply_cascade(&mut data, target).expect("the cascade resolves both fan-outs");
+
+    let expected = vec![
+        AnnotatedOp::from(AnnotatedSlotPairingOp::Remove(rule_ac)),
+        AnnotatedOp::from(AnnotatedColloscopeOp::SetInterrogation(
+            slot_a,
+            week,
+            BTreeSet::new(),
+        )),
+        AnnotatedOp::from(AnnotatedSlotOp::Remove(slot_a)),
+        AnnotatedOp::from(AnnotatedSlotPairingOp::Remove(rule_cb)),
+        AnnotatedOp::from(AnnotatedSlotOp::Remove(slot_b)),
+        AnnotatedOp::from(AnnotatedTeacherOp::Remove(teacher)),
+    ];
+    assert_same_ops(&forward_ops(&applied), &expected);
+
+    assert_clean(&data);
+    let inner = data.get_inner_data();
+    assert!(
+        inner.params.teachers.teacher_map.get(&teacher).is_none(),
+        "the target teacher is gone"
+    );
+    for slot in [slot_a, slot_b] {
+        assert!(
+            inner.params.slots.find_slot(slot).is_none(),
+            "both of the teacher's slots went with them"
+        );
+    }
+    for rule in [rule_ac, rule_cb] {
+        assert!(
+            inner
+                .params
+                .slot_pairings
+                .slot_pairing_rule_map
+                .get(&rule)
+                .is_none(),
+            "each rule went with the slot it named"
+        );
+    }
+    assert!(
+        inner.colloscope.interrogation(slot_a, week).is_none(),
+        "the cell that hung off the removed slot is gone"
+    );
+    // The identity test in the `SlotTeacher` arm: the other teacher's timetable
+    // is not collateral damage.
+    assert!(
+        inner
+            .params
+            .teachers
+            .teacher_map
+            .get(&other_teacher)
+            .is_some(),
+        "the innocent teacher is untouched"
+    );
+    assert_eq!(
+        inner.params.slots.find_slot(slot_c),
+        Some(&innocent_slot),
+        "and their slot is byte-identical, not merely present"
     );
 }
