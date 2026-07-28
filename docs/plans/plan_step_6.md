@@ -82,16 +82,22 @@ the design doc's §8):
   same fix, and each carries its own consumer sweep.
 - **Commit 6** — the colloscope resolution map: `impl Fixable for Data` in
   `state-colloscopes/src/resolution.rs`, total over `FixableInvariant`.
-- **Commit 7** — colloscope integration tests (`state-colloscopes/tests/cascade.rs`):
-  the period-removal family (order / depth / breadth / confluence-on-one-op / flagship),
-  teacher / subject-update / student-removal cascades, self-caused-rejection fixtures,
-  the week-pattern divergence pin and the collateral-damage identity pins.
+- **Commit 7** — colloscope integration tests (`state-colloscopes/tests/cascade.rs`), the
+  half that asserts `Ok`: the period-removal family (order / depth / breadth /
+  confluence-on-one-op / flagship), teacher / subject-update / student-removal cascades,
+  the week-pattern divergence pin, the collateral-damage identity pins and the
+  benign-target-lands-alone pin.
 - **Commit 7.5** — the innocent-state `None` tests
   (`state-colloscopes/src/resolution/innocent_tests.rs`): one test per invariant variant,
   asserting that an arm handed an invariant its own state does *not* cause returns `None`.
   This is the mechanical detector for frame point 5. Adopted during the commit-6 review
   (July 28 2026). It is **46 tests, so it ships as ten commits** — 7.5a … 7.5f for the
   dangling-FK arms, then four for the `Convergence` blocks; see §9bis.
+- **Commit 7.6** — the self-caused rejection fixtures, back in
+  `state-colloscopes/tests/cascade.rs`: the half of commit 7 that asserts `Err`, split out
+  and sequenced **after** 7.5 (★ user ruling, July 28 2026) because a rejection fixture only
+  means something once the `None` branch it rests on has been tested arm by arm. Four
+  fixtures; see §9ter.
 - **Commit 8** — the cascade property test (`state-colloscopes/tests/property_cascade.rs`):
   random valid walks driven through `apply_cascade`; no panic, `Ok` ⇒ clean, `Err` ⇒
   bit-identical state.
@@ -1275,7 +1281,7 @@ alone.
 > (§7quater) and 7.5 (§9bis). §8.1 was re-audited end to end against frame point 4 after
 > that point was discovered mid-table: five rows were missing their identity test —
 > `SlotTeacher`, `IncompatSubject` and both `PairingRule` parts (all reachable), plus
-> `SlotSubject` and `WeekPeriodFk` (unreachable, added defensively). Commit-7 scenario 7
+> `SlotSubject` and `WeekPeriodFk` (unreachable, added defensively). Commit-7 scenario 6
 > pins the three reachable ones.
 
 New file `state-colloscopes/src/resolution.rs` (`mod resolution;` in `lib.rs`; nothing new
@@ -1976,28 +1982,13 @@ Scenarios:
    Assertions: `Ok`; **content** (five simultaneous breaks); a clean final state; the student
    gone from all five places; and a **second student**, present in the same prefilled group, the
    same assignments row and the same colloscope row, still there and untouched at the end.
-5. **Self-caused rejections** (each asserts `Err(Error::BrokenInvariants(..))` with the
-   expected variant *and* a bit-identical state):
-   - `SlotOp::Update` moving a slot's start so it overflows the day — round-one `None` from
-     the `SlotOverflowsDay` arm, whose shape test finds the live slot still at its old,
-     harmless start (frame point 5). *(The first draft of this plan described this scenario
-     as the "target consumed mid-cascade" trace — fixes landing, then the retry prechecking
-     out, and the remembered break being reported instead of the precheck error. That was
-     written before the arm had its shape test, and is no longer what happens: nothing lands
-     at all. If a fixture for the consumed-target trace is wanted, it needs a different
-     target.)*
-   - `AssignmentOp::SetRow` whose set includes a student excluded from the period —
-     round-one `None` from the `AssignedStudentNotPresentForPeriod` arm;
-   - `ColloscopeOp::SetInterrogation` with an out-of-bounds group number — round-one
-     `None` from the enriched `InterrogationGroupOutOfBounds` arm (the offending group is
-     absent from the pre-op cell).
-6. **Week-pattern removal** (added July 28 2026, because this is the map's one deliberate
+5. **Week-pattern removal** (added July 28 2026, because this is the map's one deliberate
    divergence from the legacy cleaning — D5.4). A pattern used by one slot and one incompat.
    Target: `WeekPatternOp::Remove`. Assert `Ok`, and assert that the slot and the incompat are
    both **still there** with their pattern field cleared to `None` — the legacy cleaning would
    have deleted both. Since the divergence forecloses a differential fuzz against `ops/`, this
    fixture is the only thing pinning the behaviour.
-7. **Identity tests: the collateral-damage pins** (added July 28 2026; frame point 4). Three
+6. **Identity tests: the collateral-damage pins** (added July 28 2026; frame point 4). Three
    short fixtures, each a target that rewrites a row's reference to a dead id while the live
    row names a *live* one — the route that a missing identity test turns into silent
    over-deletion. In each case assert `Err` with the expected `DanglingFk`, a bit-identical
@@ -2012,7 +2003,14 @@ Scenarios:
    These are the end-to-end form of the defence; the systematic one, variant by variant, is
    commit 7.5 below. Neither is visible to the commit-8 property test, which sees a valid
    state and an `Ok` cascade.
-8. **Clean target lands alone**: a benign op cascades to exactly `[itself]`.
+7. **Clean target lands alone**: a benign op cascades to exactly `[itself]`.
+
+A fourth scenario stood here through the first three drafts — the **self-caused rejections**,
+the fixtures in which the target is convicted and nothing lands. They were moved out at the
+July 28 2026 review, into their own commit 7.6 (§9ter), because they read the `None` branch
+of an arm end to end and that branch is only trustworthy once commit 7.5 has tested it
+systematically. Scenario 6 above rests on the same `None` branch and will very likely follow
+them; that is left open until it is reviewed in its turn.
 
 ## 9bis. Commit 7.5 — the innocent-state `None` tests
 
@@ -2134,6 +2132,142 @@ Three rules for the series:
 - **One shared valid fixture serves most tests.** What differs between tests is the
   corruption, not the document. The builder belongs in 7.5a and is written to be reused —
   do not copy a fixture per test.
+
+## 9ter. Commit 7.6 — the self-caused rejection fixtures (`tests/cascade.rs`)
+
+Split out of commit 7 at the July 28 2026 review (★ user ruling). Commit 7's fixtures all
+assert `Ok`: the cascade repairs the document and the target lands. These assert `Err`: the
+target is convicted and *nothing* lands. The reason for the split is sequencing, not subject
+matter — an end-to-end rejection test is only convincing once the `None` branch it rests on
+has been tested arm by arm, and that is commit 7.5. So the order is **7 → 7.5 → 7.6**.
+
+The file is the same `tests/cascade.rs`, the fixture style is the one at the head of §9, and
+the three shared rules there apply here too.
+
+### 9ter.1 What is being tested
+
+Every fixture here sends a single op that is bad **on its own terms**. The document is valid
+before the op, and the op alone carries the fault. The engine path is `cascade.rs:112-119`:
+
+```rust
+None if is_target => {
+    *data = snapshot;
+    return Err(ApplyError::BrokenInvariants(last_target_break.expect(..)));
+}
+```
+
+The checker reports a break, the gate rolls the op back, and `fix_invariant` then runs on the
+**restored** state — which is the valid pre-op document. The arm looks for the material it
+would remove, does not find it, and answers `None`. Since the failing op is the target, the
+engine restores the snapshot and reports the break.
+
+This is the production-visible half of frame point 5. If any of these arms answered `Some`
+instead, the cascade would quietly repair the state, `apply` would return `Ok`, and the user
+would be told an edit succeeded that was in fact refused. Two of the three also keep a live
+`ops/`-layer translation alive: `UpdateColloscopeInterrogationError::InvalidGroupNumInInterrogation`
+(`ops/src/colloscope.rs:216-223`) and `UpdateSlotError::SlotOverlapsWithNextDay`
+(`ops/src/slots.rs:481`) both read a `BrokenInvariants` error that would never arrive.
+
+Commit 7.5 does not cover this. 7.5 calls the map directly, on a state built by `InnerData`
+field surgery. These fixtures go through the public surface, with ops a user can actually
+issue, and check the whole route: `None` → snapshot restore → `Err` at the API.
+
+### 9ter.2 The construction rule: fail on the *last* conjunct
+
+Every shape test in §8.1 and §8.2 is a conjunction — "the row exists **and** it holds `x`".
+A fixture must be built so that every conjunct passes except the last one. Otherwise a map
+that dropped the last conjunct entirely would still return `None`, and the test would go green
+for the wrong reason.
+
+Concretely, for fixture 3 below: do **not** write the out-of-bounds group into a cell that did
+not exist before. Then the *presence* half already fails and the membership half is never
+reached. Start from a cell that already holds a valid group, and add the bad one to it. Same
+for fixture 2: the assignments row must already exist and already hold a different, legitimate
+student. Fixture 1a needs no such care — the slot obviously exists, so only the `start_time`
+comparison can fail.
+
+### 9ter.3 The fixtures
+
+Each asserts four things: `Err(Error::BrokenInvariants(set))` with `set` compared against a
+**hand-derived exact set** (not a `contains` — the first shared rule of §9); the document
+unchanged; and, for the fixtures that have one, the innocent neighbour still in place.
+
+On "unchanged": the assertion is `assert_eq!(&data, &before)` on a `Data` cloned before the
+call. `impl PartialEq for Data` compares `inner_data` only (`lib.rs:145-194`), so this pins
+the document and not the id issuer. That is the right coverage here — none of these three
+targets issues an id — and the id issuer needs no fixture of its own in any case: the engine
+restores with `*data = snapshot` on the whole value, so recycling cannot regress separately
+from `Clone`.
+
+**1a — `SlotOverflowsDay`, rejected.** A subject with a 60-minute interrogation and a slot
+starting at 22:00. Target: `SlotOp::Update(slot, same slot at 23:30)`. Post-op,
+`SlotWithDuration::new(23:30, 60)` is `None` and the checker reports
+`SlotOverflowsDay { slot, start: 23:30, duration: 60 }` (`invariants.rs:438-446`). The gate
+rolls back. The arm compares the invariant's `start` with the live `slot.start_time`, which is
+still 22:00 — mismatch, `None`, target convicted.
+
+This fixture is unwritable before **commit 5.97**. On today's payload the variant carries only
+a `SlotId`, so the arm has no second conjunct at all: the slot exists, and the only possible
+answer is `Some(Slot::Remove(slot))` — the user asks to move a slot and the application
+deletes it. 1a is the end-to-end reason 5.97 exists.
+
+**1b — `SlotOverflowsDay`, accepted.** The mirror of 1a, and the pair is worth more than
+either half. Same document, but the target is `SubjectOp::Update(S, interrogation duration
+90)` with the slot left at 23:00. The same invariant fires on the same slot — but this time
+the slot's `start_time` is exactly what the invariant names, the shape test passes, the arm
+answers `Some(Slot::Remove(slot))`, the fix lands and the target lands after it. Assert `Ok`,
+`applied.inner()` of length 2, and the slot gone.
+
+Alone, 1a only shows that the arm says `None` somewhere. Together the two show that the
+`start` field *discriminates*: same invariant, same arm, opposite verdict, and the only
+difference is which of the two operands the op moved.
+
+1b asserts `Ok` and so does not strictly depend on commit 7.5. It stays here anyway, next to
+its twin, because the contrast is the point and splitting the pair across two commits would
+lose it.
+
+1b is also §8.2 row 4's only pin. That row has **no legacy behaviour to compare against**:
+`ops/src/subjects.rs` has no arm for the overflow, so the ops layer reaches its catch-all
+`panic!("Unexpected invariant breaks …")` today. This fixture is what states the new answer.
+
+**2 — `AssignedStudentNotPresentForPeriod`.** A subject that genuinely runs on period `P`, an
+assignments row at `(P, S)` already holding student `A`, and a student `B` who excludes `P`.
+Target: `AssignmentOp::SetRow(P, S, {A, B})`. The arm finds the row and finds `A` in it, but
+not `B` — `None`, target convicted.
+
+Two traps in the construction. The subject must really run on `P`: otherwise
+`AssignmentForSubjectNotRunningOnPeriod` fires, and it is declared **before**
+`AssignedStudentNotPresentForPeriod` (`invariants.rs:158-167`), so the engine picks it
+instead — its shape test (a row exists at `(P, S)`) passes on the pre-op state, a fix lands,
+and the trace becomes a different one, with the test still green. And the row must pre-exist
+with `A` in it, per §9ter.2.
+
+**3 — `InterrogationGroupOutOfBounds`.** A group list with 3 groups, associated to the
+subject, and a colloscope cell at `(slot, week)` already holding group `0`. Target:
+`ColloscopeOp::SetInterrogation(slot, week, {0, 7})`. The arm finds the cell and finds it
+does not contain `7` — `None`, target convicted. The enrichment this needs is **commit 5**,
+already landed.
+
+### 9ter.4 One engine branch these fixtures do not reach
+
+`cascade.rs:124-131` holds a second conviction route: the target fails on broken invariants, a
+fix lands, the target is retried, and *that* attempt fails its **precheck** because a fix
+removed something the target names. The engine then reports the remembered `BrokenInvariants`
+rather than the precheck error.
+
+Nothing exercises it. Toy test 7 (§5) reaches "target convicted after fixes landed", but
+through `None`, not through `InvalidOp`. Toy test 4 reaches `InvalidOp`, but at round one,
+where `last_target_break` is still `None`. The `Some(set)` arm of that `match` is untouched.
+
+The first two drafts of this plan gave fixture 1a as the example of this trace. That was
+written before the arm had its shape test and is simply wrong: 1a rejects at round one and
+nothing lands. A search for a target that does reach the branch was made at the July 28 2026
+review and came up empty, but the argument was not judged solid enough to record as a
+determination. So the position is: **the branch is untested, and no colloscope target for it
+is known.** If it is to be pinned, the natural home is a tenth engine test in §5, where an
+evil mode can delete the target's referent directly — the branch is generic engine code, and
+the reasons it looks hard to reach are all facts about the colloscope map, which the engine
+knows nothing about.
 
 ## 10. Commit 8 — the cascade property test (`tests/property_cascade.rs`)
 
