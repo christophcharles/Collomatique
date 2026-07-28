@@ -57,11 +57,20 @@ the design doc's §8):
 - **Commit 5** — enrich `Convergence::InterrogationGroupOutOfBounds` with the offending
   group number (the one information-poor variant found by the review's error survey), so
   its fix can trim minimally instead of clearing the whole cell.
+- **Commit 5.98** — split the settings elementary op: `SettingsOp::Update(Settings)`
+  (which ships a whole `Table` value through the op surface) becomes
+  `SetGlobal(Limits)` + `SetStudent(StudentId, Option<Limits>)`. Adopted during the
+  commit-6 review (July 28 2026), on the `SettingsStudentKey` arm.
 - **Commit 5.99** — split the balancing elementary op: `BalancingOp::Update(Balancing)`
   (which ships a whole `Table` value through the op surface) becomes
   `SetGlobal(BalancingOptions)` + `SetSubject(SubjectId, Option<BalancingOptions>)`.
-  Adopted during the commit-6 review (July 27 2026); numbered 5.99 because it is a
-  prerequisite of the map's two balancing arms, not a part of commit 5.
+  Adopted during the commit-6 review (July 27 2026), on the `BalancingSubjectKey` arm.
+
+  Both are numbered below 6 because they are prerequisites of map arms, not parts of
+  commit 5; they are **two separate commits** (user ruling, July 28 2026) even though
+  they are structural twins — `Settings { global, students: Table<..> }` and
+  `Balancing { global, subjects: Table<..> }` have the same shape, the same wart and the
+  same fix, and each carries its own consumer sweep.
 - **Commit 6** — the colloscope resolution map: `impl Fixable for Data` in
   `state-colloscopes/src/resolution.rs`, total over `FixableInvariant`.
 - **Commit 7** — colloscope integration tests (`state-colloscopes/tests/cascade.rs`):
@@ -217,8 +226,19 @@ rules:
    implements `Default`, `state-colloscopes/src/lib.rs:421`); every fix op must land
    strictly *below* the current state — remove a row/entity, clear an optional edge, or
    rewrite a whole value *minus* the offending element. Nothing is ever invented (no
-   substitute teacher, no widened week pattern), and nothing lands *equivalent*: the map
-   returns `None` or a strictly-decreasing op, never a no-op (D4). Because the order is
+   substitute teacher, no fabricated group), and nothing lands *equivalent*: the map
+   returns `None` or a strictly-decreasing op, never a no-op (D4).
+
+   **The order is over the document's *content*, not over the meaning it denotes** (made
+   explicit at the July 28 2026 review, and binding on step 6.5's `PartialOrd`). Several
+   arms strictly shrink the data while *widening* the semantics, and that is fine: a
+   subject/student/week-pattern/pairing-rule that stops excluding a dead period now applies
+   more broadly, and a slot whose optional `week_pattern` is cleared to `None` now runs
+   every week. In each case an id was removed and nothing was added, so the document
+   strictly decreased. Reading the order semantically instead would make these arms look
+   like increases and would break the termination proof.
+
+   Because the order is
    well-founded, strict monotonicity **is** the termination proof of the cascade. This
    contract is engraved: it goes verbatim into the `Fixable` trait's doc-comment (the map
    implementor's contract) and into the `apply_cascade` module docs; the engine's `None`
@@ -227,18 +247,34 @@ rules:
 2. **Where a targeted single-edge op exists, use it**; where none exists, rewrite the whole
    value through the domain's `Update` op with the offending element removed, reading the
    current value from the pre-op state.
-3. **Where the referencing entity cannot survive the loss, remove the entity**: a slot cannot
-   exist without its teacher or subject; a pairing rule cannot exist without both parts; an
-   incompatibility cannot exist without its (mandatory) subject.
+3. **Remove the reference; remove the entity only when the reference cannot go alone.**
+   Sharpened at the July 28 2026 review, replacing the earlier "remove the entity where it
+   cannot survive the loss". The test is purely structural: *is the offending reference
+   expressible as absent?* If the field is an `Option`, or the reference lives in a set or
+   in the value of a map entry, then clear that one field / drop that one element / drop
+   that one entry, and the row stays. Only when the reference is mandatory — a bare id
+   field, or half of a row's key — does the row have to go with it. Rows that must die:
+   a slot without its teacher (`Slot::teacher_id`, a bare `TeacherId`) or subject; a
+   pairing rule without both parts (`SlotRulePart::slot_id`); an incompatibility without
+   its (mandatory) subject; a colloscope interrogation row without its slot or its week
+   (both are key components). Rows that live on: everything the map narrows instead —
+   a subject, a student, a week pattern or a pairing rule that stops excluding a dead
+   period/week; a slot or an incompat whose optional `week_pattern` is cleared; an
+   association entry that is unassigned.
 4. **Aim to match the legacy cleaning semantics** (`ops/src/*.rs get_next_cleaning_op`)
    where they exist — but this is an aspiration, not a gate (softened at review). An exact
    match may not always be achievable, and where the map diverges the divergence is
    recorded at close-out: it more likely captures an edge case the hand-written cleaning
    forgot than a regression. Verified against the legacy code in the planning session:
-   week-pattern deletion *deletes* referencing slots and incompats (it does not clear
-   their optional pattern field to `None` — that would silently widen the slot to every
-   week); a group-list shrink removes the out-of-bounds *student placements*; a
-   week-exclusion update clears *whole interrogation cells*.
+   a group-list shrink removes the out-of-bounds *student placements*; a week-exclusion
+   update clears *whole interrogation cells*.
+
+   **One deliberate divergence** (user ruling, July 28 2026). `DeleteWeekPattern`'s legacy
+   cleaning (`ops/src/week_patterns.rs:229-256`) *deletes* every referencing slot and
+   incompat; the map instead clears their optional `week_pattern` field to `None` and keeps
+   the rows — see §8.1's week-pattern table for the argument. This is the divergence D5.4
+   anticipated, and it costs us the differential fuzz that would otherwise have pinned this
+   arm against the legacy cleaning in a later step. Accepted knowingly.
 
 The review also asked whether any invariant payload is too poor to fix precisely — the
 error cases are not fixed in stone, and the checker often holds the precise culprit in
@@ -904,7 +940,88 @@ fixture's expected set gains the `2` payload), `tests/week_ops.rs:536`,
 third binding; note that a multi-group bad op can now put *several* instances in the set —
 the existing first-match loop shape still translates correctly).
 
-## 7bis. Commit 5.99 — split the balancing elementary op
+## 7bis. Commit 5.98 — split the settings elementary op
+
+Adopted during the July 28 2026 review of the map (§8). The trigger is the
+`SettingsStudentKey` arm, and the case is the exact twin of commit 5.99 below — read that
+section for the reasoning, which transposes word for word. `Settings`
+(`state-colloscopes/src/settings.rs:17-23`) is structurally identical to `Balancing`:
+
+```rust
+pub struct Settings {
+    pub global: Limits,
+    pub students: Table<StudentId, Limits>,
+}
+```
+
+and `SettingsOp::Update(Settings)` (`ops.rs:230-233`) is the last remaining place besides
+balancing where a `Table` value travels through the op surface out of `state/`. The arm
+needs "drop this one per-student override" and the whole-value rewrite is all it has.
+
+**New**:
+
+```rust
+pub enum SettingsOp {
+    /// Replace the global limits
+    SetGlobal(settings::Limits),
+    /// Set or clear the per-student override. `None` removes the entry.
+    SetStudent(StudentId, Option<settings::Limits>),
+}
+```
+
+Two variants, not three, for the same reason as balancing (the `AssignToSubject`
+canonical-absent precedent). Both have the content-carrying inverse: `SetGlobal(new)`
+reverses to `SetGlobal(old)`, `SetStudent(s, new)` to `SetStudent(s, old_option)`.
+
+**Prechecks.** `SettingsPrecheckError` is currently the empty enum
+(`settings.rs:47-51` — the settings op had no carve-out guards at all). It gains
+`InvalidStudentId(StudentId)`, checked by `SetStudent` uniformly for `Some` and `None`;
+`SetGlobal` stays infallible. Same uniformity choice as `SetRow` and `SetSubject`.
+
+**New** `force_apply_settings` body (shape), replacing the single `Update` arm at
+`settings.rs:66-72`:
+
+```rust
+AnnotatedSettingsOp::SetGlobal(new_limits) => {
+    let old_limits = std::mem::replace(
+        &mut self.inner_data.params.settings.global,
+        new_limits.clone(),
+    );
+    Ok(AnnotatedSettingsOp::SetGlobal(old_limits))
+}
+AnnotatedSettingsOp::SetStudent(student_id, new_limits) => {
+    if !self.inner_data.params.students.student_map.contains(student_id) {
+        return Err(SettingsPrecheckError::InvalidStudentId(*student_id));
+    }
+    let students = &mut self.inner_data.params.settings.students;
+    let old_limits = match new_limits {
+        Some(limits) => students.insert(*student_id, limits.clone()),
+        None => students.remove(student_id),
+    };
+    Ok(AnnotatedSettingsOp::SetStudent(*student_id, old_limits))
+}
+```
+
+**Consumer sweep.** The `ops/` vocabulary already has exactly the target shape and fakes it
+by cloning the whole `Settings`: `SettingsUpdateOp::{UpdateGlobalLimits, UpdateStudentLimits,
+RemoveStudentLimits}` (`ops/src/settings.rs:18-25`). It is **unchanged**, so nothing above
+`ops/` moves — same doctrine as commits 4 and 5.99. Inside `ops/src/settings.rs`, the three
+`apply_no_cleaning` arms (`:63-145`) each drop their clone-edit-push-back for a single
+targeted apply. `UpdateStudentLimits` and `RemoveStudentLimits` keep their existing
+`InvalidStudentId` pre-checks (so their `.expect` on the gate still holds), and
+`RemoveStudentLimits` keeps reading the entry first to raise `NoLimitsForStudent` before
+applying `SetStudent(*student_id, None)`.
+
+The remaining op-construction sites, all mechanical: `testgen-colloscopes/src/generator.rs:849`
+and `:1314`, `storage/tests/populated_round_trip/builder.rs:604`,
+`state-colloscopes/tests/refs_registry.rs:344`, and
+`state-colloscopes/tests/found_bugs.rs:66` and `:93`.
+
+**Out of scope**: the read side (`Settings::limits_for` and every snapshot reader), for the
+same reason as balancing — reading through the inherent `Table` API inside a snapshot is not
+shipping a `Table` through an op.
+
+## 7ter. Commit 5.99 — split the balancing elementary op
 
 Adopted during the July 27 2026 review of the map (§8). The trigger is the
 `BalancingSubjectKey` arm: it needs "drop this one per-subject override", and the only
@@ -1047,7 +1164,7 @@ No more, no less. The arm is entirely **local** — what the engine then does wi
 (convict the target, or panic when the invariant came from a fix) is the engine's business
 and no arm needs to reason about it.
 
-Three consequences, each of which the tables below rely on:
+Four consequences, each of which the tables below rely on:
 
 1. **Presence, never predicate** (the D2 doctrine). An arm asks whether the material it would
    remove is *there*; it never re-evaluates the invariant's own condition, which may depend
@@ -1079,6 +1196,57 @@ Three consequences, each of which the tables below rely on:
    gone. The same argument covers `AssignToSubject` (period + subject prechecks,
    `group_lists.rs:450-468`), `SetInterrogation` (week + slot, `colloscopes.rs:196-217`) and
    `SetGroupList` (group list, `colloscopes.rs:166-176`).
+4. **The presence test names the target, not merely "some value is there"** (July 28 2026
+   review). Wherever the offending reference sits in a field or entry that could legally
+   hold a *different*, live id, the arm must compare against the target before acting —
+   otherwise it destroys a perfectly valid reference. The reachable route is always the
+   same: an `Update`-style target rewrites a row's field to a dead id, the gate rolls the
+   op back, and the arm is handed the *old* row, whose field names a live id.
+
+   **The audit criterion**: an arm needs an explicit identity test **exactly when the target
+   id does not appear in the op it emits**. `SetRow(P, subject, ∅)`, `SetSubject(S, None)`,
+   `SetInterrogation(slot, W, ∅)` and `SetGroupList(GL, ∅)` all carry the target inside the
+   op, so a wrong target is not even expressible and a plain lookup is the whole test. But
+   `Remove(row)` and `Update(row, rebuilt)` name only the row; nothing ties them to the
+   target, and the identity test is the only thing that does. This criterion is a *shape* a
+   reviewer can check by eye, row by row, without reasoning about reachability — which is
+   why it is stated here rather than argued case by case in the tables.
+
+   Applied to §8.1, the rows that carry an identity test are: the four *row-removal* arms
+   driven by a scalar field — `WeekPeriodFk` (`week.period_id == P`), `SlotSubject`
+   (`slot.subject_id == S`), `IncompatSubject` (`incompat.subject_id == S`) and `SlotTeacher`
+   (`slot.teacher_id == T`); the four *rule-part* arms — the two `PairingRule` parts
+   (`RulePart::subject_id`) and the two `SlotPairingRule` parts (`SlotRulePart::slot_id`),
+   each testing **its own** part, separate arms even though both parts emit the same
+   `Remove(rule)` op, since a shared arm testing neither would delete a rule whose two parts
+   are both live; the two *cleared-field* arms `SlotWeekPattern` and `IncompatWeekPattern`
+   (`week_pattern != Some(WP) => None`, not `is_none()`); and `AssociationEntry` under a
+   group-list target (the entry's assigned id vs `GL`). The element-removal rebuilds
+   (`… minus P`, `… minus St`, the group-list fillings) satisfy the criterion for free: the
+   membership test *is* the identity test.
+
+   Two of the four scalar-field arms are, on today's code, unreachable — `SlotSubject`,
+   because `force_apply_slot`'s `Update` keeps `CannotChangeSubject` (`slots.rs:465-471`) so a
+   live slot's subject can never be rewritten; and `WeekPeriodFk`, because every path that
+   sets `Week::period_id` keeps destination-period existence (`force_add_week`,
+   `weeks.rs:563-566`; `force_move_week`, `:674-682`; `WeekOp::Update` carries a `WeekDesc`
+   with no period at all). **They get the test anyway** (user ruling, July 28 2026): their
+   unreachability rests on guards living in other files that nothing obliges to stay, the test
+   is one comparison that cannot be wrong, and uniformity is what makes the criterion above
+   checkable by shape instead of by argument. It is also a cheap net against a plain bug.
+
+   **A missing identity test is invisible to every automated check in this step.** Deleting a
+   slot whose teacher is live still leaves a *valid* state, so the cascade returns `Ok`, the
+   commit-8 property test's `Ok ⇒ clean` and undo-round-trip assertions both pass, and no
+   engine panic fires (the op is a real change, so the no-op panic is silent too). The only
+   things that can catch it are the criterion above, applied by eye, and a fixture that
+   asserts the *exact* op list (commit-7 scenarios 1 and 7bis). Treat the criterion as part
+   asserts the *exact* op list (commit-7 scenarios 1 and 7). Treat the criterion as part
+   of the review checklist for commit 6, not as something the tests will find.
+
+   Where the reference is part of the row's identity there is nothing to compare (a
+   colloscope `(slot, week)` row cannot be about another slot), and a plain lookup remains
+   the whole test.
 
 The table cells below give the op inside the `Some(...)` in the plain-op spelling for
 readability; the presence check is implied (e.g. "the row exists", "the element is in the
@@ -1091,7 +1259,7 @@ settled (rationale tags refer to D5):
 
 | Site | Fix | Rule |
 |---|---|---|
-| `WeekPeriodFk(week)` | `[Week(WeekOp::Remove(week))]` | entity cannot survive (a week belongs to its period); cascades further |
+| `WeekPeriodFk(week)` | `[Week(WeekOp::Remove(week))]` | entity cannot survive (a week belongs to its period, `Week::period_id` is a bare id — D5.3); cascades further; presence = the week exists **and** `week.period_id == P` (frame point 4, defensive: unreachable today) |
 | `SubjectExcludedPeriods(subject)` | `[Subject(SubjectOp::Update(subject, subject minus P))]` | whole-value minus element |
 | `StudentExcludedPeriods(student)` | `[Student(StudentOp::Update(student, student minus P))]` | idem |
 | `PairingRuleExcludedPeriods(rule)` | `[Pairing(PairingOp::Update(rule, rebuilt))]` | sealed rebuild, below |
@@ -1135,10 +1303,10 @@ across untouched. `SlotPairingRule` is the exact twin.
 | Site | Fix | Rule |
 |---|---|---|
 | `TeacherSubjects(teacher)` | `[Teacher(TeacherOp::Update(teacher, teacher minus S))]` | whole-value minus element |
-| `SlotSubject(slot)` | `[Slot(SlotOp::Remove(slot))]` | `Slot::subject_id` is mandatory and authoritative (`SlotOp::Update` rejects changing it) — the slot cannot survive |
-| `IncompatSubject(incompat)` | `[Incompat(IncompatOp::Remove(incompat))]` | `Incompatibility::subject_id` is mandatory |
-| `PairingRuleAntecedent(rule)` / `PairingRuleConsequent(rule)` | `[Pairing(PairingOp::Remove(rule))]` | a rule needs both parts; no half-rule exists |
-| `BalancingSubjectKey` | `[Balancing(BalancingOp::SetSubject(S, None))]` | drops the per-subject override; the subject falls back to `balancing.global` (needs commit 5.99, §7bis) |
+| `SlotSubject(slot)` | `[Slot(SlotOp::Remove(slot))]` | `Slot::subject_id` is mandatory and authoritative (`SlotOp::Update` rejects changing it) — the slot cannot survive (D5.3); presence = the slot exists **and** `slot.subject_id == S` (frame point 4, defensive: unreachable today) |
+| `IncompatSubject(incompat)` | `[Incompat(IncompatOp::Remove(incompat))]` | `Incompatibility::subject_id` is mandatory (D5.3); presence = the incompat exists **and** `incompat.subject_id == S` — **reachable**, `force_apply_incompat`'s `Update` replaces the whole row with no field guards (`incompats.rs:108-124`) |
+| `PairingRuleAntecedent(rule)` / `PairingRuleConsequent(rule)` | `[Pairing(PairingOp::Remove(rule))]` | `RulePart::subject_id` is a bare id, so no half-rule exists (D5.3); **two arms, not one** — each tests its own part's subject against `S` (frame point 4) — **reachable**, `force_apply_pairing`'s `Update` has no field guards (`pairings.rs:237-247`) |
+| `BalancingSubjectKey` | `[Balancing(BalancingOp::SetSubject(S, None))]` | drops the per-subject override; the subject falls back to `balancing.global` (needs commit 5.99, §7ter) |
 | `AssignmentsKey { period }` | `[Assignment(AssignmentOp::SetRow(period, S, BTreeSet::new()))]` | single row-clearing op; presence = the row exists |
 | `AssociationEntry { period }` | `[GroupList(GroupListOp::AssignToSubject(period, S, None))]` | targeted op |
 
@@ -1152,59 +1320,125 @@ it. Removing it would be destruction the invariant never asked for.
 
 | Site | Fix | Rule |
 |---|---|---|
-| `SlotTeacher(slot)` | `[Slot(SlotOp::Remove(slot))]` | `teacher_id` is mandatory (`slots.rs:56-57`, no `Option`), so there is no teacher-less slot to fall back to; naming a substitute teacher would be invented data |
+| `SlotTeacher(slot)` | `[Slot(SlotOp::Remove(slot))]` | `teacher_id` is mandatory (`slots.rs:56-57`, no `Option`), so there is no teacher-less slot to fall back to (D5.3); naming a substitute teacher would be invented data; presence = the slot exists **and** `slot.teacher_id == T` — **reachable**, see below |
 
 Note the contrast with `SlotSubject`, which removes the slot too but for a different reason:
 there `SlotOp::Update` *cannot* express the change (`CannotChangeSubject`), here it can — the
-teacher field is freely editable — and the map declines on the invented-data rule. Presence
-check: the slot row exists. This is also the most explosive fix in the table: one teacher
+teacher field is freely editable — and the map declines on the invented-data rule.
+
+That same editability is what makes this row's identity test (frame point 4) load-bearing
+rather than defensive: `force_apply_slot`'s `Update` keeps only `CannotChangeSubject` and
+strips `validate_slot`, with no teacher-existence carve-out (`slots.rs:455-483`). So
+`SlotOp::Update(slot, new_slot naming a dead teacher)` lands, the checker reports
+`SlotTeacher`, the gate rolls back — and without the test the arm would delete a slot whose
+live teacher is perfectly valid. This is also the most explosive fix in the table: one teacher
 removal takes every one of their slots, and each slot removal then cascades to that slot's
 colloscope cells and to any `SlotPairingRule` naming it (commit-7 fixture 3).
-
-> ## ⛔ REVIEW STOPPED HERE — July 27 2026
->
-> Everything **above** this banner has been walked arm by arm with the user and is
-> confirmed: the §8 frame, and the period, week, subject and teacher targets of §8.1. The
-> findings of that review are the frame's three points (arm-locality, no-`expect`-on-a-lookup,
-> `self`-is-always-valid) and commit 5.99 (§7bis).
->
-> Everything **below** it — the student, week-pattern, slot and group-list targets of §8.1,
-> and the whole of §8.2 (`Convergence`) — is still **unreviewed first-draft material**.
-> Resume the review at the `StudentRefSite` table immediately below.
 
 **Target: a student `St`** (`StudentRefSite`):
 
 | Site | Fix | Rule |
 |---|---|---|
-| `GroupListPrefilledStudent(gl)` | `[GroupList(GroupListOp::Update(gl, rebuilt))]` — `GroupList::new(params.clone(), Prefilled with St removed from its group)` | sealed rebuild; removing a member changes neither the group count nor introduces duplicates, so `new()` cannot fail — `.expect` with that sentence |
-| `GroupListExcludedStudent(gl)` | `[GroupList(GroupListOp::Update(gl, rebuilt))]` — `Automatic { excluded_students minus St }` | idem |
-| `SettingsStudentKey` | `[Settings(SettingsOp::Update(settings minus St))]` | whole-value minus keyed entry |
-| `AssignmentsStudent { period, subject }` | `[Assignment(AssignmentOp::SetRow(period, subject, row minus St))]` — row read live | presence = `St` is in the row |
-| `ColloscopeGroupListStudent(gl)` | `[Colloscope(ColloscopeOp::SetGroupList(gl, placements minus St))]` | rewrite of the row read from `self.inner_data.colloscope.group_list(gl)` (an absent row degrades to the empty map — a no-op clear) |
+| `GroupListPrefilledStudent(gl)` | `[GroupList(GroupListOp::Update(gl, rebuilt))]` — `GroupList::new(params, filling with St removed)` | sealed rebuild; presence = `filling().contains_student(St)`; removing a member changes neither the group count nor introduces a duplicate, so `new()` cannot fail — `.expect` with that sentence |
+| `GroupListExcludedStudent(gl)` | `[GroupList(GroupListOp::Update(gl, rebuilt))]` — `Automatic { excluded_students minus St }` | sealed rebuild; presence = `filling().excluded_students().contains(&St)`; `new()` validates only the `Prefilled` branch, so an `Automatic` rebuild cannot fail at all |
+| `SettingsStudentKey` | `[Settings(SettingsOp::SetStudent(St, None))]` | drops the per-student override; the student falls back to `settings.global` (needs commit 5.98, §7bis) |
+| `AssignmentsStudent { period, subject }` | `[Assignment(AssignmentOp::SetRow(period, subject, row minus St))]` — row read live | presence = the row exists and holds `St` |
+| `ColloscopeGroupListStudent(gl)` | `[Colloscope(ColloscopeOp::SetGroupList(gl, placements minus St))]` | rewrite of the row read from `self.inner_data.colloscope.group_list(gl)`; presence = the row exists **and** places `St` |
 
-**Target: a week pattern `WP`** (`WeekPatternRefSite`) — both cells verified against the
-legacy `DeleteWeekPattern` cleaning (`ops/src/week_patterns.rs:230-256`), which *deletes* the
-referencing entities; clearing the optional field to `None` would silently widen the
-slot/incompat to "every week" and was rejected:
+Two notes on the student table.
+
+The two group-list rows need no bespoke variant matching: `GroupListFilling::contains_student`
+(`group_lists.rs:210`) returns `false` for an `Automatic` filling, and
+`excluded_students()` (`:153`) returns a static empty set for a `Prefilled` one. So each arm's
+single presence test already short-circuits to `None` when the live filling is the *other*
+variant — which happens when the target was a `GroupListOp::Update` whose new value carried
+the dead student while the live value is of the other kind. Each arm then rebuilds through
+`into_parts()` (`:312`) and the existing mutators (`remove_student` at `:195`, or a plain
+`BTreeSet::remove` on the excluded set).
+
+The `ColloscopeGroupListStudent` row corrects the first draft, which said an absent row
+"degrades to the empty map — a no-op clear". It must not: `SetGroupList(gl, ∅)` against a
+state with no row for `gl` is a **perfect no-op**, which the engine answers with an
+unconditional panic (D4). An absent row, and a row that does not place `St`, are both `None`.
+Where the row *is* there, it is non-empty (canonical-absent), so removing `St` — even as the
+last placement, which clears the row — is always a real change.
+
+**Target: a week pattern `WP`** (`WeekPatternRefSite`):
 
 | Site | Fix | Rule |
 |---|---|---|
-| `SlotWeekPattern(slot)` | `[Slot(SlotOp::Remove(slot))]` | legacy match (D5.4) |
-| `IncompatWeekPattern(incompat)` | `[Incompat(IncompatOp::Remove(incompat))]` | legacy match |
+| `SlotWeekPattern(slot)` | `[Slot(SlotOp::Update(slot, rebuilt))]` — the live slot cloned with `week_pattern = None` | presence = `slot.week_pattern == Some(WP)`, per frame point 4 (D5.4, deliberate divergence) |
+| `IncompatWeekPattern(incompat)` | `[Incompat(IncompatOp::Update(incompat, rebuilt))]` — the live incompat cloned with `week_pattern_id = None` | presence = `incompat.week_pattern_id == Some(WP)` (idem) |
+
+**These two rows were reversed at the July 28 2026 review**, and they are the map's one
+deliberate departure from the legacy cleaning (D5.4). The first draft *removed* the slot and
+the incompat, matching `DeleteWeekPattern` (`ops/src/week_patterns.rs:229-256`), on the
+argument that clearing the optional field to `None` would silently widen the row to "every
+week". The user overruled it, and on review the rule the map actually follows is D5.3 as now
+stated: `Slot::week_pattern` (`slots.rs:65-67`) and `Incompatibility::week_pattern_id`
+(`incompats.rs:48-50`) are both `Option`, with `None` a legal documented value meaning "every
+week", so the reference *can* go alone and the row stays.
+
+The reasons, in the order they were argued:
+
+- **Repairability.** With the cascade wired to the UI, "the Math slot with M. Smith at 8:00 is
+  now every week" is a message a user can act on; "all your slots disappeared" is not. And the
+  common real case is a week pattern that had *become* every-week before being deleted, where
+  clearing to `None` is not a widening at all — it is the identity.
+- **Consistency.** Widening is not in fact disqualifying: every excluded-set arm in this map
+  widens. A subject, a student, a week pattern or a pairing rule that stops excluding a dead
+  period/week all end up applying more broadly than before. Deleting the referencing row here
+  was the outlier, not the rule.
+- **No invariant can break either way.** For slots, `InterrogationOnInactiveWeek(slot, week)`
+  fires when an interrogation sits on a week the pattern deactivates; `None` deactivates
+  nothing, so clearing can only ever *remove* instances of it. For incompats, no `Convergence`
+  variant mentions an incompatibility at all — the checker never relates one to a colloscope.
+  (An incompat can of course make a colloscope infeasible for the *solver*; that is not this
+  layer's contract.)
+
+Cost, accepted knowingly: the divergence forecloses a later differential fuzz of these two
+arms against the legacy cleaning. Prechecks checked: `force_apply_slot`'s `Update` keeps only
+`CannotChangeSubject` (`slots.rs:455-483`) — the rebuild clones the slot and touches one
+field, so the subject is unchanged — and strips the colloscope pattern-compat guard.
 
 **Target: a slot `Sl`** (`SlotRefSite`):
 
 | Site | Fix | Rule |
 |---|---|---|
-| `SlotPairingRuleAntecedent(rule)` / `SlotPairingRuleConsequent(rule)` | `[SlotPairing(SlotPairingOp::Remove(rule))]` | a rule needs both parts |
-| `ColloscopeInterrogation { week }` | `[Colloscope(ColloscopeOp::SetInterrogation(Sl, week, BTreeSet::new()))]` | clearing op |
+| `SlotPairingRuleAntecedent(rule)` / `SlotPairingRuleConsequent(rule)` | `[SlotPairing(SlotPairingOp::Remove(rule))]` | `SlotRulePart::slot_id` is a bare `SlotId` (`slot_pairings.rs:58-70`), so the reference cannot go alone (D5.3); **two arms, not one** — each tests its own part against the target (frame point 4) |
+| `ColloscopeInterrogation { week }` | `[Colloscope(ColloscopeOp::SetInterrogation(Sl, week, BTreeSet::new()))]` | the slot is half the row key (`colloscopes.rs:24`), so clearing is forced (D5.3); presence = the row exists — canonical-absent, so a present row is non-empty and clearing is always a real change |
 
 **Target: a group list `GL`** (`GroupListRefSite`):
 
 | Site | Fix | Rule |
 |---|---|---|
-| `AssociationEntry { period, subject }` | `[GroupList(GroupListOp::AssignToSubject(period, subject, None))]` | targeted op |
-| `ColloscopeGroupListKey` | `[Colloscope(ColloscopeOp::SetGroupList(GL, BTreeMap::new()))]` | clearing op |
+| `AssociationEntry { period, subject }` | `[GroupList(GroupListOp::AssignToSubject(period, subject, None))]` | targeted op; the reference is the entry's *value* (`subjects_associations: Table<(PeriodId, SubjectId), GroupListId>`, `group_lists.rs:31`), so it goes alone (D5.3); presence = the entry exists **and** names `GL` (frame point 4) |
+| `ColloscopeGroupListKey` | `[Colloscope(ColloscopeOp::SetGroupList(GL, BTreeMap::new()))]` | the group list *is* the row key, so clearing is forced (D5.3); presence = the row exists — canonical-absent, so clearing is always a real change |
+
+`AssignToSubject(.., None)` removes the association entry and **nothing else**: the
+`GroupList` value itself survives (user ruling — an unreferenced group list is a legal state,
+as already noted under the subject table). Prechecks checked: the `None` payload needs only
+subject-exists and period-exists (`group_lists.rs:450-480` checks the group list only when the
+payload is `Some`), and both hold because `self` is valid.
+
+> ## ⛔ REVIEW STOPPED HERE — July 28 2026
+>
+> Everything **above** this banner has been walked arm by arm with the user and is
+> confirmed: the §8 frame and the whole of §8.1 (`DanglingFk`, all eight target kinds).
+> The findings of that review are the frame's four points (arm-locality,
+> no-`expect`-on-a-lookup, `self`-is-always-valid, presence-names-the-target with its audit
+> criterion), the D5.3 sharpening (remove the reference; remove the row only when the
+> reference cannot go alone) and its one deliberate legacy divergence in D5.4, and commits
+> 5.98 (§7bis) and 5.99 (§7ter).
+>
+> §8.1 was then re-audited end to end against frame point 4 (July 28 2026), since that point
+> was discovered mid-table: five rows were missing their identity test — `SlotTeacher`,
+> `IncompatSubject` and both `PairingRule` parts (all reachable), plus `SlotSubject` and
+> `WeekPeriodFk` (unreachable, added defensively). All are now in the tables, and commit-7
+> scenario 7 pins the three reachable ones.
+>
+> Everything **below** it — the whole of §8.2 (`Convergence`, 16 variants) — is still
+> **unreviewed first-draft material**. Resume the review at the table immediately below.
 
 ### 8.2 `Convergence` — all 16 variants
 
@@ -1221,7 +1455,7 @@ now-invalid data (design doc §3, tier 3 — lossy by nature).
 | `AssignedStudentNotPresentForPeriod { period, subject, student }` | `SetRow(period, subject, row minus student)`; `None` if the student is not in the current row | minimal; the `None` arm is the round-one self-caused rejection (D4) |
 | `AssociationForSubjectWithoutInterrogations(period, subject)` | `[GroupList(GroupListOp::AssignToSubject(period, subject, None))]` | |
 | `AssociationForSubjectNotRunningOnPeriod(period, subject)` | `[GroupList(GroupListOp::AssignToSubject(period, subject, None))]` | |
-| `BalancingForSubjectWithoutInterrogations(subject)` | `[Balancing(BalancingOp::SetSubject(subject, None))]` | needs commit 5.99 (§7bis) |
+| `BalancingForSubjectWithoutInterrogations(subject)` | `[Balancing(BalancingOp::SetSubject(subject, None))]` | needs commit 5.99 (§7ter) |
 | `PairedSlotsNotInSameSubject(rule)` | `[SlotPairing(SlotPairingOp::Remove(rule))]` | which slot is "wrong" is undecidable; the rule goes |
 | `InterrogationSlotNotRunningOnPeriod(slot, week)` | `[Colloscope(SetInterrogation(slot, week, ∅))]` | whole cell |
 | `InterrogationOnInactiveWeek(slot, week)` | `[Colloscope(SetInterrogation(slot, week, ∅))]` | whole cell; matches the legacy week-exclusion cleaning |
@@ -1279,7 +1513,27 @@ Fixture style: build a document through the public surface
    - `ColloscopeOp::SetInterrogation` with an out-of-bounds group number — round-one
      `None` from the enriched `InterrogationGroupOutOfBounds` arm (the offending group is
      absent from the pre-op cell).
-6. **Clean target lands alone**: a benign op cascades to exactly `[itself]`.
+6. **Week-pattern removal** (added July 28 2026, because this is the map's one deliberate
+   divergence from the legacy cleaning — D5.4). A pattern used by one slot and one incompat.
+   Target: `WeekPatternOp::Remove`. Assert `Ok`, and assert that the slot and the incompat are
+   both **still there** with their pattern field cleared to `None` — the legacy cleaning would
+   have deleted both. Since the divergence forecloses a differential fuzz against `ops/`, this
+   fixture is the only thing pinning the behaviour.
+7. **Identity tests: the collateral-damage pins** (added July 28 2026; frame point 4). Three
+   short fixtures, each a target that rewrites a row's reference to a dead id while the live
+   row names a *live* one — the route that a missing identity test turns into silent
+   over-deletion. In each case assert `Err` with the expected `DanglingFk`, a bit-identical
+   state, and — the actual point — that the innocent row is **still there**:
+   - `SlotOp::Update` giving a slot a dead `teacher_id`, with the slot's real teacher alive:
+     the `SlotTeacher` arm must return `None`, not delete the slot;
+   - `IncompatOp::Update` giving an incompat a dead `subject_id`;
+   - `PairingOp::Update` giving a rule's antecedent a dead `subject_id`, the consequent's
+     subject alive: the antecedent arm returns `None`, and the consequent arm must not fire
+     at all.
+
+   These three are the only automated defence: a missing identity test produces a valid state
+   and an `Ok` cascade, so the commit-8 property test cannot see it.
+8. **Clean target lands alone**: a benign op cascades to exactly `[itself]`.
 
 ## 10. Commit 8 — the cascade property test (`tests/property_cascade.rs`)
 
@@ -1325,6 +1579,8 @@ strict-monotonicity contract with `Default::default()` as the minimum; the `None
 conviction and the unconditional no-op-fix panic replacing the §5 repetition ledger;
 target-fallible/fix-infallible; the remembered-error rule; snapshot-restore failure; no
 fuse — hang accepted until 6.5), the resolution table's policy rules
-(presence-not-predicate arms, orthogonality principle, legacy semantics as aspiration with
-divergences recorded), and the test inventory. Then retire this plan from the tree with a
+(the frame's four points, the D5.3 remove-the-reference-first rule, the content-not-semantics
+reading of the order, orthogonality, legacy semantics as aspiration with the week-pattern
+divergence recorded), the two op splits (commits 5.98 and 5.99) and their shared motivation
+(no `Table` through the op surface), and the test inventory. Then retire this plan with a
 pin, per the house pattern.
