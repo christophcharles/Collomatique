@@ -2459,18 +2459,59 @@ suite once, captured to a scratchpad file, per the house testing rules.
 
 ## 11. Non-goals, gates, close-out
 
-**Non-goals**: no `ops/` migration onto the cascade (the commit-4 `SetRow` translation
-rewrite inside `ops/` is an op-surface adaptation, not the step-7 remaster — `Warning`,
-`get_next_cleaning_op` and the `UpdateError` vocabulary all stay), no dry-run/preview UX,
-no `Warning` retirement, no history/`Manager` integration of the cascade (step 7 decides
-whether `apply_cascade` gets a `Manager`-level wrapper), no storage change, no gtk4 change
-beyond the mechanical commit-1 re-spelling, no variant reorder, and no `PartialOrd` /
-monotonicity checking — that is step 6.5 (design doc §8), recorded, not implemented here.
+**Non-goals**: no `ops/` migration onto the cascade, no dry-run/preview UX, no `Warning`
+retirement, no history/`Manager` integration of the cascade (step 7 decides whether
+`apply_cascade` gets a `Manager`-level wrapper), no storage **format** change, no gtk4
+change, no variant reorder, and no `PartialOrd` / monotonicity checking — that is step 6.5
+(design doc §8), recorded, not implemented here.
+
+Three of those need their edges drawn, because several commits *do* touch `ops/` and the
+storage tests without crossing into step 7 — and because the gtk4 line turned out to be
+stricter than the first draft dared claim (all three audited July 28 2026).
+
+**`ops/` changes in four places, and none of them is the remaster.** `Warning`,
+`get_next_cleaning_op` and the whole `UpdateError` vocabulary stay exactly as they are; what
+moves is spelling forced from below.
+
+- commit 4 — the `SetRow` translation rewrite, an op-surface adaptation;
+- commit 5 (landed) — `InterrogationGroupOutOfBounds` gained a field, matched at
+  `ops/src/colloscope.rs:218`;
+- commit 5.97 — every one of the four enriched variants is matched in `ops/`:
+  `SlotTeacherDoesNotTeachSubject` (three sites), `SlotOverflowsDay` (two),
+  `PairedSlotsNotInSameSubject` (two), `SlotForSubjectWithoutInterrogations` (one);
+- commits 5.98 and 5.99 — `ops/src/settings.rs` and `ops/src/balancing.rs` each construct the
+  op being split at three sites.
+
+**"No storage change" means the format.** `storage/tests/populated_round_trip/builder.rs:604`
+and `:638` build `SettingsOp::Update` and `BalancingOp::Update`, so commits 5.98 and 5.99
+re-spell that test builder. Nothing in this step goes near serialization, and elementary ops
+are never persisted.
+
+**"No gtk4 change" is now verified rather than predicted.** The first draft said "no gtk4
+change beyond the mechanical commit-1 re-spelling"; commit 1 landed touching twenty-one files
+and **not one of them under `gtk4/`**. Nor is any later commit expected to: gtk4 never names
+`SettingsOp`, `BalancingOp`, `Convergence`, `FixableInvariant` or the `Error` variants. What it
+does use — `BalancingOptions`, `DecodeError::LogicError`, `Op::GlobalUpdate` — none of this
+step moves.
 
 **Gates**: `cargo test --workspace` (background, output captured once) green after every
-commit; the property harnesses untouched and green; `Cargo.lock` unchanged (no new
-dependencies). The user runs the acceptance scripts / gtk4 smoke at their own cadence; no
-step in this plan blocks on it.
+commit; `Cargo.lock` unchanged (no new dependencies); commit 8's harness run at its full
+50 × 500 configuration.
+
+The property harnesses **keep their configuration and their oracles** — that is the invariant
+to hold, not "untouched", which is already false three times over: commit 1 re-spelled
+`property_apply_gate.rs` onto the new error surface, commits 5.98/5.99 change the op
+vocabulary in `testgen-colloscopes/src/generator.rs` (`:849`, `:985`, `:1314`, `:1321`) which
+feeds *both* existing harnesses, and commit 8 adds a third. What must not change is seeds,
+op counts, `invalid_fraction`, or what any of them assert.
+
+One per-commit obligation lives outside this section and is repeated here because it is easy
+to lose: **within the 7.5 series, a failing test is a map bug**, and the house rule applies —
+commit the failing test alone, then the fix in a separate commit (§9bis.1). The reflex
+mid-series is to fix and commit together; do not.
+
+The user runs the acceptance scripts / gtk4 smoke at their own cadence; no step in this plan
+blocks on it.
 
 **Close-out ritual** (after the user's gate): record the delivered state as **Appendix H**
 of the design doc — the `ApplyError` reshaping of the G.2 error surface (G stays as the
@@ -2486,6 +2527,33 @@ fuse — hang accepted until 6.5), the resolution table's policy rules
 corollary — the D5.3 remove-the-reference-first rule, the content-not-semantics reading of
 the order, orthogonality, legacy semantics as aspiration with the week-pattern and
 `SlotOverflowsDay` divergences recorded), the two op splits (commits 5.98 and 5.99) and
-their shared motivation (no `Table` through the op surface), and the test inventory —
-including the commit-7.5 innocent-state tests and why the contract panic is not counted as a
-safety net. Then retire this plan with a pin, per the house pattern.
+their shared motivation (no `Table` through the op surface), and the test inventory. Then
+retire this plan with a pin, per the house pattern.
+
+The test inventory is the part that grew most during the July 28 2026 review, so it is spelled
+out rather than left to "the tests we wrote":
+
+- **the three tiers and why they are three.** Commit 7 = the fixtures that assert `Ok`;
+  commit 7.5 = the innocent-state `None` tests, one per arm, forty-six of them across ten
+  commits; commit 7.6 = the fixtures that assert `Err`, sequenced *after* 7.5 because a
+  rejection fixture only means something once the `None` branch it rests on has been tested
+  arm by arm (★ user ruling). Plus commit 8's property harness.
+- **the fixture-writing rules**, which are the reusable part: expected op lists derived by
+  hand from the §8 tables *before* the test runs; sequence versus content, and why an ordered
+  literal is a tripwire on a derived `Ord` and **not** a confluence pin; fail on the *last*
+  conjunct; the create-then-remove recipe for a dead id.
+- **the accepted asymmetry**: 7.5 covers every arm's `None` branch systematically, nothing
+  covers the `Some` branches systematically, and a second forty-six-test series was
+  considered and rejected. Record it as a decision, since that is what it is.
+- **the two deliberate deletions and their reasons** — the undo round-trip fixture (every
+  component already pinned by `property_ops.rs` Properties 2 and 4, `history.rs:494`, the
+  order fixtures and the toy test) and "clean target lands alone" (when nothing breaks the map
+  is never consulted, so it never touched this step's code); what replaced the latter is the
+  no-op-target pin, which guards the `(!is_target).then(..)` carve-out.
+- **the two structural findings**: §8.2 row 3's `Some` branch is shadowed by declaration order
+  and can never be the pick; and the engine's `InvalidOp`-with-remembered-break conviction
+  route (`cascade.rs:124-131`) is reached by no test, with no colloscope target known for it
+  (§9ter.5). Both recorded as facts, neither used as a licence to weaken an arm.
+- **the outcome of the coverage sweep** that the open item at the foot of §9 requires, and
+  which must be run before the plan is retired.
+- and why the contract panic is **not** counted as a safety net.
