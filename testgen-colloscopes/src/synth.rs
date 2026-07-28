@@ -19,7 +19,7 @@ use collomatique_state_colloscopes::{
     ids::{PeriodId, SlotId, StudentId, SubjectId, TeacherId, WeekId, WeekPatternId},
     incompats::Incompatibility,
     pairings::{PairingRule, RulePart},
-    settings::{Limits, Settings},
+    settings::Limits,
     slot_pairings::{SlotPairingRule, SlotRulePart},
     slots::Slot,
     soft_param::SoftParam,
@@ -329,7 +329,7 @@ pub fn automatic_filling(rng: &mut ChaCha8Rng, student_ids: &[StudentId]) -> Gro
     }
 }
 
-fn limits(rng: &mut ChaCha8Rng) -> Limits {
+pub fn limits(rng: &mut ChaCha8Rng) -> Limits {
     Limits {
         interrogations_per_week_min: if rng.random_bool(0.4) {
             Some(SoftParam {
@@ -355,16 +355,6 @@ fn limits(rng: &mut ChaCha8Rng) -> Limits {
         } else {
             None
         },
-    }
-}
-
-pub fn settings(rng: &mut ChaCha8Rng, student_ids: &[StudentId]) -> Settings {
-    Settings {
-        global: limits(rng),
-        students: subset(rng, student_ids, 0.2)
-            .into_iter()
-            .map(|id| (id, limits(rng)))
-            .collect(),
     }
 }
 

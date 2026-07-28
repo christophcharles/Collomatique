@@ -14,7 +14,7 @@ use collomatique_state_colloscopes::{
     SubjectOp, SubjectParameters, SubjectPeriodicity, TeacherOp, WeekOp,
     group_lists::{GroupList, GroupListFilling, GroupListParameters, PrefilledGroup},
     ids::PeriodId,
-    settings::{Limits, Settings},
+    settings::Limits,
     slots::Slot,
     students::Student,
     teachers::Teacher,
@@ -63,10 +63,7 @@ fn remove_student_with_settings_is_rejected() {
 
     // Per-student settings entry referencing the student
     let Ok(None) = app_state.apply(
-        Op::Settings(SettingsOp::Update(Settings {
-            global: Limits::default(),
-            students: BTreeMap::from([(student_id, Limits::default())]).into(),
-        })),
+        Op::Settings(SettingsOp::SetStudent(student_id, Some(Limits::default()))),
         "Add per-student settings".into(),
     ) else {
         panic!("Unexpected result after updating settings");
@@ -90,7 +87,7 @@ fn remove_student_with_settings_is_rejected() {
 
     // Once the settings entry is gone, the removal succeeds
     let Ok(None) = app_state.apply(
-        Op::Settings(SettingsOp::Update(Settings::default())),
+        Op::Settings(SettingsOp::SetStudent(student_id, None)),
         "Clear per-student settings".into(),
     ) else {
         panic!("Unexpected result after clearing settings");

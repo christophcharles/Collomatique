@@ -23,7 +23,7 @@ use collomatique_state_colloscopes::{
     ids::{GroupListId, PeriodId, SlotId, StudentId, SubjectId, TeacherId, WeekId, WeekPatternId},
     incompats::Incompatibility,
     pairings::{PairingRule, RulePart},
-    settings::{Limits, Settings},
+    settings::Limits,
     slot_pairings::{SlotPairingRule, SlotRulePart},
     slots::Slot,
     students::Student,
@@ -341,10 +341,7 @@ fn walk_covers_every_site_in_order() {
 
     // Per-student settings entry for st2.
     apply_none!(
-        Op::Settings(SettingsOp::Update(Settings {
-            global: Limits::default(),
-            students: BTreeMap::from([(st2, Limits::default())]).into(),
-        })),
+        Op::Settings(SettingsOp::SetStudent(st2, Some(Limits::default()))),
         "add per-student settings"
     );
 

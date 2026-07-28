@@ -20,7 +20,7 @@ use collomatique_state_colloscopes::{
     ids::{PeriodId, WeekId},
     incompats::Incompatibility,
     pairings::{PairingRule, RulePart},
-    settings::{Limits, Settings},
+    settings::Limits,
     slot_pairings::{SlotPairingRule, SlotRulePart},
     slots::Slot,
     soft_param::SoftParam,
@@ -601,35 +601,36 @@ pub fn build_rich_data() -> Data {
     // Settings: global limits plus a per-student override
     apply(
         &mut state,
-        Op::Settings(SettingsOp::Update(Settings {
-            global: Limits {
-                interrogations_per_week_min: Some(SoftParam {
-                    soft: false,
-                    value: 1,
-                }),
+        Op::Settings(SettingsOp::SetGlobal(Limits {
+            interrogations_per_week_min: Some(SoftParam {
+                soft: false,
+                value: 1,
+            }),
+            interrogations_per_week_max: Some(SoftParam {
+                soft: true,
+                value: 4,
+            }),
+            max_interrogations_per_day: Some(SoftParam {
+                soft: false,
+                value: nz(2),
+            }),
+        })),
+        "global settings",
+    );
+    apply(
+        &mut state,
+        Op::Settings(SettingsOp::SetStudent(
+            student1,
+            Some(Limits {
+                interrogations_per_week_min: None,
                 interrogations_per_week_max: Some(SoftParam {
                     soft: true,
-                    value: 4,
+                    value: 3,
                 }),
-                max_interrogations_per_day: Some(SoftParam {
-                    soft: false,
-                    value: nz(2),
-                }),
-            },
-            students: BTreeMap::from([(
-                student1,
-                Limits {
-                    interrogations_per_week_min: None,
-                    interrogations_per_week_max: Some(SoftParam {
-                        soft: true,
-                        value: 3,
-                    }),
-                    max_interrogations_per_day: None,
-                },
-            )])
-            .into(),
-        })),
-        "settings",
+                max_interrogations_per_day: None,
+            }),
+        )),
+        "per-student settings",
     );
 
     // Balancing: global options plus a per-subject override

@@ -840,13 +840,29 @@ fn gen_group_list(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invali
 }
 
 fn gen_settings(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
-    let mut settings = synth::settings(rng, &pools.student_ids);
     if invalid {
-        settings
-            .students
-            .insert(unsafe { StudentId::new(dangling(rng)) }, Default::default());
+        // A dangling student key. `SetStudent` prechecks the key, so this
+        // bounces at the precheck tier rather than as a dangling FK — the same
+        // flavor of invalidity as `gen_student`'s `Remove(dangling)` arm.
+        return Op::Settings(SettingsOp::SetStudent(
+            unsafe { StudentId::new(dangling(rng)) },
+            Some(synth::limits(rng)),
+        ));
     }
-    Op::Settings(SettingsOp::Update(settings))
+    let op = if pools.student_ids.is_empty() || rng.random_bool(0.4) {
+        SettingsOp::SetGlobal(synth::limits(rng))
+    } else {
+        let student_id = pick(rng, &pools.student_ids);
+        // Both directions of the sparse form are drawn: setting an override
+        // and clearing one.
+        let new_limits = if rng.random_bool(0.75) {
+            Some(synth::limits(rng))
+        } else {
+            None
+        };
+        SettingsOp::SetStudent(student_id, new_limits)
+    };
+    Op::Settings(op)
 }
 
 fn gen_pairing(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
@@ -1192,7 +1208,7 @@ pub fn gen_corruption_op(rng: &mut ChaCha8Rng, inner: &InnerData) -> (Corruption
     if removable_present(&pools) {
         eligible.push(CorruptionKind::ForceRemove);
     }
-    eligible.push(CorruptionKind::ForceRetarget); // settings/balancing always work
+    eligible.push(CorruptionKind::ForceRetarget); // balancing always works
     if !semantic.is_empty() {
         eligible.push(CorruptionKind::ForceSemantic);
     }
@@ -1300,19 +1316,14 @@ fn gen_force_remove(rng: &mut ChaCha8Rng, pools: &Pools) -> Option<Op> {
 }
 
 /// ForceRetarget: an `Update` on a live target whose payload embeds a dangling
-/// id (stripped `validate_*` lets it land as a dangling FK). Settings and
-/// balancing are always available (whole-config replace), so the candidate set
-/// is never empty.
+/// id (stripped `validate_*` lets it land as a dangling FK). Balancing is
+/// always available (whole-config replace), so the candidate set is never
+/// empty. Settings used to be a second such candidate; since the settings op
+/// was split, its only reference — the per-student key — is a prechecked
+/// coordinate, so no settings op can land a dangling FK any more.
 fn gen_force_retarget(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools) -> Op {
     let mut candidates: Vec<Op> = Vec::new();
 
-    {
-        let mut settings = synth::settings(rng, &pools.student_ids);
-        settings
-            .students
-            .insert(unsafe { StudentId::new(dangling(rng)) }, Default::default());
-        candidates.push(Op::Settings(SettingsOp::Update(settings)));
-    }
     {
         let mut balancing = synth::balancing(rng, &pools.interrogation_subject_ids);
         balancing

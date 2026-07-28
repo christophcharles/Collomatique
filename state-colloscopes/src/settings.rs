@@ -46,29 +46,59 @@ pub struct Limits {
 }
 
 /// Precondition errors of the forced settings op — the carve-out subset
-/// (step-3 survey Table 2). The settings op has no transition/input guards
-/// (only `validate_settings`, which strips), so this enum is empty; kept for
-/// uniformity across the [crate::PrecheckError] family.
+/// (step-3 survey Table 2). The whole-value `Update` had no
+/// transition/input guards at all (only `validate_settings`, which strips);
+/// the targeted [crate::SettingsOp::SetStudent] adds the coordinate
+/// carve-out its key needs.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum SettingsPrecheckError {}
+pub enum SettingsPrecheckError {
+    /// A student id is invalid
+    #[error("invalid student id ({0:?})")]
+    InvalidStudentId(StudentId),
+}
 
 impl crate::Data {
     /// Used internally by [crate::Data::force_apply]
     ///
-    /// Force-applies a settings op: the only guard (`validate_settings`)
-    /// is an invariant guard and is stripped (step-3 survey Table 1), so this
-    /// copy is guard-free and its [SettingsPrecheckError] is empty. May leave the
-    /// state invalid; the caller owns checking and rollback.
+    /// Force-applies a settings op: `validate_settings` is an invariant guard
+    /// and is stripped (step-3 survey Table 1); what remains is the
+    /// coordinate-existence check on the per-student key, checked uniformly
+    /// whether the override is being set or cleared — the same choice
+    /// `force_apply_assignment`'s `SetRow` makes. May leave the state invalid;
+    /// the caller owns checking and rollback.
     pub(crate) fn force_apply_settings(
         &mut self,
         settings_op: &AnnotatedSettingsOp,
     ) -> std::result::Result<AnnotatedSettingsOp, SettingsPrecheckError> {
         match settings_op {
-            AnnotatedSettingsOp::Update(new_settings) => {
+            AnnotatedSettingsOp::SetGlobal(new_limits) => {
                 // stripped: validate_settings
-                let old_settings =
-                    std::mem::replace(&mut self.inner_data.params.settings, new_settings.clone());
-                Ok(AnnotatedSettingsOp::Update(old_settings))
+                let old_limits = std::mem::replace(
+                    &mut self.inner_data.params.settings.global,
+                    new_limits.clone(),
+                );
+                Ok(AnnotatedSettingsOp::SetGlobal(old_limits))
+            }
+            AnnotatedSettingsOp::SetStudent(student_id, new_limits) => {
+                if !self
+                    .inner_data
+                    .params
+                    .students
+                    .student_map
+                    .contains(student_id)
+                {
+                    return Err(SettingsPrecheckError::InvalidStudentId(*student_id));
+                }
+
+                // Sparse canonical form: a student has an entry iff an
+                // override was set for it. `None` removes the entry.
+                let students = &mut self.inner_data.params.settings.students;
+                let old_limits = match new_limits {
+                    Some(limits) => students.insert(*student_id, limits.clone()),
+                    None => students.remove(student_id),
+                };
+
+                Ok(AnnotatedSettingsOp::SetStudent(*student_id, old_limits))
             }
         }
     }

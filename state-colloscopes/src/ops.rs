@@ -228,8 +228,10 @@ pub enum GroupListOp {
 /// settings we can do on a [Data]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SettingsOp {
-    /// Update the settings
-    Update(settings::Settings),
+    /// Replace the global limits
+    SetGlobal(settings::Limits),
+    /// Set or clear the per-student limits override. `None` removes the entry.
+    SetStudent(StudentId, Option<settings::Limits>),
 }
 
 /// Pairing rule operation enumeration
@@ -689,8 +691,10 @@ pub enum AnnotatedSlotPairingOp {
 /// See [collomatique_state::history] for a complete discussion of the problem.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AnnotatedSettingsOp {
-    /// Update the settings
-    Update(settings::Settings),
+    /// Replace the global limits
+    SetGlobal(settings::Limits),
+    /// Set or clear the per-student limits override. `None` removes the entry.
+    SetStudent(StudentId, Option<settings::Limits>),
 }
 
 /// Balancing annotated operation enumeration
@@ -1105,7 +1109,10 @@ impl AnnotatedSettingsOp {
     /// Annotates the subcategory of operations [SettingsOp].
     fn annotate(settings_op: SettingsOp) -> AnnotatedSettingsOp {
         match settings_op {
-            SettingsOp::Update(general_settings) => AnnotatedSettingsOp::Update(general_settings),
+            SettingsOp::SetGlobal(limits) => AnnotatedSettingsOp::SetGlobal(limits),
+            SettingsOp::SetStudent(student_id, limits) => {
+                AnnotatedSettingsOp::SetStudent(student_id, limits)
+            }
         }
     }
 }

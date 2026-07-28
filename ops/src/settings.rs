@@ -68,17 +68,14 @@ impl SettingsUpdateOp {
     ) -> Result<(), SettingsUpdateError> {
         match self {
             Self::UpdateGlobalLimits(limits) => {
-                let mut new_settings = data.get_data().get_inner_data().params.settings.clone();
-                new_settings.global = limits.clone();
-
                 let result = data
                     .apply(
                         collomatique_state_colloscopes::Op::Settings(
-                            collomatique_state_colloscopes::SettingsOp::Update(new_settings),
+                            collomatique_state_colloscopes::SettingsOp::SetGlobal(limits.clone()),
                         ),
                         self.get_desc(),
                     )
-                    .expect("SettingsOp::Update should never fail");
+                    .expect("SettingsOp::SetGlobal should never fail");
 
                 assert!(result.is_none());
 
@@ -96,17 +93,17 @@ impl SettingsUpdateOp {
                     return Err(UpdateStudentLimitsError::InvalidStudentId(*student_id).into());
                 }
 
-                let mut new_settings = data.get_data().get_inner_data().params.settings.clone();
-                new_settings.students.insert(*student_id, limits.clone());
-
                 let result = data
                     .apply(
                         collomatique_state_colloscopes::Op::Settings(
-                            collomatique_state_colloscopes::SettingsOp::Update(new_settings),
+                            collomatique_state_colloscopes::SettingsOp::SetStudent(
+                                *student_id,
+                                Some(limits.clone()),
+                            ),
                         ),
                         self.get_desc(),
                     )
-                    .expect("SettingsOp::Update should not fail");
+                    .expect("SettingsOp::SetStudent should not fail on a checked student id");
 
                 assert!(result.is_none());
 
@@ -124,19 +121,31 @@ impl SettingsUpdateOp {
                     return Err(RemoveStudentLimitsError::InvalidStudentId(*student_id).into());
                 }
 
-                let mut new_settings = data.get_data().get_inner_data().params.settings.clone();
-                if new_settings.students.remove(student_id).is_none() {
+                // `SetStudent(_, None)` is a no-op on a student without an
+                // override, so the absence is detected here rather than by the
+                // elementary op.
+                if !data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .settings
+                    .students
+                    .contains(student_id)
+                {
                     return Err(RemoveStudentLimitsError::NoLimitsForStudent(*student_id).into());
                 }
 
                 let result = data
                     .apply(
                         collomatique_state_colloscopes::Op::Settings(
-                            collomatique_state_colloscopes::SettingsOp::Update(new_settings),
+                            collomatique_state_colloscopes::SettingsOp::SetStudent(
+                                *student_id,
+                                None,
+                            ),
                         ),
                         self.get_desc(),
                     )
-                    .expect("SettingsOp::Update should not fail");
+                    .expect("SettingsOp::SetStudent should not fail on a checked student id");
 
                 assert!(result.is_none());
 
