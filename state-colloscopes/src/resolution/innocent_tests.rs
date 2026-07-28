@@ -595,11 +595,15 @@ pub(super) fn build_valid_document() -> (Data, ValidDocument) {
         )),
         "filling the assignments row",
     );
-    // A second row, same subject on the *other* period. `Assignments` offers a
-    // period-keyed lookup (`subjects_for_period`), so an arm that keyed on the
-    // period alone is a bug a test can really express — this row is what such
-    // an arm would wrongly find when §8.2 row 5's twin puts a row at
-    // `(other_period, excluded_subject)`. It is also the row §8.2 row 6's twin
+    // Two more rows, placed so that §8.2 row 5's twin — which puts a row at
+    // `(other_period, excluded_subject)` — has a live neighbour sharing *each*
+    // half of that coordinate: same period different subject, then same subject
+    // different period. An arm that dropped either half of the key would find
+    // one of them and clear a row nobody complained about. `Sport` runs on the
+    // first period (it excludes only the second), so the second row is ordinary
+    // data, not a contrivance.
+    //
+    // The first of the two does double duty: it is the row §8.2 row 6's twin
     // adds an excluded student to, so that arm's lookup succeeds and its
     // membership test is what the test is really about.
     apply(
@@ -610,6 +614,15 @@ pub(super) fn build_valid_document() -> (Data, ValidDocument) {
             BTreeSet::from([student, other_student]),
         )),
         "filling the second assignments row",
+    );
+    apply(
+        &mut data,
+        Op::Assignment(AssignmentOp::SetRow(
+            period,
+            excluded_subject,
+            BTreeSet::from([student, other_student]),
+        )),
+        "filling the third assignments row",
     );
 
     // Both overrides are deliberately *different* from the global values, so
@@ -2339,11 +2352,11 @@ fn slot_overflows_day_arm_spares_a_slot_that_starts_elsewhere() {
 //
 // The block-1 rule applies unchanged — vary the row, not the predicate's other
 // side — and it bites hardest here, because for a coordinate-shaped arm the
-// only bug a `None` test can catch is a mis-keyed or missing lookup. Two
-// fixture rows were added for exactly that: a second assignments row on the
-// other period, and a second association on the other subject. Without a live
-// neighbour sharing one half of the corrupt coordinate, an arm that dropped
-// the other half would sail through every test in this block.
+// only bug a `None` test can catch is a mis-keyed or missing lookup. Three
+// fixture rows were added for exactly that: two assignments rows and a second
+// association. Without a live neighbour sharing one half of the corrupt
+// coordinate, an arm that dropped the other half would sail through every test
+// in this block.
 //
 // One coverage limit is worth stating rather than leaving to be rediscovered:
 // **row 7's subject half cannot be covered at all.** A live neighbour for it
@@ -2362,10 +2375,11 @@ fn slot_overflows_day_arm_spares_a_slot_that_starts_elsewhere() {
 /// tests. Widening the subject's exclusions instead would leave the fixture's
 /// own row offending and make the valid document guilty.
 ///
-/// The valid document holds no row at that coordinate — but it does hold one
-/// on `other_period`, for `subject`. `Assignments::subjects_for_period` makes a
-/// period-keyed lookup a bug an arm could really have, and that row is what
-/// such an arm would find before clearing a row nobody complained about.
+/// The valid document holds no row at that coordinate — but it holds a
+/// neighbour on each half of it: `(other_period, subject)` for the period,
+/// `(period, excluded_subject)` for the subject. So the arm cannot pass by
+/// having nothing to look at, and an arm that dropped either half of the key
+/// would find one of those rows and clear something nobody complained about.
 ///
 /// **Exactly one break**: the row's students exclude no period, so row 6 does
 /// not join, and every id in it is live.

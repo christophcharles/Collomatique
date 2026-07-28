@@ -2445,8 +2445,8 @@ dangling-FK commits). So
 its first run, with its hand-derived set; **no map bug has surfaced anywhere in §8.1, nor in the
 first two §8.2 blocks**. Two commits remain, both `Convergence`: rows 9-12, and rows 13-16
 with the two `GlobalUpdate` policy pins folded in. The shared fixture has been touched three
-times across the eight commits (7.5c's `lone_slot`, 7.5g's `other_teacher`, 7.5h's second
-assignments row and second association). Four things settled
+times across the eight commits (7.5c's `lone_slot`, 7.5g's `other_teacher`, 7.5h's two extra
+assignments rows and second association). Four things settled
 while writing 7.5a, all of them things the rest of the series inherits:
 
 - ★ **The in-crate equivalent of "through `Manager::apply`" is `Data::annotate` + `Data::apply`.**
@@ -2668,19 +2668,25 @@ remain:
 And two from 7.5h, both about what a **coordinate-shaped** arm can and cannot be tested for:
 
 - ★ **For a coordinate-shaped arm the lookup is the only thing there is, so the corrupt
-  coordinate needs a live neighbour on each half — and the container's own API says which
-  halves are worth the trouble.** Rows 5, 7 and 8 have no identity test to write: the op carries
-  the coordinate, so a wrong target is not expressible. That leaves exactly two bugs a `None`
-  test can catch — an arm that skipped the lookup (which the engine would answer with the no-op
-  panic) and an arm that keyed on half the coordinate. Guarding the second is what the fixture's
-  two new rows are for: `(other_period, subject)` in the assignments, `(period, other_subject)`
-  in the associations. The choice of which halves to cover is not a matter of taste — it follows
-  the container. `Assignments` exposes `subjects_for_period`, so a period-keyed arm is a bug
-  that can really be written and the period half is worth a neighbour; there is no
-  subject-keyed lookup, so that half was deliberately left uncovered rather than paying for a
-  third row. `subjects_associations` is a plain `Table` keyed by the pair with no half-keyed
-  lookup at all, so there the neighbours mainly keep the map from being a singleton. Record the
-  reasoning with the fixture rows, not just the rows.
+  coordinate needs a live neighbour on *each* half.** Rows 5, 7 and 8 have no identity test to
+  write: the op carries the coordinate, so a wrong target is not expressible. That leaves
+  exactly two bugs a `None` test can catch — an arm that skipped the lookup (which the engine
+  would answer with the no-op panic) and an arm that keyed on half the coordinate. Guarding the
+  second is what the fixture's three new rows are for: `(other_period, subject)` and
+  `(period, excluded_subject)` in the assignments, `(period, other_subject)` in the
+  associations. Row 5's twin sits at `(other_period, excluded_subject)` and now has a neighbour
+  on both halves; row 8's twin likewise.
+
+  A first draft of this finding covered only the period half of row 5 and argued the gap away:
+  `Assignments` exposes `subjects_for_period` but no subject-keyed lookup, so — the argument
+  went — only a period-keyed arm is a bug that can really be written. **That argument does not
+  hold, and the ★ user ruling is to close the gap instead of defending it** (July 28 2026). A
+  wrong arm can walk `assignments.iter()` and match on the subject; what the container happens
+  to expose does not bound what a buggy arm could do. Covering the half cost one `apply` line of
+  ordinary data — `Sport` runs on the first period, so students take it there — which is far
+  less than the paragraph written to excuse its absence. The general rule for the two remaining
+  blocks: **cover both halves, and if one genuinely cannot be covered, the reason must be a
+  proof, not a plausibility argument** (row 7 below is what a proof looks like).
 - ★ **Row 7's subject half has no innocent witness, and provably cannot have one.** A live
   neighbour for it would be a second association naming a subject whose interrogations are
   disabled — and that association *is* row 7, so no valid document can hold one. The offending
