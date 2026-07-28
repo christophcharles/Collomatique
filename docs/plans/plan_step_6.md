@@ -2317,10 +2317,16 @@ Why this shape:
   fires with it. For these two tests the expected literal is a **two-element set, still
   hand-derived and still `assert_eq!`'d whole**. Keep the slot's teacher live and teaching
   so the companion is the deterministic one: for `SlotSubject` the set is the dangle plus
-  `SlotTeacherDoesNotTeachSubject(slot, teacher, dead_subject)`; for row 3 (corrupt by
-  turning the subject's `interrogation_parameters` to `None`) it is row 3 plus row 2,
-  `TeacherSubjectWithoutInterrogations(teacher, subject)` — and that fixture's subject
-  must carry no association and no balancing override, or rows 7 and 9 join the set.
+  `SlotTeacherDoesNotTeachSubject(slot, teacher, dead_subject)`; for row 3 it is row 3
+  plus **row 1**, `SlotTeacherDoesNotTeachSubject(slot, teacher, no_interrogation_subject)`
+  — **this passage originally predicted row 2 and prescribed "corrupt by turning the
+  subject's `interrogation_parameters` to `None`"; both were wrong, and 7.5g's finding
+  below says why**: that corruption yields a *guilty* document rather than an innocent one,
+  and the corruption that does yield an innocent one forces row 1 as the companion. The
+  rider that came with the wrong recipe — "that fixture's subject must carry no association
+  and no balancing override, or rows 7 and 9 join the set" — is void with it: the right twin
+  moves a slot onto another subject and leaves every subject's interrogations alone, so
+  rows 7 and 9 cannot fire at all.
   Step 4 then runs on the element the test is about, selected from the set — not on
   `set.first()`. Every other arm keeps the one-element form; a future arm that cannot is a
   finding to record here, never a licence to fall back to `contains`.
@@ -2426,17 +2432,20 @@ Three rules for the series:
   corruption, not the document. The builder belongs in 7.5a and is written to be reused —
   do not copy a fixture per test.
 
-**Status: the whole dangling-FK half has landed** — 7.5a (`b04bdcaf`), 7.5b (`362dde77`),
-7.5c (`acaab2fb`), 7.5d (`cba1a8b2`), 7.5e (`332ef6a6`) and 7.5f (`3d9deb0b`). So
+**Status: the whole dangling-FK half has landed, and the first `Convergence` commit with it** —
+7.5a (`b04bdcaf`), 7.5b (`362dde77`), 7.5c (`acaab2fb`), 7.5d (`cba1a8b2`), 7.5e (`332ef6a6`),
+7.5f (`3d9deb0b`) and 7.5g (`e73d6572`, §8.2 rows 1-4; the letter is this document's, the split
+table above numbers only the six dangling-FK commits). So
 `src/resolution/innocent_tests.rs` exists with its `#[cfg(test)] mod innocent_tests;` line in
-`resolution.rs`, the shared builder, and **thirty tests, one per §8.1 arm**: the `SlotTeacher`
-arm, all seven `PeriodRefSite` arms, all eight `SubjectRefSite` ones, all five `StudentRefSite`
-ones, both `WeekRefSite` ones, both `WeekPatternRefSite` ones, all three `SlotRefSite` ones and
-both `GroupListRefSite` ones. Every one passed on its first run, with
-its hand-derived set; **no map bug has surfaced anywhere in §8.1**. Four commits remain, all of
-them the `Convergence` ones. The shared fixture was touched exactly once across the six commits
-(7.5c's `lone_slot`). Four things settled while writing 7.5a, all of them things the rest of the
-series inherits:
+`resolution.rs`, the shared builder, and **thirty-four tests**: one per §8.1 arm — the
+`SlotTeacher` arm, all seven `PeriodRefSite` arms, all eight `SubjectRefSite` ones, all five
+`StudentRefSite` ones, both `WeekRefSite` ones, both `WeekPatternRefSite` ones, all three
+`SlotRefSite` ones and both `GroupListRefSite` ones — plus §8.2 rows 1-4. Every one passed on
+its first run, with its hand-derived set; **no map bug has surfaced anywhere in §8.1, nor in the
+first §8.2 block**. Three commits remain, all `Convergence`: rows 5-8, rows 9-12, and rows 13-16
+with the two `GlobalUpdate` policy pins folded in. The shared fixture has been touched exactly
+twice across the seven commits (7.5c's `lone_slot`, 7.5g's `other_teacher`). Four things settled
+while writing 7.5a, all of them things the rest of the series inherits:
 
 - ★ **The in-crate equivalent of "through `Manager::apply`" is `Data::annotate` + `Data::apply`.**
   §9bis's step-1 sketch says "ops through `Manager::apply`, then `get_data().clone()`", which is
@@ -2603,6 +2612,41 @@ And two from 7.5f, which closed the half:
   the fixture: here it is the group-number bound treating an association to a *dangling* list as
   unknown and skipping (`invariants.rs:596-611`) instead of falling back to a bound of 0, which
   is what lets the association twin leave the fixture's colloscope cell alone.
+
+And two from 7.5g, the first `Convergence` commit. The first is the rule the whole second half
+of the series turns on, and it should be read before writing any of the twelve twins that
+remain:
+
+- ★ **The two sides of a `Convergence` predicate are not interchangeable, and an innocent twin
+  must vary the side the arm tests.** A `Convergence` variant names an offending
+  *configuration*: a row, together with the field values that make it offending. The arm never
+  re-checks the predicate (rule 1) and pins only what its fix is about to destroy (rule 5). So
+  the twin has to differ from the valid document in **exactly the field the arm compares**, and
+  the corruption that first comes to mind usually varies the other side. Turning a subject's
+  `interrogation_parameters` to `None` does make rows 2 and 3 fire — but it leaves the teacher
+  still teaching that subject and the slot still sitting on it, so the *valid* document carries
+  the very shape the arm tests for and `Some` is the right answer. That corruption produces a
+  **guilty** document, and a `None` test written on it would fail for a reason that has nothing
+  to do with the map. The twin must move the **row** instead: give the slot another teacher, put
+  it on another subject, move its start time, add a subject to the teacher's set. Three of this
+  block's four rows needed exactly that, and 7.5f's closing prediction — that `lone_slot`'s rule
+  ("a corruption that moves a row between owners needs a row that owns nothing else") would bite
+  again on the first `Convergence` twin that retargets an existing row — came true immediately:
+  rows 1, 3 and 4 all retarget `lone_slot`, and all three are one-break because it owns nothing.
+- ★ **Row 3's companion is row 1, not row 2, and it provably cannot be row 2.** §9bis's
+  exception paragraph (corrected above) predicted the wrong one because it was reasoning from
+  the wrong corruption. Take the right one: an innocent twin has to move the slot onto a
+  *different*, live subject that runs no interrogations. But no valid document ever lets a
+  teacher teach such a subject — that is row 2 itself, and the fixture would not have built —
+  so the slot's live teacher cannot be teaching the destination subject, and the teacher-teaches
+  check is **guaranteed** to fire beside row 3. The set is still two elements, and row 3 is
+  still selected out of it by shape: it is *not* `set.first()` here, since row 1 is declared
+  first, which is the pick-order independence the `SlotSubject` test only claimed to have.
+  The fixture change this block needed is the second and last so far, and it is smaller than the
+  one §9bis foresaw: a **second teacher**, on `other_subject` and teaching no slot at all. It
+  exists so row 1's twin can point a slot at a *live* teacher who does not teach that slot's
+  subject — §8.2 row 1's reachable route, and the only way to pin the teacher comparison, which
+  §8.2 calls the load-bearing one, instead of settling for the defensive subject comparison.
 
 ## 9ter. Commit 7.6 — the self-caused rejection fixtures (`tests/cascade.rs`)
 
