@@ -554,10 +554,18 @@ pub(super) fn build_valid_document() -> (Data, ValidDocument) {
         )),
         "associating the group list",
     );
-    // A second association, on the *other* subject and the same period. It is
-    // what an arm keyed on the subject alone would wrongly find when §8.2 row
-    // 8's twin puts an entry at `(other_period, other_subject)`, and it keeps
-    // the association map from being a singleton.
+    // Two more associations, placed so that §8.2 row 8's twin — which puts an
+    // entry at `(other_period, other_subject)` — has a live neighbour sharing
+    // *each* half of that coordinate. The first shares the subject, and is what
+    // an arm that ignored the period would wrongly find; the second shares the
+    // period, and is what an arm that ignored the subject would wrongly find.
+    // The second is also ordinary data: the running subject uses the same group
+    // list in both periods.
+    //
+    // Row 7's twin has no such pair, and provably cannot: its subject is the
+    // one with interrogations disabled, and *any* entry naming that subject is
+    // row 7 itself. Only the period half is coverable there, and the entry on
+    // `period` above covers it.
     apply(
         &mut data,
         Op::GroupList(GroupListOp::AssignToSubject(
@@ -566,6 +574,15 @@ pub(super) fn build_valid_document() -> (Data, ValidDocument) {
             Some(excluding_group_list),
         )),
         "associating the second group list",
+    );
+    apply(
+        &mut data,
+        Op::GroupList(GroupListOp::AssignToSubject(
+            other_period,
+            subject,
+            Some(group_list),
+        )),
+        "associating the group list on the second period",
     );
     // Only an *automatic* list may carry a colloscope row
     // (`ColloscopeGroupListPrefilled`), so the placements go on `group_list`.
@@ -2368,19 +2385,26 @@ fn slot_overflows_day_arm_spares_a_slot_that_starts_elsewhere() {
 //
 // The block-1 rule applies unchanged — vary the row, not the predicate's other
 // side — and it bites hardest here, because for a coordinate-shaped arm the
-// only bug a `None` test can catch is a mis-keyed or missing lookup. Three
-// fixture rows were added for exactly that: two assignments rows and a second
-// association. Without a live neighbour sharing one half of the corrupt
-// coordinate, an arm that dropped the other half would sail through every test
-// in this block.
+// only bug a `None` test can catch is a mis-keyed or missing lookup. Without a
+// live neighbour sharing one half of the corrupt coordinate, an arm that
+// dropped the other half would sail through every test in this block. Five
+// fixture rows exist for exactly that: three assignments rows and two extra
+// associations.
 //
-// One coverage limit is worth stating rather than leaving to be rediscovered:
-// **row 7's subject half cannot be covered at all.** A live neighbour for it
-// would be a second association naming `excluded_subject`, and that association
-// is itself row 7 — no valid document can hold one. The offending predicate is
-// a property of the subject, so the subject half has no innocent witness. Row
-// 8 has no such problem, because a subject that excludes one period may be
-// associated on another.
+// Which halves are coverable is decided by the predicate, and the rule is
+// mechanical: **a neighbour keeping half H fixed exists only if a valid
+// document may hold that H again — so whatever the predicate reads on its own
+// is uncoverable.**
+//
+// - Rows 5 and 8 read the subject and the period *together*. Relational, so
+//   neither half alone is condemned and both witnesses are buildable. Both
+//   twins have both.
+// - Row 7 reads the subject alone. Any association naming a subject without
+//   interrogations *is* row 7, so the subject half has no witness at any
+//   fixture. The period half is covered.
+// - Row 6 reads the student and the period. Any assignments row on that period
+//   holding that student *is* row 6, so the period half has no witness. The
+//   subject half is covered.
 
 /// `Convergence::AssignmentForSubjectNotRunningOnPeriod` — §8.2 row 5.
 ///
@@ -2482,8 +2506,10 @@ fn assigned_student_not_present_for_period_arm_spares_a_row_of_present_students(
 ///
 /// **The subject half of the coordinate has no innocent witness**, and cannot
 /// have one: a live association naming a subject without interrogations *is*
-/// this invariant. The period half does — the fixture holds two entries on
-/// `period` — so that is the half this test pins.
+/// this invariant. The predicate reads the subject alone, so that half is
+/// uncoverable at any fixture — a proof, not a gap left open. The period half
+/// is covered: the fixture holds two entries on `period`, so an arm that
+/// ignored the subject would find one and detach it.
 ///
 /// **Exactly one break**: `excluded_subject` excludes `other_period`, not
 /// `period`, so row 8 does not join; the list associated has no colloscope row,
@@ -2519,10 +2545,13 @@ fn association_for_subject_without_interrogations_arm_spares_a_missing_entry() {
 /// excluded on the period. That is what keeps row 7 out of the set: a subject
 /// with interrogations disabled would fire both.
 ///
-/// Unlike row 7, this coordinate has a live neighbour on **both** halves — the
-/// fixture's `(period, subject)` and `(period, other_subject)` entries — so an
-/// arm that dropped either half of the key would find one of them and clear an
-/// association nothing complained about.
+/// Unlike row 7, this coordinate has a live neighbour on **both** halves, and
+/// that is not luck — row 8's predicate is *relational*, reading the subject
+/// and the period together, so neither half alone determines it and both
+/// witnesses are buildable. `(period, other_subject)` shares the subject and
+/// catches an arm that ignored the period; `(other_period, subject)` shares the
+/// period and catches an arm that ignored the subject. Either mistake finds a
+/// live entry and clears an association nothing complained about.
 ///
 /// **Exactly one break**: `other_subject` runs interrogations, so row 7 stays
 /// quiet, and it hosts no slot, so nothing in the colloscope block is

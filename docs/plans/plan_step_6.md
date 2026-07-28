@@ -2445,8 +2445,9 @@ dangling-FK commits). So
 its first run, with its hand-derived set; **no map bug has surfaced anywhere in §8.1, nor in the
 first two §8.2 blocks**. Two commits remain, both `Convergence`: rows 9-12, and rows 13-16
 with the two `GlobalUpdate` policy pins folded in. The shared fixture has been touched three
-times across the eight commits (7.5c's `lone_slot`, 7.5g's `other_teacher`, 7.5h's two extra
-assignments rows and second association). Four things settled
+times across the eight commits (7.5c's `lone_slot`, 7.5g's `other_teacher`, and 7.5h's innocent
+witnesses — two extra assignments rows, a third member in the first row, and two extra
+associations). Four things settled
 while writing 7.5a, all of them things the rest of the series inherits:
 
 - ★ **The in-crate equivalent of "through `Manager::apply`" is `Data::annotate` + `Data::apply`.**
@@ -2672,12 +2673,23 @@ And two from 7.5h, both about what a **coordinate-shaped** arm can and cannot be
   write: the op carries the coordinate, so a wrong target is not expressible. That leaves
   exactly two bugs a `None` test can catch — an arm that skipped the lookup (which the engine
   would answer with the no-op panic) and an arm that keyed on half the coordinate. Guarding the
-  second is what the fixture's three new rows are for: `(other_period, subject)` and
-  `(period, excluded_subject)` in the assignments, `(period, other_subject)` in the
-  associations. Row 5's twin sits at `(other_period, excluded_subject)` and now has a neighbour
-  on both halves; row 8's twin likewise. Row 6 needs the same treatment one axis over — its
+  second is what the fixture's five extra rows are for: `(other_period, subject)` and
+  `(period, excluded_subject)` in the assignments, `(period, other_subject)` and
+  `(other_period, subject)` in the associations. Row 5's twin sits at
+  `(other_period, excluded_subject)` and has a neighbour on both halves; row 8's twin, at
+  `(other_period, other_subject)`, likewise. Row 6 needs the same treatment one axis over — its
   witness is a *member*, not a row, so `excluded_student` was added to the fixture's first
   assignments row, where she is present and therefore innocent.
+
+  **Row 8's second neighbour was missing at first, and the claim that it was there was made
+  without checking** (★ user, July 28 2026, reviewing the block row by row). Both of the
+  fixture's associations sat on `period`, so nothing was attached on `other_period` and an arm
+  that ignored the subject would have found nothing and passed. One `apply` closed it — the
+  running subject uses the same group list in both periods, which is ordinary data. The lesson
+  is narrow and worth keeping: **do not assert a witness exists, look at where the fixture
+  actually put its rows.** Both of this block's coverage claims were wrong on first writing, in
+  opposite directions — row 5's gap was defended when it should have been closed, row 8's gap
+  was declared closed when it was open.
 
   A first draft of this finding covered only the period half of row 5 and argued the gap away:
   `Assignments` exposes `subjects_for_period` but no subject-keyed lookup, so — the argument
@@ -2689,10 +2701,12 @@ And two from 7.5h, both about what a **coordinate-shaped** arm can and cannot be
   less than the paragraph written to excuse its absence. The general rule for the two remaining
   blocks: **cover both halves, and if one genuinely cannot be covered, the reason must be a
   proof, not a plausibility argument** (row 7 below is what a proof looks like).
-- ★ **The coverage limit, and the rule it comes from: whichever coordinate the predicate depends
-  on, that half has no innocent witness — and cannot have one at any fixture.** This is the
-  series' first stated limit, and it has two instances in this block, which is what makes it a
-  rule rather than an accident.
+- ★ **The coverage limit, and the rule it comes from.** Stated mechanically: a neighbour keeping
+  coordinate half `H` fixed exists only if a valid document may hold that `H` again — so
+  **whatever the predicate reads on its own is uncoverable, and whatever it reads only jointly
+  is coverable and must be covered.** This is the series' first stated limit, and it has two
+  instances in this block against two counter-instances, which is what makes it a rule rather
+  than an accident.
 
   *Row 7.* A witness for its subject half would be a second association naming a subject whose
   interrogations are disabled. That association **is** row 7, so no valid document can hold one.
@@ -2705,10 +2719,15 @@ And two from 7.5h, both about what a **coordinate-shaped** arm can and cannot be
   witness on the subject axis is the one the fixture now carries (she is assigned on `period`,
   where she is present).
 
-  Row 8 escapes the limit entirely because its predicate is *relational*: a subject that
-  excludes one period may be associated on another, so both halves have witnesses. That is the
-  test to apply to the twelve rows still to come — **ask which coordinates the predicate reads;
-  those halves are uncoverable, the rest must be covered.** Making row 8 reachable at all is
+  *Rows 5 and 8* escape the limit entirely, and they are the counter-instances that keep the
+  rule honest. Both predicates are *relational* — they read the subject and the period together,
+  and neither half alone condemns anything. A subject that excludes one period may be associated
+  on another; a period that one subject skips may carry a row for a different subject. So both
+  witnesses are buildable for both rows, and both twins now have both.
+
+  That is the test to apply to the twelve rows still to come — **ask what the predicate reads on
+  its own and what it reads only jointly; the first is uncoverable, the second must be
+  covered.** Making row 8 reachable at all is
   what one fixture change bought: `other_subject` now excludes `other_period`, making it the
   fixture's only subject that runs interrogations and does not run everywhere, which is exactly
   the combination that fires row 8 without dragging row 7 in.
