@@ -48,6 +48,9 @@ pub mod non_empty_range;
 pub mod pairings;
 pub mod periods;
 pub mod refs;
+// The cascade's resolution map. Private: it exports nothing, and surfaces only
+// through the `collomatique_state::Fixable` impl it holds for [Data].
+mod resolution;
 pub mod settings;
 pub mod slot_pairings;
 pub mod slots;
