@@ -73,6 +73,9 @@
 //! that lands as a perfect no-op is a crash in front of the user, not a repair.
 //! Correctness lives in these arms.
 
+#[cfg(test)]
+mod innocent_tests;
+
 use std::collections::{BTreeMap, BTreeSet};
 
 use collomatique_state::Fixable;
