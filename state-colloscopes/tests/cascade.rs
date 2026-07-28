@@ -2184,3 +2184,98 @@ fn fixture_5b_week_pattern_update_clears_the_newly_inactive_cell() {
         "and the week is now impossible for the slot — the mirror of 5a's flip"
     );
 }
+
+/// Fixture `6` — **a no-op target lands, and does not panic**.
+///
+/// Every other fixture in this file drives the resolution map. This one does
+/// not: the target breaks nothing, so the map is never consulted. What it
+/// guards is a deliberate carve-out in the engine that nothing else touches.
+///
+/// `cascade.rs:81-83` computes the no-op snapshot for fix ops only:
+///
+/// ```ignore
+/// // Snapshot for the no-op-fix panic; only fix ops are held to it (a
+/// // no-op *target* is a legitimate perfect no-op, G.2).
+/// let before = (!is_target).then(|| data.clone());
+/// ```
+///
+/// A fix that applies as a perfect no-op is a map-contract violation and the
+/// engine panics on it — the map owes a `None` when there is nothing to repair.
+/// A *target* that applies as a perfect no-op is legitimate, because the apply
+/// gate accepts perfect no-ops (the G.2 widening), so the target is exempt from
+/// that check on purpose. Drop the `(!is_target)` guard and make the snapshot
+/// unconditional, and every no-op target starts panicking — and without this
+/// fixture no test in the suite would notice. The toy tests in `cascade.rs` do
+/// not cover it, and `property_apply_gate.rs` exercises the gate rather than the
+/// cascade.
+///
+/// An identical `Slot` is the right op for the job: unambiguously a no-op, and
+/// clear of the canonical-absent rules that would make an emptying colloscope or
+/// assignments write a *real* change. The expected value is read from the live
+/// document, so "identical" is guaranteed rather than reconstructed.
+///
+/// This fixture replaces a "clean target lands alone" one — a benign edit
+/// cascading to exactly `[itself]` — dropped at the July 28 2026 review as
+/// testing nothing new: the engine's fast path is already toy test 3, and "an
+/// ordinary edit does not trip the checker" is what the rest of the suite does
+/// all day.
+#[test]
+fn fixture_6_a_no_op_target_lands_alone_and_does_not_panic() {
+    let mut app = AppState::<Data, String>::new(Data::new());
+
+    let subject: SubjectId = apply_new!(
+        app,
+        Op::Subject(SubjectOp::AddAfter(
+            None,
+            interrogation_subject("Math", BTreeSet::new())
+        )),
+        NewId::SubjectId,
+        "adding a subject"
+    );
+    let teacher: TeacherId = apply_new!(
+        app,
+        Op::Teacher(TeacherOp::Add(Teacher {
+            desc: Default::default(),
+            subjects: BTreeSet::from([subject]),
+        })),
+        NewId::TeacherId,
+        "adding a teacher"
+    );
+    let slot: SlotId = apply_new!(
+        app,
+        Op::Slot(SlotOp::AddAfter(None, make_slot(subject, teacher, None, 8))),
+        NewId::SlotId,
+        "adding a slot"
+    );
+
+    let mut data = app.get_data().clone();
+    let before = data.get_inner_data().clone();
+    // Read back rather than rebuild: this is the identical value by
+    // construction, which is the whole point of the op.
+    let identical_slot = before
+        .params
+        .slots
+        .find_slot(slot)
+        .expect("the slot is there")
+        .clone();
+
+    let (target, _new_info) = data.annotate(Op::Slot(SlotOp::Update(slot, identical_slot.clone())));
+
+    let applied = apply_cascade(&mut data, target).expect("a no-op target is accepted, not fixed");
+
+    assert_eq!(
+        forward_ops(&applied),
+        vec![AnnotatedOp::from(AnnotatedSlotOp::Update(
+            slot,
+            identical_slot
+        ))],
+        "the target lands alone: nothing broke, so the map was never consulted"
+    );
+
+    assert_clean(&data);
+    assert_eq!(
+        data.get_inner_data(),
+        &before,
+        "and the document is byte-identical — the no-op really was one"
+    );
+}
