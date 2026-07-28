@@ -89,7 +89,8 @@ the design doc's §8):
   (`state-colloscopes/src/resolution/innocent_tests.rs`): one test per invariant variant,
   asserting that an arm handed an invariant its own state does *not* cause returns `None`.
   This is the mechanical detector for frame point 5. Adopted during the commit-6 review
-  (July 28 2026).
+  (July 28 2026). It is **46 tests, so it ships as ten commits** — 7.5a … 7.5f for the
+  dangling-FK arms, then four for the `Convergence` blocks; see §9bis.
 - **Commit 8** — the cascade property test (`state-colloscopes/tests/property_cascade.rs`):
   random valid walks driven through `apply_cascade`; no panic, `Ok` ⇒ clean, `Err` ⇒
   bit-identical state.
@@ -1813,8 +1814,9 @@ Fixture style: build a document through the public surface
 ## 9bis. Commit 7.5 — the innocent-state `None` tests
 
 Adopted during the July 28 2026 review, as the mechanical detector for frame point 5. One
-test per `FixableInvariant` variant — every `Convergence` variant and every `Reference` site
-— all of the same shape:
+test per **arm** — every `Convergence` variant and every `Reference` site, counting a
+two-part site as the two arms it really is — all of the same shape (the split into ten
+commits is §9bis.1):
 
 ```rust
 // 1. A valid fixture, built through the public surface.
@@ -1878,6 +1880,58 @@ cleaned**. That is D4 applied to a whole-document target, and it is user-visible
 import takes exactly that shape. They reuse the idiom of the existing corrupt-`GlobalUpdate`
 tests at `lib.rs:620` and `:780`.
 
+### 9bis.1 The split — ten commits
+
+One test per arm means **46 tests**: 30 for §8.1 (a two-part site such as
+`PairingRuleAntecedent` / `Consequent` is *two* arms and therefore two tests) and 16 for
+§8.2. That is far too much for one commit, so it ships as ten (★ user ruling, July 28 2026).
+
+The arms are spread very unevenly across the eight target kinds — period 7, subject 8,
+student 5, slot 3, week 2, week pattern 2, group list 2, teacher 1 — so "one commit per
+target kind" is kept as the rule, but the four smallest kinds are merged in pairs rather than
+producing commits whose whole content is two tests.
+
+**The dangling-FK half — six commits:**
+
+| Commit | Content | Tests |
+|---|---|---|
+| **7.5a** | scaffolding + **target: a teacher** | 1 |
+| **7.5b** | **target: a period** | 7 |
+| **7.5c** | **target: a subject** | 8 |
+| **7.5d** | **target: a student** | 5 |
+| **7.5e** | **targets: a week and a week pattern** | 4 |
+| **7.5f** | **targets: a slot and a group list** | 5 |
+
+7.5a is the commit that introduces the file, its `#[cfg(test)] mod innocent_tests;` line, the
+shared valid-fixture builder and the surgery helpers. Its payload is a *single* test on
+purpose: the review there is about the shape of the idiom, not about volume. `SlotTeacher`
+earns that slot because it is the arm that produced frame point 5, and one of only three
+whose identity test is reachable on today's code. 7.5c comes early for the same reason — it
+holds the other two (`IncompatSubject` and the two `PairingRule` parts). The two merges pair
+arms of a common shape: 7.5e is four arms that clear a reference out of a pattern or a
+pattern out of a row; 7.5f is five arms that clear colloscope rows or remove pairing rules.
+
+**The `Convergence` half — four commits, one per review block**: rows 1-4 (the slot and
+teacher block), rows 5-8, rows 9-12, and rows 13-16 (the colloscope block). Four tests each,
+and each commit lines up exactly with one chunk of the §8.2 table, so a reviewer can read the
+commit beside the paragraph that justifies it.
+
+The two `GlobalUpdate` policy pins fold into the last of those four rather than getting a
+commit of their own: one or two tests, a different idiom (`lib.rs:620`, `:780`), and nothing
+depends on them.
+
+Three rules for the series:
+
+- **Ordering.** The whole series lands after commit 5.97, so the enriched payloads are final
+  and no test has to be rewritten. Within the series only 7.5a is constrained (it carries the
+  scaffolding); the other nine are independent, and each is green on its own — they are pure
+  tests against a map that already landed in commit 6.
+- **A failing test is a map bug, not a test bug.** That is the entire point of the series. The
+  house rule then applies: commit the failing test alone, then the fix in a separate commit.
+- **One shared valid fixture serves most tests.** What differs between tests is the
+  corruption, not the document. The builder belongs in 7.5a and is written to be reused —
+  do not copy a fixture per test.
+
 ## 10. Commit 8 — the cascade property test (`tests/property_cascade.rs`)
 
 The "fuzz that there are no panics". Reuse `collomatique_testgen_colloscopes`
@@ -1893,10 +1947,22 @@ every generated op through `annotate` + `apply_cascade` instead of `apply`:
   `applied`, and replaying the reverses in reverse restores the pre-call state exactly.
 - **`Err` ⇒ atomicity**: the state is bit-identical to before the call.
 
-Modest configuration (the cascade multiplies gate calls): start at 20 seeds × 300 ops and
-tune to keep the suite's wall-clock reasonable; the main `property_ops`/`property_apply_gate`
-harnesses remain the deep oracles. Run the suite once, captured to a scratchpad file, per the
-house testing rules.
+**Configuration — start wide, shrink later** (★ user ruling, July 28 2026). The first draft
+proposed a modest 20 seeds × 300 ops because the cascade multiplies gate calls. That is the
+wrong way round: while the migration is in flight we would rather catch a bug and wait a bit.
+So start at **50 seeds × 500 ops**, in the house style — a single hardcoded `RunConfig`
+const, no env variables, no `#[ignore]` tiers (the standing decision recorded at
+`property_ops.rs:30-34`), and `invalid_fraction` at the usual `0.15`. For scale, the two
+existing harnesses run 100 seeds × 1000 ops each (`property_ops.rs:35-39`,
+`property_apply_gate.rs:46`), so this sits below them, not above.
+
+Shrinking is a **later** decision, taken once step 7's migration is finished and the map has
+stopped moving — not a tuning knob to reach for the first time the suite feels slow. When
+that day comes, justify the new size the way `property_ops.rs:32-34` justifies its own ("100
+seeds was verified to still catch every bug found by the original 500-seed configuration"),
+and keep the wide configuration around as the slow reference for milestone checks. The main
+`property_ops` / `property_apply_gate` harnesses remain the deep oracles throughout. Run the
+suite once, captured to a scratchpad file, per the house testing rules.
 
 ## 11. Non-goals, gates, close-out
 
