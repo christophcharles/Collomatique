@@ -1845,17 +1845,24 @@ Fixture style: build a document through the public surface
 `Data::annotate`, and drive `apply_cascade` on it directly.
 
 **Status (July 28 2026).** Landed: `1a` (`32b64bb8`), `1b`–`1e` (`df9357a2`), `2`
-(`a9201341`), `3` (`ba82ac5b`). Every one passed on its first run, so no map bug has surfaced
-yet. Remaining: scenarios 4, 5, 6. Two scenario descriptions below turned out to be wrong when
-implemented, and both are corrected in place and marked **★ CORRECTION** — `1b`'s document is
-not constructible as described, and scenario 2 needs two slot pairing rules rather than one.
-Read those before writing the remaining fixtures: the `1b` one states a constraint that binds
-scenario 5 as well. (It was written as binding scenario 3 too; it does not. The constraint is
-about *colloscope cells*, and scenario 3 has none — its association is there because the
-scenario asks for one, not because a cell forces it.)
+(`a9201341`), `3` (`ba82ac5b`), `4` (`ea73e700`), `5a`/`5b` (`cd2eb958`). Every one passed on
+its first run, so no map bug has surfaced yet. Remaining: scenario 6.
 
-Scenario 3's description held up as written: it landed with no ★ CORRECTION, and the only
-changes are the two **★ ADDITION**s recorded under it.
+Three descriptions below needed correcting, all marked **★ CORRECTION** in place. Two were
+found at implementation: `1b`'s document is not constructible as described, and scenario 2
+needs two slot pairing rules rather than one. The third was found *before* implementation, at
+the discussion that opened scenario 5 — the plan's account of what `None` means was plain
+wrong, and it would have mis-shaped target A's semantic assertion. See the note under target A.
+
+Scenarios 3 and 4 held up as written. Scenario 3 carries two **★ ADDITION**s (things the
+fixture needed in order to *see* what it asserts, not changes to its trace); scenario 4 needed
+nothing at all.
+
+The `1b` correction states a constraint that binds every fixture wanting a colloscope cell:
+the cell needs a group list associated to its `(period, subject)`, and that association is
+itself a live period reference. It duly bound fixture 2 and scenario 5. It was written as
+binding scenario 3 too; it does not — scenario 3 has no cell, and its association is there
+because the scenario asks for one.
 
 Three rules apply to the whole section, settled at the July 28 2026 review.
 
@@ -2176,11 +2183,26 @@ Scenarios:
      cleaning would have deleted both (`ops/src/week_patterns.rs:229-256`).
    - `WP2`, its slot and its incompatibility **byte-identical** at the end.
    - the colloscope cell **still there**: widening destroys nothing.
-   - the semantics, not merely the field: `is_interrogation_possible(slot, w)` is now `true`
-     for a week `w` that `WP` excluded (`colloscope_params.rs:59`; the underlying
-     `is_week_active(week, None)` is `:45`). The divergence was argued on what `None` *means*,
-     so it is the meaning that should be pinned. If `None` ever stopped meaning "every week",
-     this assertion is the one that should scream.
+   - the semantics, not merely the field — and as a **before/after flip**, not as a final
+     value. Take `w`, a week `WP` excluded: `is_interrogation_possible(slot, w)` is `false`
+     before the cascade and `true` after (`colloscope_params.rs:59`; the underlying
+     `is_week_active(week, None)` is `:45`). Asserting `slot.week_pattern == None` would say a
+     field moved; it would not say the slot got *wider*, which is the whole claim of the
+     divergence. And a bare "true at the end" could pass for a reason unrelated to the map,
+     where the flip cannot.
+
+     **★ CORRECTION, July 28 2026 (user ruling, before implementation).** The sentence that
+     stood here — "if `None` ever stopped meaning *every week*, this assertion is the one that
+     should scream" — was wrong, and wrong in a way that would have mis-shaped the assertion.
+     `None` does not mean "every week". It means "no pattern excludes this slot".
+     `is_week_active` is a **conjunction**: the week must run interrogations *and* not be
+     excluded by the slot's pattern. Clearing the pattern drops the second conjunct only, so
+     `None` means "every week that runs interrogations".
+
+     The consequence for the fixture is a **non-goal**: it does not check that a week with
+     `interrogations: false` stays impossible once the pattern is gone. That would be testing
+     `is_week_active`, which is `colloscope_params`' business and has its own tests. A cascade
+     fixture stops at: the map cleared the field, and clearing it widened the slot.
 
    **Target B — `WeekPatternOp::Update(WP, excluded_weeks + w)`**, with the slot's colloscope
    cell sitting on `w`. One break, `InterrogationOnInactiveWeek(slot, w)` (§8.2 row 12), fix
