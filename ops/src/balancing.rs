@@ -68,17 +68,14 @@ impl BalancingUpdateOp {
     ) -> Result<(), BalancingUpdateError> {
         match self {
             Self::UpdateGlobalOptions(options) => {
-                let mut new_balancing = data.get_data().get_inner_data().params.balancing.clone();
-                new_balancing.global = options.clone();
-
                 let result = data
                     .apply(
                         collomatique_state_colloscopes::Op::Balancing(
-                            collomatique_state_colloscopes::BalancingOp::Update(new_balancing),
+                            collomatique_state_colloscopes::BalancingOp::SetGlobal(options.clone()),
                         ),
                         self.get_desc(),
                     )
-                    .expect("BalancingOp::Update should never fail");
+                    .expect("BalancingOp::SetGlobal should never fail");
 
                 assert!(result.is_none());
 
@@ -96,17 +93,17 @@ impl BalancingUpdateOp {
                     return Err(UpdateSubjectOptionsError::InvalidSubjectId(*subject_id).into());
                 }
 
-                let mut new_balancing = data.get_data().get_inner_data().params.balancing.clone();
-                new_balancing.subjects.insert(*subject_id, options.clone());
-
                 let result = data
                     .apply(
                         collomatique_state_colloscopes::Op::Balancing(
-                            collomatique_state_colloscopes::BalancingOp::Update(new_balancing),
+                            collomatique_state_colloscopes::BalancingOp::SetSubject(
+                                *subject_id,
+                                Some(options.clone()),
+                            ),
                         ),
                         self.get_desc(),
                     )
-                    .expect("BalancingOp::Update should not fail");
+                    .expect("BalancingOp::SetSubject should not fail on a checked subject id");
 
                 assert!(result.is_none());
 
@@ -124,19 +121,31 @@ impl BalancingUpdateOp {
                     return Err(RemoveSubjectOptionsError::InvalidSubjectId(*subject_id).into());
                 }
 
-                let mut new_balancing = data.get_data().get_inner_data().params.balancing.clone();
-                if new_balancing.subjects.remove(subject_id).is_none() {
+                // `SetSubject(_, None)` is a no-op on a subject without an
+                // override, so the absence is detected here rather than by the
+                // elementary op.
+                if !data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .balancing
+                    .subjects
+                    .contains(subject_id)
+                {
                     return Err(RemoveSubjectOptionsError::NoOptionsForSubject(*subject_id).into());
                 }
 
                 let result = data
                     .apply(
                         collomatique_state_colloscopes::Op::Balancing(
-                            collomatique_state_colloscopes::BalancingOp::Update(new_balancing),
+                            collomatique_state_colloscopes::BalancingOp::SetSubject(
+                                *subject_id,
+                                None,
+                            ),
                         ),
                         self.get_desc(),
                     )
-                    .expect("BalancingOp::Update should not fail");
+                    .expect("BalancingOp::SetSubject should not fail on a checked subject id");
 
                 assert!(result.is_none());
 

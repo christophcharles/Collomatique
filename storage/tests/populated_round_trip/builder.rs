@@ -14,7 +14,7 @@ use collomatique_state_colloscopes::{
     NonEmptyRangeInclusive, Op, PairingOp, PeriodOp, PersonWithContact, SettingsOp, SlotOp,
     SlotPairingOp, StudentOp, Subject, SubjectInterrogationParameters, SubjectOp,
     SubjectParameters, SubjectPeriodicity, TeacherOp, WeekOp, WeekPatternOp,
-    balancing::{Balancing, BalancingOptions},
+    balancing::BalancingOptions,
     export_config,
     group_lists::{GroupList, GroupListFilling, GroupListParameters, PrefilledGroup},
     ids::{PeriodId, WeekId},
@@ -636,33 +636,34 @@ pub fn build_rich_data() -> Data {
     // Balancing: global options plus a per-subject override
     apply(
         &mut state,
-        Op::Balancing(BalancingOp::Update(Balancing {
-            global: BalancingOptions {
-                teacher_rotation: Some(SoftParam {
-                    soft: true,
+        Op::Balancing(BalancingOp::SetGlobal(BalancingOptions {
+            teacher_rotation: Some(SoftParam {
+                soft: true,
+                value: (),
+            }),
+            slot_rotation: None,
+            avoid_twice_in_a_row: true,
+            year_teacher_rotation: false,
+            period_teacher_rotation: true,
+        })),
+        "global balancing",
+    );
+    apply(
+        &mut state,
+        Op::Balancing(BalancingOp::SetSubject(
+            subject_maths,
+            Some(BalancingOptions {
+                teacher_rotation: None,
+                slot_rotation: Some(SoftParam {
+                    soft: false,
                     value: (),
                 }),
-                slot_rotation: None,
-                avoid_twice_in_a_row: true,
-                year_teacher_rotation: false,
-                period_teacher_rotation: true,
-            },
-            subjects: BTreeMap::from([(
-                subject_maths,
-                BalancingOptions {
-                    teacher_rotation: None,
-                    slot_rotation: Some(SoftParam {
-                        soft: false,
-                        value: (),
-                    }),
-                    avoid_twice_in_a_row: false,
-                    year_teacher_rotation: true,
-                    period_teacher_rotation: false,
-                },
-            )])
-            .into(),
-        })),
-        "balancing",
+                avoid_twice_in_a_row: false,
+                year_teacher_rotation: true,
+                period_teacher_rotation: false,
+            }),
+        )),
+        "per-subject balancing",
     );
 
     // A pairing rule and a slot pairing rule

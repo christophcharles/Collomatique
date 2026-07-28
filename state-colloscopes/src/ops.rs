@@ -268,8 +268,10 @@ pub enum SlotPairingOp {
 /// balancing configuration we can do on a [Data]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BalancingOp {
-    /// Update the balancing configuration
-    Update(balancing::Balancing),
+    /// Replace the global balancing options
+    SetGlobal(balancing::BalancingOptions),
+    /// Set or clear the per-subject override. `None` removes the entry.
+    SetSubject(SubjectId, Option<balancing::BalancingOptions>),
 }
 
 /// Colloscope operation enumeration
@@ -706,8 +708,10 @@ pub enum AnnotatedSettingsOp {
 /// See [collomatique_state::history] for a complete discussion of the problem.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AnnotatedBalancingOp {
-    /// Update the balancing configuration
-    Update(balancing::Balancing),
+    /// Replace the global balancing options
+    SetGlobal(balancing::BalancingOptions),
+    /// Set or clear the per-subject override. `None` removes the entry.
+    SetSubject(SubjectId, Option<balancing::BalancingOptions>),
 }
 
 /// Colloscope operation enumeration
@@ -1123,7 +1127,10 @@ impl AnnotatedBalancingOp {
     /// Annotates the subcategory of operations [BalancingOp].
     fn annotate(balancing_op: BalancingOp) -> AnnotatedBalancingOp {
         match balancing_op {
-            BalancingOp::Update(balancing) => AnnotatedBalancingOp::Update(balancing),
+            BalancingOp::SetGlobal(options) => AnnotatedBalancingOp::SetGlobal(options),
+            BalancingOp::SetSubject(subject_id, options) => {
+                AnnotatedBalancingOp::SetSubject(subject_id, options)
+            }
         }
     }
 }

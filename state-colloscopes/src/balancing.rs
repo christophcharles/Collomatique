@@ -73,29 +73,59 @@ impl Default for BalancingOptions {
 }
 
 /// Precondition errors of the forced balancing op — the carve-out subset
-/// (step-3 survey Table 2). The balancing op has no transition/input guards
-/// (only `validate_balancing`, which strips), so this enum is empty; kept for
-/// uniformity across the [crate::PrecheckError] family.
+/// (step-3 survey Table 2). The whole-value `Update` had no
+/// transition/input guards at all (only `validate_balancing`, which strips);
+/// the targeted [crate::BalancingOp::SetSubject] adds the coordinate
+/// carve-out its key needs.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum BalancingPrecheckError {}
+pub enum BalancingPrecheckError {
+    /// A subject id is invalid
+    #[error("invalid subject id ({0:?})")]
+    InvalidSubjectId(SubjectId),
+}
 
 impl crate::Data {
     /// Used internally by [crate::Data::force_apply]
     ///
-    /// Force-applies a balancing op: the only guard (`validate_balancing`)
-    /// is an invariant guard and is stripped (step-3 survey Table 1), so this
-    /// copy is guard-free and its [BalancingPrecheckError] is empty. May leave the
-    /// state invalid; the caller owns checking and rollback.
+    /// Force-applies a balancing op: `validate_balancing` is an invariant guard
+    /// and is stripped (step-3 survey Table 1); what remains is the
+    /// coordinate-existence check on the per-subject key, checked uniformly
+    /// whether the override is being set or cleared — the same choice
+    /// `force_apply_assignment`'s `SetRow` makes. May leave the state invalid;
+    /// the caller owns checking and rollback.
     pub(crate) fn force_apply_balancing(
         &mut self,
         balancing_op: &AnnotatedBalancingOp,
     ) -> std::result::Result<AnnotatedBalancingOp, BalancingPrecheckError> {
         match balancing_op {
-            AnnotatedBalancingOp::Update(new_balancing) => {
+            AnnotatedBalancingOp::SetGlobal(new_options) => {
                 // stripped: validate_balancing
-                let old_balancing =
-                    std::mem::replace(&mut self.inner_data.params.balancing, new_balancing.clone());
-                Ok(AnnotatedBalancingOp::Update(old_balancing))
+                let old_options = std::mem::replace(
+                    &mut self.inner_data.params.balancing.global,
+                    new_options.clone(),
+                );
+                Ok(AnnotatedBalancingOp::SetGlobal(old_options))
+            }
+            AnnotatedBalancingOp::SetSubject(subject_id, new_options) => {
+                if self
+                    .inner_data
+                    .params
+                    .subjects
+                    .find_subject(*subject_id)
+                    .is_none()
+                {
+                    return Err(BalancingPrecheckError::InvalidSubjectId(*subject_id));
+                }
+
+                // Sparse canonical form: a subject has an entry iff an
+                // override was set for it. `None` removes the entry.
+                let subjects = &mut self.inner_data.params.balancing.subjects;
+                let old_options = match new_options {
+                    Some(options) => subjects.insert(*subject_id, options.clone()),
+                    None => subjects.remove(subject_id),
+                };
+
+                Ok(AnnotatedBalancingOp::SetSubject(*subject_id, old_options))
             }
         }
     }

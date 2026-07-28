@@ -13,7 +13,7 @@ use std::num::NonZeroU32;
 use collomatique_state_colloscopes::{
     NonEmptyRangeInclusive, PersonWithContact, Subject, SubjectInterrogationParameters,
     SubjectParameters, SubjectPeriodicity,
-    balancing::{Balancing, BalancingOptions},
+    balancing::BalancingOptions,
     export_config,
     group_lists::{GroupListFilling, GroupListParameters, PrefilledGroup},
     ids::{PeriodId, SlotId, StudentId, SubjectId, TeacherId, WeekId, WeekPatternId},
@@ -358,7 +358,7 @@ pub fn limits(rng: &mut ChaCha8Rng) -> Limits {
     }
 }
 
-fn balancing_options(rng: &mut ChaCha8Rng) -> BalancingOptions {
+pub fn balancing_options(rng: &mut ChaCha8Rng) -> BalancingOptions {
     BalancingOptions {
         teacher_rotation: if rng.random_bool(0.5) {
             Some(SoftParam {
@@ -379,16 +379,6 @@ fn balancing_options(rng: &mut ChaCha8Rng) -> BalancingOptions {
         avoid_twice_in_a_row: rng.random_bool(0.5),
         year_teacher_rotation: rng.random_bool(0.3),
         period_teacher_rotation: rng.random_bool(0.3),
-    }
-}
-
-pub fn balancing(rng: &mut ChaCha8Rng, interrogation_subject_ids: &[SubjectId]) -> Balancing {
-    Balancing {
-        global: balancing_options(rng),
-        subjects: subset(rng, interrogation_subject_ids, 0.3)
-            .into_iter()
-            .map(|id| (id, balancing_options(rng)))
-            .collect(),
     }
 }
 

@@ -18,7 +18,7 @@ use collomatique_state_colloscopes::{
     SubjectInterrogationParameters, SubjectOp, SubjectParameters, SubjectPeriodicity,
     SubjectRefSite, TeacherOp, TeacherRefSite, WeekOp, WeekPatternOp, WeekPatternRefSite,
     WeekRefSite,
-    balancing::{Balancing, BalancingOptions},
+    balancing::BalancingOptions,
     group_lists::{GroupList, GroupListFilling, GroupListParameters, PrefilledGroup},
     ids::{GroupListId, PeriodId, SlotId, StudentId, SubjectId, TeacherId, WeekId, WeekPatternId},
     incompats::Incompatibility,
@@ -347,10 +347,10 @@ fn walk_covers_every_site_in_order() {
 
     // Per-subject balancing override for Physics.
     apply_none!(
-        Op::Balancing(BalancingOp::Update(Balancing {
-            global: BalancingOptions::default(),
-            subjects: BTreeMap::from([(phys, BalancingOptions::default())]).into(),
-        })),
+        Op::Balancing(BalancingOp::SetSubject(
+            phys,
+            Some(BalancingOptions::default())
+        )),
         "add per-subject balancing"
     );
 

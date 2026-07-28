@@ -988,17 +988,36 @@ fn gen_slot_pairing(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
 }
 
 fn gen_balancing(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
-    let mut balancing = synth::balancing(rng, &pools.interrogation_subject_ids);
     if invalid {
+        // Two flavors, as before the split: an override on a live subject that
+        // has no interrogations (lands, then the checker reports
+        // `BalancingForSubjectWithoutInterrogations`), or a dangling subject
+        // key — which `SetSubject` now bounces at the precheck tier.
         let subject_id = if !pools.non_interrogation_subject_ids.is_empty() && rng.random_bool(0.5)
         {
             pick(rng, &pools.non_interrogation_subject_ids)
         } else {
             unsafe { SubjectId::new(dangling(rng)) }
         };
-        balancing.subjects.insert(subject_id, Default::default());
+        return Op::Balancing(BalancingOp::SetSubject(
+            subject_id,
+            Some(synth::balancing_options(rng)),
+        ));
     }
-    Op::Balancing(BalancingOp::Update(balancing))
+    let op = if pools.interrogation_subject_ids.is_empty() || rng.random_bool(0.4) {
+        BalancingOp::SetGlobal(synth::balancing_options(rng))
+    } else {
+        let subject_id = pick(rng, &pools.interrogation_subject_ids);
+        // Both directions of the sparse form are drawn: setting an override
+        // and clearing one.
+        let new_options = if rng.random_bool(0.75) {
+            Some(synth::balancing_options(rng))
+        } else {
+            None
+        };
+        BalancingOp::SetSubject(subject_id, new_options)
+    };
+    Op::Balancing(op)
 }
 
 fn gen_colloscope(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invalid: bool) -> Op {
@@ -1196,8 +1215,8 @@ impl CorruptionKind {
 /// Generates one probe op for the gate-property fuzz.
 ///
 /// A [`CorruptionKind`] is chosen uniformly among the kinds that have material
-/// in the current state (retarget and valid are always available); the returned
-/// op is carve-out-clean so `force_apply` lands it. All but
+/// in the current state (only valid is always available); the returned op is
+/// carve-out-clean so `force_apply` lands it. All but
 /// [`CorruptionKind::ForceValid`] aim at a stripped invariant.
 pub fn gen_corruption_op(rng: &mut ChaCha8Rng, inner: &InnerData) -> (CorruptionKind, Op) {
     let pools = Pools::extract(inner);
@@ -1208,7 +1227,9 @@ pub fn gen_corruption_op(rng: &mut ChaCha8Rng, inner: &InnerData) -> (Corruption
     if removable_present(&pools) {
         eligible.push(CorruptionKind::ForceRemove);
     }
-    eligible.push(CorruptionKind::ForceRetarget); // balancing always works
+    if retargetable_present(inner, &pools) {
+        eligible.push(CorruptionKind::ForceRetarget);
+    }
     if !semantic.is_empty() {
         eligible.push(CorruptionKind::ForceSemantic);
     }
@@ -1222,7 +1243,9 @@ pub fn gen_corruption_op(rng: &mut ChaCha8Rng, inner: &InnerData) -> (Corruption
         CorruptionKind::ForceRemove => {
             gen_force_remove(rng, &pools).expect("removable pool present")
         }
-        CorruptionKind::ForceRetarget => gen_force_retarget(rng, inner, &pools),
+        CorruptionKind::ForceRetarget => {
+            gen_force_retarget(rng, inner, &pools).expect("retargetable pool present")
+        }
         CorruptionKind::ForceSemantic => gen_force_semantic(rng, inner, &pools, &semantic),
         CorruptionKind::ForceLogic => gen_force_logic(rng, inner, &pools, &logic),
         CorruptionKind::ForceValid => gen_op(rng, inner, &[], 0.0).1,
@@ -1316,21 +1339,15 @@ fn gen_force_remove(rng: &mut ChaCha8Rng, pools: &Pools) -> Option<Op> {
 }
 
 /// ForceRetarget: an `Update` on a live target whose payload embeds a dangling
-/// id (stripped `validate_*` lets it land as a dangling FK). Balancing is
-/// always available (whole-config replace), so the candidate set is never
-/// empty. Settings used to be a second such candidate; since the settings op
-/// was split, its only reference — the per-student key — is a prechecked
-/// coordinate, so no settings op can land a dangling FK any more.
-fn gen_force_retarget(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools) -> Op {
+/// id (stripped `validate_*` lets it land as a dangling FK). Every candidate is
+/// gated on a pool, so the recipe needs [removable_present]'s counterpart,
+/// [retargetable_present], and returns `None` on an empty state. Settings and
+/// balancing used to be two unconditional candidates; since both ops were
+/// split, their only references — the per-student and per-subject keys — are
+/// prechecked coordinates, so neither can land a dangling FK any more.
+fn gen_force_retarget(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools) -> Option<Op> {
     let mut candidates: Vec<Op> = Vec::new();
 
-    {
-        let mut balancing = synth::balancing(rng, &pools.interrogation_subject_ids);
-        balancing
-            .subjects
-            .insert(unsafe { SubjectId::new(dangling(rng)) }, Default::default());
-        candidates.push(Op::Balancing(BalancingOp::Update(balancing)));
-    }
     if !pools.student_ids.is_empty() {
         let id = pick(rng, &pools.student_ids);
         let mut student = synth::student(rng, &pools.period_ids);
@@ -1414,8 +1431,23 @@ fn gen_force_retarget(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools) ->
         }
     }
 
+    if candidates.is_empty() {
+        return None;
+    }
     let idx = rng.random_range(0..candidates.len());
-    candidates.swap_remove(idx)
+    Some(candidates.swap_remove(idx))
+}
+
+/// Whether any [gen_force_retarget] candidate has material in the current
+/// state. Mirrors that function's pool gates, the way [removable_present]
+/// mirrors [gen_force_remove]'s.
+fn retargetable_present(inner: &InnerData, pools: &Pools) -> bool {
+    !pools.student_ids.is_empty()
+        || !pools.subject_ids.is_empty()
+        || !pools.teacher_ids.is_empty()
+        || !pools.incompat_ids.is_empty()
+        || !pools.slot_ids.is_empty()
+        || !group_lists_with_min_groups(inner, 1).is_empty()
 }
 
 /// Live group lists whose `group_names` count is at least `min`. Used to gate
