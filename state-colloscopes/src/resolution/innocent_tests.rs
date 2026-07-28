@@ -61,8 +61,8 @@ use crate::ops::{
 };
 use crate::pairings::{PairingRule, RulePart};
 use crate::refs::{
-    PeriodRefSite, Reference, StudentRefSite, SubjectRefSite, TeacherRefSite, WeekPatternRefSite,
-    WeekRefSite,
+    GroupListRefSite, PeriodRefSite, Reference, SlotRefSite, StudentRefSite, SubjectRefSite,
+    TeacherRefSite, WeekPatternRefSite, WeekRefSite,
 };
 use crate::settings::Limits;
 use crate::slot_pairings::{SlotPairingRule, SlotRulePart};
@@ -1787,5 +1787,211 @@ fn incompat_week_pattern_arm_spares_an_incompat_wearing_a_live_pattern() {
             site: WeekPatternRefSite::IncompatWeekPattern(doc.incompat),
         }),
         "the live incompatibility wears a live pattern, so the arm has no field to clear",
+    );
+}
+
+// ---- Targets: a slot and a group list (`SlotRefSite`, `GroupListRefSite`) ----
+//
+// Five arms, and the commit that closes the dangling-FK half. Three of them
+// clear a colloscope row or an association; two remove a slot pairing rule
+// outright.
+//
+// They also complete the series' catalogue of key shapes, which is worth
+// reading as a whole, because the corruption recipe follows from it:
+//
+// - The target is **in the row key** (`SlotRefSite::ColloscopeInterrogation`,
+//   `GroupListRefSite::ColloscopeGroupListKey`, and 7.5b/7.5c's `AssignmentsKey`
+//   and `AssociationEntry`). The emitted op carries the key, so a wrong target
+//   is not expressible and no identity test exists to write. The corruption must
+//   *add* a row on the dead coordinate beside a live one, or the valid document
+//   would be innocent for the trivial reason that it holds no such row at all.
+// - The target is the entry's **value** (`GroupListRefSite::AssociationEntry`).
+//   The op carries the key but not the value, so the identity test is the only
+//   thing tying the fix to the target — and the corruption *replaces* the live
+//   value, so the valid document answers `None` by comparing two live ids.
+// - The target is a **field inside the row** (the two pairing parts, and most of
+//   §8.1). Same as above: replace, and the comparison is real.
+
+/// `SlotRefSite::SlotPairingRuleAntecedent` — the slot twin of 7.5c's two
+/// pairing-rule arms, and separate from its consequent for the same reason: an
+/// arm testing neither part, or the wrong one, would delete a rule whose two
+/// slots are both live.
+///
+/// **Exactly one break**: `PairedSlotsNotInSameSubject` is gated on *both* slots
+/// resolving (`invariants.rs:550-557`), so a dead antecedent makes it skip
+/// rather than fire about mismatched subjects.
+#[test]
+fn slot_pairing_rule_antecedent_arm_spares_a_rule_whose_antecedent_is_live() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    let (mut antecedent, consequent, excluded_periods, soft) = corrupt
+        .params
+        .slot_pairings
+        .slot_pairing_rule_map
+        .get(&doc.slot_pairing)
+        .expect("the fixture's slot pairing rule is there")
+        .clone()
+        .into_parts();
+    antecedent.slot_id = doc.dead_slot;
+    corrupt.params.slot_pairings.slot_pairing_rule_map.insert(
+        doc.slot_pairing,
+        SlotPairingRule::new(antecedent, consequent, excluded_periods, soft)
+            .expect("the dead slot is not the consequent's, so the parts stay distinct"),
+    );
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::DanglingFk(Reference::Slot {
+            target: doc.dead_slot,
+            site: SlotRefSite::SlotPairingRuleAntecedent(doc.slot_pairing),
+        }),
+        "the live rule's antecedent names a live slot, so the arm has no rule to remove",
+    );
+}
+
+/// `SlotRefSite::SlotPairingRuleConsequent` — the mirror of the arm above.
+#[test]
+fn slot_pairing_rule_consequent_arm_spares_a_rule_whose_consequent_is_live() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    let (antecedent, mut consequent, excluded_periods, soft) = corrupt
+        .params
+        .slot_pairings
+        .slot_pairing_rule_map
+        .get(&doc.slot_pairing)
+        .expect("the fixture's slot pairing rule is there")
+        .clone()
+        .into_parts();
+    consequent.slot_id = doc.dead_slot;
+    corrupt.params.slot_pairings.slot_pairing_rule_map.insert(
+        doc.slot_pairing,
+        SlotPairingRule::new(antecedent, consequent, excluded_periods, soft)
+            .expect("the dead slot is not the antecedent's, so the parts stay distinct"),
+    );
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::DanglingFk(Reference::Slot {
+            target: doc.dead_slot,
+            site: SlotRefSite::SlotPairingRuleConsequent(doc.slot_pairing),
+        }),
+        "the live rule's consequent names a live slot, so the arm has no rule to remove",
+    );
+}
+
+/// `SlotRefSite::ColloscopeInterrogation` — the slot half of the `(slot, week)`
+/// key whose week half 7.5e tested, and corrupted the same way: the row is
+/// *added* on the dead slot for the week that already carries a live one.
+///
+/// So the valid document really does hold a colloscope row on that week; what it
+/// does not hold is one for the dead slot. An arm that looked the week up and
+/// ignored the slot would find that row and clear a cell nothing complained
+/// about.
+///
+/// **Exactly one break**: the interrogation loop resolves the slot once
+/// (`invariants.rs:573`) and all three of its predicates are gated on that
+/// resolving, so a dead slot switches the whole loop body off for its row. The
+/// row's week is live, so the `Week` reference the same row emits does not
+/// dangle either.
+#[test]
+fn colloscope_interrogation_slot_arm_spares_a_cell_for_another_slot() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    corrupt
+        .colloscope
+        .set_interrogation(doc.dead_slot, doc.week, BTreeSet::from([0]));
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::DanglingFk(Reference::Slot {
+            target: doc.dead_slot,
+            site: SlotRefSite::ColloscopeInterrogation { week: doc.week },
+        }),
+        "the week's only live cell belongs to another slot, so the arm has no row to clear",
+    );
+}
+
+/// `GroupListRefSite::AssociationEntry` — the only site in the map where the
+/// target is an entry's **value** rather than part of its key. The op is
+/// `AssignToSubject(period, subject, None)`, which names the entry but not the
+/// group list it held, so the identity test is the only thing tying the fix to
+/// the target.
+///
+/// The corruption therefore *replaces* the live association rather than adding
+/// one elsewhere: in the valid document the same `(period, subject)` entry
+/// exists and holds a *live* group list, so the arm answers `None` by comparing
+/// two live ids — which is the comparison under test.
+///
+/// **Exactly one break**: both association predicates read the subject, which is
+/// live and runs interrogations on a period it does not exclude; and the
+/// fixture's colloscope cell survives because the group-number bound treats an
+/// association to a *dangling* list as unknown and skips the check entirely
+/// (`invariants.rs:596-611`) rather than falling back to a bound of 0.
+#[test]
+fn association_entry_group_list_arm_spares_an_entry_holding_a_live_list() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    corrupt
+        .params
+        .group_lists
+        .subjects_associations
+        .insert((doc.period, doc.subject), doc.dead_group_list);
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::DanglingFk(Reference::GroupList {
+            target: doc.dead_group_list,
+            site: GroupListRefSite::AssociationEntry {
+                period: doc.period,
+                subject: doc.subject,
+            },
+        }),
+        "the live entry holds a live group list, so the arm has nothing to unassign",
+    );
+}
+
+/// `GroupListRefSite::ColloscopeGroupListKey` — a pure key site, like
+/// `BalancingSubjectKey` and `SettingsStudentKey`: the group list *is* the key,
+/// so there is no complement to carry and no identity test to write. The arm's
+/// whole content is one lookup.
+///
+/// The fixture already carries a colloscope group-list row for a live list, and
+/// the corruption adds one for the dead list beside it. So the valid document is
+/// not innocent by being empty: an arm that asked "are there any colloscope
+/// group-list rows at all" would find one and emit
+/// `SetGroupList(dead_group_list, {})`, which against a state with no such row
+/// is a perfect no-op — and the engine answers a no-op fix with a panic.
+///
+/// **Exactly one break**: the colloscope group-list loop reads the list behind a
+/// `let … else { continue }` (`invariants.rs:629`), so a dead one makes it skip
+/// before it can judge the placement. The placed student is live, so the
+/// `Student` reference the same row emits does not dangle.
+#[test]
+fn colloscope_group_list_key_arm_spares_a_row_of_a_live_list() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    // Non-empty: rows are canonical-absent, so an empty one is a `LogicError`
+    // that would short-circuit the checker before it reaches the dangle.
+    corrupt
+        .colloscope
+        .set_group_list(doc.dead_group_list, BTreeMap::from([(doc.student, 0)]));
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::DanglingFk(Reference::GroupList {
+            target: doc.dead_group_list,
+            site: GroupListRefSite::ColloscopeGroupListKey,
+        }),
+        "the only live colloscope row belongs to a live list, so the arm has no row to clear",
     );
 }
