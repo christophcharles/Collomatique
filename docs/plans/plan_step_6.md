@@ -1844,6 +1844,14 @@ Fixture style: build a document through the public surface
 `week_ops.rs` idiom), then take `app.get_data().clone()`, annotate the target through
 `Data::annotate`, and drive `apply_cascade` on it directly.
 
+**Status (July 28 2026).** Landed: `1a` (`32b64bb8`), `1b`–`1e` (`df9357a2`), `2`
+(`a9201341`). Every one passed on its first run, so no map bug has surfaced yet. Remaining:
+scenarios 3, 4, 5, 6. Two scenario descriptions below turned out to be wrong when
+implemented, and both are corrected in place and marked **★ CORRECTION** — `1b`'s document is
+not constructible as described, and scenario 2 needs two slot pairing rules rather than one.
+Read those before writing the remaining fixtures: the `1b` one states a constraint that binds
+scenarios 3 and 5 as well.
+
 Three rules apply to the whole section, settled at the July 28 2026 review.
 
 **Expected op lists are written by hand first.** Every fixture below asserts something about
@@ -1865,6 +1873,12 @@ only `Debug, Clone, PartialEq, Eq` (`ops.rs:311`), so a sorted-vector comparison
 available and `Ord` is not worth adding for a test; length plus `contains` catches an extra,
 a missing and a wrong op, and the one case it misses (a duplicate paired with an omission)
 cannot occur — a fix landing twice would be a perfect no-op and the engine would panic first.
+
+(★ Amended July 28 2026. The second of "those two different reasons" no longer holds as
+written: `1b`'s round 1 turned out to report two breaks, not one — see the correction under
+`1b` below. `1b` still asserts its literal sequence, but that sequence is now forced by the
+canonical pick order as well as by the stack, so the two reasons overlap instead of being
+disjoint. `1a` remains the fixture whose *job* is the pick order, on a two-op diff.)
 
 This is a reversal of the first draft, which had the flagship assert its full sequence
 literally and called that "the design-doc §8 confluence pin". It is not one. Confluence means
@@ -1900,14 +1914,44 @@ Scenarios:
    2. **Depth** (`1b`). The minimal chain: a period with exactly **one** week (two would give
       two simultaneous breaks and drag order back in), one slot with one colloscope cell on
       that week, and no week pattern excluding it. Round 1: `PeriodOp::Remove` breaks
-      `WeekPeriodFk(w)`, one break, fix `Week(Remove(w))`. Round 2: that fix breaks
+      `WeekPeriodFk(w)`, fix `Week(Remove(w))`. Round 2: that fix breaks
       `ColloscopeInterrogation { slot }`, one break, fix `SetInterrogation(slot, w, ∅)`. Round
       3: the clear lands, the week removal is retried and lands, the period is retried and
-      lands. Assert the literal sequence
-      `[Colloscope(SetInterrogation(slot, w, ∅)), Week(Remove(w)), Period(Remove(P))]`. This is
-      a fix of a fix of the target — depth three, which no engine test reaches (the toy tests
-      stop at depth two). Because each round has a single break, the sequence is forced and
-      only a real stack or arm bug can change it.
+      lands. This is a fix of a fix of the target — depth three, which no engine test reaches
+      (the toy tests stop at depth two).
+
+      **★ CORRECTION, found at implementation (commit `df9357a2`, July 28 2026). The document
+      as described above is not constructible, and the fixture lands four ops, not three.** The
+      paragraph asked for a document where *every* round reports exactly one break, and closed
+      with "because each round has a single break, the sequence is forced". Round 1 has two.
+
+      A colloscope cell must be non-empty — an empty one is canonical-absent, so writing it
+      removes the row — and `InterrogationGroupOutOfBounds` bounds every group number in a cell
+      by the group count of the group list associated to `(the week's period, the slot's
+      subject)`. **With no association the bound is 0**, so *any* group number is out of bounds
+      and the cell cannot be filled at all. The cell therefore forces an association on
+      `(P, subject)`, and that association is itself a seventh period reference site
+      (`AssociationEntry`). Round 1 breaks `WeekPeriodFk(w)` *and* `AssociationEntry`.
+
+      The literal sequence to assert is therefore
+
+      ```
+      [Colloscope(SetInterrogation(slot, w, ∅)), Week(Remove(w)),
+       GroupList(AssignToSubject(P, subject, None)), Period(Remove(P))]
+      ```
+
+      and the fixture's reason for existing is untouched: `PeriodRefSite` declares
+      `WeekPeriodFk` before `AssociationEntry`, so the week is still picked first and the
+      depth-three chain runs to completion before the association is cleared. What is lost is
+      only the "one break per round" property, so the sequence is now forced by the canonical
+      pick order as well as by the stack — which is `1a`'s subject, and is why `1a` remains the
+      fixture that pins it.
+
+      **This constraint is general and binds every later fixture that wants a colloscope
+      cell**: the cell needs a group list associated to its `(period, subject)`, and that
+      association is a live period reference. It duly bit fixture 2 (commit `a9201341`), where
+      the association is present purely to make the cell fillable. Scenarios 3 and 5 need it
+      too.
    3. **Breadth** (`1c`). A period referenced from **all seven** of its sites at once
       (`WeekPeriodFk`, `SubjectExcludedPeriods`, `StudentExcludedPeriods`,
       `PairingRuleExcludedPeriods`, `SlotPairingRuleExcludedPeriods`, `AssignmentsKey`,
@@ -1950,6 +1994,14 @@ Scenarios:
    each of which opens its own sub-cascade — cell clears for the first, the pairing-rule
    removal for the second.
 
+   **★ CORRECTION, found at implementation (commit `a9201341`, July 28 2026): "a
+   `SlotPairingRule`", singular, is wrong — the scenario needs two.** The sentence above and
+   the coverage paragraph below cannot both hold with one rule. Full `SlotRefSite` coverage
+   wants the removed teacher's slots to appear once as an antecedent and once as a consequent;
+   the construction note below forbids putting them on the two sides of the *same* rule; so
+   each of them needs its own rule, both pairing with the second teacher's slot. The fixture
+   lands **six** ops: two rule removals, one cell clear, two slot removals, the target.
+
    This is not a duplicate of `1c`, and the difference is worth stating because it is not
    obvious. `1c` is breadth **at the root**: seven fixes hanging directly off the target, all
    flat. This is breadth **below** the root: one break round yields two `SlotTeacher` fixes,
@@ -1983,6 +2035,12 @@ Scenarios:
    would take the rule with it, and by the time the second slot is removed there would be no
    rule left to break — the two-arm coverage would collapse to one arm, silently and with the
    test still green.
+
+   That is a coverage argument and nothing more. **Pairing two slots of the same teacher is
+   perfectly legal**; `SlotPairingRule::new` (`slot_pairings.rs`) refuses only a rule whose two
+   parts name the *same slot*, and its doc calls that "the only value-internal invariant". The
+   note is recorded here because the implementation write-up first stated the restriction as if
+   it were a validity limit, which it is not.
 3. **Subject update turning interrogations off.** A subject with interrogations enabled, a
    teacher who teaches it, a slot on it, a group-list association and a balancing override.
    Target: `SubjectOp::Update` turning interrogations off.
