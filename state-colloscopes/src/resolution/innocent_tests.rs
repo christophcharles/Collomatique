@@ -277,8 +277,11 @@ pub(super) struct ValidDocument {
     other_subject: SubjectId,
     /// Excludes `other_period`, and runs no interrogations.
     excluded_subject: SubjectId,
-    /// Teaches `subject`, and is the teacher of both slots.
+    /// Teaches `subject`, and is the teacher of all three slots.
     teacher: TeacherId,
+    /// Teaches `other_subject` only, and teaches no slot. The live teacher a
+    /// twin points a slot at to break the teacher-teaches check honestly.
+    other_teacher: TeacherId,
     /// Excludes `other_week`; worn by `slot` and by `incompat`.
     week_pattern: WeekPatternId,
     /// Wears `week_pattern`, and carries the colloscope cell on `week`.
@@ -392,6 +395,19 @@ pub(super) fn build_valid_document() -> (Data, ValidDocument) {
         })),
         NewId::TeacherId,
         "adding the teacher"
+    );
+    // A second teacher, on the *other* subject, and the teacher of no slot at
+    // all. It exists so that a twin can point a slot at a **live** teacher who
+    // does not teach that slot's subject — §8.2 row 1's reachable route, and
+    // the only way to pin that comparison without reaching for a dead id.
+    let other_teacher = apply_new!(
+        data,
+        Op::Teacher(TeacherOp::Add(Teacher {
+            desc: Default::default(),
+            subjects: BTreeSet::from([other_subject]),
+        })),
+        NewId::TeacherId,
+        "adding the second teacher"
     );
 
     // The pattern excludes the *second* week, so the colloscope cell below —
@@ -705,6 +721,7 @@ pub(super) fn build_valid_document() -> (Data, ValidDocument) {
         other_subject,
         excluded_subject,
         teacher,
+        other_teacher,
         week_pattern,
         slot,
         other_slot,
@@ -1993,5 +2010,271 @@ fn colloscope_group_list_key_arm_spares_a_row_of_a_live_list() {
             site: GroupListRefSite::ColloscopeGroupListKey,
         }),
         "the only live colloscope row belongs to a live list, so the arm has no row to clear",
+    );
+}
+
+// ---- `Convergence`, rows 1-4: the slot and teacher block ----
+//
+// The dangling-FK half is behind us. From here the invariant is a *predicate*
+// over live rows rather than a reference, and that changes what an innocent
+// twin has to look like. The change is the same for all sixteen `Convergence`
+// rows, so it is worth stating once, here.
+//
+// A `Convergence` variant names an offending *configuration*: a row together
+// with the field values that make it offending. The arm never re-checks the
+// predicate (rule 1) and pins only what its fix is about to destroy (rule 5) —
+// for these four rows, a slot's `teacher_id`, its `subject_id`, its
+// `start_time`, or a subject's membership in a teacher's `subjects` set. So an
+// innocent twin has to differ from the valid document in **exactly the field
+// the arm compares**, and nowhere else.
+//
+// That rules out the corruption that first comes to mind in three of the four
+// rows. Turning a subject's interrogations off does make rows 2 and 3 fire —
+// but it leaves the teacher still teaching that subject and the slot still
+// sitting on it, so the *valid* document carries the very shape the arm tests
+// for, and `Some` is the right answer there. Such a corruption produces a
+// guilty document, not an innocent one. The twin has to move the **row**
+// instead: give the slot another teacher, put it on another subject, move its
+// start time, add a subject to the teacher's set.
+//
+// Read the other way round, this is the whole point of the series restated for
+// layer C: the two sides of a `Convergence` predicate are not
+// interchangeable. One of them is the row the fix destroys, and that is the
+// side an innocent-state test must vary.
+
+/// `Convergence::SlotTeacherDoesNotTeachSubject` — §8.2 row 1.
+///
+/// The fix is `Slot::Remove(slot)`, which names only the slot, so both of the
+/// arm's comparisons are pure identity tests. This test pins the **teacher**
+/// one, which §8.2 calls the load-bearing comparison — the subject one is
+/// defensive.
+///
+/// The corruption is row 1's reachable route, reached here by surgery: the slot
+/// is pointed at `other_teacher`, who is alive and teaches `other_subject`
+/// only. A user gets to the same state with `SlotOp::Update` rewriting a slot's
+/// teacher over a document that was fine; the gate rolls that update back, and
+/// the map is then asked about the slot as it stood before.
+///
+/// **Exactly one break**: the teacher resolves, so the check runs rather than
+/// skipping, and fires. The slot's subject is untouched and still runs
+/// interrogations, so rows 3 and 4 have nothing to say about it, and the second
+/// teacher's own subject runs interrogations too, so row 2 stays quiet.
+///
+/// Without the identity test the answer here would be
+/// `Some(Slot::Remove(lone_slot))` merely because the slot exists — deleting a
+/// slot whose teacher is precisely the one who should be teaching it.
+#[test]
+fn slot_teacher_does_not_teach_subject_arm_spares_a_slot_whose_teacher_teaches_it() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    let live_slot = corrupt
+        .params
+        .slots
+        .find_slot(doc.lone_slot)
+        .expect("the fixture's lone slot is there")
+        .clone();
+    // `replace_slot`: the subject is unchanged, so the slot ordering — which is
+    // keyed by subject — stays consistent.
+    corrupt.params.slots.replace_slot(
+        doc.lone_slot,
+        Slot {
+            teacher_id: doc.other_teacher,
+            ..live_slot
+        },
+    );
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::Convergence(Convergence::SlotTeacherDoesNotTeachSubject(
+            doc.lone_slot,
+            doc.other_teacher,
+            doc.subject,
+        )),
+        "the live slot's teacher is not the named one, so the arm has no slot to remove",
+    );
+}
+
+/// `Convergence::TeacherSubjectWithoutInterrogations` — §8.2 row 2, and the one
+/// row of this block whose fix keeps the row alive: `Teacher::subjects` is a
+/// set, so the element leaves and the teacher stays.
+///
+/// The fix is `Teacher::Update(teacher, rebuilt)`, which names the teacher but
+/// not the subject being dropped, so rule 4 asks for an identity test — and
+/// frame point 4's corollary supplies it for free, since the membership test an
+/// element-removal rebuild needs *is* the identity test. This is the test that
+/// the arm really makes it.
+///
+/// The corruption adds `excluded_subject`, which runs no interrogations, to
+/// `other_teacher`'s set. It cannot be done the other way round: a subject
+/// whose interrogations are off is one no valid document lets any teacher
+/// teach, so switching a subject off would leave the *valid* document carrying
+/// the offending membership.
+///
+/// The teacher chosen already teaches something, so the valid document is not
+/// innocent by holding an empty set: an arm that asked "does this teacher teach
+/// anything at all" would find `other_subject` and strip it.
+///
+/// **Exactly one break**: `other_teacher` teaches no slot, so the slots loop
+/// never looks at them, and nothing else in `convergence_breaks` reads a
+/// teacher's set.
+#[test]
+fn teacher_subject_without_interrogations_arm_spares_a_teacher_of_live_subjects() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    corrupt
+        .params
+        .teachers
+        .teacher_map
+        .get_mut(&doc.other_teacher)
+        .expect("the fixture's second teacher is there")
+        .subjects
+        .insert(doc.excluded_subject);
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::Convergence(Convergence::TeacherSubjectWithoutInterrogations(
+            doc.other_teacher,
+            doc.excluded_subject,
+        )),
+        "the live teacher does not teach the named subject, so the arm has nothing to drop",
+    );
+}
+
+/// `Convergence::SlotForSubjectWithoutInterrogations` — §8.2 row 3, and **the
+/// second two-element exception** (§9bis).
+///
+/// No state where this fires breaks only one invariant: the slot's teacher
+/// either teaches the offending subject — row 2 — or does not — row 1 — or
+/// dangles, and then the `SlotTeacher` dangle fires. That is §8.2 row 3's
+/// shadowing argument, and it holds on a corrupted twin exactly as it does on a
+/// live state. So the expected literal is a **two-element set**, still
+/// hand-derived and still `assert_eq!`d whole, and step 4 runs on the element
+/// the test is about, picked out by shape rather than by `set.first()` — which
+/// here is the *other* element.
+///
+/// **The companion is row 1, and it cannot be anything else.** §9bis predicted
+/// row 2 and prescribed "turn the subject's `interrogation_parameters` to
+/// `None`"; that recipe does not produce an innocent state at all, since it
+/// leaves the slot sitting on the very subject the invariant names and the arm
+/// rightly answers `Some`. An innocent twin has to move the slot onto a
+/// *different* subject that runs no interrogations — and no valid document ever
+/// lets a teacher teach such a subject, so the teacher-teaches check is
+/// guaranteed to fire beside row 3. The slot's teacher is kept live, which
+/// makes that companion the deterministic one.
+///
+/// The slot moved is the one referenced by nothing else, and the surgery goes
+/// through `remove_slot` + `insert_slot_at`: the slot ordering is keyed by
+/// subject, so a raw field write would leave the slot filed under its old
+/// subject and the twin would die at step 3 with a `LogicError`.
+#[test]
+fn slot_for_subject_without_interrogations_arm_spares_a_slot_on_a_live_subject() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    let (_position, live_slot) = corrupt.params.slots.remove_slot(doc.lone_slot);
+    corrupt.params.slots.insert_slot_at(
+        doc.lone_slot,
+        Slot {
+            subject_id: doc.excluded_subject,
+            ..live_slot
+        },
+        0,
+    );
+
+    let set = corrupt
+        .broken_invariants()
+        .expect("the corruption is fixable, not a logic error");
+    assert_eq!(
+        set,
+        BTreeSet::from([
+            FixableInvariant::Convergence(Convergence::SlotTeacherDoesNotTeachSubject(
+                doc.lone_slot,
+                doc.teacher,
+                doc.excluded_subject,
+            )),
+            FixableInvariant::Convergence(Convergence::SlotForSubjectWithoutInterrogations(
+                doc.lone_slot,
+                doc.excluded_subject,
+            )),
+        ])
+    );
+    let invariant = set
+        .into_iter()
+        .find(|invariant| {
+            matches!(
+                invariant,
+                FixableInvariant::Convergence(Convergence::SlotForSubjectWithoutInterrogations(..))
+            )
+        })
+        .expect("the set was just asserted to hold row 3");
+
+    assert_eq!(
+        valid.fix_invariant(&invariant),
+        None,
+        "the live slot sits on a subject that does run interrogations, so the arm has no slot to remove"
+    );
+}
+
+/// `Convergence::SlotOverflowsDay` — §8.2 row 4, and the arm frame point 5's
+/// corollary was written for: it tests `start` and deliberately does **not**
+/// test `duration`.
+///
+/// So `start` is the only field this test can vary, and it is the one it
+/// varies: the twin moves the slot to 23:30, where the subject's one-hour
+/// interrogation runs past midnight. The invariant's `duration` is the live
+/// one, unchanged — which is what makes the answer rest entirely on the start
+/// comparison.
+///
+/// The case the arm must *not* reject is the mirror image: the subject's
+/// interrogation is lengthened, so the live subject still holds the old
+/// duration while the live slot still holds the offending start, and the fix
+/// has to land. That is the legitimate cascade route, it belongs to the
+/// commit-7 scenarios, and pinning `duration` here would break it.
+///
+/// **Exactly one break**: the slot keeps its teacher and its subject, and it is
+/// referenced by nothing — no week pattern, no colloscope cell, no pairing
+/// rule — so a start time is all that changes.
+#[test]
+fn slot_overflows_day_arm_spares_a_slot_that_starts_elsewhere() {
+    let (valid, doc) = build_valid_document();
+
+    // 23:30 plus the fixture's one-hour interrogation crosses midnight. (23:00
+    // would not: a slot ending exactly at 00:00 is valid.)
+    let late = collomatique_time::SlotStart {
+        weekday: collomatique_time::Weekday(chrono::Weekday::Mon),
+        start_time: collomatique_time::WholeMinuteTime::new(
+            chrono::NaiveTime::from_hms_opt(23, 30, 0).unwrap(),
+        )
+        .unwrap(),
+    };
+
+    let mut corrupt = valid.get_inner_data().clone();
+    let live_slot = corrupt
+        .params
+        .slots
+        .find_slot(doc.lone_slot)
+        .expect("the fixture's lone slot is there")
+        .clone();
+    corrupt.params.slots.replace_slot(
+        doc.lone_slot,
+        Slot {
+            start_time: late.clone(),
+            ..live_slot
+        },
+    );
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::Convergence(Convergence::SlotOverflowsDay {
+            slot: doc.lone_slot,
+            start: late,
+            duration: collomatique_time::NonZeroMinutes::new(60).unwrap(),
+        }),
+        "the live slot starts hours earlier, so the arm has no overflowing slot to remove",
     );
 }
