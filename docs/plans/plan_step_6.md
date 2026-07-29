@@ -2982,6 +2982,17 @@ lose it.
 `ops/src/subjects.rs` has no arm for the overflow, so the ops layer reaches its catch-all
 `panic!("Unexpected invariant breaks …")` today. This fixture is what states the new answer.
 
+★ **CORRECTION, found while writing 7.6a (July 29 2026): that last sentence names the wrong
+mechanism.** `ops/src/subjects.rs` has no catch-all, because it never matches on
+`BrokenInvariants` at all — the string `"Unexpected invariant breaks"` does not occur in the
+file. What it does is apply the update under
+`.expect("All data should be valid at this point")` (`subjects.rs:758`, and the same shape
+again at `:895`), so an interrogation lengthened over a late slot aborts the process on an
+`expect`, not on a match arm. The catch-all this paragraph was remembering is in the
+*neighbouring* file, `ops/src/slots.rs:487` — which is 1a's route, not 1b's. The conclusion is
+unchanged and if anything slightly stronger: there is no legacy answer for row 4 to compare
+against, and today's answer is a crash.
+
 **2 — `AssignedStudentNotPresentForPeriod`.** A subject that genuinely runs on period `P`, an
 assignments row at `(P, S)` already holding student `A`, and a student `B` who excludes `P`.
 Target: `AssignmentOp::SetRow(P, S, {A, B})`. The arm finds the row and finds `A` in it, but
@@ -3151,6 +3162,41 @@ Each commit follows the series rhythm: the fixtures alone in one commit, then a 
 commit amending this document with what the writing turned up. And §9's first rule binds every
 fixture here — the expected break set is derived by hand from the §8.1 / §8.2 tables before the
 test is run, never pasted from a run.
+
+**Status: 7.6a landed July 29 2026 (`ec2bf270`).** Both fixtures passed on their first run
+against hand-derived expectations, so no map bug surfaced. `tests/cascade.rs` now holds
+thirteen tests. Five things settled while writing it, all of which 7.6b and 7.6c inherit:
+
+- ★ **The tests are named `rejection_*`, not `fixture_*`.** §9 already owns `fixture_1a` and
+  `fixture_1b`, and §9ter numbers its own fixtures 1a and 1b as well, so the names would
+  collide outright. The two that landed are `rejection_1a_a_slot_moved_past_midnight_is_convicted_not_deleted`
+  and `rejection_1b_a_lengthened_interrogation_removes_the_slot_it_overflows`. 7.6b and 7.6c
+  keep the prefix. It reads correctly as a family name even for 1b, which asserts `Ok`: 1b is
+  the accepted half of a rejection pair, and its whole job is to sit next to its twin.
+
+- ★ **The `ops/src/subjects.rs` sentence under 1b was wrong in its mechanism**, and is
+  corrected in place above. Recorded here too because it is the second time this document has
+  described an `ops/` guard from memory rather than from the file.
+
+- ★ **The shared document is much smaller than the prose suggests.** A subject, a teacher and
+  a slot — no period, no week, no student, no group list. Nothing in either fixture's trace
+  needs one, and a slot with `week_pattern: None` is valid on its own. Both fixtures take it
+  from one builder, `document_with_a_slot_ending_at_midnight()`, whose doc comment is where
+  the 23:00 argument now lives (it is a property of the pair, so it belongs above both).
+
+- ★ **Two existing helpers had to be generalised, and that was the whole cost.** `make_slot`
+  took an hour and no minutes; `interrogation_subject` hardcoded 60. Both now delegate to a
+  spelled-out version — `make_slot_at(.., hour, minute)` and
+  `interrogation_subject_lasting(.., minutes)` — so not one of the eleven existing call sites
+  changed. Worth knowing for 7.6b, which needs neither.
+
+- ★ **"The document is unchanged" is asserted as `assert_eq!(data.get_inner_data(), &before)`,
+  not on `Data`.** §9ter.3 prescribes `assert_eq!(&data, &before)` and justifies it by
+  `impl PartialEq for Data` comparing `inner_data` only (`lib.rs:191-195`). The two are exactly
+  equivalent, but `Data` has no field-level `Debug` worth reading, so a failure on the `Data`
+  form prints two opaque blobs. Comparing the `InnerData` directly gives a real diff, and it is
+  already this file's idiom — fixture 6 does it. The coverage argument in §9ter.3 is untouched:
+  the id issuer is still out of scope, for the reason given there.
 
 ## 10. Commit 8 — the cascade property test (`tests/property_cascade.rs`)
 
