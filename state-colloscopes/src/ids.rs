@@ -131,6 +131,30 @@ pub struct PairingRuleId(u64);
 #[entity(SlotPairingRule)]
 pub struct SlotPairingRuleId(u64);
 
+// The document order on the ids (plan step 6.5, §3.4). An id is a scalar
+// reference token with no internal content, so wherever it appears as a field
+// *value* it is an atom: two ids are content-equivalent when they are the same
+// id, and otherwise incomparable. That also makes `==` content identity, so
+// the macro emits `ContentIdentity` too and ids may be used as container keys
+// and set elements.
+//
+// This is deliberately *not* the numeric `Ord` those types also carry: the
+// numeric order is what makes them `BTreeMap` keys, and it says nothing about
+// document content.
+collomatique_state::impl_content_ord_atom!(
+    PeriodId,
+    WeekId,
+    SubjectId,
+    TeacherId,
+    StudentId,
+    WeekPatternId,
+    SlotId,
+    IncompatId,
+    GroupListId,
+    PairingRuleId,
+    SlotPairingRuleId,
+);
+
 #[derive(Debug, Clone)]
 pub(crate) struct IdIssuer {
     helper: tools::IdIssuerHelper,

@@ -7,14 +7,15 @@ use std::num::NonZeroU32;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use collomatique_state::{Join, References};
+use collomatique_state::partial_order::vec_subsequence;
+use collomatique_state::{ContentOrd, Join, References};
 
 use crate::Table;
 use crate::ids::{IncompatId, NewId, SubjectId, WeekPatternId};
 use crate::ops::AnnotatedIncompatOp;
 
 /// Description of the schedule incompatibilities
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, ContentOrd)]
 pub struct Incompats {
     /// Incompats for subjects
     ///
@@ -23,7 +24,7 @@ pub struct Incompats {
 }
 
 /// Description of a single schedule incompat
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References, Join)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References, Join, ContentOrd)]
 #[join(error = NewId)]
 pub struct Incompatibility {
     /// Subject the incompatibility is linked to
@@ -42,6 +43,12 @@ pub struct Incompatibility {
     /// Slots of time when the students might not be available
     ///
     /// This is given as a weekday, a start time and a duration
+    // Value-borne identity: a time window *is* its value, nothing points at
+    // it by position, so dropping one anywhere in the list is removing
+    // content (subsequence). The helper is needed because
+    // `SlotWithDuration` is foreign and so carries no `ContentIdentity` for
+    // the `Vec` blanket to use.
+    #[ord(with = vec_subsequence)]
     pub slots: Vec<collomatique_time::SlotWithDuration>,
     /// Number of slots to force to be free in the above list
     pub minimum_free_slots: NonZeroU32,

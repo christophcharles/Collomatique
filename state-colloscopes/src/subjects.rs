@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::{collections::BTreeSet, num::NonZeroU32};
 use thiserror::Error;
 
-use collomatique_state::{Join, References};
+use collomatique_state::{ContentOrd, Join, References};
 
 use crate::OrderedTable;
 use crate::ids::{NewId, PeriodId, SubjectId};
@@ -14,7 +14,7 @@ use crate::non_empty_range::NonEmptyRangeInclusive;
 use crate::ops::AnnotatedSubjectOp;
 
 /// Description of the subjects
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, ContentOrd)]
 pub struct Subjects {
     /// Ordered list of subjects
     ///
@@ -24,7 +24,9 @@ pub struct Subjects {
 }
 
 /// Description of one subject
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, References, Join)]
+#[derive(
+    Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, References, Join, ContentOrd,
+)]
 #[join(error = NewId)]
 pub struct Subject {
     /// Parameters for the subject
@@ -40,7 +42,7 @@ pub struct Subject {
 }
 
 /// Description of one subject
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ContentOrd)]
 pub struct SubjectParameters {
     /// Name of the subject
     ///
@@ -54,7 +56,7 @@ pub struct SubjectParameters {
 }
 
 /// Description of the interrogations parameters for a subject
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ContentOrd)]
 pub struct SubjectInterrogationParameters {
     /// Students per group
     ///
@@ -84,6 +86,9 @@ pub struct SubjectInterrogationParameters {
     ///   groups at the same time can represent this situation.
     pub groups_per_interrogation: NonEmptyRangeInclusive<NonZeroU32>,
     /// Duration of an interrogation in minutes
+    // A scalar leaf whose type is foreign: same duration or incomparable.
+    // Shortening an interrogation is a change of value, not a removal.
+    #[ord(atom)]
     pub duration: collomatique_time::NonZeroMinutes,
     /// This is useful when we try to limit or regulate
     /// the number of interrogations a student has in a week.
@@ -101,7 +106,7 @@ pub struct SubjectInterrogationParameters {
 }
 
 /// Periodicity information for a subject
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ContentOrd)]
 pub enum SubjectPeriodicity {
     /// The interrogation must happen once for every block of time
     ///
@@ -177,6 +182,13 @@ pub enum SubjectPeriodicity {
         /// It is also possible to have blocks after the end of the schedule or without
         /// any actual interrogations planned in them. But of course, no consistent
         /// colloscope will be found for this.
+        // The block list is *relational*, not a collection of independent
+        // items: each block's `delay_in_weeks` is measured from the previous
+        // block, so dropping or truncating blocks re-dates every block after
+        // it. The chain is therefore one composite value — an atom (plan
+        // step 6.5, decision 10). Even a strict truncation is incomparable,
+        // not below.
+        #[ord(atom)]
         blocks: Vec<WeekBlock>,
         /// Minimum of weeks between two interrogations for the same student
         ///

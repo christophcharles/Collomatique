@@ -26,6 +26,22 @@ impl<T: Ord + Clone> NonEmptyRangeInclusive<T> {
     }
 }
 
+/// The document order: a range is an atom — its content is the endpoint
+/// pair. Reading `[2..=3] ⊆ [1..=4]` as an order would compare the denoted
+/// sets, which is exactly the semantic reading D5.1 forbids.
+///
+/// Hand-written because the type is generic, which `#[derive(ContentOrd)]`
+/// deliberately does not support.
+impl<T: Ord + Clone> collomatique_state::ContentOrd for NonEmptyRangeInclusive<T> {
+    fn content_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        collomatique_state::partial_order::discrete(self, other)
+    }
+}
+
+/// An atom's content equivalence is `==` by construction, so a range may
+/// be matched by equality inside containers.
+impl<T: Ord + Clone> collomatique_state::ContentIdentity for NonEmptyRangeInclusive<T> {}
+
 impl<T: Ord + Clone> std::ops::Deref for NonEmptyRangeInclusive<T> {
     type Target = RangeInclusive<T>;
     fn deref(&self) -> &RangeInclusive<T> {

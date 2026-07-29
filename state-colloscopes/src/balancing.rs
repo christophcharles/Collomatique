@@ -7,13 +7,14 @@ use crate::Table;
 use crate::ids::SubjectId;
 use crate::ops::AnnotatedBalancingOp;
 use crate::soft_param::SoftParam;
+use collomatique_state::ContentOrd;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// Description of the balancing configuration
 ///
 /// Contains global balancing options and optional per-subject overrides.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, ContentOrd)]
 pub struct Balancing {
     /// Global balancing options
     pub global: BalancingOptions,
@@ -56,6 +57,12 @@ pub struct BalancingOptions {
     /// Whether to enforce fair teacher distribution within each period
     pub period_teacher_rotation: bool,
 }
+
+// A whole-entry override record, exactly like [crate::settings::Limits]: a
+// `None` field means "disabled" — an active choice, not absent content — so
+// the document order treats the whole record as one atom (plan step 6.5,
+// decision 13).
+collomatique_state::impl_content_ord_atom!(BalancingOptions);
 
 impl Default for BalancingOptions {
     fn default() -> Self {

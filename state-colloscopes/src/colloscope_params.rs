@@ -9,7 +9,7 @@ use crate::ids::{
 
 use super::*;
 
-use collomatique_state::Lookup;
+use collomatique_state::{ContentOrd, Lookup};
 
 /// Full set of parameters to describe the constraints for colloscopes
 ///
@@ -19,7 +19,7 @@ use collomatique_state::Lookup;
 /// This structure is used in two ways:
 /// - a main version is used in [InnerData] to represent the currently edited parameters
 /// - another version is used for each colloscope to store the parameters used for its generation
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, ContentOrd)]
 pub struct Parameters {
     pub periods: periods::Periods,
     pub weeks: weeks::Weeks,

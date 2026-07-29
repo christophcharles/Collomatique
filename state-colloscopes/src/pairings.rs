@@ -7,21 +7,21 @@ use std::collections::BTreeSet;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use collomatique_state::{Join, References};
+use collomatique_state::{ContentOrd, Join, References};
 
 use crate::Table;
 use crate::ids::{NewId, PairingRuleId, PeriodId, SubjectId};
 use crate::ops::AnnotatedPairingOp;
 
 /// Description of the pairing rules
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, ContentOrd)]
 pub struct Pairings {
     /// Map from pairing rule id to pairing rule
     pub pairing_rule_map: Table<PairingRuleId, PairingRule>,
 }
 
 /// One part (antecedent or consequent) of a pairing rule
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References, Join)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References, Join, ContentOrd)]
 #[join(error = NewId)]
 pub struct RulePart {
     /// The subject this part refers to
@@ -51,7 +51,7 @@ pub struct RulePart {
 /// exactly like the raw four-field struct via [`RawPairingRule`]; deserializing
 /// a rule with both parts on one subject is a hard error (the
 /// [`crate::non_empty_range::NonEmptyRangeInclusive`] precedent).
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References, Join)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References, Join, ContentOrd)]
 #[join(error = NewId)]
 #[serde(try_from = "RawPairingRule", into = "RawPairingRule")]
 pub struct PairingRule {

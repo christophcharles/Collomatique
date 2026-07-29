@@ -7,14 +7,14 @@ use std::collections::BTreeSet;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use collomatique_state::References;
+use collomatique_state::{ContentOrd, References};
 
 use crate::Table;
 use crate::ids::{WeekId, WeekPatternId};
 use crate::ops::AnnotatedWeekPatternOp;
 
 /// Description of the week patterns
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, ContentOrd)]
 pub struct WeekPatterns {
     /// Week patterns
     ///
@@ -27,7 +27,7 @@ pub struct WeekPatterns {
 /// A pattern is stored as the *exception set* of the weeks it disables; every
 /// week not listed is active. This is the sparse dual of the historical
 /// positional bitmask.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References, ContentOrd)]
 pub struct WeekPattern {
     /// Name of the week pattern for identification
     pub name: String,

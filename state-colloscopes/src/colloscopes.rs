@@ -6,6 +6,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use thiserror::Error;
 
+use collomatique_state::ContentOrd;
+
 use crate::Table;
 use crate::ids::{GroupListId, SlotId, StudentId, WeekId};
 use crate::ops::AnnotatedColloscopeOp;
@@ -17,7 +19,7 @@ use crate::ops::AnnotatedColloscopeOp;
 /// there is no dense skeleton, no per-period/per-slot scaffolding and no
 /// `None` cells. The ids in a row should be valid with respect to the
 /// corresponding params.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, ContentOrd)]
 pub struct Colloscope {
     /// Assigned groups per `(slot, week)`. A row is present exactly when the
     /// group set is non-empty.

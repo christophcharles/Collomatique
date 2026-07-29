@@ -8,7 +8,8 @@ use std::num::NonZeroU32;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use collomatique_state::References;
+use collomatique_state::partial_order::{option_lift_discrete, prefix_pointwise, vec_prefix};
+use collomatique_state::{ContentOrd, References};
 
 use crate::Table;
 use crate::ids::{GroupListId, PeriodId, StudentId, SubjectId};
@@ -16,7 +17,7 @@ use crate::non_empty_range::NonEmptyRangeInclusive;
 use crate::ops::AnnotatedGroupListOp;
 
 /// Description of the group lists
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, ContentOrd)]
 pub struct GroupLists {
     /// Group lists
     ///
@@ -40,7 +41,7 @@ pub struct GroupLists {
 /// with the checker/walker as dangling FKs. Serialized exactly like the raw
 /// `{ params, filling }` pair via [`RawGroupList`]; deserializing an
 /// inconsistent pair is a hard error (the [`NonEmptyRangeInclusive`] precedent).
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References, ContentOrd)]
 #[serde(try_from = "RawGroupList", into = "RawGroupList")]
 pub struct GroupList {
     /// parameters for the group list
@@ -100,10 +101,20 @@ pub enum GroupListBuildError {
 }
 
 /// Filling strategy for a group list
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ContentOrd)]
 pub enum GroupListFilling {
     /// Groups are filled manually with prefilled students
-    Prefilled { groups: Vec<PrefilledGroup> },
+    Prefilled {
+        // Position-borne identity: group i binds to group name i, and group
+        // numbers are referenced by index from the colloscope's placement
+        // maps and interrogation cells — so the document order reads this
+        // Vec as a map from indices (prefix + pointwise). The blanket Vec
+        // rule (subsequence) does not even apply here: `PrefilledGroup` is
+        // deliberately not `ContentIdentity`, so omitting this attribute is
+        // a compile error, not a silently wrong order.
+        #[ord(with = vec_prefix)]
+        groups: Vec<PrefilledGroup>,
+    },
     /// Groups are filled automatically, except for excluded students
     Automatic {
         excluded_students: BTreeSet<StudentId>,
@@ -236,7 +247,10 @@ impl GroupListFilling {
 }
 
 /// Prefilled groups for a single group list
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+// Deliberately **no** `ContentIdentity`: a prefilled group is identified by
+// its position in the list, never by its value, so it must never be matched
+// by `==` inside a container (plan step 6.5, decision 17).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ContentOrd)]
 pub struct PrefilledGroup {
     /// Students set
     ///
@@ -245,13 +259,20 @@ pub struct PrefilledGroup {
 }
 
 /// Parameters for a single group list
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ContentOrd)]
 pub struct GroupListParameters {
     /// Name for the list
     pub name: String,
     /// Range of possible count of students per group
     pub students_per_group: NonEmptyRangeInclusive<NonZeroU32>,
     /// Group names (length determines max group count, None = unnamed group)
+    // Position-borne identity, like the prefilled groups it runs alongside:
+    // entry i names group i. So the rule is prefix + pointwise — truncating
+    // the list is below, un-naming an entry (`Some` → `None`) is below,
+    // renaming one is incomparable, and a middle removal shifts every later
+    // binding and is incomparable too. The element type is foreign, hence
+    // the explicit inner lift.
+    #[ord(with = |a, b| prefix_pointwise(a, b, option_lift_discrete))]
     pub group_names: Vec<Option<non_empty_string::NonEmptyString>>,
 }
 

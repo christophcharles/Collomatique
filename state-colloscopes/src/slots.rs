@@ -5,7 +5,7 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use collomatique_state::{Join, References};
+use collomatique_state::{ContentOrd, Join, References};
 
 use crate::Table;
 use crate::ids::{NewId, SlotId, SubjectId, TeacherId, WeekPatternId};
@@ -26,7 +26,7 @@ use crate::ops::AnnotatedSlotOp;
 /// All mutation goes through the compound `pub(crate)` helpers below so no
 /// call site can desynchronize the two structures. The fields are private:
 /// consumers read through the accessor surface further down.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, ContentOrd)]
 pub struct Slots {
     /// Every slot, keyed by its id
     slot_map: Table<SlotId, Slot>,
@@ -43,7 +43,7 @@ pub struct Slots {
 pub struct DuplicatedSlotIdError(pub SlotId);
 
 /// Description of a single slot
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References, Join)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References, Join, ContentOrd)]
 #[join(error = NewId)]
 pub struct Slot {
     /// Subject this slot belongs to
@@ -57,6 +57,10 @@ pub struct Slot {
     pub teacher_id: TeacherId,
     /// Day and start time for the interrogation
     /// The duration is fixed by the subject
+    // A scalar leaf whose type is foreign (`SlotStart` cannot carry a
+    // `ContentOrd` impl of ours), so the rule is inlined: same time or
+    // incomparable. Moving a slot is not removing content.
+    #[ord(atom)]
     pub start_time: collomatique_time::SlotStart,
     /// Extra info that can be exported (like the room number)
     pub extra_info: String,

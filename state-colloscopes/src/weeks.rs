@@ -6,7 +6,8 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use collomatique_state::{Join, References};
+use collomatique_state::partial_order::option_lift_discrete;
+use collomatique_state::{ContentOrd, Join, References};
 
 use crate::Table;
 use crate::ids::{NewId, PeriodId, WeekId};
@@ -31,7 +32,7 @@ use crate::periods::Periods;
 /// readers take the sibling [Periods] as an explicit parameter (the
 /// `WeekPatterns::is_week_active(&Weeks, …)` precedent) since the period display
 /// order lives there.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, ContentOrd)]
 pub struct Weeks {
     /// Every week, keyed by its id
     ///
@@ -58,7 +59,7 @@ pub struct DuplicatedWeekIdError(pub WeekId);
 /// This is the stored week entity: it carries its owning period as a foreign
 /// key plus whether an interrogation happens on it and an optional annotation.
 /// The period-less, id-less [WeekDesc] is the matching op-payload / DTO form.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References, Join)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References, Join, ContentOrd)]
 #[join(error = NewId)]
 pub struct Week {
     /// Period this week belongs to
@@ -70,6 +71,10 @@ pub struct Week {
     /// Whether an interrogation happens on this week
     pub interrogations: bool,
     /// Optional annotation (e.g. "Rentrée", "Vacances")
+    // `NonEmptyString` is foreign, so the helper supplies the `Option` rule:
+    // clearing the annotation is removing content, and two different
+    // annotations are incomparable.
+    #[ord(with = option_lift_discrete)]
     pub annotation: Option<non_empty_string::NonEmptyString>,
 }
 

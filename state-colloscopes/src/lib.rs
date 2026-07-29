@@ -7,7 +7,8 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use collomatique_state::{InMemoryData, Operation, tools};
+use collomatique_state::partial_order::option_lift_discrete;
+use collomatique_state::{ContentOrd, InMemoryData, Operation, tools};
 use std::collections::BTreeSet;
 
 /// Internal re-export of the generic table containers.
@@ -46,6 +47,10 @@ pub mod incompats;
 pub mod invariants;
 pub mod non_empty_range;
 pub mod pairings;
+// Semantic pins for the document order (step 6.5). In-crate, because several
+// of the values they compare live behind private fields.
+#[cfg(test)]
+mod partial_order_tests;
 pub mod periods;
 pub mod refs;
 // The cascade's resolution map. Private: it exports nothing, and surfaces only
@@ -105,7 +110,7 @@ pub use teachers::JoinedTeacher;
 /// Each student and teacher has its own card with name and contacts.
 /// There are not used for the colloscope solving process
 /// but can help produce a nice colloscope output with contact info.
-#[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize, ContentOrd)]
 pub struct PersonWithContact {
     /// Surname of the person
     ///
@@ -124,6 +129,10 @@ pub struct PersonWithContact {
     /// This field is optional: this reflects the
     /// fact that some persons might not want to share
     /// their personal info or only some of it.
+    // `NonEmptyString` is foreign, so the helper supplies the `Option` rule:
+    // clearing a contact is removing content, two different numbers are
+    // incomparable.
+    #[ord(with = option_lift_discrete)]
     pub tel: Option<non_empty_string::NonEmptyString>,
 
     /// Person's email
@@ -131,6 +140,7 @@ pub struct PersonWithContact {
     /// This field is optional: this reflects the
     /// fact that some persons might not want to share
     /// their personal info or only some of it.
+    #[ord(with = option_lift_discrete)]
     pub email: Option<non_empty_string::NonEmptyString>,
 }
 
@@ -144,7 +154,7 @@ pub struct PersonWithContact {
 /// [InnerData] represents this actual 'on-disk' data so we can
 /// directly use `derive(PartialEq, Eq)` with it. The implementation
 /// of [Eq] and [PartialEq] for [Data] relies on it.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, ContentOrd)]
 pub struct InnerData {
     pub params: colloscope_params::Parameters,
     pub colloscope: colloscopes::Colloscope,
@@ -170,8 +180,12 @@ impl InnerData {
 ///
 /// It does not necesserally correlate exactly to the data stored
 /// on disk. This is to allow versioning.
-#[derive(Debug)]
+#[derive(Debug, ContentOrd)]
 pub struct Data {
+    // The document order does not see the issuer: two `Data` with equal
+    // inner data are content-equivalent even when their issuers differ —
+    // the same quotient the hand-written `PartialEq` below takes.
+    #[ord(ignore)]
     id_issuer: std::sync::Mutex<IdIssuer>,
     inner_data: InnerData,
 }

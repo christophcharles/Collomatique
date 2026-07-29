@@ -4,6 +4,9 @@
 
 use thiserror::Error;
 
+use collomatique_state::ContentOrd;
+use collomatique_state::partial_order::option_lift_discrete;
+
 use crate::OrderedTable;
 use crate::ids::PeriodId;
 use crate::ops::AnnotatedPeriodOp;
@@ -21,12 +24,16 @@ use crate::ops::AnnotatedPeriodOp;
 /// the row is non-empty, every week names its period, no week is left
 /// un-ordered) is checked by the week-ordering `LogicError`s in
 /// `InnerData::broken_invariants`.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, ContentOrd)]
 pub struct Periods {
     /// Start date for the colloscope
     ///
     /// The date might not be set but of course, this will hinder
     /// the eventual pretty output
+    // `WeekStart` is foreign, so it carries no `ContentOrd` impl of its own:
+    // the helper lifts the plain `Option` rule over it (unset is below set,
+    // two different dates are incomparable).
+    #[ord(with = option_lift_discrete)]
     pub first_week: Option<collomatique_time::WeekStart>,
 
     /// Ordered set of period ids — existence and display order only

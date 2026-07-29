@@ -6,6 +6,8 @@ use std::collections::BTreeSet;
 
 use thiserror::Error;
 
+use collomatique_state::ContentOrd;
+
 use crate::Table;
 use crate::ids::{PeriodId, StudentId, SubjectId};
 use crate::ops::AnnotatedAssignmentOp;
@@ -20,7 +22,7 @@ use crate::ops::AnnotatedAssignmentOp;
 /// [`crate::subjects::Subject::excluded_periods`] instead. Canonical absence
 /// is checked by `LogicError::EmptyAssignmentsRow` in
 /// `InnerData::broken_invariants`.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, ContentOrd)]
 pub struct Assignments {
     /// Attending students for each `(period, subject)` pair with ≥1 student
     pub map: Table<(PeriodId, SubjectId), BTreeSet<StudentId>>,

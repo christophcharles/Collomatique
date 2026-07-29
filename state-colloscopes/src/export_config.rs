@@ -75,6 +75,13 @@ pub struct ExportConfig {
     pub per_group_list_config: PerGroupListConfig,
 }
 
+// One composite presentation preference: colors, orientations and toggles are
+// choices, not content that can be added or removed, so the document order
+// treats the whole configuration as one atom (plan step 6.5, decision 13).
+// Two different configurations are incomparable — including the default
+// against a modified one.
+collomatique_state::impl_content_ord_atom!(ExportConfig);
+
 impl Default for GlobalConfig {
     fn default() -> Self {
         Self {

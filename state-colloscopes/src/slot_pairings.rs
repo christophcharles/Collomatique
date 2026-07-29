@@ -8,21 +8,21 @@ use std::collections::BTreeSet;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use collomatique_state::{Join, References};
+use collomatique_state::{ContentOrd, Join, References};
 
 use crate::Table;
 use crate::ids::{NewId, PeriodId, SlotId, SlotPairingRuleId};
 use crate::ops::AnnotatedSlotPairingOp;
 
 /// Description of the slot pairing rules
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, ContentOrd)]
 pub struct SlotPairings {
     /// Map from slot pairing rule id to slot pairing rule
     pub slot_pairing_rule_map: Table<SlotPairingRuleId, SlotPairingRule>,
 }
 
 /// One part (antecedent or consequent) of a slot pairing rule
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References, Join)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References, Join, ContentOrd)]
 #[join(error = NewId)]
 pub struct SlotRulePart {
     /// The slot this part refers to
@@ -52,7 +52,7 @@ pub struct SlotRulePart {
 /// four-field struct via [`RawSlotPairingRule`]; deserializing a rule with both
 /// parts on one slot is a hard error (the
 /// [`crate::non_empty_range::NonEmptyRangeInclusive`] precedent).
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References, Join)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References, Join, ContentOrd)]
 #[join(error = NewId)]
 #[serde(try_from = "RawSlotPairingRule", into = "RawSlotPairingRule")]
 pub struct SlotPairingRule {

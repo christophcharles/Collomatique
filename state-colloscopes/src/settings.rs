@@ -10,11 +10,13 @@ use std::num::NonZeroU32;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use collomatique_state::ContentOrd;
+
 // Re-export for backward compatibility
 pub use crate::soft_param::SoftParam;
 
 /// Description of the general settings
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, ContentOrd)]
 pub struct Settings {
     /// Global limits to impose during resolution
     pub global: Limits,
@@ -44,6 +46,12 @@ pub struct Limits {
     /// maximum number of interrogation in a single day for each student
     pub max_interrogations_per_day: Option<SoftParam<NonZeroU32>>,
 }
+
+// A whole-entry override record: a `None` field means "disabled" — an active
+// choice, not absent content — so the document order treats the whole record
+// as one atom (plan step 6.5, decision 13). Clearing one limit is therefore
+// not a step *down*; two different limit records are simply incomparable.
+collomatique_state::impl_content_ord_atom!(Limits);
 
 /// Precondition errors of the forced settings op — the carve-out subset
 /// (step-3 survey Table 2). The whole-value `Update` had no
