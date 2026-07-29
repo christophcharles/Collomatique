@@ -103,7 +103,8 @@ the design doc's §8):
   July 28 2026) because a rejection fixture only means something once the `None` branch it
   rests on has been tested arm by arm. Two families — the self-caused rejections and the
   collateral-damage identity pins — eight fixtures in all, shipping as **three commits**
-  (7.6a … 7.6c); see §9ter, and §9ter.6 for the split.
+  (7.6a … 7.6c); see §9ter, and §9ter.6 for the split. **Landed in full on July 29 2026**,
+  which finishes commit 7.
 - **Commit 8** — the cascade property test (`state-colloscopes/tests/property_cascade.rs`):
   random valid walks driven through `apply_cascade`; no panic, `Ok` ⇒ clean, `Err` ⇒
   bit-identical state.
@@ -1870,7 +1871,8 @@ Fixture style: build a document through the public surface
 (`a9201341`), `3` (`ba82ac5b`), `4` (`ea73e700`), `5a`/`5b` (`cd2eb958`), `6` (`62816871`).
 **§9 is complete.** Every fixture passed on its first run, so no map bug surfaced anywhere in
 the scenario suite. §9bis (commit 7.5) is complete too, as of July 29 2026 — see its own
-status paragraph. What remains of commit 7 is §9ter (commit 7.6).
+status paragraph, and so is §9ter (commit 7.6), also July 29 2026. **Commit 7 is therefore
+finished end to end across all three of its tiers, and the next unit is commit 8 (§10).**
 
 Three descriptions below needed correcting, all marked **★ CORRECTION** in place. Two were
 found at implementation: `1b`'s document is not constructible as described, and scenario 2
@@ -3168,10 +3170,16 @@ commit amending this document with what the writing turned up. And §9's first r
 fixture here — the expected break set is derived by hand from the §8.1 / §8.2 tables before the
 test is run, never pasted from a run.
 
-**Status: 7.6a landed July 29 2026 (`ec2bf270`), 7.6b the same day (`56a3379b`).** Every
-fixture passed on its first run against hand-derived expectations, so no map bug has surfaced
-in this commit either. `tests/cascade.rs` now holds fifteen tests. Five things settled while
-writing 7.6a, all of which 7.6b and 7.6c inherit:
+**Status: §9ter is COMPLETE (July 29 2026).** Three commits — 7.6a (`ec2bf270`), 7.6b
+(`56a3379b`) and 7.6c (`d58301db`) — plus their plan follow-ups (`71950333`, `bceedc02`,
+`578f8d14`). All eight fixtures passed on their first run against hand-derived expectations, so
+**no map bug surfaced anywhere in §9ter**, which now matches §9 and §9bis: the resolution map
+that landed in commit 6 has been wrong about nothing, on any of the three tiers.
+`tests/cascade.rs` holds nineteen tests — commit 7's eleven `fixture_*`, 7.6a and 7.6b's four
+`rejection_*`, and 7.6c's four `identity_pin_*`. **With this, commit 7 is finished end to end
+and the next unit is commit 8 (§10).**
+
+Five things settled while writing 7.6a, all of which 7.6b and 7.6c inherited:
 
 - ★ **The tests are named `rejection_*`, not `fixture_*`.** §9 already owns `fixture_1a` and
   `fixture_1b`, and §9ter numbers its own fixtures 1a and 1b as well, so the names would
@@ -3244,6 +3252,47 @@ Three more from 7.6b:
   the way in; `force_apply_colloscope` says so in as many words ("stripped: … the
   `InvalidGroupNumInInterrogation` group-bound guard", `colloscopes.rs:219-220`), which is what
   lets the bad payload land and be caught by the checker rather than by a precheck.
+
+And three from 7.6c, which closed the section:
+
+- ★ **§9ter.4's "reachable" claim holds exactly as written, and the three `Update` paths are
+  even barer than it says.** `force_apply_incompat`'s `Update` and `force_apply_pairing`'s
+  `Update` are each a single `mem::replace` behind an id lookup and nothing else
+  (`incompats.rs:108-124`, `pairings.rs:238-249`); `force_apply_slot`'s `Update` has one guard,
+  and it is about the *subject* not changing, not about the teacher
+  (`slots.rs:455-483`). So all four bad ops land, all four dangles are reported by the checker,
+  and all four arms are asked on the restored state. Nothing had to be worked around.
+
+- ★ **All four sets are one-element, for two different reasons, and both are worth keeping.**
+  Pin 1's reason is the one §9ter.4 gives: the teacher-teaches predicate sits behind
+  `if let Some(teacher) = …` (`invariants.rs:433`), so a *dead* teacher makes it skip rather
+  than fire — the dangle arrives alone. Pins 2, 3 and 4 have the simpler reason: no
+  `Convergence` variant mentions an incompatibility or a `PairingRule` at all, so layer C has
+  nothing to say about those rows in any state whatsoever. (`PairedSlotsNotInSameSubject` is
+  the near-miss to keep straight: it is about *slot* pairings, a different table.)
+
+- ★ **One shared document serves all four, and the four `assert_eq!(inner, &before)` lines get
+  a little extra out of it.** No pin's edit is visible to another pin's row, so there is no
+  interference; and because the document also holds the other three rows, each pin's
+  "document unchanged" assertion incidentally covers them too. The document is a subject with
+  interrogations, a second plain subject for the rule's other part, a teacher, a slot, an
+  incompatibility, a pairing rule, and the two dead ids.
+
+  The **create-then-remove** recipe works exactly as §9ter.4 describes and is two helpers
+  rather than one, because the id types differ: `dead_teacher_id` adds a teacher teaching
+  nothing and removes it, `dead_subject_id` does the same with a `plain_subject`. Both
+  removals cascade to nothing and land alone.
+
+  One assertion-shape note: the "innocent row is still there" check compares against a
+  **rebuilt** expected value (`make_slot(subject, teacher, None, 8)`, `identity_pin_incompat(subject)`,
+  `pairing_rule(subject, other_subject, ∅)`), not against the row read out of `before`.
+  Comparing against `before` would be tautological — the preceding line already asserts the
+  whole document equals `before` — so it would assert nothing and read as though it did.
+
+- ★ **A shared `assert_convicted_of(err, expected_set, why)` helper was introduced with 7.6c
+  and 7.6a/7.6b were moved onto it**, so all six `Err`-asserting tests read alike. It keeps the
+  set literal at the call site, which is what §9's first rule is about — the exactness must
+  stay visible where the fixture is described, not disappear into a helper.
 
 ## 10. Commit 8 — the cascade property test (`tests/property_cascade.rs`)
 
