@@ -19,10 +19,15 @@ pub mod tools;
 pub mod traits;
 
 /// Re-export the derive macros so users can write `#[derive(EntityId)]`,
-/// `#[derive(References)]` and `#[derive(Join)]` after
-/// `use collomatique_state::{EntityId, References, Join}`.
+/// `#[derive(References)]`, `#[derive(Join)]`, `#[derive(ContentOrd)]` and
+/// `#[derive(ContentIdentity)]` after
+/// `use collomatique_state::{EntityId, References, Join, ContentOrd, ContentIdentity}`.
+///
+/// `Join`, `ContentOrd` and `ContentIdentity` name both a trait and its
+/// derive; the two live in different namespaces, so each re-export above
+/// carries one of the pair.
 #[cfg(feature = "derive")]
-pub use collomatique_state_derive::{EntityId, Join, References};
+pub use collomatique_state_derive::{ContentIdentity, ContentOrd, EntityId, Join, References};
 
 pub use cascade::{Fixable, apply_cascade};
 pub use ids::Id;
