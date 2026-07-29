@@ -21,8 +21,11 @@ retired (pinned at `git show b6f7bdbc:docs/plans/plan_step_5.md`; sub-plans
 recorded in Appendix G. **Step 6 completed July 29 2026** — the cascade engine, the
 colloscope resolution map and its four tiers of tests; its session plan is retired (pinned
 at `git show b35d6a56:docs/plans/plan_step_6.md`), the delivered state is recorded in
-Appendix H. Next up: **step 6.5** (monotonicity checking — the one hole step 6 knowingly
-left open), then step 7 (the `ops/` remaster).
+Appendix H. **Step 6.5 completed July 29 2026** — the document order materialized as the
+`ContentOrd` trait, adopted across `state-colloscopes/`, and asserted in the cascade loop
+after every fix; the one hole step 6 knowingly left open is closed. Its session plan is
+retired (pinned at `git show 8bfd0b64:docs/plans/plan_step_6_5.md`), the delivered state is
+recorded in Appendix I. Next up: **step 7** (the `ops/` remaster).
 This doc started as an exploration after phase C of the table-registry plan shipped (item 2's
 detailed plan, since delivered in full and retired; pinned at
 `git show 77695338:docs/table_registry_plan.md`); it now
@@ -515,31 +518,44 @@ the (op, picked-invariant) repetition ledger went with it, and the round fuse wa
 built. Note that **nothing in production calls the cascade yet** — `apply_cascade` has no
 `Manager`-level wrapper, and whether it gets one is step 7's decision.
 
-**Step 6.5 — monotonicity checking (added July 27 2026) — NEXT UP.** Step 6 landed the
-contract but not the order, so this is the one hole it knowingly left open; it needs its own
-session plan and sign-off like every other step. One constraint from Appendix H binds any
-implementation: D5.1's order is over the document's **content**, not over the meaning it
-denotes, because several conforming arms shrink the data while widening the semantics — a
-`PartialOrd` that compared meanings would reject them. The cascade's termination proof
-is the engraved map contract: states form a partial order whose universal minimal element
-is `Default::default()` (the empty document), and every fix must land **strictly below**
-the current state — the map returns `None` or a strictly-decreasing op, never an
-equivalent one. Step 6 enforces the contract only partially in-flight: `None` convictions
-and the no-op-fix panic catch every removal-shaped violation, but a map bug that keeps
-*growing* the state is undetectable without the order itself, and the step-6 engine
+**Step 6.5 — monotonicity checking (added July 27 2026) — COMPLETED July 29 2026.** Step 6
+landed the contract but not the order, so this was the one hole it knowingly left open.
+Planned and delivered July 29 2026 across ten commits (`ec0dd2a2`…`8bfd0b64`); its session
+plan is retired (pinned `git show 8bfd0b64:docs/plans/plan_step_6_5.md`); **the delivered
+state is Appendix I**. One constraint from Appendix H bound the implementation and was
+honoured throughout: D5.1's order is over the document's **content**, not over the meaning
+it denotes, because several conforming arms shrink the data while widening the semantics —
+an order that compared meanings would reject them. The cascade's termination proof is the
+engraved map contract: states form a **well-founded** partial order, and every fix must
+land **strictly below** the current state — the map returns `None` or a strictly-decreasing
+op, never an equivalent one. Step 6 enforced the contract only partially in-flight: `None`
+convictions and the no-op-fix panic caught every removal-shaped violation, but a map bug
+that kept *growing* the state was undetectable without the order itself, and the engine
 deliberately has **no round fuse** (no meaningful bound exists; a bound loose enough to be
-safe detects nothing in useful time) — such a map makes the cascade loop forever. Step 6.5
-closes that hole by materializing the order: require `PartialOrd` on `Fixable`
-implementors (only there — generic `InMemoryData` is not touched), comparing states up to
-equivalence classes modulo the id issuer if the issuer gets in the way, and assert in the
-cascade loop, after every fix apply, that the new state is strictly below the pre-fix
-state — catching a growing map in-flight as a loud panic instead of a hang. Two fuzz tests
-come with it: (a) `Default::default()` is ≤ every reachable state (it really is the
-universal minimum); (b) over generated broken states, every `fix_invariant` answer is
-`None` or an op whose applied result sits strictly below the pre-fix state — never above,
-never equivalent (`Some(equivalent)` is a map bug by contract, already a panic at
-step 6). Until 6.5 lands, the guard against a production hang is the step-6 cascade fuzz
-plus the per-arm audit against the contract.
+safe detects nothing in useful time) — such a map made the cascade loop forever. Step 6.5
+closed that hole by materializing the order and asserting it in the loop after every fix
+apply, so a growing map is now a loud panic instead of a hang.
+
+Three prescriptions written here in July 2026 were **superseded during the step**, each for
+a reason recorded in Appendix I:
+
+* *"require `PartialOrd` on `Fixable` implementors"* → a dedicated **`ContentOrd`** trait
+  (I.1). `PartialOrd` on containers is lexicographic in std, cannot be replaced under
+  coherence, and the typed ids must keep their numeric `Ord` as map keys. No type anywhere
+  gained a new `PartialOrd`.
+* *"comparing states up to equivalence classes modulo the id issuer if the issuer gets in
+  the way"* → the quotient is not a fallback but the ordinary mechanism: `ContentOrd`'s
+  laws are self-contained and never mention `PartialEq`, so `#[ord(ignore)]` on
+  `Data::id_issuer` is simply how the order is written (I.1, I.4).
+* *fuzz test (a), "`Default::default()` is ≤ every reachable state"* → **retired with the
+  universal-minimum axiom** (I.3). The empty document is *a* minimal element, not *the*
+  one: a walk that touches a configuration override reaches states incomparable to the
+  default, and that is correct. Well-foundedness, not a universal minimum, is what
+  termination needs. The sanity half survives as a unit pin.
+
+Fuzz test (b) shipped as prescribed: `state-colloscopes/tests/property_content_ord.rs`,
+over generated broken states, every `fix_invariant` answer is `None` or an op whose applied
+result sits strictly below the pre-fix state — never above, never equivalent.
 
 **Step 7 — migrate `ops/` (the remaster).** Each natural op becomes: open a session, run
 `apply_cascade`, present the extra ops to the user (dry-run preview, §5), commit or cancel.
@@ -1489,11 +1505,14 @@ by arm with the user** and completed July 28 2026 — the frame, all eight targe
 5.97–5.99 and the 7.5/7.6 test tiers, and its per-row reasoning lives only in the pin. This
 appendix records the delivered state steps 6.5 and 7 build on.
 
-**Step 6.5 is *not* included and remains open.** The monotonicity contract below is
-engraved in doc-comments and enforced only by cheap in-flight detectors; the order itself
-(`PartialOrd` + a strictly-below assertion per fix) is step 6.5's job, and until it lands a
-map that *grows* the state makes the cascade loop forever (§8, step 6.5). What guards
-against that today is the commit-8 fuzz plus the per-arm audit — not a mechanism.
+**Step 6.5 is *not* included here** — this appendix is the step-6 record and stays as
+written. At step 6 the monotonicity contract was engraved in doc-comments and enforced only
+by cheap in-flight detectors; the order itself, plus a strictly-below assertion per fix, was
+step 6.5's job, and until it landed a map that *grew* the state made the cascade loop
+forever. What guarded against that was the commit-8 fuzz plus the per-arm audit — not a
+mechanism. **Step 6.5 has since closed that hole; see Appendix I**, which supersedes this
+appendix wherever the two disagree (the `Fixable` bound in H.2, the no-op panic row of its
+conviction table, and the opening sentence of D5.1 below).
 
 ### H.1 The error surface (reshapes G.2; G stays as the step-5 record)
 
@@ -1520,7 +1539,8 @@ would trip every future reader.
 
 ### H.2 The engine (`state/src/cascade.rs`)
 
-`Fixable: InMemoryData + PartialEq` carries one method,
+`Fixable: InMemoryData + PartialEq` (step 6.5 replaced the `PartialEq` bound with
+`ContentOrd` — I.5) carries one method,
 `fn fix_invariant(&self, invariant: &Self::Invariant) -> Option<Self::AnnotatedOperation>`,
 and `pub fn apply_cascade` sits beside it. On success the return is a bare
 `AggregatedOp<T::AnnotatedOperation>` — target always last, `.rev()` is the compound undo.
@@ -1641,8 +1661,15 @@ Two of §8.1's four scalar-field identity tests are unreachable on today's code
    well-founded, strict monotonicity **is** the termination proof. Engraved verbatim into
    the `Fixable` doc-comment and the `apply_cascade` module docs.
 
+   ★ **Superseded in part by step 6.5** (I.3): the universal-minimum axiom is retired. The
+   empty document is *a* minimal element, not *the* one — a configuration override record
+   is an atom, so the default is *incomparable* to a modified one rather than below it. The
+   rest of the rule stands unchanged, and it is well-foundedness (never a universal
+   minimum) that the termination proof actually rests on.
+
    ★ **The order is over the document's *content*, not the meaning it denotes** (July 28
-   2026; binding on step 6.5's `PartialOrd`). Several arms strictly shrink the data while
+   2026; binding on step 6.5's order, and honoured by it). Several arms strictly shrink the
+   data while
    *widening* the semantics — a subject that stops excluding a dead period now applies more
    broadly; a slot whose `week_pattern` is cleared now runs every week. An id was removed
    and nothing added, so the document strictly decreased. Reading the order semantically
@@ -1787,10 +1814,239 @@ and still standing for step 7: the ops-layer cleaning phases and `Warning` machi
 frozen `UpdateError` vocabulary, the dry-run/preview UX (§5), and gtk4's
 itemized-`Display`-only error dialogs.
 
-For **step 6.5** specifically, this step leaves exactly one hole and it is a known one: the
+For **step 6.5** specifically, this step left exactly one hole and it was a known one: the
 monotonicity contract is engraved in prose and enforced by detectors that catch every
 *removal-shaped* violation (`None` convictions, the no-op panic), while a map that keeps
 growing the state is undetectable without the order itself and hangs. D5.1's
-content-not-semantics reading is binding on the `PartialOrd` that closes it — several
-conforming arms shrink the document while widening what it means, and an implementation
-that compared meanings would reject them.
+content-not-semantics reading was binding on the order that closes it — several conforming
+arms shrink the document while widening what it means, and an implementation that compared
+meanings would reject them. **Step 6.5 closed the hole on July 29 2026** and honoured that
+reading; see Appendix I. Nothing else in this appendix changed: the resolution map's arms,
+the conviction rules and the op surface are exactly as recorded above.
+
+---
+
+## Appendix I — step 6.5 as delivered (July 29 2026)
+
+Commit span `ec0dd2a2`…`8bfd0b64` (ten commits: four on the session plan, six of code);
+session plan retired, pinned `git show 8bfd0b64:docs/plans/plan_step_6_5.md`. Earlier plan
+versions: v1 `git show ec0dd2a2:…`, v2 `git show 85f44889:…`, v3 `git show 74a80456:…`,
+v4 `git show 63fafa8b:…`. This appendix records the delivered state step 7 builds on, and
+supersedes Appendix H wherever the two disagree.
+
+Step 6 engraved the monotonicity contract but never materialized the order it quantifies
+over, so a resolution-map bug that *grows* the state was undetectable and hung the cascade
+forever (there is no round fuse, by design). Step 6.5 materializes the order and holds the
+map to it in-flight. **No storage bytes, no op vocabulary, no `ops/` behaviour and no gtk4
+code changed**, and no dependency was added — so no `Cargo.lock` churn and no Nix
+`cargoHash` refresh.
+
+### I.1 The `ContentOrd` trait (`state/src/partial_order.rs`)
+
+```rust
+pub trait ContentOrd {
+    fn content_cmp(&self, other: &Self) -> Option<Ordering>;
+    fn content_eq(&self, other: &Self) -> bool { … }   // == Some(Equal)
+    fn content_le(&self, other: &Self) -> bool { … }
+    fn content_lt(&self, other: &Self) -> bool { … }   // the fix obligation
+}
+```
+
+**Deliberately not `PartialOrd`**, for three independent reasons, any one of which is
+sufficient: std implements `PartialOrd` **lexicographically** on `BTreeSet`/`BTreeMap`/
+`Vec`/`Option` — under which removing an element can make a set sort *later*
+(`{1,3} > {1,2,3}`), the exact opposite of a removal-shaped order; those impls cannot be
+replaced under coherence; and the typed ids must keep their *numeric* `Ord`, which is what
+makes them `BTreeMap` keys. **No type anywhere gained a new `PartialOrd`.**
+
+**The laws are self-contained — no law mentions `PartialEq`.** `Some(Equal)` is an
+equivalence relation (*content equivalence*), which may be **coarser** than a type's `==`:
+a type may quotient away non-content fields. `PartialEq` never promises structural
+equality, so nothing here may lean on it. `content_cmp` is a partial order up to that
+equivalence, and it is **well-founded on document data**: every strict decrease removes an
+element from a finite container or moves an `Option` from `Some` to `None`.
+
+**The order is intrinsic to the data type, and pre-exists the resolution map** (★ decision
+8). It is defined from the structure alone; the map is *held to it*, never the other way
+around. Fix behaviour was audit material during design — used to check the order was not
+too strict — and never definition material.
+
+### I.2 The `ContentIdentity` marker
+
+```rust
+pub trait ContentIdentity: Eq {}
+```
+
+A marker asserting that `==` coincides with content equivalence for this type. Inside a
+container, "the same element/row" can only mean `==` (for `Ord`-backed storage, `Ord`'s own
+contract ties its `Equal` to `==`), and that is sound exactly when `==` is content identity
+for the element or key type.
+
+The requirement is **positional, never global**: it must hold at container matching
+positions and nowhere else. A global law would outlaw exactly the quotients the trait is
+designed to allow — `Data` ignoring its id issuer. All five container blankets
+(`BTreeSet`, `BTreeMap`, `Vec`, `Table`, `OrderedTable`) require the marker at every
+matching position, so a quotiented element or key inside a container is a **compile error**.
+
+Enrollment is **opt-in and never automatic**: the atom macros emit it beside `ContentOrd`
+(an atom's equivalence *is* `==` by construction), tuples of markers are markers, and
+composite types use `#[derive(ContentIdentity)]` or a hand-written impl. An entity struct
+whose equivalence happens to equal `==` today still does not get the marker unless a
+container needs it — "safe to match by `==`" stays an explicit, auditable assertion.
+**Nothing in `state-colloscopes/` derives it**, because no entity sits at a matching
+position; the ids and configuration records get it from the atom macro.
+
+The absence of the marker is load-bearing, not merely conservative: `PrefilledGroup`
+deliberately has none, so the `Vec` blanket cannot apply to `groups: Vec<PrefilledGroup>`
+and omitting `#[ord(with = vec_prefix)]` is a compile error rather than a silently wrong
+order (★ decisions 11/17).
+
+### I.3 The order itself — seven building blocks and the identity criterion
+
+The combinators, all in `partial_order.rs`: **atom** (`discrete` — equal or incomparable),
+**`Option` lift** (`None` below `Some`), **set inclusion**, **map inclusion** with a value
+rule, **sequence embedding** (`subsequence` — obtainable by *deleting* elements, the
+survivors keeping their relative order; contiguity is *not* required, so `[1,3] < [1,2,3]`
+and a reordering is incomparable), **prefix pointwise** (the `Vec` read as a map from an
+initial segment of indices), and **product** (`combine` — for structs *and* enum variants;
+different variants are incomparable). Convenience wrappers for field attributes:
+`option_lift_discrete`, `vec_subsequence`, `vec_prefix`.
+
+**The identity criterion for sequences** (★ decision 9) — the question a `Vec` field must
+answer before it gets a rule:
+
+| where the element's identity is borne | rule |
+| --- | --- |
+| by its **value** | subsequence (the `Vec` blanket) |
+| by its **position** | prefix + pointwise (`#[ord(with = vec_prefix)]`) |
+| in **relations between elements** (a chain) | the whole list is one **atom** |
+
+Its instances in the domain:
+
+* ★ **`SubjectPeriodicity`'s `blocks: Vec<WeekBlock>` is one atom** (decision 10). Each
+  block's `delay_in_weeks` is measured from the previous block, so dropping or truncating
+  blocks re-dates every block after it. The chain is one composite value; even a strict
+  truncation is *incomparable*, not below.
+* **Prefilled groups and group names are prefix-ordered.** Group *i* binds to group name
+  *i*, and group numbers are referenced **by index** from the colloscope's placement maps
+  and interrogation cells — the external-index argument. So trailing removal is below,
+  un-naming an entry (`Some` → `None`) is below, and a *middle* removal shifts every later
+  binding and is incomparable.
+* **`Incompatibility::slots` is a subsequence** (value-borne identity, foreign element type,
+  hence the explicit `vec_subsequence`).
+
+**Configuration records are atoms, and the universal-minimum axiom is retired** (★ decision
+13, superseding the step-6 ruling in D5.1). `Limits`, `BalancingOptions` and `ExportConfig`
+are whole-entry override records: a `None` field means "disabled" — an active choice, not
+absent content — and `ExportConfig` is one composite presentation preference. Clearing one
+limit is therefore not a step *down*; two different limit records are simply incomparable.
+The consequence is that **there is no bottom**: `Default::default()` is *a* minimal element,
+not *the* one, and a document with a configuration override is incomparable to the default.
+This is why the planned fuzz property "`Default::default()` ≤ every reachable state" was
+retired rather than implemented. It costs nothing: **well-foundedness**, not a universal
+minimum, is what the termination proof needs.
+
+`NonEmptyRangeInclusive<T>` is an atom by hand (the type is generic, which the derive
+rejects on purpose). Reading `[2..=3] ⊆ [1..=4]` as an order would compare the *denoted
+sets*, which is exactly the semantic reading D5.1 forbids.
+
+### I.4 The derive (`state-derive/src/content_ord.rs`)
+
+`#[derive(ContentOrd)]` implements the trait for regular structs and enums as the product
+of their fields, destructuring both sides so that a field added later is a compile error
+rather than a silently ignored field. Generics are rejected on purpose (hand-write those).
+Four field attributes:
+
+| attribute | meaning |
+| --- | --- |
+| `#[ord(atom)]` | inline `discrete` — for a foreign leaf type (`SlotStart`, `NonZeroMinutes`) or a relational chain |
+| `#[ord(ignore)]` | the order does not see this field — the content quotient (`Data::id_issuer`) |
+| `#[ord(total)]` | the field's native total order *is* its content order |
+| `#[ord(with = <expr>)]` | call the expression; a path (`option_lift_discrete`) or a closure both parse |
+
+`#[derive(ContentIdentity)]` checks everything a macro can before emitting the marker:
+`#[ord(ignore)]` is **rejected outright** (an ignored field *is* a content quotient),
+`#[ord(with = …)]` is rejected as unanalyzable (hand-write the marker and justify it), and
+otherwise every field type must itself be `ContentIdentity`.
+
+### I.5 The engine assertion (`state/src/cascade.rs`)
+
+`Fixable: InMemoryData + PartialEq` became **`Fixable: InMemoryData + ContentOrd`**
+(reshaping H.2). `==` no longer appears anywhere in the cascade loop. The step-6 equality
+test became a three-way check on the document order, run after every fix apply:
+
+| `content_cmp(after, before)` | outcome |
+| --- | --- |
+| `Some(Less)` | the contract is met — proceed |
+| `Some(Equal)` | **panic**, "landed equivalent" — the step-6 perfect-no-op panic, restated |
+| `Some(Greater)` | **panic**, "did not land strictly below" — a *growing* map |
+| `None` | **panic**, "did not land strictly below" — a *sideways* map |
+
+Only fix ops are held to it: the `before` snapshot is still taken under `(!is_target)`, so a
+no-op *target* stays a legitimate success (G.2). The engraved contract in `fix_invariant`'s
+doc-comment and the `apply_cascade` module docs was reworded for the materialized order and
+for the retired axiom.
+
+The rule of H.2 stands unchanged and is worth repeating: **these panics are not a safety
+net**. They are instruments for the tests. Correctness lives in the arms.
+
+### I.6 Tests as delivered
+
+86 new tests, all green on their first run, and **no existing test needed a change** —
+which is itself the headline result: the 11 domain cascade fixtures and the two 50-seed ×
+500-op cascade fuzz walks now push every legitimate fix through the strictly-below
+assertion and stayed green, so the order accepts every conforming resolution arm in the
+real domain, not just in the toys.
+
+| tier | file | count |
+| --- | --- | --- |
+| combinators and blankets | `state/src/partial_order.rs` | 33 |
+| what the derive generates | `state/tests/derive_content_ord.rs` | 13 |
+| a derived order driving the cascade | `state/tests/cascade_on_derived_order.rs` | 5 |
+| the toy types' hand-written order | `state/src/test_utils.rs` | 6 |
+| the engine's new panics | `state/src/cascade.rs` | 2 |
+| **the domain order's semantics** | `state-colloscopes/src/partial_order_tests.rs` | **26** |
+| the contract fuzz | `state-colloscopes/tests/property_content_ord.rs` | 1 |
+
+The 26 domain tests pin the *order*, not the machinery: the `Data` quotient over the id
+issuer, row removal versus same-content-different-id versus same-id-different-name,
+reordering, the exclusion-set pins where semantics widen while content shrinks, the
+relational block chain, and the position-borne group rules. They live **in-crate**
+(`#[cfg(test)] mod partial_order_tests;`) because several compared values sit behind private
+fields.
+
+Two new `EvilMode`s drive the engine's new panics: `CreateAuthor` invents the missing
+student (grows) and `ReauthorExisting` re-points an existing quote (sideways). Both carry
+their ids, because at fix time the invariant's own dangling quote was rolled back and cannot
+be read from the state.
+
+**The contract fuzz** (`property_content_ord.rs`, 50 seeds × 500 ops, invalid fraction
+0.15 — the house configuration of the step-6 family) runs the *plain gate*, not the cascade.
+The event it waits for is a rejection over broken invariants: the gate has rolled back, so
+the state is unchanged and valid, which is precisely what the cascade would consult the map
+on. It then asks the map about **every** invariant in the reported set — not just the
+canonical first pick the engine takes — lands each answer on a clone through the **force
+door**, and asserts `content_lt`. `force_apply` rather than `apply` is deliberate and
+mirrors the engine: a fix may legitimately land a state that still breaks *other*
+invariants (the mid-cascade states), and the gate would bounce those and hide exactly the
+comparison this property is about. Measured on its first run: **3564 rejections over broken
+invariants, 6354 map answers probed, 5.0 s**. Both coverage counters guard the specific
+outcome the test is about, so a walk that never broke an invariant, or never drew a `Some`,
+fails rather than passing quietly.
+
+Full workspace suite at close-out: **1233 passed, 0 failed, no warnings.**
+
+### I.7 What step 7 builds on
+
+Termination is now a mechanism rather than a promise, so step 7 can wire `apply_cascade`
+into production without the standing risk of a silent hang: a map bug is a loud panic at
+the moment it happens, naming the offending fix and its `content_cmp`. Everything else step
+6 left for step 7 is untouched and still standing — `apply_cascade` still has no
+`Manager`-level wrapper (H.6), the ops-layer cleaning phases and `Warning` machinery, the
+frozen `UpdateError` vocabulary, the dry-run/preview UX (§5), and gtk4's
+itemized-`Display`-only error dialogs.
+
+One standing obligation for anyone touching `state-colloscopes/`: **a new field on an
+ordered type is a compile error until it gets a rule**, and the rule is a design decision,
+not boilerplate. Ask the identity question of I.3 before reaching for an attribute, and
+remember that the order is over content, never over meaning (D5.1).
