@@ -18,7 +18,11 @@ Appendix F. **Step 5 completed July 26 2026** — production switched to the
 apply/check/rollback gate and the old checked-apply world was deleted; its session plan is
 retired (pinned at `git show b6f7bdbc:docs/plans/plan_step_5.md`; sub-plans
 `plan_step_5_commit_5.md` / `plan_step_5_r1_5.md` at the same pin), the delivered state is
-recorded in Appendix G. Next up: step 6 (the cascade).
+recorded in Appendix G. **Step 6 completed July 29 2026** — the cascade engine, the
+colloscope resolution map and its four tiers of tests; its session plan is retired (pinned
+at `git show b35d6a56:docs/plans/plan_step_6.md`), the delivered state is recorded in
+Appendix H. Next up: **step 6.5** (monotonicity checking — the one hole step 6 knowingly
+left open), then step 7 (the `ops/` remaster).
 This doc started as an exploration after phase C of the table-registry plan shipped (item 2's
 detailed plan, since delivered in full and retired; pinned at
 `git show 77695338:docs/table_registry_plan.md`); it now
@@ -498,15 +502,25 @@ state steps 6–7 build on is Appendix G.**
   pristine, contract scripts + gtk4 smoke all passed (July 26 2026). Noted: test coverage
   is not exhaustive — widening it is a standing future-work item.
 
-**Step 6 — the cascade (§5).** Resolution map + retry queue; the compound
-reverse feeds the history stack; a confluence pin test freezes the emitted op list on a
-hand-built document. Planned July 26–27 2026 — `docs/plans/plan_step_6.md` is the
-authority; among its recorded deviations from the §5 sketch, the no-progress guard
-originally listed here is retired (under one-step fixes, re-picking the same
-(op, invariant) pair across rounds is a legitimate path), replaced by the conviction
-rules and the monotonicity contract below.
+**Step 6 — the cascade (§5) — COMPLETED July 29 2026.** Resolution map + retry queue; the
+compound reverse feeds the history stack; a confluence pin test freezes the emitted op list
+on a hand-built document. Planned July 26–27 2026, reviewed arm by arm with the user and
+completed July 28, delivered July 29 across 69 commits (`53b02a40`…`b35d6a56`). Its session
+plan is retired (pinned `git show b35d6a56:docs/plans/plan_step_6.md`); **the delivered
+state is Appendix H**, which is what steps 6.5 and 7 should be read against. Among its
+recorded deviations from the §5 sketch, the no-progress guard originally listed here is
+retired (under one-step fixes, re-picking the same (op, invariant) pair across rounds is a
+legitimate path), replaced by the conviction rules and the monotonicity contract below;
+the (op, picked-invariant) repetition ledger went with it, and the round fuse was never
+built. Note that **nothing in production calls the cascade yet** — `apply_cascade` has no
+`Manager`-level wrapper, and whether it gets one is step 7's decision.
 
-**Step 6.5 — monotonicity checking (added July 27 2026).** The cascade's termination proof
+**Step 6.5 — monotonicity checking (added July 27 2026) — NEXT UP.** Step 6 landed the
+contract but not the order, so this is the one hole it knowingly left open; it needs its own
+session plan and sign-off like every other step. One constraint from Appendix H binds any
+implementation: D5.1's order is over the document's **content**, not over the meaning it
+denotes, because several conforming arms shrink the data while widening the semantics — a
+`PartialOrd` that compared meanings would reject them. The cascade's termination proof
 is the engraved map contract: states form a partial order whose universal minimal element
 is `Default::default()` (the empty document), and every fix must land **strictly below**
 the current state — the map returns `None` or a strictly-decreasing op, never an
@@ -1465,3 +1479,318 @@ retry queue, consumes `Error::Invariants` sets in canonical order as its resolut
 input, and never sees a broken state escape (§5, with `try_apply` read as `apply`). Still
 standing for step 7: the ops-layer cleaning phases and `Warning` machinery, and gtk4's
 itemized-`Display`-only error dialogs.
+
+## Appendix H — step 6 as delivered (July 29 2026)
+
+Commit span `53b02a40`…`b35d6a56` (69 commits); session plan retired, pinned
+`git show b35d6a56:docs/plans/plan_step_6.md`. ★ The plan's §8 map review was walked **arm
+by arm with the user** and completed July 28 2026 — the frame, all eight target kinds of
+§8.1 and all sixteen `Convergence` variants of §8.2; that review is what produced commits
+5.97–5.99 and the 7.5/7.6 test tiers, and its per-row reasoning lives only in the pin. This
+appendix records the delivered state steps 6.5 and 7 build on.
+
+**Step 6.5 is *not* included and remains open.** The monotonicity contract below is
+engraved in doc-comments and enforced only by cheap in-flight detectors; the order itself
+(`PartialOrd` + a strictly-below assertion per fix) is step 6.5's job, and until it lands a
+map that *grows* the state makes the cascade loop forever (§8, step 6.5). What guards
+against that today is the commit-8 fuzz plus the per-arm audit — not a mechanism.
+
+### H.1 The error surface (reshapes G.2; G stays as the step-5 record)
+
+The opaque `InMemoryData::Error` is gone. `state/src/traits.rs` now defines two associated
+types and one shared generic enum, `ApplyError<InvalidOp, Invariant>`, with exactly two
+arms: `InvalidOp(InvalidOp)` — "this op cannot be made sense of against this state",
+absorbing *both* step-5 tiers (`Precheck` **and** `Logic`), never resolvable; and
+`BrokenInvariants(BTreeSet<Invariant>)` — the op is well-formed but the state does not yet
+satisfy what it needs. The classification lives in the trait rather than behind a hook
+because every hook shape for classifying an opaque error is a workaround (D1). `Logic`
+sitting inside `InvalidOp` is deliberate: no op is valid against a state we could not make
+sense of, and the cascade needs no `Logic` special case anywhere.
+
+`format_error_set` moved up into `state` (the colloscope crate keeps a private copy for its
+remaining local enums), so G.2's itemized-`Display` behaviour is unchanged for gtk4.
+`collomatique_state_colloscopes::Error` survives as an **alias**
+(`pub type Error = ApplyError<InvalidOp, FixableInvariant>`, `lib.rs:267`), which is why
+most consumer code still reads naturally. Commit 1 touched twenty-one files and **not one
+under `gtk4/`** — the "no gtk4 change" line of the plan is verified, not predicted.
+
+The word "precondition" was considered for the second arm and rejected: §4 already uses
+"the precondition carve-out" for the *precheck* family, and flipping the word's meaning
+would trip every future reader.
+
+### H.2 The engine (`state/src/cascade.rs`)
+
+`Fixable: InMemoryData + PartialEq` carries one method,
+`fn fix_invariant(&self, invariant: &Self::Invariant) -> Option<Self::AnnotatedOperation>`,
+and `pub fn apply_cascade` sits beside it. On success the return is a bare
+`AggregatedOp<T::AnnotatedOperation>` — target always last, `.rev()` is the compound undo.
+On failure the data is restored **bit-identically from an entry snapshot** (id issuer
+included), so `Err ⇒ unchanged` holds literally; collected backward ops are never replayed.
+
+Five deviations from the §5 pseudocode, all settled at review:
+
+- **Everything is annotated ops** (D6). The caller annotates the target and keeps its
+  `NewInfo`; fixes arrive already annotated from the map. Since the map holds only `&self`
+  it physically cannot reach the id issuer — a fix *cannot* carry a fresh id, so the
+  signature leans the same way the contract does. There is no `CascadeSuccess` struct and
+  no `NewInfo` threading in the engine.
+- **One-step `Option` fixes, recomputed every round.** The engine picks one invariant per
+  round (`BTreeSet::first()`, the canonical minimum) and the map returns one op, computed
+  from the live state. An invariant needing N removals is repaired over N rounds. (After
+  the commit-4 `SetRow` swap no colloscope arm actually needs more than one round.)
+- **The §5 (op, picked-invariant) repetition ledger is retired**, along with the
+  no-progress guard: under one-step fixes, re-picking the same pair across rounds is the
+  legitimate path, not a bug signature. D4's detectors replace it.
+- **No round fuse** (the first draft had 10 000). No meaningful bound exists — real
+  cascades are bounded by the document, and any constant loose enough to be safe detects
+  nothing in useful time. Termination rests entirely on the monotonicity contract.
+- **Conviction is positional, not tagged.** "Is the failing op the target" is
+  `stack.len() == 1`; no origin tags anywhere.
+
+The conviction rules (D4), which are the engine's whole error behaviour:
+
+| failing op | outcome |
+| --- | --- |
+| map says `None`, op is the target | restore snapshot, `Err` with the target's **last** `BrokenInvariants` set |
+| map says `None`, op is a fix | **panic** — the map disowned an invariant a fix of its own produced |
+| `InvalidOp`, op is the target | restore, `Err` — the remembered break if there is one, else the `InvalidOp` |
+| `InvalidOp`, op is a fix | **panic** |
+| a fix applies as a perfect no-op | **panic**, unconditionally |
+
+Two of these carry the design's weight. **The remembered-error rule**: when a fix consumes
+the target's own target (`SlotOp::Update(S, 23:00)` → the only fix is `Remove(S)` → the
+retried update hits `InvalidSlotId`), the user must be told "would break
+`SlotOverflowsDay`", not a baffling "invalid slot id" for a slot they can see. **The no-op
+panic is unconditional and applies only to fixes**: a conforming arm checks presence of the
+material and removes it if present, so a no-op fix never encodes bad user input — only a
+broken map. A no-op *target*, by contrast, stays a legitimate success (G.2's widened
+acceptance), which is why the snapshot for the check is taken under `(!is_target)`.
+
+Ops whose own payload breaks an invariant are bad **input**, not map bugs, and surface as
+`Err`. gtk4 never offers them, but the same op surface is driven by Python/RPC scripting
+and by UI code racing a stale view, so it must stay panic-free on data-dependent input.
+
+**The engine's contract panics are not a safety net** (★ user ruling, July 28 2026). A fix
+that no-ops and a fix that trips a precheck both panic — a crash in front of the user, not
+a repair. They are instruments for the tests. Correctness lives in the arms; never argue
+that a mistake is "caught anyway".
+
+### H.3 The resolution map (`state-colloscopes/src/resolution.rs`)
+
+`impl Fixable for Data` dispatches to one private helper per family (`fix_dangling`,
+`fix_convergence`), each an exhaustive match with **no wildcard arm** — totality is the
+compiler's business. Nothing new is exported; the map surfaces only through the trait. Every
+op it emits is deletive, and deletive ops' annotated forms are payload-identical to their
+plain forms, so the arms construct `AnnotatedOp` variants directly.
+
+**The whole job of an arm**: *can I remove, from the current state, the thing the invariant
+complains about?* If yes `Some(op)`, if no `None`. The arm is entirely local — what the
+engine does with `None` is the engine's business.
+
+Five frame points govern every arm:
+
+1. **Presence, never predicate.** An arm asks whether the material it would remove is
+   *there*; it never re-evaluates the invariant's condition, which may depend on the failed
+   op's payload and is unknowable from the state. `InterrogationGroupOutOfBounds(slot, week, 3)`
+   asks "is group 3 still in that cell", never "is 3 ≥ the group count" — after a group-list
+   shrink is repaired the count can be back above 3 while group 3 still has to go.
+2. **No `expect` on a state lookup — a miss is `None`.** The invariant set was computed on
+   `self` *plus the op that just failed*, and that op was rolled back, so a row named by a
+   site may simply not exist. Every arm is a chain of `?` lookups. The only `expect`
+   permitted is on a sealed-constructor rebuild, where failure is provably impossible from
+   the value alone.
+3. **`self` is always valid at fix time**, so the ids a fix names are alive. This is what
+   makes row-clearing fixes legal even though the dangling target is "gone" — it is not
+   gone in `self`. The hole appears only once the retried target finally lands, by which
+   time every row that would have dangled is already removed.
+4. **The presence test names the target, not merely "some value is there."** Where the
+   offending reference sits in a field that could legally hold a *different, live* id, the
+   arm must compare against the target or it destroys a valid reference. **The audit
+   criterion is a shape, checkable by eye**: an arm needs an explicit identity test exactly
+   when the target id does **not** appear in the op it emits. `SetRow(P, subject, ∅)` and
+   friends carry the target inside the op, so a wrong target is not expressible; `Remove(row)`
+   and `Update(row, rebuilt)` name only the row, and the identity test is the only thing
+   tying them to the target. Element-removal rebuilds satisfy it for free — the membership
+   test *is* the identity test.
+5. **Pin the shape you are about to change, not merely its existence** (point 4
+   generalised, and it governs `Convergence` too). An invariant names an offending
+   *configuration*: a row together with the field values that make it offending. Because
+   the failing op is rolled back before `fix_invariant` runs, an arm testing only "the row
+   is there" is looking at a row that is now **innocent**, and would repair it instead of
+   rejecting a bad edit. **Corollary — the payload rule**: a variant too poor to write that
+   test must be enriched (commit 5.97 is the collection point). The test pins only the
+   fields the fix is about to destroy, never the whole predicate — `SlotOverflowsDay` tests
+   `start` and deliberately **not** `duration`, because on the legitimate route the live
+   subject still holds the old duration.
+
+★ **Do not reason about what a missing shape test would lead to** (user ruling, July 28
+2026). The downstream outcome varies by arm — a wasteful-but-correct rejection, a rejection
+reporting the wrong thing, a contract panic, a non-terminating cascade, or a wrong `Ok` —
+and working out which applies rests on guards in other files that nothing obliges to keep.
+The test costs one comparison: write it in every arm, always. The same ruling covers arms
+whose `Some` branch is unreachable today (`GlobalUpdate` can carry states nobody foresaw).
+Two of §8.1's four scalar-field identity tests are unreachable on today's code
+(`SlotSubject`, `WeekPeriodFk`) and **were written anyway** for exactly this reason.
+
+**The policy (D5), four rules:**
+
+1. **Fixes are strictly monotonically decreasing.** States form a partial order whose
+   universal minimal element is `Default::default()` — the empty document. Every fix
+   removes a row/entity, clears an optional edge, or rewrites a value *minus* the offending
+   element. Nothing is invented; nothing lands equivalent. Because the order is
+   well-founded, strict monotonicity **is** the termination proof. Engraved verbatim into
+   the `Fixable` doc-comment and the `apply_cascade` module docs.
+
+   ★ **The order is over the document's *content*, not the meaning it denotes** (July 28
+   2026; binding on step 6.5's `PartialOrd`). Several arms strictly shrink the data while
+   *widening* the semantics — a subject that stops excluding a dead period now applies more
+   broadly; a slot whose `week_pattern` is cleared now runs every week. An id was removed
+   and nothing added, so the document strictly decreased. Reading the order semantically
+   would make these look like increases and break the termination proof.
+2. **Where a targeted single-edge op exists, use it**; otherwise rewrite the whole value
+   through the domain's `Update` with the offending element removed, reading the current
+   value from the pre-op state.
+3. **Remove the reference; remove the entity only when the reference cannot go alone**
+   (★ sharpened July 28 2026, replacing "remove the entity where it cannot survive the
+   loss"). The test is purely **structural**: *is the offending reference expressible as
+   absent?* `Option`, set member, or map-entry value → clear that one thing, the row stays.
+   Only a bare mandatory id field or half a row's key forces the row to die. Rows that must
+   go: a slot without its teacher or subject; a pairing rule missing a part; an
+   incompatibility without its subject; a colloscope interrogation row without its slot or
+   week. Rows that live on: everything the map narrows instead.
+4. **Legacy cleaning semantics are an aspiration, not a gate** (softened at review). Where
+   the map diverges, the divergence is recorded here — it more likely captures an edge case
+   the hand-written cleaning forgot than a regression.
+
+**Three divergences from legacy, all deliberate.** (a) ★ `DeleteWeekPattern`: legacy
+(`ops/src/week_patterns.rs:229-256`) *deletes* every referencing slot and incompat; the map
+clears their optional `week_pattern` to `None` and keeps the rows (user ruling, July 28
+2026). Cost, accepted knowingly: it forecloses a differential fuzz that would otherwise
+have pinned this arm against legacy. (b) §8.2 row 14 clears the row in one op where legacy
+removes students one at a time — same fixpoint, fewer rounds, a shorter op list to show the
+user. (c) `SlotOverflowsDay` (row 4) has **no legacy behaviour to compare against at all**:
+`ops/src/subjects.rs` never matches on `BrokenInvariants` and applies the update under
+`.expect("All data should be valid at this point")` (`:758`, `:895`), so an interrogation
+lengthened over a late slot aborts the process today. Commit 7.6's fixture 1b states the
+new answer. *(★ Corrected July 29 2026: the plan had claimed a catch-all
+`panic!("Unexpected invariant breaks …")` in `subjects.rs`; that string lives in the
+neighbouring `ops/src/slots.rs:487`, which is a different route. The conclusion — no legacy
+answer, today a crash — is unchanged and slightly stronger.)*
+
+**Two structural findings**, recorded as facts and used as a licence to weaken nothing:
+§8.2 row 3's `Some` branch is shadowed by declaration order and can never be the pick
+(something declared earlier is always in the set, and the engine picks `set.first()` with
+no fallback); and the engine's `InvalidOp`-with-remembered-break conviction route
+(`cascade.rs:124-131`) is reached by no test, with no colloscope target known for it.
+
+### H.4 Op-surface changes step 6 forced
+
+None of these is the step-7 remaster; each is spelling forced from below.
+
+- **Commit 4 — `AssignmentOp::Assign` → `SetRow(period, subject, BTreeSet<StudentId>)`.**
+  Adopted rather than deferred: it is the right op shape on its own merits (the
+  `SetInterrogation`/`SetGroupList` pattern) and it makes every assignment fix a single
+  minimal op. This is an orthogonality-preserving **swap**, not an addition — the standing
+  principle is that no two elementary ops express the same state change, `GlobalUpdate`
+  being the accepted external-data exception. It is what let the plan reject `Vec<Op>`
+  fixes, which were only an optimization and are easy to get subtly wrong when a middle op
+  does not produce the intermediate state the author imagined.
+- **Commit 5 — `InterrogationGroupOutOfBounds` gains the offending group.** The survey of
+  all 16 `Convergence` variants and every `DanglingFk` site found exactly one
+  information-poor payload; this was it.
+- **Commit 5.97 — five more `Convergence` variants enriched**:
+  `SlotTeacherDoesNotTeachSubject`, `SlotForSubjectWithoutInterrogations`,
+  `SlotOverflowsDay` (the only variant where an id cannot do the job — it needs `start` and
+  `duration`), `PairedSlotsNotInSameSubject`, `ColloscopeStudentGroupOutOfBounds`. Same
+  work as commit 5, one level deeper, driven by frame point 5's corollary.
+- **Commits 5.98 / 5.99 — split the settings and balancing elementary ops.** Shared
+  motivation: `SettingsOp::Update(Settings)` and `BalancingOp::Update(Balancing)` were the
+  last places a `Table` value travelled through the op surface out of `state/`, against the
+  house rule that a `Table` stays inside `state/`. The map needed "drop this one
+  per-student/per-subject override" and had only a whole-value rewrite. The split is not
+  invented — the `ops/`-level vocabulary already had exactly this shape and faked it by
+  cloning the whole value. The read side (`limits_for` and snapshot readers) is out of
+  scope: reading through the inherent `Table` API inside a snapshot is not shipping a
+  `Table` through an op.
+
+`ops/` also absorbed the matching re-spellings (the enriched variants are matched at several
+sites; `storage/tests/populated_round_trip/builder.rs` re-spells the two split `Update`s).
+`Warning`, `get_next_cleaning_op` and the whole `UpdateError` vocabulary are **untouched** —
+that is step 7.
+
+### H.5 Tests as delivered
+
+- **`state/src/cascade.rs`** — 9 engine unit tests on a toy implementor (`QuoteData`, plus
+  an `EvilQuoteData` whose modes deliberately violate the contract): canonical pick order,
+  compound undo, a target that breaks nothing, precheck rejection, the self-caused `None`
+  conviction, mid-cascade restore with a non-empty applied prefix, and one test per
+  contract panic.
+- **`state-colloscopes/tests/cascade.rs`** — 19 colloscope fixtures in three families:
+  11 `fixture_*` asserting `Ok` (the cascade repairs and the target lands), 4 `rejection_*`
+  and 4 `identity_pin_*` asserting `Err` plus the document unchanged.
+- **`state-colloscopes/src/resolution/innocent_tests.rs`** — **51** innocent-state `None`
+  tests, one per *comparison*, calling `fix_invariant` directly on a valid document with an
+  invariant derived from a corrupted twin. These are what mechanically catch a missing
+  identity or shape test; the `Ok`-route fixtures cannot see one, because on a legitimate
+  route the target id equals the live field and the op list comes out the same either way.
+- **`state-colloscopes/tests/property_cascade.rs`** — the cascade fuzz, two walks at
+  50 seeds × 500 ops, sharing one `cascade_step` so they differ only in the document handed
+  over: from the bootstrap, and on a document the plain gate has already grown.
+
+**Why the three fixture tiers are three, and in that order** (★ user ruling): commit 7
+asserts `Ok`, commit 7.5 the `None` branches arm by arm, commit 7.6 asserts `Err` — and 7.6
+is sequenced *after* 7.5 because a rejection fixture only means something once the `None`
+branch it rests on has been tested.
+
+**The reusable rules**, which outlive this step: expected op lists derived by hand from the
+§8 tables *before* the test runs; sequence versus content (an ordered literal is a tripwire
+on a derived `Ord`, **not** a confluence pin, and is asserted only where the engine really
+chose); fail on the *last* conjunct, so a map that dropped it cannot go green for the wrong
+reason; the create-then-remove recipe for a dead id. Commit 8 added two for property
+harnesses: a green fuzz run proves nothing without a cross-seed guard that the code under
+test was actually reached, and such a guard must count the specific outcome it claims — of
+3677 rejections, 2296 were gate bounces that never consulted the map and only 1381 were
+real convictions.
+
+**What the fuzz measured** (both walks green on their first run, no panic):
+
+| | from bootstrap | grown first |
+| --- | --- | --- |
+| landings needing a fix | 1597 | 2077 |
+| fix ops in total | 4592 | **7298** |
+| widest single cascade | 25 | **42** |
+| document size at handover → end | 21 → 42 | 61 → 50 |
+
+The two walks converge on one equilibrium from opposite directions, which is the finding
+worth keeping: **cascading erodes exactly the structures that make cascades deep**, so a
+large document must be handed over — the cascade phase can never grow one itself. The
+erosion is real *and* bounded.
+
+**Two deliberate deletions**: the undo round-trip fixture (every component is already
+pinned by `property_ops.rs` Properties 2 and 4, `history.rs:494`, the order fixtures and the
+toy test) and "clean target lands alone" (when nothing breaks, the map is never consulted,
+so it never touched this step's code). The latter was replaced by the no-op-target pin,
+which guards the `(!is_target)` carve-out.
+
+**The accepted asymmetry, recorded as the decision it is**: commit 7.5 covers every arm's
+`None` branch systematically; **nothing covers the `Some` branches systematically**. A
+second series of the same size was considered and rejected.
+
+**No map bug surfaced on any tier** — 11 `Ok` fixtures, 51 `None` tests, 8 `Err` fixtures
+and 50 000 fuzzed cascade ops. The map that landed in commit 6 was right about every arm.
+
+### H.6 What steps 6.5 and 7 build on
+
+The cascade is now a real primitive, but **nothing in production calls it**: `apply_cascade`
+has no `Manager`-level wrapper, and whether it gets one is step 7's decision. Also untouched
+and still standing for step 7: the ops-layer cleaning phases and `Warning` machinery, the
+frozen `UpdateError` vocabulary, the dry-run/preview UX (§5), and gtk4's
+itemized-`Display`-only error dialogs.
+
+For **step 6.5** specifically, this step leaves exactly one hole and it is a known one: the
+monotonicity contract is engraved in prose and enforced by detectors that catch every
+*removal-shaped* violation (`None` convictions, the no-op panic), while a map that keeps
+growing the state is undetectable without the order itself and hangs. D5.1's
+content-not-semantics reading is binding on the `PartialOrd` that closes it — several
+conforming arms shrink the document while widening what it means, and an implementation
+that compared meanings would reject them.
