@@ -2,17 +2,17 @@
 
 **Status: DRAFT — awaiting user sign-off. No implementation commit has landed.**
 
-This is the second version of the plan, with the second review round folded
-in. The first version (committed as `ec0dd2a2`, readable via
-`git show ec0dd2a2:docs/plans/plan_step_6_5.md`) built the same partial order
-out of hand-written `PartialOrd` implementations; it was reworked after review
-into the present design: a dedicated **`ContentOrd`** trait, implemented for
-the regular shapes by a **derive macro** in the existing
-`collomatique-state-derive` crate, with manual implementations only where the
-shape is irregular. A second review round then corrected the *methodology* of
-the order's definition itself (§0.2, decisions 8–11): the order is intrinsic
-to the document type and pre-exists the resolution map; several rules were
-re-derived accordingly.
+This is the third version of the plan. The first version (committed as
+`ec0dd2a2`) built the order out of hand-written `PartialOrd` implementations;
+the second (committed as `85f44889`) reworked it into a dedicated
+**`ContentOrd`** trait implemented by a **derive macro** in the existing
+`collomatique-state-derive` crate, and re-founded the methodology (the order
+is intrinsic and pre-exists the resolution map). This third version folds in
+the user's proofread of §0–§4 (§0.2, decisions 12–15): structural tolerance
+for equivalence classes, the retirement of the `Default`-universal-minimum
+axiom (configuration values become atoms; the flat order is gone), the
+`#[ord(ignore)]` attribute (which lets `Data` itself be derived), and a
+second, end-to-end test class for the derive.
 
 This plan is self-sufficient: it contains every design decision, the complete
 specification of the order, and old/new code for every touched site. It is
@@ -30,27 +30,31 @@ over broken invariants, asks the resolution map (`Fixable::fix_invariant`,
 implemented for `Data` in `state-colloscopes/src/resolution.rs`) for one repair
 operation, pushes it on the retry stack, and loops. The engine has **no round
 fuse** — deliberately, because no meaningful bound exists. Termination rests
-entirely on the engraved map contract:
+entirely on the engraved map contract, whose step-6 wording was:
 
 > States form a partial order with a universal minimal element:
 > `Default::default()`, the empty document. Every returned op must land
 > **strictly below** the current state in that order.
 
-Step 6 enforced this contract only partially in-flight. The `None` convictions
+(The "universal minimal element" half of that wording is retired by this
+step — see §0.1; the strictly-below half is what this step enforces.)
+
+Step 6 enforced the contract only partially in-flight. The `None` convictions
 and the no-op-fix panic catch every *removal-shaped* violation, but the order
 itself was never materialized, so a map bug that keeps **growing** the state is
 undetectable and makes the cascade loop forever. Step 6.5 closes that hole:
 
 1. define the partial order as a real trait implementation on the document
-   (`InnerData`, and `Data` by delegation),
+   (`InnerData`, and `Data` above it),
 2. require that trait on `Fixable` implementors (only there — the generic
    `InMemoryData` trait is untouched),
 3. assert in the cascade loop, after every fix that lands, that the new state
    is **strictly below** the pre-fix state — turning a growing or sideways map
    into a loud panic instead of a hang,
-4. fuzz the two halves of the contract: (a) `Default::default()` really is
-   below every reachable state, and (b) every `fix_invariant` answer is `None`
-   or an op whose applied result lands strictly below.
+4. fuzz the contract: every `fix_invariant` answer is `None` or an op whose
+   applied result lands strictly below. (An earlier sketch had a companion
+   property, "`Default::default()` ≤ every reachable state"; it died with the
+   universal-minimum axiom — decision 13.)
 
 ### 0.1 Binding constraints (★ user rulings, recorded in the design doc)
 
@@ -62,26 +66,34 @@ undetectable and makes the cascade loop forever. Step 6.5 closes that hole:
   strictly decreased. An order that compared meanings would reject these arms
   and break the termination proof. Every rule in §3 below is a rule about
   *content*. The trait's name, `ContentOrd`, records this ruling.
-* **Compatibility with `Eq`.** `InnerData` derives `PartialEq, Eq`, and the
-  order must agree with it: `content_cmp` returns `Some(Ordering::Equal)`
-  exactly when the two values are `==`. So there is no room for equivalence
-  classes coarser than equality: two documents that differ at all — same
-  teacher under a different id, same id with a different name — must *not*
-  compare `Equal`. They compare incomparable (or strictly ordered, where one is
-  an honest content-subset of the other). The design doc's "equivalence classes
-  modulo the id issuer if the issuer gets in the way" resolves to nothing
-  special: the id issuer lives in `Data` *outside* `InnerData`, and the order
-  on `Data` delegates to `inner_data` exactly as its hand-written `PartialEq`
-  already does (`state-colloscopes/src/lib.rs:191-197`).
-* **The minimal element is `Default::default()`** — an **axiom** of the
-  engraved step-6 contract, not a theorem. Fuzz property (a) pins it, and it
-  actively shapes the order: it *forces* the flat rule for the three
-  configuration types whose `Default` is structurally non-minimal (§2,
-  block 7).
+* **Equivalence tolerance, and where it stops** (★ this review, decision 12).
+  The generic layer does **not** require agreement with `PartialEq`:
+  `content_cmp` may have equivalence classes coarser than `==` — `Data`
+  ignoring its id issuer is the canonical case. The engine never consults
+  `==`: a fix must land `Some(Ordering::Less)`, which means "below and not
+  equivalent" (the user's "S2 ≤ S1 and not(S1 ≤ S2)"); `S1 != S2` appears
+  nowhere. Where a type also implements `PartialEq`, `==` must *imply*
+  content-equivalence; the converse is not required. For `InnerData` and
+  everything below it the converse does hold — no equivalence classes — as an
+  implementation property of this crate, kept as a guide.
+  **The scope law**: element and key matching *inside* containers (sets,
+  maps, sequences, tables) is by `==`/`Ord`, full stop. Equivalence-aware set
+  inclusion is a matching problem (up to bipartite matching once two elements
+  of one set are mutually equivalent) and is not attempted; a type with
+  coarse equivalence must never be used as a set element or map key. In this
+  document the only quotient sits at the very top (`Data`), above every
+  container.
+* **Well-foundedness is the termination requirement — the universal-minimum
+  axiom is retired** (★ this review, decision 13, superseding the step-6
+  ruling "minimal element = `Default::default()`"). Termination needs finite
+  descent, nothing more; the order may have many minimal elements. The empty
+  document remains *a* minimal element (§4.4), just not the unique bottom.
+  Consequently the flat-with-a-bottom construction of plan v2 is gone, and
+  the fuzz property that pinned the axiom is gone with it.
 
 ### 0.2 Decisions from the design reviews (July 29 2026)
 
-Settled with the user across the two review rounds:
+Settled with the user across the review rounds:
 
 1. **A derive, not thirty-odd hand-written impls.** The comparison rule
    travels *by type, through trait impls* (the serde model): containers get
@@ -103,12 +115,12 @@ Settled with the user across the two review rounds:
    order.
 3. **Blanket `Vec` impl = subsequence.** A wrong default here can only be *too
    strict* (it never blesses a non-removal change), and too-strict fails loud —
-   the engine's strictly-below panic, the fixtures, fuzz (b). The blanket is
-   also what lets `Vec` fields *inside table values* (the week/slot ordering
-   sidecars) participate through trait dispatch, where field attributes cannot
-   reach. It is gated on `T: ContentOrd`, so it can never fire on a type that
-   was not deliberately enrolled. Fields whose element identity is not
-   value-borne override it (decisions 9–11).
+   the engine's strictly-below panic, the fixtures, the contract fuzz. The
+   blanket is also what lets `Vec` fields *inside table values* (the week/slot
+   ordering sidecars) participate through trait dispatch, where field
+   attributes cannot reach. It is gated on `T: ContentOrd`, so it can never
+   fire on a type that was not deliberately enrolled. Fields whose element
+   identity is not value-borne override it (decisions 9–11).
 4. **Attribute values are plain expressions, not strings.** House style
    (`#[join(error = NewId)]`, `#[fk(name = subject)]`) already writes unquoted
    attribute arguments; syn 2 parses an attribute value as an ordinary
@@ -120,23 +132,23 @@ Settled with the user across the two review rounds:
    (the same reason the existing derive tests are integration tests). The
    hand-written toy impls also test the engine and the combinators with zero
    dependence on the macro.
-6. **The derive gets its own integration test** in
+6. **The derive gets its own direct integration test** in
    `state/tests/derive_content_ord.rs`, in the style of `derive_refs.rs` /
    `derive_join.rs`.
 7. **A `Vec` analogue of `option_lift_discrete` is provided**:
    `vec_subsequence` (elements matched by plain `==`, i.e. discretely), for
    `#[ord(with = …)]` on a `Vec` whose element type is foreign and cannot be
    enrolled in the trait.
-8. **★ The content order *pre-exists* the resolution map** (second review
-   round). The order is an intrinsic property of the document type, derived
-   from first principles — content inclusion, D5.1, `Eq`-consistency, the
-   `Default`-minimum axiom, scalar leaves as atoms. The map is then *obligated*
-   to move strictly downward in it. "No fix touches this field" is **never** a
-   reason for choosing a rule; such statements are theorems about the map and
-   live in the §4.3 audit, not in the definition. (This corrected one rule
-   outright: `Incompatibility::slots` is subsequence-ordered, not atomic.)
-9. **The identity criterion for `Vec` fields** (second review round). Ask
-   where an element's identity lives:
+8. **★ The content order *pre-exists* the resolution map.** The order is an
+   intrinsic property of the document type, derived from first principles —
+   content inclusion, D5.1, well-foundedness, scalar leaves as atoms. The map
+   is then *obligated* to move strictly downward in it. "No fix touches this
+   field" is **never** a reason for choosing a rule; such statements are
+   theorems about the map and live in the §4.3 audit, not in the definition.
+   (This corrected one rule outright: `Incompatibility::slots` is
+   subsequence-ordered, not atomic.)
+9. **The identity criterion for `Vec` fields.** Ask where an element's
+   identity lives:
    * with the element's **value** (id lists, time windows) → **subsequence**;
    * with its **position** — indices bound to a sibling structure or
      referenced from outside → **prefix + pointwise** (the `Vec` read as a map
@@ -148,12 +160,40 @@ Settled with the user across the two review rounds:
     so the list is a relational chain, one composite schedule description, not
     a collection of independently removable items.
 11. **Prefilled groups and group names are prefix-ordered** (user correction
-    of the earlier same-length rule). Adding a group is adding content, and
+    of an earlier same-length rule). Adding a group is adding content, and
     zero groups is the minimum element; removing a *middle* group is an
     identity shift, not a removal — group numbers are referenced *by index*
     from the colloscope's placement maps and interrogation cells — and stays
     incomparable. The `same_length_pointwise` combinator of the earlier draft
-    is replaced by `prefix_pointwise`.
+    was replaced by `prefix_pointwise`.
+12. **★ Equivalence classes are tolerated structurally** (proofread round).
+    `ContentOrd` has no `PartialEq` supertrait; its laws are stated up to the
+    equivalence `Some(Equal)` ("content equivalence"); a `content_eq` default
+    method names that relation so nobody reaches for `==`. The engine is
+    `==`-free. The scope law of §0.1 bounds the tolerance: container matching
+    stays `==`/`Ord`-based, so quotiented types stay out of containers.
+13. **★ Configuration values are atoms; the flat order and the
+    `Default`-universal-minimum axiom are retired** (proofread round,
+    superseding both plan v2's flat rule and the step-6 minimal-element
+    phrasing). The principled ground: `Limits` and `BalancingOptions` are
+    *whole-entry override records* — per the long-standing override
+    semantics, a `None` field there means **"disabled", an active choice, not
+    absent content**, so the Option-lift reading ("`None` is less content")
+    is semantically false inside them and the record is one composite value.
+    `ExportConfig` is one composite presentation preference. Termination
+    needs only well-foundedness, which atoms give trivially; the order simply
+    has several minimal elements.
+14. **`#[ord(ignore)]`: a field the order does not see** (proofread round;
+    the user proposed the spelling `none`, changed to `ignore` so it cannot
+    be read as "compare with `None`"). Generates a constant `Some(Equal)`
+    and puts no bounds on the field's type. This is the structural source of
+    equivalence classes — and it lets `Data` itself be **derived**, ignoring
+    its `id_issuer`. The toy mirror: `EvilQuoteData` delegates to its inner
+    data only, ignoring the mode, by hand.
+15. **The derive gets a second, end-to-end test class** (proofread round): a
+    toy `InMemoryData + Fixable` whose `ContentOrd` is *derived*, driven
+    through `apply_cascade` — including a small deterministic op-walk with no
+    new dependencies (§6.4).
 
 ### 0.3 What this step does *not* do
 
@@ -167,13 +207,13 @@ decision.
 
 | commit | contents |
 | --- | --- |
-| 0 | this plan (the rework; the first draft is already committed as `ec0dd2a2`) |
+| 0 | this plan (v1 pinned at `ec0dd2a2`, v2 at `85f44889`; this revision lands as its own commit) |
 | 1 | `state/`: the `ContentOrd` trait, the combinators, the leaf and container impls, the `impl_content_ord_atom!` macro, the `with =` helpers + unit tests |
-| 2 | `collomatique-state-derive`: `#[derive(ContentOrd)]` with the three field attributes + integration tests in `state/tests/derive_content_ord.rs` |
-| 3 | `state-colloscopes/`: adoption — the id enrollment, the derives with their ten attributes, five manual impls + the semantic unit tests |
+| 2 | `collomatique-state-derive`: `#[derive(ContentOrd)]` with the four field attributes + the direct integration tests in `state/tests/derive_content_ord.rs` + the end-to-end cascade tests on a derived toy in `state/tests/cascade_on_derived_order.rs` |
+| 3 | `state-colloscopes/`: adoption — the atom enrollments, the derives with their attributes (including `Data` with `#[ord(ignore)]`), one manual impl + the semantic unit tests |
 | 4 | the toy types: manual `ContentOrd` for `QuoteData` / `EvilQuoteData` + unit tests |
-| 5 | the engine: `Fixable: InMemoryData + ContentOrd`, the in-loop strictly-below check, two new evil modes, two new engine tests |
-| 6 | the two fuzz properties (`state-colloscopes/tests/property_partial_order.rs`) |
+| 5 | the engine: `Fixable: InMemoryData + ContentOrd`, the in-loop strictly-below check, the contract rewording, two new evil modes, two new engine tests |
+| 6 | the contract fuzz property (`state-colloscopes/tests/property_content_ord.rs`) |
 
 Each commit builds and passes the whole workspace suite on its own. Commit 4
 only needs commit 1; commits 3 and 5 need everything before them.
@@ -186,34 +226,45 @@ only needs commit 1; commits 3 and 5 need everything before them.
 /// The document order: a partial order over *content* (design doc §8,
 /// step 6.5, and ruling D5.1 — content, not the meaning it denotes).
 ///
-/// This is the order of the cascade's monotonicity contract: states form a
-/// partial order whose universal minimal element is `Default::default()`
-/// (the empty document), and every resolution-map fix must land strictly
-/// below the pre-fix state. [crate::apply_cascade] checks that in-flight.
-/// The order is intrinsic to the data type — it is defined from the
-/// structure alone, and the resolution map is *held to it*, never the other
-/// way around.
+/// This is the order of the cascade's monotonicity contract: the order is
+/// well-founded, and every resolution-map fix must land strictly below the
+/// pre-fix state. [crate::apply_cascade] checks that in-flight. The order
+/// is intrinsic to the data type — it is defined from the structure alone,
+/// and the resolution map is *held to it*, never the other way around.
 ///
 /// # Laws
 ///
-/// * **Consistency with equality**: `content_cmp` returns
-///   `Some(Ordering::Equal)` exactly when the two values are `==` (hence the
-///   `PartialEq` supertrait).
-/// * **Antisymmetry and transitivity**, as for any partial order.
-/// * **Well-foundedness on document data**: every strict decrease removes an
-///   element from a finite container, moves an `Option` from `Some` to
-///   `None`, or moves a flat configuration value onto its bottom — so there
-///   is no infinite strictly-decreasing chain, and strict monotonicity of
-///   fixes is a termination proof.
+/// * `Some(Ordering::Equal)` is an equivalence relation — **content
+///   equivalence** (see [ContentOrd::content_eq]). It may be coarser than
+///   `==`: a type may quotient away non-content fields (an id issuer, a
+///   test-harness mode). Where the type also implements `PartialEq`,
+///   `a == b` must imply content equivalence; the converse is not required.
+/// * `content_cmp` is a partial order up to that equivalence: reflexive
+///   (`x.content_cmp(&x) == Some(Equal)`), transitive, and antisymmetric up
+///   to equivalence.
+/// * **Element matching inside containers is by `==`/`Ord`** (the blanket
+///   impls and combinators): a type with coarse equivalence must not be
+///   used as a set element or map key — equivalence-aware inclusion is a
+///   matching problem and is deliberately out of scope.
+/// * **Well-foundedness on document data**: every strict decrease removes
+///   an element from a finite container or moves an `Option` from `Some` to
+///   `None` — so there is no infinite strictly-decreasing chain, and strict
+///   monotonicity of fixes is a termination proof.
 ///
 /// This is deliberately *not* `PartialOrd`: the standard library implements
 /// `PartialOrd` lexicographically on containers (under which removing an
 /// element can make a set sort *later*), and the typed ids must keep their
 /// numeric `Ord` for use as map keys. A distinct trait keeps both worlds
 /// intact and unambiguous.
-pub trait ContentOrd: PartialEq {
+pub trait ContentOrd {
     /// Compares two values in the document order.
     fn content_cmp(&self, other: &Self) -> Option<Ordering>;
+
+    /// `self` and `other` are content-equivalent. Use this, never `==`,
+    /// when the question is about the document order.
+    fn content_eq(&self, other: &Self) -> bool {
+        self.content_cmp(other) == Some(Ordering::Equal)
+    }
 
     /// `self` is below or equal to `other` in the document order.
     fn content_le(&self, other: &Self) -> bool {
@@ -223,7 +274,8 @@ pub trait ContentOrd: PartialEq {
         )
     }
 
-    /// `self` is strictly below `other` in the document order.
+    /// `self` is strictly below `other` in the document order: below and
+    /// not equivalent. This is the fix obligation.
     fn content_lt(&self, other: &Self) -> bool {
         self.content_cmp(other) == Some(Ordering::Less)
     }
@@ -232,13 +284,17 @@ pub trait ContentOrd: PartialEq {
 
 The comparison rule for a compound value is determined by its type's impl;
 struct and enum impls are generated by `#[derive(ContentOrd)]` (commit 2) as
-the product of their fields' rules. Three field attributes override the
-default dispatch where a type cannot carry an impl (foreign types, the orphan
-rule) or where the field's structure demands a different reading than its
-type's default:
+the product of their fields. Four field attributes override the default
+dispatch:
 
 * `#[ord(atom)]` — compare this field discretely, inline (`==` or
-  incomparable); no trait impl needed on the field's type.
+  incomparable); no trait impl needed on the field's type. The escape hatch
+  for foreign types (orphan rule).
+* `#[ord(ignore)]` — the order does not see this field: the generated
+  comparison is a constant `Some(Equal)`, and no bound is placed on the
+  field's type. **Using it introduces equivalence classes** (two values
+  differing only in ignored fields are content-equivalent); that is its
+  purpose, and it is legal under the laws above.
 * `#[ord(with = <expr>)]` — compare this field with the given expression,
   which must be callable as `fn(&T, &T) -> Option<Ordering>`; a path or an
   inline closure.
@@ -253,31 +309,43 @@ type's default:
 
 The order is defined from first principles (decision 8): structure decomposes
 until it bottoms out in scalar leaves, and each structural layer is read *as
-content*. Eight named building blocks; §3 assigns every type a composition of
+content*. Seven named building blocks; §3 assigns every type a composition of
 them.
 
 1. **Atom** (discrete order). Comparable only when equal: `Some(Equal)` iff
    `==`, otherwise `None`. In order-theory vocabulary this is the discrete
    partial order — two different values are neither above nor below one
-   another. Atoms are the scalar leaves of the document: strings, numbers,
-   booleans, times, ids, ranges. A range deserves the explicit argument: its
-   *content* is the endpoint pair, and reading `[2..=3] ⊆ [1..=4]` as an
-   order would compare the denoted sets — exactly the semantic reading D5.1
-   forbids. Text is likewise opaque: a string is a scalar value, not a
-   container of characters.
+   another. Atoms are, first, the scalar leaves of the document: strings,
+   numbers, booleans, times, ids, ranges. A range deserves the explicit
+   argument: its *content* is the endpoint pair, and reading
+   `[2..=3] ⊆ [1..=4]` as an order would compare the denoted sets — exactly
+   the semantic reading D5.1 forbids. Text is likewise opaque: a string is a
+   scalar value, not a container of characters. Second, atoms are the
+   composite values that read as *one* value: relational chains (the
+   `WeekBlock` list, decision 10) and the three **configuration records**
+   (decision 13) — `Limits`, `BalancingOptions`, `ExportConfig`. In the two
+   override records a `None` field means "disabled", an active choice, so
+   the Option lift's reading ("`None` is less content") is false inside
+   them; `ExportConfig` is one composite presentation preference.
 2. **Option lift.** `None` is strictly below `Some(_)`; two `Some` values
-   compare by the inner rule. This applies to **every** `Option` field:
-   clearing optional content is removing content.
+   compare by the inner rule. This applies to every `Option` field *whose
+   `None` means absent content* — which is every `Option` field the order
+   descends into (the override records, where `None` means "disabled", are
+   atoms and never descended into). Clearing optional content is removing
+   content; the rule is load-bearing for the two optional foreign keys a fix
+   actually clears (`Slot::week_pattern`, `Incompatibility::week_pattern_id`).
 3. **Set inclusion.** `Equal` iff equal, `Less` iff strict subset, `Greater`
-   iff strict superset, `None` otherwise.
+   iff strict superset, `None` otherwise. Elements are matched by `==`/`Ord`
+   (the scope law of §0.1).
 4. **Map inclusion with a value rule.** Below iff the key set is included and
-   every shared key's value is below or equal. Rows are matched **by id**: the
-   same teacher under a different id is incomparable (the user's defining
+   every shared key's value is below or equal. Rows are matched **by id**:
+   the same teacher under a different id is incomparable (the user's defining
    example); the same id with different content compares by the value rule.
 5. **Sequence embedding (subsequence).** `Less` iff the left is a strict
-   subsequence of the right — obtainable by *removing elements only*, the
-   survivors keeping their relative order. Reordering is incomparable:
-   ordering is user-visible data.
+   subsequence of the right — obtainable by *deleting elements only*, the
+   survivors keeping their relative order; contiguity is **not** required:
+   `[1,3] < [1,2,3]`. Reordering is incomparable: ordering is user-visible
+   data.
 6. **Prefix pointwise.** A `Vec` whose positions carry the identity is
    content-wise a **map from indices to values**; map inclusion (block 4)
    specialized to index sets that are initial segments gives: below iff the
@@ -285,26 +353,14 @@ them.
    Appending is adding content (the empty vector is the minimum); shrinking a
    value in place is a decrease; removing a *middle* element shifts the
    identity of every later element and is incomparable.
-7. **Flat with a bottom.** For exactly three configuration types — `Limits`,
-   `BalancingOptions`, `ExportConfig`: `Equal` iff equal, and the type's
-   `Default::default()` value sits strictly below everything else; any other
-   pair is incomparable. This rule is **forced by the `Default`-minimum
-   axiom**, not chosen for convenience: `BalancingOptions::default()` and
-   `ExportConfig::default()` are non-trivial (`balancing.rs:60-73`; the
-   export defaults carry enabled flags and named sheets), so the structural
-   reading puts states strictly *below* the default (clear
-   `teacher_rotation` from the default and content was removed) —
-   contradicting the axiom that nothing sits below `Default::default()`. Nor
-   can "default ≤ everything" be glued onto the structural order: a state
-   structurally below the default would then sit both above and below it,
-   breaking antisymmetry. So every order honoring the axiom must make all
-   other values incomparable-or-above; flat is the simplest such order.
-   (`Limits::default()` happens to be all-`None`, but it follows the same
-   rule so the three configuration values behave alike.)
-8. **Product.** For a struct: the field-wise combination. `Equal` iff every
-   field `Equal`; `Less` iff at least one `Less` and none `Greater` or
-   incomparable; `None` as soon as one field is incomparable or two fields
-   disagree in direction. A product of atoms degenerates to an atom.
+7. **Product** — for structs *and enum variants*. For a struct: the
+   field-wise combination. `Equal` iff every field `Equal`; `Less` iff at
+   least one `Less` and none `Greater` or incomparable; `None` as soon as one
+   field is incomparable or two fields disagree in direction. A product of
+   atoms degenerates to an atom. For an **enum**: two values of the *same*
+   variant compare as the product of that variant's fields (a unit variant is
+   the empty product, `Equal`); two values of *different* variants are
+   incomparable.
 
 **The identity criterion for `Vec` fields** (decision 9) selects among blocks
 5, 6 and 1: identity borne by the element's *value* → subsequence (block 5);
@@ -317,28 +373,32 @@ prefilled groups and group names are position-borne — group *i* binds to name
 (prefix pointwise); the `WeekBlock` chain is relational — each block's delay
 is measured from its predecessor (atom, ★ decision 10).
 
+**Where equivalence classes may appear.** Only above the containers: through
+`#[ord(ignore)]` or a hand-written quotient (`Data`'s ignored issuer,
+`EvilQuoteData`'s ignored mode). Inside containers, matching is `==`/`Ord`
+(the scope law), so a quotiented type must never be a set element or map key.
+
 Two implementation rules apply everywhere: **never `#[derive(PartialOrd)]`,
 never the standard library's container orders** (both lexicographic, wrong for
-a removal order); and the derive covers all fields by construction, so no
-manual impl may compare a strict subset of a type's fields (the
-`Eq`-consistency law would break).
+a removal order); and no impl may skip a field *silently* — the derive walks
+every field by construction, and ignoring one is exactly what
+`#[ord(ignore)]` states out loud.
 
 ---
 
 ## 3. The complete specification, type by type
 
 Notation: "atom", "lift(X)", "set-inclusion", "map-inclusion(V)",
-"subsequence", "prefix(V)", "flat", "product" refer to §2. The **how** column
-says what produces the impl: `derive` (with any attributes), `blanket` (a
+"subsequence", "prefix(V)", "product" refer to §2. The **how** column says
+what produces the impl: `derive` (with any attributes), `blanket` (a
 container impl from commit 1), `macro` (`impl_content_ord_atom!`), `manual`,
-or `—` (no impl; the type is only ever compared inside an atom or flat
-boundary).
+or `—` (no impl; the type is only ever compared inside an atom boundary).
 
 ### 3.1 The two roots
 
 | type | rule | how |
 | --- | --- | --- |
-| `Data` (`lib.rs`) | delegates to `inner_data`, ignoring the id issuer — mirroring `PartialEq for Data` | manual |
+| `Data` (`lib.rs`) | product with `id_issuer` **ignored** — the content equivalence is "same inner data", which coincides with `Data`'s hand-written `PartialEq` | derive, `#[ord(ignore)]` on `id_issuer` |
 | `InnerData` (`lib.rs`) | product: `params` × `colloscope` × `export_config` | derive |
 
 ### 3.2 `Parameters` and everything under it
@@ -365,29 +425,29 @@ boundary).
 | `Slots` (`slots.rs`) | product: `slot_map` map-inclusion(`Slot`) × `ordering` map-inclusion(subsequence of `Vec<SlotId>`) | derive |
 | `Slot` (`slots.rs`) | product: `subject_id` atom × `teacher_id` atom × `start_time` atom × `extra_info` atom × `week_pattern` lift(atom) × `cost` atom | derive; `start_time` gets `#[ord(atom)]` (foreign `SlotStart`); `week_pattern` needs no attribute (`Option` blanket + id atom) |
 | `Incompats` (`incompats.rs`) | map-inclusion(`Incompatibility`) | derive |
-| `Incompatibility` (`incompats.rs`) | product: `subject_id` atom × `name` atom × `slots` **subsequence** × `minimum_free_slots` atom × `week_pattern_id` lift(atom) | derive; `slots` gets `#[ord(with = vec_subsequence)]` — a time window's identity is its value, so removing one is removing content (decision 8 corrected the earlier atom designation); the helper is needed because `SlotWithDuration` is foreign |
+| `Incompatibility` (`incompats.rs`) | product: `subject_id` atom × `name` atom × `slots` **subsequence** × `minimum_free_slots` atom × `week_pattern_id` lift(atom) | derive; `slots` gets `#[ord(with = vec_subsequence)]` — a time window's identity is its value, so removing one is removing content (decision 8); the helper is needed because `SlotWithDuration` is foreign |
 | `GroupLists` (`group_lists.rs`) | product: `group_list_map` map-inclusion(`GroupList`) × `subjects_associations` map-inclusion(atom `GroupListId`) | derive |
 | `GroupList` (`group_lists.rs`, sealed) | product: `params` × `filling` | derive (in-module; private fields are fine) |
 | `GroupListParameters` (`group_lists.rs`) | product: `name` atom × `students_per_group` atom (range) × `group_names` **prefix**(lift(atom)) — un-naming a group is below, renaming is incomparable, truncating is below, a middle removal shifts bindings and is incomparable | derive; `group_names` gets `#[ord(with = \|a, b\| prefix_pointwise(a, b, option_lift_discrete))]` (closure form; the element type is foreign) |
 | `GroupListFilling` (`group_lists.rs`) | `Prefilled`/`Prefilled`: **prefix**(`PrefilledGroup`); `Automatic`/`Automatic`: `excluded_students` set-inclusion; mixed variants: incomparable | derive; the `groups` field gets `#[ord(with = vec_prefix)]` — position-borne identity (decision 11); the `Vec` blanket's subsequence would reject the minus-one-student fix (§7.4) |
 | `PrefilledGroup` (`group_lists.rs`) | `students` set-inclusion | derive |
-| `Settings` (`settings.rs`) | product: `global` flat × `students` map-inclusion(flat) | derive (`Limits` carries the flat impl) |
-| `Limits` (`settings.rs`) | flat, bottom `Limits::default()` | manual |
+| `Settings` (`settings.rs`) | product: `global` atom × `students` map-inclusion(atom) | derive (`Limits` carries the atom impl) |
+| `Limits` (`settings.rs`) | atom — a whole-entry override record: a `None` field means "disabled", an active choice, not absent content (decision 13) | macro |
 | `Pairings` (`pairings.rs`) | map-inclusion(`PairingRule`) | derive |
 | `PairingRule` (`pairings.rs`, sealed) | product: `antecedent` × `consequent` × `excluded_periods` set-inclusion × `soft` atom | derive (in-module) |
 | `RulePart` (`pairings.rs`) | product: `subject_id` atom × `should_have` atom — a product of atoms, i.e. effectively an atom, but derived so any future field joins the order | derive |
 | `SlotPairings` / `SlotPairingRule` / `SlotRulePart` (`slot_pairings.rs`) | as pairings | derive |
-| `Balancing` (`balancing.rs`) | product: `global` flat × `subjects` map-inclusion(flat) | derive |
-| `BalancingOptions` (`balancing.rs`) | flat, bottom `BalancingOptions::default()` | manual |
+| `Balancing` (`balancing.rs`) | product: `global` atom × `subjects` map-inclusion(atom) | derive |
+| `BalancingOptions` (`balancing.rs`) | atom — same whole-entry override argument as `Limits` | macro |
 
 ### 3.3 The colloscope and the export configuration
 
 | type (module) | rule | how |
 | --- | --- | --- |
 | `Colloscope` (`colloscopes.rs`) | product: `interrogations` map-inclusion(set-inclusion of `BTreeSet<u32>`) × `group_lists` map-inclusion(map-inclusion(atom `u32`)) | derive — the blankets compose all the way down |
-| `ExportConfig` (`export_config.rs`) | flat, bottom `ExportConfig::default()` | manual |
+| `ExportConfig` (`export_config.rs`) | atom — one composite presentation preference (decision 13) | macro |
 
-### 3.4 Enrollment of the ids, and the unenrolled types
+### 3.4 Enrollment of the atoms, and the unenrolled types
 
 In `state-colloscopes/src/ids.rs`, one invocation — ids are scalar reference
 tokens with no internal content, so they are atoms wherever they appear as
@@ -400,42 +460,61 @@ collomatique_state::impl_content_ord_atom!(
 );
 ```
 
-`NonEmptyRangeInclusive<T>` is generic, which the macro cannot express, so it
-gets the one hand-written atom impl (§7.4).
+Next to their definitions, the three configuration records, each with a short
+comment carrying the decision-13 argument:
 
-Types with **no** impl at all (only ever compared inside an atom or flat
-boundary): `WeekBlock`, `SoftParam<T>`, `Color`, `PageOrientation`,
-`GlobalConfig`, `ColloscopeConfig`, `PerStudentGroupsConfig`,
-`PerGroupListConfig`, `WeekDesc`, and every `collomatique-time` /
-`non_empty_string` type.
+```rust
+// A whole-entry override record: a `None` field means "disabled" — an
+// active choice, not absent content — so the document order treats the
+// whole record as one atom (plan step 6.5, decision 13).
+collomatique_state::impl_content_ord_atom!(Limits);
+```
+
+(and likewise `BalancingOptions` in `balancing.rs`, `ExportConfig` in
+`export_config.rs` — the latter's comment says "one composite presentation
+preference" instead of the override sentence).
+
+`NonEmptyRangeInclusive<T>` is generic, which the macro cannot express, so it
+gets the one hand-written impl (§7.4).
+
+Types with **no** impl at all (only ever compared inside an atom boundary):
+`WeekBlock`, `SoftParam<T>`, `Color`, `PageOrientation`, `GlobalConfig`,
+`ColloscopeConfig`, `PerStudentGroupsConfig`, `PerGroupListConfig`,
+`WeekDesc`, and every `collomatique-time` / `non_empty_string` type.
 
 ---
 
 ## 4. Why this order is correct
 
-### 4.1 Consistency with `Eq`
+### 4.1 Consistency with equality and equivalence
 
-Every block reports `Some(Equal)` exactly when the two values are `==`: atoms
-by definition; the lift because both sides must be `None` or both inner values
-equal; inclusion/embedding because mutual inclusion of finite structures
-forces equality; prefix pointwise because mutual prefix forces equal lengths
-and pointwise equality; the flat order by its first arm; and a product of
-consistent fields is consistent **provided every field participates** — which
-the derive guarantees by construction (it walks the field list of the
-definition itself). The law is stated on the trait; the manual impls (`Data`,
-the three flat types, the range atom, the toys) are small enough to check by
-eye.
+Every block generated by the derive, the blankets and the macro reports
+`Some(Equal)` exactly when the two values are `==`: atoms by definition; the
+lift because both sides must be `None` or both inner values equal;
+inclusion/embedding because mutual inclusion of finite structures forces
+equality; prefix pointwise because mutual prefix forces equal lengths and
+pointwise equality; and a product of such fields is again exact, provided
+every field participates — which the derive guarantees by construction.
+Equivalence classes therefore enter **only** where they are declared:
+`#[ord(ignore)]` (the derived `Data`, whose equivalence "same inner data"
+coincides with its hand-written `PartialEq`) and the hand-written toy
+quotient (`EvilQuoteData`). The trait law — `==` implies content equivalence
+— holds everywhere; the sharper "iff" holds for `InnerData` and everything
+below it, which is what §7.5's twin tests rely on.
 
 ### 4.2 Well-foundedness (the termination proof survives)
 
 Every strict decrease under any block removes an element from a finite
-container (including a trailing prefix element), moves an `Option` from
-`Some` to `None`, or moves a flat value onto its bottom. Each block is
-therefore well-founded on the finite values the document holds, and a product
-of well-founded orders is well-founded (an infinite strictly-decreasing chain
-would have to decrease some field infinitely often). Strict monotonicity of
-fixes plus a well-founded order is the termination proof, unchanged from
-step 6 — this step only *materializes* the order it was already stated in.
+container (including a trailing prefix element) or moves an `Option` from
+`Some` to `None`. Each block is therefore well-founded on the finite values
+the document holds, and a product of well-founded orders is well-founded (an
+infinite strictly-decreasing chain would have to decrease some field
+infinitely often). Strict monotonicity of fixes plus a well-founded order is
+the termination proof, unchanged from step 6 — this step only *materializes*
+the order it was already stated in. Note that termination needs nothing else:
+in particular it does not need a universal minimum (decision 13), and
+well-foundedness itself is argued here, not checked by a test — a fuzz for
+finite descent would be hairy and slow for no payoff.
 
 ### 4.3 Every arm of the resolution map lands strictly below
 
@@ -476,24 +555,25 @@ emitted op falls into one of five shapes, each a strict decrease under §3:
    `IncompatOp::Update` with `week_pattern_id: None`: strictly below by the
    Option lift, every other field equal.
 
-No arm creates anything, renames anything, reorders anything, or moves a
-configuration value — so the comparability the atoms and the flat order
-withhold is never needed by today's map, and the in-loop assertion holds every
-*future* arm to the same discipline. Shapes 4 and 5 include the D5.1 arms that
-widen semantics while shrinking content; under §3 they are plain decreases, as
+No arm creates anything, renames anything, reorders anything, or touches a
+configuration record — so the comparability the atoms withhold is never
+needed by today's map, and the in-loop assertion holds every *future* arm to
+the same discipline. Shapes 4 and 5 include the D5.1 arms that widen
+semantics while shrinking content; under §3 they are plain decreases, as
 required.
 
-### 4.4 `Default::default()` is below every reachable state
+### 4.4 Minimal elements
 
-`InnerData::default()` has: every table empty (below anything by
-map-inclusion/embedding), `first_week == None` (bottom of the lift),
-`Settings::default()` (empty override table + `Limits::default()`, the flat
-bottom), `Balancing::default()` (empty table + `BalancingOptions::default()`,
-the flat bottom by definition), an empty colloscope, and
-`ExportConfig::default()` (the flat bottom). Every component is at its
-component-wise minimum — including the prefix rule, whose minimum is the
-empty vector — so the product is the universal minimum among all documents,
-reachable or not. Fuzz property (a) checks the reachable half end to end.
+The empty document `InnerData::default()` is *a* minimal element: nothing
+sits strictly below it (its tables are empty and cannot lose a row,
+`first_week` is already `None`, and its configuration records are atoms —
+comparable only to themselves). It is **not** a universal minimum: a document
+that differs from the default only in a configuration value is incomparable
+to it, and is itself minimal. This plurality is deliberate (decision 13,
+retiring the step-6 "universal minimal element" phrasing) and harmless: the
+termination proof (§4.2) rests on well-foundedness alone. §7.5 keeps a unit
+pin of the sanity half — the default *is* strictly below a populated document
+whose configuration was never touched.
 
 ### 4.5 What the order rejects, on purpose
 
@@ -501,9 +581,9 @@ Same entity content under a different id; same id with different scalar
 content; any reordering; a retargeted association or renumbered placement; a
 *middle* group removed from a prefilled list (the surviving groups' externally
 referenced indices silently re-aim — an identity shift, not a removal); one
-table shrinking while another grows; any change between two non-default
-configuration values. Each would be a contract violation if a fix produced
-it, and the in-loop assertion turns each into a panic.
+table shrinking while another grows; any change to a configuration record.
+Each would be a contract violation if a fix produced it, and the in-loop
+assertion turns each into a panic.
 
 ---
 
@@ -536,8 +616,8 @@ use std::num::{NonZeroU32, NonZeroU64};
 
 use crate::tables::{Key, OrderedKey, OrderedTable, Table};
 
-pub trait ContentOrd: PartialEq {
-    // exactly as §1, with content_le / content_lt default methods
+pub trait ContentOrd {
+    // exactly as §1, with content_eq / content_le / content_lt defaults
 }
 ```
 
@@ -564,20 +644,6 @@ pub fn combine(fields: impl IntoIterator<Item = Option<Ordering>>) -> Option<Ord
 /// Discrete order: comparable only when equal.
 pub fn discrete<T: PartialEq + ?Sized>(a: &T, b: &T) -> Option<Ordering> {
     (a == b).then_some(Ordering::Equal)
-}
-
-/// Flat order with a designated bottom: `Equal` when equal, otherwise the
-/// bottom is below everything and every other pair is incomparable.
-pub fn flat_with_bottom<T: PartialEq>(a: &T, b: &T, bottom: &T) -> Option<Ordering> {
-    if a == b {
-        Some(Ordering::Equal)
-    } else if a == bottom {
-        Some(Ordering::Less)
-    } else if b == bottom {
-        Some(Ordering::Greater)
-    } else {
-        None
-    }
 }
 
 /// Option lift: `None` is the bottom, two `Some` values compare by `inner`.
@@ -625,10 +691,10 @@ pub fn map_inclusion<K: Ord, V>(
     ))
 }
 
-/// Sequence embedding: a strict subsequence (same relative order, elements
-/// removed) is strictly below; a reordering is incomparable. Elements are
-/// matched by `==`. The rule for sequences whose elements carry their own
-/// identity (id lists, time windows).
+/// Sequence embedding: a strict subsequence — obtainable by *deleting*
+/// elements, the survivors keeping their relative order; contiguity is NOT
+/// required, so `[1,3]` is a subsequence of `[1,2,3]` and compares `Less`.
+/// A reordering is incomparable. Elements are matched by `==`.
 pub fn subsequence<T: PartialEq>(a: &[T], b: &[T]) -> Option<Ordering> {
     fn embeds<T: PartialEq>(small: &[T], big: &[T]) -> bool {
         let mut rest = big.iter();
@@ -722,8 +788,8 @@ impl_atoms!(
 ```
 
 The exported macro for downstream *local* types (the orphan rule allows a
-foreign trait on a local type, so `state-colloscopes` enrolls its ids with
-this):
+foreign trait on a local type; `state-colloscopes` enrolls its ids and its
+configuration records with this):
 
 ```rust
 /// Enrolls local types into the document order as atoms (discretely
@@ -741,7 +807,8 @@ macro_rules! impl_content_ord_atom {
 }
 ```
 
-The container blankets — the heart of the dispatch design:
+The container blankets — the heart of the dispatch design. `ContentOrd` has
+no `PartialEq` supertrait, so bounds that need `==` say so explicitly:
 
 ```rust
 impl<T: ContentOrd> ContentOrd for Option<T> {
@@ -767,10 +834,11 @@ impl<K: Ord, V: ContentOrd> ContentOrd for BTreeMap<K, V> {
 /// values). Deliberately a blanket: a wrong fit can only be too strict
 /// (never blesses a non-removal change), and it is gated on
 /// `T: ContentOrd` so it never fires on a type not deliberately enrolled.
-/// Where identity is positional, override the field with
+/// Element matching is by `==` (the container scope law — never by content
+/// equivalence). Where identity is positional, override the field with
 /// `#[ord(with = vec_prefix)]`; where the list is a relational chain, with
 /// `#[ord(atom)]` (§2, the identity criterion).
-impl<T: ContentOrd> ContentOrd for Vec<T> {
+impl<T: ContentOrd + PartialEq> ContentOrd for Vec<T> {
     fn content_cmp(&self, other: &Self) -> Option<Ordering> {
         subsequence(self, other)
     }
@@ -810,10 +878,6 @@ impl<I: OrderedKey, T: ContentOrd> ContentOrd for OrderedTable<I, T> {
 `get` — so `tables.rs` stays untouched. `OrderedTable` keys are unique, so the
 embedding is unambiguous, and a shared key set in a different order yields
 `None` from the key comparison before any value is consulted.)
-
-Note the `Vec` blanket satisfies the `ContentOrd: PartialEq` supertrait
-because `T: ContentOrd` implies `T: PartialEq`; the `BTreeSet` blanket gets it
-from `T: Ord`.
 
 ### 5.4 Wiring in `state/src/lib.rs`
 
@@ -855,21 +919,22 @@ In `partial_order.rs` `#[cfg(test)]`, on plain `u64` / `String` fixtures:
 
 * `combine`: all-equal → `Equal`; a `Less` among equals → `Less`; `Less` and
   `Greater` mixed → `None`; any `None` → `None`; empty iterator → `Equal`.
-* `discrete`, `flat_with_bottom` (bottom below, two non-bottom values
-  incomparable), `option_lift` (all four arms).
+* `discrete`, `option_lift` (all four arms).
 * `set_inclusion`: equal / strict subset / strict superset / crossed →
   `None`; **the lexicographic trap pinned**: `set_inclusion` of `{1,3}` vs
   `{1,2,3}` is `Some(Less)` while std's `Ord` sorts `{1,3}` *after*
   `{1,2,3}` — assert both facts side by side, as documentation.
 * `map_inclusion`: key-subset with equal values → `Less`; same keys, one
   value `Less` → `Less`; key-subset but a shared value `Greater` → `None`.
-* `subsequence`: `[1,3]` vs `[1,2,3]` → `Less`; reorder `[2,1]` vs `[1,2]` →
-  `None`; equal; empty below anything.
+* `subsequence`: `[1,3]` vs `[1,2,3]` → `Less` (the non-contiguity pin);
+  reorder `[2,1]` vs `[1,2]` → `None`; equal; empty below anything.
 * `prefix_pointwise`: truncation `[1]` vs `[1,2]` → `Less`; equal length
   with one pointwise decrease → `Less`; **the middle-removal pin**: `[1,3]`
   vs `[1,2,3]` with a discrete element rule → `None` (contrast with
   `subsequence`, which says `Less` on the same input — the two rules differ
   exactly on identity); mixed directions → `None`; empty below anything.
+* the default methods: `content_eq` / `content_le` / `content_lt` on a small
+  enrolled type, including `content_lt == false` on equivalent values.
 * Blanket dispatch smoke tests: `Option<u32>` (`None < Some(3)`,
   `Some(3)` vs `Some(4)` → `None`), `Vec<u32>` subsequence,
   `BTreeMap<u64, u32>` (value renumber → `None`), and `Table` /
@@ -925,6 +990,10 @@ enum FieldRule {
     Default,
     /// `#[ord(atom)]`: inline discrete comparison.
     Atom,
+    /// `#[ord(ignore)]`: the order does not see this field (constant
+    /// `Equal`, no bounds on the field's type) — the structural source of
+    /// equivalence classes.
+    Ignore,
     /// `#[ord(partial_ord)]`: use the field type's existing `PartialOrd`.
     PartialOrd,
     /// `#[ord(with = <expr>)]`: call the expression (path or closure).
@@ -933,10 +1002,10 @@ enum FieldRule {
 ```
 
 parsed by a small `syn::parse::Parse` impl: an identifier, which must be
-`atom`, `partial_ord`, or `with` followed by `=` and an `Expr`. Anything else
-is a spanned error listing the three forms. Note `with` takes a **plain
-expression, not a string** — `#[ord(with = option_lift_discrete)]` and
-`#[ord(with = |a, b| …)]` both parse.
+`atom`, `ignore`, `partial_ord`, or `with` followed by `=` and an `Expr`.
+Anything else is a spanned error listing the four forms. Note `with` takes a
+**plain expression, not a string** — `#[ord(with = option_lift_discrete)]`
+and `#[ord(with = |a, b| …)]` both parse.
 
 Per-field generated comparison, for a struct field `x` (fully-qualified paths
 throughout, per the house lesson on derive hygiene; `ContentOrd::content_cmp`
@@ -947,6 +1016,7 @@ arguments and never needs to be re-spelled):
 | --- | --- |
 | `Default` | `::collomatique_state::partial_order::ContentOrd::content_cmp(&self.x, &other.x)` |
 | `Atom` | `::collomatique_state::partial_order::discrete(&self.x, &other.x)` |
+| `Ignore` | `::core::option::Option::Some(::core::cmp::Ordering::Equal)` |
 | `PartialOrd` | `::core::cmp::PartialOrd::partial_cmp(&self.x, &other.x)` |
 | `With(expr)` | `(#expr)(&self.x, &other.x)` |
 
@@ -999,7 +1069,7 @@ match (self, other) {
 
 (This example is literally what `GroupListFilling` will expand to.)
 
-### 6.3 Commit-2 integration tests
+### 6.3 Direct integration tests
 
 New file `state/tests/derive_content_ord.rs` (integration test on purpose —
 the generated code's absolute `::collomatique_state::` paths only resolve from
@@ -1013,6 +1083,9 @@ local toy types and pins every macro behavior:
   `Less`, value renumber → `None`;
 * a field of a local type with **no** `ContentOrd` impl under `#[ord(atom)]`:
   equal → `Equal`, changed → `None`;
+* a field under `#[ord(ignore)]` — of a type with no impls at all: two
+  values differing only there compare `Some(Equal)` (and `content_eq` is
+  true) while being `!=` — the equivalence-class pin;
 * a field under `#[ord(with = option_lift_discrete)]` (path form) and another
   under `#[ord(with = |a, b| prefix_pointwise(a, b, option_lift_discrete))]`
   (closure form, the exact shape §7.3 uses for `group_names`);
@@ -1023,7 +1096,7 @@ local toy types and pins every macro behavior:
 * the product mixing rules on a two-field struct: one field down + one field
   up → `None`; one down + one equal → `Less`;
 * an empty struct → `Equal`;
-* `content_le` / `content_lt` default methods behave.
+* `content_eq` / `content_le` / `content_lt` default methods behave.
 
 Compile-failure cases (generics, tuple struct, duplicate attribute, unknown
 attribute argument) are asserted the same way the existing derives do it — if
@@ -1031,13 +1104,68 @@ attribute argument) are asserted the same way the existing derives do it — if
 the spanned-error behavior instead of adding a new dev-dependency (no
 `Cargo.lock` churn in this step).
 
+### 6.4 End-to-end tests: the cascade running on a derived order
+
+New file `state/tests/cascade_on_derived_order.rs` (decision 15). The direct
+tests above check what the macro *generates*; this file checks that a derived
+order actually drives `apply_cascade` — the derive, the blankets, the
+`Fixable` bound and the in-loop check working together, with no
+`state-colloscopes` involvement.
+
+The toy: authors and books, deliberately isomorphic to `QuoteData` so the
+expected behavior is already understood, but with the order **derived**:
+
+```rust
+#[derive(Clone, Debug, PartialEq, Eq, ContentOrd)]
+struct LibraryData {
+    authors: BTreeSet<u64>,
+    /// book id -> author id
+    books: BTreeMap<u64, u64>,
+}
+```
+
+(the two blankets give set inclusion and map inclusion over atomic author
+ids — no attribute needed), plus a hand-written `InMemoryData` and `Fixable`
+in the test file, following `QuoteData`'s shape in `state/src/test_utils.rs`:
+ops `AddAuthor` / `RemoveAuthor` / `SetBook` / `RemoveBook`, the invariant
+"every book's author exists", and the honest map "remove the dangling book if
+it is present, else `None`". A `mode` field on a wrapper (or a second
+implementor) provides one evil variant whose "fix" is `AddAuthor` — the
+growing map.
+
+Tests (note commit 5 must land for the panic test to pass; this file is
+therefore written in commit 2 with the happy-path tests, and the panic test
+is added by commit 5 — each commit stays green):
+
+* `a_cascade_repairs_through_a_derived_order` — one author, two books,
+  remove the author: three ops land in canonical order, final state empty;
+  the in-loop strictly-below check (once commit 5 lands) silently passes on
+  every fix.
+* `a_growing_fix_through_a_derived_order_panics` (added in commit 5) — the
+  evil variant: `#[should_panic(expected = "did not land strictly below")]`.
+* `a_deterministic_walk_never_panics_and_errors_are_atomic` — a small
+  op-walk with a hand-rolled deterministic generator (a linear congruential
+  step over a `u64` seed, e.g. `x = x.wrapping_mul(6364136223846793005)
+  .wrapping_add(1442695040888963407)`, selecting op kind and ids from its
+  bits — **no new dependency**, so no `Cargo.lock`/cargoHash churn): a few
+  hundred ops through `apply_cascade`; asserts `Ok` ⇒ target last in the
+  aggregated op, `Err` ⇒ state `==` before (the toy has honest `PartialEq`);
+  a coverage counter asserts at least one landing needed a fix — the
+  commit-8 lesson, a walk that never cascades proves nothing.
+
+The full-scale end-to-end remains the domain fixtures and harnesses of
+commits 3, 5 and 6.
+
 ---
 
 ## 7. Commit 3 — adoption in `state-colloscopes/`
 
-### 7.1 Enrollment of the ids
+### 7.1 Enrollment of the atoms
 
-The single `impl_content_ord_atom!` invocation of §3.4 in `ids.rs`.
+The `impl_content_ord_atom!` invocations of §3.4: the eleven ids in `ids.rs`,
+and the three configuration records next to their definitions (`Limits` in
+`settings.rs`, `BalancingOptions` in `balancing.rs`, `ExportConfig` in
+`export_config.rs`), each with its decision-13 comment.
 
 ### 7.2 The derives
 
@@ -1065,9 +1193,34 @@ pub struct InnerData {
 ```
 
 with `use collomatique_state::ContentOrd;` added to the module's imports (the
-name serves as both derive and trait, exactly like `Join`). The full derive
-list (36 types): `InnerData`, `Parameters`, `Periods`, `Weeks`, `Week`,
-`Subjects`, `Subject`, `SubjectParameters`,
+name serves as both derive and trait, exactly like `Join`).
+
+`Data` itself is derived, ignoring the issuer (decision 14) — old code:
+
+```rust
+#[derive(Debug)]
+pub struct Data {
+    id_issuer: std::sync::Mutex<IdIssuer>,
+    inner_data: InnerData,
+}
+```
+
+New code:
+
+```rust
+#[derive(Debug, ContentOrd)]
+pub struct Data {
+    // The document order does not see the issuer: two `Data` with equal
+    // inner data are content-equivalent even when their issuers differ —
+    // the same quotient the hand-written `PartialEq` below takes.
+    #[ord(ignore)]
+    id_issuer: std::sync::Mutex<IdIssuer>,
+    inner_data: InnerData,
+}
+```
+
+The full derive list (37 types): `Data`, `InnerData`, `Parameters`,
+`Periods`, `Weeks`, `Week`, `Subjects`, `Subject`, `SubjectParameters`,
 `SubjectInterrogationParameters`, `SubjectPeriodicity`, `Teachers`,
 `Teacher`, `PersonWithContact`, `Students`, `Student`, `Assignments`,
 `WeekPatterns`, `WeekPattern`, `Slots`, `Slot`, `Incompats`,
@@ -1076,10 +1229,11 @@ list (36 types): `InnerData`, `Parameters`, `Periods`, `Weeks`, `Week`,
 `RulePart`, `SlotPairings`, `SlotPairingRule`, `SlotRulePart`, `Balancing`,
 `Colloscope`.
 
-### 7.3 The ten field attributes
+### 7.3 The eleven field attributes
 
 | file | field | attribute | why |
 | --- | --- | --- | --- |
+| `lib.rs` (`Data`) | `id_issuer` | `#[ord(ignore)]` | not content; the `Data` quotient (decision 14) |
 | `lib.rs` (`PersonWithContact`) | `tel` | `#[ord(with = option_lift_discrete)]` | foreign `NonEmptyString` |
 | `lib.rs` (`PersonWithContact`) | `email` | `#[ord(with = option_lift_discrete)]` | foreign `NonEmptyString` |
 | `weeks.rs` (`Week`) | `annotation` | `#[ord(with = option_lift_discrete)]` | foreign `NonEmptyString` |
@@ -1118,20 +1272,7 @@ the code:
     },
 ```
 
-### 7.4 The five manual impls
-
-`Data` (`lib.rs`, right below its `PartialEq`):
-
-```rust
-/// The document order (design doc §8, step 6.5): delegates to [InnerData],
-/// ignoring the id issuer exactly as [PartialEq] does. Two [Data] with equal
-/// inner data compare `Equal` even when their issuers differ.
-impl ContentOrd for Data {
-    fn content_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.inner_data.content_cmp(&other.inner_data)
-    }
-}
-```
+### 7.4 The one manual impl
 
 `NonEmptyRangeInclusive<T>` (`non_empty_range.rs` — generic, so outside the
 macro's reach):
@@ -1143,22 +1284,6 @@ macro's reach):
 impl<T: Ord + Clone> ContentOrd for NonEmptyRangeInclusive<T> {
     fn content_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         collomatique_state::partial_order::discrete(self, other)
-    }
-}
-```
-
-`Limits` (`settings.rs`) — identical pattern for `BalancingOptions`
-(`balancing.rs`) and `ExportConfig` (`export_config.rs`):
-
-```rust
-/// The document order: configuration values compare flat — the type's
-/// [Default] value is the bottom, everything else is comparable only to
-/// itself. Forced by the Default-minimum axiom: this type's default is not
-/// structurally minimal, and nothing may sit below `Default::default()`
-/// (design doc §8, step 6.5 — the antisymmetry argument).
-impl ContentOrd for Limits {
-    fn content_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        collomatique_state::partial_order::flat_with_bottom(self, other, &Limits::default())
     }
 }
 ```
@@ -1177,10 +1302,13 @@ value and a twin, calls `content_cmp`, and asserts the exact
 Must-cover list (one test each; names indicative):
 
 * `data_ignores_the_id_issuer` — two `Data` built by different op sequences
-  ending on the same `InnerData` compare `Some(Equal)`.
+  ending on the same `InnerData`: `content_eq` is true (the equivalence-class
+  pin at the root; for `Data` this coincides with its hand-written `==`).
 * `default_is_below_a_populated_document` — build a document through the gate
-  (the `data_with_assignment` recipe from `lib.rs`'s test modules is a good
-  base), assert `InnerData::default().content_lt(data.get_inner_data())`.
+  **without touching any configuration op** (the `data_with_assignment`
+  recipe from `lib.rs`'s test modules qualifies), assert
+  `InnerData::default().content_lt(data.get_inner_data())`. A sanity pin,
+  deliberately *not* a universal claim (§4.4).
 * `row_removal_is_strictly_below` — remove one teacher from a two-teacher
   `Teachers` value: `Some(Less)`.
 * `same_content_under_a_different_id_is_incomparable` — the user's defining
@@ -1235,9 +1363,11 @@ Must-cover list (one test each; names indicative):
 * `colloscope_cell_trim_is_strictly_below` — interrogation cell minus one
   group: `Some(Less)`; placement map minus one student: `Some(Less)`; a
   placement renumbered: `None`.
-* `flat_config_bottom` — for each of `Limits`, `BalancingOptions`,
-  `ExportConfig`: default below a modified value (`Some(Less)`), two distinct
-  non-default values `None`.
+* `config_values_are_atoms` — for each of `Limits`, `BalancingOptions`,
+  `ExportConfig`: equal → `Some(Equal)`, two distinct values → `None` —
+  **including the default against a modified value** (the decision-13 pin:
+  no bottom, `None` fields in the override records are choices, not absent
+  content).
 * `settings_override_row_removal_is_strictly_below`.
 * `pairing_rule_excluded_period_drop_is_strictly_below` and
   `pairing_rule_part_change_is_incomparable`.
@@ -1281,18 +1411,18 @@ impl ContentOrd for QuoteData {
 }
 ```
 
-`EvilQuoteData` derives `PartialEq` over both its fields (the inner data and
-the mode), so its order must account for both to stay `Eq`-consistent; the
-mode never changes during a run, so this costs nothing:
+`EvilQuoteData` ignores its mode — the hand-written miniature of `Data`'s
+ignored issuer, and a live example of the relaxed laws (its content
+equivalence is coarser than its derived `==`, which compares the mode too):
 
 ```rust
+/// The document order sees only the inner data: the mode is test-harness
+/// configuration, not content. Two [EvilQuoteData] with equal data but
+/// different modes are content-equivalent while `!=` — the toy mirror of
+/// [`Data`]'s ignored id issuer.
 impl ContentOrd for EvilQuoteData {
     fn content_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        let EvilQuoteData(data, mode) = self;
-        crate::partial_order::combine([
-            data.content_cmp(&other.0),
-            crate::partial_order::discrete(mode, &other.1),
-        ])
+        self.0.content_cmp(&other.0)
     }
 }
 ```
@@ -1305,13 +1435,15 @@ Commit-4 unit tests, beside the toys:
 * adding a student → `Some(Greater)`;
 * re-authoring an existing quote to another author → `None`;
 * removing a student while adding a quote → `None`;
-* equal → `Some(Equal)`.
+* equal → `Some(Equal)`;
+* two `EvilQuoteData` with the same inner data and different modes:
+  `content_eq` true while `!=` (the equivalence pin).
 
 ---
 
 ## 9. Commit 5 — the `Fixable` bound and the in-flight assertion
 
-### 9.1 The trait bound (`state/src/cascade.rs`)
+### 9.1 The trait bound and the contract rewording (`state/src/cascade.rs`)
 
 Old code:
 
@@ -1327,18 +1459,27 @@ New code:
 /// Implemented by data whose broken invariants can be repaired by ops: the
 /// resolution map. (`ContentOrd` materializes the document order of the
 /// monotonicity contract; the engine checks every fix against it in-flight,
-/// and its `PartialEq` supertrait backs the no-op-fix panic.)
+/// and its content equivalence backs the no-op-fix panic — the engine never
+/// compares with `==`.)
 pub trait Fixable: InMemoryData + ContentOrd {
 ```
 
 with `use crate::partial_order::ContentOrd;` and `use std::cmp::Ordering;`
-added to the imports. (`ContentOrd: PartialEq`, so implementors keep exactly
-the obligations they had, plus the order; after commits 3 and 4, `Data`,
-`QuoteData` and `EvilQuoteData` all qualify.)
+added to the imports. (After commits 3 and 4, `Data`, `QuoteData` and
+`EvilQuoteData` all qualify.)
 
-In the `fix_invariant` doc comment, update the forward reference. Old text:
+The engraved contract text in the `fix_invariant` doc comment is reworded —
+both for the materialized order and for the retired axiom (decision 13). Old
+text:
 
 ```rust
+    /// States form a partial order with a universal minimal element:
+    /// `Default::default()`, the empty document. Every returned op must land
+    /// **strictly below** the current state in that order: it removes a row
+    /// or entity, clears an edge, or rewrites a value minus an element —
+    /// never creates, and never lands equivalent. Return `None`, or a
+    /// strictly-decreasing op; an op that applies as a perfect no-op is a
+    /// contract violation, and the engine panics on it. The order is
     /// well-founded, so this contract is the cascade's termination proof —
     /// a map that *grows* the state makes the cascade loop forever (step 6.5
     /// adds a `PartialOrd`-based in-flight check for exactly that).
@@ -1347,11 +1488,16 @@ In the `fix_invariant` doc comment, update the forward reference. Old text:
 New text:
 
 ```rust
-    /// well-founded, so this contract is the cascade's termination proof.
-    /// The order is materialized by the [ContentOrd] supertrait bound (the
-    /// document order, design doc §8 step 6.5), and [apply_cascade] asserts
-    /// after every fix that the state landed strictly below the pre-fix
-    /// state — a growing or sideways map panics instead of hanging.
+    /// States form a **well-founded** partial order — the document order,
+    /// materialized by the [ContentOrd] supertrait bound (design doc §8,
+    /// step 6.5); the empty document `Default::default()` is a minimal
+    /// element. Every returned op must land **strictly below** the current
+    /// state in that order: it removes a row or entity, clears an edge, or
+    /// rewrites a value minus an element — never creates, and never lands
+    /// equivalent. Return `None`, or a strictly-decreasing op. Because the
+    /// order is well-founded, this contract is the cascade's termination
+    /// proof, and [apply_cascade] asserts it after every fix: a fix landing
+    /// equivalent, above, or incomparable panics instead of hanging.
 ```
 
 Also update the module header's contract sentence the same way (it currently
@@ -1381,10 +1527,11 @@ Old code (the success arm of the apply match):
             }
 ```
 
-New code — the equality check becomes a three-way check on the document order;
-only fix ops are held to it, exactly as before (the `before` snapshot is still
-taken only when `!is_target`, so a no-op *target* remains a legitimate perfect
-no-op, G.2):
+New code — the equality check becomes a three-way check on the document order
+(no `==` anywhere: `Some(Equal)` means *equivalent*, which is what the no-op
+panic is really about); only fix ops are held to it, exactly as before (the
+`before` snapshot is still taken only when `!is_target`, so a no-op *target*
+remains legitimate, G.2):
 
 ```rust
             Ok(backward) => {
@@ -1393,8 +1540,9 @@ no-op, G.2):
                         Some(Ordering::Less) => {}
                         Some(Ordering::Equal) => panic!(
                             "resolution map violated the strict-monotonicity \
-                             contract: fix {front:?} applied as a perfect no-op \
-                             (return None when no material is present)"
+                             contract: fix {front:?} landed equivalent to the \
+                             pre-fix state (a perfect no-op — return None when \
+                             no material is present)"
                         ),
                         not_below => panic!(
                             "resolution map violated the strict-monotonicity \
@@ -1465,10 +1613,12 @@ exist in `self`.)
 
 ### 9.4 Two new engine tests (`state/src/cascade.rs`, tests module)
 
-Numbered 10 and 11, following the file's comment style. Also tighten test 6's
-expected string from `"strict-monotonicity"` to `"applied as a perfect no-op"`
-— both panic messages now share the `strict-monotonicity` prefix, and each
-panic test should pin its own message.
+Numbered 10 and 11, following the file's comment style. Also update test 6's
+expected string to `"landed equivalent"` (its message changed in §9.2, and
+each panic test should pin its own message rather than the shared
+`strict-monotonicity` prefix). This commit also adds the
+`a_growing_fix_through_a_derived_order_panics` test to
+`state/tests/cascade_on_derived_order.rs` (§6.4).
 
 ```rust
     // 10. A fix that grows the state: the map "fixes" the dangling author by
@@ -1524,9 +1674,9 @@ strict somewhere), not the map; fix the order against §3 and §4.3.
 
 ---
 
-## 10. Commit 6 — the two fuzz properties
+## 10. Commit 6 — the contract fuzz property
 
-New file `state-colloscopes/tests/property_partial_order.rs`, the fourth
+New file `state-colloscopes/tests/property_content_ord.rs`, the fourth
 property harness, built on the same testgen machinery as
 `tests/property_cascade.rs` (same imports and `RunConfig` shape, same
 `for_each_seed` / `bootstrap` / `generator::gen_op` / `OpLog` plumbing — copy
@@ -1534,6 +1684,13 @@ that file's `next_op` and `maybe_snapshot` helpers verbatim, and keep the
 snapshot bookkeeping on the success path exactly as there; moving it perturbs
 the RNG trajectory). Additional imports:
 `use collomatique_state::ContentOrd;`.
+
+One property. (Plan v2 had a second — "`Default::default()` ≤ every reachable
+state" — retired with the universal-minimum axiom, decision 13: a walk that
+touches a configuration op reaches states incomparable to the default, and
+that is now correct behavior. The sanity half survives as the §7.5 unit pin.
+The design doc §8 paragraph still prescribes the retired property; the
+close-out amends it.)
 
 Configuration, matching the house ruling for step-6-family harnesses (one
 hardcoded const, no environment variables, no `#[ignore]` tiers):
@@ -1546,55 +1703,10 @@ const CONFIG: RunConfig = RunConfig {
 };
 ```
 
-### 10.1 Property (a): the empty document really is the universal minimum
+### 10.1 The property: every map answer is `None` or lands strictly below
 
 A plain gated walk (`data.annotate` + `data.apply`, as in `property_ops.rs` —
-no cascade). After every op that lands, assert the design-doc claim directly:
-
-```rust
-/// Design doc §8 step 6.5, fuzz (a): `Default::default()` is the universal
-/// minimal element of the document order — below every state the gate can
-/// reach.
-#[test]
-fn default_is_below_every_reachable_state() {
-    let landed = Cell::new(0usize);
-
-    harness::for_each_seed(
-        "default_is_below_every_reachable_state",
-        &CONFIG,
-        |rng, log, stats| {
-            let (state, _) = harness::bootstrap(rng);
-            let mut data: Data = state.get_data().clone();
-            let bottom = InnerData::default();
-            let mut snapshots: Vec<InnerData> = vec![];
-
-            for _ in 0..CONFIG.ops_per_run {
-                let (category, op) = next_op(rng, &data, &snapshots, log);
-                let (annotated, _) = data.annotate(op);
-                let ok = data.apply(&annotated).is_ok();
-                stats.record(category, ok);
-                if ok {
-                    landed.set(landed.get() + 1);
-                    assert!(
-                        bottom.content_le(data.get_inner_data()),
-                        "InnerData::default() must be below every reachable state",
-                    );
-                    maybe_snapshot(rng, &data, &mut snapshots);
-                }
-            }
-        },
-    );
-
-    assert!(landed.get() > 0, "no op ever landed across all seeds");
-}
-```
-
-(The bootstrap document itself is covered too: the first landing's assertion
-compares against a state that includes everything the bootstrap built.)
-
-### 10.2 Property (b): every map answer is `None` or lands strictly below
-
-The same gated walk, but the interesting event is a **rejection over broken
+no cascade), where the interesting event is a **rejection over broken
 invariants**: at that point `data` is unchanged and valid (the gate rolled
 back), which is precisely the state the cascade would consult the map on. For
 *every* invariant in the reported set — not only the canonical first pick the
@@ -1602,7 +1714,7 @@ engine would take — ask the map, and when it answers with a fix, land that fix
 through the force door on a clone and compare:
 
 ```rust
-/// Design doc §8 step 6.5, fuzz (b): over generated broken states, every
+/// Design doc §8 step 6.5: over generated broken states, every
 /// `fix_invariant` answer is `None` or an op whose applied result sits
 /// strictly below the pre-fix state — never above, never equivalent. This
 /// is also the only systematic exercise of the map's `Some` branches (the
@@ -1640,13 +1752,12 @@ fn every_fix_lands_strictly_below() {
                                 "a fix op emitted by the resolution map must \
                                  pass the prechecks",
                             );
-                            assert_eq!(
-                                fixed
-                                    .get_inner_data()
-                                    .content_cmp(data.get_inner_data()),
-                                Some(std::cmp::Ordering::Less),
+                            assert!(
+                                fixed.get_inner_data().content_lt(data.get_inner_data()),
                                 "fix {fix:?} for {invariant:?} must land \
-                                 strictly below the pre-fix state",
+                                 strictly below the pre-fix state (content_cmp \
+                                 = {:?})",
+                                fixed.get_inner_data().content_cmp(data.get_inner_data()),
                             );
                             probed_fixes.set(probed_fixes.get() + 1);
                         }
@@ -1698,7 +1809,7 @@ grepped — never run twice).
 
 **End-of-step gate:** the full suite including the three existing property
 harnesses at their committed configurations and the new
-`property_partial_order.rs`. This step touches no storage bytes, no op
+`property_content_ord.rs`. This step touches no storage bytes, no op
 vocabulary, no `ops/` behavior and no gtk4 code, so no contract-script or GUI
 surface changed; the standing user-run checks stay at the user's discretion.
 No `Cargo.toml`/`Cargo.lock` change is expected (no new dependencies — no Nix
@@ -1707,20 +1818,24 @@ No `Cargo.toml`/`Cargo.lock` change is expected (no new dependencies — no Nix
 **Close-out (after the user's sign-off that the step is done):**
 
 * update `docs/plans/invariant_cascade_design.md`: mark the §8 step-6.5
-  paragraph completed with commit anchors, and record the delivered state as
-  **Appendix I** — the `ContentOrd` trait and why it is not `PartialOrd`; the
-  intrinsic-order methodology (the order pre-exists the map; fix behavior is
-  audit material, never definition material); the §2/§3 order definition with
-  the identity criterion for sequences (value-borne → subsequence,
-  position-borne → prefix, relational chain → atom) and its instances
+  paragraph completed with commit anchors — including amending its retired
+  prescriptions (the fuzz-(a) companion, the "equivalence classes modulo the
+  id issuer" phrasing, and every "universal minimal element" wording, notably
+  Appendix H's policy rule D5.1's opening line) — and record the delivered
+  state as **Appendix I**: the `ContentOrd` trait and why it is not
+  `PartialOrd`; the intrinsic-order methodology (the order pre-exists the
+  map; fix behavior is audit material, never definition material); the
+  equivalence-tolerance laws and their container scope; the §2/§3 order
+  definition with the identity criterion for sequences and its instances
   (★ `WeekBlock` atom, prefix-ordered groups/names with the external-index
-  argument); the flat rule for the three configuration types derived from the
-  `Default`-minimum axiom via antisymmetry; the derive and its three
-  attributes; the engine assertion; the two new evil modes; and the two fuzz
-  properties with their measured numbers;
+  argument); the configuration records as atoms and the retirement of the
+  universal-minimum axiom (★ superseding the step-6 ruling); the derive and
+  its four attributes; the engine assertion; the two new evil modes; and the
+  contract fuzz with its measured numbers;
 * retire this plan: delete `docs/plans/plan_step_6_5.md` in the close-out
-  commit and pin **both versions** in the topic memory — the first draft at
-  `git show ec0dd2a2:docs/plans/plan_step_6_5.md`, the final version at
+  commit and pin the versions in the topic memory — the first draft at
+  `git show ec0dd2a2:docs/plans/plan_step_6_5.md`, the second at
+  `git show 85f44889:docs/plans/plan_step_6_5.md`, the final version at
   `git show <close-out parent>:docs/plans/plan_step_6_5.md`;
 * update the topic memory: step 6.5 closed, next = step 7 (the `ops/`
   remaster).
