@@ -94,8 +94,10 @@ the design doc's §8):
   (`state-colloscopes/src/resolution/innocent_tests.rs`): one test per invariant variant,
   asserting that an arm handed an invariant its own state does *not* cause returns `None`.
   This is the mechanical detector for frame point 5. Adopted during the commit-6 review
-  (July 28 2026). It is **46 tests, so it ships as ten commits** — 7.5a … 7.5f for the
-  dangling-FK arms, then four for the `Convergence` blocks; see §9bis.
+  (July 28 2026). It is **49 tests — one per comparison, not per arm — plus two policy pins,
+  so it ships as ten commits** — 7.5a … 7.5f for the
+  dangling-FK arms, then four for the `Convergence` blocks; see §9bis. **Landed in full on
+  July 29 2026.**
 - **Commit 7.6** — the rejection fixtures, back in `state-colloscopes/tests/cascade.rs`: the
   half of commit 7 that asserts `Err`, split out and sequenced **after** 7.5 (★ user ruling,
   July 28 2026) because a rejection fixture only means something once the `None` branch it
@@ -1866,7 +1868,8 @@ Fixture style: build a document through the public surface
 **Status (July 28 2026).** Landed: `1a` (`32b64bb8`), `1b`–`1e` (`df9357a2`), `2`
 (`a9201341`), `3` (`ba82ac5b`), `4` (`ea73e700`), `5a`/`5b` (`cd2eb958`), `6` (`62816871`).
 **§9 is complete.** Every fixture passed on its first run, so no map bug surfaced anywhere in
-the scenario suite. What remains of commit 7 is §9bis (commit 7.5) and §9ter (commit 7.6).
+the scenario suite. §9bis (commit 7.5) is complete too, as of July 29 2026 — see its own
+status paragraph. What remains of commit 7 is §9ter (commit 7.6).
 
 Three descriptions below needed correcting, all marked **★ CORRECTION** in place. Two were
 found at implementation: `1b`'s document is not constructible as described, and scenario 2
@@ -2462,24 +2465,28 @@ Three rules for the series:
   corruption, not the document. The builder belongs in 7.5a and is written to be reused —
   do not copy a fixture per test.
 
-**Status: the whole dangling-FK half has landed, and three of the four `Convergence` commits
-with it** — 7.5a (`b04bdcaf`), 7.5b (`362dde77`), 7.5c (`acaab2fb`), 7.5d (`cba1a8b2`),
-7.5e (`332ef6a6`), 7.5f (`3d9deb0b`), 7.5g (`e73d6572`, §8.2 rows 1-4), 7.5h (`1c350820`,
-§8.2 rows 5-8) and 7.5i (`2dcd2342`, §8.2 rows 9-12; the letters are this document's, the
-split table above numbers only the six dangling-FK commits). So
+**Status: §9bis is COMPLETE (July 29 2026).** Ten commits — 7.5a (`b04bdcaf`),
+7.5b (`362dde77`), 7.5c (`acaab2fb`), 7.5d (`cba1a8b2`), 7.5e (`332ef6a6`), 7.5f (`3d9deb0b`),
+7.5g (`e73d6572`, §8.2 rows 1-4), 7.5h (`1c350820`, §8.2 rows 5-8), 7.5i (`2dcd2342`,
+§8.2 rows 9-12) and 7.5j (`ca3b4521`, §8.2 rows 13-16 plus the two `GlobalUpdate` policy pins;
+the letters are this document's, the split table above numbers only the six dangling-FK
+commits). So
 `src/resolution/innocent_tests.rs` exists with its `#[cfg(test)] mod innocent_tests;` line in
-`resolution.rs`, the shared builder, and **forty-four tests**: one per §8.1 arm — the
+`resolution.rs`, the shared builder, and **fifty-one tests**: one per §8.1 arm — the
 `SlotTeacher` arm, all seven `PeriodRefSite` arms, all eight `SubjectRefSite` ones, all five
 `StudentRefSite` ones, both `WeekRefSite` ones, both `WeekPatternRefSite` ones, all three
-`SlotRefSite` ones and both `GroupListRefSite` ones — plus §8.2 rows 1-12, with rows 1 and 10
-carrying two each (one per comparison). Every one passed on
-its first run, with its hand-derived set; **no map bug has surfaced anywhere in §8.1, nor in the
-first three §8.2 blocks**. One commit remains: rows 13-16
-with the two `GlobalUpdate` policy pins folded in. The shared fixture has been touched four
-times across the nine commits (7.5c's `lone_slot`; 7.5g's `other_teacher`; 7.5h's innocent
+`SlotRefSite` ones and both `GroupListRefSite` ones — plus all sixteen §8.2 rows, with rows 1,
+10 and 16 carrying two each (one per comparison), plus the two policy pins. That is exactly
+the corrected count: 30 + 19 = **49**, as predicted, and 51 with the pins. Every one passed on
+its first run, with its hand-derived set; **no map bug surfaced anywhere in the series** — the
+resolution map that landed in commit 6 is correct on every arm and every comparison it makes.
+`ValidDocument`'s `#[allow(dead_code)]` came off with 7.5j and the crate builds clean, so no
+fixture field was built for nobody. The shared fixture was touched five
+times across the ten commits (7.5c's `lone_slot`; 7.5g's `other_teacher`; 7.5h's innocent
 witnesses — two extra assignments rows, a third member in the first row, and two extra
-associations; and 7.5i's — three extra colloscope cells, a week in `other_period`,
-`other_subject_slot`, and `bare_week`). Four things settled
+associations; 7.5i's — three extra colloscope cells, a week in `other_period`,
+`other_subject_slot`, and `bare_week`; and 7.5j's placements row on
+`excluding_group_list`). Four things settled
 while writing 7.5a, all of them things the rest of the series inherits:
 
 - ★ **The in-crate equivalent of "through `Manager::apply`" is `Data::annotate` + `Data::apply`.**
@@ -2826,6 +2833,35 @@ And three from 7.5i, §8.2 rows 9-12 (July 29 2026):
   bug, not a map bug. That distinction is what decides whether the house rule ("commit the
   failing test alone, then the fix") applies: it does not here.
 
+And three that close the series, from 7.5j (§8.2 rows 13-16 plus the pins, July 29 2026):
+
+- ★ **Rows 13-16 are the one §8.2 block whose plan text needed no correction at all.** Every
+  other block turned something up: rows 1-4 killed §9bis's prescribed recipe for row 3, rows
+  5-8 exposed the coverage rule, rows 9-12 exposed row 11's forced companion. The colloscope
+  block held as written, down to row 16's two conjuncts. The reason is visible in §8.2 itself:
+  it is the only block that *argues* its shape tests rather than tabulating them, and the
+  argument it makes — reading the predicate from `self` would reject an edit legacy accepts —
+  is the same rule the whole series ended up needing. Worth remembering when the next map is
+  reviewed: **a block that explains why its tests are what they are is a block that survives
+  implementation.**
+
+- ★ **For rows 14-16 the block-1 rule is not a test-construction trick, it is the arms'
+  specification.** Elsewhere "vary the row the fix destroys, never the predicate's other side"
+  is how one *builds* an innocent twin. Here it is what the arm must do: the offending
+  configuration has two routes, and on the route where the op flips the predicate's side, the
+  pre-op row is innocent and must be cleared. So an arm that read prefilled-ness, the excluded
+  set or the group bound from `self` would be wrong, not merely over-careful. The two
+  statements are the same statement seen from opposite ends, and it took the whole series to
+  see that.
+
+- ★ **The two `GlobalUpdate` pins pin an outcome, and that is all they can pin — confirmed at
+  implementation.** Each reuses a twin from the four-step tests verbatim, sent as a payload
+  instead of being asked about, which is the cheapest possible construction and makes the
+  pairing explicit: the arm test proves `None`, the pin shows what the engine does with that
+  `None`. Both assert `Err(BrokenInvariants(the target's own break))` **and** `data == before`.
+  The second half is the load-bearing one, since the first would hold even for a churning arm.
+  One pin per half of the map (a dangle, a convergence break) is the whole of it.
+
 ## 9ter. Commit 7.6 — the self-caused rejection fixtures (`tests/cascade.rs`)
 
 Split out of commit 7 at the July 28 2026 review (★ user ruling). Commit 7's fixtures all
@@ -3165,8 +3201,9 @@ The test inventory is the part that grew most during the July 28 2026 review, so
 out rather than left to "the tests we wrote":
 
 - **the three tiers and why they are three.** Commit 7 = the fixtures that assert `Ok`;
-  commit 7.5 = the innocent-state `None` tests, one per arm, forty-six of them across ten
-  commits; commit 7.6 = the fixtures that assert `Err`, sequenced *after* 7.5 because a
+  commit 7.5 = the innocent-state `None` tests, one per *comparison*, forty-nine of them plus
+  two policy pins across ten commits; commit 7.6 = the fixtures that assert `Err`, sequenced
+  *after* 7.5 because a
   rejection fixture only means something once the `None` branch it rests on has been tested
   arm by arm (★ user ruling). Plus commit 8's property harness.
 - **the fixture-writing rules**, which are the reusable part: expected op lists derived by
@@ -3174,7 +3211,7 @@ out rather than left to "the tests we wrote":
   literal is a tripwire on a derived `Ord` and **not** a confluence pin; fail on the *last*
   conjunct; the create-then-remove recipe for a dead id.
 - **the accepted asymmetry**: 7.5 covers every arm's `None` branch systematically, nothing
-  covers the `Some` branches systematically, and a second forty-six-test series was
+  covers the `Some` branches systematically, and a second series of the same size was
   considered and rejected. Record it as a decision, since that is what it is.
 - **the two deliberate deletions and their reasons** — the undo round-trip fixture (every
   component already pinned by `property_ops.rs` Properties 2 and 4, `history.rs:494`, the
