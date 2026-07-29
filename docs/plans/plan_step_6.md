@@ -107,7 +107,9 @@ the design doc's §8):
   which finishes commit 7.
 - **Commit 8** — the cascade property test (`state-colloscopes/tests/property_cascade.rs`):
   random valid walks driven through `apply_cascade`; no panic, `Ok` ⇒ clean, `Err` ⇒
-  bit-identical state.
+  bit-identical state. **Landed July 29 2026** as one commit, green on its first run at the
+  full 50 × 500; see §10.1 for the two coverage guards §10 had forgotten and for what the run
+  measured.
 
 Every commit compiles and passes the suite on its own. The on-disk format is untouched
 (nothing in this step goes near storage, and elementary ops are never persisted), so no
@@ -3326,6 +3328,62 @@ and keep the wide configuration around as the slow reference for milestone check
 `property_ops` / `property_apply_gate` harnesses remain the deep oracles throughout. Run the
 suite once, captured to a scratchpad file, per the house testing rules.
 
+### 10.1 What the implementation added, and what the first run measured
+
+**Landed July 29 2026 as a single commit** (`f1e83dac`), one file, one test function, green on
+its first run at the full 50 × 500 — no panic, and the whole harness takes 7.7 seconds. The
+plan's four assertions went in exactly as written. Two things were added on top, and one
+correction had to be made to the first draft of the harness itself.
+
+**★ The plan's assertion list has no coverage guard, and it needs one.** As §10 specifies it,
+this harness would pass just as happily if not one cascade ever fired — every target landing
+alone, the resolution map never once consulted. A green run would then be evidence of nothing.
+So the run counts, across all seeds, the landings that needed at least one fix, and asserts
+that count is non-zero. This is the same reflex as the two existing harnesses, both of which
+carry cross-seed honesty guards for exactly this reason (`property_ops.rs` requires every op
+category to have been attempted; `property_apply_gate.rs:194-211` requires every
+`CorruptionKind` to have been attempted and every corrupting one rejected). §10 simply
+forgot it.
+
+**★ The conviction guard must count `BrokenInvariants` only — the first draft got this
+wrong.** `apply_cascade` returns `Err` for two events that have almost nothing in common.
+`ApplyError::InvalidOp` is the gate bouncing the target before any invariant was checked, so
+the map is never asked anything; `ApplyError::BrokenInvariants` is the map asked and answering
+`None` for the target (`cascade.rs:114-119`), which is the branch this whole tier of testing
+exists for. The first draft of the harness counted the two together and guarded on the total,
+with a message claiming the `None if is_target` branch had been reached. The run showed why
+that is not good enough: of 3677 rejections, **2296 were gate bounces and only 1381 were real
+convictions**. A guard on the total would have been satisfied by ops that never reached this
+step's code at all. The counters are split, and the guard is on the 1381.
+
+**★ The degeneration question, measured rather than argued.** The cascade *removes* material
+where the gate merely rejected, so this walk could in principle gut its own document and spend
+its 500 ops fuzzing something far smaller than the other two harnesses ever see. That is a real
+risk and `for_each_seed`'s existing guard does not catch it (it catches an error loop, not a
+shrinking document). The harness therefore tracks the end-of-seed document size
+(`params.all_ids().count()`), and the answer was obtained by running the same walk through the
+plain gate as a throwaway comparison, then deleting it:
+
+| | plain gate | through the cascade |
+| --- | --- | --- |
+| targets landed | 19216 | 21323 |
+| end-of-seed document size | mean 61, min 21 | **mean 42, min 17** |
+
+So the cascade explores a document about **two-thirds** the size. That is a real difference and
+worth knowing, but it is not a collapse: the floor barely moved (21 → 17), no seed ran itself
+down to anything near empty, and the shrink is exactly what the mechanism predicts — the
+cascade lands ~2100 *more* ops than the gate (precisely the ones the gate rejected on invariant
+grounds) and pays for each of them with removals. Re-measure before shrinking the
+configuration, since a smaller document gives deep cascades less material to walk through.
+
+**The cascade coverage numbers themselves**, for the record: 21323 targets landed, 1597 of them
+needing at least one fix, 4592 fix ops in all, and the **widest single cascade 25 fixes deep**.
+That last figure is the reassuring one — the map is being walked hard, not probed one hop at a
+time.
+
+**No map bug surfaced.** Which now holds across all four tiers: §9's eleven `Ok` fixtures,
+§9bis's fifty-one `None` unit tests, §9ter's eight `Err` fixtures, and 25000 fuzzed ops here.
+
 ## 11. Non-goals, gates, close-out
 
 **Non-goals**: no `ops/` migration onto the cascade, no dry-run/preview UX, no `Warning`
@@ -3422,7 +3480,11 @@ out rather than left to "the tests we wrote":
 - **the fixture-writing rules**, which are the reusable part: expected op lists derived by
   hand from the §8 tables *before* the test runs; sequence versus content, and why an ordered
   literal is a tripwire on a derived `Ord` and **not** a confluence pin; fail on the *last*
-  conjunct; the create-then-remove recipe for a dead id.
+  conjunct; the create-then-remove recipe for a dead id. Commit 8 adds two of the same kind
+  for a *property* harness: a green fuzz run proves nothing without a cross-seed guard that
+  the code under test was actually reached, and a guard must count the specific outcome it
+  claims — lumping `InvalidOp` in with `BrokenInvariants` would have let 2296 gate bounces
+  stand in for the 1381 real convictions (§10.1).
 - **the accepted asymmetry**: 7.5 covers every arm's `None` branch systematically, nothing
   covers the `Some` branches systematically, and a second series of the same size was
   considered and rejected. Record it as a decision, since that is what it is.
