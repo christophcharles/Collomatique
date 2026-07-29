@@ -102,7 +102,8 @@ the design doc's §8):
   half of commit 7 that asserts `Err`, split out and sequenced **after** 7.5 (★ user ruling,
   July 28 2026) because a rejection fixture only means something once the `None` branch it
   rests on has been tested arm by arm. Two families — the self-caused rejections and the
-  collateral-damage identity pins — eight fixtures in all; see §9ter.
+  collateral-damage identity pins — eight fixtures in all, shipping as **three commits**
+  (7.6a … 7.6c); see §9ter, and §9ter.6 for the split.
 - **Commit 8** — the cascade property test (`state-colloscopes/tests/property_cascade.rs`):
   random valid walks driven through `apply_cascade`; no panic, `Ok` ⇒ clean, `Err` ⇒
   bit-identical state.
@@ -2878,6 +2879,10 @@ path: the **self-caused rejections** (§9ter.3), where the op's payload is bad i
 the **collateral-damage identity pins** (§9ter.4), where the op points an otherwise fine row at
 a dead id. They were reviewed a day apart and moved here for the same reason.
 
+"Commit 7.6" is a unit of subject matter, not of git history: eight fixtures in this style is
+well over a thousand lines, so it ships as three commits, 7.6a to 7.6c. **§9ter.6 has the
+split and the reasoning behind each seam; read it before starting.**
+
 ### 9ter.1 What is being tested
 
 Every fixture here sends a single op that is bad **on its own terms**. The document is valid
@@ -3081,6 +3086,72 @@ evil mode can delete the target's referent directly — the branch is generic en
 the reasons it looks hard to reach are all facts about the colloscope map, which the engine
 knows nothing about.
 
+### 9ter.6 The split — three commits
+
+Eight fixtures is too much for one commit. `tests/cascade.rs` already holds eleven fixtures in
+2281 lines — roughly two hundred lines each, because a fixture builds its whole document
+through the public surface before it can assert anything. Eight more, written in that same
+style, is something like twelve to sixteen hundred lines, and a reviewer cannot hold that in
+one reading. So §9ter ships as **three commits** (★ decided July 29 2026, on the same reasoning
+that split §9bis into ten).
+
+This subsection is numbered last only so that the existing cross-references to §9ter.3 and
+§9ter.4 keep pointing at the fixture descriptions; read it first.
+
+| Commit | Content | Fixtures |
+|---|---|---|
+| **7.6a** | §9ter.3's `SlotOverflowsDay` pair — `1a` (rejected) and `1b` (accepted) | 2 |
+| **7.6b** | §9ter.3's remaining two — `2` (`AssignedStudentNotPresentForPeriod`) and `3` (`InterrogationGroupOutOfBounds`) | 2 |
+| **7.6c** | all four of §9ter.4's collateral-damage identity pins | 4 |
+
+**Why the seams fall there.**
+
+**7.6a is a pair that cannot be split.** `1a` and `1b` share one document — a subject with a
+60-minute interrogation and a slot at 23:00 — and the whole value of the two is the contrast:
+same invariant, same arm, opposite verdict, and the only difference is which of the two
+operands the op moved. §9ter.3 already says this ("the pair is worth more than either half",
+and `1b` "stays here anyway, next to its twin, because the contrast is the point"). Splitting
+them across two commits would leave `1a` alone in the first, where it shows only that the arm
+says `None` somewhere. It would also strand the 23:00 start, which is load-bearing for the
+pair rather than for either half. This commit is also where §8.2 row 4 finally gets its only
+pin, so it is the one with the most new ground in it despite holding just two fixtures.
+
+**7.6b holds the two that share a shape.** Fixtures `2` and `3` are the same sentence twice:
+the row exists, holds a legitimate member already, and the op adds a second member the row may
+not have. Both are governed by §9ter.2 in the same way — the pre-existing legitimate member is
+exactly what makes the *last* conjunct the one that fails. Neither shares a document with the
+`SlotOverflowsDay` pair, so nothing is lost by putting them in their own commit, and their
+common construction rule is easier to review when they sit side by side.
+
+**7.6c holds all four identity pins, because they share a helper and an assertion shape.** The
+create-then-remove dead-id recipe (§9ter.4) is written once and shared by all four; spreading
+them over two commits would either duplicate that helper or make the second commit depend on
+the first for no reason other than the split. All four also assert the same three things —
+the exact one-element break set, the document unchanged, and (the actual point) the
+referencing row still present and unmodified — so they are read as one idiom applied four
+times. Fixtures `3` and `4` in particular must stay together for the same reason `1a` and `1b`
+do: §9ter.4 already argues that the antecedent fixture alone tests the consequent arm "in no
+way whatsoever", and the mirror is what makes "two arms, not one" true of the suite.
+
+**Why not finer.** A fourth commit splitting 7.6c into slot+incompat and the pairing pair was
+considered and rejected: it would separate four fixtures that share one helper and one
+assertion shape, and the pairing half would be a commit whose whole content is three lines of
+difference from its neighbour. §9bis merged its smallest target kinds in pairs for exactly
+this reason.
+
+**Ordering and independence.** All three land after 7.5, per §9ter's opening. Among themselves
+they are independent — no fixture here shares a document with a fixture in another commit —
+except that 7.6c introduces the dead-id helper, so if the order is changed, that helper moves
+with whichever commit lands first. The default order is 7.6a → 7.6b → 7.6c: the self-caused
+family first, because §9ter.1 explains the engine path in its terms, and the identity pins
+last, because they are the residue of the frame-point-4 audit and read best once the plain
+rejection route is already on the page.
+
+Each commit follows the series rhythm: the fixtures alone in one commit, then a **separate**
+commit amending this document with what the writing turned up. And §9's first rule binds every
+fixture here — the expected break set is derived by hand from the §8.1 / §8.2 tables before the
+test is run, never pasted from a run.
+
 ## 10. Commit 8 — the cascade property test (`tests/property_cascade.rs`)
 
 The "fuzz that there are no panics". Reuse `collomatique_testgen_colloscopes`
@@ -3202,8 +3273,8 @@ out rather than left to "the tests we wrote":
 
 - **the three tiers and why they are three.** Commit 7 = the fixtures that assert `Ok`;
   commit 7.5 = the innocent-state `None` tests, one per *comparison*, forty-nine of them plus
-  two policy pins across ten commits; commit 7.6 = the fixtures that assert `Err`, sequenced
-  *after* 7.5 because a
+  two policy pins across ten commits; commit 7.6 = the fixtures that assert `Err`, eight of
+  them across three commits, sequenced *after* 7.5 because a
   rejection fixture only means something once the `None` branch it rests on has been tested
   arm by arm (★ user ruling). Plus commit 8's property harness.
 - **the fixture-writing rules**, which are the reusable part: expected op lists derived by
