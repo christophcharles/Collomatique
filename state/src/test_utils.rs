@@ -254,8 +254,10 @@ impl ContentOrd for QuoteData {
 
 /// The way an [EvilQuoteData] map misbehaves.
 ///
-/// There is no state-*growing* mode: without a round fuse that scenario is a
-/// hang, not a test — it belongs to step 6.5's `PartialOrd` in-flight check.
+/// The two step-6.5 modes ([EvilMode::CreateAuthor] and
+/// [EvilMode::ReauthorExisting]) violate the contract while *resolving* the
+/// invariant: before the in-flight document-order check they would have led
+/// the cascade to a quiet, creative `Ok`. Now they panic.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EvilMode {
     /// Always "fixes" by removing the invariant's own quote, even when it is
@@ -269,6 +271,18 @@ pub enum EvilMode {
     /// "Fixes" by *creating* a fresh dangling quote, then disowns the invariant
     /// that fresh quote raises.
     CreateThenDisown { fresh_quote: u64, fresh_author: u64 },
+    /// "Fixes" a dangling author by *creating* the missing student — the
+    /// state grows, which is exactly what a strictly-decreasing map may
+    /// never do, however helpful it looks.
+    ///
+    /// The author id is carried by the mode because the map cannot read it
+    /// from the state: at fix time the dangling quote of the invariant was
+    /// rolled back and does not exist in `self`.
+    CreateAuthor { author: u64 },
+    /// "Fixes" a dangling author by re-authoring some existing quote to an
+    /// existing student — the state moves *sideways* (incomparable),
+    /// neither shrinking nor growing.
+    ReauthorExisting { quote: u64, author: u64 },
 }
 
 /// A deliberately misbehaving resolution map, to drive the engine's panic and
@@ -315,6 +329,11 @@ impl Fixable for EvilQuoteData {
             } => (quote != fresh_quote).then(|| QuoteOp::SetQuote {
                 quote: *fresh_quote,
                 author: *fresh_author,
+            }),
+            EvilMode::CreateAuthor { author } => Some(QuoteOp::AddStudent(*author)),
+            EvilMode::ReauthorExisting { quote, author } => Some(QuoteOp::SetQuote {
+                quote: *quote,
+                author: *author,
             }),
         }
     }

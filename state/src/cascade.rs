@@ -12,15 +12,26 @@
 //! data is restored bit-identically from an entry snapshot (id issuer included),
 //! so `Err ⇒ unchanged` holds literally; the collected backward ops are never
 //! replayed.
+//!
+//! Termination rests on the resolution map's contract, and the engine holds it
+//! to it in-flight: after every fix, the new state must compare **strictly
+//! below** the pre-fix state in the document order ([ContentOrd], step 6.5). A
+//! fix landing equivalent (the old perfect-no-op panic), above, or incomparable
+//! panics instead of hanging.
 
+use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
 use crate::history::{AggregatedOp, ReversibleOp};
+use crate::partial_order::ContentOrd;
 use crate::traits::{ApplyError, InMemoryData};
 
 /// Implemented by data whose broken invariants can be repaired by ops: the
-/// resolution map. (`PartialEq` backs the engine's no-op-fix panic.)
-pub trait Fixable: InMemoryData + PartialEq {
+/// resolution map. ([ContentOrd] materializes the document order of the
+/// monotonicity contract; the engine checks every fix against it in-flight,
+/// and its content equivalence backs the no-op-fix panic — the engine never
+/// compares with `==`.)
+pub trait Fixable: InMemoryData + ContentOrd {
     /// One repair step for `invariant` on the current state, or `None` when
     /// the current state holds nothing that causes it (the invariant can then
     /// only come from the failing op's own payload — [apply_cascade] rejects
@@ -28,16 +39,16 @@ pub trait Fixable: InMemoryData + PartialEq {
     ///
     /// # Contract (the engraved cascade contract — design doc §5)
     ///
-    /// States form a partial order with a universal minimal element:
-    /// `Default::default()`, the empty document. Every returned op must land
-    /// **strictly below** the current state in that order: it removes a row
-    /// or entity, clears an edge, or rewrites a value minus an element —
-    /// never creates, and never lands equivalent. Return `None`, or a
-    /// strictly-decreasing op; an op that applies as a perfect no-op is a
-    /// contract violation, and the engine panics on it. The order is
-    /// well-founded, so this contract is the cascade's termination proof —
-    /// a map that *grows* the state makes the cascade loop forever (step 6.5
-    /// adds a `PartialOrd`-based in-flight check for exactly that).
+    /// States form a **well-founded** partial order — the document order,
+    /// materialized by the [ContentOrd] supertrait bound (design doc §8,
+    /// step 6.5); the empty document `Default::default()` is a minimal
+    /// element. Every returned op must land **strictly below** the current
+    /// state in that order: it removes a row or entity, clears an edge, or
+    /// rewrites a value minus an element — never creates, and never lands
+    /// equivalent. Return `None`, or a strictly-decreasing op. Because the
+    /// order is well-founded, this contract is the cascade's termination
+    /// proof, and [apply_cascade] asserts it after every fix: a fix landing
+    /// equivalent, above, or incomparable panics instead of hanging.
     ///
     /// The return type is the *annotated* op on purpose: with only `&self`,
     /// an implementation cannot reach the id issuer, so a fix physically
@@ -78,20 +89,32 @@ pub fn apply_cascade<T: Fixable>(
         };
         let is_target = stack.len() == 1;
 
-        // Snapshot for the no-op-fix panic; only fix ops are held to it (a
+        // Snapshot for the monotonicity check; only fix ops are held to it (a
         // no-op *target* is a legitimate perfect no-op, G.2).
         let before = (!is_target).then(|| data.clone());
 
         match data.apply(&front) {
             Ok(backward) => {
-                if let Some(before) = before
-                    && *data == before
-                {
-                    panic!(
-                        "resolution map violated the strict-monotonicity \
-                         contract: fix {front:?} applied as a perfect no-op \
-                         (return None when no material is present)"
-                    );
+                if let Some(before) = before {
+                    // The in-flight monotonicity check (step 6.5): a fix
+                    // must land strictly below the pre-fix state in the
+                    // document order. Equivalent = the old no-op panic;
+                    // above or incomparable = a growing/sideways map, which
+                    // without this check would hang the cascade instead.
+                    match (*data).content_cmp(&before) {
+                        Some(Ordering::Less) => {}
+                        Some(Ordering::Equal) => panic!(
+                            "resolution map violated the strict-monotonicity \
+                             contract: fix {front:?} landed equivalent to the \
+                             pre-fix state (a perfect no-op — return None when \
+                             no material is present)"
+                        ),
+                        not_below => panic!(
+                            "resolution map violated the strict-monotonicity \
+                             contract: fix {front:?} did not land strictly below \
+                             the pre-fix state (content_cmp = {not_below:?})"
+                        ),
+                    }
                 }
                 stack.pop();
                 applied.push(ReversibleOp {
@@ -253,7 +276,7 @@ mod tests {
     //    it: blind mode returns Some(RemoveQuote(99)) against a quote 99 that
     //    does not exist, so the fix applies as a perfect no-op.
     #[test]
-    #[should_panic(expected = "strict-monotonicity")]
+    #[should_panic(expected = "landed equivalent")]
     fn a_no_op_fix_panics() {
         let mut data = EvilQuoteData(quote_data(&[1], &[]), EvilMode::Blind);
         let (target, ()) = data.annotate(QuoteOp::SetQuote {
@@ -312,6 +335,42 @@ mod tests {
         let (target, ()) = data.annotate(QuoteOp::SetQuote {
             quote: 10,
             author: 5,
+        });
+
+        let _ = apply_cascade(&mut data, target);
+    }
+
+    // 10. A fix that grows the state: the map "fixes" the dangling author by
+    //     creating the missing student. Before step 6.5 this landed a quiet
+    //     creative Ok; the document-order check panics instead.
+    #[test]
+    #[should_panic(expected = "did not land strictly below")]
+    fn a_growing_fix_panics() {
+        let mut data = EvilQuoteData(quote_data(&[1], &[]), EvilMode::CreateAuthor { author: 2 });
+        let (target, ()) = data.annotate(QuoteOp::SetQuote {
+            quote: 99,
+            author: 2,
+        });
+
+        let _ = apply_cascade(&mut data, target);
+    }
+
+    // 11. A fix that moves the state sideways: an existing quote is
+    //     re-authored to another existing student — nothing removed, nothing
+    //     added, the result incomparable with the pre-fix state.
+    #[test]
+    #[should_panic(expected = "did not land strictly below")]
+    fn a_sideways_fix_panics() {
+        let mut data = EvilQuoteData(
+            quote_data(&[1, 2], &[(10, 1)]),
+            EvilMode::ReauthorExisting {
+                quote: 10,
+                author: 2,
+            },
+        );
+        let (target, ()) = data.annotate(QuoteOp::SetQuote {
+            quote: 99,
+            author: 3,
         });
 
         let _ = apply_cascade(&mut data, target);

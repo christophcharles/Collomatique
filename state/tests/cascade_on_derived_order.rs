@@ -246,6 +246,24 @@ fn the_growing_maps_answer_lands_strictly_above() {
     );
 }
 
+#[test]
+#[should_panic(expected = "did not land strictly below")]
+fn a_growing_fix_through_a_derived_order_panics() {
+    // The same growing map, now driven through the engine. The starting state
+    // is built by hand (the gate would never commit a dangling book), so that
+    // the map has a book row to read its invented author from.
+    let mut data = GrowingLibraryData {
+        inner: library(&[], &[(10, 1)]),
+    };
+    // Any target at all re-raises DanglingBookAuthor(10): the checker scans
+    // the whole state, not just what the op touched.
+    let (target, ()) = data.annotate(LibraryOp::AddAuthor(0));
+
+    // The fix `AddAuthor(1)` applies cleanly and repairs the invariant — but
+    // it lands *above* the pre-fix state, and the derived order says so.
+    let _ = apply_cascade(&mut data, target);
+}
+
 /// A tiny deterministic op-walk: a linear congruential step over a `u64`
 /// seed selects the op kind and the ids from its bits. No new dependency,
 /// so no `Cargo.lock`/`cargoHash` churn.
