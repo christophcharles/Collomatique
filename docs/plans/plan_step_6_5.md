@@ -2,17 +2,20 @@
 
 **Status: DRAFT — awaiting user sign-off. No implementation commit has landed.**
 
-This is the third version of the plan. The first version (committed as
-`ec0dd2a2`) built the order out of hand-written `PartialOrd` implementations;
-the second (committed as `85f44889`) reworked it into a dedicated
-**`ContentOrd`** trait implemented by a **derive macro** in the existing
-`collomatique-state-derive` crate, and re-founded the methodology (the order
-is intrinsic and pre-exists the resolution map). This third version folds in
-the user's proofread of §0–§4 (§0.2, decisions 12–15): structural tolerance
-for equivalence classes, the retirement of the `Default`-universal-minimum
-axiom (configuration values become atoms; the flat order is gone), the
-`#[ord(ignore)]` attribute (which lets `Data` itself be derived), and a
-second, end-to-end test class for the derive.
+This is the fourth version of the plan. Version history: v1 (`ec0dd2a2`)
+built the order out of hand-written `PartialOrd` implementations; v2
+(`85f44889`) reworked it into a dedicated **`ContentOrd`** trait implemented
+by a derive macro and re-founded the methodology (the order is intrinsic and
+pre-exists the resolution map); v3 (`74a80456`) folded in the first proofread
+round (equivalence tolerance, configuration records as atoms, the
+`Default`-universal-minimum axiom retired, `#[ord(ignore)]`, end-to-end
+derive tests). This v4 folds in the second proofread round (§0.2, decisions
+16–20): the trait laws become fully self-contained (no law mentions
+`PartialEq`), the container scope law is enforced in the type system by the
+**`ContentIdentity`** marker trait, the marker gets an explicit checked
+derive (never an automatic one), `#[ord(partial_ord)]` is renamed
+`#[ord(total)]` and generates `Ord::cmp`, and every edge-case ruling must
+land as a comment at its code site.
 
 This plan is self-sufficient: it contains every design decision, the complete
 specification of the order, and old/new code for every touched site. It is
@@ -66,30 +69,33 @@ undetectable and makes the cascade loop forever. Step 6.5 closes that hole:
   strictly decreased. An order that compared meanings would reject these arms
   and break the termination proof. Every rule in §3 below is a rule about
   *content*. The trait's name, `ContentOrd`, records this ruling.
-* **Equivalence tolerance, and where it stops** (★ this review, decision 12).
-  The generic layer does **not** require agreement with `PartialEq`:
-  `content_cmp` may have equivalence classes coarser than `==` — `Data`
-  ignoring its id issuer is the canonical case. The engine never consults
-  `==`: a fix must land `Some(Ordering::Less)`, which means "below and not
-  equivalent" (the user's "S2 ≤ S1 and not(S1 ≤ S2)"); `S1 != S2` appears
-  nowhere. Where a type also implements `PartialEq`, `==` must *imply*
-  content-equivalence; the converse is not required. For `InnerData` and
-  everything below it the converse does hold — no equivalence classes — as an
-  implementation property of this crate, kept as a guide.
-  **The scope law**: element and key matching *inside* containers (sets,
-  maps, sequences, tables) is by `==`/`Ord`, full stop. Equivalence-aware set
-  inclusion is a matching problem (up to bipartite matching once two elements
-  of one set are mutually equivalent) and is not attempted; a type with
-  coarse equivalence must never be used as a set element or map key. In this
-  document the only quotient sits at the very top (`Data`), above every
-  container.
+* **The trait is self-contained; equivalence classes are tolerated**
+  (decisions 12 and 16). `ContentOrd`'s laws never mention `PartialEq`:
+  `Some(Equal)` is an equivalence relation ("content equivalence"), possibly
+  coarser than `==` — `Data` ignoring its id issuer is the canonical case.
+  The engine never consults `==`: a fix must land `Some(Ordering::Less)`,
+  which means "below and not equivalent" (the user's "S2 ≤ S1 and
+  not(S1 ≤ S2)"); `S1 != S2` appears nowhere. The relation to `==` exists
+  only as a *fact about the building blocks*: `discrete` — and hence every
+  atom and blanket — **defines** content equivalence as the leaf's `==`, so a
+  type assembled from them inherits whatever `==` means on its leaves. For
+  `InnerData` and everything below it, content equivalence *is* structural
+  equality — an implementation property of this crate (pinned by §7.5's twin
+  tests), not a trait law.
+* **Container matching is by `==`/`Ord`, and the type system enforces where
+  that is sound** (decision 17). Inside a container, "the same element/row"
+  can only mean `==` (for `Ord`-backed storage, Rust's own contract already
+  ties `Ord`'s `Equal` to `==`). That is correct exactly when `==` coincides
+  with content equivalence *for the element/key type* — a positional
+  requirement, never a global one (a global law would outlaw the `Data`
+  quotient). The `ContentIdentity` marker trait states it, and the container
+  blanket impls **require** it at every matching position, so putting a
+  quotiented type in a container is a compile error, not a prose violation.
 * **Well-foundedness is the termination requirement — the universal-minimum
-  axiom is retired** (★ this review, decision 13, superseding the step-6
-  ruling "minimal element = `Default::default()`"). Termination needs finite
-  descent, nothing more; the order may have many minimal elements. The empty
-  document remains *a* minimal element (§4.4), just not the unique bottom.
-  Consequently the flat-with-a-bottom construction of plan v2 is gone, and
-  the fuzz property that pinned the axiom is gone with it.
+  axiom is retired** (decision 13, superseding the step-6 ruling "minimal
+  element = `Default::default()`"). Termination needs finite descent, nothing
+  more; the order may have many minimal elements. The empty document remains
+  *a* minimal element (§4.4), just not the unique bottom.
 
 ### 0.2 Decisions from the design reviews (July 29 2026)
 
@@ -110,17 +116,13 @@ Settled with the user across the review rounds:
    they are `BTreeMap` keys — Rust requires `PartialOrd` and `Ord` to agree, so
    the ids could never carry a discrete `PartialOrd`. Hence `ContentOrd`, and
    the engine requires it directly: `Fixable: InMemoryData + ContentOrd`. **No
-   type anywhere gains a new `PartialOrd`** — the name stays free for genuine
-   total-order needs, and nobody can mistake the document order for a sortable
-   order.
-3. **Blanket `Vec` impl = subsequence.** A wrong default here can only be *too
-   strict* (it never blesses a non-removal change), and too-strict fails loud —
-   the engine's strictly-below panic, the fixtures, the contract fuzz. The
-   blanket is also what lets `Vec` fields *inside table values* (the week/slot
-   ordering sidecars) participate through trait dispatch, where field
-   attributes cannot reach. It is gated on `T: ContentOrd`, so it can never
-   fire on a type that was not deliberately enrolled. Fields whose element
-   identity is not value-borne override it (decisions 9–11).
+   type anywhere gains a new `PartialOrd`.**
+3. **Blanket `Vec` impl = subsequence.** The value-borne-identity reading,
+   which is the common case reached through trait dispatch (id lists inside
+   table values, where field attributes cannot reach). Since decision 17 it is
+   gated on `T: ContentOrd + ContentIdentity`, so it can only ever fire on
+   id/scalar vectors — a structured element type without the marker simply
+   does not dispatch, and the field demands an explicit attribute.
 4. **Attribute values are plain expressions, not strings.** House style
    (`#[join(error = NewId)]`, `#[fk(name = subject)]`) already writes unquoted
    attribute arguments; syn 2 parses an attribute value as an ordinary
@@ -166,34 +168,91 @@ Settled with the user across the review rounds:
     from the colloscope's placement maps and interrogation cells — and stays
     incomparable. The `same_length_pointwise` combinator of the earlier draft
     was replaced by `prefix_pointwise`.
-12. **★ Equivalence classes are tolerated structurally** (proofread round).
-    `ContentOrd` has no `PartialEq` supertrait; its laws are stated up to the
-    equivalence `Some(Equal)` ("content equivalence"); a `content_eq` default
-    method names that relation so nobody reaches for `==`. The engine is
-    `==`-free. The scope law of §0.1 bounds the tolerance: container matching
-    stays `==`/`Ord`-based, so quotiented types stay out of containers.
+12. **★ Equivalence classes are tolerated structurally.** `ContentOrd` has no
+    `PartialEq` supertrait; its laws are stated up to the equivalence
+    `Some(Equal)`; a `content_eq` default method names that relation so
+    nobody reaches for `==`. The engine is `==`-free.
 13. **★ Configuration values are atoms; the flat order and the
-    `Default`-universal-minimum axiom are retired** (proofread round,
-    superseding both plan v2's flat rule and the step-6 minimal-element
-    phrasing). The principled ground: `Limits` and `BalancingOptions` are
-    *whole-entry override records* — per the long-standing override
-    semantics, a `None` field there means **"disabled", an active choice, not
-    absent content**, so the Option-lift reading ("`None` is less content")
-    is semantically false inside them and the record is one composite value.
-    `ExportConfig` is one composite presentation preference. Termination
-    needs only well-foundedness, which atoms give trivially; the order simply
-    has several minimal elements.
-14. **`#[ord(ignore)]`: a field the order does not see** (proofread round;
-    the user proposed the spelling `none`, changed to `ignore` so it cannot
-    be read as "compare with `None`"). Generates a constant `Some(Equal)`
-    and puts no bounds on the field's type. This is the structural source of
-    equivalence classes — and it lets `Data` itself be **derived**, ignoring
-    its `id_issuer`. The toy mirror: `EvilQuoteData` delegates to its inner
-    data only, ignoring the mode, by hand.
-15. **The derive gets a second, end-to-end test class** (proofread round): a
-    toy `InMemoryData + Fixable` whose `ContentOrd` is *derived*, driven
-    through `apply_cascade` — including a small deterministic op-walk with no
-    new dependencies (§6.4).
+    `Default`-universal-minimum axiom are retired** (superseding both plan
+    v2's flat rule and the step-6 minimal-element phrasing). The principled
+    ground: `Limits` and `BalancingOptions` are *whole-entry override
+    records* — per the long-standing override semantics, a `None` field there
+    means **"disabled", an active choice, not absent content**, so the
+    Option-lift reading is semantically false inside them and the record is
+    one composite value. `ExportConfig` is one composite presentation
+    preference. Termination needs only well-foundedness, which atoms give
+    trivially; the order simply has several minimal elements.
+14. **`#[ord(ignore)]`: a field the order does not see** (the user proposed
+    the spelling `none`, changed to `ignore` so it cannot be read as "compare
+    with `None`"). Generates a constant `Some(Equal)` and puts no bounds on
+    the field's type. This is the structural source of equivalence classes —
+    and it lets `Data` itself be **derived**, ignoring its `id_issuer`. The
+    toy mirror: `EvilQuoteData` delegates to its inner data only, ignoring
+    the mode, by hand.
+15. **The derive gets a second, end-to-end test class**: a toy
+    `InMemoryData + Fixable` whose `ContentOrd` is *derived*, driven through
+    `apply_cascade` — including a small deterministic op-walk with no new
+    dependencies (§6.6).
+16. **★ No law relates `ContentOrd` to `PartialEq`** (second proofread
+    round; the earlier "`==` must imply equivalence" law is dropped —
+    `PartialEq` never promises structural equality, so no law may lean on
+    it). The trait laws are internal: `Some(Equal)` is an equivalence;
+    reflexivity, transitivity, antisymmetry up to it; well-foundedness.
+    Reflexivity through `discrete` needs the leaf's `==` to be *reflexive*,
+    so the discrete-matching helpers are bounded `Eq`, not `PartialEq`
+    (`discrete<T: Eq>`, `option_lift_discrete<T: Eq>`,
+    `vec_subsequence<T: Eq>`, `subsequence<T: Eq>`) — the obligation lives in
+    the type system, and every leaf in use derives `Eq` (verified:
+    `time/src/lib.rs:106,530,593,838`; `non_empty_string` likewise).
+17. **★ The `ContentIdentity` marker trait** (second proofread round —
+    answering "should `Ord` and `ContentOrd` share equivalence classes?").
+    The orthogonality between `ContentOrd` and `Ord` is in the *ordering*,
+    not the equality: Rust ties `Ord`'s `Equal` to `==` (`Ord: Eq` plus the
+    consistency contract), so container matching is matching by `==`, and
+    the only question is whether `==` coincides with content equivalence
+    *for the element/key type*. `ContentIdentity: Eq` is the marker that
+    asserts exactly that, emitted alongside every atom enrollment
+    (`impl_atoms`, `impl_content_ord_atom`, tuples of markers), and
+    **required by all five container blankets at matching positions**.
+    Consequences: a quotiented type in a container is a compile error; and
+    the one remaining footgun dies — `PrefilledGroup` has no marker, so the
+    `Vec` blanket cannot apply to `Vec<PrefilledGroup>` and *omitting*
+    `#[ord(with = vec_prefix)]` fails to compile instead of silently
+    landing a too-strict order. Entity structs deliberately do not get the
+    marker (they never sit at matching positions; opting in stays an
+    explicit, auditable assertion).
+18. **★ `ContentIdentity` is derivable, but never automatic** (second
+    proofread round). Auto-emitting the marker from `#[derive(ContentOrd)]`
+    is unsound: the compiler strips `#[derive(...)]` lists from macro input,
+    so the macro *cannot know* whether `PartialEq` is derived or
+    hand-written, and must never sign a claim it cannot check. Instead, an
+    explicit `#[derive(ContentIdentity)]` checks everything checkable —
+    rejects `#[ord(ignore)]` (a quotient by definition) and
+    `#[ord(with = …)]` (unanalyzable; hand-write the marker impl if the rule
+    preserves identity), statically asserts `ContentIdentity` on default
+    fields and `Eq` on atom fields, accepts `total` fields for free (`Ord`'s
+    own contract) — leaving exactly **one** human-signed premise: the type's
+    `==` is the structural field-wise equality, auditable at a glance
+    because `PartialEq` sits in the same derive list.
+19. **★ `#[ord(partial_ord)]` is renamed `#[ord(total)]`** and generates
+    `Some(Ord::cmp(…))` instead of `partial_cmp` (second proofread round).
+    Strictly the laws need `PartialOrd + Eq`, but that is a two-trait side
+    condition prose would have to carry; calling `Ord::cmp` makes the
+    requirement self-enforcing — the call demands `Ord`, `Ord: Eq` gives
+    reflexivity, and `Ord`'s contract ties `Equal` to `==`. The exotic case
+    (a genuinely partial but `Eq`-honest order) goes through
+    `#[ord(with = …)]` like any other custom rule.
+20. **★ Every edge-case ruling lands as a comment at its code site** (user
+    request). The snippets in this plan carry the comment text; the
+    implementer copies them. The mandated sites: the two trait docs; the
+    `Eq` bounds on the discrete-matching helpers; every container blanket's
+    marker bound; the `Vec` blanket's non-dispatch example; the atom macros
+    (emit both traits, and why); the tuple marker impls; the `total` and
+    `ignore` codegen arms; the `ContentIdentity` derive's unverifiable
+    premise; `Data`'s ignored issuer; `EvilQuoteData`'s ignored mode; the
+    `groups` field's `vec_prefix` attribute; the three configuration-record
+    enrollments; the `NonEmptyRangeInclusive` impls; the engine's two panic
+    arms.
 
 ### 0.3 What this step does *not* do
 
@@ -207,10 +266,10 @@ decision.
 
 | commit | contents |
 | --- | --- |
-| 0 | this plan (v1 pinned at `ec0dd2a2`, v2 at `85f44889`; this revision lands as its own commit) |
-| 1 | `state/`: the `ContentOrd` trait, the combinators, the leaf and container impls, the `impl_content_ord_atom!` macro, the `with =` helpers + unit tests |
-| 2 | `collomatique-state-derive`: `#[derive(ContentOrd)]` with the four field attributes + the direct integration tests in `state/tests/derive_content_ord.rs` + the end-to-end cascade tests on a derived toy in `state/tests/cascade_on_derived_order.rs` |
-| 3 | `state-colloscopes/`: adoption — the atom enrollments, the derives with their attributes (including `Data` with `#[ord(ignore)]`), one manual impl + the semantic unit tests |
+| 0 | this plan (v1 `ec0dd2a2`, v2 `85f44889`, v3 `74a80456`; this revision lands as its own commit) |
+| 1 | `state/`: the `ContentOrd` and `ContentIdentity` traits, the combinators, the leaf/container/tuple impls, the `impl_content_ord_atom!` macro, the `with =` helpers + unit tests |
+| 2 | `collomatique-state-derive`: `#[derive(ContentOrd)]` (four field attributes) and `#[derive(ContentIdentity)]` + the direct integration tests in `state/tests/derive_content_ord.rs` + the end-to-end cascade tests on a derived toy in `state/tests/cascade_on_derived_order.rs` |
+| 3 | `state-colloscopes/`: adoption — the atom enrollments, the derives with their attributes (including `Data` with `#[ord(ignore)]`), the two manual impls + the semantic unit tests |
 | 4 | the toy types: manual `ContentOrd` for `QuoteData` / `EvilQuoteData` + unit tests |
 | 5 | the engine: `Fixable: InMemoryData + ContentOrd`, the in-loop strictly-below check, the contract rewording, two new evil modes, two new engine tests |
 | 6 | the contract fuzz property (`state-colloscopes/tests/property_content_ord.rs`) |
@@ -220,7 +279,7 @@ only needs commit 1; commits 3 and 5 need everything before them.
 
 ---
 
-## 1. The trait
+## 1. The two traits
 
 ```rust
 /// The document order: a partial order over *content* (design doc §8,
@@ -232,20 +291,19 @@ only needs commit 1; commits 3 and 5 need everything before them.
 /// is intrinsic to the data type — it is defined from the structure alone,
 /// and the resolution map is *held to it*, never the other way around.
 ///
-/// # Laws
+/// # Laws (self-contained: no law mentions `PartialEq`)
 ///
 /// * `Some(Ordering::Equal)` is an equivalence relation — **content
-///   equivalence** (see [ContentOrd::content_eq]). It may be coarser than
-///   `==`: a type may quotient away non-content fields (an id issuer, a
-///   test-harness mode). Where the type also implements `PartialEq`,
-///   `a == b` must imply content equivalence; the converse is not required.
+///   equivalence** (see [ContentOrd::content_eq]). It may be coarser than a
+///   type's `==`: a type may quotient away non-content fields (an id
+///   issuer, a test-harness mode). No law relates it to `PartialEq` —
+///   `PartialEq` never promises structural equality, so nothing here may
+///   lean on it. The provided building blocks ([discrete] and the blankets)
+///   *define* content equivalence from `==` for the types they cover; a
+///   type assembled from them inherits whatever `==` means on its leaves.
 /// * `content_cmp` is a partial order up to that equivalence: reflexive
 ///   (`x.content_cmp(&x) == Some(Equal)`), transitive, and antisymmetric up
 ///   to equivalence.
-/// * **Element matching inside containers is by `==`/`Ord`** (the blanket
-///   impls and combinators): a type with coarse equivalence must not be
-///   used as a set element or map key — equivalence-aware inclusion is a
-///   matching problem and is deliberately out of scope.
 /// * **Well-foundedness on document data**: every strict decrease removes
 ///   an element from a finite container or moves an `Option` from `Some` to
 ///   `None` — so there is no infinite strictly-decreasing chain, and strict
@@ -280,6 +338,27 @@ pub trait ContentOrd {
         self.content_cmp(other) == Some(Ordering::Less)
     }
 }
+
+/// Marker: `==` coincides with content equivalence — this type carries no
+/// content quotient, so containers may match it by `==`/`Ord`.
+///
+/// Inside a container, "the same element/row" can only mean `==` (for
+/// `Ord`-backed storage, `Ord`'s own contract ties its `Equal` to `==`), and
+/// that is sound exactly when `==` is content identity for the element/key
+/// type. This requirement is *positional* — it must hold at container
+/// matching positions and nowhere else (a global law would outlaw quotients
+/// like [`ContentOrd` on `Data`], which ignores the id issuer). The
+/// container blanket impls require this marker at every matching position,
+/// so a quotiented type inside a container is a compile error.
+///
+/// Deliberately opt-in: entity structs whose equivalence happens to equal
+/// `==` today still do not get the marker unless they need it — "safe to
+/// match by `==`" stays an explicit, auditable assertion. Enrollment paths:
+/// the atom macros emit it together with `ContentOrd` (an atom's
+/// equivalence *is* `==` by construction), tuples of markers are markers,
+/// and composite types use `#[derive(ContentIdentity)]` (§6.4) or a
+/// hand-written impl.
+pub trait ContentIdentity: Eq {}
 ```
 
 The comparison rule for a compound value is determined by its type's impl;
@@ -289,7 +368,8 @@ dispatch:
 
 * `#[ord(atom)]` — compare this field discretely, inline (`==` or
   incomparable); no trait impl needed on the field's type. The escape hatch
-  for foreign types (orphan rule).
+  for foreign types (orphan rule). The field's type must be `Eq` (reflexive
+  `==`), enforced by the generated call's bound.
 * `#[ord(ignore)]` — the order does not see this field: the generated
   comparison is a constant `Some(Equal)`, and no bound is placed on the
   field's type. **Using it introduces equivalence classes** (two values
@@ -298,10 +378,12 @@ dispatch:
 * `#[ord(with = <expr>)]` — compare this field with the given expression,
   which must be callable as `fn(&T, &T) -> Option<Ordering>`; a path or an
   inline closure.
-* `#[ord(partial_ord)]` — compare this field with its existing
-  `PartialOrd::partial_cmp`. An explicit opt-in for a type whose `PartialOrd`
-  *is* the right content order; never a default, because of the numeric-order
-  traps above.
+* `#[ord(total)]` — this field's native *total* order is its content order:
+  the generated code is `Some(Ord::cmp(…))`. Calling `Ord::cmp` makes the
+  soundness requirement self-enforcing: the call demands `Ord`, `Ord: Eq`
+  gives reflexivity, and `Ord`'s contract ties `Equal` to `==`. (A genuinely
+  partial but `Eq`-honest order goes through `with` instead.) Never a
+  default, because of the numeric-order traps of decision 2.
 
 ---
 
@@ -315,18 +397,21 @@ them.
 1. **Atom** (discrete order). Comparable only when equal: `Some(Equal)` iff
    `==`, otherwise `None`. In order-theory vocabulary this is the discrete
    partial order — two different values are neither above nor below one
-   another. Atoms are, first, the scalar leaves of the document: strings,
-   numbers, booleans, times, ids, ranges. A range deserves the explicit
-   argument: its *content* is the endpoint pair, and reading
-   `[2..=3] ⊆ [1..=4]` as an order would compare the denoted sets — exactly
-   the semantic reading D5.1 forbids. Text is likewise opaque: a string is a
-   scalar value, not a container of characters. Second, atoms are the
-   composite values that read as *one* value: relational chains (the
-   `WeekBlock` list, decision 10) and the three **configuration records**
-   (decision 13) — `Limits`, `BalancingOptions`, `ExportConfig`. In the two
-   override records a `None` field means "disabled", an active choice, so
-   the Option lift's reading ("`None` is less content") is false inside
-   them; `ExportConfig` is one composite presentation preference.
+   another. Atoms must be `Eq` (a reflexive `==` is what makes the block
+   reflexive — a `PartialEq`-only type like `f64` would break the law
+   through `NaN != NaN`; the helper bounds enforce this). Atoms are, first,
+   the scalar leaves of the document: strings, numbers, booleans, times,
+   ids, ranges. A range deserves the explicit argument: its *content* is the
+   endpoint pair, and reading `[2..=3] ⊆ [1..=4]` as an order would compare
+   the denoted sets — exactly the semantic reading D5.1 forbids. Text is
+   likewise opaque: a string is a scalar value, not a container of
+   characters. Second, atoms are the composite values that read as *one*
+   value: relational chains (the `WeekBlock` list, decision 10) and the
+   three **configuration records** (decision 13) — `Limits`,
+   `BalancingOptions`, `ExportConfig`. In the two override records a `None`
+   field means "disabled", an active choice, so the Option lift's reading
+   ("`None` is less content") is false inside them; `ExportConfig` is one
+   composite presentation preference.
 2. **Option lift.** `None` is strictly below `Some(_)`; two `Some` values
    compare by the inner rule. This applies to every `Option` field *whose
    `None` means absent content* — which is every `Option` field the order
@@ -336,23 +421,27 @@ them.
    actually clears (`Slot::week_pattern`, `Incompatibility::week_pattern_id`).
 3. **Set inclusion.** `Equal` iff equal, `Less` iff strict subset, `Greater`
    iff strict superset, `None` otherwise. Elements are matched by `==`/`Ord`
-   (the scope law of §0.1).
+   and must be `ContentIdentity` (§0.1, enforced by the blanket bound).
 4. **Map inclusion with a value rule.** Below iff the key set is included and
    every shared key's value is below or equal. Rows are matched **by id**:
    the same teacher under a different id is incomparable (the user's defining
    example); the same id with different content compares by the value rule.
+   Keys must be `ContentIdentity`.
 5. **Sequence embedding (subsequence).** `Less` iff the left is a strict
    subsequence of the right — obtainable by *deleting elements only*, the
    survivors keeping their relative order; contiguity is **not** required:
    `[1,3] < [1,2,3]`. Reordering is incomparable: ordering is user-visible
-   data.
+   data. Elements are matched by `==` and must be `ContentIdentity` on the
+   blanket path.
 6. **Prefix pointwise.** A `Vec` whose positions carry the identity is
    content-wise a **map from indices to values**; map inclusion (block 4)
    specialized to index sets that are initial segments gives: below iff the
    left is at most as long *and* every shared index compares below or equal.
    Appending is adding content (the empty vector is the minimum); shrinking a
    value in place is a decrease; removing a *middle* element shifts the
-   identity of every later element and is incomparable.
+   identity of every later element and is incomparable. (No element
+   *matching* happens here — positions match by construction — so no
+   `ContentIdentity` is involved.)
 7. **Product** — for structs *and enum variants*. For a struct: the
    field-wise combination. `Equal` iff every field `Equal`; `Less` iff at
    least one `Less` and none `Greater` or incomparable; `None` as soon as one
@@ -375,8 +464,9 @@ is measured from its predecessor (atom, ★ decision 10).
 
 **Where equivalence classes may appear.** Only above the containers: through
 `#[ord(ignore)]` or a hand-written quotient (`Data`'s ignored issuer,
-`EvilQuoteData`'s ignored mode). Inside containers, matching is `==`/`Ord`
-(the scope law), so a quotiented type must never be a set element or map key.
+`EvilQuoteData`'s ignored mode). Inside containers, matching is `==`/`Ord`,
+and the `ContentIdentity` bounds make a quotiented element or key a compile
+error rather than a prose violation.
 
 Two implementation rules apply everywhere: **never `#[derive(PartialOrd)]`,
 never the standard library's container orders** (both lexicographic, wrong for
@@ -391,8 +481,9 @@ every field by construction, and ignoring one is exactly what
 Notation: "atom", "lift(X)", "set-inclusion", "map-inclusion(V)",
 "subsequence", "prefix(V)", "product" refer to §2. The **how** column says
 what produces the impl: `derive` (with any attributes), `blanket` (a
-container impl from commit 1), `macro` (`impl_content_ord_atom!`), `manual`,
-or `—` (no impl; the type is only ever compared inside an atom boundary).
+container impl from commit 1), `macro` (`impl_content_ord_atom!`, which also
+emits `ContentIdentity`), `manual`, or `—` (no impl; the type is only ever
+compared inside an atom boundary).
 
 ### 3.1 The two roots
 
@@ -407,7 +498,7 @@ or `—` (no impl; the type is only ever compared inside an atom boundary).
 | --- | --- | --- |
 | `Parameters` (`colloscope_params.rs`) | product of its fourteen fields | derive |
 | `Periods` (`periods.rs`) | product: `first_week` lift(atom `WeekStart`) × `ordered_period_list` embedding (unit values always `Equal`) | derive; `first_week` gets `#[ord(with = option_lift_discrete)]` (foreign inner type) |
-| `Weeks` (`weeks.rs`) | product: `week_map` map-inclusion(`Week`) × `ordering` map-inclusion(subsequence of `Vec<WeekId>`) | derive — the `Table` and `Vec` blankets compose |
+| `Weeks` (`weeks.rs`) | product: `week_map` map-inclusion(`Week`) × `ordering` map-inclusion(subsequence of `Vec<WeekId>`) | derive — the `Table` and `Vec` blankets compose (ids carry `ContentIdentity`) |
 | `Week` (`weeks.rs`) | product: `period_id` atom × `interrogations` atom × `annotation` lift(atom) | derive; `annotation` gets `#[ord(with = option_lift_discrete)]` |
 | `Subjects` (`subjects.rs`) | embedding of `OrderedTable<SubjectId, Subject>` with pointwise `Subject` values | derive |
 | `Subject` (`subjects.rs`) | product: `parameters` × `excluded_periods` set-inclusion | derive |
@@ -415,12 +506,12 @@ or `—` (no impl; the type is only ever compared inside an atom boundary).
 | `SubjectInterrogationParameters` (`subjects.rs`) | product: `students_per_group` atom (range) × `groups_per_interrogation` atom (range) × `duration` atom × `take_duration_into_account` atom × `periodicity` | derive; `duration` gets `#[ord(atom)]` (foreign `NonZeroMinutes`) |
 | `SubjectPeriodicity` (`subjects.rs`) | enum: same variant → product of its fields (all atoms), different variants → incomparable | derive; the `blocks` field of `AmountForEveryArbitraryBlock` gets `#[ord(atom)]` — ★ decision 10: the `WeekBlock` chain is one composite value |
 | `WeekBlock` (`subjects.rs`) | — (inside the `blocks` atom) | — |
-| `NonEmptyRangeInclusive<T>` (`non_empty_range.rs`) | atom — content is the endpoint pair; interval inclusion would be the semantic reading D5.1 forbids | manual (generic impl; the macro cannot express generics) |
+| `NonEmptyRangeInclusive<T>` (`non_empty_range.rs`) | atom — content is the endpoint pair; interval inclusion would be the semantic reading D5.1 forbids | manual (generic, so outside the macro's reach; also gets `ContentIdentity`) |
 | `Teachers` (`teachers.rs`) | map-inclusion(`Teacher`) | derive |
 | `Teacher` (`teachers.rs`) | product: `desc` × `subjects` set-inclusion | derive |
 | `PersonWithContact` (`lib.rs`) | product: `surname` atom × `firstname` atom × `tel` lift(atom) × `email` lift(atom) | derive; `tel` and `email` get `#[ord(with = option_lift_discrete)]` (foreign `NonEmptyString`) |
 | `Students` / `Student` (`students.rs`) | as `Teachers` / `Teacher`, with `excluded_periods` set-inclusion | derive |
-| `Assignments` (`assignments.rs`) | `map` map-inclusion(set-inclusion) | derive |
+| `Assignments` (`assignments.rs`) | `map` map-inclusion(set-inclusion) — the `(PeriodId, SubjectId)` key is `ContentIdentity` via the tuple impl | derive |
 | `WeekPatterns` / `WeekPattern` (`week_patterns.rs`) | map-inclusion(product: `name` atom × `excluded_weeks` set-inclusion) | derive |
 | `Slots` (`slots.rs`) | product: `slot_map` map-inclusion(`Slot`) × `ordering` map-inclusion(subsequence of `Vec<SlotId>`) | derive |
 | `Slot` (`slots.rs`) | product: `subject_id` atom × `teacher_id` atom × `start_time` atom × `extra_info` atom × `week_pattern` lift(atom) × `cost` atom | derive; `start_time` gets `#[ord(atom)]` (foreign `SlotStart`); `week_pattern` needs no attribute (`Option` blanket + id atom) |
@@ -429,8 +520,8 @@ or `—` (no impl; the type is only ever compared inside an atom boundary).
 | `GroupLists` (`group_lists.rs`) | product: `group_list_map` map-inclusion(`GroupList`) × `subjects_associations` map-inclusion(atom `GroupListId`) | derive |
 | `GroupList` (`group_lists.rs`, sealed) | product: `params` × `filling` | derive (in-module; private fields are fine) |
 | `GroupListParameters` (`group_lists.rs`) | product: `name` atom × `students_per_group` atom (range) × `group_names` **prefix**(lift(atom)) — un-naming a group is below, renaming is incomparable, truncating is below, a middle removal shifts bindings and is incomparable | derive; `group_names` gets `#[ord(with = \|a, b\| prefix_pointwise(a, b, option_lift_discrete))]` (closure form; the element type is foreign) |
-| `GroupListFilling` (`group_lists.rs`) | `Prefilled`/`Prefilled`: **prefix**(`PrefilledGroup`); `Automatic`/`Automatic`: `excluded_students` set-inclusion; mixed variants: incomparable | derive; the `groups` field gets `#[ord(with = vec_prefix)]` — position-borne identity (decision 11); the `Vec` blanket's subsequence would reject the minus-one-student fix (§7.4) |
-| `PrefilledGroup` (`group_lists.rs`) | `students` set-inclusion | derive |
+| `GroupListFilling` (`group_lists.rs`) | `Prefilled`/`Prefilled`: **prefix**(`PrefilledGroup`); `Automatic`/`Automatic`: `excluded_students` set-inclusion; mixed variants: incomparable | derive; the `groups` field gets `#[ord(with = vec_prefix)]` — position-borne identity (decision 11). `PrefilledGroup` has no `ContentIdentity`, so the `Vec` blanket cannot apply here: omitting the attribute is a compile error (decision 17) |
+| `PrefilledGroup` (`group_lists.rs`) | `students` set-inclusion | derive (deliberately **no** `ContentIdentity`) |
 | `Settings` (`settings.rs`) | product: `global` atom × `students` map-inclusion(atom) | derive (`Limits` carries the atom impl) |
 | `Limits` (`settings.rs`) | atom — a whole-entry override record: a `None` field means "disabled", an active choice, not absent content (decision 13) | macro |
 | `Pairings` (`pairings.rs`) | map-inclusion(`PairingRule`) | derive |
@@ -444,14 +535,15 @@ or `—` (no impl; the type is only ever compared inside an atom boundary).
 
 | type (module) | rule | how |
 | --- | --- | --- |
-| `Colloscope` (`colloscopes.rs`) | product: `interrogations` map-inclusion(set-inclusion of `BTreeSet<u32>`) × `group_lists` map-inclusion(map-inclusion(atom `u32`)) | derive — the blankets compose all the way down |
+| `Colloscope` (`colloscopes.rs`) | product: `interrogations` map-inclusion(set-inclusion of `BTreeSet<u32>`) × `group_lists` map-inclusion(map-inclusion(atom `u32`)) — the `(SlotId, WeekId)` key via the tuple `ContentIdentity` | derive — the blankets compose all the way down |
 | `ExportConfig` (`export_config.rs`) | atom — one composite presentation preference (decision 13) | macro |
 
 ### 3.4 Enrollment of the atoms, and the unenrolled types
 
 In `state-colloscopes/src/ids.rs`, one invocation — ids are scalar reference
 tokens with no internal content, so they are atoms wherever they appear as
-field *values* (`Slot::teacher_id`, an association's `GroupListId`, …):
+field *values*, and their `==` is content identity (the macro emits both
+traits):
 
 ```rust
 collomatique_state::impl_content_ord_atom!(
@@ -475,7 +567,7 @@ collomatique_state::impl_content_ord_atom!(Limits);
 preference" instead of the override sentence).
 
 `NonEmptyRangeInclusive<T>` is generic, which the macro cannot express, so it
-gets the one hand-written impl (§7.4).
+gets the one hand-written pair of impls (§7.4).
 
 Types with **no** impl at all (only ever compared inside an atom boundary):
 `WeekBlock`, `SoftParam<T>`, `Color`, `PageOrientation`, `GlobalConfig`,
@@ -486,21 +578,22 @@ Types with **no** impl at all (only ever compared inside an atom boundary):
 
 ## 4. Why this order is correct
 
-### 4.1 Consistency with equality and equivalence
+### 4.1 Consistency of equality and equivalence
 
 Every block generated by the derive, the blankets and the macro reports
-`Some(Equal)` exactly when the two values are `==`: atoms by definition; the
-lift because both sides must be `None` or both inner values equal;
-inclusion/embedding because mutual inclusion of finite structures forces
-equality; prefix pointwise because mutual prefix forces equal lengths and
-pointwise equality; and a product of such fields is again exact, provided
-every field participates — which the derive guarantees by construction.
-Equivalence classes therefore enter **only** where they are declared:
-`#[ord(ignore)]` (the derived `Data`, whose equivalence "same inner data"
-coincides with its hand-written `PartialEq`) and the hand-written toy
-quotient (`EvilQuoteData`). The trait law — `==` implies content equivalence
-— holds everywhere; the sharper "iff" holds for `InnerData` and everything
-below it, which is what §7.5's twin tests rely on.
+`Some(Equal)` exactly when the two values are `==`: atoms by definition (with
+`Eq` guaranteeing reflexivity); the lift because both sides must be `None` or
+both inner values equal; inclusion/embedding because mutual inclusion of
+finite structures forces equality; prefix pointwise because mutual prefix
+forces equal lengths and pointwise equality; and a product of such fields is
+again exact, provided every field participates — which the derive guarantees
+by construction. Equivalence classes therefore enter **only** where they are
+declared: `#[ord(ignore)]` (the derived `Data`, whose equivalence "same inner
+data" coincides with its hand-written `PartialEq`) and the hand-written toy
+quotient (`EvilQuoteData`). No trait law relates `ContentOrd` to `PartialEq`
+(decision 16); the sharper fact that content equivalence *is* structural
+equality for `InnerData` and everything below it is a crate-level property,
+pinned by §7.5's twin tests.
 
 ### 4.2 Well-foundedness (the termination proof survives)
 
@@ -595,12 +688,14 @@ public API).
 
 ### 5.1 The module
 
-Contents, in order (doc comments abbreviated here where §1 already gives them
-in full; write them out):
+Contents, in order: the module doc, the two traits of §1 (verbatim, with
+their full doc comments), then the combinators — the shared vocabulary the
+blanket impls, the derive expansion, the manual impls and the attributes all
+use:
 
 ```rust
-//! The document order: building blocks and the [ContentOrd] trait (design
-//! doc §8, step 6.5).
+//! The document order: building blocks, the [ContentOrd] trait and the
+//! [ContentIdentity] marker (design doc §8, step 6.5).
 //!
 //! The standard library's `PartialOrd`/`Ord` on containers is lexicographic
 //! and is NOT what a removal-shaped order needs (removing an element can
@@ -616,13 +711,9 @@ use std::num::{NonZeroU32, NonZeroU64};
 
 use crate::tables::{Key, OrderedKey, OrderedTable, Table};
 
-pub trait ContentOrd {
-    // exactly as §1, with content_eq / content_le / content_lt defaults
-}
+pub trait ContentOrd { /* §1, verbatim */ }
+pub trait ContentIdentity: Eq {} /* §1, verbatim */
 ```
-
-Then the free-function combinators — the shared vocabulary the blanket impls,
-the derive expansion, the manual impls and the attributes all use:
 
 ```rust
 /// Product order: combines per-field comparisons. `Equal` is neutral; two
@@ -642,7 +733,12 @@ pub fn combine(fields: impl IntoIterator<Item = Option<Ordering>>) -> Option<Ord
 }
 
 /// Discrete order: comparable only when equal.
-pub fn discrete<T: PartialEq + ?Sized>(a: &T, b: &T) -> Option<Ordering> {
+///
+/// `Eq`, not `PartialEq`: the document order's reflexivity law rests on the
+/// leaf's `==` being reflexive — a `PartialEq`-only type like `f64` would
+/// break it through `NaN != NaN`. The bound puts that obligation in the
+/// type system.
+pub fn discrete<T: Eq + ?Sized>(a: &T, b: &T) -> Option<Ordering> {
     (a == b).then_some(Ordering::Equal)
 }
 
@@ -694,9 +790,10 @@ pub fn map_inclusion<K: Ord, V>(
 /// Sequence embedding: a strict subsequence — obtainable by *deleting*
 /// elements, the survivors keeping their relative order; contiguity is NOT
 /// required, so `[1,3]` is a subsequence of `[1,2,3]` and compares `Less`.
-/// A reordering is incomparable. Elements are matched by `==`.
-pub fn subsequence<T: PartialEq>(a: &[T], b: &[T]) -> Option<Ordering> {
-    fn embeds<T: PartialEq>(small: &[T], big: &[T]) -> bool {
+/// A reordering is incomparable. Elements are matched by `==` (`Eq` for the
+/// same reflexivity reason as [discrete]).
+pub fn subsequence<T: Eq>(a: &[T], b: &[T]) -> Option<Ordering> {
+    fn embeds<T: Eq>(small: &[T], big: &[T]) -> bool {
         let mut rest = big.iter();
         small.iter().all(|x| rest.any(|y| y == x))
     }
@@ -737,36 +834,42 @@ holds `g3` against `g2`.)
 ### 5.2 The `with =` helpers
 
 The functions field attributes reach for. The first two exist for *foreign*
-element types the orphan rule keeps out of the trait (they need only
-`PartialEq`); the third is the positional-identity rule for enrolled types:
+element types the orphan rule keeps out of the traits; the third is the
+positional-identity rule for enrolled types:
 
 ```rust
 /// `Option` lift with a discrete inner comparison — for
 /// `#[ord(with = option_lift_discrete)]` on an `Option` whose inner type is
 /// foreign (`Option<NonEmptyString>`, `Option<WeekStart>`, …).
-pub fn option_lift_discrete<T: PartialEq>(a: &Option<T>, b: &Option<T>) -> Option<Ordering> {
+pub fn option_lift_discrete<T: Eq>(a: &Option<T>, b: &Option<T>) -> Option<Ordering> {
     option_lift(a, b, |x, y| discrete(x, y))
 }
 
 /// Sequence embedding with elements matched discretely (by `==`) — the `Vec`
 /// analogue of [option_lift_discrete], for `#[ord(with = vec_subsequence)]`
-/// on a `Vec` whose element type is foreign. (For an *enrolled* element type
-/// the blanket `Vec` impl already gives exactly this behavior.)
-pub fn vec_subsequence<T: PartialEq>(a: &Vec<T>, b: &Vec<T>) -> Option<Ordering> {
+/// on a `Vec` whose element type is foreign. (For an *enrolled*
+/// [ContentIdentity] element type the blanket `Vec` impl already gives
+/// exactly this behavior.)
+pub fn vec_subsequence<T: Eq>(a: &Vec<T>, b: &Vec<T>) -> Option<Ordering> {
     subsequence(a, b)
 }
 
 /// Prefix-pointwise comparison through [ContentOrd] — for
 /// `#[ord(with = vec_prefix)]` where element identity is positional
-/// (prefilled groups) and the subsequence default would be wrong.
+/// (prefilled groups). Positional elements are never matched by `==`, so no
+/// [ContentIdentity] is required of them — deliberately: a positional
+/// element type *without* the marker also keeps the `Vec` blanket from
+/// applying, which turns a forgotten attribute into a compile error.
 pub fn vec_prefix<T: ContentOrd>(a: &Vec<T>, b: &Vec<T>) -> Option<Ordering> {
     prefix_pointwise(a, b, ContentOrd::content_cmp)
 }
 ```
 
-### 5.3 The leaf and container impls
+### 5.3 The leaf, container and tuple impls
 
-Scalar atoms, via a private macro:
+Scalar atoms, via a private macro — note it emits **both** traits (an atom's
+content equivalence is `==` by construction, so the marker is always
+truthful for it):
 
 ```rust
 macro_rules! impl_atoms {
@@ -776,6 +879,9 @@ macro_rules! impl_atoms {
                 discrete(self, other)
             }
         }
+        // An atom's content equivalence IS `==`, so `==` is content
+        // identity and the type may be matched inside containers.
+        impl ContentIdentity for $t {}
     )* };
 }
 
@@ -793,8 +899,10 @@ configuration records with this):
 
 ```rust
 /// Enrolls local types into the document order as atoms (discretely
-/// compared: equal or incomparable). For foreign types use `#[ord(atom)]`
-/// on the field instead; for generic types write the impl by hand.
+/// compared: equal or incomparable), together with [ContentIdentity] —
+/// an atom's content equivalence is `==` by construction, so the marker is
+/// always truthful for it. For foreign types use `#[ord(atom)]` on the
+/// field instead; for generic types write the impls by hand.
 #[macro_export]
 macro_rules! impl_content_ord_atom {
     ($($t:ty),* $(,)?) => { $(
@@ -803,12 +911,25 @@ macro_rules! impl_content_ord_atom {
                 $crate::partial_order::discrete(self, other)
             }
         }
+        impl $crate::partial_order::ContentIdentity for $t {}
     )* };
 }
 ```
 
-The container blankets — the heart of the dispatch design. `ContentOrd` has
-no `PartialEq` supertrait, so bounds that need `==` say so explicitly:
+Tuples of markers are markers (composite table keys — `(PeriodId,
+SubjectId)`, `(SlotId, WeekId)` — are matched by `Ord`, which compares
+component-wise `==`):
+
+```rust
+// A tuple of content identities is a content identity: tuple `==` is
+// component-wise `==`, which coincides with component-wise content
+// equivalence by the components' own markers.
+impl<A: ContentIdentity, B: ContentIdentity> ContentIdentity for (A, B) {}
+impl<A: ContentIdentity, B: ContentIdentity, C: ContentIdentity> ContentIdentity for (A, B, C) {}
+```
+
+The container blankets — the heart of the dispatch design. Every matching
+position requires `ContentIdentity` (decision 17):
 
 ```rust
 impl<T: ContentOrd> ContentOrd for Option<T> {
@@ -817,13 +938,17 @@ impl<T: ContentOrd> ContentOrd for Option<T> {
     }
 }
 
-impl<T: Ord> ContentOrd for BTreeSet<T> {
+// Set elements are matched by `Ord`, whose `Equal` is `==` by Rust's own
+// contract — sound exactly when `==` is content identity for the element
+// type, hence the marker bound. A quotiented element type does not compile.
+impl<T: Ord + ContentIdentity> ContentOrd for BTreeSet<T> {
     fn content_cmp(&self, other: &Self) -> Option<Ordering> {
         set_inclusion(self, other)
     }
 }
 
-impl<K: Ord, V: ContentOrd> ContentOrd for BTreeMap<K, V> {
+// Keys are row identity; the marker bound is the same argument as for sets.
+impl<K: Ord + ContentIdentity, V: ContentOrd> ContentOrd for BTreeMap<K, V> {
     fn content_cmp(&self, other: &Self) -> Option<Ordering> {
         map_inclusion(self, other, ContentOrd::content_cmp)
     }
@@ -831,20 +956,21 @@ impl<K: Ord, V: ContentOrd> ContentOrd for BTreeMap<K, V> {
 
 /// Sequence embedding — the value-borne-identity reading, which is the
 /// common case reached through trait dispatch (id lists inside table
-/// values). Deliberately a blanket: a wrong fit can only be too strict
-/// (never blesses a non-removal change), and it is gated on
-/// `T: ContentOrd` so it never fires on a type not deliberately enrolled.
-/// Element matching is by `==` (the container scope law — never by content
-/// equivalence). Where identity is positional, override the field with
-/// `#[ord(with = vec_prefix)]`; where the list is a relational chain, with
+/// values). Elements are matched by `==`, hence the [ContentIdentity]
+/// bound; it doubles as a safety net: a structured element type without
+/// the marker (e.g. `PrefilledGroup`) does not dispatch at all, so the
+/// field demands an explicit `#[ord(...)]` attribute instead of silently
+/// getting a wrong rule. Where identity is positional, use
+/// `#[ord(with = vec_prefix)]`; where the list is a relational chain,
 /// `#[ord(atom)]` (§2, the identity criterion).
-impl<T: ContentOrd + PartialEq> ContentOrd for Vec<T> {
+impl<T: ContentOrd + ContentIdentity> ContentOrd for Vec<T> {
     fn content_cmp(&self, other: &Self) -> Option<Ordering> {
         subsequence(self, other)
     }
 }
 
-impl<I: Key, T: ContentOrd> ContentOrd for Table<I, T> {
+// Table keys are row identity — same marker argument as `BTreeMap`.
+impl<I: Key + ContentIdentity, T: ContentOrd> ContentOrd for Table<I, T> {
     fn content_cmp(&self, other: &Self) -> Option<Ordering> {
         let self_in_other = self.keys().all(|k| other.contains(&k));
         let other_in_self = other.keys().all(|k| self.contains(&k));
@@ -861,7 +987,7 @@ impl<I: Key, T: ContentOrd> ContentOrd for Table<I, T> {
     }
 }
 
-impl<I: OrderedKey, T: ContentOrd> ContentOrd for OrderedTable<I, T> {
+impl<I: OrderedKey + ContentIdentity, T: ContentOrd> ContentOrd for OrderedTable<I, T> {
     fn content_cmp(&self, other: &Self) -> Option<Ordering> {
         let self_keys: Vec<I> = self.keys().collect();
         let other_keys: Vec<I> = other.keys().collect();
@@ -877,7 +1003,9 @@ impl<I: OrderedKey, T: ContentOrd> ContentOrd for OrderedTable<I, T> {
 (Both table impls use only the public read API — `keys`, `contains`, `iter`,
 `get` — so `tables.rs` stays untouched. `OrderedTable` keys are unique, so the
 embedding is unambiguous, and a shared key set in a different order yields
-`None` from the key comparison before any value is consulted.)
+`None` from the key comparison before any value is consulted. The
+`ContentIdentity: Eq` supertrait also supplies the `Eq` that `subsequence`
+demands of the key vectors.)
 
 ### 5.4 Wiring in `state/src/lib.rs`
 
@@ -906,12 +1034,12 @@ and
 
 ```rust
 pub use join::{Join, Joinable, Lookup};
-pub use partial_order::ContentOrd;
+pub use partial_order::{ContentIdentity, ContentOrd};
 ```
 
 (The combinators and helpers stay behind the module path —
-`collomatique_state::partial_order::…` — only the trait gets a root
-re-export, mirroring `Fixable`.)
+`collomatique_state::partial_order::…` — only the traits get root
+re-exports, mirroring `Fixable`.)
 
 ### 5.5 Commit-1 unit tests
 
@@ -934,21 +1062,25 @@ In `partial_order.rs` `#[cfg(test)]`, on plain `u64` / `String` fixtures:
   `subsequence`, which says `Less` on the same input — the two rules differ
   exactly on identity); mixed directions → `None`; empty below anything.
 * the default methods: `content_eq` / `content_le` / `content_lt` on a small
-  enrolled type, including `content_lt == false` on equivalent values.
+  enrolled type, including `content_lt == false` on equivalent values, and a
+  reflexivity check `x.content_cmp(&x.clone()) == Some(Equal)`.
 * Blanket dispatch smoke tests: `Option<u32>` (`None < Some(3)`,
   `Some(3)` vs `Some(4)` → `None`), `Vec<u32>` subsequence,
-  `BTreeMap<u64, u32>` (value renumber → `None`), and `Table` /
-  `OrderedTable` with a local test id type (row removal → `Less`, reorder →
-  `None`, value change dispatching into the value's impl).
+  `BTreeMap<u64, u32>` (value renumber → `None`), `Table` / `OrderedTable`
+  with a local test id type (row removal → `Less`, reorder → `None`, value
+  change dispatching into the value's impl), and a
+  `Table<(u64, u64), BTreeSet<u64>>` exercising the tuple `ContentIdentity`
+  (composite keys compile and compare — this is the assignments/colloscope
+  shape).
 
 ---
 
-## 6. Commit 2 — `#[derive(ContentOrd)]` in `collomatique-state-derive`
+## 6. Commit 2 — the derives in `collomatique-state-derive`
 
 ### 6.1 Registration
 
-New file `state-derive/src/content_ord.rs`; in `state-derive/src/lib.rs`, next
-to the existing entries:
+New file `state-derive/src/content_ord.rs` holding both entry points; in
+`state-derive/src/lib.rs`, next to the existing entries:
 
 ```rust
 #[proc_macro_derive(ContentOrd, attributes(ord))]
@@ -957,11 +1089,21 @@ pub fn derive_content_ord(input: TokenStream) -> TokenStream {
         .unwrap_or_else(|e| e.to_compile_error())
         .into()
 }
+
+// Registers `attributes(ord)` too: the identity derive must *read* the
+// `#[ord(...)]` attributes to reject quotients, and registration keeps the
+// attribute inert even when `ContentIdentity` is derived alone.
+#[proc_macro_derive(ContentIdentity, attributes(ord))]
+pub fn derive_content_identity(input: TokenStream) -> TokenStream {
+    content_ord::derive_identity(parse_macro_input!(input as DeriveInput))
+        .unwrap_or_else(|e| e.to_compile_error())
+        .into()
+}
 ```
 
-And in `state/src/lib.rs`, the derive joins the existing re-export (derive
-macros and traits live in different namespaces, so the name `ContentOrd` can
-be both — the `Join` trait/derive pair is the in-house precedent). Old code:
+And in `state/src/lib.rs`, the derives join the existing re-export (derive
+macros and traits live in different namespaces, so each name can be both —
+the `Join` trait/derive pair is the in-house precedent). Old code:
 
 ```rust
 pub use collomatique_state_derive::{EntityId, Join, References};
@@ -970,106 +1112,333 @@ pub use collomatique_state_derive::{EntityId, Join, References};
 New code:
 
 ```rust
-pub use collomatique_state_derive::{ContentOrd, EntityId, Join, References};
+pub use collomatique_state_derive::{ContentIdentity, ContentOrd, EntityId, Join, References};
 ```
 
-### 6.2 What the derive accepts and what it generates
+### 6.2 Shape gate and attribute parsing
 
-Accepted inputs: **non-generic structs with named fields** (including empty
-ones) and **non-generic enums whose variants have named fields or are unit
-variants**. Everything else — generics (the `Join` precedent), tuple structs,
-tuple variants, unions — is rejected with a spanned `syn::Error` naming the
-restriction. All our targets are non-generic named shapes.
+Accepted inputs, for both derives: **non-generic structs with named fields**
+(including empty ones) and **non-generic enums whose variants have named
+fields or are unit variants**. Everything else — generics (the `Join`
+precedent), tuple structs, tuple variants, unions — is rejected with a
+spanned `syn::Error` naming the restriction. All our targets are non-generic
+named shapes.
 
-Field rule resolution: at most one `#[ord(…)]` attribute per field (a second
-is a spanned error), parsed as:
+The attribute grammar, shared by both derives:
 
 ```rust
+use proc_macro2::TokenStream;
+use quote::{format_ident, quote};
+use syn::parse::{Parse, ParseStream};
+use syn::spanned::Spanned;
+use syn::{Attribute, Data, DeriveInput, Expr, Field, Fields, FieldsNamed, Ident, Token};
+
+/// The comparison rule of one field, from its optional `#[ord(...)]`
+/// attribute.
 enum FieldRule {
-    /// No attribute: dispatch through the trait.
+    /// No attribute: dispatch through `ContentOrd` on the field's type.
     Default,
-    /// `#[ord(atom)]`: inline discrete comparison.
+    /// `#[ord(atom)]`: inline discrete comparison (`discrete`, whose `Eq`
+    /// bound enforces the reflexivity obligation on the field's type).
     Atom,
-    /// `#[ord(ignore)]`: the order does not see this field (constant
-    /// `Equal`, no bounds on the field's type) — the structural source of
-    /// equivalence classes.
+    /// `#[ord(ignore)]`: the order does not see this field — the
+    /// structural source of equivalence classes.
     Ignore,
-    /// `#[ord(partial_ord)]`: use the field type's existing `PartialOrd`.
-    PartialOrd,
+    /// `#[ord(total)]`: the field's native total order is its content
+    /// order (`Ord::cmp`, self-enforcing — see the codegen table).
+    Total,
     /// `#[ord(with = <expr>)]`: call the expression (path or closure).
-    With(syn::Expr),
+    With(Expr),
+}
+
+impl Parse for FieldRule {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let ident: Ident = input.parse()?;
+        match ident.to_string().as_str() {
+            "atom" => Ok(FieldRule::Atom),
+            "ignore" => Ok(FieldRule::Ignore),
+            "total" => Ok(FieldRule::Total),
+            // A plain expression, not a string: `with = option_lift_discrete`
+            // and `with = |a, b| …` both parse (house style, like
+            // `#[join(error = NewId)]`).
+            "with" => {
+                input.parse::<Token![=]>()?;
+                Ok(FieldRule::With(input.parse()?))
+            }
+            _ => Err(syn::Error::new(
+                ident.span(),
+                "expected `atom`, `ignore`, `total` or `with = <expression>`",
+            )),
+        }
+    }
+}
+
+/// Extracts the rule of one field; at most one `#[ord(...)]` per field.
+fn field_rule(attrs: &[Attribute]) -> syn::Result<FieldRule> {
+    let mut found: Option<FieldRule> = None;
+    for attr in attrs {
+        if !attr.path().is_ident("ord") {
+            continue;
+        }
+        if found.is_some() {
+            return Err(syn::Error::new(
+                attr.span(),
+                "at most one `#[ord(...)]` attribute per field",
+            ));
+        }
+        found = Some(attr.parse_args()?);
+    }
+    Ok(found.unwrap_or(FieldRule::Default))
 }
 ```
 
-parsed by a small `syn::parse::Parse` impl: an identifier, which must be
-`atom`, `ignore`, `partial_ord`, or `with` followed by `=` and an `Expr`.
-Anything else is a spanned error listing the four forms. Note `with` takes a
-**plain expression, not a string** — `#[ord(with = option_lift_discrete)]`
-and `#[ord(with = |a, b| …)]` both parse.
+### 6.3 `ContentOrd` codegen
 
-Per-field generated comparison, for a struct field `x` (fully-qualified paths
-throughout, per the house lesson on derive hygiene; `ContentOrd::content_cmp`
-is called in function position so the receiver type is inferred from the
-arguments and never needs to be re-spelled):
-
-| rule | generated expression |
-| --- | --- |
-| `Default` | `::collomatique_state::partial_order::ContentOrd::content_cmp(&self.x, &other.x)` |
-| `Atom` | `::collomatique_state::partial_order::discrete(&self.x, &other.x)` |
-| `Ignore` | `::core::option::Option::Some(::core::cmp::Ordering::Equal)` |
-| `PartialOrd` | `::core::cmp::PartialOrd::partial_cmp(&self.x, &other.x)` |
-| `With(expr)` | `(#expr)(&self.x, &other.x)` |
-
-For a **struct**, the impl is the product:
+Per-field generated comparison (fully-qualified paths throughout, per the
+house lesson on derive hygiene; trait methods are called in function position
+so the receiver type is inferred from the arguments and never re-spelled).
+`lhs`/`rhs` are the borrowed access expressions — `&self.x` / `&other.x` for
+structs, the match bindings for enums:
 
 ```rust
-impl ::collomatique_state::partial_order::ContentOrd for Foo {
-    fn content_cmp(
-        &self,
-        other: &Self,
-    ) -> ::core::option::Option<::core::cmp::Ordering> {
-        ::collomatique_state::partial_order::combine([
-            /* one expression per field, in declaration order */
-        ])
+fn cmp_expr(rule: &FieldRule, lhs: TokenStream, rhs: TokenStream) -> TokenStream {
+    match rule {
+        FieldRule::Default => quote! {
+            ::collomatique_state::partial_order::ContentOrd::content_cmp(#lhs, #rhs)
+        },
+        FieldRule::Atom => quote! {
+            ::collomatique_state::partial_order::discrete(#lhs, #rhs)
+        },
+        // Constant Equal: the order does not see the field. This is what
+        // makes the containing type's content equivalence coarser than its
+        // `==` — the declared quotient.
+        FieldRule::Ignore => quote! {
+            ::core::option::Option::Some(::core::cmp::Ordering::Equal)
+        },
+        // `Ord::cmp`, not `partial_cmp`: the call itself demands `Ord`,
+        // whose contract (`Ord: Eq`, `cmp(x, x) == Equal`, `Equal` iff
+        // `==`) is exactly what makes the field's native order a valid,
+        // reflexive content order. A genuinely partial order goes through
+        // `with` instead.
+        FieldRule::Total => quote! {
+            ::core::option::Option::Some(::core::cmp::Ord::cmp(#lhs, #rhs))
+        },
+        FieldRule::With(expr) => quote! { (#expr)(#lhs, #rhs) },
     }
 }
 ```
 
-A struct with no fields short-circuits to
-`::core::option::Option::Some(::core::cmp::Ordering::Equal)` (an empty array
-literal would not infer its item type).
-
-For an **enum**: a match over `(self, other)`; each variant produces one arm
-destructuring both sides with distinct bindings and combining its fields'
-comparisons (same table, applied to the bindings, which are references thanks
-to match ergonomics); a unit variant's arm yields `Some(Equal)`; and — only
-when the enum has at least two variants — a trailing `_ => None` arm makes
-mixed variants incomparable:
+The struct body — the product over all fields, in declaration order; an
+empty struct short-circuits (an empty array literal would not infer its item
+type):
 
 ```rust
-match (self, other) {
-    (
-        Self::Prefilled { groups: self_groups },
-        Self::Prefilled { groups: other_groups },
-    ) => ::collomatique_state::partial_order::combine([
-        (vec_prefix)(self_groups, other_groups),
-    ]),
-    (
-        Self::Automatic { excluded_students: self_excluded_students },
-        Self::Automatic { excluded_students: other_excluded_students },
-    ) => ::collomatique_state::partial_order::combine([
-        ::collomatique_state::partial_order::ContentOrd::content_cmp(
-            self_excluded_students,
-            other_excluded_students,
-        ),
-    ]),
-    _ => ::core::option::Option::None,
+fn struct_body(fields: &FieldsNamed) -> syn::Result<TokenStream> {
+    if fields.named.is_empty() {
+        return Ok(quote! {
+            ::core::option::Option::Some(::core::cmp::Ordering::Equal)
+        });
+    }
+    let cmps = fields
+        .named
+        .iter()
+        .map(|field| {
+            let rule = field_rule(&field.attrs)?;
+            let name = field.ident.as_ref().expect("named field");
+            Ok(cmp_expr(&rule, quote! { &self.#name }, quote! { &other.#name }))
+        })
+        .collect::<syn::Result<Vec<_>>>()?;
+    Ok(quote! {
+        ::collomatique_state::partial_order::combine([#(#cmps),*])
+    })
 }
 ```
 
-(This example is literally what `GroupListFilling` will expand to.)
+The enum body — one arm per variant pair of the *same* variant, destructuring
+both sides with distinct bindings (which are references thanks to match
+ergonomics, so they feed `cmp_expr` directly); a unit variant is the empty
+product; a trailing `_ => None` arm is emitted only when the enum has at
+least two variants (on a single-variant enum it would be unreachable and
+warn):
 
-### 6.3 Direct integration tests
+```rust
+fn enum_body(data: &syn::DataEnum) -> syn::Result<TokenStream> {
+    let mut arms = Vec::new();
+    for variant in &data.variants {
+        let v = &variant.ident;
+        match &variant.fields {
+            Fields::Unit => arms.push(quote! {
+                (Self::#v, Self::#v) =>
+                    ::core::option::Option::Some(::core::cmp::Ordering::Equal),
+            }),
+            Fields::Named(fields) => {
+                let names: Vec<&Ident> =
+                    fields.named.iter().map(|f| f.ident.as_ref().unwrap()).collect();
+                let self_bind: Vec<Ident> =
+                    names.iter().map(|n| format_ident!("self_{}", n)).collect();
+                let other_bind: Vec<Ident> =
+                    names.iter().map(|n| format_ident!("other_{}", n)).collect();
+                let cmps = fields
+                    .named
+                    .iter()
+                    .zip(self_bind.iter().zip(&other_bind))
+                    .map(|(field, (s, o))| {
+                        let rule = field_rule(&field.attrs)?;
+                        Ok(cmp_expr(&rule, quote! { #s }, quote! { #o }))
+                    })
+                    .collect::<syn::Result<Vec<_>>>()?;
+                arms.push(quote! {
+                    (
+                        Self::#v { #(#names: #self_bind),* },
+                        Self::#v { #(#names: #other_bind),* },
+                    ) => ::collomatique_state::partial_order::combine([#(#cmps),*]),
+                });
+            }
+            Fields::Unnamed(f) => {
+                return Err(syn::Error::new(
+                    f.span(),
+                    "#[derive(ContentOrd)] does not support tuple variants",
+                ));
+            }
+        }
+    }
+    let fallback = (data.variants.len() > 1)
+        .then(|| quote! { _ => ::core::option::Option::None, });
+    Ok(quote! {
+        match (self, other) {
+            #(#arms)*
+            #fallback
+        }
+    })
+}
+```
+
+And the entry point:
+
+```rust
+pub fn derive(input: DeriveInput) -> syn::Result<TokenStream> {
+    reject_generics(&input)?;
+    let ident = &input.ident;
+    let body = match &input.data {
+        Data::Struct(s) => match &s.fields {
+            Fields::Named(fields) => struct_body(fields)?,
+            Fields::Unit => quote! {
+                ::core::option::Option::Some(::core::cmp::Ordering::Equal)
+            },
+            Fields::Unnamed(f) => {
+                return Err(syn::Error::new(
+                    f.span(),
+                    "#[derive(ContentOrd)] does not support tuple structs",
+                ));
+            }
+        },
+        Data::Enum(e) => enum_body(e)?,
+        Data::Union(u) => {
+            return Err(syn::Error::new(
+                u.union_token.span(),
+                "#[derive(ContentOrd)] does not support unions",
+            ));
+        }
+    };
+    Ok(quote! {
+        impl ::collomatique_state::partial_order::ContentOrd for #ident {
+            fn content_cmp(
+                &self,
+                other: &Self,
+            ) -> ::core::option::Option<::core::cmp::Ordering> {
+                #body
+            }
+        }
+    })
+}
+```
+
+(This example expansion is literally what `GroupListFilling` will produce:
+one `Prefilled`/`Prefilled` arm calling `(vec_prefix)(self_groups,
+other_groups)`, one `Automatic`/`Automatic` arm dispatching the student set
+through the trait, and `_ => None`.)
+
+### 6.4 `ContentIdentity` codegen
+
+**Never automatic** (decision 18): the compiler strips `#[derive(...)]`
+lists from macro input, so no macro can know whether `PartialEq` is derived
+or hand-written — and a macro must never sign a claim it cannot check. The
+explicit derive checks everything checkable and documents the one premise it
+cannot:
+
+```rust
+/// `#[derive(ContentIdentity)]`: asserts that `==` coincides with content
+/// equivalence for this type, so containers may match it by `==`/`Ord`.
+///
+/// The macro verifies what it can see: every field's rule must preserve
+/// identity — `ignore` is rejected outright (an ignored field IS a content
+/// quotient), `with` is rejected as unanalyzable (hand-write the marker
+/// impl if the custom rule preserves identity), default fields must
+/// themselves be `ContentIdentity`, atom fields must be `Eq`, and `total`
+/// fields are safe by `Ord`'s own contract (`Equal` iff `==`).
+///
+/// ONE premise remains that no macro can verify: this type's `==` must be
+/// the structural, field-wise equality — in practice, `PartialEq` must be
+/// *derived*, in the same derive list where this marker is requested. That
+/// co-location is the audit trail: replacing the derived `PartialEq` with a
+/// hand-written one obligates re-justifying the `ContentIdentity` right
+/// next to it.
+pub fn derive_identity(input: DeriveInput) -> syn::Result<TokenStream> {
+    reject_generics(&input)?;
+    let mut asserts = Vec::new();
+    for field in all_named_fields(&input)? /* struct fields, or every variant's */ {
+        let ty = &field.ty;
+        match field_rule(&field.attrs)? {
+            FieldRule::Default => asserts.push(quote! {
+                assert_content_identity::<#ty>();
+            }),
+            FieldRule::Atom => asserts.push(quote! {
+                assert_eq_impl::<#ty>();
+            }),
+            // Safe by Ord's contract: Ord: Eq, and cmp == Equal iff ==.
+            FieldRule::Total => {}
+            FieldRule::Ignore => {
+                return Err(syn::Error::new(
+                    field.span(),
+                    "an `#[ord(ignore)]`d field is a content quotient: \
+                     this type cannot be ContentIdentity",
+                ));
+            }
+            FieldRule::With(_) => {
+                return Err(syn::Error::new(
+                    field.span(),
+                    "`#[ord(with = ...)]` cannot be analyzed by the derive; \
+                     write the ContentIdentity impl by hand if the custom \
+                     rule preserves identity",
+                ));
+            }
+        }
+    }
+    let ident = &input.ident;
+    // The static-assert pattern, not `where`-clauses on the impl: failures
+    // are deterministic compile errors with a clear span, and the
+    // `ContentIdentity: Eq` supertrait already forces `#ident: Eq` through
+    // the emitted impl itself.
+    Ok(quote! {
+        impl ::collomatique_state::partial_order::ContentIdentity for #ident {}
+        const _: () = {
+            fn assert_content_identity<T: ::collomatique_state::partial_order::ContentIdentity>() {}
+            fn assert_eq_impl<T: ::core::cmp::Eq>() {}
+            #[allow(dead_code)]
+            fn asserts() {
+                #(#asserts)*
+            }
+        };
+    })
+}
+```
+
+(`reject_generics` and `all_named_fields` are the small shared helpers the
+snippets above imply: the first errors on any generic parameter, the second
+flattens struct fields or all variants' named fields and errors on tuple
+shapes.)
+
+### 6.5 Direct integration tests
 
 New file `state/tests/derive_content_ord.rs` (integration test on purpose —
 the generated code's absolute `::collomatique_state::` paths only resolve from
@@ -1078,33 +1447,40 @@ local toy types and pins every macro behavior:
 
 * a struct whose fields exercise **default dispatch** through `Option`,
   `BTreeSet`, `BTreeMap`, `Vec`, `Table<u64, _>` and `OrderedTable<u64, _>`
-  (plain `u64` keys satisfy `Key`/`OrderedKey`, no id type needed): row
+  (plain `u64` keys satisfy `Key`/`OrderedKey` and carry the marker): row
   removal → `Less`, reorder → `None`, set shrink → `Less`, option clear →
   `Less`, value renumber → `None`;
-* a field of a local type with **no** `ContentOrd` impl under `#[ord(atom)]`:
-  equal → `Equal`, changed → `None`;
+* a field of a local type with **no** impls under `#[ord(atom)]`: equal →
+  `Equal`, changed → `None`;
 * a field under `#[ord(ignore)]` — of a type with no impls at all: two
   values differing only there compare `Some(Equal)` (and `content_eq` is
   true) while being `!=` — the equivalence-class pin;
 * a field under `#[ord(with = option_lift_discrete)]` (path form) and another
   under `#[ord(with = |a, b| prefix_pointwise(a, b, option_lift_discrete))]`
   (closure form, the exact shape §7.3 uses for `group_names`);
-* a field under `#[ord(partial_ord)]` on a type whose derived `PartialOrd` is
-  the intended order, asserting the numeric behavior really is used;
+* a field under `#[ord(total)]` on a numeric-like type, asserting the native
+  total order really is used (`3` vs `5` → `Some(Less)` — the one rule where
+  two different values are comparable);
 * an enum with two named-field variants and a unit variant: same variant →
   product, unit/unit → `Equal`, mixed → `None`;
 * the product mixing rules on a two-field struct: one field down + one field
   up → `None`; one down + one equal → `Less`;
 * an empty struct → `Equal`;
-* `content_eq` / `content_le` / `content_lt` default methods behave.
+* `content_eq` / `content_le` / `content_lt` default methods behave;
+* **the identity derive**: `#[derive(PartialEq, Eq, ContentOrd,
+  ContentIdentity)]` on a struct of default/atom/total fields, then that
+  type used as a `BTreeSet` element inside another derived struct — the
+  dispatch compiling *is* the test, plus one behavioral assertion through
+  the outer set.
 
 Compile-failure cases (generics, tuple struct, duplicate attribute, unknown
-attribute argument) are asserted the same way the existing derives do it — if
+attribute argument, `ContentIdentity` over an `ignore`d or `with` field) are
+asserted the same way the existing derives do it — if
 `derive_refs.rs`/`derive_join.rs` have no trybuild harness, a comment records
 the spanned-error behavior instead of adding a new dev-dependency (no
 `Cargo.lock` churn in this step).
 
-### 6.4 End-to-end tests: the cascade running on a derived order
+### 6.6 End-to-end tests: the cascade running on a derived order
 
 New file `state/tests/cascade_on_derived_order.rs` (decision 15). The direct
 tests above check what the macro *generates*; this file checks that a derived
@@ -1165,7 +1541,9 @@ commits 3, 5 and 6.
 The `impl_content_ord_atom!` invocations of §3.4: the eleven ids in `ids.rs`,
 and the three configuration records next to their definitions (`Limits` in
 `settings.rs`, `BalancingOptions` in `balancing.rs`, `ExportConfig` in
-`export_config.rs`), each with its decision-13 comment.
+`export_config.rs`), each with its decision-13 comment. (The macro emits
+`ContentIdentity` alongside — truthful for atoms by construction, and
+harmless where unused.)
 
 ### 7.2 The derives
 
@@ -1227,7 +1605,9 @@ The full derive list (37 types): `Data`, `InnerData`, `Parameters`,
 `Incompatibility`, `GroupLists`, `GroupList`, `GroupListParameters`,
 `GroupListFilling`, `PrefilledGroup`, `Settings`, `Pairings`, `PairingRule`,
 `RulePart`, `SlotPairings`, `SlotPairingRule`, `SlotRulePart`, `Balancing`,
-`Colloscope`.
+`Colloscope`. **None of them derives `ContentIdentity`** — no entity type
+sits at a container matching position today, and the marker stays an
+explicit assertion (decision 17).
 
 ### 7.3 The eleven field attributes
 
@@ -1253,9 +1633,8 @@ use collomatique_state::partial_order::{
 };
 ```
 
-The `groups` override is the one site where the blanket's subsequence rule
-would be *wrong* rather than merely absent, and it deserves its own comment in
-the code:
+The `groups` field carries the fullest comment — the identity argument plus
+the compile-time safety net (decision 17):
 
 ```rust
     /// Groups are filled manually with prefilled students
@@ -1263,19 +1642,19 @@ the code:
         // Position-borne identity: group i binds to group name i, and group
         // numbers are referenced by index from the colloscope's placement
         // maps and interrogation cells — so the document order reads this
-        // Vec as a map from indices (prefix + pointwise). The Vec blanket's
-        // subsequence rule would both reject the minus-one-student fix
-        // (a modified group matches nothing under ==) and bless middle
-        // removals that silently re-aim every later group's references.
+        // Vec as a map from indices (prefix + pointwise). The blanket Vec
+        // rule (subsequence) does not even apply here: `PrefilledGroup` is
+        // deliberately not `ContentIdentity`, so omitting this attribute is
+        // a compile error, not a silently wrong order.
         #[ord(with = vec_prefix)]
         groups: Vec<PrefilledGroup>,
     },
 ```
 
-### 7.4 The one manual impl
+### 7.4 The two manual impls
 
 `NonEmptyRangeInclusive<T>` (`non_empty_range.rs` — generic, so outside the
-macro's reach):
+macro's reach), with both traits and both comments:
 
 ```rust
 /// The document order: a range is an atom — its content is the endpoint
@@ -1286,6 +1665,10 @@ impl<T: Ord + Clone> ContentOrd for NonEmptyRangeInclusive<T> {
         collomatique_state::partial_order::discrete(self, other)
     }
 }
+
+/// An atom's content equivalence is `==` by construction, so a range may
+/// be matched by equality inside containers.
+impl<T: Ord + Clone> ContentIdentity for NonEmptyRangeInclusive<T> {}
 ```
 
 ### 7.5 Commit-3 unit tests: the semantics, not the machinery
@@ -1344,10 +1727,9 @@ Must-cover list (one test each; names indicative):
   prefix/subsequence — a twin whose block list is a strict *truncation* of
   the other's is **also** `None` (★ decision 10).
 * `group_list_prefilled_minus_student_is_strictly_below` — rebuilt via
-  `GroupList::new` with one student removed from one group: `Some(Less)`.
-  **This is the regression test for the `vec_prefix` override** — under the
-  blanket subsequence rule the modified group would match nothing and the
-  comparison would report `None`.
+  `GroupList::new` with one student removed from one group: `Some(Less)` —
+  the semantic pin of the `vec_prefix` rule (the wrong-blanket route is
+  already dead at compile time, decision 17).
 * `group_list_trailing_group_removal_is_strictly_below` — a twin with the
   *last* group and its name removed (both `group_names` and `groups`
   truncated by one): `Some(Less)` — adding a group is adding content, zero
@@ -1412,14 +1794,15 @@ impl ContentOrd for QuoteData {
 ```
 
 `EvilQuoteData` ignores its mode — the hand-written miniature of `Data`'s
-ignored issuer, and a live example of the relaxed laws (its content
+ignored issuer, and a live example of the self-contained laws (its content
 equivalence is coarser than its derived `==`, which compares the mode too):
 
 ```rust
 /// The document order sees only the inner data: the mode is test-harness
 /// configuration, not content. Two [EvilQuoteData] with equal data but
 /// different modes are content-equivalent while `!=` — the toy mirror of
-/// [`Data`]'s ignored id issuer.
+/// [`Data`]'s ignored id issuer, and legal because no law relates
+/// `ContentOrd` to `PartialEq`.
 impl ContentOrd for EvilQuoteData {
     fn content_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         self.0.content_cmp(&other.0)
@@ -1536,6 +1919,11 @@ remains legitimate, G.2):
 ```rust
             Ok(backward) => {
                 if let Some(before) = before {
+                    // The in-flight monotonicity check (step 6.5): a fix
+                    // must land strictly below the pre-fix state in the
+                    // document order. Equivalent = the old no-op panic;
+                    // above or incomparable = a growing/sideways map, which
+                    // without this check would hang the cascade instead.
                     match (*data).content_cmp(&before) {
                         Some(Ordering::Less) => {}
                         Some(Ordering::Equal) => panic!(
@@ -1618,7 +2006,7 @@ expected string to `"landed equivalent"` (its message changed in §9.2, and
 each panic test should pin its own message rather than the shared
 `strict-monotonicity` prefix). This commit also adds the
 `a_growing_fix_through_a_derived_order_panics` test to
-`state/tests/cascade_on_derived_order.rs` (§6.4).
+`state/tests/cascade_on_derived_order.rs` (§6.6).
 
 ```rust
     // 10. A fix that grows the state: the map "fixes" the dangling author by
@@ -1822,20 +2210,22 @@ No `Cargo.toml`/`Cargo.lock` change is expected (no new dependencies — no Nix
   prescriptions (the fuzz-(a) companion, the "equivalence classes modulo the
   id issuer" phrasing, and every "universal minimal element" wording, notably
   Appendix H's policy rule D5.1's opening line) — and record the delivered
-  state as **Appendix I**: the `ContentOrd` trait and why it is not
-  `PartialOrd`; the intrinsic-order methodology (the order pre-exists the
-  map; fix behavior is audit material, never definition material); the
-  equivalence-tolerance laws and their container scope; the §2/§3 order
-  definition with the identity criterion for sequences and its instances
-  (★ `WeekBlock` atom, prefix-ordered groups/names with the external-index
-  argument); the configuration records as atoms and the retirement of the
-  universal-minimum axiom (★ superseding the step-6 ruling); the derive and
-  its four attributes; the engine assertion; the two new evil modes; and the
-  contract fuzz with its measured numbers;
+  state as **Appendix I**: the `ContentOrd` trait with self-contained laws
+  and why it is not `PartialOrd`; the `ContentIdentity` marker (positional
+  coincidence of `==` and content equivalence, enforced at container
+  matching positions; opt-in, derivable but never automatic); the
+  intrinsic-order methodology (the order pre-exists the map; fix behavior is
+  audit material, never definition material); the §2/§3 order definition
+  with the identity criterion for sequences and its instances (★ `WeekBlock`
+  atom, prefix-ordered groups/names with the external-index argument); the
+  configuration records as atoms and the retirement of the universal-minimum
+  axiom (★ superseding the step-6 ruling); the derive with its four
+  attributes (`atom`/`ignore`/`total`/`with`); the engine assertion; the two
+  new evil modes; and the contract fuzz with its measured numbers;
 * retire this plan: delete `docs/plans/plan_step_6_5.md` in the close-out
-  commit and pin the versions in the topic memory — the first draft at
-  `git show ec0dd2a2:docs/plans/plan_step_6_5.md`, the second at
-  `git show 85f44889:docs/plans/plan_step_6_5.md`, the final version at
+  commit and pin the versions in the topic memory — v1 at
+  `git show ec0dd2a2:…`, v2 at `git show 85f44889:…`, v3 at
+  `git show 74a80456:…`, the final version at
   `git show <close-out parent>:docs/plans/plan_step_6_5.md`;
 * update the topic memory: step 6.5 closed, next = step 7 (the `ops/`
   remaster).
