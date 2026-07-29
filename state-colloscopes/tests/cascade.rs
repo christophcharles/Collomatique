@@ -2499,3 +2499,255 @@ fn rejection_1b_a_lengthened_interrogation_removes_the_slot_it_overflows() {
         "and the target landed: the interrogation really is 90 minutes now"
     );
 }
+
+/// Rejection `2` — `AssignedStudentNotPresentForPeriod`. The op assigns a
+/// student who is not there.
+///
+/// A period `P`, a subject `S` that runs on it, an assignments row at `(P, S)`
+/// already holding student `A`, and a student `B` who excludes `P`. Target:
+/// `AssignmentOp::SetRow(P, S, {A, B})`. The op applies, the checker reports
+/// `AssignedStudentNotPresentForPeriod { P, S, B }` (`invariants.rs:495-506`),
+/// the gate rolls it back, and the arm is asked on the restored row — which
+/// holds `A` alone. `row.contains(B)` is false, the arm answers `None`, and the
+/// target is convicted.
+///
+/// **The construction obeys §9ter.2 — fail on the last conjunct.** The arm is a
+/// two-step chain: the row exists, *and* it holds the named student. The row is
+/// made to pre-exist, with a legitimate member in it, so the first step passes
+/// and the second is the one that decides. Written the lazy way — no row at all
+/// before the target — the *presence* step would fail instead and the test
+/// would go green even for a map that had dropped the membership test entirely.
+///
+/// **The other trap is the subject.** `S` must genuinely run on `P`. If it
+/// excluded `P`, `AssignmentForSubjectNotRunningOnPeriod` would fire too, and
+/// it is declared *before* `AssignedStudentNotPresentForPeriod`
+/// (`invariants.rs:483-506`), so the engine would pick it instead — its own
+/// shape test passes on the pre-op state, a fix would land, and this fixture
+/// would be testing a different trace while staying green.
+///
+/// `S` deliberately runs no interrogations: nothing in the assignments half of
+/// the checker looks at them, and the row costs a subject and no more.
+///
+/// **What the failure would look like.** Not a silent repair, here. The arm's
+/// `Some` branch rebuilds the row without the named student, and on the
+/// restored row that rebuild is `{A}` again — a perfect no-op fix, which the
+/// engine treats as a map-contract violation and panics on
+/// (`state/src/cascade.rs:87-95`). So an arm that lost this comparison crashes
+/// rather than corrupts. That is the shape of every arm whose fix removes one
+/// element from a row, and it is why the assertion below is worth having even
+/// though the damage would be loud.
+#[test]
+fn rejection_2_a_student_absent_from_the_period_convicts_the_assignment() {
+    let mut app = AppState::<Data, String>::new(Data::new());
+
+    let period: PeriodId = apply_new!(
+        app,
+        Op::Period(PeriodOp::AddFront),
+        NewId::PeriodId,
+        "adding the period"
+    );
+    let subject: SubjectId = apply_new!(
+        app,
+        Op::Subject(SubjectOp::AddAfter(
+            None,
+            plain_subject("Math", BTreeSet::new())
+        )),
+        NewId::SubjectId,
+        "adding the subject, which runs on the period"
+    );
+    let present_student: StudentId = apply_new!(
+        app,
+        Op::Student(StudentOp::Add(plain_student(BTreeSet::new()))),
+        NewId::StudentId,
+        "adding the student who is present for the period"
+    );
+    let absent_student: StudentId = apply_new!(
+        app,
+        Op::Student(StudentOp::Add(plain_student(BTreeSet::from([period])))),
+        NewId::StudentId,
+        "adding the student who excludes the period"
+    );
+    apply_ok(
+        &mut app,
+        Op::Assignment(AssignmentOp::SetRow(
+            period,
+            subject,
+            BTreeSet::from([present_student]),
+        )),
+        "filling the assignments row with the legitimate student",
+    );
+
+    let mut data = app.get_data().clone();
+    let before = data.get_inner_data().clone();
+
+    let (target, _new_info) = data.annotate(Op::Assignment(AssignmentOp::SetRow(
+        period,
+        subject,
+        BTreeSet::from([present_student, absent_student]),
+    )));
+
+    let err = apply_cascade(&mut data, target)
+        .expect_err("assigning an absent student must be refused, not repaired");
+
+    match err {
+        Error::BrokenInvariants(set) => assert_eq!(
+            set,
+            BTreeSet::from([FixableInvariant::Convergence(
+                Convergence::AssignedStudentNotPresentForPeriod {
+                    period,
+                    subject,
+                    student: absent_student,
+                }
+            )]),
+            "the target is convicted of exactly the absence its own payload introduces"
+        ),
+        other => panic!("expected BrokenInvariants, got {other:?}"),
+    }
+
+    assert_eq!(
+        data.get_inner_data(),
+        &before,
+        "a convicted target leaves the document bit-identical"
+    );
+    assert_eq!(
+        data.get_inner_data()
+            .params
+            .assignments
+            .students(period, subject),
+        Some(&BTreeSet::from([present_student])),
+        "and the innocent row is untouched — the present student is still assigned"
+    );
+}
+
+/// Rejection `3` — `InterrogationGroupOutOfBounds`. The op writes a group
+/// number no group list has.
+///
+/// A group list of **three** groups associated to `(P, S)`, and a colloscope
+/// cell at `(slot, week)` already holding group `0`. Target:
+/// `ColloscopeOp::SetInterrogation(slot, week, {0, 7})`. The op applies, the
+/// bound read from the association is `3`, and the checker reports
+/// `InterrogationGroupOutOfBounds(slot, week, 7)` (`invariants.rs:599-621`).
+/// The gate rolls it back, and the arm is asked on the restored cell — which
+/// holds `0` alone. `cell.contains(7)` is false, the arm answers `None`, and
+/// the target is convicted.
+///
+/// §9ter.2 again, and it is the reason the cell pre-exists holding `0`: the arm
+/// looks the cell up first and only then asks whether the named group is in it.
+/// Writing `{7}` into a cell that did not exist would fail at the lookup and
+/// prove nothing about the second step. Group `0` is also what keeps the
+/// pre-op document valid, since a cell must be non-empty to exist at all.
+///
+/// The enrichment this fixture needs is **commit 5** — the offending group
+/// number in the payload. Without it the invariant names only `(slot, week)`,
+/// and an arm that can merely see a cell there has no way to tell this trace
+/// from a legitimate one.
+///
+/// The failure mode is the same panic as rejection `2`'s: removing `7` from
+/// `{0}` gives `{0}` back, a perfect no-op fix. Note also that the arm tests
+/// **presence, not the bound** — deliberately, per its own comment
+/// (`resolution.rs:623-626`): after a group-list shrink has itself been
+/// repaired, the group can read as in-bounds again while still having to go.
+/// So this fixture pins the comparison the arm really makes.
+#[test]
+fn rejection_3_an_out_of_bounds_group_convicts_the_interrogation() {
+    let mut app = AppState::<Data, String>::new(Data::new());
+
+    let period: PeriodId = apply_new!(
+        app,
+        Op::Period(PeriodOp::AddFront),
+        NewId::PeriodId,
+        "adding the period"
+    );
+    let week: WeekId = apply_new!(
+        app,
+        Op::Week(WeekOp::AddFront(period, WeekDesc::default())),
+        NewId::WeekId,
+        "adding the week that carries the cell"
+    );
+    let subject: SubjectId = apply_new!(
+        app,
+        Op::Subject(SubjectOp::AddAfter(
+            None,
+            interrogation_subject("Math", BTreeSet::new())
+        )),
+        NewId::SubjectId,
+        "adding the subject"
+    );
+    let teacher: TeacherId = apply_new!(
+        app,
+        Op::Teacher(TeacherOp::Add(Teacher {
+            desc: Default::default(),
+            subjects: BTreeSet::from([subject]),
+        })),
+        NewId::TeacherId,
+        "adding the teacher"
+    );
+    let slot: SlotId = apply_new!(
+        app,
+        Op::Slot(SlotOp::AddAfter(None, make_slot(subject, teacher, None, 8))),
+        NewId::SlotId,
+        "adding the slot"
+    );
+    let group_list: GroupListId = apply_new!(
+        app,
+        Op::GroupList(GroupListOp::Add(automatic_group_list(
+            "Liste",
+            3,
+            BTreeSet::new()
+        ))),
+        NewId::GroupListId,
+        "adding the group list of three groups"
+    );
+    apply_ok(
+        &mut app,
+        Op::GroupList(GroupListOp::AssignToSubject(
+            period,
+            subject,
+            Some(group_list),
+        )),
+        "associating the group list, which is what supplies the bound",
+    );
+    apply_ok(
+        &mut app,
+        Op::Colloscope(ColloscopeOp::SetInterrogation(
+            slot,
+            week,
+            BTreeSet::from([0]),
+        )),
+        "filling the cell with a legitimate group",
+    );
+
+    let mut data = app.get_data().clone();
+    let before = data.get_inner_data().clone();
+
+    let (target, _new_info) = data.annotate(Op::Colloscope(ColloscopeOp::SetInterrogation(
+        slot,
+        week,
+        BTreeSet::from([0, 7]),
+    )));
+
+    let err = apply_cascade(&mut data, target)
+        .expect_err("writing an out-of-bounds group must be refused, not repaired");
+
+    match err {
+        Error::BrokenInvariants(set) => assert_eq!(
+            set,
+            BTreeSet::from([FixableInvariant::Convergence(
+                Convergence::InterrogationGroupOutOfBounds(slot, week, 7)
+            )]),
+            "the target is convicted of exactly the group its own payload adds"
+        ),
+        other => panic!("expected BrokenInvariants, got {other:?}"),
+    }
+
+    assert_eq!(
+        data.get_inner_data(),
+        &before,
+        "a convicted target leaves the document bit-identical"
+    );
+    assert_eq!(
+        data.get_inner_data().colloscope.interrogation(slot, week),
+        Some(&BTreeSet::from([0])),
+        "and the innocent cell is untouched — group 0 is still interrogated"
+    );
+}
