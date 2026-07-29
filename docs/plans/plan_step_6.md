@@ -1759,7 +1759,26 @@ declared first.
 is undecidable, and a `SlotPairingRule` is sealed with two mandatory parts, so a part cannot
 leave alone (D5.3) — the rule goes. Note that on today's code the arm's `Some` branch cannot
 fire (a slot's subject can never change, so a valid `self` holding that rule has both slots on
-one subject). That is **not** a reason to weaken it: see frame point 5's closing ruling.
+one subject). That is **not** a reason to weaken it: see frame point 5's closing ruling. It
+also compares **two** fields, so it carries two innocent-state tests, one per comparison — see
+§9bis.1's counting rule.
+
+**Row 11 can never break alone** (found July 29 2026, writing 7.5i's tests; the table above
+does not record it). Row 11's predicate says the cell's slot sits on a subject that excludes
+the week's period. The group-number bound for that *same* cell — row 13's, `invariants.rs:596-611`
+— is read from the association at that same `(period, subject)`, and an association there is
+exactly **row 8**, so no valid document holds one. The bound therefore falls to its
+missing-association default of `Some(0)`, every group number in the cell is out of bounds, and
+`InterrogationGroupOutOfBounds` fires beside row 11 every time. Two consequences. Row 11's
+innocent-state test pins a two-element set, like row 3's; and any future fixture aiming at
+row 11 has to expect the companion in its break list. (§9's target B aims at row 12, not
+row 11, so it is not affected.)
+
+Unlike row 3 this is **not** a shadowing, and the difference is worth keeping straight: row 3
+is unreachable *as the canonical pick* because everything that co-fires with it is declared
+earlier, whereas row 11 is declared **before** row 13, so it stays the pick and its `Some`
+branch stays reachable. It simply never travels alone. Row 12 is unaffected: week activity has
+nothing to do with the association, so it breaks on its own.
 
 **Legacy agrees on all eight.** `SubjectsUpdateWarning::UpdatePeriodStatus`
 (`ops/src/subjects.rs:426-530`) unassigns the students, clears the colloscope cells and drops
@@ -2443,23 +2462,24 @@ Three rules for the series:
   corruption, not the document. The builder belongs in 7.5a and is written to be reused —
   do not copy a fixture per test.
 
-**Status: the whole dangling-FK half has landed, and the first two `Convergence` commits with
-it** — 7.5a (`b04bdcaf`), 7.5b (`362dde77`), 7.5c (`acaab2fb`), 7.5d (`cba1a8b2`),
-7.5e (`332ef6a6`), 7.5f (`3d9deb0b`), 7.5g (`e73d6572`, §8.2 rows 1-4) and 7.5h (`1c350820`,
-§8.2 rows 5-8; the letters are this document's, the split table above numbers only the six
-dangling-FK commits). So
+**Status: the whole dangling-FK half has landed, and three of the four `Convergence` commits
+with it** — 7.5a (`b04bdcaf`), 7.5b (`362dde77`), 7.5c (`acaab2fb`), 7.5d (`cba1a8b2`),
+7.5e (`332ef6a6`), 7.5f (`3d9deb0b`), 7.5g (`e73d6572`, §8.2 rows 1-4), 7.5h (`1c350820`,
+§8.2 rows 5-8) and 7.5i (`2dcd2342`, §8.2 rows 9-12; the letters are this document's, the
+split table above numbers only the six dangling-FK commits). So
 `src/resolution/innocent_tests.rs` exists with its `#[cfg(test)] mod innocent_tests;` line in
-`resolution.rs`, the shared builder, and **thirty-nine tests**: one per §8.1 arm — the
+`resolution.rs`, the shared builder, and **forty-four tests**: one per §8.1 arm — the
 `SlotTeacher` arm, all seven `PeriodRefSite` arms, all eight `SubjectRefSite` ones, all five
 `StudentRefSite` ones, both `WeekRefSite` ones, both `WeekPatternRefSite` ones, all three
-`SlotRefSite` ones and both `GroupListRefSite` ones — plus §8.2 rows 1-8, with row 1 carrying
-two (one per comparison). Every one passed on
+`SlotRefSite` ones and both `GroupListRefSite` ones — plus §8.2 rows 1-12, with rows 1 and 10
+carrying two each (one per comparison). Every one passed on
 its first run, with its hand-derived set; **no map bug has surfaced anywhere in §8.1, nor in the
-first two §8.2 blocks**. Two commits remain, both `Convergence`: rows 9-12, and rows 13-16
-with the two `GlobalUpdate` policy pins folded in. The shared fixture has been touched three
-times across the eight commits (7.5c's `lone_slot`, 7.5g's `other_teacher`, and 7.5h's innocent
+first three §8.2 blocks**. One commit remains: rows 13-16
+with the two `GlobalUpdate` policy pins folded in. The shared fixture has been touched four
+times across the nine commits (7.5c's `lone_slot`; 7.5g's `other_teacher`; 7.5h's innocent
 witnesses — two extra assignments rows, a third member in the first row, and two extra
-associations). Four things settled
+associations; and 7.5i's — three extra colloscope cells, a week in `other_period`,
+`other_subject_slot`, and `bare_week`). Four things settled
 while writing 7.5a, all of them things the rest of the series inherits:
 
 - ★ **The in-crate equivalent of "through `Manager::apply`" is `Data::annotate` + `Data::apply`.**
@@ -2771,6 +2791,40 @@ the shape of the series (★ user, July 28 2026):
   both parts inside one variant, so there the split has to happen in the tests instead. When a
   future variant carries two ids, splitting the site is the better fix; splitting the test is
   the fallback.
+
+And three from 7.5i, §8.2 rows 9-12 (July 29 2026):
+
+- ★ **Row 11 never breaks alone**, proved and recorded in §8.2 above. The short form: row 11's
+  own predicate guarantees that row 13's bound lookup misses, because the association that
+  would supply the bound is exactly row 8. This is the second forced companion in the series
+  after row 3's, and the two were found the same way — by deriving the expected set on paper
+  before writing the test, rather than running the checker and copying what came out. Neither
+  was predicted by §8.2 when it was written.
+
+- ★ **The coverage rule cost a slot, a week and three cells, and that is the honest price.**
+  Rows 11 and 12 are relational, so both halves of `(slot, week)` are coverable and therefore
+  had to be covered. Getting there needed a slot outside `subject` (`other_subject_slot`, since
+  no existing slot's subject excluded anything) and a week inside the excluded period
+  (`excluded_period_week`, since `other_period` had none), plus one neighbour cell per half.
+  Row 10's two twins then reused the same slot for free, because their predicate also needs a
+  **live** slot on a different subject — a dead one makes the checker skip, since it is gated
+  on both slots resolving. Where a block needs an entity the fixture lacks, add the entity; do
+  not weaken the claim to fit the fixture.
+
+- ★ **A fixture witness can make an older twin non-surgical, and the fix is a fresh entity, not
+  a weakened assertion.** `PeriodRefSite::WeekPeriodFk`'s twin moved `other_week` into the dead
+  period and expected one break. Once rows 11 and 12 had their witnesses, every week in the
+  fixture carried a colloscope cell — and moving a cell-bearing week into a dead period drags
+  in `InterrogationGroupOutOfBounds`, because the bound is read from the association at the
+  week's period and a dead period has none. The fixture now holds `bare_week`, carrying
+  nothing, for that twin alone. Worth knowing for the last block: **rows 13-16 also add
+  colloscope material, so re-run the whole file after each fixture edit rather than only the
+  new tests**. This is the first fixture addition that actually broke an older test rather than
+  merely needing it adjusted (7.5h's third member in the first assignments row was carried into
+  7.5d's twin before it could fail). The failure was in **step 3** — the checker's set against
+  the test's prediction — not in step 4, so the map was never even reached, and it was a test
+  bug, not a map bug. That distinction is what decides whether the house rule ("commit the
+  failing test alone, then the fix") applies: it does not here.
 
 ## 9ter. Commit 7.6 — the self-caused rejection fixtures (`tests/cascade.rs`)
 
