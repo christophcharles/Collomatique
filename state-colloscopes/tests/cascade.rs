@@ -35,9 +35,10 @@
 use collomatique_state::{AppState, InMemoryData, apply_cascade, traits::Manager};
 use collomatique_state_colloscopes::{
     AssignmentOp, BalancingOp, ColloscopeOp, Convergence, Data, Error, FixableInvariant,
-    GroupListOp, IncompatOp, NewId, NonEmptyRangeInclusive, Op, PairingOp, PeriodOp, SettingsOp,
-    SlotOp, SlotPairingOp, StudentOp, Subject, SubjectInterrogationParameters, SubjectOp,
-    SubjectParameters, SubjectPeriodicity, TeacherOp, WeekOp, WeekPatternOp,
+    GroupListOp, IncompatOp, NewId, NonEmptyRangeInclusive, Op, PairingOp, PeriodOp, Reference,
+    SettingsOp, SlotOp, SlotPairingOp, StudentOp, Subject, SubjectInterrogationParameters,
+    SubjectOp, SubjectParameters, SubjectPeriodicity, SubjectRefSite, TeacherOp, TeacherRefSite,
+    WeekOp, WeekPatternOp,
     balancing::BalancingOptions,
     group_lists::{GroupList, GroupListFilling, GroupListParameters, PrefilledGroup},
     ids::{
@@ -291,6 +292,18 @@ fn assert_clean(data: &Data) {
         Ok(BTreeSet::new()),
         "the final state must be fully valid"
     );
+}
+
+/// The target was convicted, of exactly `expected` and nothing else.
+///
+/// The set is compared whole rather than with a `contains`, per this file's
+/// first rule: an extra break would mean the fixture's document is not the one
+/// its doc comment describes, and that is worth failing on.
+fn assert_convicted_of(err: Error, expected: BTreeSet<FixableInvariant>, why: &str) {
+    match err {
+        Error::BrokenInvariants(set) => assert_eq!(set, expected, "{why}"),
+        other => panic!("expected BrokenInvariants, got {other:?}"),
+    }
 }
 
 /// Fixture `1a` — **order**. The minimal document in which the engine genuinely
@@ -2409,20 +2422,17 @@ fn rejection_1a_a_slot_moved_past_midnight_is_convicted_not_deleted() {
     let err = apply_cascade(&mut data, target)
         .expect_err("moving the slot past midnight must be refused, not repaired");
 
-    match err {
-        Error::BrokenInvariants(set) => assert_eq!(
-            set,
-            BTreeSet::from([FixableInvariant::Convergence(
-                Convergence::SlotOverflowsDay {
-                    slot,
-                    start: moved_slot.start_time.clone(),
-                    duration: collomatique_time::NonZeroMinutes::new(60).unwrap(),
-                }
-            )]),
-            "the target is convicted of exactly the overflow its own payload causes"
-        ),
-        other => panic!("expected BrokenInvariants, got {other:?}"),
-    }
+    assert_convicted_of(
+        err,
+        BTreeSet::from([FixableInvariant::Convergence(
+            Convergence::SlotOverflowsDay {
+                slot,
+                start: moved_slot.start_time.clone(),
+                duration: collomatique_time::NonZeroMinutes::new(60).unwrap(),
+            },
+        )]),
+        "the target is convicted of exactly the overflow its own payload causes",
+    );
 
     assert_eq!(
         data.get_inner_data(),
@@ -2592,20 +2602,17 @@ fn rejection_2_a_student_absent_from_the_period_convicts_the_assignment() {
     let err = apply_cascade(&mut data, target)
         .expect_err("assigning an absent student must be refused, not repaired");
 
-    match err {
-        Error::BrokenInvariants(set) => assert_eq!(
-            set,
-            BTreeSet::from([FixableInvariant::Convergence(
-                Convergence::AssignedStudentNotPresentForPeriod {
-                    period,
-                    subject,
-                    student: absent_student,
-                }
-            )]),
-            "the target is convicted of exactly the absence its own payload introduces"
-        ),
-        other => panic!("expected BrokenInvariants, got {other:?}"),
-    }
+    assert_convicted_of(
+        err,
+        BTreeSet::from([FixableInvariant::Convergence(
+            Convergence::AssignedStudentNotPresentForPeriod {
+                period,
+                subject,
+                student: absent_student,
+            },
+        )]),
+        "the target is convicted of exactly the absence its own payload introduces",
+    );
 
     assert_eq!(
         data.get_inner_data(),
@@ -2733,16 +2740,13 @@ fn rejection_3_an_out_of_bounds_group_convicts_the_interrogation() {
     let err = apply_cascade(&mut data, target)
         .expect_err("writing an out-of-bounds group must be refused, not repaired");
 
-    match err {
-        Error::BrokenInvariants(set) => assert_eq!(
-            set,
-            BTreeSet::from([FixableInvariant::Convergence(
-                Convergence::InterrogationGroupOutOfBounds(slot, week, 7)
-            )]),
-            "the target is convicted of exactly the group its own payload adds"
-        ),
-        other => panic!("expected BrokenInvariants, got {other:?}"),
-    }
+    assert_convicted_of(
+        err,
+        BTreeSet::from([FixableInvariant::Convergence(
+            Convergence::InterrogationGroupOutOfBounds(slot, week, 7),
+        )]),
+        "the target is convicted of exactly the group its own payload adds",
+    );
 
     assert_eq!(
         data.get_inner_data(),
@@ -2753,5 +2757,359 @@ fn rejection_3_an_out_of_bounds_group_convicts_the_interrogation() {
         data.get_inner_data().colloscope.interrogation(slot, week),
         Some(&BTreeSet::from([0])),
         "and the innocent cell is untouched — group 0 is still interrogated"
+    );
+}
+
+/// The incompatibility the identity-pin document carries, as a value, so that
+/// the fixture and its assertion cannot drift apart.
+fn identity_pin_incompat(subject_id: SubjectId) -> Incompatibility {
+    Incompatibility {
+        subject_id,
+        name: "Sport".into(),
+        slots: vec![],
+        minimum_free_slots: NonZeroU32::new(2).unwrap(),
+        week_pattern_id: None,
+    }
+}
+
+/// A `TeacherId` that is not live.
+///
+/// An integration test cannot fabricate one: the id types are opaque and carry
+/// no public constructor. The route is **create-then-remove** — add a teacher
+/// nothing references, remove it, keep the id. The removal cascades to nothing
+/// and lands alone. Three lines, but it is the step someone reading the plan
+/// would otherwise stall on.
+fn dead_teacher_id(app: &mut AppState<Data, String>) -> TeacherId {
+    let id: TeacherId = apply_new!(
+        app,
+        Op::Teacher(TeacherOp::Add(Teacher {
+            desc: Default::default(),
+            subjects: BTreeSet::new(),
+        })),
+        NewId::TeacherId,
+        "adding the teacher that is about to die"
+    );
+    apply_ok(app, Op::Teacher(TeacherOp::Remove(id)), "killing it again");
+    id
+}
+
+/// A `SubjectId` that is not live. [dead_teacher_id]'s recipe, other type.
+fn dead_subject_id(app: &mut AppState<Data, String>) -> SubjectId {
+    let id: SubjectId = apply_new!(
+        app,
+        Op::Subject(SubjectOp::AddAfter(
+            None,
+            plain_subject("Éphémère", BTreeSet::new())
+        )),
+        NewId::SubjectId,
+        "adding the subject that is about to die"
+    );
+    apply_ok(app, Op::Subject(SubjectOp::Remove(id)), "killing it again");
+    id
+}
+
+/// Everything the four collateral-damage identity pins need, in one document.
+///
+/// Each pin points one row at a dead id and asserts the row survives. Sharing
+/// the document costs nothing — no pin's edit is visible to another's row — and
+/// buys a little: the "document unchanged" assertion then covers the rows the
+/// other three pins care about as well.
+struct IdentityPinDocument {
+    subject: SubjectId,
+    other_subject: SubjectId,
+    teacher: TeacherId,
+    slot: SlotId,
+    incompat: IncompatId,
+    rule: PairingRuleId,
+    dead_teacher: TeacherId,
+    dead_subject: SubjectId,
+}
+
+fn build_identity_pin_document(app: &mut AppState<Data, String>) -> IdentityPinDocument {
+    let subject: SubjectId = apply_new!(
+        app,
+        Op::Subject(SubjectOp::AddAfter(
+            None,
+            interrogation_subject("Math", BTreeSet::new())
+        )),
+        NewId::SubjectId,
+        "adding the subject that hosts the slot"
+    );
+    let other_subject: SubjectId = apply_new!(
+        app,
+        Op::Subject(SubjectOp::AddAfter(
+            Some(subject),
+            plain_subject("Sport", BTreeSet::new())
+        )),
+        NewId::SubjectId,
+        "adding the pairing rule's second subject"
+    );
+    let teacher: TeacherId = apply_new!(
+        app,
+        Op::Teacher(TeacherOp::Add(Teacher {
+            desc: Default::default(),
+            subjects: BTreeSet::from([subject]),
+        })),
+        NewId::TeacherId,
+        "adding the slot's real teacher"
+    );
+    let slot: SlotId = apply_new!(
+        app,
+        Op::Slot(SlotOp::AddAfter(None, make_slot(subject, teacher, None, 8))),
+        NewId::SlotId,
+        "adding the slot"
+    );
+    let incompat: IncompatId = apply_new!(
+        app,
+        Op::Incompat(IncompatOp::Add(identity_pin_incompat(subject))),
+        NewId::IncompatId,
+        "adding the incompatibility"
+    );
+    let rule: PairingRuleId = apply_new!(
+        app,
+        Op::Pairing(PairingOp::Add(pairing_rule(
+            subject,
+            other_subject,
+            BTreeSet::new()
+        ))),
+        NewId::PairingRuleId,
+        "adding the pairing rule"
+    );
+
+    let dead_teacher = dead_teacher_id(app);
+    let dead_subject = dead_subject_id(app);
+
+    IdentityPinDocument {
+        subject,
+        other_subject,
+        teacher,
+        slot,
+        incompat,
+        rule,
+        dead_teacher,
+        dead_subject,
+    }
+}
+
+/// Identity pin `1` — a slot pointed at a **dead teacher**.
+///
+/// Target: `SlotOp::Update(slot, the same slot with a dead `teacher_id`)`. The
+/// op really lands — `force_apply_slot`'s `Update` has no teacher-existence
+/// guard (`slots.rs:455-483`) — the checker reports the dangle, and the gate
+/// rolls it back. The `SlotTeacher` arm is then asked on the restored document,
+/// where the slot's teacher is the live one. `slot.teacher_id != dead`, so it
+/// answers `None` and the target is convicted.
+///
+/// **The assertion that carries the weight is not the `Err`; it is that the
+/// slot is still there.** Suppose the arm skipped its identity test and
+/// answered `Some(Slot::Remove(slot))` merely because the slot exists. A user
+/// pointing a slot at a teacher who no longer exists — a stale UI view, or a
+/// script racing another edit — would have the slot deleted, its own live
+/// teacher being perfectly fine, and the target would land afterwards, so the
+/// operation would report success. That is the damage this pin exists for.
+///
+/// The expected set is a single element, and the reason is in the checker: the
+/// teacher-teaches predicate sits behind `if let Some(teacher) = …`
+/// (`invariants.rs:433`), so a *dead* teacher makes it skip rather than fire.
+/// `SlotTeacherDoesNotTeachSubject` does not accompany the dangle.
+#[test]
+fn identity_pin_1_a_slot_pointed_at_a_dead_teacher_keeps_its_live_one() {
+    let mut app = AppState::<Data, String>::new(Data::new());
+    let doc = build_identity_pin_document(&mut app);
+
+    let mut data = app.get_data().clone();
+    let before = data.get_inner_data().clone();
+
+    let mut broken_slot = make_slot(doc.subject, doc.teacher, None, 8);
+    broken_slot.teacher_id = doc.dead_teacher;
+    let (target, _new_info) = data.annotate(Op::Slot(SlotOp::Update(doc.slot, broken_slot)));
+
+    let err = apply_cascade(&mut data, target)
+        .expect_err("a slot cannot be pointed at a teacher who does not exist");
+
+    assert_convicted_of(
+        err,
+        BTreeSet::from([FixableInvariant::DanglingFk(Reference::Teacher {
+            target: doc.dead_teacher,
+            site: TeacherRefSite::SlotTeacher(doc.slot),
+        })]),
+        "exactly the dangle the target introduces, and nothing about the live teacher",
+    );
+
+    assert_eq!(
+        data.get_inner_data(),
+        &before,
+        "a convicted target leaves the document bit-identical"
+    );
+    assert_eq!(
+        data.get_inner_data().params.slots.find_slot(doc.slot),
+        Some(&make_slot(doc.subject, doc.teacher, None, 8)),
+        "and the innocent slot is still there, still on its live teacher — not deleted"
+    );
+}
+
+/// Identity pin `2` — an incompatibility pointed at a **dead subject**.
+///
+/// Target: `IncompatOp::Update(incompat, the same row with a dead
+/// `subject_id`)`. `force_apply_incompat`'s `Update` replaces the row with no
+/// field guards (`incompats.rs:108-124`), so the bad op lands, the checker
+/// reports the dangle, and the gate rolls it back. On the restored document the
+/// row's subject is the live one, so the `IncompatSubject` arm answers `None`
+/// rather than removing an innocent incompatibility.
+///
+/// One break, and here the reason is simpler than pin `1`'s: **no `Convergence`
+/// variant mentions an incompatibility at all**, so layer C has nothing to add.
+#[test]
+fn identity_pin_2_an_incompat_pointed_at_a_dead_subject_survives() {
+    let mut app = AppState::<Data, String>::new(Data::new());
+    let doc = build_identity_pin_document(&mut app);
+
+    let mut data = app.get_data().clone();
+    let before = data.get_inner_data().clone();
+
+    let (target, _new_info) = data.annotate(Op::Incompat(IncompatOp::Update(
+        doc.incompat,
+        identity_pin_incompat(doc.dead_subject),
+    )));
+
+    let err = apply_cascade(&mut data, target)
+        .expect_err("an incompatibility cannot be pointed at a subject that does not exist");
+
+    assert_convicted_of(
+        err,
+        BTreeSet::from([FixableInvariant::DanglingFk(Reference::Subject {
+            target: doc.dead_subject,
+            site: SubjectRefSite::IncompatSubject(doc.incompat),
+        })]),
+        "exactly the dangle the target introduces",
+    );
+
+    assert_eq!(
+        data.get_inner_data(),
+        &before,
+        "a convicted target leaves the document bit-identical"
+    );
+    assert_eq!(
+        data.get_inner_data()
+            .params
+            .incompats
+            .incompat_map
+            .get(&doc.incompat),
+        Some(&identity_pin_incompat(doc.subject)),
+        "and the innocent incompatibility is still there, still on its live subject"
+    );
+}
+
+/// Identity pin `3` — a pairing rule whose **antecedent** points at a dead
+/// subject.
+///
+/// Target: `PairingOp::Update(rule, the same rule with a dead antecedent
+/// subject)`. `force_apply_pairing`'s `Update` has no field guards either
+/// (`pairings.rs:237-247`). The rule is built through
+/// `PairingRule::new(...).expect(..)` — the sealed constructor is the only
+/// door, and it accepts this payload because its single failure is the two
+/// parts *sharing* a subject, which a dead id on one side cannot cause.
+///
+/// One break: no `Convergence` variant mentions a `PairingRule`. (The one that
+/// sounds close, `PairedSlotsNotInSameSubject`, is about *slot* pairings, a
+/// different table.)
+#[test]
+fn identity_pin_3_a_pairing_antecedent_pointed_at_a_dead_subject_survives() {
+    let mut app = AppState::<Data, String>::new(Data::new());
+    let doc = build_identity_pin_document(&mut app);
+
+    let mut data = app.get_data().clone();
+    let before = data.get_inner_data().clone();
+
+    let (target, _new_info) = data.annotate(Op::Pairing(PairingOp::Update(
+        doc.rule,
+        pairing_rule(doc.dead_subject, doc.other_subject, BTreeSet::new()),
+    )));
+
+    let err = apply_cascade(&mut data, target)
+        .expect_err("a pairing antecedent cannot name a subject that does not exist");
+
+    assert_convicted_of(
+        err,
+        BTreeSet::from([FixableInvariant::DanglingFk(Reference::Subject {
+            target: doc.dead_subject,
+            site: SubjectRefSite::PairingRuleAntecedent(doc.rule),
+        })]),
+        "exactly the antecedent dangle, and nothing about the untouched consequent",
+    );
+
+    assert_eq!(
+        data.get_inner_data(),
+        &before,
+        "a convicted target leaves the document bit-identical"
+    );
+    assert_eq!(
+        data.get_inner_data()
+            .params
+            .pairings
+            .pairing_rule_map
+            .get(&doc.rule),
+        Some(&pairing_rule(
+            doc.subject,
+            doc.other_subject,
+            BTreeSet::new()
+        )),
+        "and the innocent rule is still there, both parts on their live subjects"
+    );
+}
+
+/// Identity pin `4` — a pairing rule whose **consequent** points at a dead
+/// subject. The mirror of pin `3`, and the pair is the point.
+///
+/// §8.1 insists the antecedent and the consequent are **two arms, not one**.
+/// The first draft of this plan had only pin `3`, described as "the antecedent
+/// arm returns `None`, and the consequent arm must not fire at all". The second
+/// half of that sentence is not an assertion a test can make: with only the
+/// antecedent's subject dead the checker reports only the antecedent site, so
+/// the consequent arm is never called and pin `3` tests it in no way
+/// whatsoever. This mirror is what makes "two arms" true of the test suite as
+/// well, and it costs three lines.
+#[test]
+fn identity_pin_4_a_pairing_consequent_pointed_at_a_dead_subject_survives() {
+    let mut app = AppState::<Data, String>::new(Data::new());
+    let doc = build_identity_pin_document(&mut app);
+
+    let mut data = app.get_data().clone();
+    let before = data.get_inner_data().clone();
+
+    let (target, _new_info) = data.annotate(Op::Pairing(PairingOp::Update(
+        doc.rule,
+        pairing_rule(doc.subject, doc.dead_subject, BTreeSet::new()),
+    )));
+
+    let err = apply_cascade(&mut data, target)
+        .expect_err("a pairing consequent cannot name a subject that does not exist");
+
+    assert_convicted_of(
+        err,
+        BTreeSet::from([FixableInvariant::DanglingFk(Reference::Subject {
+            target: doc.dead_subject,
+            site: SubjectRefSite::PairingRuleConsequent(doc.rule),
+        })]),
+        "exactly the consequent dangle — the site the mirror exists to reach",
+    );
+
+    assert_eq!(
+        data.get_inner_data(),
+        &before,
+        "a convicted target leaves the document bit-identical"
+    );
+    assert_eq!(
+        data.get_inner_data()
+            .params
+            .pairings
+            .pairing_rule_map
+            .get(&doc.rule),
+        Some(&pairing_rule(
+            doc.subject,
+            doc.other_subject,
+            BTreeSet::new()
+        )),
+        "and the innocent rule is still there, both parts on their live subjects"
     );
 }
