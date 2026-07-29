@@ -107,9 +107,11 @@ the design doc's §8):
   which finishes commit 7.
 - **Commit 8** — the cascade property test (`state-colloscopes/tests/property_cascade.rs`):
   random valid walks driven through `apply_cascade`; no panic, `Ok` ⇒ clean, `Err` ⇒
-  bit-identical state. **Landed July 29 2026** as one commit, green on its first run at the
-  full 50 × 500; see §10.1 for the two coverage guards §10 had forgotten and for what the run
-  measured.
+  bit-identical state. **Landed July 29 2026**, green on its first run at the full 50 × 500;
+  see §10.1 for the two coverage guards §10 had forgotten and for what the run measured. A
+  **second walk** was added the same day (★ user idea, §10.2): the same cascade ops, but on a
+  document the plain gate has already grown — 60% more repair work and a widest cascade of 42
+  fixes against 25, so the erosion §10.1 measured really was costing coverage.
 
 Every commit compiles and passes the suite on its own. The on-disk format is untouched
 (nothing in this step goes near storage, and elementary ops are never persisted), so no
@@ -3381,8 +3383,58 @@ needing at least one fix, 4592 fix ops in all, and the **widest single cascade 2
 That last figure is the reassuring one — the map is being walked hard, not probed one hop at a
 time.
 
+### 10.2 The second walk — cascading on a document the gate has already grown
+
+**★ User idea, added the same day, and it pays off by more than the size figures suggested.**
+The §10.1 measurement says the cascade erodes its own document; the natural next question is
+whether that erosion is *costing coverage*, and the way to find out is to hand the cascade a
+document the plain gate has already built up. So `property_cascade.rs` grew a second property,
+`cascade_on_a_grown_document_never_panics`: `GROW_OPS` = 500 gated ops first, then the same 500
+cascade ops from there. Both walks share one `cascade_step` carrying every assertion, so they
+differ only in the document handed to the cascade and never in what is checked — two copies of
+the assertions would have drifted apart within a commit or two.
+
+| | from bootstrap | grown first |
+| --- | --- | --- |
+| targets landed | 21323 | 21250 |
+| landings needing a fix | 1597 | 2077 |
+| fix ops in total | 4592 | **7298** |
+| mean fixes per cascade | 2.9 | **3.5** |
+| widest single cascade | 25 | **42** |
+| convicted / refused | 1381 / 2296 | 1521 / 2229 |
+| document size at handover | 21 | **61** |
+| document size at the end | 42 (min 17) | 50 (min 20) |
+
+The same number of cascade ops does about **60% more repair work**, and the deepest chain the
+map is driven through nearly doubles. The erosion *was* costing coverage, and this recovers it.
+
+Three findings worth keeping beyond the numbers.
+
+**The two walks converge on one equilibrium from opposite directions** — bootstrap climbs
+21 → 42, grown decays 61 → 50. So the cascade has a steady-state document size in the mid-40s,
+which is a sharper statement of §10.1's result than either walk alone gives: the erosion is real
+*and* bounded. It is also the reason the second walk is not redundant. Cascading erodes exactly
+the structures that make cascades deep, so the only way to exercise the map against a large
+document is to hand it one already built; a longer phase-2 would never get there by itself.
+
+**`GROW_OPS` = 500 is measured, not guessed.** The handover size lands on 61 — exactly where a
+pure 500-op gated walk ends (§10.1's baseline). The growth curve has therefore flattened by the
+handover, so a longer phase 1 would buy nothing but time. The handover size stays printed so
+this stays checkable rather than becoming folklore if the generator changes.
+
+**★ Keep the snapshot-keeping on the success path.** Factoring the two walks apart briefly moved
+the generator's snapshot bookkeeping out of the landing path, so its random coin was drawn on
+every op and the snapshots were of pre-op states. Both existing harnesses draw only on a landing
+and snapshot the landed state, and the divergence perturbs the RNG path enough to move every
+number in the table. Restored; the from-bootstrap walk then reproduced its committed numbers
+exactly, which is what confirmed the refactor had left that trajectory alone. The general rule:
+when refactoring a property harness, a changed statistic is the signal to check what moved in
+the walk — §11 already accepts that op sequences drift, but drift should be a known consequence
+of a deliberate change, never a surprise.
+
 **No map bug surfaced.** Which now holds across all four tiers: §9's eleven `Ok` fixtures,
-§9bis's fifty-one `None` unit tests, §9ter's eight `Err` fixtures, and 25000 fuzzed ops here.
+§9bis's fifty-one `None` unit tests, §9ter's eight `Err` fixtures, and 50000 fuzzed ops here
+across the two walks.
 
 ## 11. Non-goals, gates, close-out
 
