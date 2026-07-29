@@ -19,11 +19,12 @@
 //! 4. The point: the *valid* document holds nothing that causes it, so the arm
 //!    answers `None`.
 //!
-//! Nothing here runs the engine. There is no `apply_cascade`, no rejection
-//! semantics and no rollback reasoning — the end-to-end counterparts live in
-//! `tests/cascade.rs`. And nothing here tests the *positive* half either (the
-//! arm firing when the shape really is live); that belongs to the commit-7
-//! scenarios, which reach it by the legitimate route.
+//! Nothing in the four-step tests runs the engine: no `apply_cascade`, no
+//! rejection semantics and no rollback reasoning — the end-to-end counterparts
+//! live in `tests/cascade.rs`. The two `GlobalUpdate` policy pins at the very
+//! end are the one exception, and they say so. Nothing here tests the
+//! *positive* half either (the arm firing when the shape really is live); that
+//! belongs to the commit-7 scenarios, which reach it by the legitimate route.
 //!
 //! **Why the twin is built by field surgery and not by an op.** `force_apply`
 //! keeps the coordinate carve-out prechecks, so several of these shapes are
@@ -45,7 +46,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use collomatique_state::{Fixable, InMemoryData};
+use collomatique_state::{ApplyError, Fixable, InMemoryData, apply_cascade};
 
 use crate::balancing::BalancingOptions;
 use crate::group_lists::{GroupList, GroupListFilling, GroupListParameters, PrefilledGroup};
@@ -56,8 +57,9 @@ use crate::ids::{
 use crate::incompats::Incompatibility;
 use crate::invariants::{Convergence, FixableInvariant};
 use crate::ops::{
-    AssignmentOp, BalancingOp, ColloscopeOp, GroupListOp, IncompatOp, Op, PairingOp, PeriodOp,
-    SettingsOp, SlotOp, SlotPairingOp, StudentOp, SubjectOp, TeacherOp, WeekOp, WeekPatternOp,
+    AnnotatedOp, AssignmentOp, BalancingOp, ColloscopeOp, GroupListOp, IncompatOp, Op, PairingOp,
+    PeriodOp, SettingsOp, SlotOp, SlotPairingOp, StudentOp, SubjectOp, TeacherOp, WeekOp,
+    WeekPatternOp,
 };
 use crate::pairings::{PairingRule, RulePart};
 use crate::refs::{
@@ -254,11 +256,10 @@ fn slot_pairing_rule(
 /// here needs: the id types are opaque, and forging one risks colliding with a
 /// live entity.
 //
-// The whole struct is `allow(dead_code)` for the duration of the 7.5 series:
-// each commit reads the handful of fields its arms need, and the document is
-// deliberately built whole rather than grown per commit. The attribute comes
-// off once the series has landed.
-#[allow(dead_code)]
+// The struct carried `allow(dead_code)` for the duration of the 7.5 series,
+// because each commit read only the handful of fields its arms needed. The
+// attribute came off with the last commit: every field is now read by some
+// test, which is the cheap check that nothing here was built for nobody.
 pub(super) struct ValidDocument {
     /// The active period: it holds the weeks, the assignments row, the
     /// association and the colloscope cell.
@@ -643,6 +644,20 @@ pub(super) fn build_valid_document() -> (Data, ValidDocument) {
             BTreeMap::from([(student, 0), (other_student, 1)]),
         )),
         "placing the students in the colloscope group list",
+    );
+    // A second placements row, on the list that excludes `excluded_student`.
+    // §8.2 row 15's twin adds her to *this* row, so the row has to exist first:
+    // the arm looks the list up and then tests membership, and only a successful
+    // lookup leaves the membership test as the thing under test. The two
+    // students placed here are the ones the list does not exclude, so the row is
+    // ordinary data.
+    apply(
+        &mut data,
+        Op::Colloscope(ColloscopeOp::SetGroupList(
+            excluding_group_list,
+            BTreeMap::from([(student, 0), (other_student, 1)]),
+        )),
+        "placing the students in the excluding group list",
     );
     // The association above is what bounds the group numbers: without it the
     // bound is 0 and no cell can be filled at all.
@@ -3012,5 +3027,345 @@ fn interrogation_on_inactive_week_arm_spares_a_missing_cell() {
             doc.other_week,
         )),
         "the live document has no cell at that coordinate, so the arm has nothing to clear",
+    );
+}
+
+// ---- `Convergence`, rows 13-16: the colloscope block ----
+//
+// Four rows, five tests: row 16 compares two things, so it gets one test per
+// comparison, like rows 1 and 10.
+//
+// This block is where the block-1 rule — vary the row the fix destroys, never
+// the predicate's other side — stops being merely the way to build an innocent
+// twin and becomes the arms' actual specification. §8.2 proves it for row 14 and
+// the proof carries to 15 and 16. The offending configuration has **two routes**:
+// the op writes a row onto a list that is already prefilled, or the op flips an
+// existing list to prefilled while a row sits on it. On the first route the
+// pre-op state has no row, the presence test fails, and the engine convicts the
+// op — right. On the second the pre-op row is a real, innocent row that the arm
+// must clear, which is what legacy does too. So an arm that read prefilled-ness
+// from `self` would reject an edit legacy accepts. Reading the predicate is not
+// merely unnecessary here; it would be **wrong**.
+//
+// The tests inherit that directly: every twin below adds or edits the *row*, and
+// leaves the list's prefilled-ness, its excluded set and its group count exactly
+// as the fixture built them.
+//
+// The two element-removal rows, 15 and 16, emit `SetGroupList(gl, rebuilt)`,
+// which names the list but not the student leaving it. Rule 4 therefore asks for
+// an identity test, and the membership test the rebuild needs already is one —
+// so both twins add their student to a row that **already exists**, leaving the
+// membership test as the only thing that can answer `None`. A missing identity
+// test here does not destroy a row; it silently unplaces an innocent student,
+// which is worse in a different way, because the resulting colloscope looks
+// perfectly ordinary.
+
+/// `Convergence::InterrogationGroupOutOfBounds` — §8.2 row 13.
+///
+/// The op is `SetInterrogation(slot, week, cell minus group)`: it carries the
+/// coordinate but not the group number being dropped, so the membership test is
+/// the identity test (frame point 4).
+///
+/// The twin adds group 2 to the fixture's own cell, whose list has two groups
+/// and so bounds them at 0 and 1. The cell is edited, never the bound: shrinking
+/// the group list instead is the legitimate cascade route this row exists for,
+/// and on that route the live document really does hold the offending cell.
+///
+/// The arm must **not** re-check the bound, and that is not an oversight — after
+/// a repaired shrink the group reads as in-bounds again while the trim is still
+/// needed. So the only thing standing between an innocent cell and a silent trim
+/// is the membership test, and the twin makes the lookup succeed so that the
+/// membership test is what answers.
+///
+/// **Exactly one break**: the cell's week is active for the slot's pattern and
+/// its subject excludes no period, so rows 11 and 12 stay quiet.
+#[test]
+fn interrogation_group_out_of_bounds_arm_spares_a_cell_of_in_bounds_groups() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    corrupt
+        .colloscope
+        .set_interrogation(doc.slot, doc.week, BTreeSet::from([0, 2]));
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::Convergence(Convergence::InterrogationGroupOutOfBounds(
+            doc.slot, doc.week, 2,
+        )),
+        "the live cell does not hold the named group, so the arm has nothing to trim",
+    );
+}
+
+/// `Convergence::ColloscopeGroupListPrefilled` — §8.2 row 14, a pure key site:
+/// the group list *is* the coordinate, `SetGroupList(gl, ∅)` carries it, and the
+/// arm's whole content is one lookup. For a prefilled list there is no single
+/// element to blame — the offending thing is the whole row.
+///
+/// The twin puts a placements row on `prefilled_group_list`. The direction is
+/// forced twice over: by the block-1 rule, and by the argument above that
+/// reading prefilled-ness from `self` would be wrong.
+///
+/// The valid document is not innocent by being empty: it carries a colloscope
+/// row for `group_list`, so an arm asking "are there any colloscope group-list
+/// rows at all" would find one, answer `Some`, and emit
+/// `SetGroupList(prefilled_group_list, ∅)` against a state with no such row — a
+/// perfect no-op, which the engine answers with a panic.
+///
+/// **Exactly one break**: a prefilled filling reports an empty excluded set
+/// (`group_lists.rs:152-162`), so row 15 stays quiet, and the list has two
+/// groups, so group 0 is in bounds and row 16 does too.
+#[test]
+fn colloscope_group_list_prefilled_arm_spares_a_missing_row() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    corrupt
+        .colloscope
+        .set_group_list(doc.prefilled_group_list, BTreeMap::from([(doc.student, 0)]));
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::Convergence(Convergence::ColloscopeGroupListPrefilled(
+            doc.prefilled_group_list,
+        )),
+        "the live document has no colloscope row for that list, so the arm has nothing to clear",
+    );
+}
+
+/// `Convergence::ColloscopeStudentExcluded` — §8.2 row 15.
+///
+/// The twin adds `excluded_student` to the placements of
+/// `excluding_group_list`, which is the list that excludes her. The row already
+/// exists in the fixture — that is what it was added for — so the arm's lookup
+/// **succeeds** on the valid document and finds real placements. Only the
+/// membership test stands between an innocent student and being silently
+/// unplaced.
+///
+/// The excluded set is left alone, and must be: adding a student to it is the
+/// legitimate cascade route, and on that route the live document really does
+/// hold the offending placement. That is also why the arm never reads the
+/// excluded set — the presence test has to serve both routes, cleaning the
+/// placement on one and rejecting the op on the other.
+///
+/// **Exactly one break**: the list is automatic, so row 14 stays quiet, and it
+/// has two groups, so group 0 is in bounds and row 16 does too.
+#[test]
+fn colloscope_student_excluded_arm_spares_a_row_of_included_students() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    // Every live placement is carried across, so the edit really is "one student
+    // added" rather than a rewritten row.
+    corrupt.colloscope.set_group_list(
+        doc.excluding_group_list,
+        BTreeMap::from([
+            (doc.student, 0),
+            (doc.other_student, 1),
+            (doc.excluded_student, 0),
+        ]),
+    );
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::Convergence(Convergence::ColloscopeStudentExcluded(
+            doc.excluding_group_list,
+            doc.excluded_student,
+        )),
+        "the live row does not place the named student, so the arm has nobody to unplace",
+    );
+}
+
+/// `Convergence::ColloscopeStudentGroupOutOfBounds` — §8.2 row 16, **group
+/// half**.
+///
+/// The arm's test is one expression, `placements.get(student) != Some(group)`,
+/// asserting two things: the student is placed at all, and placed in *that*
+/// group. Each needs its own twin. This one varies the group; the next varies
+/// who is placed.
+///
+/// The twin moves `student` from group 0 to group 2, which is out of bounds for
+/// a two-group list. So in the valid document she **is** placed — the presence
+/// half of the test is satisfied — and `None` can come from nowhere but the
+/// group comparison.
+///
+/// The bound is left alone, as everywhere in this block: shrinking the group
+/// list is the legitimate route, and on it the live document really does hold
+/// the offending placement.
+///
+/// **Exactly one break**: `group_list` excludes nobody, so row 15 stays quiet,
+/// and it is automatic, so row 14 does. The colloscope cells are unaffected —
+/// their bound is the list's group count, which the twin does not touch.
+#[test]
+fn colloscope_student_group_out_of_bounds_arm_spares_a_student_placed_elsewhere() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    corrupt.colloscope.set_group_list(
+        doc.group_list,
+        BTreeMap::from([(doc.student, 2), (doc.other_student, 1)]),
+    );
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::Convergence(Convergence::ColloscopeStudentGroupOutOfBounds(
+            doc.group_list,
+            doc.student,
+            2,
+        )),
+        "the live row places the named student in another group, so the arm has nobody to unplace",
+    );
+}
+
+/// `Convergence::ColloscopeStudentGroupOutOfBounds` — §8.2 row 16, **presence
+/// half**, and the mirror of the test above.
+///
+/// The twin places `excluded_student` — who is in no colloscope row at all — in
+/// `group_list`, out of bounds at group 2. So the valid document's row exists
+/// and holds real placements, but not hers, and `None` can come only from the
+/// presence half of the same expression.
+///
+/// Without it the arm would rebuild the row minus a student who was never in it,
+/// which is a perfect no-op, and the engine answers a no-op fix with a panic in
+/// front of the user.
+///
+/// **Exactly one break**: `group_list` excludes nobody, so row 15 stays quiet
+/// even though the student added is the one another list excludes.
+#[test]
+fn colloscope_student_group_out_of_bounds_arm_spares_a_row_that_places_somebody_else() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    corrupt.colloscope.set_group_list(
+        doc.group_list,
+        BTreeMap::from([
+            (doc.student, 0),
+            (doc.other_student, 1),
+            (doc.excluded_student, 2),
+        ]),
+    );
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::Convergence(Convergence::ColloscopeStudentGroupOutOfBounds(
+            doc.group_list,
+            doc.excluded_student,
+            2,
+        )),
+        "the live row does not place the named student at all, so the arm has nobody to unplace",
+    );
+}
+
+// ---- The two `GlobalUpdate` policy pins ----
+//
+// These two are not four-step tests and do run the engine. They close §9bis,
+// and they pin a policy rather than an arm: **a `GlobalUpdate` carrying a
+// corrupt document is rejected whole, never cleaned.** That is D4 applied to a
+// whole-document target, and it is user-visible, because an import takes exactly
+// that shape.
+//
+// One test per *half of the map* is enough, and deliberately so. Such a test
+// cannot see a missing shape test: a `GlobalUpdate` payload that is corrupt is
+// corrupt whatever the live document looks like, so no repair to the live
+// document can ever make the retry succeed. A sloppy arm merely churns — repair
+// the innocent row, retry, same break, material now gone, `None`, convict — and
+// since the engine restores its entry snapshot on failure, the caller sees the
+// same `Err` and the same untouched document either way. What these pin is the
+// outcome, not the route.
+//
+// Each reuses a twin from above verbatim, sent as a payload instead of being
+// asked about. That is the point of the pairing: the tests above prove the arm
+// answers `None` for these very documents, and these two show what the engine
+// then does with that `None` when the target is the whole document.
+
+/// A `GlobalUpdate` whose payload holds a dangling reference is rejected, and
+/// the document is left bit-identical.
+///
+/// The payload is the twin of
+/// `assignments_student_arm_spares_a_row_of_live_students`: a valid document
+/// plus one dead student in an assignments row. The engine applies it, the gate
+/// rolls it back, the arm is asked about the dangle on the (now restored) live
+/// document and answers `None` — which is exactly what that test proves — so
+/// the target is convicted and the entry snapshot is restored.
+#[test]
+fn global_update_with_a_dangling_reference_is_rejected_whole() {
+    let (mut data, doc) = build_valid_document();
+    let before = data.clone();
+
+    let mut corrupt = data.get_inner_data().clone();
+    corrupt.params.assignments.map.insert(
+        (doc.period, doc.subject),
+        BTreeSet::from([
+            doc.student,
+            doc.other_student,
+            doc.excluded_student,
+            doc.dead_student,
+        ]),
+    );
+
+    let err = apply_cascade(&mut data, AnnotatedOp::GlobalUpdate(corrupt))
+        .expect_err("a corrupt GlobalUpdate payload must be rejected");
+
+    match err {
+        ApplyError::BrokenInvariants(set) => assert_eq!(
+            set,
+            BTreeSet::from([FixableInvariant::DanglingFk(Reference::Student {
+                target: doc.dead_student,
+                site: StudentRefSite::AssignmentsStudent {
+                    period: doc.period,
+                    subject: doc.subject,
+                },
+            })]),
+            "the error carries the target's own break, not a fix's"
+        ),
+        other => panic!("expected BrokenInvariants, got {other:?}"),
+    }
+    assert!(
+        data == before,
+        "a rejected GlobalUpdate must leave the document bit-identical: \
+         the cascade cleans the live document to make a *target* land, never to \
+         make a corrupt payload acceptable"
+    );
+}
+
+/// The `Convergence` half of the same policy: a `GlobalUpdate` whose payload
+/// breaks a convergence invariant is rejected whole too.
+///
+/// The payload is the twin of
+/// `interrogation_on_inactive_week_arm_spares_a_missing_cell`: a valid document
+/// plus one colloscope cell on a week the slot's pattern excludes. Both halves
+/// of the map are covered by these two, and neither can see more than the
+/// outcome — see the block comment.
+#[test]
+fn global_update_breaking_a_convergence_invariant_is_rejected_whole() {
+    let (mut data, doc) = build_valid_document();
+    let before = data.clone();
+
+    let mut corrupt = data.get_inner_data().clone();
+    corrupt
+        .colloscope
+        .set_interrogation(doc.slot, doc.other_week, BTreeSet::from([0]));
+
+    let err = apply_cascade(&mut data, AnnotatedOp::GlobalUpdate(corrupt))
+        .expect_err("a corrupt GlobalUpdate payload must be rejected");
+
+    match err {
+        ApplyError::BrokenInvariants(set) => assert_eq!(
+            set,
+            BTreeSet::from([FixableInvariant::Convergence(
+                Convergence::InterrogationOnInactiveWeek(doc.slot, doc.other_week)
+            )]),
+            "the error carries the target's own break, not a fix's"
+        ),
+        other => panic!("expected BrokenInvariants, got {other:?}"),
+    }
+    assert!(
+        data == before,
+        "a rejected GlobalUpdate must leave the document bit-identical"
     );
 }
