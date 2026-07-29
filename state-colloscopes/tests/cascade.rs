@@ -1,4 +1,4 @@
-//! Colloscope cascade fixtures (step-6 commit 7, plan §9).
+//! Colloscope cascade fixtures (step-6 commits 7 and 7.6, plan §9 and §9ter).
 //!
 //! Each fixture builds a document through the public op surface
 //! (`AppState` + `Manager::apply`), then takes `app.get_data().clone()`,
@@ -21,13 +21,23 @@
 //! `set.first()` out of the `BTreeSet`. Fixture `1a` is the one that pins that
 //! canonical pick order; every later fixture asserts content (length plus
 //! `contains`) and is deliberately blind to order.
+//!
+//! The `fixture_*` tests are commit 7's (plan §9): the cascade repairs the
+//! document and the target lands, so they all assert `Ok`. The `rejection_*`
+//! tests at the end are commit 7.6's (plan §9ter): the op's payload is bad on
+//! its own terms, no state fix can help, and the target is convicted — so they
+//! assert `Err`, plus the document unchanged. They read the engine's
+//! `None if is_target` branch (`state/src/cascade.rs:114-119`), which is the
+//! production-visible half of the design doc's frame point 5: if an arm
+//! answered `Some` there, the cascade would quietly repair the state and the
+//! user would be told an edit succeeded that was in fact refused.
 
 use collomatique_state::{AppState, InMemoryData, apply_cascade, traits::Manager};
 use collomatique_state_colloscopes::{
-    AssignmentOp, BalancingOp, ColloscopeOp, Data, GroupListOp, IncompatOp, NewId,
-    NonEmptyRangeInclusive, Op, PairingOp, PeriodOp, SettingsOp, SlotOp, SlotPairingOp, StudentOp,
-    Subject, SubjectInterrogationParameters, SubjectOp, SubjectParameters, SubjectPeriodicity,
-    TeacherOp, WeekOp, WeekPatternOp,
+    AssignmentOp, BalancingOp, ColloscopeOp, Convergence, Data, Error, FixableInvariant,
+    GroupListOp, IncompatOp, NewId, NonEmptyRangeInclusive, Op, PairingOp, PeriodOp, SettingsOp,
+    SlotOp, SlotPairingOp, StudentOp, Subject, SubjectInterrogationParameters, SubjectOp,
+    SubjectParameters, SubjectPeriodicity, TeacherOp, WeekOp, WeekPatternOp,
     balancing::BalancingOptions,
     group_lists::{GroupList, GroupListFilling, GroupListParameters, PrefilledGroup},
     ids::{
@@ -88,7 +98,19 @@ fn plain_subject(name: &str, excluded: BTreeSet<PeriodId>) -> Subject {
 
 /// A subject that runs interrogations (so it can host slots, an association and
 /// colloscope cells), excluding exactly `excluded`.
+///
+/// Its interrogations last an hour. The rejection fixtures need to vary that,
+/// so the body lives in [interrogation_subject_lasting].
 fn interrogation_subject(name: &str, excluded: BTreeSet<PeriodId>) -> Subject {
+    interrogation_subject_lasting(name, excluded, 60)
+}
+
+/// [interrogation_subject], with the interrogation duration spelled out.
+fn interrogation_subject_lasting(
+    name: &str,
+    excluded: BTreeSet<PeriodId>,
+    minutes: u32,
+) -> Subject {
     Subject {
         parameters: SubjectParameters {
             name: name.into(),
@@ -101,7 +123,7 @@ fn interrogation_subject(name: &str, excluded: BTreeSet<PeriodId>) -> Subject {
                     NonZeroU32::new(1).unwrap()..=NonZeroU32::new(1).unwrap(),
                 )
                 .expect("statically non-empty"),
-                duration: collomatique_time::NonZeroMinutes::new(60).unwrap(),
+                duration: collomatique_time::NonZeroMinutes::new(minutes).unwrap(),
                 take_duration_into_account: true,
                 periodicity: SubjectPeriodicity::ExactlyPeriodic {
                     periodicity_in_weeks: NonZeroU32::new(2).unwrap(),
@@ -128,13 +150,28 @@ fn make_slot(
     week_pattern: Option<WeekPatternId>,
     hour: u32,
 ) -> Slot {
+    make_slot_at(subject_id, teacher_id, week_pattern, hour, 0)
+}
+
+/// [make_slot], to the minute.
+///
+/// Only the `SlotOverflowsDay` fixtures need this: every other fixture in the
+/// file wants a slot that is merely somewhere in the day, and says so with an
+/// hour alone.
+fn make_slot_at(
+    subject_id: SubjectId,
+    teacher_id: TeacherId,
+    week_pattern: Option<WeekPatternId>,
+    hour: u32,
+    minute: u32,
+) -> Slot {
     Slot {
         subject_id,
         teacher_id,
         start_time: collomatique_time::SlotStart {
             weekday: collomatique_time::Weekday(chrono::Weekday::Mon),
             start_time: collomatique_time::WholeMinuteTime::new(
-                chrono::NaiveTime::from_hms_opt(hour, 0, 0).unwrap(),
+                chrono::NaiveTime::from_hms_opt(hour, minute, 0).unwrap(),
             )
             .unwrap(),
         },
@@ -2277,5 +2314,188 @@ fn fixture_6_a_no_op_target_lands_alone_and_does_not_panic() {
         data.get_inner_data(),
         &before,
         "and the document is byte-identical — the no-op really was one"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Commit 7.6 (plan §9ter) — the rejection fixtures.
+// ---------------------------------------------------------------------------
+
+/// The document both `SlotOverflowsDay` fixtures start from: a subject whose
+/// interrogations last an hour, a teacher who teaches it, and one slot at
+/// 23:00.
+///
+/// The document is **valid**. 23:00 plus 60 minutes ends exactly at midnight,
+/// and a slot ending exactly at midnight does not overflow —
+/// `SlotWithDuration::new` accepts it, and its doctest pins `22:00 + 2h =
+/// 00:00` as `Some` (`time/src/lib.rs:632-643`).
+///
+/// The 23:00 start is load-bearing for the **pair**, not just for `1a`. `1b`
+/// reuses this document and grows the interrogation to 90 minutes: from 22:00
+/// that would end at 23:30, overflow nothing, and `1b` would pass while testing
+/// nothing at all. From 23:00 both halves overflow — 23:30 + 60 for `1a`,
+/// 23:00 + 90 for `1b`.
+fn document_with_a_slot_ending_at_midnight()
+-> (AppState<Data, String>, SubjectId, TeacherId, SlotId) {
+    let mut app = AppState::<Data, String>::new(Data::new());
+
+    let subject: SubjectId = apply_new!(
+        app,
+        Op::Subject(SubjectOp::AddAfter(
+            None,
+            interrogation_subject("Math", BTreeSet::new())
+        )),
+        NewId::SubjectId,
+        "adding the subject"
+    );
+    let teacher: TeacherId = apply_new!(
+        app,
+        Op::Teacher(TeacherOp::Add(Teacher {
+            desc: Default::default(),
+            subjects: BTreeSet::from([subject]),
+        })),
+        NewId::TeacherId,
+        "adding the teacher"
+    );
+    let slot: SlotId = apply_new!(
+        app,
+        Op::Slot(SlotOp::AddAfter(
+            None,
+            make_slot_at(subject, teacher, None, 23, 0)
+        )),
+        NewId::SlotId,
+        "adding the slot that ends exactly at midnight"
+    );
+
+    (app, subject, teacher, slot)
+}
+
+/// Rejection `1a` — `SlotOverflowsDay`, **rejected**. The op moves the slot.
+///
+/// Target: `SlotOp::Update(slot, the same slot at 23:30)`. The op applies,
+/// `SlotWithDuration::new(23:30, 60)` is `None`, and the checker reports
+/// `SlotOverflowsDay { slot, start: 23:30, duration: 60 }`
+/// (`invariants.rs:451-462`). The apply gate rolls the op back, so the arm is
+/// asked about that invariant on the **restored** document — where the slot
+/// still starts at 23:00. `23:00 != 23:30`, the shape test fails, the arm
+/// answers `None`, and since the failing op is the target the engine restores
+/// its entry snapshot and returns the break.
+///
+/// The expected set is derived by hand and is a single element. The slot's
+/// teacher teaches its subject and the subject runs interrogations, so neither
+/// `SlotTeacherDoesNotTeachSubject` nor `SlotForSubjectWithoutInterrogations`
+/// fires, and the document holds nothing else at all.
+///
+/// **What the failure would look like.** Without the `start` comparison the arm
+/// has only one possible answer, `Some(Slot::Remove(slot))`: the user asks to
+/// move a slot half an hour later, and the application deletes it and reports
+/// success. This fixture is the end-to-end reason commit 5.97 put `start` in
+/// the payload — before that enrichment the variant carried a `SlotId` alone
+/// and the arm had no second conjunct to test.
+///
+/// The op is unwritable through `ops/`, which guards it with
+/// `UpdateSlotError::SlotOverlapsWithNextDay` (`ops/src/slots.rs:481`) — but
+/// that guard reads a `BrokenInvariants` error, so this is the trace it reads.
+#[test]
+fn rejection_1a_a_slot_moved_past_midnight_is_convicted_not_deleted() {
+    let (app, subject, teacher, slot) = document_with_a_slot_ending_at_midnight();
+
+    let mut data = app.get_data().clone();
+    let before = data.get_inner_data().clone();
+
+    let moved_slot = make_slot_at(subject, teacher, None, 23, 30);
+    let (target, _new_info) = data.annotate(Op::Slot(SlotOp::Update(slot, moved_slot.clone())));
+
+    let err = apply_cascade(&mut data, target)
+        .expect_err("moving the slot past midnight must be refused, not repaired");
+
+    match err {
+        Error::BrokenInvariants(set) => assert_eq!(
+            set,
+            BTreeSet::from([FixableInvariant::Convergence(
+                Convergence::SlotOverflowsDay {
+                    slot,
+                    start: moved_slot.start_time.clone(),
+                    duration: collomatique_time::NonZeroMinutes::new(60).unwrap(),
+                }
+            )]),
+            "the target is convicted of exactly the overflow its own payload causes"
+        ),
+        other => panic!("expected BrokenInvariants, got {other:?}"),
+    }
+
+    assert_eq!(
+        data.get_inner_data(),
+        &before,
+        "a convicted target leaves the document bit-identical"
+    );
+    assert_eq!(
+        data.get_inner_data().params.slots.find_slot(slot),
+        Some(&make_slot_at(subject, teacher, None, 23, 0)),
+        "and the innocent slot is still there, still at 23:00 — the arm did not delete it"
+    );
+}
+
+/// Rejection `1b` — `SlotOverflowsDay`, **accepted**. The op lengthens the
+/// interrogation.
+///
+/// The mirror of `1a`, on the same document, and the pair is worth more than
+/// either half. Target: `SubjectOp::Update(subject, interrogations of 90
+/// minutes)`, with the slot left at 23:00 — 90 minutes from 23:00 ends at
+/// 00:30, so the *same* invariant fires on the *same* slot. But this time the
+/// slot's `start_time` is exactly what the invariant names: the shape test
+/// passes, the arm answers `Some(Slot::Remove(slot))`, the fix lands, and the
+/// target lands after it.
+///
+/// Alone, `1a` shows only that the arm says `None` somewhere. Together the two
+/// show that the `start` field *discriminates*: same invariant, same arm,
+/// opposite verdict, and the only difference is which of the two operands the
+/// op moved.
+///
+/// Two ops land, and content rather than sequence is asserted per this file's
+/// second rule: every round here reports exactly one break, so the order is
+/// forced by the data and pinning it would pin depth, not choice.
+///
+/// This is also §8.2 row 4's only pin. That row has **no legacy behaviour to
+/// compare against**: `ops/src/subjects.rs` does not read `BrokenInvariants` at
+/// all on this route — it applies the update under
+/// `.expect("All data should be valid at this point")` (`subjects.rs:758`, and
+/// again at `:895`), so lengthening an interrogation over a late slot aborts
+/// the process today. This fixture is what states the new answer. (The
+/// neighbouring `ops/src/slots.rs` *does* match on the overflow, at `:481`,
+/// which is `1a`'s route and a different story.)
+#[test]
+fn rejection_1b_a_lengthened_interrogation_removes_the_slot_it_overflows() {
+    let (app, subject, _teacher, slot) = document_with_a_slot_ending_at_midnight();
+
+    let mut data = app.get_data().clone();
+    let longer_subject = interrogation_subject_lasting("Math", BTreeSet::new(), 90);
+
+    let (target, _new_info) = data.annotate(Op::Subject(SubjectOp::Update(
+        subject,
+        longer_subject.clone(),
+    )));
+
+    let applied = apply_cascade(&mut data, target)
+        .expect("the arm removes the slot the lengthened interrogation overflows");
+
+    assert_same_ops(
+        &forward_ops(&applied),
+        &[
+            AnnotatedOp::from(AnnotatedSlotOp::Remove(slot)),
+            AnnotatedOp::from(AnnotatedSubjectOp::Update(subject, longer_subject.clone())),
+        ],
+    );
+
+    assert_clean(&data);
+    let params = &data.get_inner_data().params;
+    assert!(
+        params.slots.find_slot(slot).is_none(),
+        "the slot is gone — this is the arm's `Some` branch, the one `1a` refuses to take"
+    );
+    assert_eq!(
+        params.subjects.find_subject(subject),
+        Some(&longer_subject),
+        "and the target landed: the interrogation really is 90 minutes now"
     );
 }
