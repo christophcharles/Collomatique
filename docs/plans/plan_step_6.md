@@ -2902,7 +2902,11 @@ engine restores the snapshot and reports the break.
 
 This is the production-visible half of frame point 5. If any of these arms answered `Some`
 instead, the cascade would quietly repair the state, `apply` would return `Ok`, and the user
-would be told an edit succeeded that was in fact refused. Two of the §9ter.3 fixtures also keep
+would be told an edit succeeded that was in fact refused. (★ Refined July 29 2026 while
+writing 7.6b: that is the outcome for 1a, whose fix removes a whole row. For fixtures 2 and 3,
+whose fixes remove *one named element* from a row, the outcome is a **panic** instead — see the
+finding in §9ter.6. The general statement is "the arm does something it should not"; which of
+the two it looks like depends on the fix's shape.) Two of the §9ter.3 fixtures also keep
 a live `ops/`-layer translation alive: `UpdateColloscopeInterrogationError::InvalidGroupNumInInterrogation`
 (`ops/src/colloscope.rs:216-223`) and `UpdateSlotError::SlotOverlapsWithNextDay`
 (`ops/src/slots.rs:481`) both read a `BrokenInvariants` error that would never arrive.
@@ -3163,9 +3167,10 @@ commit amending this document with what the writing turned up. And §9's first r
 fixture here — the expected break set is derived by hand from the §8.1 / §8.2 tables before the
 test is run, never pasted from a run.
 
-**Status: 7.6a landed July 29 2026 (`ec2bf270`).** Both fixtures passed on their first run
-against hand-derived expectations, so no map bug surfaced. `tests/cascade.rs` now holds
-thirteen tests. Five things settled while writing it, all of which 7.6b and 7.6c inherit:
+**Status: 7.6a landed July 29 2026 (`ec2bf270`), 7.6b the same day (`56a3379b`).** Every
+fixture passed on its first run against hand-derived expectations, so no map bug has surfaced
+in this commit either. `tests/cascade.rs` now holds fifteen tests. Five things settled while
+writing 7.6a, all of which 7.6b and 7.6c inherit:
 
 - ★ **The tests are named `rejection_*`, not `fixture_*`.** §9 already owns `fixture_1a` and
   `fixture_1b`, and §9ter numbers its own fixtures 1a and 1b as well, so the names would
@@ -3197,6 +3202,40 @@ thirteen tests. Five things settled while writing it, all of which 7.6b and 7.6c
   form prints two opaque blobs. Comparing the `InnerData` directly gives a real diff, and it is
   already this file's idiom — fixture 6 does it. The coverage argument in §9ter.3 is untouched:
   the id issuer is still out of scope, for the reason given there.
+
+Three more from 7.6b:
+
+- ★ **For both of 7.6b's arms, a dropped shape test is a *panic*, not a silent repair** — and
+  §9ter.1's account of the stakes ("the cascade would quietly repair the state, `apply` would
+  return `Ok`, and the user would be told an edit succeeded that was in fact refused") does not
+  describe them. Both arms rebuild a row minus the named element: `rebuilt = row.clone();
+  rebuilt.remove(student)` (`resolution.rs:574-579`) and the same on the cell
+  (`resolution.rs:627-633`). On the *restored* row the named element is exactly the one that is
+  absent, so the rebuild returns the row unchanged, the fix applies as a perfect no-op, and the
+  engine panics on the strict-monotonicity contract (`state/src/cascade.rs:87-95`). This is not
+  a property of these two fixtures' construction — it is intrinsic to any arm whose fix removes
+  one named element, because §9ter.2 forces the element to be absent from the restored row. So
+  §9ter.1's sentence is right for 1a (whose fix is a whole-row `Remove`) and wrong for 2 and 3;
+  the correct general statement is "the arm does something it should not", and whether that
+  reads as a corruption or a crash depends on the fix's shape. Either way the fixture fails,
+  which is what matters.
+
+- ★ **Fixture 2's subject needs no interrogations.** §9ter.3 says only that it must "genuinely
+  run on `P`", which is about `excluded_periods` alone. Nothing in the assignments half of the
+  checker (`invariants.rs:483-507`) reads `interrogation_parameters`, and `force_apply_assignment`
+  checks only that the period, the subject and every student id exist
+  (`assignments.rs:86-120`) — the `SubjectDoesNotRunOnPeriod` and `StudentIsNotPresentOnPeriod`
+  guards are stripped at this layer. So the fixture uses `plain_subject` and needs neither a
+  teacher nor a slot: a period, a subject and two students is the whole document.
+
+- ★ **Fixture 3's document is the `1b` / `5b` colloscope-cell recipe, unchanged.** A cell needs
+  a week in a period, a slot whose subject runs there, *and* a group list associated to
+  `(period, subject)` — with no association the bound is `0` and no cell can be filled at all
+  (`invariants.rs:599-611`). The only thing this fixture varies is the group count: three, so
+  that `0` is legitimate and `7` is not. Nothing at the state layer guards the group number on
+  the way in; `force_apply_colloscope` says so in as many words ("stripped: … the
+  `InvalidGroupNumInInterrogation` group-bound guard", `colloscopes.rs:219-220`), which is what
+  lets the bad payload land and be caught by the checker rather than by a precheck.
 
 ## 10. Commit 8 — the cascade property test (`tests/property_cascade.rs`)
 
