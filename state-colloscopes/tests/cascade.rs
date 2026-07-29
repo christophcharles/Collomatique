@@ -2528,14 +2528,17 @@ fn rejection_1b_a_lengthened_interrogation_removes_the_slot_it_overflows() {
 /// `S` deliberately runs no interrogations: nothing in the assignments half of
 /// the checker looks at them, and the row costs a subject and no more.
 ///
-/// **What the failure would look like.** Not a silent repair, here. The arm's
-/// `Some` branch rebuilds the row without the named student, and on the
-/// restored row that rebuild is `{A}` again — a perfect no-op fix, which the
-/// engine treats as a map-contract violation and panics on
-/// (`state/src/cascade.rs:87-95`). So an arm that lost this comparison crashes
-/// rather than corrupts. That is the shape of every arm whose fix removes one
-/// element from a row, and it is why the assertion below is worth having even
-/// though the damage would be loud.
+/// **What the failure would look like.** Not a silent repair, here. On today's
+/// map the comparison above *is* how this arm honours the strict-monotonicity
+/// contract: it finds no `B` to remove and returns `None`, so no fix op is
+/// produced at all. Take the comparison away and the arm would fall through to
+/// its `Some` branch, which rebuilds the row without the named student — and on
+/// the restored row that rebuild is `{A}` again. That would be a perfect no-op
+/// fix, which the engine treats as a map-contract violation and panics on
+/// (`state/src/cascade.rs:87-95`). So an arm that lost this comparison would
+/// crash rather than corrupt. That is the shape of every arm whose fix removes
+/// one named element from a row, and it is why the assertion below is worth
+/// having even though the damage would be loud.
 #[test]
 fn rejection_2_a_student_absent_from_the_period_convicts_the_assignment() {
     let mut app = AppState::<Data, String>::new(Data::new());
@@ -2642,8 +2645,9 @@ fn rejection_2_a_student_absent_from_the_period_convicts_the_assignment() {
 /// and an arm that can merely see a cell there has no way to tell this trace
 /// from a legitimate one.
 ///
-/// The failure mode is the same panic as rejection `2`'s: removing `7` from
-/// `{0}` gives `{0}` back, a perfect no-op fix. Note also that the arm tests
+/// The counterfactual is the same as rejection `2`'s: were the `contains` test
+/// gone, removing `7` from `{0}` would give `{0}` back — a perfect no-op fix,
+/// and the engine's panic rather than a silent repair. Note also that the arm tests
 /// **presence, not the bound** — deliberately, per its own comment
 /// (`resolution.rs:623-626`): after a group-list shrink has itself been
 /// repaired, the group can read as in-bounds again while still having to go.

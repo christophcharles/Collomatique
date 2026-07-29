@@ -2903,10 +2903,11 @@ engine restores the snapshot and reports the break.
 This is the production-visible half of frame point 5. If any of these arms answered `Some`
 instead, the cascade would quietly repair the state, `apply` would return `Ok`, and the user
 would be told an edit succeeded that was in fact refused. (★ Refined July 29 2026 while
-writing 7.6b: that is the outcome for 1a, whose fix removes a whole row. For fixtures 2 and 3,
-whose fixes remove *one named element* from a row, the outcome is a **panic** instead — see the
-finding in §9ter.6. The general statement is "the arm does something it should not"; which of
-the two it looks like depends on the fix's shape.) Two of the §9ter.3 fixtures also keep
+writing 7.6b: that is the counterfactual outcome for 1a, whose fix removes a whole row. An arm
+whose fix removes *one named element* from a row — fixtures 2 and 3 — would instead emit a
+perfect no-op and be caught by the engine's panic. Same premise, different symptom; see the
+finding in §9ter.6. On today's map neither happens: the shape test is exactly how these arms
+honour the contract.) Two of the §9ter.3 fixtures also keep
 a live `ops/`-layer translation alive: `UpdateColloscopeInterrogationError::InvalidGroupNumInInterrogation`
 (`ops/src/colloscope.rs:216-223`) and `UpdateSlotError::SlotOverlapsWithNextDay`
 (`ops/src/slots.rs:481`) both read a `BrokenInvariants` error that would never arrive.
@@ -3205,20 +3206,27 @@ writing 7.6a, all of which 7.6b and 7.6c inherit:
 
 Three more from 7.6b:
 
-- ★ **For both of 7.6b's arms, a dropped shape test is a *panic*, not a silent repair** — and
-  §9ter.1's account of the stakes ("the cascade would quietly repair the state, `apply` would
-  return `Ok`, and the user would be told an edit succeeded that was in fact refused") does not
-  describe them. Both arms rebuild a row minus the named element: `rebuilt = row.clone();
-  rebuilt.remove(student)` (`resolution.rs:574-579`) and the same on the cell
-  (`resolution.rs:627-633`). On the *restored* row the named element is exactly the one that is
-  absent, so the rebuild returns the row unchanged, the fix applies as a perfect no-op, and the
-  engine panics on the strict-monotonicity contract (`state/src/cascade.rs:87-95`). This is not
-  a property of these two fixtures' construction — it is intrinsic to any arm whose fix removes
-  one named element, because §9ter.2 forces the element to be absent from the restored row. So
-  §9ter.1's sentence is right for 1a (whose fix is a whole-row `Remove`) and wrong for 2 and 3;
-  the correct general statement is "the arm does something it should not", and whether that
-  reads as a corruption or a crash depends on the fix's shape. Either way the fixture fails,
-  which is what matters.
+- ★ **§9ter.1's account of the stakes does not fit 2 and 3, and the reason is one §9bis already
+  named.** To be clear about what is and is not being claimed: on today's map nothing here
+  emits a no-op. The shape test *is* how these two arms honour the strict-monotonicity
+  contract — they look the row up, do not find the named element in it, and return `None`, so
+  no fix op is ever produced. The counterfactual is what differs. §9ter.1 says that an arm
+  which lost its shape test "would quietly repair the state, `apply` would return `Ok`, and the
+  user would be told an edit succeeded that was in fact refused". That is 1a's outcome, whose
+  fix is a whole-row `Remove`. Fixtures 2 and 3 rebuild a row *minus one named element* —
+  `rebuilt = row.clone(); rebuilt.remove(student)` (`resolution.rs:574-579`), and the same on
+  the cell (`resolution.rs:627-633`) — and §9ter.2 forces that element to be absent from the
+  restored row, so such an arm would hand the engine a rebuild identical to the row it started
+  from. The engine panics on that (`state/src/cascade.rs:87-95`), which is the panic doing its
+  job: it exists to catch a map that stops honouring the contract.
+
+  This is not a property of how these two fixtures were built; it is intrinsic to every arm
+  whose fix removes one named element. §9bis reached the same place from the other side and
+  said it well — *"what the arm needs, and what the test pins, is the presence test that keeps
+  it from emitting a perfect no-op"* (the `SettingsStudentKey` finding, and again in the
+  key-shape catalogue). Read §9ter.1's sentence as "the arm does something it should not";
+  whether that reads as a corruption or a crash depends on the fix's shape. Either way the
+  fixture fails, which is what it is for.
 
 - ★ **Fixture 2's subject needs no interrogations.** §9ter.3 says only that it must "genuinely
   run on `P`", which is about `excluded_periods` alone. Nothing in the assignments half of the
