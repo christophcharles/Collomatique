@@ -283,6 +283,11 @@ pub enum EvilMode {
     /// existing student — the state moves *sideways* (incomparable),
     /// neither shrinking nor growing.
     ReauthorExisting { quote: u64, author: u64 },
+    /// Answers the dangling invariant of quote `a` by "fixing" quote `b` and
+    /// vice versa, each fix creating the other dangling quote — a two-cycle
+    /// of never-landing fixes. Without the no-progress ledger this hangs the
+    /// cascade forever.
+    PingPong { a: u64, b: u64, author: u64 },
 }
 
 /// A deliberately misbehaving resolution map, to drive the engine's panic and
@@ -335,6 +340,13 @@ impl Fixable for EvilQuoteData {
                 quote: *quote,
                 author: *author,
             }),
+            EvilMode::PingPong { a, b, author } => {
+                let other = if quote == a { *b } else { *a };
+                Some(QuoteOp::SetQuote {
+                    quote: other,
+                    author: *author,
+                })
+            }
         }
     }
 }

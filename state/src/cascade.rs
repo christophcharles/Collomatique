@@ -14,10 +14,17 @@
 //! replayed.
 //!
 //! Termination rests on the resolution map's contract, and the engine holds it
-//! to it in-flight: after every fix, the new state must compare **strictly
-//! below** the pre-fix state in the document order ([ContentOrd], step 6.5). A
-//! fix landing equivalent (the old perfect-no-op panic), above, or incomparable
-//! panics instead of hanging.
+//! to it in-flight, on both routes a map bug could hang it. Fixes that land:
+//! after every fix, the new state must compare **strictly below** the pre-fix
+//! state in the document order ([ContentOrd], step 6.5) — landing equivalent
+//! (the old perfect-no-op panic), above, or incomparable panics. Fixes that
+//! never land: re-picking the same invariant with no landing in between panics
+//! (the no-progress ledger) — state only changes on landings and the map is a
+//! pure function of state, so such a re-pick is a cycle, not a repair. The one
+//! shape neither check can catch in-flight is a map that answers a failing fix
+//! with ever-fresh invented material instead of the state's own; the
+//! presence-test frame rule (design doc H.3) is what excludes it, and its
+//! material is finite, so a conforming map either lands or repeats a pick.
 
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
@@ -46,9 +53,13 @@ pub trait Fixable: InMemoryData + ContentOrd {
     /// state in that order: it removes a row or entity, clears an edge, or
     /// rewrites a value minus an element — never creates, and never lands
     /// equivalent. Return `None`, or a strictly-decreasing op. Because the
-    /// order is well-founded, this contract is the cascade's termination
-    /// proof, and [apply_cascade] asserts it after every fix: a fix landing
-    /// equivalent, above, or incomparable panics instead of hanging.
+    /// order is well-founded, this contract bounds the number of fixes that
+    /// *land*, and [apply_cascade] asserts it after every one: a fix landing
+    /// equivalent, above, or incomparable panics instead of hanging. Fix
+    /// chains that never land are bounded by the engine's no-progress ledger,
+    /// for any map that (per the presence rule below) only ever names material
+    /// present in the state: such a map has finitely many answers on an
+    /// unchanged state, so it either lands one or repeats a pick.
     ///
     /// The return type is the *annotated* op on purpose: with only `&self`,
     /// an implementation cannot reach the id issuer, so a fix physically
@@ -82,6 +93,12 @@ pub fn apply_cascade<T: Fixable>(
     // The target's most recent BrokenInvariants set: the informative error
     // when the target is convicted mid-cascade (D4 — the SlotOverflowsDay trace).
     let mut last_target_break: Option<BTreeSet<T::Invariant>> = None;
+    // Picks since the last landed op. State only changes on landings and the
+    // map is a pure function of (state, invariant), so re-picking the same
+    // invariant with no landing in between reproduces the same failing fix
+    // forever — a stuck map. Any landing resets the ledger; the legitimate
+    // N-round repair path always lands between re-picks.
+    let mut picks_since_landing: BTreeSet<T::Invariant> = BTreeSet::new();
 
     loop {
         let Some(front) = stack.last().cloned() else {
@@ -116,6 +133,7 @@ pub fn apply_cascade<T: Fixable>(
                         ),
                     }
                 }
+                picks_since_landing.clear();
                 stack.pop();
                 applied.push(ReversibleOp {
                     forward: front,
@@ -129,6 +147,13 @@ pub fn apply_cascade<T: Fixable>(
                     .clone();
                 if is_target {
                     last_target_break = Some(set);
+                }
+                if !picks_since_landing.insert(pick.clone()) {
+                    panic!(
+                        "cascade made no progress: invariant {pick:?} was picked \
+                         twice with no fix landing in between (failing op \
+                         {front:?}) — the resolution map is stuck in a cycle"
+                    );
                 }
                 match data.fix_invariant(&pick) {
                     Some(fix) => stack.push(fix),
@@ -371,6 +396,28 @@ mod tests {
         let (target, ()) = data.annotate(QuoteOp::SetQuote {
             quote: 99,
             author: 3,
+        });
+
+        let _ = apply_cascade(&mut data, target);
+    }
+
+    // 12. A map stuck in a never-landing two-cycle: without the no-progress
+    //     ledger this loops forever with no state change; with it, the second
+    //     pick of the same invariant panics.
+    #[test]
+    #[should_panic(expected = "made no progress")]
+    fn a_never_landing_fix_cycle_panics() {
+        let mut data = EvilQuoteData(
+            quote_data(&[1], &[]),
+            EvilMode::PingPong {
+                a: 10,
+                b: 20,
+                author: 7,
+            },
+        );
+        let (target, ()) = data.annotate(QuoteOp::SetQuote {
+            quote: 10,
+            author: 7,
         });
 
         let _ = apply_cascade(&mut data, target);
