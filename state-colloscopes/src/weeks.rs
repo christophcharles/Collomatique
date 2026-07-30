@@ -259,15 +259,6 @@ impl Weeks {
         self.ordering.get(&period_id).map(|order| order.len())
     }
 
-    /// Iterator over the periods that have at least one week, in id order.
-    ///
-    /// Under the sparse ordering this is *not* the same as "periods": a
-    /// week-empty period is absent. Twin of
-    /// [`crate::slots::Slots::subjects_with_slots`].
-    pub fn periods_with_weeks(&self) -> impl Iterator<Item = PeriodId> + '_ {
-        self.ordering.keys()
-    }
-
     /// Whether no period has any weeks.
     ///
     /// Reads the week table: the compound mutators keep it in lockstep with
@@ -333,44 +324,6 @@ impl Weeks {
                 return Some((pos, first_week));
             }
             first_week += self.week_order(period_id).len();
-        }
-
-        None
-    }
-
-    /// Finds the position of a period by id and gives the total number of weeks
-    /// up to and including the given period.
-    pub fn find_period_position_and_total_number_of_weeks(
-        &self,
-        periods: &Periods,
-        id: PeriodId,
-    ) -> Option<(usize, usize)> {
-        let mut total_weeks = 0usize;
-
-        for (pos, period_id) in periods.ordered_period_list.keys().enumerate() {
-            total_weeks += self.week_order(period_id).len();
-            if period_id == id {
-                return Some((pos, total_weeks));
-            }
-        }
-
-        None
-    }
-
-    /// Finds the first week number and the length of a period.
-    pub fn get_first_week_and_length_for_period(
-        &self,
-        periods: &Periods,
-        id: PeriodId,
-    ) -> Option<(usize, usize)> {
-        let mut first_week = 0usize;
-
-        for period_id in periods.ordered_period_list.keys() {
-            let len = self.week_order(period_id).len();
-            if period_id == id {
-                return Some((first_week, len));
-            }
-            first_week += len;
         }
 
         None

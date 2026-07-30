@@ -172,24 +172,6 @@ impl GroupListFilling {
         }
     }
 
-    /// Checks that no student appears twice in the groups (for Prefilled variant)
-    pub fn check_duplicated_student(&self) -> bool {
-        match self {
-            GroupListFilling::Prefilled { groups } => {
-                let mut students_so_far = BTreeSet::new();
-                for group in groups {
-                    for student in &group.students {
-                        if !students_so_far.insert(*student) {
-                            return false;
-                        }
-                    }
-                }
-                true
-            }
-            GroupListFilling::Automatic { .. } => true,
-        }
-    }
-
     /// Iterates over all students in prefilled groups (empty for Automatic)
     pub fn iter_students(&self) -> impl Iterator<Item = StudentId> + '_ {
         match self {
@@ -234,14 +216,6 @@ impl GroupListFilling {
                 None
             }
             GroupListFilling::Automatic { .. } => None,
-        }
-    }
-
-    /// Returns the number of groups (for Prefilled variant, 0 for Automatic)
-    pub fn groups_len(&self) -> usize {
-        match self {
-            GroupListFilling::Prefilled { groups } => groups.len(),
-            GroupListFilling::Automatic { .. } => 0,
         }
     }
 }
@@ -339,19 +313,6 @@ impl GroupList {
     /// Returns true if filling is Prefilled variant
     pub fn is_prefilled(&self) -> bool {
         self.filling.is_prefilled()
-    }
-
-    /// Returns the set of students that are not already in a prefilled group
-    pub fn students(&self, students: &BTreeSet<StudentId>) -> BTreeSet<StudentId> {
-        match &self.filling {
-            GroupListFilling::Automatic { excluded_students } => {
-                students.difference(excluded_students).copied().collect()
-            }
-            GroupListFilling::Prefilled { groups } => groups
-                .iter()
-                .flat_map(|g| g.students.iter().copied())
-                .collect(),
-        }
     }
 }
 
