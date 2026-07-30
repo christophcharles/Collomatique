@@ -753,6 +753,61 @@ fn neutral_assignments_row_on_excluded_subject_is_rejected() {
     );
 }
 
+/// A document with a single period of seven weeks and one week pattern
+/// whose bitmask has `week_count` entries
+///
+/// The spec (§4.6) requires exactly one entry per week of the schedule,
+/// so only `week_count == 7` is well-formed here.
+fn seven_week_document_with_pattern_of_length(week_count: usize) -> String {
+    let weeks = vec![r#"{ "interrogations": true, "annotation": null }"#; 7].join(", ");
+    let bits = vec!["true"; week_count].join(", ");
+    document(&[
+        entry(&format!(
+            r#"{{ "GeneralPlanning": {{
+                "first_week": null,
+                "periods": [ {{ "id": 1, "weeks": [{weeks}] }} ]
+            }} }}"#
+        )),
+        entry(&format!(
+            r#"{{ "WeekPatterns": [ {{ "id": 6, "name": "Quinzaine", "weeks": [{bits}] }} ] }}"#
+        )),
+    ])
+}
+
+#[test]
+fn week_pattern_matching_the_schedule_decodes() {
+    // The control: the exact-length bitmask is the well-formed shape.
+    let content = seven_week_document_with_pattern_of_length(7);
+
+    let (_data, caveats) = deserialize_data(&content).expect("Exact-length pattern should decode");
+    assert!(caveats.is_empty());
+}
+
+#[test]
+fn week_pattern_shorter_than_the_schedule_is_rejected() {
+    // Decode zips the bitmask against the walk order, so the missing
+    // bits silently default to active.
+    let content = seven_week_document_with_pattern_of_length(1);
+
+    assert!(
+        deserialize_data(&content).is_err(),
+        "A week pattern with fewer entries than the schedule has weeks must be rejected"
+    );
+}
+
+#[test]
+fn week_pattern_longer_than_the_schedule_is_rejected() {
+    // The surplus bits vanish in the zip. Since the in-memory type keeps
+    // only the exclusion set (no length), nothing downstream can catch
+    // this — decode is the only place it can be seen.
+    let content = seven_week_document_with_pattern_of_length(8);
+
+    assert!(
+        deserialize_data(&content).is_err(),
+        "A week pattern with more entries than the schedule has weeks must be rejected"
+    );
+}
+
 #[test]
 fn incompatibility_slot_crossing_midnight_is_rejected() {
     let entries = vec![
