@@ -6,8 +6,9 @@
 //! history-pointer logic, rollback of aggregated operations and session
 //! commit/cancel semantics. It has no invariants.
 //!
-//! [QuoteData] is the smallest state *with* an invariant (every quote's author
-//! must exist), so it can drive the cascade ([crate::cascade]); [EvilQuoteData]
+//! [QuoteData] is the smallest state *with* invariants (every quote's author
+//! must exist, and every note's quote must exist — three levels, so a fix can
+//! itself need a fix), so it can drive the cascade ([crate::cascade]); [EvilQuoteData]
 //! is a resolution-map wrapper whose deliberately misbehaving fixes exercise the
 //! engine's panic and restore paths.
 
@@ -99,16 +100,22 @@ pub fn rev_set(old: i64, new: i64) -> ReversibleOp<FakeOp> {
     }
 }
 
-/// A minimal state *with* an invariant: every quote's author must exist.
+/// A minimal state *with* invariants: every quote's author must exist, and
+/// every note's quote must exist.
 ///
 /// Students are a set of ids; quotes are rows attributing a saying to a
-/// student. Removing a student strands their quotes — the invariant break the
-/// cascade exists to resolve.
+/// student; notes are rows commenting on a quote. Removing a student strands
+/// their quotes — the invariant break the cascade exists to resolve. The
+/// third level exists so a *fix* can itself break an invariant: removing a
+/// stranded quote strands its notes, which makes the depth-first unwinding
+/// (deepest fix first, target last) reachable.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct QuoteData {
     pub students: BTreeSet<u64>,
     /// quote id -> author student id
     pub quotes: BTreeMap<u64, u64>,
+    /// note id -> commented quote id
+    pub notes: BTreeMap<u64, u64>,
 }
 
 /// Operations on [QuoteData].
@@ -130,6 +137,12 @@ pub enum QuoteOp {
     /// the target's own target and drive the retried target into `InvalidOp`
     /// with a remembered break (the D4 conviction route).
     UpdateQuote { quote: u64, author: u64 },
+    /// Sets (or overwrites) a note row. The commented quote is *not*
+    /// prechecked — the [QuoteOp::SetQuote] mirror one level down.
+    SetNote { note: u64, quote: u64 },
+    /// Removes a note row. Removing an absent note is a perfect no-op,
+    /// whose inverse is itself.
+    RemoveNote(u64),
 }
 
 impl Operation for QuoteOp {}
@@ -146,10 +159,19 @@ pub enum QuoteInvalidOp {
 }
 
 /// The resolvable tier for [QuoteData]: one broken invariant.
+///
+/// Declaration order is load-bearing: the derived `Ord` is what the engine's
+/// canonical pick (`set.first()`) follows, so quote invariants sort before
+/// note invariants. Keeping the levels in that order means a cascade repairs
+/// the quote level first, and the note breakage a quote removal creates is
+/// discovered as a *fresh* failure of that fix — which is exactly the
+/// depth-3 shape the toy exists to exercise.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Error)]
 pub enum QuoteInvariant {
     #[error("quote {0} has a dangling author")]
     DanglingQuoteAuthor(u64),
+    #[error("note {0} comments a quote that does not exist")]
+    DanglingNoteQuote(u64),
 }
 
 impl InMemoryData for QuoteData {
@@ -220,15 +242,35 @@ impl InMemoryData for QuoteData {
                     author: old,
                 }
             }
+            QuoteOp::SetNote { note, quote } => match next.notes.insert(*note, *quote) {
+                Some(old) => QuoteOp::SetNote {
+                    note: *note,
+                    quote: old,
+                },
+                None => QuoteOp::RemoveNote(*note),
+            },
+            QuoteOp::RemoveNote(note) => match next.notes.remove(note) {
+                Some(old) => QuoteOp::SetNote {
+                    note: *note,
+                    quote: old,
+                },
+                None => QuoteOp::RemoveNote(*note),
+            },
         };
 
         // Check the whole state (the gate's tier 2), as the real checker does:
-        // every quote's author must exist.
+        // every quote's author must exist, and every note's quote must exist.
         let broken: BTreeSet<QuoteInvariant> = next
             .quotes
             .iter()
             .filter(|(_, author)| !next.students.contains(author))
             .map(|(quote, _)| QuoteInvariant::DanglingQuoteAuthor(*quote))
+            .chain(
+                next.notes
+                    .iter()
+                    .filter(|(_, quote)| !next.quotes.contains_key(quote))
+                    .map(|(note, _)| QuoteInvariant::DanglingNoteQuote(*note)),
+            )
             .collect();
         if !broken.is_empty() {
             // Rollback = never commit `next`; `self` is untouched.
@@ -249,23 +291,34 @@ impl Fixable for QuoteData {
                 .quotes
                 .contains_key(quote)
                 .then(|| QuoteOp::RemoveQuote(*quote)),
+            QuoteInvariant::DanglingNoteQuote(note) => self
+                .notes
+                .contains_key(note)
+                .then(|| QuoteOp::RemoveNote(*note)),
         }
     }
 }
 
-/// The document order on the toy: students by set inclusion, quotes by map
-/// inclusion with atomic authors (re-authoring a quote is incomparable,
-/// removing one is strictly below).
+/// The document order on the toy: students by set inclusion, quotes and notes
+/// by map inclusion with atomic values (re-authoring a quote, or re-pointing
+/// a note, is incomparable; removing one is strictly below).
 ///
 /// Hand-written on purpose: it exercises the combinators and the engine with
 /// zero dependence on `#[derive(ContentOrd)]`, and doubles as documentation
 /// of what that derive expands to.
 impl ContentOrd for QuoteData {
     fn content_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        let QuoteData { students, quotes } = self;
+        let QuoteData {
+            students,
+            quotes,
+            notes,
+        } = self;
         crate::partial_order::combine([
             crate::partial_order::set_inclusion(students, &other.students),
             crate::partial_order::map_inclusion(quotes, &other.quotes, |a, b| {
+                crate::partial_order::discrete(a, b)
+            }),
+            crate::partial_order::map_inclusion(notes, &other.notes, |a, b| {
                 crate::partial_order::discrete(a, b)
             }),
         ])
@@ -337,7 +390,12 @@ impl InMemoryData for EvilQuoteData {
 
 impl Fixable for EvilQuoteData {
     fn fix_invariant(&self, invariant: &QuoteInvariant) -> Option<QuoteOp> {
-        let QuoteInvariant::DanglingQuoteAuthor(quote) = invariant;
+        // Every mode misbehaves on the quote level only; the note level is
+        // answered honestly, so the existing evil tests read unchanged.
+        let quote = match invariant {
+            QuoteInvariant::DanglingQuoteAuthor(quote) => quote,
+            QuoteInvariant::DanglingNoteQuote(_) => return self.0.fix_invariant(invariant),
+        };
         match &self.1 {
             EvilMode::Blind => Some(QuoteOp::RemoveQuote(*quote)),
             EvilMode::WrongTargetElseNone => self
@@ -391,6 +449,7 @@ mod partial_order_tests {
         QuoteData {
             students: students.iter().copied().collect(),
             quotes: quotes.iter().copied().collect(),
+            notes: BTreeMap::new(),
         }
     }
 

@@ -196,9 +196,18 @@ mod tests {
     use std::collections::BTreeSet;
 
     fn quote_data(students: &[u64], quotes: &[(u64, u64)]) -> QuoteData {
+        quote_data_with_notes(students, quotes, &[])
+    }
+
+    fn quote_data_with_notes(
+        students: &[u64],
+        quotes: &[(u64, u64)],
+        notes: &[(u64, u64)],
+    ) -> QuoteData {
         QuoteData {
             students: students.iter().copied().collect(),
             quotes: quotes.iter().copied().collect(),
+            notes: notes.iter().copied().collect(),
         }
     }
 
@@ -442,6 +451,46 @@ mod tests {
             err,
             ApplyError::BrokenInvariants(BTreeSet::from([QuoteInvariant::DanglingQuoteAuthor(10)])),
         );
+        assert_eq!(data, original);
+    }
+
+    // 14. Depth 3: a fix that itself needs a fix. Every other green cascade
+    //     here is a depth-2 alternation, because removing a quote used to
+    //     break nothing. The applied list is the depth-first unwinding —
+    //     deepest fix first, target last.
+    #[test]
+    fn a_fix_needing_its_own_fix_unwinds_depth_first() {
+        let mut data = quote_data_with_notes(&[1], &[(10, 1)], &[(5, 10)]);
+        let (target, ()) = data.annotate(QuoteOp::RemoveStudent(1));
+
+        let applied = apply_cascade(&mut data, target).expect("cascade resolves");
+
+        assert_eq!(
+            forward_ops(&applied),
+            vec![
+                QuoteOp::RemoveNote(5),
+                QuoteOp::RemoveQuote(10),
+                QuoteOp::RemoveStudent(1),
+            ],
+        );
+        assert!(data.students.is_empty());
+        assert!(data.quotes.is_empty());
+        assert!(data.notes.is_empty());
+    }
+
+    // 15. Test 2's compound reverse, pinned at depth 3: the unwinding is
+    //     replayed backwards through three levels back to the exact original.
+    #[test]
+    fn undo_replays_a_depth_three_cascade_to_the_original_state() {
+        let original = quote_data_with_notes(&[1], &[(10, 1)], &[(5, 10)]);
+        let mut data = original.clone();
+        let (target, ()) = data.annotate(QuoteOp::RemoveStudent(1));
+
+        let applied = apply_cascade(&mut data, target).expect("cascade resolves");
+        for rev_op in applied.inner().iter().rev() {
+            data.apply(&rev_op.backward).expect("backward op applies");
+        }
+
         assert_eq!(data, original);
     }
 }
