@@ -158,6 +158,12 @@ impl Slots {
     }
 
     /// Whether no subject has any slots.
+    ///
+    /// Reads the ordering sidecar: the compound mutators keep it in lockstep
+    /// with `slot_map`, so the two containers cover the same slots in every
+    /// ops-reachable state (force ops included); only test forgery can split
+    /// them. (The weeks twin reads its entity table instead — either side of
+    /// the lockstep is equally authoritative.)
     pub fn is_empty(&self) -> bool {
         self.ordering.is_empty()
     }

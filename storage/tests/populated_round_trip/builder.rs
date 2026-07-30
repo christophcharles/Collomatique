@@ -949,7 +949,7 @@ fn check_all_sections_populated(data: &Data) {
     assert!(!params.pairings.pairing_rule_map.is_empty());
     assert!(!params.slot_pairings.slot_pairing_rule_map.is_empty());
 
-    assert!(!inner.colloscope.is_empty());
+    assert!(!inner.colloscope.are_interrogations_empty());
     assert!(!inner.colloscope.are_group_lists_empty());
 
     assert!(inner.export_config != export_config::ExportConfig::default());

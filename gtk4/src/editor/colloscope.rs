@@ -332,7 +332,7 @@ impl Component for Colloscope {
                     },
                     gtk::Button {
                         #[watch]
-                        set_sensitive: !model.colloscope.is_empty(),
+                        set_sensitive: !model.colloscope.are_interrogations_empty(),
                         set_icon_name: "edit-delete-symbolic",
                         add_css_class: "flat",
                         set_tooltip_text: Some("Effacer le colloscope"),

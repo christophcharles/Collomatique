@@ -30,10 +30,16 @@ pub struct Colloscope {
 }
 
 impl Colloscope {
-    pub fn is_empty(&self) -> bool {
+    /// Whether there are no interrogation rows. Reads the interrogations table
+    /// only — its twin [Self::are_group_lists_empty] covers the other half of
+    /// the struct.
+    pub fn are_interrogations_empty(&self) -> bool {
         self.interrogations.is_empty()
     }
 
+    /// Whether no group list has any placements. Reads the group-lists table
+    /// only — its twin [Self::are_interrogations_empty] covers the other half
+    /// of the struct.
     pub fn are_group_lists_empty(&self) -> bool {
         self.group_lists.is_empty()
     }

@@ -1502,7 +1502,7 @@ fn available_semantic_recipes(inner: &InnerData, pools: &Pools) -> Vec<SemanticR
     if inner.params.assignments.iter().next().is_some() {
         recipes.push(SemanticRecipe::SubjectExclude);
     }
-    if !inner.colloscope.is_empty() {
+    if !inner.colloscope.are_interrogations_empty() {
         recipes.push(SemanticRecipe::WeekOff);
     }
     recipes
