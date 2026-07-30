@@ -109,6 +109,10 @@ small. No id counter is stored. Writers should nevertheless strive to keep ids
 within the 32-bit range: small ids are easier on human readers, and we avoid
 potential bugs if the IDs exceed 2^63 while the application is running.
 
+Readers may reserve id headroom above the largest defining id (for synthesized
+ids); writers should stay far below the 2⁶³ − 1 ceiling — the 32-bit guidance
+above makes the reservation invisible in practice.
+
 ### Scalar encodings
 
 | Value | JSON encoding | Constraints |

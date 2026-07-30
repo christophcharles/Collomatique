@@ -805,6 +805,9 @@ state; this appendix supersedes them as the description of the live model.
 - **Colloscope surface**: readers `interrogation`, `interrogations_for_slot`, `iter`,
   `group_list`, `group_lists_iter`; writers `set_interrogation` / `set_group_list` (panic
   on impossible coordinates, empty payload clears the row — canonical form maintained).
+  *(Superseded: since the step-5/6 gate the writers are plain upserts that never panic
+  (`colloscopes.rs:84-86`); the coordinate checks live in `force_apply_colloscope`'s
+  prechecks — see G/H.4. The empty-payload-clears-the-row half stands.)*
 
 ### B.4 Deleted or dissolved by step 1
 
@@ -1776,7 +1779,12 @@ that is step 7.
   11 `fixture_*` asserting `Ok` (the cascade repairs and the target lands), 4 `rejection_*`
   and 4 `identity_pin_*` asserting `Err` plus the document unchanged.
 - **`state-colloscopes/src/resolution/innocent_tests.rs`** — **51** innocent-state `None`
-  tests, one per *comparison*, calling `fix_invariant` directly on a valid document with an
+  tests, one per *comparison* (with one deliberate doubling-up: the
+  `StudentRefSite::GroupListExcludedStudent` arm's variant guard shares its test with the
+  membership half — a prefilled list excludes nobody, so a regression that dropped the
+  guard still answers `None` through the membership test, which makes splitting the two
+  near-worthless; acknowledged in the block comment at `innocent_tests.rs:1619-1624`),
+  calling `fix_invariant` directly on a valid document with an
   invariant derived from a corrupted twin. These are what mechanically catch a missing
   identity or shape test; the `Ok`-route fixtures cannot see one, because on a legitimate
   route the target id equals the live field and the op list comes out the same either way.
