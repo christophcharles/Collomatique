@@ -422,4 +422,26 @@ mod tests {
 
         let _ = apply_cascade(&mut data, target);
     }
+
+    // 13. The remembered-error conviction (D4): a fix consumes the target's
+    //     own target, the retried target hits a precheck, and the user is told
+    //     what the target kept breaking — not a baffling "unknown quote" for a
+    //     quote they can see.
+    #[test]
+    fn a_fix_consuming_the_targets_target_reports_the_remembered_break() {
+        let original = quote_data(&[1], &[(10, 1)]);
+        let mut data = original.clone();
+        let (target, ()) = data.annotate(QuoteOp::UpdateQuote {
+            quote: 10,
+            author: 7,
+        });
+
+        let err = apply_cascade(&mut data, target).unwrap_err();
+
+        assert_eq!(
+            err,
+            ApplyError::BrokenInvariants(BTreeSet::from([QuoteInvariant::DanglingQuoteAuthor(10)])),
+        );
+        assert_eq!(data, original);
+    }
 }

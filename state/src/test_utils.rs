@@ -125,6 +125,11 @@ pub enum QuoteOp {
     /// Removes a quote row. Removing an absent quote is a perfect no-op
     /// (G.2 precedent), whose inverse is itself.
     RemoveQuote(u64),
+    /// Rewrites an existing quote's author. Unlike [QuoteOp::SetQuote] the
+    /// quote must exist (precheck) — which is what lets a cascade fix consume
+    /// the target's own target and drive the retried target into `InvalidOp`
+    /// with a remembered break (the D4 conviction route).
+    UpdateQuote { quote: u64, author: u64 },
 }
 
 impl Operation for QuoteOp {}
@@ -136,6 +141,8 @@ pub enum QuoteInvalidOp {
     UnknownStudent(u64),
     #[error("student {0} already exists")]
     StudentExists(u64),
+    #[error("unknown quote {0}")]
+    UnknownQuote(u64),
 }
 
 /// The resolvable tier for [QuoteData]: one broken invariant.
@@ -169,6 +176,9 @@ impl InMemoryData for QuoteData {
             QuoteOp::RemoveStudent(s) if !self.students.contains(s) => {
                 return Err(ApplyError::InvalidOp(QuoteInvalidOp::UnknownStudent(*s)));
             }
+            QuoteOp::UpdateQuote { quote, .. } if !self.quotes.contains_key(quote) => {
+                return Err(ApplyError::InvalidOp(QuoteInvalidOp::UnknownQuote(*quote)));
+            }
             _ => {}
         }
 
@@ -200,6 +210,16 @@ impl InMemoryData for QuoteData {
                 },
                 None => QuoteOp::RemoveQuote(*quote),
             },
+            QuoteOp::UpdateQuote { quote, author } => {
+                let old = next
+                    .quotes
+                    .insert(*quote, *author)
+                    .expect("prechecked: the quote exists");
+                QuoteOp::UpdateQuote {
+                    quote: *quote,
+                    author: old,
+                }
+            }
         };
 
         // Check the whole state (the gate's tier 2), as the real checker does:
