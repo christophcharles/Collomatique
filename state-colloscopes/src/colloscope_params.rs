@@ -104,99 +104,6 @@ impl Parameters {
     }
 }
 
-impl Parameters {
-    /// Promotes an u64 to a [PeriodId] if it is valid
-    pub fn validate_period_id(&self, id: u64) -> Option<PeriodId> {
-        for period_id in self.periods.period_ids() {
-            if period_id.inner() == id {
-                return Some(period_id);
-            }
-        }
-
-        None
-    }
-
-    /// Promotes an u64 to a [StudentId] if it is valid
-    pub fn validate_student_id(&self, id: u64) -> Option<StudentId> {
-        let student_id = unsafe { StudentId::new(id) };
-
-        if !self.students.student_map.contains(&student_id) {
-            return None;
-        }
-
-        Some(student_id)
-    }
-
-    /// Promotes an u64 to a [SubjectId] if it is valid
-    pub fn validate_subject_id(&self, id: u64) -> Option<SubjectId> {
-        for (subject_id, _) in self.subjects.ordered_subject_list.iter() {
-            if subject_id.inner() == id {
-                return Some(subject_id);
-            }
-        }
-
-        None
-    }
-
-    /// Promotes an u64 to a [TeacherId] if it is valid
-    pub fn validate_teacher_id(&self, id: u64) -> Option<TeacherId> {
-        let temp_teacher_id = unsafe { TeacherId::new(id) };
-        if self.teachers.teacher_map.contains(&temp_teacher_id) {
-            return Some(temp_teacher_id);
-        }
-
-        None
-    }
-
-    /// Promotes an u64 to a [WeekPatternId] if it is valid
-    pub fn validate_week_pattern_id(&self, id: u64) -> Option<WeekPatternId> {
-        let temp_week_pattern_id = unsafe { WeekPatternId::new(id) };
-        if self
-            .week_patterns
-            .week_pattern_map
-            .contains(&temp_week_pattern_id)
-        {
-            return Some(temp_week_pattern_id);
-        }
-
-        None
-    }
-
-    /// Promotes an u64 to a [SlotId] if it is valid
-    pub fn validate_slot_id(&self, id: u64) -> Option<SlotId> {
-        let slot_id = unsafe { SlotId::new(id) };
-        if self.slots.find_slot(slot_id).is_some() {
-            Some(slot_id)
-        } else {
-            None
-        }
-    }
-
-    /// Promotes an u64 to a [IncompatId] if it is valid
-    pub fn validate_incompat_id(&self, id: u64) -> Option<IncompatId> {
-        let temp_incompat_id = unsafe { IncompatId::new(id) };
-        if self.incompats.incompat_map.contains(&temp_incompat_id) {
-            return Some(temp_incompat_id);
-        }
-
-        None
-    }
-
-    /// Promotes an u64 to a [GroupListId] if it is valid
-    pub fn validate_group_list_id(&self, id: u64) -> Option<GroupListId> {
-        let temp_group_list_id = unsafe { GroupListId::new(id) };
-        if self
-            .group_lists
-            .group_list_map
-            .contains(&temp_group_list_id)
-        {
-            return Some(temp_group_list_id);
-        }
-
-        None
-    }
-}
-
 // --- Keyed read interface (SQL-like lookup) ---
 //
 // One [`Lookup`] impl per entity kind, keyed on the matching typed id and
@@ -348,25 +255,5 @@ impl Parameters {
     /// raw `u64`. A thin numeric adapter over [`Parameters::all_ids`].
     pub(crate) fn ids(&self) -> impl Iterator<Item = u64> + '_ {
         self.all_ids().map(|id| id.inner())
-    }
-
-    /// Promotes an u64 to a [PairingRuleId] if it is valid
-    pub fn validate_pairing_rule_id(&self, id: u64) -> Option<PairingRuleId> {
-        let temp_id = unsafe { PairingRuleId::new(id) };
-        if self.pairings.pairing_rule_map.contains(&temp_id) {
-            return Some(temp_id);
-        }
-
-        None
-    }
-
-    /// Promotes an u64 to a [SlotPairingRuleId] if it is valid
-    pub fn validate_slot_pairing_rule_id(&self, id: u64) -> Option<SlotPairingRuleId> {
-        let id = unsafe { SlotPairingRuleId::new(id) };
-        if self.slot_pairings.slot_pairing_rule_map.contains(&id) {
-            Some(id)
-        } else {
-            None
-        }
     }
 }

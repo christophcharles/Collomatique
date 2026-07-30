@@ -1472,7 +1472,10 @@ precheck twin already or died as a stripped guard; D.4-F1's vacuous
 predicted); `InnerData::check_invariants` + `check_no_duplicate_ids` + `InnerDataError`;
 `Parameters::check_invariants` + `InvariantError` + the `check_*_data_consistency` family
 + the `validate_*`/`*_internal` Result-returning validators (the pub `validate_*_id`
-u64-promotion helpers are a different family and stay); colloscopes
+u64-promotion helpers are a different family and stay — *superseded: the pre-step-7
+review found all ten of them caller-free workspace-wide and deleted them too; a
+u64-promotion surface can be reintroduced deliberately, in one style, when a consumer
+asks for it*); colloscopes
 `validate_against_params` + sub-validators + `ColloscopeError`; and the whole legacy
 bridge (`to_legacy` ×2, `dangling_to_legacy`, `convergence_to_legacy`,
 `is_necessarily_logic_error`, `assert_differential`). R1 had already deleted the canary
