@@ -163,4 +163,32 @@ mod tests {
         });
         assert!(serde_json::from_value::<Options>(value).is_err());
     }
+
+    // The test above drops a plain `bool`, which serde rejects on its own.
+    // The two `Option` fields only reject a missing key because of their
+    // `explicit_option` attribute: lose it and serde silently defaults them
+    // to `None`, turning "rotation off" into a spelling of "field absent".
+    // One pin per field is what catches that.
+
+    #[test]
+    fn missing_teacher_rotation_is_rejected() {
+        let value = json!({
+            "slot_rotation": null,
+            "avoid_twice_in_a_row": true,
+            "year_teacher_rotation": false,
+            "period_teacher_rotation": false
+        });
+        assert!(serde_json::from_value::<Options>(value).is_err());
+    }
+
+    #[test]
+    fn missing_slot_rotation_is_rejected() {
+        let value = json!({
+            "teacher_rotation": null,
+            "avoid_twice_in_a_row": true,
+            "year_teacher_rotation": false,
+            "period_teacher_rotation": false
+        });
+        assert!(serde_json::from_value::<Options>(value).is_err());
+    }
 }

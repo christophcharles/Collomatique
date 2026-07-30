@@ -115,4 +115,34 @@ mod tests {
         });
         assert!(serde_json::from_value::<Student>(value).is_err());
     }
+
+    // `missing_field_is_rejected` drops `excluded_periods`, which serde
+    // rejects on its own. The two `Option` fields only reject a missing key
+    // because of their `explicit_option` attribute: lose it and serde
+    // silently defaults them to `None`, so "no phone number" and "the field
+    // was never written" stop being distinguishable. One pin per field.
+
+    #[test]
+    fn missing_tel_is_rejected() {
+        let value = json!({
+            "id": 5,
+            "surname": "Granger",
+            "firstname": "Hermione",
+            "email": null,
+            "excluded_periods": []
+        });
+        assert!(serde_json::from_value::<Student>(value).is_err());
+    }
+
+    #[test]
+    fn missing_email_is_rejected() {
+        let value = json!({
+            "id": 5,
+            "surname": "Granger",
+            "firstname": "Hermione",
+            "tel": null,
+            "excluded_periods": []
+        });
+        assert!(serde_json::from_value::<Student>(value).is_err());
+    }
 }

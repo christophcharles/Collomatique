@@ -307,4 +307,31 @@ mod tests {
             .insert("extra".to_string(), json!(1));
         assert!(serde_json::from_value::<ExportConfig>(value).is_err());
     }
+
+    // The block's only `Option` field, carried by the three
+    // [PerStudentGroupsConfig] sections. It rejects a missing key solely
+    // because of its `explicit_option` attribute; without it serde would
+    // silently default to `None`, i.e. to "auto-detect the orientation".
+    #[test]
+    fn missing_per_student_groups_orientation_is_rejected() {
+        for section in [
+            "all_groups_config",
+            "automatic_groups_config",
+            "prefilled_groups_config",
+        ] {
+            let mut value = spec_default();
+            value
+                .as_object_mut()
+                .unwrap()
+                .get_mut(section)
+                .unwrap()
+                .as_object_mut()
+                .unwrap()
+                .remove("orientation");
+            assert!(
+                serde_json::from_value::<ExportConfig>(value).is_err(),
+                "a missing orientation in {section} should be rejected"
+            );
+        }
+    }
 }

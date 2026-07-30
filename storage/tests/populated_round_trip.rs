@@ -44,6 +44,59 @@ fn reserialize_is_stable() {
     assert_eq!(serialize_data(&decoded), serialized);
 }
 
+/// The bytes `serialize_data` produced for [builder::build_rich_data] on
+/// the day the fixture was written
+///
+/// The two tests above pin *self*-consistency: one build's writer against
+/// the same build's writer. They stay green if the writer changes its
+/// indentation, its key order or its number formatting, as long as it does
+/// so consistently. This fixture is the outside witness that catches that.
+const GOLDEN: &str = include_str!("fixtures/spec2_populated_golden.json");
+
+/// Blanks out the header's `produced_with_version` object
+///
+/// That object is the package version, not a format decision, so a version
+/// bump must not force a fixture regeneration. Everything else — the
+/// header's own shape and key order included — stays under the byte
+/// comparison. The version object has no nested braces, so the first `}`
+/// closes it.
+fn mask_version(document: &str) -> String {
+    let start = document
+        .find("\"produced_with_version\": {")
+        .expect("the header carries a produced_with_version object");
+    let end = start
+        + document[start..]
+            .find('}')
+            .expect("the version object is closed")
+        + 1;
+    format!(
+        "{}\"produced_with_version\": <masked>{}",
+        &document[..start],
+        &document[end..]
+    )
+}
+
+#[test]
+fn writer_output_matches_the_golden_fixture() {
+    // On a *deliberate* format evolution, regenerate the fixture with
+    //     cargo test -p collomatique-storage --test populated_round_trip \
+    //         -- --ignored regenerate_golden_fixture
+    // and read the resulting diff before committing it. A diff nobody
+    // intended is this test doing its job.
+    let serialized = serialize_data(&builder::build_rich_data());
+
+    assert_eq!(mask_version(&serialized), mask_version(GOLDEN));
+}
+
+#[test]
+#[ignore = "writes the golden fixture; run explicitly on a deliberate format change"]
+fn regenerate_golden_fixture() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/spec2_populated_golden.json");
+    std::fs::write(&path, serialize_data(&builder::build_rich_data()))
+        .expect("The fixture should be writable");
+}
+
 #[test]
 fn deserialized_data_is_still_editable() {
     let data = builder::build_rich_data();
