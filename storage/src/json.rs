@@ -16,13 +16,21 @@ use serde::{Deserialize, Serialize};
 /// that a file can be routed to the right decoding pipeline — legacy (spec 1)
 /// or spec 2 — based only on the declared `minimum_spec_version` values,
 /// before any payload interpretation happens.
+///
+/// The envelope structs are records in the sense of the spec (§2-§3):
+/// every field is always present and an unknown field makes the document
+/// invalid, hence `deny_unknown_fields` on each of them. (It is
+/// compatible with the raw `content` payload: that is a named field, not
+/// a `flatten`.)
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RawJsonData {
     pub header: Header,
     pub entries: Vec<RawEntry>,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RawEntry {
     pub minimum_spec_version: u32,
     pub needed_entry: bool,
@@ -49,6 +57,7 @@ pub struct Spec2Entry {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Header {
     pub file_type: FileType,
     pub produced_with_version: Version,
@@ -60,6 +69,7 @@ pub struct Header {
 /// A semantic version number is structure as MAJOR.MINOR.PATCH
 /// as given by th various members
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord)]
+#[serde(deny_unknown_fields)]
 pub struct Version {
     /// Major version number
     pub major: u32,
