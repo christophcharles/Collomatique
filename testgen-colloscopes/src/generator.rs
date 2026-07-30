@@ -493,7 +493,11 @@ fn gen_teacher(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
 fn gen_assignment(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invalid: bool) -> Op {
     let period_id = pick(rng, &pools.period_ids);
     if invalid {
-        // A dangling student id inside the row trips the coordinate precheck.
+        // A dangling student id inside the row. It is rejected by the *checker*
+        // (`DanglingFk @ AssignmentsStudent`), not by a precheck: `SetRow`
+        // prechecks the row's `(period, subject)` address only, and the payload
+        // students are content owned by the FK net. Either way the op is an
+        // `Err`, which is all the walk harnesses key on.
         let op = AssignmentOp::SetRow(
             period_id,
             pick(rng, &pools.subject_ids),

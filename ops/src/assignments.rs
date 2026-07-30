@@ -147,7 +147,7 @@ impl AssignmentsUpdateOp {
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
                             AssignmentPrecheckError, Convergence, Error, FixableInvariant,
-                            InvalidOp, PrecheckError,
+                            InvalidOp, PrecheckError, Reference, StudentRefSite,
                         };
                         match e {
                             Error::InvalidOp(InvalidOp::Precheck(PrecheckError::Assignment(
@@ -156,18 +156,39 @@ impl AssignmentsUpdateOp {
                                 AssignmentPrecheckError::InvalidPeriodId(id) => {
                                     AssignError::InvalidPeriodId(id)
                                 }
-                                AssignmentPrecheckError::InvalidStudentId(id) => {
-                                    AssignError::InvalidStudentId(id)
-                                }
                                 AssignmentPrecheckError::InvalidSubjectId(id) => {
                                     AssignError::InvalidSubjectId(id)
                                 }
                             },
-                            // The pre-op state was valid, so any convergence break
-                            // in the set was introduced by this Assign. Old validator
-                            // order (colloscope_params validate): subject-not-running
-                            // before student-not-present.
+                            // The pre-op state was valid, so any break in the set
+                            // was introduced by this Assign.
+                            //
+                            // The dangling-student scan comes first, and that
+                            // order is the whole point: the state layer used to
+                            // sweep `SetRow`'s payload students in its precheck,
+                            // so a dead student was reported *before* the op could
+                            // land and no convergence break was ever visible
+                            // alongside it. The sweep moved to the FK net in the
+                            // pre-step-7 review (op *address* is prechecked, op
+                            // *content* belongs to the checker), which means both
+                            // kinds of break can now arrive in one set — e.g. a
+                            // dead student on a subject that does not run on the
+                            // period. Scanning FK-first keeps this public error
+                            // surface exactly what it was.
+                            //
+                            // The two convergence scans then follow the old
+                            // validator order (colloscope_params validate):
+                            // subject-not-running before student-not-present.
                             Error::BrokenInvariants(set) => {
+                                for inv in &set {
+                                    if let FixableInvariant::DanglingFk(Reference::Student {
+                                        target,
+                                        site: StudentRefSite::AssignmentsStudent { .. },
+                                    }) = inv
+                                    {
+                                        return AssignError::InvalidStudentId(*target);
+                                    }
+                                }
                                 for inv in &set {
                                     if let FixableInvariant::Convergence(
                                         Convergence::AssignmentForSubjectNotRunningOnPeriod(

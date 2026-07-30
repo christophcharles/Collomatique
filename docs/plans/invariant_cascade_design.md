@@ -1044,9 +1044,22 @@ deletion (everything twinned in Table 1 retires in favor of the precise vocabula
 
 - **No-clobber** — `*IdAlreadyExists` in every Add.
 - **Op-target existence** — `Invalid*Id` on the entity being updated/removed.
-- **Parameter targeting** — op inputs that must resolve (`AddAfter` anchors incl.
-  `PreviousSlotIsNotInRightSubject`, `Assign`/`SetInterrogation`/`SetGroupList`/
-  `AssignToSubject` coordinates, `WeekMove` destination).
+- **Parameter targeting** — op inputs that say *where* the op acts must resolve (`AddAfter`
+  anchors incl. `PreviousSlotIsNotInRightSubject`, `Assign`/`SetInterrogation`/
+  `SetGroupList`/`AssignToSubject` coordinates, `WeekMove` destination).
+  *Revised by the pre-step-7 review — the address/content split.* This bullet covers the
+  op's **address** only. Ids the op writes *into* the document are **content**, and are
+  deliberately not prechecked: the dangling-FK net reports them, and the resolution map's
+  presence tests guarantee a *conviction* rather than a spurious fix when such an op is a
+  cascade target (the gate rolls the failing target back before the map is consulted, so
+  the map only ever sees the valid pre-state, where the bad id is absent — the arm answers
+  `None` and the engine reports the remembered break). Concretely: `AssignmentOp::SetRow`'s
+  payload-student sweep was **removed** by that review, and `ColloscopeOp::SetGroupList`'s
+  placements were never swept — the two ops are now symmetric. `SetRow` keeps both key
+  checks (period, subject), because with an empty payload (`SetRow(key, ∅)` clears the row)
+  nothing lands in the document and the FK net is structurally blind to a dead address.
+  This does not touch the cascade path for `StudentOp::Remove`: that one flows through
+  `DanglingFk @ AssignmentsStudent` computed on the *live* state and never met the precheck.
 - **Position bounds** — `InvalidPosition`, `PositionOutOfBounds`.
 - **Empty-first protocol** — `PeriodStillHasWeeks`, `RemainingFilling`,
   `NonEmptyGroupsWhenReducing` (op-ordering discipline; these three are *preconditions*,

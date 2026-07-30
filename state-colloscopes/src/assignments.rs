@@ -53,9 +53,19 @@ impl Assignments {
 }
 
 /// Precondition errors of the forced assignment op — the carve-out subset
-/// (step-3 survey Table 2). The three coordinate-existence checks are
-/// dual-listed (also invariant twins) and kept per Appendix D.3; the two
-/// semantic guards (subject-runs / student-present) are stripped.
+/// (step-3 survey Table 2, as revised by the pre-step-7 review).
+///
+/// The two *address* checks (the row's `(period, subject)` key) are kept: with
+/// an empty payload `SetRow` clears the row, so nothing lands in the document
+/// and the dangling-FK net has no material to see — a dead key is the one case
+/// it is structurally blind to.
+///
+/// The payload-student sweep and the two semantic guards (subject-runs /
+/// student-present) are stripped: they are op *content*, owned by the checker
+/// ([crate::FixableInvariant::DanglingFk] at
+/// [crate::StudentRefSite::AssignmentsStudent],
+/// [crate::Convergence::AssignmentForSubjectNotRunningOnPeriod],
+/// [crate::Convergence::AssignedStudentNotPresentForPeriod]).
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum AssignmentPrecheckError {
     /// A period id is invalid
@@ -65,21 +75,18 @@ pub enum AssignmentPrecheckError {
     /// A subject id is invalid
     #[error("invalid subject id ({0:?})")]
     InvalidSubjectId(SubjectId),
-
-    /// A student id is invalid
-    #[error("invalid student id ({0:?})")]
-    InvalidStudentId(StudentId),
 }
 
 impl crate::Data {
     /// Used internally by [crate::Data::force_apply]
     ///
-    /// Force-applies an assignment op: the three coordinate-existence
-    /// checks are kept (dual-listed carve-outs, returned as
-    /// [AssignmentPrecheckError]); the two semantic guards (subject-runs /
-    /// student-present) are stripped (step-3 survey Table 1). Write-time
-    /// canonicalization is copied verbatim. May leave the state invalid; the
-    /// caller owns checking and rollback.
+    /// Force-applies an assignment op: the two *address* checks (the row's
+    /// `(period, subject)` key) are kept, returned as
+    /// [AssignmentPrecheckError]. The payload-student sweep and the two
+    /// semantic guards (subject-runs / student-present) are stripped — they are
+    /// op content, owned by the checker (see [AssignmentPrecheckError]).
+    /// Write-time canonicalization is copied verbatim. May leave the state
+    /// invalid; the caller owns checking and rollback.
     pub(crate) fn force_apply_assignment(
         &mut self,
         assignment_op: &AnnotatedAssignmentOp,
@@ -108,18 +115,10 @@ impl crate::Data {
 
                 // stripped: SubjectDoesNotRunOnPeriod semantic guard
 
-                // Every id in the incoming row must exist (coordinate carve-out).
-                for student_id in students {
-                    if !self
-                        .inner_data
-                        .params
-                        .students
-                        .student_map
-                        .contains(student_id)
-                    {
-                        return Err(AssignmentPrecheckError::InvalidStudentId(*student_id));
-                    }
-                }
+                // stripped: payload-student existence sweep — the students are
+                // op *content*, owned by the FK net (`DanglingFk @
+                // StudentRefSite::AssignmentsStudent`); only the address
+                // (period, subject) is prechecked.
 
                 // stripped: StudentIsNotPresentOnPeriod semantic guard
 

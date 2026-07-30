@@ -36,9 +36,9 @@ use collomatique_state::{AppState, InMemoryData, apply_cascade, traits::Manager}
 use collomatique_state_colloscopes::{
     AssignmentOp, BalancingOp, ColloscopeOp, Convergence, Data, Error, FixableInvariant,
     GroupListOp, IncompatOp, NewId, NonEmptyRangeInclusive, Op, PairingOp, PeriodOp, Reference,
-    SettingsOp, SlotOp, SlotPairingOp, StudentOp, Subject, SubjectInterrogationParameters,
-    SubjectOp, SubjectParameters, SubjectPeriodicity, SubjectRefSite, TeacherOp, TeacherRefSite,
-    WeekOp, WeekPatternOp,
+    SettingsOp, SlotOp, SlotPairingOp, StudentOp, StudentRefSite, Subject,
+    SubjectInterrogationParameters, SubjectOp, SubjectParameters, SubjectPeriodicity,
+    SubjectRefSite, TeacherOp, TeacherRefSite, WeekOp, WeekPatternOp,
     balancing::BalancingOptions,
     group_lists::{GroupList, GroupListFilling, GroupListParameters, PrefilledGroup},
     ids::{
@@ -2760,6 +2760,120 @@ fn rejection_3_an_out_of_bounds_group_convicts_the_interrogation() {
     );
 }
 
+/// Rejection `4` — `DanglingFk @ AssignmentsStudent`. The op assigns a student
+/// who does not exist.
+///
+/// A period `P`, a subject `S` that runs on it, an assignments row at `(P, S)`
+/// already holding the live student `A`, and a dead student id `D`
+/// ([dead_student_id]). Target: `AssignmentOp::SetRow(P, S, {A, D})`. The op
+/// applies — `force_apply_assignment` prechecks the row's *address*, the
+/// `(period, subject)` key, and nothing about the payload — the checker reports
+/// `DanglingFk(Student { D, AssignmentsStudent { P, S } })`, and the gate rolls
+/// it back. The `AssignmentsStudent` arm is then asked on the restored row,
+/// which holds `A` alone: `row.contains(D)` is false, the arm answers `None`,
+/// and the target is convicted.
+///
+/// **Why this fixture exists.** Until the pre-step-7 review the state layer
+/// swept `SetRow`'s payload students in its precheck, so this op was refused
+/// one tier up, as `AssignmentPrecheckError::InvalidStudentId`, and never
+/// reached the cascade at all. The sweep was removed on the address/content
+/// split (design doc D.3): the op's *address* is prechecked, the ids the op
+/// writes *into* the document are content and belong to the dangling-FK net —
+/// the same tier `ColloscopeOp::SetGroupList`'s placements have always been
+/// reported at. The two ops are now symmetric.
+///
+/// What that split needs proving is that it cannot produce a *spurious fix*:
+/// a dead payload student must not make the cascade quietly repair something
+/// and report success. It cannot, and the reason is structural rather than
+/// lucky. The gate rolls the failing target back *before* the resolution map is
+/// ever consulted, so the map only ever sees the pre-state — which is valid,
+/// and therefore does not contain `D` anywhere. The arm's presence test
+/// (`resolution.rs:376-383`) then answers `None`, and the engine convicts,
+/// handing the user back the break the target itself introduced.
+///
+/// **§9ter.2 — fail on the last conjunct.** As in rejection `2`, the row is made
+/// to pre-exist with a legitimate member in it. The arm is a two-step chain (the
+/// row exists, *and* it holds the named student); with no row at all the first
+/// step would fail and the fixture would stay green even for a map that had
+/// dropped the membership test.
+///
+/// The expected set is a single element. `S` genuinely runs on `P`, so
+/// `AssignmentForSubjectNotRunningOnPeriod` cannot fire; and
+/// `AssignedStudentNotPresentForPeriod` sits behind `let Some(student) = …`
+/// (`invariants.rs:495-498`), so a *dead* student makes it skip rather than
+/// fire. The dangle arrives alone.
+#[test]
+fn rejection_4_an_unknown_student_convicts_the_assignment() {
+    let mut app = AppState::<Data, String>::new(Data::new());
+
+    let period: PeriodId = apply_new!(
+        app,
+        Op::Period(PeriodOp::AddFront),
+        NewId::PeriodId,
+        "adding the period"
+    );
+    let subject: SubjectId = apply_new!(
+        app,
+        Op::Subject(SubjectOp::AddAfter(
+            None,
+            plain_subject("Math", BTreeSet::new())
+        )),
+        NewId::SubjectId,
+        "adding the subject, which runs on the period"
+    );
+    let live_student: StudentId = apply_new!(
+        app,
+        Op::Student(StudentOp::Add(plain_student(BTreeSet::new()))),
+        NewId::StudentId,
+        "adding the student who is legitimately assigned"
+    );
+    let dead_student = dead_student_id(&mut app);
+    apply_ok(
+        &mut app,
+        Op::Assignment(AssignmentOp::SetRow(
+            period,
+            subject,
+            BTreeSet::from([live_student]),
+        )),
+        "filling the assignments row with the legitimate student",
+    );
+
+    let mut data = app.get_data().clone();
+    let before = data.get_inner_data().clone();
+
+    let (target, _new_info) = data.annotate(Op::Assignment(AssignmentOp::SetRow(
+        period,
+        subject,
+        BTreeSet::from([live_student, dead_student]),
+    )));
+
+    let err = apply_cascade(&mut data, target)
+        .expect_err("assigning a student who does not exist must be refused, not repaired");
+
+    assert_convicted_of(
+        err,
+        BTreeSet::from([FixableInvariant::DanglingFk(Reference::Student {
+            target: dead_student,
+            site: StudentRefSite::AssignmentsStudent { period, subject },
+        })]),
+        "the target is convicted of exactly the dangle its own payload introduces",
+    );
+
+    assert_eq!(
+        data.get_inner_data(),
+        &before,
+        "a convicted target leaves the document bit-identical"
+    );
+    assert_eq!(
+        data.get_inner_data()
+            .params
+            .assignments
+            .students(period, subject),
+        Some(&BTreeSet::from([live_student])),
+        "and the innocent row is untouched — the live student is still assigned"
+    );
+}
+
 /// The incompatibility the identity-pin document carries, as a value, so that
 /// the fixture and its assertion cannot drift apart.
 fn identity_pin_incompat(subject_id: SubjectId) -> Incompatibility {
@@ -2790,6 +2904,18 @@ fn dead_teacher_id(app: &mut AppState<Data, String>) -> TeacherId {
         "adding the teacher that is about to die"
     );
     apply_ok(app, Op::Teacher(TeacherOp::Remove(id)), "killing it again");
+    id
+}
+
+/// A `StudentId` that is not live. [dead_teacher_id]'s recipe, other type.
+fn dead_student_id(app: &mut AppState<Data, String>) -> StudentId {
+    let id: StudentId = apply_new!(
+        app,
+        Op::Student(StudentOp::Add(plain_student(BTreeSet::new()))),
+        NewId::StudentId,
+        "adding the student that is about to die"
+    );
+    apply_ok(app, Op::Student(StudentOp::Remove(id)), "killing it again");
     id
 }
 

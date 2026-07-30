@@ -708,7 +708,7 @@ mod apply_tests {
     //! precisely; a `GlobalUpdate` carrying logically impossible (duplicated-id)
     //! data comes back as [InvalidOp::Logic], rolled back.
 
-    use crate::ids::{Id, StudentId, WeekPatternId};
+    use crate::ids::{Id, PeriodId, StudentId, SubjectId, WeekPatternId};
     use crate::ops::{
         AnnotatedOp, AnnotatedPeriodOp, AnnotatedStudentOp, AnnotatedSubjectOp, AssignmentOp, Op,
         PeriodOp, StudentOp, SubjectOp,
@@ -716,7 +716,7 @@ mod apply_tests {
     use crate::students::Student;
     use crate::subjects::Subject;
     use crate::week_patterns::WeekPattern;
-    use crate::{Data, Error, FixableInvariant, InnerData, InvalidOp};
+    use crate::{Data, Error, FixableInvariant, InnerData, InvalidOp, Reference, StudentRefSite};
     use collomatique_state::InMemoryData;
     use std::collections::BTreeSet;
 
@@ -729,8 +729,9 @@ mod apply_tests {
     }
 
     /// The smallest state where a student is referenced by an assignments row:
-    /// one period, one subject running on it, one student assigned.
-    fn data_with_assignment() -> (Data, StudentId) {
+    /// one period, one subject running on it, one student assigned. Returns
+    /// `(data, period, subject, student)`.
+    fn data_with_assignment() -> (Data, PeriodId, SubjectId, StudentId) {
         let mut data = Data::default();
         let period = match apply(&mut data, Op::Period(PeriodOp::AddFront)) {
             AnnotatedOp::Period(AnnotatedPeriodOp::AddFront(p)) => p,
@@ -755,12 +756,12 @@ mod apply_tests {
                 BTreeSet::from([student]),
             )),
         );
-        (data, student)
+        (data, period, subject, student)
     }
 
     #[test]
     fn apply_invariant_breaking_op_rolls_back_and_reports() {
-        let (mut data, student) = data_with_assignment();
+        let (mut data, _period, _subject, student) = data_with_assignment();
         let before = data.clone();
 
         // Removing a still-referenced student lands a dangling assignments FK
@@ -817,6 +818,45 @@ mod apply_tests {
         assert!(
             data == before,
             "a rolled-back GlobalUpdate must leave the state bit-identical"
+        );
+    }
+
+    #[test]
+    fn apply_set_row_with_a_dead_payload_student_is_a_checker_rejection() {
+        let (mut data, period, subject, student) = data_with_assignment();
+        let before = data.clone();
+
+        // A student id nobody holds. `SetRow` prechecks its *address* — the
+        // `(period, subject)` key, which an empty payload would clear without
+        // leaving the FK net anything to look at — and nothing else. The
+        // payload students are op content: the op lands, the checker walks the
+        // row it wrote, and the dangling reference is what stops it. This is
+        // one tier down from where the payload sweep used to catch it, and it
+        // is the same tier `ColloscopeOp::SetGroupList`'s placements have always
+        // been reported at.
+        let ghost = unsafe { StudentId::new(9_999) };
+        let (set_row, _) = data.annotate(Op::Assignment(AssignmentOp::SetRow(
+            period,
+            subject,
+            BTreeSet::from([student, ghost]),
+        )));
+        let err = data.apply(&set_row).unwrap_err();
+
+        assert_eq!(
+            err,
+            Error::BrokenInvariants(BTreeSet::from([FixableInvariant::DanglingFk(
+                Reference::Student {
+                    target: ghost,
+                    site: StudentRefSite::AssignmentsStudent { period, subject },
+                }
+            )])),
+            "the dead payload student is reported by the FK net — and it is the \
+             only break, since the convergence checks skip a student that does \
+             not resolve"
+        );
+        assert!(
+            data == before,
+            "a rolled-back apply must leave the state bit-identical"
         );
     }
 }
