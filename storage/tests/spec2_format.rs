@@ -652,6 +652,104 @@ fn neutral_rows_decode_identically_to_their_absence() {
     assert_eq!(serialize_data(&bare_data), serialize_data(&redundant_data));
 }
 
+// The four tests below are the counterpart of the one above: a neutral
+// entry is the redundant spelling of an absent row only when its key is
+// *inside* the derived key set. "Keys outside that set are invalid"
+// (§3) whatever the row content, so an empty row must not launder an
+// invalid key past decode.
+
+#[test]
+fn neutral_slots_row_on_unknown_subject_is_rejected() {
+    // The derived key set of §4.7 is the subjects with interrogations;
+    // subject 9999 does not exist at all.
+    let content = document(&[entry(
+        r#"{ "Slots": [ { "subject_id": 9999, "slots": [] } ] }"#,
+    )]);
+
+    assert!(
+        deserialize_data(&content).is_err(),
+        "An empty slots row keyed by an unknown subject must be rejected"
+    );
+}
+
+#[test]
+fn neutral_slots_row_on_subject_without_interrogations_is_rejected() {
+    // Subject 2 exists but has no interrogations, so it is outside the
+    // §4.7 key set just as firmly as an unknown id.
+    let content = document(&[
+        entry(
+            r#"{ "Subjects": [
+                {
+                    "id": 2,
+                    "name": "Mathématiques",
+                    "interrogation_parameters": null,
+                    "excluded_periods": []
+                }
+            ] }"#,
+        ),
+        entry(r#"{ "Slots": [ { "subject_id": 2, "slots": [] } ] }"#),
+    ]);
+
+    assert!(
+        deserialize_data(&content).is_err(),
+        "An empty slots row keyed by a subject without interrogations must be rejected"
+    );
+}
+
+#[test]
+fn neutral_assignments_row_on_unknown_subject_is_rejected() {
+    // The §4.5 key set is (period × subject not excluded from it). The
+    // period half of the key is already validated before the neutral-row
+    // drop; the subject half is what this pins.
+    let content = document(&[
+        entry(
+            r#"{ "GeneralPlanning": {
+                "first_week": null,
+                "periods": [ { "id": 1, "weeks": [ { "interrogations": true, "annotation": null } ] } ]
+            } }"#,
+        ),
+        entry(r#"{ "Assignments": [ { "period_id": 1, "subject_id": 9999, "students": [] } ] }"#),
+    ]);
+
+    assert!(
+        deserialize_data(&content).is_err(),
+        "An empty assignments row keyed by an unknown subject must be rejected"
+    );
+}
+
+#[test]
+fn neutral_assignments_row_on_excluded_subject_is_rejected() {
+    // Subject 2 exists but excludes period 1, so the pair (1, 2) is
+    // outside the §4.5 key set.
+    let content = document(&[
+        entry(
+            r#"{ "GeneralPlanning": {
+                "first_week": null,
+                "periods": [
+                    { "id": 1, "weeks": [ { "interrogations": true, "annotation": null } ] },
+                    { "id": 4, "weeks": [ { "interrogations": true, "annotation": null } ] }
+                ]
+            } }"#,
+        ),
+        entry(
+            r#"{ "Subjects": [
+                {
+                    "id": 2,
+                    "name": "Mathématiques",
+                    "interrogation_parameters": null,
+                    "excluded_periods": [1]
+                }
+            ] }"#,
+        ),
+        entry(r#"{ "Assignments": [ { "period_id": 1, "subject_id": 2, "students": [] } ] }"#),
+    ]);
+
+    assert!(
+        deserialize_data(&content).is_err(),
+        "An empty assignments row keyed by an excluded subject must be rejected"
+    );
+}
+
 #[test]
 fn incompatibility_slot_crossing_midnight_is_rejected() {
     let entries = vec![
