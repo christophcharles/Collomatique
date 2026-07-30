@@ -51,6 +51,67 @@ fn decode_invalid_file_content() {
     assert_eq!(decode_error, expected_error);
 }
 
+/// The envelope of the three tests below: a header, and one entry
+/// carrying an empty (and therefore trivially valid) `Students` block
+///
+/// `extra_header_field` and `extra_entry_field` are spliced in verbatim,
+/// each with its leading comma.
+fn envelope(extra_header_field: &str, extra_entry_field: &str) -> String {
+    format!(
+        r#"{{
+    "header": {{
+        "file_type": "Collomatique",
+        "produced_with_version": {{ "major": 0, "minor": 1, "patch": 0 }},
+        "file_content": "Colloscope"{extra_header_field}
+    }},
+    "entries": [
+        {{
+            "minimum_spec_version": 2,
+            "needed_entry": true,
+            "content": {{ "Students": [] }}{extra_entry_field}
+        }}
+    ]
+}}"#
+    )
+}
+
+#[test]
+fn decode_envelope_without_extra_fields() {
+    // The control: the envelope the two tests below perturb is valid.
+    let content = envelope("", "");
+
+    let (_data, caveats) =
+        collomatique_storage::deserialize_data(&content).expect("The plain envelope should decode");
+    assert!(caveats.is_empty());
+}
+
+#[test]
+fn decode_header_with_unknown_field() {
+    // The header is a record (spec §2), and "a record with a missing
+    // field or an unknown field is invalid" (§3).
+    let content = envelope(r#", "junk": 1"#, "");
+
+    let error = collomatique_storage::deserialize_data(&content)
+        .expect_err("An unknown header field should lead to an invalid file");
+
+    let DeserializationError::InvalidJson(_) = error else {
+        panic!("The error should be in the JSON deserialization process, got {error:?}")
+    };
+}
+
+#[test]
+fn decode_entry_with_unknown_field() {
+    // Likewise for an entry: its three fields are fixed by §2.
+    let content = envelope("", r#", "junk": 1"#);
+
+    let error = collomatique_storage::deserialize_data(&content)
+        .expect_err("An unknown entry field should lead to an invalid file");
+
+    let DeserializationError::InvalidJson(_) = error else {
+        panic!("The error should be in the JSON deserialization process, got {error:?}")
+    };
+}
+
 #[test]
 fn decode_more_recent_file() {
     let current_version = Version::current();
