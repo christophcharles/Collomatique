@@ -515,7 +515,11 @@ recorded deviations from the §5 sketch, the no-progress guard originally listed
 retired (under one-step fixes, re-picking the same (op, invariant) pair across rounds is a
 legitimate path), replaced by the conviction rules and the monotonicity contract below;
 the (op, picked-invariant) repetition ledger went with it, and the round fuse was never
-built. Note that **nothing in production calls the cascade yet** — `apply_cascade` has no
+built. *(Partly superseded by the pre-step-7 review, commit `c40dde18`: a no-progress
+ledger is back, but a different one — keyed on the invariants picked since the last
+**landing**, not on (op, invariant) pairs across rounds. The §5 guard was wrong for exactly
+the reason recorded here; the new one is cleared by every landing, so the legitimate
+N-round path cannot trip it. See Appendix H's bullet.)* Note that **nothing in production calls the cascade yet** — `apply_cascade` has no
 `Manager`-level wrapper, and whether it gets one is step 7's decision.
 
 **Step 6.5 — monotonicity checking (added July 27 2026) — COMPLETED July 29 2026.** Step 6
@@ -1583,10 +1587,22 @@ Five deviations from the §5 pseudocode, all settled at review:
   the commit-4 `SetRow` swap no colloscope arm actually needs more than one round.)
 - **The §5 (op, picked-invariant) repetition ledger is retired**, along with the
   no-progress guard: under one-step fixes, re-picking the same pair across rounds is the
-  legitimate path, not a bug signature. D4's detectors replace it.
+  legitimate path, not a bug signature. D4's detectors replace it. *(Superseded by the
+  pre-step-7 review, commit `c40dde18`: a no-progress ledger is back, keyed on the
+  invariants picked **since the last landing** rather than on (op, invariant) pairs across
+  rounds. That is the distinction this bullet was missing — the legitimate N-round path
+  always lands a fix between re-picks of an invariant, and every landing clears the ledger,
+  so only a genuinely stuck map repeats a pick. It closes the hole below.)*
 - **No round fuse** (the first draft had 10 000). No meaningful bound exists — real
   cascades are bounded by the document, and any constant loose enough to be safe detects
   nothing in useful time. Termination rests entirely on the monotonicity contract.
+  *(Superseded by the pre-step-7 review: the monotonicity contract meters only the fixes
+  that **land**. A map caught in a dependency cycle — "remove A" failing because B must go
+  first and vice versa — re-pushed the same ops forever on an unchanged state, with no
+  ledger and no panic. Termination now rests on two mechanisms: the strictly-below
+  assertion bounds landed fixes, and the no-progress ledger bounds non-landing chains. The
+  one shape neither catches in-flight is a map answering with ever-fresh invented material;
+  the presence-test frame rule (H.3) is what excludes it.)*
 - **Conviction is positional, not tagged.** "Is the failing op the target" is
   `stack.len() == 1`; no origin tags anywhere.
 
