@@ -1060,7 +1060,11 @@ deletion (everything twinned in Table 1 retires in favor of the precise vocabula
   nothing lands in the document and the FK net is structurally blind to a dead address.
   This does not touch the cascade path for `StudentOp::Remove`: that one flows through
   `DanglingFk @ AssignmentsStudent` computed on the *live* state and never met the precheck.
-- **Position bounds** — `InvalidPosition`, `PositionOutOfBounds`.
+- **Position bounds** — `PositionOutOfBounds`. *(Unified by the pre-step-7 review: the
+  three entity spellings — weeks' `InvalidPosition`, slots' and subjects' positional
+  `PositionOutOfBounds` — became one named-field variant per entity carrying scope,
+  position and size, and every entity now tests op-target existence **before** bounds, so
+  a doubly-bad op reports its dangling target.)*
 - **Empty-first protocol** — `PeriodStillHasWeeks`, `RemainingFilling`,
   `NonEmptyGroupsWhenReducing` (op-ordering discipline; these three are *preconditions*,
   so step 5 decides their fate with the rest — the states they demand are valid either way).

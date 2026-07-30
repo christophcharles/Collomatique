@@ -343,9 +343,13 @@ pub enum SlotPrecheckError {
     #[error("slot id ({0:?}) already exists")]
     SlotIdAlreadyExists(SlotId),
 
-    /// A position is outside of bounds
-    #[error("Position {0} is outside the list (size = {1})")]
-    PositionOutOfBounds(usize, usize),
+    /// A position is outside the subject's slot list
+    #[error("position {position} is outside the slot list of subject {subject:?} (size = {size})")]
+    PositionOutOfBounds {
+        subject: SubjectId,
+        position: usize,
+        size: usize,
+    },
 
     /// The previous slot given is not for the same subject
     #[error("Slot {0:?} to be previous slot is not for subject {1:?}")]
@@ -421,7 +425,11 @@ impl crate::Data {
                     .slot_count_for_subject(subject_id)
                     .expect("Subject id should be valid at this point");
                 if *new_pos >= count {
-                    return Err(SlotPrecheckError::PositionOutOfBounds(*new_pos, count));
+                    return Err(SlotPrecheckError::PositionOutOfBounds {
+                        subject: subject_id,
+                        position: *new_pos,
+                        size: count,
+                    });
                 }
 
                 self.inner_data.params.slots.move_slot(*id, *new_pos);

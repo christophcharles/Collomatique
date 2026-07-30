@@ -480,8 +480,12 @@ pub enum WeekPrecheckError {
     WeekIdAlreadyExists(WeekId),
 
     /// The target position is out of range for the destination period
-    #[error("invalid position ({1}) in period ({0:?})")]
-    InvalidPosition(PeriodId, usize),
+    #[error("position {position} is out of range for period {period:?} (size = {size})")]
+    PositionOutOfBounds {
+        period: PeriodId,
+        position: usize,
+        size: usize,
+    },
 }
 
 impl crate::Data {
@@ -549,7 +553,11 @@ impl crate::Data {
             .week_count_for_period(period_id)
             .unwrap_or(0);
         if per_pos > period_len {
-            return Err(WeekPrecheckError::InvalidPosition(period_id, per_pos));
+            return Err(WeekPrecheckError::PositionOutOfBounds {
+                period: period_id,
+                position: per_pos,
+                size: period_len,
+            });
         }
 
         self.inner_data
@@ -648,7 +656,15 @@ impl crate::Data {
             .unwrap_or(0)
             - if dest_period == src_period { 1 } else { 0 };
         if dest_pos > dest_len_post {
-            return Err(WeekPrecheckError::InvalidPosition(dest_period, dest_pos));
+            // `size` is the post-detachment length — the size of the list the
+            // position actually indexes into, so the reported bound matches the
+            // one that was checked (on a same-period move that is one below the
+            // period's current week count).
+            return Err(WeekPrecheckError::PositionOutOfBounds {
+                period: dest_period,
+                position: dest_pos,
+                size: dest_len_post,
+            });
         }
 
         // stripped: the per-row colloscope compatibility guard (subject-runs +

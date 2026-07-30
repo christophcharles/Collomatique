@@ -283,9 +283,9 @@ pub enum SubjectPrecheckError {
     #[error("subject id ({0:?}) already exists")]
     SubjectIdAlreadyExists(SubjectId),
 
-    /// A position is outside of bounds
-    #[error("Position {0} is outside the list (size = {1})")]
-    PositionOutOfBounds(usize, usize),
+    /// A position is outside the subject list
+    #[error("position {position} is outside the list (size = {size})")]
+    PositionOutOfBounds { position: usize, size: usize },
 }
 
 impl crate::Data {
@@ -334,16 +334,19 @@ impl crate::Data {
                 Ok(AnnotatedSubjectOp::Remove(*new_id))
             }
             AnnotatedSubjectOp::ChangePosition(id, new_pos) => {
-                if *new_pos >= self.inner_data.params.subjects.ordered_subject_list.len() {
-                    return Err(SubjectPrecheckError::PositionOutOfBounds(
-                        *new_pos,
-                        self.inner_data.params.subjects.ordered_subject_list.len(),
-                    ));
-                }
+                // Target existence before bounds (the slots/weeks order): a
+                // doubly-bad op reports its dangling target, not the position.
                 let Some(old_pos) = self.inner_data.params.subjects.find_subject_position(*id)
                 else {
                     return Err(SubjectPrecheckError::InvalidSubjectId(*id));
                 };
+                let size = self.inner_data.params.subjects.ordered_subject_list.len();
+                if *new_pos >= size {
+                    return Err(SubjectPrecheckError::PositionOutOfBounds {
+                        position: *new_pos,
+                        size,
+                    });
+                }
 
                 self.inner_data
                     .params
