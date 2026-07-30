@@ -18,10 +18,16 @@ use crate::ops::AnnotatedSlotOp;
 /// The two must stay consistent; the invariant is checked by the slot-ordering
 /// `LogicError`s in `InnerData::broken_invariants`:
 /// - `ordering` is sparse: a row is present exactly when the subject has at
-///   least one slot (canonical form — no empty rows), and that subject exists
-///   and has interrogations, and
+///   least one slot (canonical form — no empty rows), and
 /// - `ordering[s]` is a duplicate-free permutation of
 ///   `{ id | slot_map[id].subject_id == s }`.
+///
+/// Row-key *liveness* (the subject exists) is deliberately not part of these
+/// `LogicError`s: a row keyed by a removed subject is the op-reachable dangling
+/// state, reported as `DanglingFk` through the per-slot `SlotSubject` sites and
+/// repaired by the cascade (design doc Appendix F.4). The interrogation flag is
+/// not part of them either: a slot on a subject without interrogations is
+/// `Convergence::SlotForSubjectWithoutInterrogations`, also in the fixable tier.
 ///
 /// All mutation goes through the compound `pub(crate)` helpers below so no
 /// call site can desynchronize the two structures. The fields are private:
@@ -168,7 +174,8 @@ impl Slots {
         self.ordering.is_empty()
     }
 
-    /// Ordered slots for a subject, or `None` if the subject has no interrogations.
+    /// Ordered slots for a subject; `None` if the subject has no slots (no
+    /// ordering row).
     pub fn slots_for_subject(
         &self,
         subject_id: SubjectId,
@@ -183,7 +190,8 @@ impl Slots {
         }))
     }
 
-    /// Owned copy of the ordered slots for a subject, or `None` if it has no interrogations.
+    /// Owned copy of the ordered slots for a subject; `None` if the subject has
+    /// no slots (no ordering row).
     pub fn slots_vec_for_subject(&self, subject_id: SubjectId) -> Option<Vec<(SlotId, Slot)>> {
         let order = self.ordering.get(&subject_id)?;
         Some(
@@ -202,7 +210,8 @@ impl Slots {
         )
     }
 
-    /// Number of slots for a subject, or `None` if the subject has no interrogations.
+    /// Number of slots for a subject; `None` if the subject has no slots (no
+    /// ordering row).
     pub fn slot_count_for_subject(&self, subject_id: SubjectId) -> Option<usize> {
         self.ordering.get(&subject_id).map(|order| order.len())
     }

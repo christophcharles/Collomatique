@@ -1,7 +1,7 @@
 //! Invariant vocabulary for the precise whole-model checker.
 //!
 //! This module defines *what can be broken*, in three kinds, classified
-//! mechanically (plan `docs/plans/plan_step_2.md` §3):
+//! mechanically (plan §3, pinned at `git show 49b4f77d:docs/plans/plan_step_2.md`):
 //!
 //! - [FixableInvariant::DanglingFk] — the edge is in the refs registry
 //!   ([crate::InnerData::for_each_reference]) and its target id does not

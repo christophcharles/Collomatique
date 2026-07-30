@@ -37,10 +37,12 @@ use crate::tables::{Key, OrderedKey, OrderedTable, Table};
 /// * `content_cmp` is a partial order up to that equivalence: reflexive
 ///   (`x.content_cmp(&x) == Some(Equal)`), transitive, and antisymmetric up
 ///   to equivalence.
-/// * **Well-foundedness on document data**: every strict decrease removes
-///   an element from a finite container or moves an `Option` from `Some` to
-///   `None` — so there is no infinite strictly-decreasing chain, and strict
-///   monotonicity of fixes is a termination proof.
+/// * **Well-foundedness on document data**: every strict decrease happens in
+///   a well-founded coordinate — removing an element from a finite container,
+///   moving an `Option` from `Some` to `None`, or stepping down a field whose
+///   own order admits no infinite descending chain — so there is no infinite
+///   strictly-decreasing chain, and strict monotonicity of fixes is a
+///   termination proof.
 ///
 /// This is deliberately *not* `PartialOrd`: the standard library implements
 /// `PartialOrd` lexicographically on containers (under which removing an
@@ -323,6 +325,9 @@ impl<T: ContentOrd + ContentIdentity> ContentOrd for Vec<T> {
 
 // Table keys are row identity — same marker argument as `BTreeMap`.
 impl<I: Key + ContentIdentity, T: ContentOrd> ContentOrd for Table<I, T> {
+    // Same order as `map_inclusion` with a `combine`d value rule, expressed
+    // through `Table`'s public surface (`keys`/`contains`/`get`/`iter`) — keep
+    // the two in step if either changes.
     fn content_cmp(&self, other: &Self) -> Option<Ordering> {
         let self_in_other = self.keys().all(|k| other.contains(&k));
         let other_in_self = other.keys().all(|k| self.contains(&k));

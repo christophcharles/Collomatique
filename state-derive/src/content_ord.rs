@@ -29,7 +29,12 @@ enum FieldRule {
     /// structural source of equivalence classes.
     Ignore,
     /// `#[ord(total)]`: the field's native total order is its content
-    /// order (`Ord::cmp`, self-enforcing — see [cmp_expr]).
+    /// order (`Ord::cmp`, self-enforcing — see [cmp_expr]). The field's
+    /// `Ord` must itself be well-founded (no infinite strictly-descending
+    /// chain): integers are, `String` is **not** (`"b" > "ab" > "aab" >
+    /// …`) — a non-well-founded `total` field silently voids the
+    /// termination proof. This cannot be checked mechanically; it is part
+    /// of the field's design decision.
     Total,
     /// `#[ord(with = <expr>)]`: call the expression (path or closure).
     With(Expr),

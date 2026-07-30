@@ -186,9 +186,9 @@ pub enum SlotOp {
     AddAfter(Option<SlotId>, slots::Slot),
     /// Remove an existing slot
     Remove(SlotId),
-    /// Move a subject to another position in the list
+    /// Move a slot to another position in the list
     ChangePosition(SlotId, usize),
-    /// Update the parameters of an existing subject
+    /// Update the parameters of an existing slot
     Update(SlotId, slots::Slot),
 }
 
@@ -330,7 +330,7 @@ pub enum AnnotatedOp {
     WeekPattern(AnnotatedWeekPatternOp),
     /// Operation on slots
     Slot(AnnotatedSlotOp),
-    /// Operation on slots
+    /// Operation on incompatibilities
     Incompat(AnnotatedIncompatOp),
     /// Operation on group lists
     GroupList(AnnotatedGroupListOp),
@@ -519,8 +519,8 @@ pub enum AnnotatedWeekOp {
 /// See [collomatique_state::history] for a complete discussion of the problem.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AnnotatedSubjectOp {
-    /// Add a period after an existing period
-    /// First parameter is the period id for the new period
+    /// Add a subject after an existing subject
+    /// First parameter is the subject id for the new subject
     /// If the second parameter is `None`, the subject is added at the first place
     AddAfter(SubjectId, Option<SubjectId>, subjects::Subject),
     /// Remove an existing subject
@@ -600,9 +600,9 @@ pub enum AnnotatedSlotOp {
     AddAfter(SlotId, Option<SlotId>, slots::Slot),
     /// Remove an existing slot
     Remove(SlotId),
-    /// Move a subject to another position in the list
+    /// Move a slot to another position in the list
     ChangePosition(SlotId, usize),
-    /// Update the parameters of an existing subject
+    /// Update the parameters of an existing slot
     Update(SlotId, slots::Slot),
 }
 

@@ -43,12 +43,22 @@
 //!    acting; otherwise it destroys a perfectly valid reference. The criterion:
 //!    an arm needs an explicit identity test **exactly when the target id does
 //!    not appear in the op it emits**. `SetRow`, `SetSubject`, `SetStudent`,
-//!    `SetInterrogation`, `SetGroupList` and `AssignToSubject` all carry the
-//!    target inside the op, so a wrong target is not expressible and a plain
-//!    lookup is the whole test; `Remove(row)` and `Update(row, rebuilt)` name
-//!    only the row, and the identity test is the only thing that ties them to
-//!    the target. Element-removal rebuilds satisfy the criterion for free — the
-//!    membership test *is* the identity test.
+//!    `SetInterrogation`, `SetGroupList` and `AssignToSubject` carry the target
+//!    inside the op *when the target is the coordinate the op names* — and only
+//!    then: a wrong target is then not expressible and a plain lookup is the
+//!    whole test. `Remove(row)` and `Update(row, rebuilt)` name only the row,
+//!    and the identity test is the only thing that ties them to the target.
+//!    Element-removal rebuilds satisfy the criterion for free — the membership
+//!    test *is* the identity test. Two arms emit one of the carrying ops on a
+//!    target it does *not* name, and each carries its own test accordingly:
+//!    [GroupListRefSite::AssociationEntry] (target = the assigned group list,
+//!    op = `AssignToSubject(period, subject, None)`, which names the entry key
+//!    only) has the explicit `*assigned != group_list` test, and
+//!    [StudentRefSite::ColloscopeGroupListStudent] (target = the student, op =
+//!    `SetGroupList(list, rebuilt)`, which names the list only) is the
+//!    element-removal case, tested by its `contains_key(&student)` membership
+//!    check. Read the criterion op-*instance*-wise, never op-*variant*-wise:
+//!    taken as a list of variant names it would wave those two arms through.
 //! 5. **Pin the shape you are about to change, not merely its existence.** An
 //!    invariant names an offending *configuration*: a row together with the
 //!    field values that make it offending. Since the failing op was rolled back

@@ -10,11 +10,13 @@
 //! What both properties assert, through the one shared [`cascade_step`]:
 //!
 //! * **no panic** — implicit in the test passing, and the reason this harness
-//!   exists. The engine holds the map to its contract with three panics (a fix
-//!   rejected as invalid, a fix-created invariant the map then disowns, a fix
-//!   that applies as a perfect no-op). With the round fuse gone, those panics
-//!   plus the by-hand audit of every arm are what stands between a map bug and a
-//!   production hang, until step 6.5 adds the `PartialOrd` in-flight check.
+//!   exists. The engine holds the map to its contract in-flight: the precheck
+//!   and disowned-invariant panics, the strictly-below assertion in the
+//!   document order ([`ContentOrd`](collomatique_state::partial_order::ContentOrd))
+//!   after every landed fix (step 6.5 — deliberately *not* `PartialOrd`, whose
+//!   std container impls are lexicographic), and the no-progress ledger on
+//!   never-landing fix chains. Every fix a green walk lands has passed the
+//!   strictly-below assertion.
 //! * **`Ok` ⇒ honesty** — the landed state is fully valid, the target op is the
 //!   *last* entry of the returned aggregated op, and replaying the reverses in
 //!   reverse order restores the pre-call state exactly.

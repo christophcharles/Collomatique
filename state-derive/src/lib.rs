@@ -118,7 +118,12 @@ pub fn derive_join(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 ///   as `fn(&T, &T) -> Option<Ordering>`; a path or an inline closure.
 /// - `#[ord(total)]`: the field's native *total* order is its content
 ///   order (`Ord::cmp`). Never a default — std's container orders are
-///   lexicographic, which is wrong for a removal order.
+///   lexicographic, which is wrong for a removal order. The field's `Ord`
+///   must itself be well-founded (no infinite strictly-descending chain):
+///   integers are, `String` is **not** (`"b" > "ab" > "aab" > …`) — a
+///   non-well-founded `total` field silently voids the termination proof.
+///   This cannot be checked mechanically; it is part of the field's design
+///   decision.
 ///
 /// Only non-generic structs with named fields and non-generic enums with
 /// named-field or unit variants are supported.

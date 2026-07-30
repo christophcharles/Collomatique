@@ -45,8 +45,8 @@
 //!     b. `group_lists.subjects_associations` (per entry: period, subject, group
 //!        list), in `(period, subject)` key order
 //! 14. colloscope: interrogation rows keyed `(slot, week)` — each emits a slot
-//!     key site then a week key site, in surface order (period → slot → week) —
-//!     then `group_lists` rows (group-list key site, then that list's placed
+//!     key site then a week key site, in `(slot, week)` key order — then
+//!     `group_lists` rows (group-list key site, then that list's placed
 //!     students → student)
 //!
 //! ## Documented exclusions
@@ -519,7 +519,7 @@ fn walk_colloscope(colloscope: &Colloscope, v: &mut impl RefVisitor) {
 impl InnerData {
     /// Walks every reference in the document, in the documented fixed order (see
     /// the module docs): first the [Parameters] entity families (steps 1–12),
-    /// then the dense mirrors (step 13), then the colloscope (step 14).
+    /// then the sparse mirrors (step 13), then the colloscope (step 14).
     pub fn walk_refs(&self, v: &mut impl RefVisitor) {
         walk_params_refs(&self.params, v);
         walk_assignments(&self.params, v);

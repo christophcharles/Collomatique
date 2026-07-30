@@ -21,10 +21,14 @@ use crate::periods::Periods;
 /// sidecar. The two must stay consistent; the invariant is checked by the
 /// week-ordering `LogicError`s in `InnerData::broken_invariants`:
 /// - `ordering` is sparse: a row is present exactly when the period has at
-///   least one week (canonical form — no empty rows), and that period exists,
-///   and
+///   least one week (canonical form — no empty rows), and
 /// - `ordering[p]` is a duplicate-free permutation of
 ///   `{ id | week_map[id].period_id == p }`.
+///
+/// Row-key *liveness* (the period exists) is deliberately not part of these
+/// `LogicError`s: a row keyed by a removed period is the op-reachable dangling
+/// state, reported as `DanglingFk` through the per-week `WeekPeriodFk` sites
+/// and repaired by the cascade (design doc Appendix F.4).
 ///
 /// All mutation goes through the compound `pub(crate)` helpers below so no
 /// call site can desynchronize the two structures. The fields are private:
