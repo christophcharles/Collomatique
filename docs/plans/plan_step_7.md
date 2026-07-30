@@ -11,7 +11,10 @@ transitional names, move consumers over, delete the old world, rename at the ver
 the lasting API carries no migration scars.
 
 Every decision in §0 is settled, including the three survey-surfaced ones (D12–D14),
-each ★-ruled by the user at sign-off on July 30 2026.
+each ★-ruled by the user at sign-off on July 30 2026, and the `Fix` vocabulary
+redesign (★ D15, user-driven design round of July 30 2026, after the first draft) —
+D15 revises D2 and D6 in place; their entries below are already rewritten to the
+final ruling.
 
 ---
 
@@ -28,17 +31,24 @@ Rationale is recorded so the executing session does not re-litigate.
   one-op-at-a-time shape was right; we keep it behind a session struct that owns the
   manager, applies one elementary op at a time through the cascade, hands ids back
   inline, and accumulates the fixes.
-- **D2 — The engine tags every fix with the invariant that caused it.** Attribution is
-  exact: each cascade round picks one invariant (`BTreeSet::first()`) and the map returns
-  one op. Return shape: fixes as `Vec<(op, invariant)>` with the target held separately —
-  **not** `Option<Invariant>` in one Vec (encodes impossible states) and **not** a
-  parallel Vec (index re-alignment at every reader). The same invariant may appear on
-  several fixes (the N-round path); that is honest.
+- **D2 — The engine tags every fix with its `Fix` value; the invariant stays
+  engine-internal** (revised by ★ D15, July 30 — the original ruling exported
+  `(op, invariant)` pairs). Attribution is still exact inside the engine: each cascade
+  round picks one invariant (`BTreeSet::first()`) and the map answers one `Fix`; the
+  pick keeps feeding the no-progress ledger. But nothing downstream needs the cause
+  anymore — rendering keys on `Fix` (D15), and invariant→fix attribution is pinned by
+  direct `fix_invariant` unit tests in `state-colloscopes` — so the receipt exports the
+  meaning, not the cause. Return shape: fixes as `Vec<(ReversibleOp, Fix)>` with the
+  target held separately — **not** an `Option<Fix>` in one Vec (encodes impossible
+  states) and **not** a parallel Vec (index re-alignment at every reader). The same
+  `Fix` shape may appear on several fixes (the N-round path); that is honest. If a
+  future consumer genuinely wants the cause, adding a tag back is additive.
 - **D3 — `Manager` gets the cascade wrapper** (settles H.6's open question). A defaulted
   trait method mirroring `Manager::apply`, bounded `where Self::Data: Fixable`. `ops/`
   never reaches around the manager into the raw `Data`.
-- **D4 — No list comparison anywhere.** With D2 the warnings *are* the tagged fixes; the
-  earlier "diff applied vs intended" idea is redundant and fragile. Dropped.
+- **D4 — No list comparison anywhere.** With D2 the warnings *are* the cascade's own
+  `Fix` answers; the earlier "diff applied vs intended" idea is redundant and fragile.
+  Dropped.
 - **D5 — `UpdateError` runs as today.** The per-family translation of state-layer errors
   stays at the call sites, copied from the old bodies **including the scan order**, which
   is documented in-code as reproducing the old validator's first-error order (e.g.
@@ -49,17 +59,20 @@ Rationale is recorded so the executing session does not re-litigate.
   case that panics today, and `DeletePeriod`'s dead `InvalidPeriodId` variant coming
   alive (D13). Removals of dead variants are deferred to commit 7 (D14). Python's ~80
   exception-matching sites in `python/src/glue.rs` stay intact.
-- **D6 — Warning texts: keyed on the invariant, phrased as the effect, in `ops/`.**
-  Keyed on `FixableInvariant` so the `match` is exhaustive (a new invariant is a compile
-  error); sound because the map is a function — for a given invariant value the fix
-  shape is fixed by its arm (the full invariant → fix table is §5-C5). Effect only
+- **D6 — Warning texts: keyed on the `Fix` variant, phrased as the effect, in `ops/`**
+  (keying revised by ★ D15, July 30 — the original ruling keyed on `FixableInvariant`).
+  Keyed on `Fix` so the `match` is exhaustive with no wildcard: a new fix shape is a
+  compile error in the renderer, and — because D15's variants are one-per-rendered-
+  meaning — the renderer never inspects the invariant at all. Effect only
   ("L'interrogation de X sera supprimée", never "… car son colleur a été supprimé") —
   the user just performed the action; §5's own design-doc example is effect-only.
   Located in `ops/` because `state-colloscopes/` carries no French, no presentation, no
   serde, and rendering needs entity *names* — a data-snapshot read, exactly what today's
-  `build_desc_from_data` does. Known risk, accepted: if a resolution arm changes its fix
-  shape the text can desynchronize; mitigations are text-pinning fixtures plus a pointer
-  line in `resolution.rs`'s module doc.
+  `build_desc_from_data` does. The desync risk the original D6 had to accept (a
+  resolution arm silently changing its fix shape under an unchanged invariant) is now
+  closed structurally by D15; text-pinning fixtures stay as the backstop, plus a pointer
+  line in `resolution.rs`'s module doc ("every `Fix` variant has a French description
+  in `ops/src/warning_text.rs`").
 - **D7 — Rendering is lazy, against the composite's pre-state** (revised July 30,
   superseding an earlier per-op-pre-state rule). In principle a later op's cascade could
   touch material *created* by an earlier op of the same composite, which the pre-state
@@ -124,6 +137,49 @@ Rationale is recorded so the executing session does not re-litigate.
   returning `MoveSlotUpError::InvalidSlotId` cross-enum (`slots.rs:560`) and returns
   its own `MoveSlotDownError::InvalidSlotId`, pinned by a fixture in the same commit.
   Until commit 7 the old surface is replicated verbatim — commit 3 stays mechanical.
+- ★ **D15 — The resolution map answers a `Fix` enum, not a raw op** (user-driven design
+  round, July 30, after the first draft; revises D2 and D6 above). Motivation: with the
+  map returning bare `AnnotatedOp`s, the fix *shape* is implicit in each arm, and the
+  UI text lives two crates away keyed by cause — a resolution arm could change its fix
+  and the text would silently lie (the risk the original D6 had to accept). The ruling:
+  - **The vocabulary.** `state-colloscopes` gains a public `Fix` enum — the closed set
+    of repair shapes the map can answer (`DeleteSlot`, `ClearAssignmentRow`, …; full
+    catalogue in §5-C5). It is structurally deletive: creation is unrepresentable. A
+    small trait in `state/` (`FixOp`, one method `to_annotated_op(&self) -> Op`) lets
+    the engine translate generically; `Fixable` gains `type Fix: FixOp<…>` and
+    `fix_invariant` returns `Option<Self::Fix>`.
+  - **Single lookup; payload-carrying variants; pure translation.** An earlier split
+    ("`fix_invariant` presence-tests, `to_annotated_op(&data)` re-looks-up and
+    materializes") was **rejected**: it does every lookup twice and its second half
+    needs `.expect`s justified only by call-timing discipline — a new panic surface.
+    Instead `fix_invariant` keeps its single lookup (presence test + build, exactly
+    today's arm bodies) and the variant carries *everything the op needs*: ids for the
+    pure cases, the rebuilt payload for the whole-value ops (`Update(id, rebuilt)`,
+    `SetRow`, `SetGroupList` — the elementary vocabulary is whole-value and frozen, so
+    the payload must travel). `to_annotated_op` is then **total, pure and testable in
+    isolation**, and the engine contract sentence "the map is a pure function of
+    (state, invariant)" stays literally true.
+  - **Granularity: one variant per rendered meaning** — not per invariant, and not per
+    op shape. Several invariants share a variant when the user-facing sentence is the
+    same (dead subject and dead teacher both yield `DeleteSlot`); the same elementary
+    op splits into two variants when the meaning differs (`DeleteOverflowingSlot`
+    carries the « il déborderait sur le jour suivant » nuance; `ClearSlotWeekPattern`
+    means "the slot now runs every week", not just an update). Consequence: the
+    renderer is a function of `Fix` alone. A future cause-dependent wording need is
+    answered by a new variant, never by re-exporting the invariant.
+  - **The invariant is demoted to engine-internal** (D2 as rewritten): receipt, manager
+    wrapper and warnings all carry `Fix`, nothing carries `FixableInvariant`.
+    Attribution pinning relocates to direct `fix_invariant` unit tests in
+    `state-colloscopes` (state + invariant in, expected `Fix` value out — the map is
+    now unit-testable at exactly that seam).
+  - **Accepted residuals**, named consciously: (a) payload-carrying variants hold both
+    the semantic delta and the rebuilt value three lines apart in one arm, and nothing
+    *forces* e.g. `student ∉ rebuilt_row` — but the fixtures' exact-post-state asserts
+    pin the payload, and the drift class shrinks from "cross-crate, invisible" to
+    "same screen, pinned"; (b) fixture literals for the rebuild shapes contain the
+    rebuilt payload — tolerable, the fixtures build their documents in-process so the
+    expected value comes from the same builders, and the majority of variants (deletes,
+    clears, unassigns) stay id-only.
 
 ---
 
@@ -180,7 +236,8 @@ families have empty warning enums); **6 explicit "should be cleaned before" pani
   snapshot on failure. Conviction rules, the no-progress ledger and the `ContentOrd`
   strictly-below assertion are inside (H.2, I.5, the review's termination rider).
 - The resolution map (`state-colloscopes/src/resolution.rs`), total over
-  `FixableInvariant`, every fix deletive. The full invariant → fix table is §5-C5.
+  `FixableInvariant`, every fix deletive. The full fix catalogue (with the
+  invariant → variant mapping) is §5-C5.
 - `Manager::apply` (`state/src/traits.rs:150`): annotate → gate → store a single-entry
   `AggregatedOp`. `annotate` takes `&mut self` since the review.
 - `AppSession` (`state/src/state.rs:100`): blank history, `commit(desc)` collapses into
@@ -190,22 +247,80 @@ families have empty warning enums); **6 explicit "should be cleaned before" pani
 
 ## 2. Target architecture
 
-Five new pieces, bottom-up.
+Six new pieces, bottom-up.
 
-### 2.1 `CascadeReceipt` — the engine return, re-shaped (commit 1)
+### 2.1a `Fix` / `FixOp` — the fix vocabulary (commit 1a)
+
+The trait side, in `state/src/cascade.rs`:
+
+```rust
+// state/src/cascade.rs
+/// A repair the resolution map can answer: one value of a closed, deletive
+/// vocabulary. The variant carries everything its op needs (ids; the rebuilt
+/// payload for whole-value ops), so translation is total and pure — it reads
+/// no state and can be tested in isolation. Neither the map (`&self`) nor
+/// this translation can reach the id issuer: a fix physically cannot carry a
+/// fresh id.
+pub trait FixOp: Clone + std::fmt::Debug {
+    type Op;
+    fn to_annotated_op(&self) -> Self::Op;
+}
+
+pub trait Fixable: InMemoryData + ContentOrd {
+    /// The repair vocabulary (D15): one variant per *rendered meaning*.
+    type Fix: FixOp<Op = Self::AnnotatedOperation>;
+    fn fix_invariant(&self, invariant: &Self::Invariant) -> Option<Self::Fix>;
+}
+```
+
+`fix_invariant`'s contract prose (`cascade.rs:47-76`) moves onto the new signature
+essentially unchanged — presence test, single lookup, strict monotonicity, totality,
+one step per call. What changes in each arm's *body* is only the last line: instead of
+constructing the `AnnotatedOp` in place, it constructs the `Fix` variant, with the
+payload built exactly where it is built today (single lookup — an earlier
+two-function split was rejected, D15). `to_annotated_op` gets one arm per variant,
+each a pure translation reproducing today's op construction verbatim.
+
+The enum side, in `state-colloscopes/src/resolution.rs` (deliberately the same file
+as the map — the vocabulary, the arms and the translation stay on one screen),
+re-exported from the crate root beside `FixableInvariant` (`lib.rs:69`): `pub enum
+Fix` with the ~25 variants of the §5-C5 catalogue, `derive(Clone, Debug, PartialEq,
+Eq)`, plus `impl FixOp for Fix`. Variant *names* are polishable at implementation
+(like the French templates); the partition — which invariants share a variant — is
+the settled part.
+
+The engine's push site (`cascade.rs:158-159`) materializes at push time:
+
+```rust
+match data.fix_invariant(&pick) {
+    Some(fix) => stack.push((fix.to_annotated_op(), Some(fix))),
+    …
+}
+```
+
+Push-time materialization is deliberate: when a fix op itself fails and gets its own
+sub-fix, the engine retries the original fix with its already-materialized payload —
+that is today's semantics, byte-identical; materializing lazily at retry time would
+be a silent behaviour change.
+
+The toy `QuoteData` (`state/src/test_utils.rs`) gains a `QuoteFix` so the engine
+tests keep compiling; the eleven engine tests themselves are untouched by 1a (the
+return type does not change yet).
+
+### 2.1b `CascadeReceipt` — the engine return, re-shaped (commit 1b)
 
 ```rust
 // state/src/cascade.rs
 /// Everything a successful cascade landed: the fixes in application order,
-/// each tagged with the invariant that caused it, and the target last.
-pub struct CascadeReceipt<T: InMemoryData> {
-    fixes: Vec<(ReversibleOp<T::AnnotatedOperation>, T::Invariant)>,
+/// each carrying the `Fix` it materialized from, and the target last.
+pub struct CascadeReceipt<T: Fixable> {
+    fixes: Vec<(ReversibleOp<T::AnnotatedOperation>, T::Fix)>,
     target: ReversibleOp<T::AnnotatedOperation>,
 }
 
-impl<T: InMemoryData> CascadeReceipt<T> {
-    /// The fixes in application order, with their causes.
-    pub fn fixes(&self) -> &[(ReversibleOp<T::AnnotatedOperation>, T::Invariant)];
+impl<T: Fixable> CascadeReceipt<T> {
+    /// The fixes in application order, with their meanings.
+    pub fn fixes(&self) -> &[(ReversibleOp<T::AnnotatedOperation>, T::Fix)];
     /// Rebuild the history-ready aggregated op (fixes in order, target last).
     pub fn into_aggregated_op(self) -> AggregatedOp<T::AnnotatedOperation>;
 }
@@ -217,14 +332,15 @@ pub fn apply_cascade<T: Fixable>(
 ```
 
 Engine internals: today `stack: Vec<T::AnnotatedOperation>` and
-`applied: Vec<ReversibleOp<…>>` (`cascade.rs:91-92`). They become
-`Vec<(T::AnnotatedOperation, Option<T::Invariant>)>` — the target pushed with `None`
-(`cascade.rs:91`), each fix pushed with `Some(pick)` at the single push site
-(`cascade.rs:159`) — and `applied` collects the cause alongside each `ReversibleOp` at
-the single success site (`cascade.rs:137-141`). On loop exit the last `applied` entry is
-the target by construction (assert it; its cause is `None`), the rest split off as the
-tagged fixes. The `Option` never leaves the engine — the public type is exact (D2).
-Error behaviour, the monotonicity check and the ledger are untouched.
+`applied: Vec<ReversibleOp<…>>` (`cascade.rs:91-92`). With 1a's push site the stack is
+already `Vec<(T::AnnotatedOperation, Option<T::Fix>)>` — the target pushed with `None`
+(`cascade.rs:91`), each fix with `Some(fix)`; 1b makes `applied` collect the `Fix`
+alongside each `ReversibleOp` at the single success site (`cascade.rs:137-141`). On
+loop exit the last `applied` entry is the target by construction (assert it; its tag is
+`None`), the rest split off as the fixes. The `Option` never leaves the engine — the
+public type is exact (D2). The invariant pick never leaves the engine at all (D15): it
+feeds the no-progress ledger and nothing else. Error behaviour, the monotonicity check
+and the ledger are untouched.
 
 ### 2.2 `Manager::apply_cascade` (commit 2a)
 
@@ -232,7 +348,8 @@ Error behaviour, the monotonicity check and the ledger are untouched.
 // state/src/traits.rs — inside trait Manager, beside apply()
 /// Apply `op` through the cascade (see [crate::cascade::apply_cascade]) and
 /// keep the modification history consistent: the whole cascade lands as one
-/// history slot. Returns the annotation's NewInfo and the tagged fixes.
+/// history slot. Returns the annotation's NewInfo and the fixes the cascade
+/// had to apply, as their `Fix` meanings (D15).
 /// A failed call leaves data and history strictly unchanged.
 fn apply_cascade(
     &mut self,
@@ -241,10 +358,7 @@ fn apply_cascade(
 ) -> Result<
     (
         <Self::Data as InMemoryData>::NewInfo,
-        Vec<(
-            <Self::Data as InMemoryData>::AnnotatedOperation,
-            <Self::Data as InMemoryData>::Invariant,
-        )>,
+        Vec<<Self::Data as crate::cascade::Fixable>::Fix>,
     ),
     ApplyError<…>,
 >
@@ -256,7 +370,7 @@ where
     let fixes = receipt
         .fixes()
         .iter()
-        .map(|(rev_op, inv)| (rev_op.inner().clone(), inv.clone()))
+        .map(|(_rev_op, fix)| fix.clone())
         .collect();
     self.get_modification_history_mut()
         .store(receipt.into_aggregated_op(), desc);
@@ -283,10 +397,10 @@ pub struct CascadeWarning {
 }
 
 enum WarningInner {
-    /// A fix the cascade applied, tagged with the invariant that caused it.
+    /// A fix the cascade applied, as its `Fix` meaning (D15) — the invariant
+    /// that caused it never leaves the engine.
     CascadeFix {
-        op: collomatique_state_colloscopes::AnnotatedOp,
-        invariant: collomatique_state_colloscopes::FixableInvariant,
+        fix: collomatique_state_colloscopes::Fix,
     },
     /// Students silently lost by shrinking a prefilled group list (D12): the
     /// GUI edits group count and filling in separate places, so the
@@ -301,8 +415,7 @@ enum WarningInner {
 /// Borrowed view for reading/matching a warning's content.
 pub enum CascadeWarningView<'a> {
     CascadeFix {
-        op: &'a collomatique_state_colloscopes::AnnotatedOp,
-        invariant: &'a collomatique_state_colloscopes::FixableInvariant,
+        fix: &'a collomatique_state_colloscopes::Fix,
     },
     DroppedPrefilledStudents {
         group_list: collomatique_state_colloscopes::GroupListId,
@@ -469,7 +582,8 @@ to the scratchpad and grepped — never run twice).
 
 | commit | content | crates |
 | --- | --- | --- |
-| 1 | `CascadeReceipt` engine re-shape + test adaptation | state, state-colloscopes (tests) |
+| 1a | `FixOp` trait + `Fix` enum + map refactor + attribution pins | state, state-colloscopes |
+| 1b | `CascadeReceipt` engine re-shape + test adaptation | state, state-colloscopes (tests) |
 | 2a | `Manager::apply_cascade` + toy tests | state |
 | 2b | `CascadeSession`/`CascadeWarning`/`CascadeResult` + struct tests | ops |
 | 3.1–3.15 | one family per commit, `apply_to_session` + family fixtures | ops |
@@ -492,26 +606,51 @@ general_planning.
 
 ## 4. Commits 1–2 in detail
 
-### Commit 1 — `state/`: `CascadeReceipt`
+### Commit 1a — the fix vocabulary
 
-Sites: `state/src/cascade.rs` (§2.1 — the struct, the loop's two tuple sites, the split
-on exit). Consumers to adapt, all mechanical:
+Sites: `state/src/cascade.rs` (§2.1a — the `FixOp` trait, the `Fixable::Fix`
+associated type, the retyped `fix_invariant`, the materializing push site);
+`state/src/test_utils.rs` (`QuoteFix` for the toy types); `state-colloscopes/src/resolution.rs`
+(the `Fix` enum per the §5-C5 catalogue, `impl FixOp`, and the arm-by-arm refactor:
+each arm keeps its presence test and its single lookup, and its last line builds the
+variant instead of the op); `state-colloscopes/src/lib.rs:69` (re-export `Fix` beside
+`FixableInvariant`).
+
+The refactor is where the map *dedupes*: materializations that today repeat across
+arms (the `AssignToSubject(period, subject, None)` unassign appears four times, the
+group-list and assignment row rebuilds twice each) become one `to_annotated_op` arm
+per variant; where several `fix_invariant` arms build the same variant they may share
+a private helper.
+
+Behaviour is byte-identical: `apply_cascade` still returns `AggregatedOp`, so the
+engine's 11 tests, the 19 cascade fixtures and `property_cascade.rs` run **unchanged**
+in this commit — they are the proof the refactor moved code without changing it.
+
+New unit tests — the attribution pins (D15 relocated them here): direct
+`fix_invariant` tests in `resolution.rs`'s in-file test module, one per `Fix`
+variant — state + invariant in, expected full `Fix` value out (payload included for
+the rebuild shapes), plus `to_annotated_op` translation pins on the payload-carrying
+variants (pure function, trivially testable).
+
+### Commit 1b — `state/`: `CascadeReceipt`
+
+Sites: `state/src/cascade.rs` (§2.1b — the struct, `applied` collecting the tag, the
+split on exit). Consumers to adapt, all mechanical:
 
 - the engine's own tests (`cascade.rs`, 11 tests): `forward_ops` helper reads
   `receipt.into_aggregated_op()` or `fixes()` + target directly;
 - `state-colloscopes/tests/cascade.rs` (19 fixtures): op-list asserts move to the
-  receipt's accessors — and gain precision for free, since expected `(op, invariant)`
-  pairs replace expected bare op lists where the fixture derivation already knows the
-  cause;
+  receipt's accessors — expected fix lists become `Vec<Fix>` literals (compact for the
+  id-only variants; the rebuild shapes carry their expected payload, derivable from
+  the same in-process builders);
 - `state-colloscopes/tests/property_cascade.rs`: `cascade_step` reads
   `applied.inner().len() - 1` for the fix count (`property_cascade.rs:255`) and replays
   `applied.rev()` (`:265-274`) — both re-expressed on the receipt
   (`fixes().len()`; `into_aggregated_op().rev()`).
 
 New unit tests: the tagging itself on the toy `QuoteData` — the two-round repair of
-`happy_cascade_repairs_in_canonical_order` (`cascade.rs:223-240`) asserts each
-`RemoveQuote` fix is tagged with its own dangling-quote invariant and the target carries
-none.
+`happy_cascade_repairs_in_canonical_order` (`cascade.rs:223-240`) asserts `fixes()`
+carries the expected `QuoteFix` values in order and the target is last, untagged.
 
 ### Commit 2a — `state/`: `Manager::apply_cascade`
 
@@ -521,16 +660,16 @@ non-`Fixable` implementors (`FakeData` in the trait tests).
 
 Tests (toy types, `traits.rs` test module): a cascading op stores **one** history slot
 whose aggregated op holds fixes + target and undoes in one step; a convicted op stores
-nothing and leaves data unchanged; the returned fixes are the tagged pairs; `NewInfo`
-comes back from annotation.
+nothing and leaves data unchanged; the returned fixes are the expected `QuoteFix`
+values; `NewInfo` comes back from annotation.
 
 ### Commit 2b — `ops/`: the session struct
 
 Site: new `ops/src/cascade.rs` (§2.3), `pub mod cascade; pub use cascade::*;` in
 `lib.rs`. The struct needs no `UpdateOp` — tests drive **raw elementary ops**:
 
-- delete a teacher who has slots → warnings accumulate as tagged
-  `(SlotOp::Remove, DanglingFk(Teacher@SlotTeacher))` pairs, in application order;
+- delete a teacher who has slots → warnings accumulate as `Fix::DeleteSlot` values
+  (plus each slot's own colloscope/pairing fixes), in application order;
 - `commit` collapses to one undo slot on the returned manager (undo restores fully);
 - `cancel` returns the manager untouched;
 - an `Add` op hands its id back inline;
@@ -541,8 +680,10 @@ Site: new `ops/src/cascade.rs` (§2.3), `pub mod cascade; pub use cascade::*;` i
 ## 5. Commit 3 — the fifteen families
 
 Format per family: what the survey found → what changes → fixtures. "Warnings via"
-names the invariant whose fix the cascade emits (full fix table in §5-C5). Old-code
-anchors are in the survey reports; key ones are repeated here.
+names the invariant whose fix the cascade emits; the fixture asserts the resulting
+`Fix` values (the invariant itself is engine-internal, D15 — the invariant → variant
+mapping is the §5-C5 catalogue). Old-code anchors are in the survey reports; key ones
+are repeated here.
 
 ### 3.1 `export_config.rs` — trivial
 
@@ -578,9 +719,9 @@ rolled-back op's pair is not in the state) → `Err`. Today that set misses ever
 `AddNewTeacherError::SubjectHasNoInterrogation(SubjectId)` (and the `Update` twin),
 scanned after the dangling-subject pass. Fixtures pin both.
 
-Fixtures: delete-teacher-with-slots (exact warning list: one `SlotOp::Remove` per slot,
-plus that slot's own colloscope/pairing fixes in engine order); update dropping a
-subject; the two new error variants; clean paths.
+Fixtures: delete-teacher-with-slots (exact warning list: one `Fix::DeleteSlot` per
+slot, plus that slot's own colloscope/pairing fixes in engine order); update dropping
+a subject; the two new error variants; clean paths.
 
 ### 3.5 `incompatibilities.rs` / 3.6 `pairings.rs` / 3.7 `slot_pairings.rs`
 
@@ -809,87 +950,73 @@ shrinking is a later decision. Once commit 5 lands, extend the loop to call
 `w.text(pre_state.get_data())` on every warning — rendering totality (no panic on any
 reachable fix) gets fuzzed for free.
 
-## 5-C5. Commit 5 — the renderer
+## 5-C5. Commit 5 — the renderer, and the `Fix` catalogue
 
-New `ops/src/warning_text.rs`: `pub(crate) fn render(data: &Data, op: &AnnotatedOp,
-invariant: &FixableInvariant) -> String`, exhaustive over `FixableInvariant` — an outer
-match `DanglingFk(reference)` / `Convergence(c)`, the former matching the eight
-`Reference` kinds and their sites (no wildcard arms anywhere, mirroring the map).
-`CascadeWarning::text` wraps it. Name lookups (teacher/student names, subject names,
-group-list names, slot day/time, week numbers) read `data` and **panic on a miss** (D7).
-`resolution.rs`'s module doc gains: *"Every fix shape here has a French description in
-`ops/src/warning_text.rs` — a changed arm must update its text."*
+New `ops/src/warning_text.rs`: `pub(crate) fn render(data: &Data, fix: &Fix) ->
+String`, exhaustive over `Fix` with **no wildcard arm** — a new fix shape is a compile
+error here (D6/D15). The renderer never sees an invariant: one variant, one meaning,
+one template. `CascadeWarning::text` wraps it, with the outer match on
+`CascadeWarningView` — the two warning variants — then on the `Fix` inside
+`CascadeFix`. Name lookups (teacher/student names, subject names, group-list names,
+slot day/time, week numbers) read `data` and **panic on a miss** (D7).
+`resolution.rs`'s module doc gains: *"Every `Fix` variant has a French description in
+`ops/src/warning_text.rs` — a new or changed variant must update its text."*
 
-The catalogue. Fix shapes are the map's (survey-verified, `resolution.rs` anchors in the
-right column); wording is a template to polish at implementation — the *structure*
-(which names appear) is the settled part. `{sujet}`, `{colleur}`, etc. are pre-state
-lookups.
+**The catalogue** — this table IS the `Fix` enum (commit 1a builds the type from it,
+commit 5 the templates). Conventions: fields in braces; `rebuilt` marks a
+payload-carrying variant (the variant reduces to a whole-value op — `Update`,
+`SetRow`, `SetGroupList` — and carries the rebuilt value so `to_annotated_op` stays
+pure, D15); all other variants are id-only and translate structurally. The
+"translates to" column is the map's current op output (survey-verified) —
+`to_annotated_op` reproduces it verbatim. The "produced by" column is the
+`fix_invariant` arm inventory: which invariants answer this variant (`Conv:` =
+`Convergence`). Variant names and French wording are templates to polish at
+implementation; the *partition* — which invariants share a variant, driven by
+one-variant-per-rendered-meaning — is the settled part. `{sujet}`, `{colleur}`, `{n}`,
+etc. are pre-state lookups.
 
-**Dangling-reference fixes** (site → fix → text template):
+| `Fix` variant | translates to | produced by | template |
+| --- | --- | --- | --- |
+| `DeleteWeek { week }` | `WeekOp::Remove` | `Period@WeekPeriodFk` | « La semaine {n} sera supprimée » |
+| `RemoveSubjectPeriodExclusion { subject, period, rebuilt }` | subject `Update` | `Period@SubjectExcludedPeriods` | « {sujet} : l'exclusion de la période disparue sera levée » |
+| `RemoveStudentPeriodExclusion { student, period, rebuilt }` | student `Update` | `Period@StudentExcludedPeriods` | « {élève} : l'exclusion de la période disparue sera levée » |
+| `RemovePairingRulePeriodExclusion { rule, period, rebuilt }` | pairing-rule `Update` | `Period@PairingRuleExcludedPeriods` | « Règle d'alternance {sujets} : l'exclusion de période sera levée » |
+| `RemoveSlotPairingRulePeriodExclusion { rule, period, rebuilt }` | slot-pairing-rule `Update` | `Period@SlotPairingRuleExcludedPeriods` | « Alternance de créneaux {desc} : l'exclusion de période sera levée » |
+| `ClearAssignmentRow { period, subject }` | `SetRow(period, subject, ∅)` | `Period@AssignmentsKey`, `Subject@AssignmentsKey`, `Conv:AssignmentForSubjectNotRunningOnPeriod` | « Les inscriptions en {sujet} (période {p}) seront supprimées » |
+| `UnassignGroupList { period, subject }` | `AssignToSubject(period, subject, None)` | `Period@AssociationEntry`, `Subject@AssociationEntry`, `GroupList@AssociationEntry`, `Conv:AssociationForSubject{WithoutInterrogations,NotRunningOnPeriod}` | « L'association de la liste « {liste} » en {sujet} (période {p}) sera supprimée » |
+| `RemoveWeekPatternExclusion { pattern, week, rebuilt }` | week-pattern `Update` | `Week@WeekPatternExcludedWeek` | « Motif « {motif} » : l'exclusion de la semaine {n} sera levée » |
+| `ClearInterrogationCell { slot, week }` | `SetInterrogation(slot, week, ∅)` | `Week@ColloscopeInterrogation`, `Slot@ColloscopeInterrogation`, `Conv:InterrogationSlotNotRunningOnPeriod`, `Conv:InterrogationOnInactiveWeek` | « Les colles du créneau {desc} en semaine {n} seront supprimées » |
+| `RemoveTeacherSubject { teacher, subject, rebuilt }` | teacher `Update` | `Subject@TeacherSubjects`, `Conv:TeacherSubjectWithoutInterrogations` | « {colleur} n'interviendra plus en {sujet} » |
+| `DeleteSlot { slot }` | `SlotOp::Remove` | `Subject@SlotSubject`, `Teacher@SlotTeacher`, `Conv:SlotTeacherDoesNotTeachSubject`, `Conv:SlotForSubjectWithoutInterrogations` | « Le créneau de colle {desc} sera supprimé » |
+| `DeleteOverflowingSlot { slot }` | `SlotOp::Remove` | `Conv:SlotOverflowsDay` | « Le créneau de colle {desc} sera supprimé (il déborderait sur le jour suivant) » |
+| `DeleteIncompat { incompat }` | `IncompatOp::Remove` | `Subject@IncompatSubject` | « L'incompatibilité horaire « {nom} » sera supprimée » |
+| `DeletePairingRule { rule }` | pairing-rule `Remove` | `Subject@PairingRuleAntecedent/Consequent` | « La règle d'alternance entre {sujet₁} et {sujet₂} sera supprimée » |
+| `ClearSubjectBalancing { subject }` | `SetSubject(subject, None)` | `Subject@BalancingSubjectKey`, `Conv:BalancingForSubjectWithoutInterrogations` | « Les options d'équilibrage propres à {sujet} seront supprimées » |
+| `RemoveStudentFromGroupListPrefill { group_list, student, rebuilt }` | group-list `Update` | `Student@GroupListPrefilledStudent` | « {élève} sera retiré(e) des groupes préremplis de « {liste} » » |
+| `RemoveStudentGroupListExclusion { group_list, student, rebuilt }` | group-list `Update` | `Student@GroupListExcludedStudent` | « {élève} : l'exclusion de la liste « {liste} » sera levée » |
+| `ClearStudentSettings { student }` | `SetStudent(student, None)` | `Student@SettingsStudentKey` | « Les limites propres à {élève} seront supprimées » |
+| `RemoveStudentFromAssignmentRow { period, subject, student, rebuilt }` | `SetRow` | `Student@AssignmentsStudent`, `Conv:AssignedStudentNotPresentForPeriod` | « L'inscription de {élève} en {sujet} (période {p}) sera supprimée » |
+| `RemoveStudentColloscopePlacement { group_list, student, rebuilt }` | `SetGroupList` | `Student@ColloscopeGroupListStudent`, `Conv:ColloscopeStudentExcluded`, `Conv:ColloscopeStudentGroupOutOfBounds` | « {élève} sera retiré(e) de son groupe dans « {liste} » (colloscope) » |
+| `ClearSlotWeekPattern { slot, rebuilt }` | slot `Update` | `WeekPattern@SlotWeekPattern` | « Le créneau {desc} ne suivra plus de motif : il aura lieu toutes les semaines » |
+| `ClearIncompatWeekPattern { incompat, rebuilt }` | incompat `Update` | `WeekPattern@IncompatWeekPattern` | « L'incompatibilité « {nom} » ne suivra plus de motif : elle s'appliquera toutes les semaines » |
+| `DeleteSlotPairingRule { rule }` | slot-pairing-rule `Remove` | `Slot@SlotPairingRuleAntecedent/Consequent`, `Conv:PairedSlotsNotInSameSubject` | « La règle d'alternance de créneaux {desc} sera supprimée » |
+| `ClearColloscopeGroupListRow { group_list }` | `SetGroupList(list, ∅)` | `GroupList@ColloscopeGroupListKey`, `Conv:ColloscopeGroupListPrefilled` | « La répartition en groupes de « {liste} » dans le colloscope sera supprimée » |
+| `RemoveGroupFromInterrogationCell { slot, week, group, rebuilt }` | `SetInterrogation` | `Conv:InterrogationGroupOutOfBounds` | « Le groupe {g} sera retiré des colles du créneau {desc} en semaine {n} » |
 
-| site | fix | template |
-| --- | --- | --- |
-| `Period@WeekPeriodFk` | remove week | « La semaine {n} sera supprimée » |
-| `Period@SubjectExcludedPeriods` | drop from set | « {sujet} : l'exclusion de la période disparue sera levée » |
-| `Period@StudentExcludedPeriods` | drop from set | « {élève} : l'exclusion de la période disparue sera levée » |
-| `Period@PairingRuleExcludedPeriods` | rule update | « Règle d'alternance {sujets} : l'exclusion de période sera levée » |
-| `Period@SlotPairingRuleExcludedPeriods` | rule update | « Alternance de créneaux {desc} : l'exclusion de période sera levée » |
-| `Period@AssignmentsKey` | `SetRow ∅` | « Les inscriptions en {sujet} pour cette période seront supprimées » |
-| `Period@AssociationEntry` | unassign | « L'association de liste de groupes en {sujet} pour cette période sera supprimée » |
-| `Week@WeekPatternExcludedWeek` | drop from set | « Motif « {motif} » : l'exclusion de la semaine {n} sera levée » |
-| `Week@ColloscopeInterrogation` | clear cell | « Les colles du créneau {desc} en semaine {n} seront supprimées » |
-| `Subject@TeacherSubjects` | drop from set | « {colleur} n'interviendra plus en {sujet} » |
-| `Subject@SlotSubject` | **remove slot** | « Le créneau de colle {desc} sera supprimé » |
-| `Subject@IncompatSubject` | **remove incompat** | « L'incompatibilité horaire « {nom} » sera supprimée » |
-| `Subject@PairingRuleAntecedent/Consequent` | **remove rule** | « La règle d'alternance entre {sujet₁} et {sujet₂} sera supprimée » |
-| `Subject@BalancingSubjectKey` | clear override | « Les options d'équilibrage propres à {sujet} seront supprimées » |
-| `Subject@AssignmentsKey` | `SetRow ∅` | « Les inscriptions en {sujet} (période {p}) seront supprimées » |
-| `Subject@AssociationEntry` | unassign | « L'association de liste de groupes en {sujet} (période {p}) sera supprimée » |
-| `Teacher@SlotTeacher` | **remove slot** | « Le créneau de colle {desc} sera supprimé » |
-| `Student@GroupListPrefilledStudent` | list update | « {élève} sera retiré(e) des groupes préremplis de « {liste} » » |
-| `Student@GroupListExcludedStudent` | list update | « {élève} : l'exclusion de la liste « {liste} » sera levée » |
-| `Student@SettingsStudentKey` | clear override | « Les limites propres à {élève} seront supprimées » |
-| `Student@AssignmentsStudent` | row rebuild | « L'inscription de {élève} en {sujet} (période {p}) sera supprimée » |
-| `Student@ColloscopeGroupListStudent` | placement rebuild | « {élève} sera retiré(e) de son groupe dans « {liste} » (colloscope) » |
-| `WeekPattern@SlotWeekPattern` | clear to `None` | « Le créneau {desc} ne suivra plus de motif : il aura lieu toutes les semaines » |
-| `WeekPattern@IncompatWeekPattern` | clear to `None` | « L'incompatibilité « {nom} » ne suivra plus de motif : elle s'appliquera toutes les semaines » |
-| `Slot@SlotPairingRuleAntecedent/Consequent` | **remove rule** | « La règle d'alternance de créneaux {desc} sera supprimée » |
-| `Slot@ColloscopeInterrogation` | clear cell | « Les colles du créneau {desc} en semaine {n} seront supprimées » |
-| `GroupList@AssociationEntry` | unassign | « L'association de « {liste} » en {sujet} (période {p}) sera supprimée » |
-| `GroupList@ColloscopeGroupListKey` | clear row | « La répartition en groupes de « {liste} » dans le colloscope sera supprimée » |
+Rendering note on `UnassignGroupList`: the template names the list, which the fix does
+not carry — the renderer reads the association entry at `(period, subject)` from the
+pre-state (the entry the fix clears, so it is present there; a miss panics per D7).
 
-**Convergence fixes**:
-
-| convergence | fix | template |
-| --- | --- | --- |
-| `SlotTeacherDoesNotTeachSubject` | remove slot | « Le créneau de colle {desc} sera supprimé » |
-| `TeacherSubjectWithoutInterrogations` | drop from set | « {colleur} n'interviendra plus en {sujet} » |
-| `SlotForSubjectWithoutInterrogations` | remove slot | « Le créneau de colle {desc} sera supprimé » |
-| `SlotOverflowsDay` | remove slot | « Le créneau de colle {desc} sera supprimé (il déborderait sur le jour suivant) » |
-| `AssignmentForSubjectNotRunningOnPeriod` | `SetRow ∅` | « Les inscriptions en {sujet} (période {p}) seront supprimées » |
-| `AssignedStudentNotPresentForPeriod` | row rebuild | « L'inscription de {élève} en {sujet} (période {p}) sera supprimée » |
-| `AssociationForSubject{WithoutInterrogations,NotRunningOnPeriod}` | unassign | « L'association de liste de groupes en {sujet} (période {p}) sera supprimée » |
-| `BalancingForSubjectWithoutInterrogations` | clear override | « Les options d'équilibrage propres à {sujet} seront supprimées » |
-| `PairedSlotsNotInSameSubject` | remove rule | « La règle d'alternance de créneaux {desc} sera supprimée » |
-| `InterrogationSlotNotRunningOnPeriod` / `InterrogationOnInactiveWeek` | clear cell | « Les colles du créneau {desc} en semaine {n} seront supprimées » |
-| `InterrogationGroupOutOfBounds` | cell rebuild | « Le groupe {g} sera retiré des colles du créneau {desc} en semaine {n} » |
-| `ColloscopeGroupListPrefilled` | clear row | « La répartition en groupes de « {liste} » dans le colloscope sera supprimée » |
-| `ColloscopeStudentExcluded` | placement rebuild | « {élève} sera retiré(e) de son groupe dans « {liste} » (colloscope) » |
-| `ColloscopeStudentGroupOutOfBounds` | placement rebuild | « {élève} sera retiré(e) de son groupe dans « {liste} » (colloscope) » |
-
-**The composite-emitted variant (D12)**:
+**The composite-emitted variant (D12)** — not part of `Fix`; the second
+`CascadeWarningView` variant:
 
 | warning | template |
 | --- | --- |
 | `DroppedPrefilledStudents` | « Les élèves {noms} seront retirés des groupes supprimés de la liste « {liste} » » |
 
-The renderer's outer match is on `CascadeWarningView` — the two variants — then on the
-invariant inside `CascadeFix`.
-
-Notice the many-to-one collapses (several invariants → one fix shape → one template):
-this is expected and correct — the *why* differs, the *effect* is the same, and D6 says
-we print the effect. Fixtures pin one rendered string per **template row** (not per
-invariant) plus every name-lookup path.
+The old many-to-one collapses (several invariants → one effect → one sentence) are now
+explicit in the vocabulary itself: they are the multi-entry "produced by" cells.
+Fixtures pin one rendered string per **variant** plus every name-lookup path.
 
 ## 5-C6/C7. Commits 6–7
 
@@ -1013,11 +1140,13 @@ convention); topic memory updated.
 
 - **Fixtures are built in-process** from `AppState::new(Data::default())` + elementary
   ops, like the three existing `ops/tests/` files — no file fixtures.
-- **Expected warning lists derived by hand before the test runs** (H.5), as
-  `(op, invariant)` literals compared through `CascadeWarning::view()` (content is
-  private — match the `CascadeWarningView` variants); sequence asserted only where the
-  engine really chose it (an ordered literal is a tripwire on the derived `Ord`, not a
-  confluence pin).
+- **Expected warning lists derived by hand before the test runs** (H.5), as `Fix`
+  literals compared through `CascadeWarning::view()` (content is private — match the
+  `CascadeWarningView` variants; payload-carrying variants include their expected
+  rebuilt value, built from the same in-process builders as the document); sequence
+  asserted only where the engine really chose it (an ordered literal is a tripwire on
+  the derived `Ord`, not a confluence pin). Invariant→fix *attribution* is not pinned
+  here — that lives in commit 1a's direct `fix_invariant` unit tests (D15).
 - **Mutation-check every pin that passes on its first run** (house rule; the review's
   G1 lesson): for behaviour-divergence fixtures, sabotage the new composite or
   translation arm and watch red before trusting green.
