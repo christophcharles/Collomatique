@@ -350,8 +350,21 @@ impl InMemoryData for Data {
         let issuer_snapshot = self.id_issuer.lock().unwrap().clone();
 
         // Precheck failures return before any mutation (by construction of the
-        // `force_apply_*` copies), so the state is untouched on this arm.
-        let backward = self.force_apply(op)?;
+        // `force_apply_*` copies); the restore below makes that a mechanism
+        // rather than a 16-file discipline — a copy that ever mutated before
+        // erroring would still leave the state bit-identical. The snapshot is
+        // already in hand for the checker arms, so this costs nothing on the
+        // accepted path. `e.into()` is the same conversion the `?` used to
+        // apply (`From<PrecheckError> for Error`), so the error value is
+        // unchanged.
+        let backward = match self.force_apply(op) {
+            Ok(backward) => backward,
+            Err(e) => {
+                self.inner_data = snapshot;
+                *self.id_issuer.lock().unwrap() = issuer_snapshot;
+                return Err(e.into());
+            }
+        };
 
         match self.inner_data.broken_invariants() {
             Err(logic) => {
