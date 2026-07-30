@@ -180,26 +180,14 @@ impl InnerData {
 ///
 /// It does not necesserally correlate exactly to the data stored
 /// on disk. This is to allow versioning.
-#[derive(Debug, ContentOrd)]
+#[derive(Clone, Debug, ContentOrd)]
 pub struct Data {
     // The document order does not see the issuer: two `Data` with equal
     // inner data are content-equivalent even when their issuers differ —
     // the same quotient the hand-written `PartialEq` below takes.
     #[ord(ignore)]
-    id_issuer: std::sync::Mutex<IdIssuer>,
+    id_issuer: IdIssuer,
     inner_data: InnerData,
-}
-
-impl Clone for Data {
-    fn clone(&self) -> Self {
-        let guard = self.id_issuer.lock().unwrap();
-
-        let id_issuer = guard.clone();
-        Data {
-            id_issuer: std::sync::Mutex::new(id_issuer),
-            inner_data: self.inner_data.clone(),
-        }
-    }
 }
 
 impl PartialEq for Data {
@@ -317,9 +305,8 @@ impl InMemoryData for Data {
     type InvalidOp = InvalidOp;
     type Invariant = FixableInvariant;
 
-    fn annotate(&self, op: Op) -> (AnnotatedOp, Option<NewId>) {
-        let mut guard = self.id_issuer.lock().unwrap();
-        AnnotatedOp::annotate(op, &mut guard)
+    fn annotate(&mut self, op: Op) -> (AnnotatedOp, Option<NewId>) {
+        AnnotatedOp::annotate(op, &mut self.id_issuer)
     }
 
     /// The apply/check/rollback gate: snapshot, [Data::force_apply], check with
@@ -347,7 +334,7 @@ impl InMemoryData for Data {
         // must *not* undo: `annotate` runs before `apply` and its issued ids
         // stay burned on failure, exactly as today — history ids are never reused.
         let snapshot = self.inner_data.clone();
-        let issuer_snapshot = self.id_issuer.lock().unwrap().clone();
+        let issuer_snapshot = self.id_issuer.clone();
 
         // Precheck failures return before any mutation (by construction of the
         // `force_apply_*` copies); the restore below makes that a mechanism
@@ -361,7 +348,7 @@ impl InMemoryData for Data {
             Ok(backward) => backward,
             Err(e) => {
                 self.inner_data = snapshot;
-                *self.id_issuer.lock().unwrap() = issuer_snapshot;
+                self.id_issuer = issuer_snapshot;
                 return Err(e.into());
             }
         };
@@ -369,14 +356,14 @@ impl InMemoryData for Data {
         match self.inner_data.broken_invariants() {
             Err(logic) => {
                 self.inner_data = snapshot;
-                *self.id_issuer.lock().unwrap() = issuer_snapshot;
+                self.id_issuer = issuer_snapshot;
                 Err(collomatique_state::ApplyError::InvalidOp(InvalidOp::Logic(
                     logic,
                 )))
             }
             Ok(fixable) if !fixable.is_empty() => {
                 self.inner_data = snapshot;
-                *self.id_issuer.lock().unwrap() = issuer_snapshot;
+                self.id_issuer = issuer_snapshot;
                 Err(collomatique_state::ApplyError::BrokenInvariants(fixable))
             }
             Ok(_empty) => {
@@ -453,8 +440,7 @@ impl Data {
         let max_id = self.inner_data.ids().max();
 
         if let Some(id) = max_id {
-            let guard = self.id_issuer.lock().expect("No error on lock");
-            if id >= guard.get_internal_counter() {
+            if id >= self.id_issuer.get_internal_counter() {
                 panic!("IdIssuer internal counter is not greater than all internal ids");
             }
         }
@@ -493,7 +479,7 @@ impl Data {
         let id_issuer = IdIssuer::new(inner_data.ids())?;
 
         let data = Data {
-            id_issuer: std::sync::Mutex::new(id_issuer),
+            id_issuer,
             inner_data,
         };
 
@@ -681,7 +667,7 @@ mod force_apply_tests {
 
     #[test]
     fn forced_valid_student_add_equals_apply() {
-        let data = Data::default();
+        let mut data = Data::default();
         let (add, _) = data.annotate(Op::Student(StudentOp::Add(Student::default())));
 
         let mut gated = data.clone();

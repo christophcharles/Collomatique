@@ -65,7 +65,7 @@ impl InMemoryData for FakeData {
     type InvalidOp = FakeError;
     type Invariant = std::convert::Infallible;
 
-    fn annotate(&self, op: FakeOp) -> (FakeOp, ()) {
+    fn annotate(&mut self, op: FakeOp) -> (FakeOp, ()) {
         (op, ())
     }
 
@@ -182,7 +182,7 @@ impl InMemoryData for QuoteData {
     type Invariant = QuoteInvariant;
 
     // Identity annotate: the toy's ops are complete, ids are caller-chosen.
-    fn annotate(&self, op: QuoteOp) -> (QuoteOp, ()) {
+    fn annotate(&mut self, op: QuoteOp) -> (QuoteOp, ()) {
         (op, ())
     }
 
@@ -376,7 +376,7 @@ impl InMemoryData for EvilQuoteData {
     type InvalidOp = QuoteInvalidOp;
     type Invariant = QuoteInvariant;
 
-    fn annotate(&self, op: QuoteOp) -> (QuoteOp, ()) {
+    fn annotate(&mut self, op: QuoteOp) -> (QuoteOp, ()) {
         self.0.annotate(op)
     }
 

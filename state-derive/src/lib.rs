@@ -126,10 +126,10 @@ pub fn derive_join(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 /// # Example
 ///
 /// ```ignore
-/// #[derive(Debug, ContentOrd)]
+/// #[derive(Clone, Debug, ContentOrd)]
 /// pub struct Data {
 ///     #[ord(ignore)]
-///     id_issuer: std::sync::Mutex<IdIssuer>,
+///     id_issuer: IdIssuer,
 ///     inner_data: InnerData,
 /// }
 /// ```

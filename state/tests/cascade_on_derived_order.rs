@@ -64,7 +64,7 @@ impl InMemoryData for LibraryData {
     type InvalidOp = LibraryInvalidOp;
     type Invariant = LibraryInvariant;
 
-    fn annotate(&self, op: LibraryOp) -> (LibraryOp, ()) {
+    fn annotate(&mut self, op: LibraryOp) -> (LibraryOp, ()) {
         (op, ())
     }
 
@@ -158,7 +158,7 @@ impl InMemoryData for GrowingLibraryData {
     type InvalidOp = LibraryInvalidOp;
     type Invariant = LibraryInvariant;
 
-    fn annotate(&self, op: LibraryOp) -> (LibraryOp, ()) {
+    fn annotate(&mut self, op: LibraryOp) -> (LibraryOp, ()) {
         self.inner.annotate(op)
     }
 

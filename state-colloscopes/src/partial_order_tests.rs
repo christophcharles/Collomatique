@@ -227,16 +227,8 @@ fn data_ignores_the_id_issuer() {
         "the two sequences end on the same document"
     );
     assert_ne!(
-        untouched
-            .id_issuer
-            .lock()
-            .expect("no panic held the lock")
-            .get_internal_counter(),
-        round_trip
-            .id_issuer
-            .lock()
-            .expect("no panic held the lock")
-            .get_internal_counter(),
+        untouched.id_issuer.get_internal_counter(),
+        round_trip.id_issuer.get_internal_counter(),
         "the issuers really do differ, so the quotient is doing work"
     );
 
