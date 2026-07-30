@@ -183,6 +183,10 @@ impl FileLoader {
                 "Fichier mal formé et est probablement corrompu.\n(Les créneaux ont une ligne pour la matière {}, qui n'a pas d'interrogations)",
                 subject_id
             ),
+            DecodeError::WrongWeekCountInWeekPattern { week_pattern_id, expected, found } => format!(
+                "Fichier mal formé et est probablement corrompu.\n(Le motif de semaines {} décrit {} semaines alors que le calendrier en compte {})",
+                week_pattern_id, found, expected
+            ),
             DecodeError::LogicError(set) => format!(
                 "Fichier mal formé et est probablement corrompu.\n(Les données sont logiquement impossibles : {})",
                 set.iter().map(|e| e.to_string()).collect::<Vec<_>>().join(" ; ")

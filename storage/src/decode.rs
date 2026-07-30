@@ -76,6 +76,14 @@ pub enum DecodeError {
     UnknownSubjectInSlots(u64),
     #[error("The slots have a row for subject id {0} which has no interrogations")]
     SlotsForSubjectWithoutInterrogations(u64),
+    #[error(
+        "Week pattern id {week_pattern_id} has {found} week entries but the schedule has {expected} weeks"
+    )]
+    WrongWeekCountInWeekPattern {
+        week_pattern_id: u64,
+        expected: usize,
+        found: usize,
+    },
     #[error("The loaded data is logically impossible: {0:?}")]
     LogicError(BTreeSet<collomatique_state_colloscopes::LogicError>),
     #[error("The loaded data breaks an invariant: {0:?}")]

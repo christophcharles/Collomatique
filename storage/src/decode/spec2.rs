@@ -292,7 +292,7 @@ fn reconstruct(blocks: Blocks) -> Result<InnerData, DecodeError> {
     let assignments =
         reconstruct_assignments(blocks.assignments.unwrap_or_default(), &periods, &subjects)?;
     let week_patterns =
-        reconstruct_week_patterns(blocks.week_patterns.unwrap_or_default(), &weeks, &periods);
+        reconstruct_week_patterns(blocks.week_patterns.unwrap_or_default(), &weeks, &periods)?;
     let slots = reconstruct_slots(blocks.slots.unwrap_or_default(), &subjects)?;
     let incompats = reconstruct_incompats(blocks.incompatibilities.unwrap_or_default())?;
     let group_lists = reconstruct_group_lists(
@@ -541,35 +541,43 @@ fn reconstruct_week_patterns(
     block: format::week_patterns::WeekPatterns,
     weeks: &mem::weeks::Weeks,
     periods: &mem::periods::Periods,
-) -> mem::week_patterns::WeekPatterns {
+) -> Result<mem::week_patterns::WeekPatterns, DecodeError> {
     // The frozen positional bitmask carries one bit per week in global walk
-    // order; a `false` bit excludes that week. Zipping against the walk order
-    // maps each bit back to its synthesized week id (and gracefully ignores any
-    // trailing bits past the schedule — such a file is rejected by layer 3).
+    // order; a `false` bit excludes that week. The spec (§4.6) requires
+    // exactly one element per week of the schedule — no shorter, no longer —
+    // and the in-memory type has no length to re-check later, so the length
+    // is enforced here.
     let week_ids: Vec<WeekId> = weeks
         .walk(periods)
         .map(|(_period_id, week_id, _week)| week_id)
         .collect();
-    mem::week_patterns::WeekPatterns {
-        week_pattern_map: block
-            .into_inner()
-            .into_iter()
-            .map(|week_pattern| {
-                let excluded_weeks = week_ids
-                    .iter()
-                    .zip(week_pattern.weeks)
-                    .filter_map(|(&week_id, active)| (!active).then_some(week_id))
-                    .collect();
-                (
-                    id::<WeekPatternId>(week_pattern.id),
-                    mem::week_patterns::WeekPattern {
-                        name: week_pattern.name,
-                        excluded_weeks,
-                    },
-                )
-            })
-            .collect(),
-    }
+    let week_pattern_map = block
+        .into_inner()
+        .into_iter()
+        .map(|week_pattern| {
+            if week_pattern.weeks.len() != week_ids.len() {
+                return Err(DecodeError::WrongWeekCountInWeekPattern {
+                    week_pattern_id: week_pattern.id,
+                    expected: week_ids.len(),
+                    found: week_pattern.weeks.len(),
+                });
+            }
+            let excluded_weeks = week_ids
+                .iter()
+                .zip(week_pattern.weeks)
+                .filter_map(|(&week_id, active)| (!active).then_some(week_id))
+                .collect();
+            Ok((
+                id::<WeekPatternId>(week_pattern.id),
+                mem::week_patterns::WeekPattern {
+                    name: week_pattern.name,
+                    excluded_weeks,
+                },
+            ))
+        })
+        .collect::<Result<_, _>>()?;
+
+    Ok(mem::week_patterns::WeekPatterns { week_pattern_map })
 }
 
 fn reconstruct_slots(

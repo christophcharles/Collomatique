@@ -789,9 +789,13 @@ fn week_pattern_shorter_than_the_schedule_is_rejected() {
     // bits silently default to active.
     let content = seven_week_document_with_pattern_of_length(1);
 
-    assert!(
-        deserialize_data(&content).is_err(),
-        "A week pattern with fewer entries than the schedule has weeks must be rejected"
+    assert_eq!(
+        expect_decode_error(&content),
+        DecodeError::WrongWeekCountInWeekPattern {
+            week_pattern_id: 6,
+            expected: 7,
+            found: 1
+        }
     );
 }
 
@@ -802,9 +806,13 @@ fn week_pattern_longer_than_the_schedule_is_rejected() {
     // this — decode is the only place it can be seen.
     let content = seven_week_document_with_pattern_of_length(8);
 
-    assert!(
-        deserialize_data(&content).is_err(),
-        "A week pattern with more entries than the schedule has weeks must be rejected"
+    assert_eq!(
+        expect_decode_error(&content),
+        DecodeError::WrongWeekCountInWeekPattern {
+            week_pattern_id: 6,
+            expected: 7,
+            found: 8
+        }
     );
 }
 
