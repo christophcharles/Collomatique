@@ -138,7 +138,9 @@ fn collect_blocks(
         if entry.minimum_spec_version != CANONICAL_MINIMUM_SPEC_VERSION
             || entry.needed_entry != CANONICAL_NEEDED_ENTRY
         {
-            return Err(DecodeError::MismatchedSpecRequirementInEntry);
+            return Err(DecodeError::MismatchedSpecRequirementInEntry(
+                block_name.as_str(),
+            ));
         }
 
         let block =
@@ -368,9 +370,21 @@ fn reconstruct_periods(
     // containers are built from the same rows: periods carry only the ordered
     // ids, weeks carry the per-period ordering and the week table.
     let period_ids = rows.iter().map(|(id, _)| *id).collect();
-    let periods = mem::periods::Periods::from_ordered_ids(first_week, period_ids)
-        .map_err(|_| DecodeError::DuplicatedID)?;
-    let weeks = mem::weeks::Weeks::from_period_rows(rows).map_err(|_| DecodeError::DuplicatedID)?;
+    let periods = mem::periods::Periods::from_ordered_ids(first_week, period_ids).map_err(|e| {
+        DecodeError::DuplicatedIdInBlock {
+            block: BlockName::GeneralPlanning.as_str(),
+            id: e.0.inner(),
+        }
+    })?;
+    // Defensive: the week ids were synthesized just above by a monotonically
+    // increasing counter, so no file can make them collide. The reported id
+    // is that synthesized value, not one the file carried.
+    let weeks = mem::weeks::Weeks::from_period_rows(rows).map_err(|e| {
+        DecodeError::DuplicatedIdInBlock {
+            block: BlockName::GeneralPlanning.as_str(),
+            id: e.0.inner(),
+        }
+    })?;
     Ok((periods, weeks))
 }
 
@@ -395,7 +409,14 @@ fn reconstruct_subjects(
         })
         .collect::<Vec<_>>()
         .try_into()
-        .map_err(|_| DecodeError::DuplicatedID)?;
+        .map_err(
+            |e: collomatique_state::tables::DuplicatedIdError<SubjectId>| {
+                DecodeError::DuplicatedIdInBlock {
+                    block: BlockName::Subjects.as_str(),
+                    id: e.0.inner(),
+                }
+            },
+        )?;
 
     Ok(mem::subjects::Subjects {
         ordered_subject_list,
@@ -633,7 +654,10 @@ fn reconstruct_slots(
     // A slot id duplicated across subjects would silently collapse the flat
     // slot table; detect it explicitly instead (it previously surfaced as a
     // duplicate-id invariant error).
-    mem::slots::Slots::from_subject_rows(rows).map_err(|_| DecodeError::DuplicatedID)
+    mem::slots::Slots::from_subject_rows(rows).map_err(|e| DecodeError::DuplicatedIdInBlock {
+        block: BlockName::Slots.as_str(),
+        id: e.0.inner(),
+    })
 }
 
 fn reconstruct_incompats(

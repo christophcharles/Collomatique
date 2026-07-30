@@ -25,12 +25,18 @@ use crate::json::*;
 /// This error type describes error that happen when interpreting the file content.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum DecodeError {
-    #[error("Unknown file type - this might be from a more recent version of Collomatique")]
+    #[error(
+        "Unknown file type - this might be from a more recent version of Collomatique (file written by version {0})"
+    )]
     UnknownFileType(Version),
+    #[error(
+        "Unknown file content - this might be from a more recent version of Collomatique (file written by version {0})"
+    )]
+    UnknownFileContent(Version),
     #[error("An unknown entry requires a newer version of Collomatique")]
     UnknownNeededEntry(Version),
-    #[error("An entry has the wrong spec requirements")]
-    MismatchedSpecRequirementInEntry,
+    #[error("Entry for block {0:?} has the wrong spec requirements")]
+    MismatchedSpecRequirementInEntry(&'static str),
     #[error("An entry is probably ill-formed (and thus not recognized)")]
     ProbablyIllformedEntry,
     #[error("An entry's content should be an object with exactly one key (the block name)")]
@@ -62,8 +68,16 @@ pub enum DecodeError {
     InconsistentSlotPairingRule(u64),
     #[error("generating new IDs is not secure, half the usable IDs have been used already")]
     EndOfTheUniverse,
+    /// Two ids collide across the whole document, without a single block
+    /// being able to name the culprit
+    ///
+    /// This is the cross-kind check run by [Data::from_inner_data]; the
+    /// in-block collisions carry their block and id, see
+    /// [DecodeError::DuplicatedIdInBlock].
     #[error("Duplicated ID")]
     DuplicatedID,
+    #[error("Duplicated ID {id} in block {block:?}")]
+    DuplicatedIdInBlock { block: &'static str, id: u64 },
     #[error("The assignments reference an unknown period (period id {0})")]
     UnknownPeriodInAssignments(u64),
     #[error("The assignments reference an unknown subject (subject id {0})")]
@@ -131,8 +145,16 @@ pub(crate) fn check_header(
     header: &Header,
     caveats: &mut BTreeSet<Caveat>,
 ) -> Result<(), DecodeError> {
-    if let FileContent::UnknownFileContent(_value) = &header.file_content {
+    // The two header discriminants are tolerated at parse (untagged
+    // unknown-value arms) so that an unrecognized one is reported here as
+    // itself, rather than as a generic serde failure on the envelope.
+    if let FileType::UnknownFileType(_value) = &header.file_type {
         return Err(DecodeError::UnknownFileType(
+            header.produced_with_version.clone(),
+        ));
+    }
+    if let FileContent::UnknownFileContent(_value) = &header.file_content {
+        return Err(DecodeError::UnknownFileContent(
             header.produced_with_version.clone(),
         ));
     }

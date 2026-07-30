@@ -20,9 +20,14 @@ fn decode_invalid_file_type() {
     let r = collomatique_storage::deserialize_data(content);
     let error = r.expect_err("invalid_file_type should lead to invalid file");
 
-    let DeserializationError::InvalidJson(_) = error else {
-        panic!("The error should be in the JSON deserialization process")
+    // An unrecognized discriminant is not a malformed document: it parses,
+    // and the header check names it — same treatment as `file_content`.
+    let DeserializationError::Decode(decode_error) = error else {
+        panic!("The error should be in the decode process")
     };
+
+    let expected_error = DecodeError::UnknownFileType(Version::new(0, 1, 0));
+    assert_eq!(decode_error, expected_error);
 }
 
 #[test]
@@ -47,7 +52,7 @@ fn decode_invalid_file_content() {
         panic!("The error should be in the decode process")
     };
 
-    let expected_error = DecodeError::UnknownFileType(Version::new(0, 1, 0));
+    let expected_error = DecodeError::UnknownFileContent(Version::new(0, 1, 0));
     assert_eq!(decode_error, expected_error);
 }
 

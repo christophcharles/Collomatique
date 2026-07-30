@@ -432,7 +432,7 @@ fn known_block_with_non_canonical_envelope_values_is_rejected() {
     )]);
     assert_eq!(
         expect_decode_error(&wrong_spec),
-        DecodeError::MismatchedSpecRequirementInEntry
+        DecodeError::MismatchedSpecRequirementInEntry("Settings")
     );
 
     let not_needed = document(&[format!(
@@ -441,7 +441,7 @@ fn known_block_with_non_canonical_envelope_values_is_rejected() {
     )]);
     assert_eq!(
         expect_decode_error(&not_needed),
-        DecodeError::MismatchedSpecRequirementInEntry
+        DecodeError::MismatchedSpecRequirementInEntry("Settings")
     );
 }
 
@@ -922,5 +922,54 @@ fn duplicate_slot_id_across_subjects_is_rejected() {
         ),
     ];
     let content = document(&entries);
-    assert_eq!(expect_decode_error(&content), DecodeError::DuplicatedID);
+    assert_eq!(
+        expect_decode_error(&content),
+        DecodeError::DuplicatedIdInBlock {
+            block: "Slots",
+            id: 8
+        }
+    );
+}
+
+// The two tests below are the siblings of the one above for the other
+// blocks whose row keys are read straight from the file: the diagnostic
+// names the block and the offending id, not just "duplicated ID".
+
+#[test]
+fn duplicate_period_id_names_its_block() {
+    let content = document(&[entry(
+        r#"{ "GeneralPlanning": {
+            "first_week": null,
+            "periods": [
+                { "id": 1, "weeks": [ { "interrogations": true, "annotation": null } ] },
+                { "id": 1, "weeks": [ { "interrogations": true, "annotation": null } ] }
+            ]
+        } }"#,
+    )]);
+
+    assert_eq!(
+        expect_decode_error(&content),
+        DecodeError::DuplicatedIdInBlock {
+            block: "GeneralPlanning",
+            id: 1
+        }
+    );
+}
+
+#[test]
+fn duplicate_subject_id_names_its_block() {
+    let content = document(&[entry(
+        r#"{ "Subjects": [
+            { "id": 2, "name": "Mathématiques", "interrogation_parameters": null, "excluded_periods": [] },
+            { "id": 2, "name": "Physique", "interrogation_parameters": null, "excluded_periods": [] }
+        ] }"#,
+    )]);
+
+    assert_eq!(
+        expect_decode_error(&content),
+        DecodeError::DuplicatedIdInBlock {
+            block: "Subjects",
+            id: 2
+        }
+    );
 }

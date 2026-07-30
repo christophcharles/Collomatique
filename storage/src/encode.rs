@@ -11,7 +11,7 @@ use json::*;
 
 fn generate_header() -> Header {
     Header {
-        file_type: FileType::Collomatique,
+        file_type: FileType::ValidFileType(ValidFileType::Collomatique),
         produced_with_version: Version::current(),
         file_content: FileContent::ValidFileContent(ValidFileContent::Colloscope),
     }

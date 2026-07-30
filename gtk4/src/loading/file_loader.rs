@@ -119,7 +119,14 @@ impl FileLoader {
         match decode_error {
             DecodeError::EndOfTheUniverse => "Le fichier est probablement un fichier malicieux ou est corrompu.\n(Dernier ID utilisé supérieur à 2^63)".into(),
             DecodeError::DuplicatedID => "Le fichier est mal formé et est probablement corrompu.\n(ID en double)".into(),
-            DecodeError::MismatchedSpecRequirementInEntry => "Le fichier est mal formé et est probablement corrompu.\n(Information de version erronée dans une entrée)".into(),
+            DecodeError::DuplicatedIdInBlock { block, id } => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(L'ID {} apparaît en double dans le bloc {})",
+                id, block
+            ),
+            DecodeError::MismatchedSpecRequirementInEntry(block) => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(Information de version erronée dans l'entrée du bloc {})",
+                block
+            ),
             DecodeError::ProbablyIllformedEntry => "Le fichier est mal formé et est probablement corrompu.\n(Entrée dans les spécifications mais non reconnue)".into(),
             DecodeError::UnknownNeededEntry(version) => format!(
                 "Le fichier a été produit avec une version plus récente de Collomatique et ne peut être ouvert.\nUtiliser la version {} pour ouvrir ce fichier.",
@@ -127,6 +134,10 @@ impl FileLoader {
             ),
             DecodeError::UnknownFileType(version) => format!(
                 "Type de fichier Collomatique inconnu.\nCe fichier a peut-être été produit avec une version plus récente ({}).",
+                version
+            ),
+            DecodeError::UnknownFileContent(version) => format!(
+                "Contenu de fichier Collomatique inconnu.\nCe fichier a peut-être été produit avec une version plus récente ({}).",
                 version
             ),
             DecodeError::MalformedEntryContent => "Le fichier est mal formé et est probablement corrompu.\n(Le contenu d'une entrée n'est pas un objet avec exactement une clé)".into(),

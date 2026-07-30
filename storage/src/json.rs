@@ -113,11 +113,26 @@ impl Version {
     }
 }
 
+/// The `file_type` discriminant
+///
+/// An unrecognized value parses into [FileType::UnknownFileType] rather
+/// than failing serde, so that the header check can report it as an
+/// unknown file type instead of a generic malformed-JSON error.
+/// Serialization is transparent: a [ValidFileType] emits exactly its own
+/// encoding.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
 pub enum FileType {
+    ValidFileType(ValidFileType),
+    UnknownFileType(serde_json::Value),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ValidFileType {
     Collomatique,
 }
 
+/// The `file_content` discriminant, same shape as [FileType]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum FileContent {
