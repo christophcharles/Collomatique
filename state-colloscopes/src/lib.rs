@@ -820,3 +820,124 @@ mod apply_tests {
         );
     }
 }
+
+#[cfg(test)]
+mod construction_boundary_tests {
+    //! Pins for the [Data] construction boundary — the decode trust boundary of
+    //! the design record's G.4. [Data::from_inner_data] is the one door through
+    //! which data built *outside* this crate enters, so both of its rejection
+    //! arms ([FromInnerDataError::Logic] and
+    //! [FromInnerDataError::BrokenInvariants]) are load-bearing: a broken state
+    //! must never exist outside the apply/check/rollback primitive. Both arms
+    //! were constructed but never exercised before this module.
+    //!
+    //! The third test pins the [Data]-level companion of the checker, the
+    //! id-issuer high-water assertion. It fires on the *accepted* path of the
+    //! gate, so the only way to reach it is a [Data] whose issuer was never
+    //! built from its own ids — which in turn needs the crate-private field, and
+    //! is why this module is in-crate rather than in `tests/`.
+
+    use crate::ids::{Id, SlotId, StudentId, SubjectId, TeacherId, WeekId};
+    use crate::ops::{AnnotatedOp, AnnotatedStudentOp};
+    use crate::slots::{Slot, Slots};
+    use crate::students::Student;
+    use crate::subjects::Subject;
+    use crate::{Data, FromInnerDataError, IdIssuer, InnerData};
+    use collomatique_state::InMemoryData;
+    use std::collections::BTreeSet;
+
+    /// A minimal well-formed slot on the given subject/teacher, mirroring the
+    /// invariants-module fixture: no week pattern, Monday 8:00.
+    fn test_slot(subject_id: SubjectId, teacher_id: TeacherId) -> Slot {
+        Slot {
+            subject_id,
+            teacher_id,
+            start_time: collomatique_time::SlotStart {
+                weekday: chrono::Weekday::Mon.into(),
+                start_time: collomatique_time::WholeMinuteTime::new(
+                    chrono::NaiveTime::from_hms_opt(8, 0, 0).unwrap(),
+                )
+                .unwrap(),
+            },
+            extra_info: String::new(),
+            week_pattern: None,
+            cost: 0,
+        }
+    }
+
+    #[test]
+    fn from_inner_data_rejects_logically_impossible_data() {
+        // A stored *empty* colloscope interrogation row: the canonical form of
+        // "no interrogation there" is an absent row, so a present empty one is
+        // logically impossible. No production surface can build it — hence the
+        // `forge_*` door — but a hand-edited or hostile file can.
+        let mut inner_data = InnerData::default();
+        let slot = unsafe { SlotId::new(1) };
+        let week = unsafe { WeekId::new(2) };
+        inner_data
+            .colloscope
+            .forge_interrogation_row(slot, week, BTreeSet::new());
+
+        let err = Data::from_inner_data(inner_data).unwrap_err();
+
+        assert!(
+            matches!(err, FromInnerDataError::Logic(ref set) if !set.is_empty()),
+            "expected a non-empty Logic error, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn from_inner_data_rejects_broken_invariants() {
+        // One subject with one slot, and a teacher id that names nobody: a
+        // dangling FK. Unlike the logic tier this one *is* fixable — but a
+        // loaded file has no cascade behind it, so the load fails outright.
+        let mut inner_data = InnerData::default();
+        let subject = unsafe { SubjectId::new(1) };
+        let slot = unsafe { SlotId::new(2) };
+        let teacher = unsafe { TeacherId::new(3) };
+        inner_data
+            .params
+            .subjects
+            .ordered_subject_list
+            .insert_at(0, subject, Subject::default())
+            .expect("a fresh list has no id to clobber");
+        inner_data.params.slots =
+            Slots::from_subject_rows([(subject, vec![(slot, test_slot(subject, teacher))])])
+                .expect("one slot cannot duplicate an id");
+
+        let err = Data::from_inner_data(inner_data).unwrap_err();
+
+        assert!(
+            matches!(err, FromInnerDataError::BrokenInvariants(ref set) if !set.is_empty()),
+            "expected a non-empty BrokenInvariants error, got {err:?}"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "not greater than all internal ids")]
+    fn an_issuer_lagging_behind_the_data_panics_on_the_accepted_path() {
+        // `from_inner_data` builds the issuer *from* the data's ids, so it can
+        // never produce this pairing; the struct literal is the only route, and
+        // it stands in for the real trigger named in [Data::apply]'s doc — an
+        // `AnnotatedOp` transplanted from another `Data` instance, whose ids
+        // this issuer never handed out.
+        let mut inner_data = InnerData::default();
+        let student = unsafe { StudentId::new(5) };
+        inner_data
+            .params
+            .students
+            .student_map
+            .insert(student, Student::default());
+
+        let mut data = Data {
+            id_issuer: IdIssuer::new(std::iter::empty()).expect("an empty issuer is valid"),
+            inner_data,
+        };
+
+        // A valid op on a valid document: the precheck passes, the landing
+        // breaks nothing, and the gate reaches its `Ok` arm — where the
+        // high-water assertion catches the lagging issuer.
+        let op = AnnotatedOp::Student(AnnotatedStudentOp::Update(student, Student::default()));
+        let _ = data.apply(&op);
+    }
+}
