@@ -167,6 +167,22 @@ impl FileLoader {
                 "Fichier mal formé et est probablement corrompu.\n(Les affectations référencent une période inconnue, id {})",
                 period_id
             ),
+            DecodeError::UnknownSubjectInAssignments(subject_id) => format!(
+                "Fichier mal formé et est probablement corrompu.\n(Les affectations référencent une matière inconnue, id {})",
+                subject_id
+            ),
+            DecodeError::AssignmentOnExcludedPeriod { period_id, subject_id } => format!(
+                "Fichier mal formé et est probablement corrompu.\n(Les affectations ont une ligne pour la matière {} sur la période {}, dont elle est exclue)",
+                subject_id, period_id
+            ),
+            DecodeError::UnknownSubjectInSlots(subject_id) => format!(
+                "Fichier mal formé et est probablement corrompu.\n(Les créneaux référencent une matière inconnue, id {})",
+                subject_id
+            ),
+            DecodeError::SlotsForSubjectWithoutInterrogations(subject_id) => format!(
+                "Fichier mal formé et est probablement corrompu.\n(Les créneaux ont une ligne pour la matière {}, qui n'a pas d'interrogations)",
+                subject_id
+            ),
             DecodeError::LogicError(set) => format!(
                 "Fichier mal formé et est probablement corrompu.\n(Les données sont logiquement impossibles : {})",
                 set.iter().map(|e| e.to_string()).collect::<Vec<_>>().join(" ; ")

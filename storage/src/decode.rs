@@ -66,6 +66,16 @@ pub enum DecodeError {
     DuplicatedID,
     #[error("The assignments reference an unknown period (period id {0})")]
     UnknownPeriodInAssignments(u64),
+    #[error("The assignments reference an unknown subject (subject id {0})")]
+    UnknownSubjectInAssignments(u64),
+    #[error(
+        "The assignments have a row for subject id {subject_id} on period id {period_id}, but the subject is excluded from that period"
+    )]
+    AssignmentOnExcludedPeriod { period_id: u64, subject_id: u64 },
+    #[error("The slots reference an unknown subject (subject id {0})")]
+    UnknownSubjectInSlots(u64),
+    #[error("The slots have a row for subject id {0} which has no interrogations")]
+    SlotsForSubjectWithoutInterrogations(u64),
     #[error("The loaded data is logically impossible: {0:?}")]
     LogicError(BTreeSet<collomatique_state_colloscopes::LogicError>),
     #[error("The loaded data breaks an invariant: {0:?}")]

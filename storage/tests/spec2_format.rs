@@ -666,9 +666,9 @@ fn neutral_slots_row_on_unknown_subject_is_rejected() {
         r#"{ "Slots": [ { "subject_id": 9999, "slots": [] } ] }"#,
     )]);
 
-    assert!(
-        deserialize_data(&content).is_err(),
-        "An empty slots row keyed by an unknown subject must be rejected"
+    assert_eq!(
+        expect_decode_error(&content),
+        DecodeError::UnknownSubjectInSlots(9999)
     );
 }
 
@@ -690,9 +690,9 @@ fn neutral_slots_row_on_subject_without_interrogations_is_rejected() {
         entry(r#"{ "Slots": [ { "subject_id": 2, "slots": [] } ] }"#),
     ]);
 
-    assert!(
-        deserialize_data(&content).is_err(),
-        "An empty slots row keyed by a subject without interrogations must be rejected"
+    assert_eq!(
+        expect_decode_error(&content),
+        DecodeError::SlotsForSubjectWithoutInterrogations(2)
     );
 }
 
@@ -711,9 +711,9 @@ fn neutral_assignments_row_on_unknown_subject_is_rejected() {
         entry(r#"{ "Assignments": [ { "period_id": 1, "subject_id": 9999, "students": [] } ] }"#),
     ]);
 
-    assert!(
-        deserialize_data(&content).is_err(),
-        "An empty assignments row keyed by an unknown subject must be rejected"
+    assert_eq!(
+        expect_decode_error(&content),
+        DecodeError::UnknownSubjectInAssignments(9999)
     );
 }
 
@@ -744,9 +744,12 @@ fn neutral_assignments_row_on_excluded_subject_is_rejected() {
         entry(r#"{ "Assignments": [ { "period_id": 1, "subject_id": 2, "students": [] } ] }"#),
     ]);
 
-    assert!(
-        deserialize_data(&content).is_err(),
-        "An empty assignments row keyed by an excluded subject must be rejected"
+    assert_eq!(
+        expect_decode_error(&content),
+        DecodeError::AssignmentOnExcludedPeriod {
+            period_id: 1,
+            subject_id: 2
+        }
     );
 }
 

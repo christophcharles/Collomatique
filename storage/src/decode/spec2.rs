@@ -289,10 +289,11 @@ fn reconstruct(blocks: Blocks) -> Result<InnerData, DecodeError> {
     let subjects = reconstruct_subjects(blocks.subjects.unwrap_or_default())?;
     let teachers = reconstruct_teachers(blocks.teachers.unwrap_or_default());
     let students = reconstruct_students(blocks.students.unwrap_or_default());
-    let assignments = reconstruct_assignments(blocks.assignments.unwrap_or_default(), &periods)?;
+    let assignments =
+        reconstruct_assignments(blocks.assignments.unwrap_or_default(), &periods, &subjects)?;
     let week_patterns =
         reconstruct_week_patterns(blocks.week_patterns.unwrap_or_default(), &weeks, &periods);
-    let slots = reconstruct_slots(blocks.slots.unwrap_or_default())?;
+    let slots = reconstruct_slots(blocks.slots.unwrap_or_default(), &subjects)?;
     let incompats = reconstruct_incompats(blocks.incompatibilities.unwrap_or_default())?;
     let group_lists = reconstruct_group_lists(
         blocks.group_lists.unwrap_or_default(),
@@ -496,6 +497,7 @@ fn reconstruct_students(block: format::students::Students) -> mem::students::Stu
 fn reconstruct_assignments(
     block: format::assignments::Assignments,
     periods: &mem::periods::Periods,
+    subjects: &mem::subjects::Subjects,
 ) -> Result<mem::assignments::Assignments, DecodeError> {
     // Sparse canonical form: a row is stored iff at least one student is
     // assigned (spec §4.5). An explicitly-empty row in the file decodes to an
@@ -509,14 +511,25 @@ fn reconstruct_assignments(
             // silently before the final gate can see it, so it is rejected here.
             return Err(DecodeError::UnknownPeriodInAssignments(row.period_id));
         }
+        // Same reasoning for the subject half of the key: an empty row keyed
+        // outside the derived set (unknown subject, or subject excluded from
+        // this period) would vanish before the final gate can see it (§4.5).
+        let subject_id = id::<SubjectId>(row.subject_id);
+        let Some(subject) = subjects.find_subject(subject_id) else {
+            return Err(DecodeError::UnknownSubjectInAssignments(row.subject_id));
+        };
+        if subject.excluded_periods.contains(&period_id) {
+            return Err(DecodeError::AssignmentOnExcludedPeriod {
+                period_id: row.period_id,
+                subject_id: row.subject_id,
+            });
+        }
         let students = id_set(row.students);
         if students.is_empty() {
             // Neutral row: drop it to keep the canonical (absent) form.
             continue;
         }
-        // A row on an unknown or excluded subject is inserted anyway:
-        // layer 3 rejects it
-        entries.push(((period_id, id(row.subject_id)), students));
+        entries.push(((period_id, subject_id), students));
     }
 
     Ok(mem::assignments::Assignments {
@@ -559,15 +572,29 @@ fn reconstruct_week_patterns(
     }
 }
 
-fn reconstruct_slots(block: format::slots::Slots) -> Result<mem::slots::Slots, DecodeError> {
+fn reconstruct_slots(
+    block: format::slots::Slots,
+    subjects: &mem::subjects::Subjects,
+) -> Result<mem::slots::Slots, DecodeError> {
     // Sparse ordering: one row per subject that has slots. An explicitly-empty
     // row in the file (a redundant neutral entry of the derived key set, spec
-    // §4.7) decodes to no row, matching the canonical absent form. Rows on
-    // subjects without interrogations are inserted anyway: layer 3 rejects them.
+    // §4.7) decodes to no row, matching the canonical absent form — which is
+    // why the row key is validated first, below.
     let mut rows: BTreeMap<SubjectId, Vec<(SlotId, mem::slots::Slot)>> = BTreeMap::new();
 
     for row in block.into_inner() {
         let subject_id = id::<SubjectId>(row.subject_id);
+        // The derived key set is "subjects with interrogations" (§4.7). An
+        // empty row keyed outside it would decode to absence and vanish
+        // before the final gate can see it, so it is rejected here.
+        let Some(subject) = subjects.find_subject(subject_id) else {
+            return Err(DecodeError::UnknownSubjectInSlots(row.subject_id));
+        };
+        if subject.parameters.interrogation_parameters.is_none() {
+            return Err(DecodeError::SlotsForSubjectWithoutInterrogations(
+                row.subject_id,
+            ));
+        }
         let ordered_slots: Vec<(SlotId, mem::slots::Slot)> = row
             .slots
             .into_iter()
