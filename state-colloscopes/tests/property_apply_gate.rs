@@ -14,9 +14,13 @@
 //! * **honesty** — every `Ok` landing is fully valid (`broken_invariants()` is
 //!   `Ok(∅)`), and its returned reverse restores the pre-state exactly;
 //! * **coverage** — every [`CorruptionKind`] is attempted, each corrupting kind
-//!   is rejected at least once, and `ForceLogic` reaches the
-//!   [`InvalidOp::Logic`] tier at least once (the external-data route the
-//!   sealing left standing).
+//!   is rejected at least once, and each one is rejected *at the tier it was
+//!   built to reach*: `ForceLogic` reaches the [`InvalidOp::Logic`] tier (the
+//!   external-data route the sealing left standing), and the three kinds that
+//!   aim at the checker reach [`Error::BrokenInvariants`]. The tier-specific
+//!   counters are what make the coverage claim honest: a corrupting kind whose
+//!   every probe bounced at the *precheck* would satisfy a bare
+//!   "was rejected once" guard while never exercising the checker at all.
 //!
 //! **Fuzz shape — depth-1 probes off a validated walk.** A validated random walk
 //! (the testgen harness, byte-untouched) is interrupted every [`PROBE_STRIDE`]
@@ -59,6 +63,27 @@ fn kind_index(kind: CorruptionKind) -> usize {
         .expect("every kind is in ALL")
 }
 
+/// Whether `kind`'s designed outcome is a *checker* rejection
+/// ([`Error::BrokenInvariants`]) — the tier the stripped invariant guards were
+/// handed to.
+///
+/// [`CorruptionKind::ForceRemove`] dangles FKs by removing a referenced entity,
+/// [`CorruptionKind::ForceRetarget`] buries a dangling id in an `Update`
+/// payload, and [`CorruptionKind::ForceSemantic`] lands a state that breaks a
+/// convergence fact: all three are fixable-invariant material.
+/// [`CorruptionKind::ForceLogic`] aims one tier up, at [`InvalidOp::Logic`]
+/// (counted separately by `logic_seen`), and [`CorruptionKind::ForceValid`] is
+/// not corrupting at all. The match is exhaustive on purpose: a new kind must
+/// state which tier it aims at rather than fall into a wildcard.
+fn aims_at_the_checker(kind: CorruptionKind) -> bool {
+    match kind {
+        CorruptionKind::ForceRemove
+        | CorruptionKind::ForceRetarget
+        | CorruptionKind::ForceSemantic => true,
+        CorruptionKind::ForceLogic | CorruptionKind::ForceValid => false,
+    }
+}
+
 /// Walk `Data` through the gate (like property 4 of `property_ops.rs`), probing
 /// `apply` every [`PROBE_STRIDE`] ops and asserting the gate's atomicity and
 /// honesty on the resulting (usually rejected) op.
@@ -70,6 +95,11 @@ fn apply_gate_is_atomic_and_honest() {
     let rejected = Cell::new(0usize); // probes that returned Err (rolled back)
     let attempted: [Cell<usize>; 5] = std::array::from_fn(|_| Cell::new(0));
     let rejected_by_kind: [Cell<usize>; 5] = std::array::from_fn(|_| Cell::new(0));
+    // Rejections that reached the *checker* tier, per kind. `rejected_by_kind`
+    // counts any `Err`, which a precheck bounce also satisfies — so it alone
+    // cannot witness that a kind's material ever got past `force_apply` to the
+    // tier the stripped guards were moved to.
+    let broken_by_kind: [Cell<usize>; 5] = std::array::from_fn(|_| Cell::new(0));
     let logic_seen = Cell::new(0usize);
 
     harness::for_each_seed(
@@ -144,6 +174,7 @@ fn apply_gate_is_atomic_and_honest() {
                                 assert!(!set.is_empty(), "a Logic error carries a non-empty set");
                             }
                             Error::BrokenInvariants(set) => {
+                                broken_by_kind[i].set(broken_by_kind[i].get() + 1);
                                 assert!(
                                     !set.is_empty(),
                                     "an Invariants error carries a non-empty set",
@@ -201,6 +232,14 @@ fn apply_gate_is_atomic_and_honest() {
             assert!(
                 rejected_by_kind[i].get() > 0,
                 "corrupting kind {kind:?} was never rejected across all seeds",
+            );
+        }
+        if aims_at_the_checker(kind) {
+            assert!(
+                broken_by_kind[i].get() > 0,
+                "corrupting kind {kind:?} was never rejected *by the checker* across all \
+                 seeds — every one of its probes bounced at an earlier tier, so the \
+                 invariant it was built to break was never exercised",
             );
         }
     }
