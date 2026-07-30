@@ -8,16 +8,23 @@
 //!   restoring the exact same week identity;
 //! * `Update(false)` blocked by a non-empty colloscope cell;
 //! * `Move` carrying a non-empty cell to a compatible period, and `Move`
-//!   blocked when the destination period does not run the slot's subject.
+//!   blocked when the destination period does not run the slot's subject;
+//! * `Move` inside a week's *own* period — the branch whose bounds check uses
+//!   the *post-detachment* length, so one position past the last week must be
+//!   rejected rather than panic inside `Vec::insert` — plus the one-week edge
+//!   that empties the ordering row in flight;
+//! * removing the *first* week, whose reverse is the `AddFront` arm (the
+//!   removal test above drops a middle week and pins only `AddAfter`).
 
 use collomatique_state::{AppState, InMemoryData, traits::Manager};
 use collomatique_state_colloscopes::{
-    ColloscopeOp, Convergence, Data, Error, FixableInvariant, GroupListOp, NewId,
-    NonEmptyRangeInclusive, Op, PeriodOp, Reference, SlotOp, Subject,
+    ColloscopeOp, Convergence, Data, Error, FixableInvariant, GroupListOp, InvalidOp, NewId,
+    NonEmptyRangeInclusive, Op, PeriodOp, PrecheckError, Reference, SlotOp, Subject,
     SubjectInterrogationParameters, SubjectOp, SubjectParameters, SubjectPeriodicity, TeacherOp,
-    WeekOp, WeekPatternOp, WeekRefSite,
+    WeekOp, WeekPatternOp, WeekPrecheckError, WeekRefSite,
     group_lists::{GroupList, GroupListFilling, GroupListParameters},
     ids::{PeriodId, SlotId, SubjectId, TeacherId, WeekId},
+    ops::{AnnotatedOp, AnnotatedWeekOp},
     slots::Slot,
     teachers::Teacher,
     week_patterns::WeekPattern,
@@ -96,12 +103,16 @@ fn add_period(
     period
 }
 
-fn week_ids_of(app: &AppState<Data, String>, period: PeriodId) -> Vec<WeekId> {
-    let params = &app.get_data().get_inner_data().params;
+fn week_ids_in(data: &Data, period: PeriodId) -> Vec<WeekId> {
+    let params = &data.get_inner_data().params;
     let count = params.weeks.week_count_for_period(period).unwrap_or(0);
     (0..count)
         .map(|i| params.weeks.week_id_at(period, i).expect("valid position"))
         .collect()
+}
+
+fn week_ids_of(app: &AppState<Data, String>, period: PeriodId) -> Vec<WeekId> {
+    week_ids_in(app.get_data(), period)
 }
 
 /// The assigned groups on the colloscope cell at `(slot, week-at-pos)`, read
@@ -539,4 +550,167 @@ fn move_week_blocked_when_destination_lacks_slot() {
         ]))),
         "moving a filled week to a period lacking the slot must fail, got {result:?}",
     );
+}
+
+/// `WeekOp::Move` with `dest_period == src_period` is a plain reorder, and the
+/// one branch where the bounds check must look at the *post-detachment* length:
+/// `dest_len_post` subtracts the week being moved, so the last legal position
+/// in a three-week period is 2. Like the slot and subject reorders, the move
+/// detaches then re-inserts, so the first week moved to position 2 lands last.
+#[test]
+fn move_week_within_its_own_period_then_undo() {
+    let mut app = AppState::<_, String>::new(Data::new());
+
+    let period = add_period(
+        &mut app,
+        None,
+        vec![
+            WeekDesc::new(true),
+            WeekDesc::new(true),
+            WeekDesc::new(true),
+        ],
+    );
+    let weeks = week_ids_of(&app, period);
+
+    // The boundary the `dest_len_post` adjustment exists for: with the week
+    // detached the period holds two, so 2 is the last legal position and 3 is
+    // one past the end. Without the adjustment 3 would be waved through and
+    // then panic inside `Vec::insert`.
+    let result = app.apply(
+        Op::Week(WeekOp::Move(weeks[0], period, 3)),
+        "Move past the end of its own period".into(),
+    );
+    assert_eq!(
+        result,
+        Err(Error::InvalidOp(InvalidOp::Precheck(PrecheckError::Week(
+            WeekPrecheckError::PositionOutOfBounds {
+                period,
+                position: 3,
+                size: 2,
+            }
+        )))),
+        "a same-period move must be bounded by the post-detachment length, got {result:?}",
+    );
+
+    // Reverse-then-forward via the raw Data path, mirroring Manager::apply.
+    let mut data: Data = app.get_data().clone();
+    let before = data.clone();
+
+    let (annotated, _) = data.annotate(Op::Week(WeekOp::Move(weeks[0], period, 2)));
+    let rev = data
+        .apply(&annotated)
+        .expect("a same-period move to the last position should succeed");
+
+    assert_eq!(
+        week_ids_in(&data, period),
+        vec![weeks[1], weeks[2], weeks[0]],
+        "the moved week is detached before `dest_pos` is honoured, so the \
+         first of three moved to position 2 lands last",
+    );
+    assert_eq!(
+        data.get_inner_data().params.weeks.week_position(weeks[0]),
+        Some((period, 2)),
+        "the week's own back-reference must agree with the ordering sidecar",
+    );
+
+    data.apply(&rev)
+        .expect("the reverse of a successful op must apply");
+
+    assert_eq!(
+        week_ids_in(&data, period),
+        vec![weeks[0], weeks[1], weeks[2]],
+    );
+    assert!(data == before, "move + undo must restore the prior state");
+}
+
+/// The transiently-empty-row edge: moving a period's *only* week to its own
+/// position 0. Detaching empties the ordering row, so this is the one input
+/// that runs `move_week_entry`'s empty-row path end to end and checks the
+/// sparse canonical form survives it.
+///
+/// It does **not** discriminate the row-keepalive guard
+/// (`order.is_empty() && src_period != dest_period`) from its absence, and the
+/// plan that asked for this test was wrong to say it would: dropping the row
+/// and letting the `else` branch re-create it at `dest_pos == 0` produces an
+/// equal table, and deleting `&& src_period != dest_period` leaves the whole
+/// suite green (checked by hand). The guard is defensive, not observable here;
+/// what this test pins is the *outcome*, which is what a consumer sees.
+#[test]
+fn move_a_periods_only_week_to_its_own_position() {
+    let mut app = AppState::<_, String>::new(Data::new());
+
+    let period = add_period(&mut app, None, vec![WeekDesc::new(true)]);
+    let weeks = week_ids_of(&app, period);
+
+    let mut data: Data = app.get_data().clone();
+    let before = data.clone();
+
+    let (annotated, _) = data.annotate(Op::Week(WeekOp::Move(weeks[0], period, 0)));
+    let rev = data
+        .apply(&annotated)
+        .expect("moving a period's only week onto its own position should succeed");
+
+    assert_eq!(
+        week_ids_in(&data, period),
+        vec![weeks[0]],
+        "the week is back in its own row, which was never dropped",
+    );
+    assert!(
+        data == before,
+        "a move onto the week's own position changes nothing",
+    );
+
+    data.apply(&rev)
+        .expect("the reverse of a successful op must apply");
+
+    assert_eq!(week_ids_in(&data, period), vec![weeks[0]]);
+    assert!(data == before);
+}
+
+/// Removing a period's *first* week: the reverse is the `AddFront` arm, which
+/// no other deterministic test reaches — `remove_week_then_undo_restores_identity`
+/// removes a middle week and so pins only `AddAfter`.
+#[test]
+fn remove_first_week_then_undo_restores_identity() {
+    let mut app = AppState::<_, String>::new(Data::new());
+
+    let period = add_period(
+        &mut app,
+        None,
+        vec![
+            WeekDesc::new(true),
+            WeekDesc::new(true),
+            WeekDesc::new(true),
+        ],
+    );
+    let weeks = week_ids_of(&app, period);
+
+    let mut data: Data = app.get_data().clone();
+    let before = data.clone();
+
+    let (annotated, _) = data.annotate(Op::Week(WeekOp::Remove(weeks[0])));
+    let rev = data
+        .apply(&annotated)
+        .expect("removing a trivially-active week should succeed");
+
+    assert_eq!(
+        rev,
+        AnnotatedOp::Week(AnnotatedWeekOp::AddFront(
+            weeks[0],
+            period,
+            WeekDesc::new(true),
+        )),
+        "removing the first week must reverse through the `AddFront` arm",
+    );
+    assert_eq!(week_ids_in(&data, period), vec![weeks[1], weeks[2]]);
+
+    data.apply(&rev)
+        .expect("the reverse of a successful op must apply");
+
+    assert_eq!(
+        week_ids_in(&data, period),
+        vec![weeks[0], weeks[1], weeks[2]],
+        "the restored week must keep its original id at its original position",
+    );
+    assert!(data == before, "remove + undo must restore the prior state");
 }
