@@ -831,7 +831,18 @@ impl AnnotatedOp {
             }
             Op::GlobalUpdate(inner_data) => {
                 if let Some(max_id) = inner_data.ids().max() {
-                    id_issuer.skip_to_id(max_id + 1).expect(
+                    // `checked_add`, not `+`: a forged payload carrying the raw
+                    // id `u64::MAX` would wrap to 0 in a release build, making
+                    // `skip_to_id(0)` a silent no-op — the exhaustion `expect`
+                    // below would never fire and the gate would instead panic
+                    // in `assert_id_issuer_high_water` *after* the mutation
+                    // landed. Both `expect`s carry the same message: the two
+                    // are one policy, "this payload is out of the id space".
+                    let next = max_id.checked_add(1).expect(
+                        "GlobalUpdate: ID space exhausted. \
+                         This is either a critical bug or a malicious data payload.",
+                    );
+                    id_issuer.skip_to_id(next).expect(
                         "GlobalUpdate: ID space exhausted. \
                          This is either a critical bug or a malicious data payload.",
                     );
@@ -1189,5 +1200,39 @@ impl AnnotatedExportConfigOp {
                 AnnotatedExportConfigOp::UpdatePerGroupListConfig(v)
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod annotate_tests {
+    //! Annotation is a pure `(Op, &mut IdIssuer) -> (AnnotatedOp, Option<NewId>)`
+    //! step that runs *before* the gate, so a payload it mishandles corrupts
+    //! the issuer with no rollback behind it. Only [Op::GlobalUpdate] reads its
+    //! payload's ids here; this is its extreme-value pin.
+
+    use super::*;
+    use crate::students::Student;
+
+    #[test]
+    #[should_panic(expected = "ID space exhausted")]
+    fn a_global_update_at_the_top_of_the_id_space_panics_before_mutating() {
+        // `unsafe { StudentId::new }` is the documented test-forgery door: the
+        // safe surface cannot produce this id, since the issuer refuses to
+        // hand out anything past `u64::MAX >> 1`. Only a hand-built (or
+        // maliciously deserialized) payload can carry it.
+        let mut inner_data = InnerData::default();
+        let student = unsafe { StudentId::new(u64::MAX) };
+        inner_data
+            .params
+            .students
+            .student_map
+            .insert(student, Student::default());
+
+        let mut id_issuer = IdIssuer::new(std::iter::empty()).expect("an empty issuer is valid");
+
+        // Without the checked increment this wraps to `skip_to_id(0)` — a
+        // silent no-op — and the panic only arrives later, from the gate's
+        // high-water assertion, after the payload has already landed.
+        let _ = AnnotatedOp::annotate(Op::GlobalUpdate(inner_data), &mut id_issuer);
     }
 }
