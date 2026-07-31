@@ -437,6 +437,7 @@ dependencies = [
  "chrono",
  "collomatique-state",
  "collomatique-state-colloscopes",
+ "collomatique-storage",
  "collomatique-time",
  "non-empty-string",
  "serde",
