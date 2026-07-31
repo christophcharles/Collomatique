@@ -65,9 +65,9 @@ reads via pyclass mirrors of `InnerData` types), `constraints-colloscopes`
    `docs/plans/invariant_cascade_design.md`, delivered July 18 2026)*: was — adding a slot
    had to insert an empty `ColloscopeSlot` into every colloscope period; period ops spanned
    ~330 lines. The colloscope is now sparse; the fan-out is deleted.
-5. **Inconsistent op granularity**: whole-struct `Update`s (Settings, Balancing, entities)
-   next to 11 per-field `ExportConfigOp` variants and a single-bool `AssignmentOp`. No
-   principle.
+5. **Inconsistent op granularity** *(resolved — phase 2 item 4)*: whole-struct `Update`s
+   (Settings, Balancing, entities) next to 11 per-field `ExportConfigOp` variants and a
+   single-bool `AssignmentOp`. No principle.
 6. **Test coverage** *(resolved — phase 0)*: zero tests in `state/`; 3 integration tests in
    `state-colloscopes/`; storage tests use only empty data.
 7. Read-path indirection (O(n) `find_*` scans, nested lookups) is **noise, not a performance
@@ -340,15 +340,22 @@ before implementation.** Ordered by leverage:
    whole-model `check_invariants()` after every op to `debug_assertions` and the phase-0
    property tests; full checks remain only at trust boundaries (file load, `GlobalUpdate`).
    Collapse `InvariantError`'s duplicated variants onto the per-entity error enums.
-4. **Uniform op granularity**: every entity gets `Add / Remove / Update(whole entity)`
-   (+ position ops where user-visible order exists, + association ops where relational).
-   Collapse `ExportConfigOp`'s 11 per-field variants into one `Update`. Elementary ops only
-   need to be *reversible and replayable*; user-facing granularity already lives in `ops/`
-   descriptions. *Note (July 2026)*: independent of, but interacting with, the
-   invariant-cascade design (its §9) — the resolution map wants elementary ops that can
-   express "remove/clear this one reference" conveniently, and the cascade's step-1 reshapes
-   re-cut the slot/week/colloscope op surfaces anyway; granularity uniformization can ride
-   along per step or stay a later pass.
+4. **Uniform op granularity** — **DONE (July 2026)**: every entity gets
+   `Add / Remove / Update(whole entity)` (+ position ops where user-visible order exists,
+   + association ops where relational). A workspace survey (July 31 2026) found every
+   family already uniform after the cascade's step-1 re-cuts and the earlier reshapes
+   (`AssignmentOp::SetRow` had long replaced the single-bool op; the group-list family is
+   one sealed-`GroupList` payload; settings and balancing are whole-override-entry sets).
+   The last residue — `ExportConfigOp`'s 11 per-field variants — collapsed into one
+   whole-struct `Update(ExportConfig)` in the pre-step-7 sidework of July 31 2026
+   (three commits; plan: `docs/plans/plan_export_config_op.md`).
+   Elementary ops only need to be *reversible and replayable*; user-facing per-field
+   granularity lives on in `ops/`' `ExportConfigUpdateOp` variants and their French history
+   descriptions, exactly as this item prescribed. *Note (July 2026)*: independent of, but
+   interacting with, the invariant-cascade design (its §9) — the resolution map wants
+   elementary ops that can express "remove/clear this one reference" conveniently, and the
+   cascade's step-1 reshapes re-cut the slot/week/colloscope op surfaces anyway; in the end
+   granularity uniformization rode along those steps, with export config as a final pass.
 5. **Params↔colloscope synchronization** — **DISSOLVED** (July 15 2026) by the
    invariant-cascade design (step 1d + the cascade): the colloscope goes sparse, so there is
    no fan-out left to centralize — cleanup becomes cascade resolution. The spec-2 format was
@@ -367,10 +374,14 @@ before implementation.** Ordered by leverage:
    unchanged. `lib.rs` is now ~400 lines: `Data`/`InnerData`, the aggregate `Error`, and
    the `InMemoryData` dispatch. No new files were needed, so the style rule (`foo.rs` +
    `foo/` directory, never `foo/mod.rs`) was moot.
-7. **Python glue**: the write path is already insulated behind `ops::UpdateOp`; the read-path
-   pyclass mirrors break compile-visibly and are regenerated mechanically per struct change.
-   No Python API redesign in this phase (a full redesign is expected later, with the MVVM UI
-   work).
+7. **Python glue** — **DONE / closed as a non-item (July 2026)**: the write path was and
+   remains insulated behind `ops::UpdateOp`; the read-path pyclass mirrors break
+   compile-visibly and have been regenerated mechanically inside the same change every time
+   a struct moved (steps 1a/1c/1d glue notes). No Python API redesign happens in this phase
+   (a full redesign is still expected later, with the MVVM UI work). The export config is
+   not exposed in Python at all, so the July 31 2026 sidework of item 4 had zero Python
+   surface. The three contract scripts of §7 remain the acceptance oracle for future
+   changes.
 
 ---
 
