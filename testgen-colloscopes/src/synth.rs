@@ -493,3 +493,19 @@ pub fn per_group_list_config(rng: &mut ChaCha8Rng) -> export_config::PerGroupLis
         center_vertically: rng.random_bool(0.5),
     }
 }
+
+pub fn export_config(rng: &mut ChaCha8Rng) -> export_config::ExportConfig {
+    export_config::ExportConfig {
+        global: global_config(rng),
+        colloscope_enabled: rng.random_bool(0.5),
+        all_groups_enabled: rng.random_bool(0.5),
+        automatic_groups_enabled: rng.random_bool(0.5),
+        prefilled_groups_enabled: rng.random_bool(0.5),
+        per_group_list_enabled: rng.random_bool(0.5),
+        colloscope_config: colloscope_config(rng),
+        all_groups_config: per_student_groups_config(rng),
+        automatic_groups_config: per_student_groups_config(rng),
+        prefilled_groups_config: per_student_groups_config(rng),
+        per_group_list_config: per_group_list_config(rng),
+    }
+}

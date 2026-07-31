@@ -1114,20 +1114,7 @@ fn gen_colloscope(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invali
 }
 
 fn gen_export_config(rng: &mut ChaCha8Rng) -> Op {
-    let op = match rng.random_range(0..11) {
-        0 => ExportConfigOp::UpdateGlobalConfig(synth::global_config(rng)),
-        1 => ExportConfigOp::UpdateColloscopeEnabled(rng.random_bool(0.5)),
-        2 => ExportConfigOp::UpdateAllGroupsEnabled(rng.random_bool(0.5)),
-        3 => ExportConfigOp::UpdatePrefilledGroupsEnabled(rng.random_bool(0.5)),
-        4 => ExportConfigOp::UpdateAutomaticGroupsEnabled(rng.random_bool(0.5)),
-        5 => ExportConfigOp::UpdatePerGroupListEnabled(rng.random_bool(0.5)),
-        6 => ExportConfigOp::UpdateColloscopeConfig(synth::colloscope_config(rng)),
-        7 => ExportConfigOp::UpdateAllGroupsConfig(synth::per_student_groups_config(rng)),
-        8 => ExportConfigOp::UpdatePrefilledGroupsConfig(synth::per_student_groups_config(rng)),
-        9 => ExportConfigOp::UpdateAutomaticGroupsConfig(synth::per_student_groups_config(rng)),
-        _ => ExportConfigOp::UpdatePerGroupListConfig(synth::per_group_list_config(rng)),
-    };
-    Op::ExportConfig(op)
+    Op::ExportConfig(ExportConfigOp::Update(synth::export_config(rng)))
 }
 
 fn gen_global_update(

@@ -757,11 +757,14 @@ pub fn build_rich_data() -> Data {
         "interrogation physics",
     );
 
-    // Export configuration: several op variants, values away from defaults
+    // Export configuration: one whole-struct op, values away from defaults.
+    // The fields the earlier per-field script never touched are spelled out
+    // with the exact `Default for ExportConfig` values, so the final state —
+    // and the written bytes — are unchanged.
     apply(
         &mut state,
-        Op::ExportConfig(ExportConfigOp::UpdateGlobalConfig(
-            export_config::GlobalConfig {
+        Op::ExportConfig(ExportConfigOp::Update(export_config::ExportConfig {
+            global: export_config::GlobalConfig {
                 background_color: export_config::Color {
                     red: 240,
                     green: 240,
@@ -774,13 +777,12 @@ pub fn build_rich_data() -> Data {
                     blue: 200,
                 },
             },
-        )),
-        "export global config",
-    );
-    apply(
-        &mut state,
-        Op::ExportConfig(ExportConfigOp::UpdateColloscopeConfig(
-            export_config::ColloscopeConfig {
+            colloscope_enabled: false,
+            all_groups_enabled: true,
+            automatic_groups_enabled: false,
+            prefilled_groups_enabled: true,
+            per_group_list_enabled: true,
+            colloscope_config: export_config::ColloscopeConfig {
                 sheet_name: "Colloscope 2026".to_string(),
                 extra_info_column_enabled: true,
                 extra_info_column_name: "Salle".to_string(),
@@ -811,42 +813,24 @@ pub fn build_rich_data() -> Data {
                     },
                 )]),
             },
-        )),
-        "export colloscope config",
-    );
-    apply(
-        &mut state,
-        Op::ExportConfig(ExportConfigOp::UpdateAllGroupsConfig(
-            export_config::PerStudentGroupsConfig {
+            all_groups_config: export_config::PerStudentGroupsConfig {
                 sheet_name: "Groupes".to_string(),
                 orientation: Some(export_config::PageOrientation::Portrait),
                 show_emails: true,
                 show_tel: false,
             },
-        )),
-        "export all groups config",
-    );
-    apply(
-        &mut state,
-        Op::ExportConfig(ExportConfigOp::UpdatePerGroupListConfig(
-            export_config::PerGroupListConfig {
+            automatic_groups_config:
+                export_config::PerStudentGroupsConfig::default_automatic_groups(),
+            prefilled_groups_config:
+                export_config::PerStudentGroupsConfig::default_prefilled_groups(),
+            per_group_list_config: export_config::PerGroupListConfig {
                 orientation: export_config::PageOrientation::Landscape,
                 show_emails: false,
                 show_tel: true,
                 center_vertically: true,
             },
-        )),
-        "export per group list config",
-    );
-    apply(
-        &mut state,
-        Op::ExportConfig(ExportConfigOp::UpdateColloscopeEnabled(false)),
-        "export colloscope enabled",
-    );
-    apply(
-        &mut state,
-        Op::ExportConfig(ExportConfigOp::UpdatePrefilledGroupsEnabled(true)),
-        "export prefilled groups enabled",
+        })),
+        "export config",
     );
 
     let data = state.get_data().clone();

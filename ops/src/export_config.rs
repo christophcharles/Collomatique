@@ -54,140 +54,35 @@ impl ExportConfigUpdateOp {
     ) -> Result<(), ExportConfigUpdateError> {
         use collomatique_state_colloscopes::ExportConfigOp;
 
+        // The eleven variants are the user-facing granularity (each carries its
+        // own history description); the elementary op is one whole-struct
+        // replace, so every variant reads the current config, patches its one
+        // field and issues that single op.
+        let mut new_config = data.get_data().get_inner_data().export_config.clone();
         match self {
-            Self::UpdateGlobalConfig(v) => {
-                let result = data
-                    .apply(
-                        collomatique_state_colloscopes::Op::ExportConfig(
-                            ExportConfigOp::UpdateGlobalConfig(v.clone()),
-                        ),
-                        self.get_desc(),
-                    )
-                    .expect("ExportConfigOp::UpdateGlobalConfig should never fail");
-                assert!(result.is_none());
-                Ok(())
-            }
-            Self::UpdateColloscopeEnabled(v) => {
-                let result = data
-                    .apply(
-                        collomatique_state_colloscopes::Op::ExportConfig(
-                            ExportConfigOp::UpdateColloscopeEnabled(*v),
-                        ),
-                        self.get_desc(),
-                    )
-                    .expect("ExportConfigOp::UpdateColloscopeEnabled should never fail");
-                assert!(result.is_none());
-                Ok(())
-            }
-            Self::UpdateAllGroupsEnabled(v) => {
-                let result = data
-                    .apply(
-                        collomatique_state_colloscopes::Op::ExportConfig(
-                            ExportConfigOp::UpdateAllGroupsEnabled(*v),
-                        ),
-                        self.get_desc(),
-                    )
-                    .expect("ExportConfigOp::UpdateAllGroupsEnabled should never fail");
-                assert!(result.is_none());
-                Ok(())
-            }
-            Self::UpdatePrefilledGroupsEnabled(v) => {
-                let result = data
-                    .apply(
-                        collomatique_state_colloscopes::Op::ExportConfig(
-                            ExportConfigOp::UpdatePrefilledGroupsEnabled(*v),
-                        ),
-                        self.get_desc(),
-                    )
-                    .expect("ExportConfigOp::UpdatePrefilledGroupsEnabled should never fail");
-                assert!(result.is_none());
-                Ok(())
-            }
-            Self::UpdateAutomaticGroupsEnabled(v) => {
-                let result = data
-                    .apply(
-                        collomatique_state_colloscopes::Op::ExportConfig(
-                            ExportConfigOp::UpdateAutomaticGroupsEnabled(*v),
-                        ),
-                        self.get_desc(),
-                    )
-                    .expect("ExportConfigOp::UpdateAutomaticGroupsEnabled should never fail");
-                assert!(result.is_none());
-                Ok(())
-            }
-            Self::UpdatePerGroupListEnabled(v) => {
-                let result = data
-                    .apply(
-                        collomatique_state_colloscopes::Op::ExportConfig(
-                            ExportConfigOp::UpdatePerGroupListEnabled(*v),
-                        ),
-                        self.get_desc(),
-                    )
-                    .expect("ExportConfigOp::UpdatePerGroupListEnabled should never fail");
-                assert!(result.is_none());
-                Ok(())
-            }
-            Self::UpdateColloscopeConfig(v) => {
-                let result = data
-                    .apply(
-                        collomatique_state_colloscopes::Op::ExportConfig(
-                            ExportConfigOp::UpdateColloscopeConfig(v.clone()),
-                        ),
-                        self.get_desc(),
-                    )
-                    .expect("ExportConfigOp::UpdateColloscopeConfig should never fail");
-                assert!(result.is_none());
-                Ok(())
-            }
-            Self::UpdateAllGroupsConfig(v) => {
-                let result = data
-                    .apply(
-                        collomatique_state_colloscopes::Op::ExportConfig(
-                            ExportConfigOp::UpdateAllGroupsConfig(v.clone()),
-                        ),
-                        self.get_desc(),
-                    )
-                    .expect("ExportConfigOp::UpdateAllGroupsConfig should never fail");
-                assert!(result.is_none());
-                Ok(())
-            }
-            Self::UpdatePrefilledGroupsConfig(v) => {
-                let result = data
-                    .apply(
-                        collomatique_state_colloscopes::Op::ExportConfig(
-                            ExportConfigOp::UpdatePrefilledGroupsConfig(v.clone()),
-                        ),
-                        self.get_desc(),
-                    )
-                    .expect("ExportConfigOp::UpdatePrefilledGroupsConfig should never fail");
-                assert!(result.is_none());
-                Ok(())
-            }
-            Self::UpdateAutomaticGroupsConfig(v) => {
-                let result = data
-                    .apply(
-                        collomatique_state_colloscopes::Op::ExportConfig(
-                            ExportConfigOp::UpdateAutomaticGroupsConfig(v.clone()),
-                        ),
-                        self.get_desc(),
-                    )
-                    .expect("ExportConfigOp::UpdateAutomaticGroupsConfig should never fail");
-                assert!(result.is_none());
-                Ok(())
-            }
-            Self::UpdatePerGroupListConfig(v) => {
-                let result = data
-                    .apply(
-                        collomatique_state_colloscopes::Op::ExportConfig(
-                            ExportConfigOp::UpdatePerGroupListConfig(v.clone()),
-                        ),
-                        self.get_desc(),
-                    )
-                    .expect("ExportConfigOp::UpdatePerGroupListConfig should never fail");
-                assert!(result.is_none());
-                Ok(())
-            }
+            Self::UpdateGlobalConfig(v) => new_config.global = v.clone(),
+            Self::UpdateColloscopeEnabled(v) => new_config.colloscope_enabled = *v,
+            Self::UpdateAllGroupsEnabled(v) => new_config.all_groups_enabled = *v,
+            Self::UpdatePrefilledGroupsEnabled(v) => new_config.prefilled_groups_enabled = *v,
+            Self::UpdateAutomaticGroupsEnabled(v) => new_config.automatic_groups_enabled = *v,
+            Self::UpdatePerGroupListEnabled(v) => new_config.per_group_list_enabled = *v,
+            Self::UpdateColloscopeConfig(v) => new_config.colloscope_config = v.clone(),
+            Self::UpdateAllGroupsConfig(v) => new_config.all_groups_config = v.clone(),
+            Self::UpdatePrefilledGroupsConfig(v) => new_config.prefilled_groups_config = v.clone(),
+            Self::UpdateAutomaticGroupsConfig(v) => new_config.automatic_groups_config = v.clone(),
+            Self::UpdatePerGroupListConfig(v) => new_config.per_group_list_config = v.clone(),
         }
+
+        let result = data
+            .apply(
+                collomatique_state_colloscopes::Op::ExportConfig(ExportConfigOp::Update(
+                    new_config,
+                )),
+                self.get_desc(),
+            )
+            .expect("ExportConfigOp::Update should never fail");
+        assert!(result.is_none());
+        Ok(())
     }
 
     pub fn get_desc(&self) -> (OpCategory, String) {
