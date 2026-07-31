@@ -242,8 +242,9 @@ scanning the `BrokenInvariants` set in the old validator's order, with
 `panic!("… should be cleaned before …")` coupling translation to cleaning.
 
 The survey's totals, for scale: **34 warning variants** across 7 non-empty families (8
-families have empty warning enums); **6 explicit "should be cleaned before" panics**
-(`students.rs:461,503,509,515`, `week_patterns.rs:375,378`) plus implicit ones —
+families have empty warning enums); **9 explicit "should be cleaned before" panics**
+(`students.rs:469,511,517,523`, `week_patterns.rs:375,378`, `teachers.rs:213,252`,
+`group_lists.rs:880`) plus implicit ones —
 `DeleteSlot` has **no** `BrokenInvariants` arm at all (`slots.rs:513-516`), and
 `general_planning.rs` does **zero** invariant translation (every apply is `.expect`ed).
 
@@ -322,7 +323,7 @@ that is today's semantics, byte-identical; materializing lazily at retry time wo
 be a silent behaviour change.
 
 The toy `QuoteData` (`state/src/test_utils.rs`) gains a `QuoteFix` so the engine
-tests keep compiling; the eleven engine tests themselves are untouched by 1a (the
+tests keep compiling; the fifteen engine tests themselves are untouched by 1a (the
 return type does not change yet).
 
 ### 2.1b `CascadeReceipt` — the engine return, re-shaped (commit 1b)
@@ -353,7 +354,7 @@ Engine internals: today `stack: Vec<T::AnnotatedOperation>` and
 `applied: Vec<ReversibleOp<…>>` (`cascade.rs:91-92`). With 1a's push site the stack is
 already `Vec<(T::AnnotatedOperation, Option<T::Fix>)>` — the target pushed with `None`
 (`cascade.rs:91`), each fix with `Some(fix)`; 1b makes `applied` collect the `Fix`
-alongside each `ReversibleOp` at the single success site (`cascade.rs:137-141`). On
+alongside each `ReversibleOp` at the single success site (`cascade.rs:138-141`). On
 loop exit the last `applied` entry is the target by construction (assert it; its tag is
 `None`), the rest split off as the fixes. The `Option` never leaves the engine — the
 public type is exact (D2). The invariant pick never leaves the engine at all (D15): it
@@ -618,12 +619,12 @@ variant instead of the op); `state-colloscopes/src/lib.rs:69` (re-export `Fix` b
 
 The refactor is where the map *dedupes*: materializations that today repeat across
 arms (the `AssignToSubject(period, subject, None)` unassign appears four times, the
-group-list and assignment row rebuilds twice each) become one `to_annotated_op` arm
-per variant; where several `fix_invariant` arms build the same variant they may share
-a private helper.
+group-list placement rebuild three times, the assignment row rebuild twice) become one
+`to_annotated_op` arm per variant; where several `fix_invariant` arms build the same
+variant they may share a private helper.
 
 Behaviour is byte-identical: `apply_cascade` still returns `AggregatedOp`, so the
-engine's 11 tests, the 19 cascade fixtures and `property_cascade.rs` run **unchanged**
+engine's 15 tests, the 20 cascade fixtures and `property_cascade.rs` run **unchanged**
 in this commit — they are the proof the refactor moved code without changing it.
 
 New unit tests — the attribution pins (D15 relocated them here): direct
@@ -637,15 +638,15 @@ variants (pure function, trivially testable).
 Sites: `state/src/cascade.rs` (§2.1b — the struct, `applied` collecting the tag, the
 split on exit). Consumers to adapt, all mechanical:
 
-- the engine's own tests (`cascade.rs`, 11 tests): `forward_ops` helper reads
+- the engine's own tests (`cascade.rs`, 15 tests): `forward_ops` helper reads
   `receipt.into_aggregated_op()` or `fixes()` + target directly;
-- `state-colloscopes/tests/cascade.rs` (19 fixtures): op-list asserts move to the
+- `state-colloscopes/tests/cascade.rs` (20 fixtures): op-list asserts move to the
   receipt's accessors — expected fix lists become `Vec<Fix>` literals (compact for the
   id-only variants; the rebuild shapes carry their expected payload, derivable from
   the same in-process builders);
 - `state-colloscopes/tests/property_cascade.rs`: `cascade_step` reads
   `applied.inner().len() - 1` for the fix count (`property_cascade.rs:255`) and replays
-  `applied.rev()` (`:265-274`) — both re-expressed on the receipt
+  `applied.rev()` (`:264-274`) — both re-expressed on the receipt
   (`fixes().len()`; `into_aggregated_op().rev()`).
 
 New unit tests: the tagging itself on the toy `QuoteData` — the two-round repair of
@@ -749,11 +750,11 @@ known document; zero warnings.
 | variant | keeps | loses | warnings via |
 | --- | --- | --- | --- |
 | `AddNewStudent` | `InvalidPeriodId` content scan | — | none |
-| `UpdateStudent` | `InvalidStudentId` precheck, `InvalidPeriodId` scan | `panic!("Assignments should be cleaned …")` (`:461`) | `AssignedStudentNotPresentForPeriod` → row rebuilt minus the student |
-| `DeleteStudent` | `InvalidStudentId` precheck | all three cleaned-before panics (`:503,509,515`) | `Student@GroupListPrefilledStudent/GroupListExcludedStudent/AssignmentsStudent/SettingsStudentKey/ColloscopeGroupListStudent` |
+| `UpdateStudent` | `InvalidStudentId` precheck, `InvalidPeriodId` scan | `panic!("Assignments should be cleaned …")` (`:469`) | `AssignedStudentNotPresentForPeriod` → row rebuilt minus the student |
+| `DeleteStudent` | `InvalidStudentId` precheck | all three cleaned-before panics (`:511,517,523`) | `Student@GroupListPrefilledStudent/GroupListExcludedStudent/AssignmentsStudent/SettingsStudentKey/ColloscopeGroupListStudent` |
 
 Old cleaning order (colloscope → group lists → assignments → settings,
-`students.rs:212-338`) is replaced by canonical invariant order; the *set* of effects is
+`students.rs:212-346`) is replaced by canonical invariant order; the *set* of effects is
 identical (the survey confirmed the old scans and the map's arms cover the same five
 sites). Fixtures: delete a fully-connected student (exact list), update excluding a
 period with assignments, error pins.
@@ -762,7 +763,7 @@ period with assignments, error pins.
 
 The behaviour-divergence family (§6.3). `DeleteWeekPattern` loses its two cleaned-before
 panics (`:375,378`); the cascade **keeps** referencing slots and incompats, clearing
-their `week_pattern` to `None` (`resolution.rs:412-445`, the map's one recorded
+their `week_pattern` to `None` (`resolution.rs:411-446`, the map's one recorded
 divergence from legacy, ★ ruled July 28). Old cleaning *deleted* them (with their
 colloscope data); the new document keeps the slot running **every week**. `UpdateWeekPattern`'s
 colloscope cleaning (cells on newly-excluded weeks) is replaced by the convergence
@@ -781,7 +782,9 @@ update excluding a week that has cells.
 (`slots.rs:513-516`). New: the catch-all becomes genuinely unreachable — cascade clears
 cells (`Slot@ColloscopeInterrogation`) and removes pairing rules
 (`Slot@SlotPairingRuleAntecedent/Consequent`), all warned. `UpdateSlot` keeps its
-six-variant scan in order (`slots.rs:433-486`); its cleaning (cells on weeks excluded by
+five-variant invariant scan in order (`slots.rs:433-486`; the sixth surface variant,
+`InvalidSlotId`, is the precheck above it, and the in-code comment at `:425-432`
+records `InvalidSubjectId` as unreachable — D14's dead variant); its cleaning (cells on weeks excluded by
 the *new* pattern) is replaced by the same convergence route as week patterns.
 `AddNewSlot` keeps both ops-level prechecks and its four-variant scan. Move ops
 unchanged (D14 wart replicated). Fixtures: delete-slot-with-everything (exact list);
@@ -827,10 +830,14 @@ Five variants since the global-group-list work (`AddNewGroupList`, `UpdateGroupL
 parameters-only `UpdateGroupList` and `SetFilling` are gone, merged into one op
 carrying a whole sealed `GroupList`). `DuplicatePreviousPeriod` is the composite
 (snapshot previous-period associations, one `AssignToSubject` per eligible subject —
-no ids, no recursion). The old module's four cleaning scans (all colloscope-erasing)
-are replaced by `ColloscopeStudentGroupOutOfBounds` / `InterrogationGroupOutOfBounds` /
-`ColloscopeStudentExcluded` / `ColloscopeGroupListPrefilled` convergence fixes and the
-two `GroupList@…` dangle arms. The old panic-only invariant scan
+no ids, no recursion). The old module's eleven cleaning scans across four arms — four
+on `UpdateGroupList` (all colloscope-erasing), five on `DeleteGroupList` (two
+colloscope-erasing, three pre-cleaning the doomed list's own filling and association),
+one interrogation-trimming scan each on `AssignGroupListToSubject` and
+`DuplicatePreviousPeriod` — are replaced by `ColloscopeStudentGroupOutOfBounds` /
+`InterrogationGroupOutOfBounds` / `ColloscopeStudentExcluded` /
+`ColloscopeGroupListPrefilled` convergence fixes and the two `GroupList@…` dangle
+arms. The old panic-only invariant scan
 (`panic!("Associated subjects should be properly cleaned")`, `group_lists.rs:880`)
 dies.
 
@@ -1059,7 +1066,7 @@ undo-label plumbing untouched. User runs a gtk4 smoke here.
 
 ### 6b — python
 
-`python/src/glue.rs:1363`: `op.apply(&mut *state)` → `op.cascade_apply(&mut *state)`.
+`python/src/glue.rs:1356`: `op.apply(&mut *state)` → `op.cascade_apply(&mut *state)`.
 One line; behaviour switches here, so the **three contract scripts run at this commit**
 (user).
 
