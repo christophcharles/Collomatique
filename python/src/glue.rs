@@ -15,12 +15,12 @@ use collomatique_ops::{
     DeleteSubjectError, DeleteTeacherError, DeleteWeekPatternError, DuplicatePreviousPeriodError,
     GeneralPlanningUpdateError, GroupListsUpdateError, IncompatibilitiesUpdateError,
     MergeWithPreviousPeriodError, MoveSlotDownError, MoveSlotUpError, MoveSubjectDownError,
-    MoveSubjectUpError, RemoveStudentLimitsError, ReplaceGroupListError, SetFillingError,
-    SettingsUpdateError, SlotsUpdateError, StudentsUpdateError, SubjectsUpdateError,
-    TeachersUpdateError, UpdateGroupListError, UpdateIncompatError, UpdatePeriodStatusError,
-    UpdatePeriodWeekCountError, UpdateSlotError, UpdateStudentError, UpdateStudentLimitsError,
-    UpdateSubjectError, UpdateTeacherError, UpdateWeekAnnotationError, UpdateWeekPatternError,
-    UpdateWeekStatusError, WeekPatternsUpdateError,
+    MoveSubjectUpError, RemoveStudentLimitsError, SettingsUpdateError, SlotsUpdateError,
+    StudentsUpdateError, SubjectsUpdateError, TeachersUpdateError, UpdateGroupListError,
+    UpdateIncompatError, UpdatePeriodStatusError, UpdatePeriodWeekCountError, UpdateSlotError,
+    UpdateStudentError, UpdateStudentLimitsError, UpdateSubjectError, UpdateTeacherError,
+    UpdateWeekAnnotationError, UpdateWeekPatternError, UpdateWeekStatusError,
+    WeekPatternsUpdateError,
 };
 use collomatique_ops::{DuplicatePreviousPeriodAssociationsError, UpdateError};
 
@@ -1141,14 +1141,14 @@ impl CollomatiqueFile {
     fn group_lists_update(
         self_: PyRef<'_, Self>,
         id: group_lists::GroupListId,
-        new_params: group_lists::GroupListParameters,
+        group_list: group_lists::GroupList,
     ) -> PyResult<()> {
         let result = self_
             .file
             .apply_update(collomatique_ops::UpdateOp::GroupLists(
                 collomatique_ops::GroupListsUpdateOp::UpdateGroupList(
                     id.into(),
-                    new_params.try_into()?,
+                    group_list.try_into()?,
                 ),
             ));
 
@@ -1158,32 +1158,7 @@ impl CollomatiqueFile {
                 UpdateGroupListError::InvalidGroupListId(id) => Err(PyValueError::new_err(
                     format!("Invalid group list id {:?}", id),
                 )),
-            },
-            e => panic!("Unexpected result: {:?}", e),
-        }
-    }
-
-    fn group_lists_replace(
-        self_: PyRef<'_, Self>,
-        id: group_lists::GroupListId,
-        group_list: group_lists::GroupList,
-    ) -> PyResult<()> {
-        let result = self_
-            .file
-            .apply_update(collomatique_ops::UpdateOp::GroupLists(
-                collomatique_ops::GroupListsUpdateOp::ReplaceGroupList(
-                    id.into(),
-                    group_list.try_into()?,
-                ),
-            ));
-
-        match result {
-            Ok(_) => Ok(()),
-            Err(UpdateError::GroupLists(GroupListsUpdateError::ReplaceGroupList(e))) => match e {
-                ReplaceGroupListError::InvalidGroupListId(id) => Err(PyValueError::new_err(
-                    format!("Invalid group list id {:?}", id),
-                )),
-                ReplaceGroupListError::InvalidStudentId(id) => Err(PyValueError::new_err(format!(
+                UpdateGroupListError::InvalidStudentId(id) => Err(PyValueError::new_err(format!(
                     "Invalid student id {:?}",
                     id
                 ))),
@@ -1205,33 +1180,6 @@ impl CollomatiqueFile {
                 DeleteGroupListError::InvalidGroupListId(id) => Err(PyValueError::new_err(
                     format!("Invalid group list id {:?}", id),
                 )),
-            },
-            e => panic!("Unexpected result: {:?}", e),
-        }
-    }
-
-    fn group_lists_set_filling(
-        self_: PyRef<'_, Self>,
-        id: group_lists::GroupListId,
-        filling: group_lists::GroupListFilling,
-    ) -> PyResult<()> {
-        let result = self_
-            .file
-            .apply_update(collomatique_ops::UpdateOp::GroupLists(
-                collomatique_ops::GroupListsUpdateOp::SetFilling(id.into(), filling.into()),
-            ));
-
-        match result {
-            Ok(_) => Ok(()),
-            Err(UpdateError::GroupLists(GroupListsUpdateError::SetFilling(e))) => match e {
-                SetFillingError::InvalidGroupListId(id) => Err(PyValueError::new_err(format!(
-                    "Invalid group list id {:?}",
-                    id
-                ))),
-                SetFillingError::InvalidStudentId(id) => Err(PyValueError::new_err(format!(
-                    "Invalid student id {:?}",
-                    id
-                ))),
             },
             e => panic!("Unexpected result: {:?}", e),
         }

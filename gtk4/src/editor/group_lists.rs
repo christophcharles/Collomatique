@@ -251,7 +251,7 @@ impl Component for GroupLists {
                 }
                 GroupListSelectionReason::Edit(group_list_id) => {
                     sender
-                        .output(GroupListsUpdateOp::ReplaceGroupList(
+                        .output(GroupListsUpdateOp::UpdateGroupList(
                             group_list_id,
                             group_list,
                         ))

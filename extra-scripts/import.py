@@ -449,7 +449,7 @@ def update_group_lists(s):
         new_group_list = collomatique.GroupList(
             params, collomatique.GroupListFilling.prefilled(prefilled_groups)
         )
-        f.group_lists_replace(group_list_id, new_group_list)
+        f.group_lists_update(group_list_id, new_group_list)
 
 def build_subject_list_for_group_lists(s, main_period_id):
     f = s.get_current_collomatique_file()

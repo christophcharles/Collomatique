@@ -1,4 +1,4 @@
-//! The global group-list ops: `ReplaceGroupList` and the widened
+//! The global group-list ops: `UpdateGroupList` and the widened
 //! `AddNewGroupList`.
 //!
 //! Both now carry a sealed [`GroupList`] — parameters *and* filling in one
@@ -26,7 +26,7 @@
 
 use collomatique_ops::{
     AddNewGroupListError, GroupListsUpdateError, GroupListsUpdateOp, GroupListsUpdateWarning,
-    OpCategory, ReplaceGroupListError, UpdateError, UpdateOp, UpdateWarning,
+    OpCategory, UpdateError, UpdateGroupListError, UpdateOp, UpdateWarning,
 };
 use collomatique_state::{AppState, traits::Manager};
 use collomatique_state_colloscopes::ids::{GroupListId, PeriodId, StudentId};
@@ -134,21 +134,21 @@ fn set_placements(
     .expect("placing students in a live automatic group list succeeds");
 }
 
-/// Runs `ReplaceGroupList` and returns the error it produced, failing the test
+/// Runs `UpdateGroupList` and returns the error it produced, failing the test
 /// on success or on any other error shape.
-fn replace_err(
+fn update_err(
     app: &AppState<Data, Desc>,
     id: GroupListId,
     group_list: GroupList,
-) -> ReplaceGroupListError {
-    let op = UpdateOp::GroupLists(GroupListsUpdateOp::ReplaceGroupList(id, group_list));
+) -> UpdateGroupListError {
+    let op = UpdateOp::GroupLists(GroupListsUpdateOp::UpdateGroupList(id, group_list));
     match op.dry_apply(app).map(|_| ()) {
-        Err(UpdateError::GroupLists(GroupListsUpdateError::ReplaceGroupList(e))) => e,
-        other => panic!("expected a ReplaceGroupList error, got {other:?}"),
+        Err(UpdateError::GroupLists(GroupListsUpdateError::UpdateGroupList(e))) => e,
+        other => panic!("expected an UpdateGroupList error, got {other:?}"),
     }
 }
 
-/// The group-list warnings a `ReplaceGroupList` raised, in the cascade's own
+/// The group-list warnings an `UpdateGroupList` raised, in the cascade's own
 /// order-insensitive form.
 fn group_list_warnings(
     result: &collomatique_ops::RecApplyResult,
@@ -169,12 +169,12 @@ fn replacing_a_group_list_that_does_not_exist_reports_the_id() {
     let dead = dead_group_list_id(&mut app);
 
     assert_eq!(
-        replace_err(
+        update_err(
             &app,
             dead,
             GroupList::new(params(2), GroupListFilling::default()).unwrap(),
         ),
-        ReplaceGroupListError::InvalidGroupListId(dead),
+        UpdateGroupListError::InvalidGroupListId(dead),
     );
 }
 
@@ -185,7 +185,7 @@ fn a_prefilled_payload_naming_a_dead_student_reports_the_student() {
     let dead = dead_student_id(&mut app);
 
     assert_eq!(
-        replace_err(
+        update_err(
             &app,
             id,
             GroupList::new(
@@ -194,7 +194,7 @@ fn a_prefilled_payload_naming_a_dead_student_reports_the_student() {
             )
             .unwrap(),
         ),
-        ReplaceGroupListError::InvalidStudentId(dead),
+        UpdateGroupListError::InvalidStudentId(dead),
     );
 }
 
@@ -208,12 +208,12 @@ fn an_automatic_payload_excluding_a_dead_student_reports_the_student() {
     // prefilled groups only, so an excluded set that is never walked would let
     // a dangling id reach the state layer.
     assert_eq!(
-        replace_err(
+        update_err(
             &app,
             id,
             GroupList::new(params(2), automatic([dead])).unwrap(),
         ),
-        ReplaceGroupListError::InvalidStudentId(dead),
+        UpdateGroupListError::InvalidStudentId(dead),
     );
 }
 
@@ -243,7 +243,7 @@ fn shrinking_a_prefilled_list_lands_verbatim_and_says_nothing() {
         prefilled([BTreeSet::from([s0]), BTreeSet::from([s1])]),
     )
     .unwrap();
-    let outcome = UpdateOp::GroupLists(GroupListsUpdateOp::ReplaceGroupList(id, payload.clone()))
+    let outcome = UpdateOp::GroupLists(GroupListsUpdateOp::UpdateGroupList(id, payload.clone()))
         .dry_apply(&app)
         .expect("shrinking a prefilled list must succeed");
 
@@ -274,7 +274,7 @@ fn shrinking_removes_the_placements_of_groups_that_disappear() {
     set_placements(&mut app, id, BTreeMap::from([(s0, 0), (s1, 2)]));
 
     let payload = GroupList::new(params(2), GroupListFilling::default()).unwrap();
-    let outcome = UpdateOp::GroupLists(GroupListsUpdateOp::ReplaceGroupList(id, payload))
+    let outcome = UpdateOp::GroupLists(GroupListsUpdateOp::UpdateGroupList(id, payload))
         .dry_apply(&app)
         .expect("shrinking past a placement must auto-clean, not fail");
 
@@ -304,7 +304,7 @@ fn excluding_a_placed_student_removes_the_placement() {
     set_placements(&mut app, id, BTreeMap::from([(s0, 0), (s1, 1)]));
 
     let payload = GroupList::new(params(2), automatic([s1])).unwrap();
-    let outcome = UpdateOp::GroupLists(GroupListsUpdateOp::ReplaceGroupList(id, payload))
+    let outcome = UpdateOp::GroupLists(GroupListsUpdateOp::UpdateGroupList(id, payload))
         .dry_apply(&app)
         .expect("excluding a placed student must auto-clean, not fail");
 
@@ -340,7 +340,7 @@ fn becoming_prefilled_empties_the_colloscope_placement_row() {
         prefilled([BTreeSet::from([s0]), BTreeSet::from([s1])]),
     )
     .unwrap();
-    let outcome = UpdateOp::GroupLists(GroupListsUpdateOp::ReplaceGroupList(id, payload))
+    let outcome = UpdateOp::GroupLists(GroupListsUpdateOp::UpdateGroupList(id, payload))
         .dry_apply(&app)
         .expect("prefilling a placed list must auto-clean, not fail");
 
@@ -478,7 +478,7 @@ fn shrinking_trims_out_of_range_interrogation_groups() {
     // Down to two groups: group 2 no longer exists, so the interrogation cell
     // that names it has to be trimmed before the replacement lands.
     let payload = GroupList::new(params(2), GroupListFilling::default()).unwrap();
-    let outcome = UpdateOp::GroupLists(GroupListsUpdateOp::ReplaceGroupList(id, payload))
+    let outcome = UpdateOp::GroupLists(GroupListsUpdateOp::UpdateGroupList(id, payload))
         .dry_apply(&app)
         .expect("shrinking past an interrogation group must auto-clean, not fail");
 
