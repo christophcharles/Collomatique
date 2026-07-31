@@ -688,10 +688,19 @@ are repeated here.
 
 ### 3.1 `export_config.rs` — trivial
 
-Eleven variants, all 1:1 elementary passthroughs, error enum **empty**, every apply
-`.expect("… should never fail")`. Change: `data.apply` → `session.apply`, expects kept.
-No warnings possible (export config references nothing). Fixture: one op round-trips,
-zero warnings.
+Eleven **ops-level** variants (the user-facing granularity, each with its own French
+history description), but only **one** elementary op behind them since the pre-step-7
+sidework of July 31 2026 (`docs/plans/plan_export_config_op.md`): each variant reads the
+current config, patches its one field, and issues the single whole-struct
+`ExportConfigOp::Update`. Error enum **empty**, the one apply still
+`.expect("… should never fail")`.
+
+Change: the current-config read moves from `data.get_data().get_inner_data()` to the
+session's read surface — `apply_to_session` gets no `data` parameter (§2.4), so the
+accessor the read-modify-write families need (assignments' snapshot maps, colloscope's
+lookups) serves this one too; and `data.apply` → `session.apply`, the expect kept. No
+warnings possible (export config references nothing). Fixture unchanged: one op
+round-trips, zero warnings.
 
 ### 3.2 `settings.rs` / 3.3 `balancing.rs` — precheck-only twins
 
