@@ -454,7 +454,8 @@ step 5 rewires production, so step 5 lands on a cleaner op surface. What changed
 
 - **B.1/B.2/B.3 (periods/weeks)** — `Periods` shrank to existence-only
   (`OrderedTable<PeriodId, ()>` + `first_week`); week data moved to a new `Weeks` module
-  (twin of `slots.rs`: `week_map` + a sparse `ordering` sidecar). `PeriodOp::Remove` is no
+  (twin of `slots.rs`: `week_map` + a sparse `ordering` sidecar). `PeriodOp::Remove`
+  (renamed `PeriodOp::RemoveWithWeeks` at step 7 commit 0) is no
   longer week-empty-gated in the *force* path (checked apply keeps its guard until step 5) —
   removing a week-bearing period now leaves dangling `WeekPeriodFk`s for the cascade. Read
   surface re-homed onto `Weeks`/`Parameters` (slots naming).
@@ -787,7 +788,9 @@ state; this appendix supersedes them as the description of the live model.
 - **`PeriodOp { ChangeStartDate, AddFront, AddAfter, Remove }`** — a period is created
   empty; `Remove` requires week-empty (`PeriodStillHasWeeks`). *Loose-ends phase (Appendix
   F): the force path dropped this guard (checked apply keeps it until step 5); the
-  elementary `GroupListOp` was also consolidated to carry a whole sealed `GroupList`.*
+  elementary `GroupListOp` was also consolidated to carry a whole sealed `GroupList`.
+  Step 7 commit 0 renamed the variant `RemoveWithWeeks`: no week-empty guard survives
+  anywhere, and leftover weeks are cascade-deleted rather than rejected.*
 - **Colloscope ops are upserts**: `SetInterrogation(SlotId, WeekId, BTreeSet<u32>)` /
   `SetGroupList(GroupListId, BTreeMap<StudentId, u32>)`; empty payload = remove row;
   reverse = `Set…` with the prior payload (or empty).
@@ -1251,10 +1254,11 @@ checkers are still wired only in tests — step 5 still does the production rewi
   `weeks_for_period` etc. with slots-style `None = no row` semantics. `find_period` (the old
   borrowable-`Vec` accessor) is **deleted**; the `read_api` pointer-identity pin moved to
   `find_week`. `WeekPatterns::is_week_active(weeks: &Weeks, …)`.
-- **`PeriodOp::Remove` no longer week-empty-gated in the force path.** Removing a
+- **`PeriodOp::Remove` no longer week-empty-gated in the force path** (the variant is
+  called `PeriodOp::RemoveWithWeeks` since step 7 commit 0). Removing a
   week-bearing period is now representable and leaves each surviving week dangling at
   `WeekPeriodFk` for the cascade to repair. `PeriodPrecheckError::PeriodStillHasWeeks` and
-  the guard in `force_apply_period` Remove are gone. **Checked `apply_period` keeps its
+  the guard in its `force_apply_period` arm are gone. **Checked `apply_period` keeps its
   guard** (it retires wholesale at step 5; stripping now would only turn the case into a
   `check_invariants` panic) — the 4.2 fuzz carve-out: a checked-rejected `ForceValid` probe
   must land broken, and it does.
