@@ -48,9 +48,26 @@ Rationale is recorded so the executing session does not re-litigate.
   states) and **not** a parallel Vec (index re-alignment at every reader). The same
   `Fix` shape may appear on several fixes (the N-round path); that is honest. If a
   future consumer genuinely wants the cause, adding a tag back is additive.
-- **D3 — `Manager` gets the cascade wrapper** (settles H.6's open question). A defaulted
-  trait method mirroring `Manager::apply`, bounded `where Self::Data: Fixable`. `ops/`
-  never reaches around the manager into the raw `Data`.
+- ★ **D3 — `Manager` gets the cascade wrapper; the allocator is outside rollback**
+  (settles H.6's open question; re-argued and confirmed July 31 2026). A defaulted
+  trait method mirroring `Manager::apply` — original op in, `(NewInfo, Vec<Fix>)`
+  out, annotation inside — bounded `where Self::Data: Fixable`. An annotated-in
+  variant (caller annotates through a new public `Manager::annotate`; `apply_cascade`
+  then strictly `Err ⇒ bit-identical`) was worked out and **rejected**: annotated ops
+  are deliberately never publicly *injectable* — no `Manager` method accepts one
+  (they flow out through `get_last_op`/`undo`/`redo` as read-only history views,
+  never in), and opening an input door invites spurious/transplanted ids. The unease
+  the variant answered is resolved by doctrine instead: the manager's
+  rollback-managed state is **document + history**; the id allocator is monotone
+  across the manager's whole life. `Manager::apply` burns annotation ids on failure
+  (the gate's snapshot is post-annotation, `lib.rs:336-337`, "history ids are never
+  reused"), and `undo` *must not* rewind the allocator — the undone entities' ids
+  stay live because `redo` can restore them. `apply_cascade`'s contract is therefore
+  *uniform* with `apply`: `Err` ⇒ data and history unchanged (engine entry-snapshot
+  restore, `cascade.rs:89-90`, `:163`, `:176`; `store` only on `Ok`), allocator
+  possibly advanced. Harmless: burned ids never appear anywhere (~2^63 deep), and
+  the `ops/` session is dropped on error anyway. `ops/` never reaches around the
+  manager into the raw `Data`.
 - **D4 — No list comparison anywhere.** With D2 the warnings *are* the cascade's own
   `Fix` answers; the earlier "diff applied vs intended" idea is redundant and fragile.
   Dropped.
@@ -91,15 +108,29 @@ Rationale is recorded so the executing session does not re-litigate.
   python/scripting route never renders. A failed lookup inside `text` panics — the
   descendant of the old `.expect("Warning should have a desc when applied on same
   state")` (`lib.rs:425`), an instrument for the tests per H.2's ruling.
-- **D8 — Composites keep their structure, drop their cleaning.** `PeriodOp::Remove`'s
-  week-empty requirement is a **precheck** (`InvalidOp`), which the cascade never
-  repairs — so `DeletePeriod` still removes the weeks itself first, and each week
-  removal is where the cascade clears colloscope cells and week-pattern bits. What the
-  bodies lose is every *reconciliation/cleaning* step; divergences are §6.
+- ★ **D8 — Composites keep their structure, drop their cleaning; the elementary op is
+  renamed `PeriodOp::RemoveWithWeeks`** (revised July 31 2026 — the original entry
+  justified `DeletePeriod`'s structure with a week-empty **precheck** that does not
+  exist). What every composite body loses is its *reconciliation/cleaning* steps
+  (divergences are §6); the structural bodies stay. For `DeletePeriod` the reason is
+  **not** necessity: the state layer has no week-empty guard (`PeriodPrecheckError` is
+  target-existence + no-clobber only, `periods.rs:112`), a dangling `Week::period_id`
+  is deliberately a *fixable* `DanglingFk` (`weeks.rs:28-31`, design doc Appendix F.4)
+  repaired by `WeekOp::Remove` (`resolution.rs:145`), and `cascade.rs`'s fixture 1b
+  pins a bare period removal landing through exactly that chain. The composite still
+  removes the weeks itself first by the authored-loss doctrine that voided D12: the
+  weeks are part of what "delete this period" *says*, so authoring their removal keeps
+  the warning list down to the genuinely surprising effects — each week removal's own
+  cascade on colloscope cells and week-pattern bits — instead of one « la semaine X
+  sera supprimée » line per week restating the user's request. The old name `Remove`
+  invited exactly the misreading this entry used to contain, so `PeriodOp::Remove` /
+  `AnnotatedPeriodOp::Remove` become **`RemoveWithWeeks`** in commit 0 (mechanical; no
+  op enum carries serde, so no wire format moves).
 - **D9 — Testing: fixtures on known documents, no differential fuzz, one
   non-differential walk.** Behaviour diverges from legacy on purpose (§6), so there is no
   reference to diff against. Every user-facing op gets fixtures asserting the exact
-  resulting state and the exact warning list. Behaviour-divergence fixtures must be
+  resulting state and the exact warning list (default base document: the frozen
+  hogwarts copy, §7). Behaviour-divergence fixtures must be
   **mutation-checked** (green-on-first-run proves nothing until seen red). The walk
   (commit 4) fires random `UpdateOp`s through the new path asserting no-panic + valid
   result; `ops/` has zero fuzz today.
@@ -195,9 +226,11 @@ Rationale is recorded so the executing session does not re-litigate.
     *forces* e.g. `student ∉ rebuilt_row` — but the fixtures' exact-post-state asserts
     pin the payload, and the drift class shrinks from "cross-crate, invisible" to
     "same screen, pinned"; (b) fixture literals for the rebuild shapes contain the
-    rebuilt payload — tolerable, the fixtures build their documents in-process so the
-    expected value comes from the same builders, and the majority of variants (deletes,
-    clears, unassigns) stay id-only.
+    rebuilt payload — tolerable: the attribution unit tests build their documents
+    in-process so the expected value comes from the same builders, the ops-level
+    fixtures derive it from the decoded hogwarts base (read the entity, remove the
+    element — §7), and the majority of variants (deletes, clears, unassigns) stay
+    id-only.
 
 ---
 
@@ -369,7 +402,12 @@ and the ledger are untouched.
 /// keep the modification history consistent: the whole cascade lands as one
 /// history slot. Returns the annotation's NewInfo and the fixes the cascade
 /// had to apply, as their `Fix` meanings (D15).
-/// A failed call leaves data and history strictly unchanged.
+///
+/// On `Err`, data and history are unchanged; the id allocator may have
+/// advanced (the annotation's ids burn, never to be reused) — the same
+/// contract as [Manager::apply], and the same relationship `undo` has to
+/// the allocator (undone ids stay live for `redo`). The allocator is
+/// monotone across the manager's whole life; it is not part of rollback.
 fn apply_cascade(
     &mut self,
     op: <Self::Data as InMemoryData>::OriginalOperation,
@@ -397,9 +435,13 @@ where
 }
 ```
 
-On failure, ids consumed by `annotate` are not rolled back — same as today's
-`Manager::apply` (the engine's snapshot is taken after annotation). Harmless (a gap in
-issued ids), and the `ops/` layer runs on a clone that is dropped on error anyway.
+The `Err` contract holds with no manager-level snapshot: the engine restores its
+entry snapshot bit-identically on every `Err` (`cascade.rs:89-90`, `:163`, `:176` —
+pinned by engine tests 4, 5, 7 and 13), nothing inside a cascade can issue ids (the
+map holds `&self`), and `store` runs only on `Ok`. Only the annotation's issuer bump
+survives a failure — deliberately outside rollback, per D3 (an annotated-in variant
+with a strictly-intact contract was rejected there: annotated ops are never publicly
+injectable).
 
 ### 2.3 `CascadeSession`, `CascadeWarning`, `CascadeResult` (commit 2b, `ops/src/cascade.rs`)
 
@@ -456,8 +498,8 @@ belongs to `state-colloscopes`, which carries no French and no presentation (D6)
 orphan rule puts the rendering method on an `ops/`-owned wrapper. Crate-private
 construction rides along for free.
 
-`apply` calls `self.session.apply_cascade(op, desc)` (2a) and extends the log — nothing
-more. Rendering never happens here (D7). There is **no** hand-written-warning channel:
+`apply` calls `self.session.apply_cascade(op, desc)` (2a), extends the log with the
+returned fixes, and hands the `NewInfo` back — nothing more. Rendering never happens here (D7). There is **no** hand-written-warning channel:
 the composites can only produce warnings by making the cascade fix something, so the
 warning set cannot drift from what actually happened. Re-opening that door (the void
 D12 wanted a `pub(crate)` push) needs a ruling in §0.
@@ -483,23 +525,37 @@ pub(crate) fn apply_to_session<T: …Manager<Data = Data, Desc = Desc>>(
 ) -> Result<Option<XxxId>, XxxUpdateError>
 ```
 
-The body is the old `apply_no_cleaning` body with exactly three mechanical changes and
+The body is the old `apply_no_cleaning` body with exactly four mechanical changes and
 no other rewriting — the new code should read like the old code:
 
 1. `data.apply(op, self.get_desc())` → `session.apply(op, self.get_desc())`;
 2. the "should be cleaned before" panic arms are deleted — the invariant sets that
    reached them are now repaired by the cascade, never returned;
 3. composite-internal recursion (`UpdateOp::…(…).rec_apply_no_session(data)`) becomes a
-   direct call of the sibling's `apply_to_session`.
+   direct call of the sibling's `apply_to_session`;
+4. each precheck translation is restructured into a two-level match: peel to the
+   family's own precheck enum, then match *that* exhaustively — no wildcard at the
+   inner level (see the exhaustivity rider below).
 
 Three doctrine riders:
 
 - **Scan order is copied verbatim** (D5). Where a set can carry several breaks, which
   one wins is public API.
-- **The residual catch-all panics stay** (`panic!("Unexpected invariant breaks during
-  …")`, `panic!("Unexpected error during …")`). After the dead arms are removed they
-  mean "the state layer produced an error this op cannot produce" — a bug; the fixtures
-  establish unreachability. H.2's ruling applies: instruments, not safety nets.
+- **Exhaustivity where the type allows it; the residual catch-all panics stay
+  outside.** The old bodies collapse each precheck translation to one deep pattern
+  plus the wildcard, so a new precheck variant falls into the catch-all silently — at
+  runtime. The new bodies peel to the family's own precheck enum and match it
+  **exhaustively, no wildcard**: variants the arm cannot produce get explicit panic
+  arms. A new variant in the family's vocabulary is then a compile error at every
+  translation site — the discipline D6/D15 apply to `Fix`, applied to prechecks. The
+  wildcard survives only on the outer `Error`, where per-arm exhaustivity is not
+  meaningful (it would enumerate every other family's vocabulary); it and the
+  remaining panics (`panic!("Unexpected invariant breaks during …")`,
+  `panic!("Unexpected error during …")`) mean "the state layer produced an error this
+  op cannot produce" — a bug; the fixtures establish unreachability. H.2's ruling
+  applies: instruments, not safety nets. Mechanically: match on `&e`, never `e` —
+  binding the inner enum by value partially moves the error, and the panic arms lose
+  `{e:?}`.
 - **Ops-level prechecks stay ops-level.** The `find_period_position(...).ok_or(...)`
   style checks (category (a) in the survey) are address checks the composites need
   *before* deciding what elementary ops to emit; they are not part of the cleaning
@@ -520,10 +576,15 @@ Self::DeleteTeacher(teacher_id) => {
             use collomatique_state_colloscopes::{
                 Error, InvalidOp, PrecheckError, TeacherPrecheckError,
             };
-            match e {
-                Error::InvalidOp(InvalidOp::Precheck(PrecheckError::Teacher(
-                    TeacherPrecheckError::InvalidTeacherId(id),
-                ))) => DeleteTeacherError::InvalidTeacherId(id),
+            match &e {
+                Error::InvalidOp(InvalidOp::Precheck(PrecheckError::Teacher(te))) => match te {
+                    TeacherPrecheckError::InvalidTeacherId(id) => {
+                        DeleteTeacherError::InvalidTeacherId(*id)
+                    }
+                    TeacherPrecheckError::TeacherIdAlreadyExists(_) => {
+                        panic!("Unexpected TeacherPrecheckError during DeleteTeacher: {e:?}")
+                    }
+                },
                 _ => panic!("Unexpected error during DeleteTeacher: {e:?}"),
             }
         })?;
@@ -583,10 +644,11 @@ to the scratchpad and grepped — never run twice).
 
 | commit | content | crates |
 | --- | --- | --- |
+| 0 | `PeriodOp::Remove` → `RemoveWithWeeks` mechanical rename (D8) | state-colloscopes, testgen-colloscopes, ops |
 | 1a | `FixOp` trait + `Fix` enum + map refactor + attribution pins | state, state-colloscopes |
 | 1b | `CascadeReceipt` engine re-shape + test adaptation | state, state-colloscopes (tests) |
 | 2a | `Manager::apply_cascade` + toy tests | state |
-| 2b | `CascadeSession`/`CascadeWarning`/`CascadeResult` + struct tests | ops |
+| 2b | `CascadeSession`/`CascadeWarning`/`CascadeResult` + struct tests; frozen hogwarts fixture copy + storage dev-dep (⇒ **cargoHash**) | ops |
 | 3.1–3.15 | one family per commit, `apply_to_session` + family fixtures | ops |
 | 3.16 | `UpdateOp` dispatch + `cascade_dry_apply`/`cascade_apply` | ops |
 | 4 | the `UpdateOp` property walk (testgen dev-dep ⇒ **cargoHash**) | ops |
@@ -605,7 +667,23 @@ general_planning.
 
 ---
 
-## 4. Commits 1–2 in detail
+## 4. Commits 0–2 in detail
+
+### Commit 0 — the `RemoveWithWeeks` rename
+
+Mechanical, standalone, first — so every later commit and every section of this plan
+speaks the new name. `PeriodOp::Remove` and `AnnotatedPeriodOp::Remove`
+(`state-colloscopes/src/ops.rs:76` / `:465`) become `RemoveWithWeeks`, making the
+elementary contract D8 documents readable at the call site: period removal has **no**
+week-empty guard, and any weeks still on the period dangle for the cascade to delete
+(`weeks.rs:28-31`, design doc Appendix F.4). No op enum carries serde, so no stored
+format moves; the sites are compiler-found (~20 across `state-colloscopes` src+tests,
+`testgen-colloscopes/src/generator.rs`, `ops/src/general_planning.rs:1113`). The two
+reverse-annotation arms in `force_apply_period` (`AddFront`/`AddAfter` answer
+`Remove(id)` as their reverse) rename with it, and stay honest: a freshly added period
+is week-less, and removing-with-weeks a week-less period is plain removal. The variant
+doc gains the sentence the old name obscured: leftover weeks are cascade-deleted,
+never rejected.
 
 ### Commit 1a — the fix vocabulary
 
@@ -660,14 +738,19 @@ Site: `state/src/traits.rs`, beside `Manager::apply` (§2.2). Note the per-metho
 non-`Fixable` implementors (`FakeData` in the trait tests).
 
 Tests (toy types, `traits.rs` test module): a cascading op stores **one** history slot
-whose aggregated op holds fixes + target and undoes in one step; a convicted op stores
-nothing and leaves data unchanged; the returned fixes are the expected `QuoteFix`
-values; `NewInfo` comes back from annotation.
+whose aggregated op holds fixes + target and undoes in one step; a convicted op
+leaves **data and history** unchanged (asserted against pre-call copies — the
+allocator is explicitly *outside* this assertion, per D3's contract); the returned
+fixes are the expected `QuoteFix` values; `NewInfo` comes back from annotation.
 
 ### Commit 2b — `ops/`: the session struct
 
 Site: new `ops/src/cascade.rs` (§2.3), `pub mod cascade; pub use cascade::*;` in
-`lib.rs`. The struct needs no `UpdateOp` — tests drive **raw elementary ops**:
+`lib.rs`. This commit also lands the frozen fixture base:
+`ops/tests/fixtures/hogwarts.collomatique` copied from `examples/`, plus the
+`collomatique-storage` dev-dependency (§7; ⇒ **cargoHash**). The struct needs no
+`UpdateOp` — tests drive **raw elementary ops** against the hogwarts base (a real
+teacher with real slots, no in-process document building):
 
 - delete a teacher who has slots → warnings accumulate as `Fix::DeleteSlot` values
   (plus each slot's own colloscope/pairing fixes), in application order;
@@ -871,9 +954,12 @@ The big one. All nine variants keep their structural bodies (D8); the module kee
   `.expect("Cleaning made the removed weeks trivial")` (`:1068`) becomes
   `.expect("the cascade resolves everything a week removal breaks")`.
 - `DeletePeriod`: remove weeks in reverse (cascading as above), then
-  `PeriodOp::Remove` — whose landing cascades the period-scoped remnants
+  `PeriodOp::RemoveWithWeeks` — whose landing cascades the period-scoped remnants
   (`Period@SubjectExcludedPeriods/StudentExcludedPeriods/PairingRuleExcludedPeriods/
-  SlotPairingRuleExcludedPeriods/AssignmentsKey/AssociationEntry`), all warned. The old
+  SlotPairingRuleExcludedPeriods/AssignmentsKey/AssociationEntry`), all warned. The
+  composite authors the week removals itself not out of necessity — the bare op would
+  cascade them away (D8) — but so the warning list carries only the surprising
+  effects, never one « semaine supprimée » line per week. The old
   eight-phase cleaning dies. **D13**: translate `InvalidPeriodId` precheck instead of
   `.expect`ing (`:1117`).
 - `CutPeriod`: unchanged structurally (the five-step id-threading body incl. the
@@ -1159,12 +1245,28 @@ convention); topic memory updated.
 
 ## 7. Testing doctrine
 
-- **Fixtures are built in-process** from `AppState::new(Data::default())` + elementary
-  ops, like the three existing `ops/tests/` files — no file fixtures.
+- **The default fixture base is a frozen hogwarts copy.**
+  `ops/tests/fixtures/hogwarts.collomatique` — copied from
+  `examples/hogwarts.collomatique` at commit 2b, deliberately decoupled so the living
+  example can evolve without touching the tests (the precedent is
+  `constraints-colloscopes/tests/pairing_build_regression.rs`, whose fixtures derive
+  from hogwarts the same way and pin literal ids). Tests `include_str!` it, decode
+  through `collomatique_storage::deserialize_data` (asserting no caveats), and wrap
+  the result in `AppState::new`; corner shapes the document lacks are set up by
+  applying ops on top of the loaded base, visible in the test. `collomatique-storage`
+  becomes an `ops/` dev-dependency (no cycle — storage does not depend on `ops/`;
+  ⇒ **cargoHash**). In-process `AppState::new(Data::default())` + elementary ops
+  stays the right tool where the point is a tiny document whose whole state reads at
+  a glance (the three existing `ops/tests/` files keep their style). Exact-state
+  assertions on the hogwarts base stay cheap: build the expected document by applying
+  the expected elementary ops, in cascade order, to a clone of the base — each is
+  gate-valid in that order, exactly as the cascade lands them — and compare with
+  `==`; that pins that the cascade landed precisely those ops.
 - **Expected warning lists derived by hand before the test runs** (H.5), as `Fix`
   literals compared through `CascadeWarning::fix()` (content is private — read it
-  through the accessor; payload-carrying variants include their expected
-  rebuilt value, built from the same in-process builders as the document); sequence
+  through the accessor; payload-carrying variants include their expected rebuilt
+  value, derived from the base document — read the entity, remove the element);
+  sequence
   asserted only where the engine really chose it (an ordered literal is a tripwire on
   the derived `Ord`, not a confluence pin). Invariant→fix *attribution* is not pinned
   here — that lives in commit 1a's direct `fix_invariant` unit tests (D15).
@@ -1187,4 +1289,6 @@ convention); topic memory updated.
   storage byte-stability + `examples/` pristine throughout (this step touches no
   storage bytes and no elementary-op vocabulary — they must never move).
 - User-run: contract scripts at 6b; gtk4 smoke at 6a and after 7; cargoHash refresh at
-  commits 4 and 6c; ★ end-of-step acceptance before close-out.
+  commits 2b, 4 and 6c (2b's may be a no-op — the storage dev-dep adds no external
+  crate — but the lock file moves, so the check runs); ★ end-of-step acceptance
+  before close-out.
