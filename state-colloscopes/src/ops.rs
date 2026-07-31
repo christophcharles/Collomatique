@@ -294,17 +294,6 @@ pub enum ColloscopeOp {
 pub enum ExportConfigOp {
     /// Replace the whole export configuration at once
     Update(export_config::ExportConfig),
-    UpdateGlobalConfig(export_config::GlobalConfig),
-    UpdateColloscopeEnabled(bool),
-    UpdateAllGroupsEnabled(bool),
-    UpdatePrefilledGroupsEnabled(bool),
-    UpdateAutomaticGroupsEnabled(bool),
-    UpdatePerGroupListEnabled(bool),
-    UpdateColloscopeConfig(export_config::ColloscopeConfig),
-    UpdateAllGroupsConfig(export_config::PerStudentGroupsConfig),
-    UpdatePrefilledGroupsConfig(export_config::PerStudentGroupsConfig),
-    UpdateAutomaticGroupsConfig(export_config::PerStudentGroupsConfig),
-    UpdatePerGroupListConfig(export_config::PerGroupListConfig),
 }
 
 /// Annotated operation
@@ -742,17 +731,6 @@ pub enum AnnotatedColloscopeOp {
 pub enum AnnotatedExportConfigOp {
     /// Replace the whole export configuration at once
     Update(export_config::ExportConfig),
-    UpdateGlobalConfig(export_config::GlobalConfig),
-    UpdateColloscopeEnabled(bool),
-    UpdateAllGroupsEnabled(bool),
-    UpdatePrefilledGroupsEnabled(bool),
-    UpdateAutomaticGroupsEnabled(bool),
-    UpdatePerGroupListEnabled(bool),
-    UpdateColloscopeConfig(export_config::ColloscopeConfig),
-    UpdateAllGroupsConfig(export_config::PerStudentGroupsConfig),
-    UpdatePrefilledGroupsConfig(export_config::PerStudentGroupsConfig),
-    UpdateAutomaticGroupsConfig(export_config::PerStudentGroupsConfig),
-    UpdatePerGroupListConfig(export_config::PerGroupListConfig),
 }
 
 impl Operation for AnnotatedOp {}
@@ -1173,37 +1151,6 @@ impl AnnotatedExportConfigOp {
     fn annotate(export_config_op: ExportConfigOp) -> AnnotatedExportConfigOp {
         match export_config_op {
             ExportConfigOp::Update(v) => AnnotatedExportConfigOp::Update(v),
-            ExportConfigOp::UpdateGlobalConfig(v) => AnnotatedExportConfigOp::UpdateGlobalConfig(v),
-            ExportConfigOp::UpdateColloscopeEnabled(v) => {
-                AnnotatedExportConfigOp::UpdateColloscopeEnabled(v)
-            }
-            ExportConfigOp::UpdateAllGroupsEnabled(v) => {
-                AnnotatedExportConfigOp::UpdateAllGroupsEnabled(v)
-            }
-            ExportConfigOp::UpdatePrefilledGroupsEnabled(v) => {
-                AnnotatedExportConfigOp::UpdatePrefilledGroupsEnabled(v)
-            }
-            ExportConfigOp::UpdateAutomaticGroupsEnabled(v) => {
-                AnnotatedExportConfigOp::UpdateAutomaticGroupsEnabled(v)
-            }
-            ExportConfigOp::UpdatePerGroupListEnabled(v) => {
-                AnnotatedExportConfigOp::UpdatePerGroupListEnabled(v)
-            }
-            ExportConfigOp::UpdateColloscopeConfig(v) => {
-                AnnotatedExportConfigOp::UpdateColloscopeConfig(v)
-            }
-            ExportConfigOp::UpdateAllGroupsConfig(v) => {
-                AnnotatedExportConfigOp::UpdateAllGroupsConfig(v)
-            }
-            ExportConfigOp::UpdatePrefilledGroupsConfig(v) => {
-                AnnotatedExportConfigOp::UpdatePrefilledGroupsConfig(v)
-            }
-            ExportConfigOp::UpdateAutomaticGroupsConfig(v) => {
-                AnnotatedExportConfigOp::UpdateAutomaticGroupsConfig(v)
-            }
-            ExportConfigOp::UpdatePerGroupListConfig(v) => {
-                AnnotatedExportConfigOp::UpdatePerGroupListConfig(v)
-            }
         }
     }
 }
