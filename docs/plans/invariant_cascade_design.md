@@ -461,7 +461,8 @@ step 5 rewires production, so step 5 lands on a cleaner op surface. What changed
 - **C.3 / D.3 (GroupList + the empty-first trio)** — the `GroupList` smart-constructor churn
   C.3 parked for step 5 is done: `GroupList` is sealed (private fields, validating `new()`),
   and the elementary `GroupListOp` carries a whole consistent `GroupList` (elementary
-  `SetFilling` gone; the high-level `ops/` API is frozen and translated onto `Update`). This
+  `SetFilling` gone; the high-level `ops/` API is frozen and translated onto `Update` —
+  that freeze was **lifted July 31 2026**, see the rider at the end of F.3). This
   makes the D.3 empty-first trio unrepresentable: `RemainingFilling`,
   `PrefillGroupCountMismatch`, `NonEmptyGroupsWhenReducing` are all deleted. *The same
   smart-constructor churn was extended to `PairingRule`/`SlotPairingRule` (Appendix F.7);
@@ -1294,6 +1295,17 @@ cleaning-op machinery are unchanged; the translators to low-level ops absorb the
 (`AddNewGroupList` → `Add(new(params, default).expect(...))`; `UpdateGroupList` replicates
 the grow/shrink pad-and-truncate then `Update(id, new(...).expect(...))`; the high-level
 `SetFilling` survives, translated to a low-level `Update`). Same panic contracts as before.
+
+> **Thawed July 31 2026** (branch `global_grouplist_update`, commits `c761208a`…`93f83345`,
+> before step 7 starts). The freeze was a *scoping* decision for the loose-ends work, not a
+> permanent contract, and the reshaping it parked in the translators is what broke: an arity
+> mismatch died in `GroupList::new(old_params, filling).expect("caller guarantees prefill
+> arity")`, reachable from a Python script. The high-level family now mirrors the elementary
+> one — `AddNewGroupList(GroupList)` and `UpdateGroupList(id, GroupList)` both carry a whole
+> sealed value, `SetFilling` and the parameters-only `UpdateGroupList` are deleted, and the
+> translators reshape nothing. Six variants down to five, one warning variant
+> (`LooseStudentsInPrefilledGroupList`) deleted with the shrink pre-empt that emitted it.
+> Consequences for step 7 are recorded in `docs/plans/plan_step_7.md` (D12, now void).
 
 ### F.4 Mirror-consistency `LogicError`s (supersedes C.3's "Mirrors" bullet + §8's panic plan)
 
