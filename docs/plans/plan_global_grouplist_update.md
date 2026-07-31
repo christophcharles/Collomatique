@@ -222,31 +222,42 @@ doctrine (step-5 R3 precedent). This also keeps `docs/plans/plan_step_7.md`'s vo
 `import.py` by one line in commit 5; the alternative (a permanently distinct name) would
 leave the final API asymmetric, which the codebase consistently refuses.
 
-**D-C — The new op's cleaning arm is the union of the two old arms, evaluated against
+**D-C — The new op's cleaning arm cleans what hangs off the list, and says nothing about
 the payload.** Since the payload carries both halves, every condition that used to read
 "new params vs old filling" or "new filling vs old list" now reads "payload vs current
 data". Check order (first match returns, mirroring the old arms' order — old
-`UpdateGroupList` checks 1–3, then old `SetFilling` checks 4–5):
+`UpdateGroupList` checks 1–2, then old `SetFilling` checks 3–4):
 
 1. Payload non-prefilled: colloscope placements in groups `>= payload count` → remove
    one student (`LooseStudentGroupInColloscope`).
 2. Out-of-range interrogation groups for associated subjects vs `payload count` → trim
    one cell (`LooseGroupsInInterrogationsInColloscope`).
-3. Shrink pre-empt: old filling `Prefilled`, `payload count < old count`, dropped groups
-   non-empty → ONE cleaning op `ReplaceGroupList(id, GroupList::new(old_params,
-   old_filling_with_dropped_groups_emptied).expect(..))` with
-   `LooseStudentsInPrefilledGroupList`. The cleaning vehicle is the new op itself (the
-   old arm used `SetFilling`, which dies in commit 5). Termination: the cleaning op keeps
-   the old count, so its own arm finds nothing to do, and afterwards the outer condition
-   is false.
-4. Payload `Automatic` and old list non-prefilled: placements of newly-excluded students
+3. Payload `Automatic` and old list non-prefilled: placements of newly-excluded students
    → remove one (`LooseStudentGroupInColloscope`).
-5. Old list non-prefilled, payload prefilled: empty the placement row one student at a
+4. Old list non-prefilled, payload prefilled: empty the placement row one student at a
    time (`LooseStudentGroupInColloscope`).
 
-This preserves today's warning behaviour exactly (in particular ★ D12's requirement that
-`LooseStudentsInPrefilledGroupList` survives — the data loss is still silent at Accept
-time even though the merged dialog makes the disappearing groups visible).
+**The old shrink pre-empt is deliberately NOT carried over.** The old `UpdateGroupList`
+arm had a third check: shrinking a prefilled list emitted a cleaning `SetFilling`
+emptying the dropped groups, with `LooseStudentsInPrefilledGroupList`. That check only
+existed because a parameters-only op had to guess what became of a filling its caller
+could not touch. Unification removes the guess: the payload *is* the caller's complete,
+already-validated description of the list, so a group they deleted and a student they
+took out of a group are their own edits, not collateral damage this layer discovered for
+them. Warning about them tells the user what they just said. Cleaning stays for the data
+that hangs off the list — colloscope placements and interrogation cells — which the
+caller never saw.
+
+Beyond being redundant, a warning here would be the wrong *mechanism*: a warning in this
+layer is inseparable from a cleaning op, so the only way to report the loss is to feed a
+`ReplaceGroupList` back into the cascade with a hand-built payload — the sole place in
+the family where an op cleans itself. That is a cascade-termination hazard for no gain.
+
+This supersedes the ★ D12 reading that `LooseStudentsInPrefilledGroupList` must survive:
+D12 protects the user from *silent* loss, and under one payload the loss is not silent,
+it is authored. Consequence for commit 5: once the old `UpdateGroupList` arm is deleted,
+nothing emits `LooseStudentsInPrefilledGroupList` any more, so the warning variant and
+its `build_desc_from_data` arm are deleted with it.
 
 **D-D — The translator is precheck-style, like the rest of the module.** Existence check
 on the id (`ReplaceGroupListError::InvalidGroupListId`), student sweep over the payload
@@ -346,11 +357,10 @@ Self::ReplaceGroupList(group_list_id, group_list) => {
    yields prefilled students, sweep the two variants explicitly like the old
    `SetFilling` arm at `:986-1023` does.)
 
-4. **Cleaning arm** for `ReplaceGroupList` per §3 D-C (five checks, first match
-   returns). `AddNewGroupList`'s arm stays `=> None`. The shrink pre-empt's cleaning op
-   is `UpdateOp::GroupLists(GroupListsUpdateOp::ReplaceGroupList(id,
-   GroupList::new(old_params.clone(), cleaned_filling).expect("same count as old
-   params")))`.
+4. **Cleaning arm** for `ReplaceGroupList` per §3 D-C (four checks, first match
+   returns; the old shrink pre-empt is dropped, not ported). `AddNewGroupList`'s arm
+   stays `=> None`. Every cleaning op the arm emits targets the colloscope, so no
+   `GroupListsUpdateOp` ever appears as its own cleaning vehicle.
 
 5. **`get_desc` arm**: `ReplaceGroupList` → `"Modifier une liste de groupes".into()`
    (the final desc; the old params-only desc "Modifier les paramètres d'une liste de
@@ -371,10 +381,9 @@ Self::ReplaceGroupList(group_list_id, group_list) => {
    - `ReplaceGroupList` on a dead list id → `InvalidGroupListId`; with a dead student in
      a prefilled group and in an `Automatic` excluded set → `InvalidStudentId` (both
      arms).
-   - Shrink of a prefilled list with students in the dropped groups → exactly the
-     `LooseStudentsInPrefilledGroupList` warning, final state truncated to the new
-     count, dropped-group students gone (behaviour parity with today's
-     `UpdateGroupList`-then-cleaning path).
+   - Shrink of a prefilled list with students in the dropped groups → the payload lands
+     verbatim and **no** warning is raised (the deliberate departure from today's
+     `UpdateGroupList`-then-cleaning path, per D-C).
    - Non-prefilled → prefilled with an existing colloscope placement row → row emptied +
      `LooseStudentGroupInColloscope` warnings.
    - Payload `Automatic` excluding a placed student → placement removed + warning.
@@ -602,7 +611,10 @@ for this commit (its CSV inputs are private and out-of-repo).
 1. `ops/src/group_lists.rs`: delete the `UpdateGroupList(id, params)` and
    `SetFilling(id, filling)` variants, their translator arms, their cleaning arms, their
    `get_desc` arms, `UpdateGroupListError` (the old one) and `SetFillingError`, and
-   their `GroupListsUpdateError` arms.
+   their `GroupListsUpdateError` arms. The old `UpdateGroupList` cleaning arm is the last
+   emitter of `GroupListsUpdateWarning::LooseStudentsInPrefilledGroupList` (D-C dropped
+   the pre-empt from the global op), so that warning variant and its
+   `build_desc_from_data` arm go too — check with a grep before deleting.
 2. Reroute the three internal `SetFilling` cleaning emitters onto the global op, keeping
    each warning unchanged — all three keep the params, so the pattern is uniform:
 
@@ -650,9 +662,9 @@ regularly; the plan does not gate on confirming it).
 - **Commit 2**: user-run gtk4 smoke — open the merged dialog on the Hogwarts example
   (`examples/hogwarts.collomatique` has both a prefilled 8-group class list and a
   5-group Divination list): edit params and prefill together, shrink the count and grow
-  it back (data must reappear), shrink-and-accept on a prefilled list (the
-  `LooseStudentsInPrefilledGroupList` warning dialog must appear), create a new list
-  with a prefill configured in the same dialog.
+  it back (data must reappear), shrink-and-accept on a prefilled list (no warning dialog
+  — the loss was authored in the dialog; a warning dialog appearing here is the D-C
+  regression), create a new list with a prefill configured in the same dialog.
 - **Commit 3**: `cargo build -p collomatique-python` (or workspace) green; the glue has
   no unit tests — script-level acceptance covers it.
 - **Commits 4–5**: user runs the three contract scripts (`extra-scripts/import.py` is

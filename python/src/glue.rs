@@ -8,18 +8,18 @@ use collomatique_rpc::{
 };
 
 use collomatique_ops::{
-    AddNewIncompatError, AddNewSlotError, AddNewStudentError, AddNewTeacherError,
-    AddNewWeekPatternError, AssignAllError, AssignError, AssignGroupListToSubjectError,
-    AssignmentsUpdateError, CutPeriodError, DeleteGroupListError, DeleteIncompatError,
-    DeletePeriodError, DeleteSlotError, DeleteStudentError, DeleteSubjectError, DeleteTeacherError,
-    DeleteWeekPatternError, DuplicatePreviousPeriodError, GeneralPlanningUpdateError,
-    GroupListsUpdateError, IncompatibilitiesUpdateError, MergeWithPreviousPeriodError,
-    MoveSlotDownError, MoveSlotUpError, MoveSubjectDownError, MoveSubjectUpError,
-    RemoveStudentLimitsError, SetFillingError, SettingsUpdateError, SlotsUpdateError,
-    StudentsUpdateError, SubjectsUpdateError, TeachersUpdateError, UpdateGroupListError,
-    UpdateIncompatError, UpdatePeriodStatusError, UpdatePeriodWeekCountError, UpdateSlotError,
-    UpdateStudentError, UpdateStudentLimitsError, UpdateSubjectError, UpdateTeacherError,
-    UpdateWeekAnnotationError, UpdateWeekPatternError, UpdateWeekStatusError,
+    AddNewGroupListError, AddNewIncompatError, AddNewSlotError, AddNewStudentError,
+    AddNewTeacherError, AddNewWeekPatternError, AssignAllError, AssignError,
+    AssignGroupListToSubjectError, AssignmentsUpdateError, CutPeriodError, DeleteGroupListError,
+    DeleteIncompatError, DeletePeriodError, DeleteSlotError, DeleteStudentError,
+    DeleteSubjectError, DeleteTeacherError, DeleteWeekPatternError, DuplicatePreviousPeriodError,
+    GeneralPlanningUpdateError, GroupListsUpdateError, IncompatibilitiesUpdateError,
+    MergeWithPreviousPeriodError, MoveSlotDownError, MoveSlotUpError, MoveSubjectDownError,
+    MoveSubjectUpError, RemoveStudentLimitsError, SetFillingError, SettingsUpdateError,
+    SlotsUpdateError, StudentsUpdateError, SubjectsUpdateError, TeachersUpdateError,
+    UpdateGroupListError, UpdateIncompatError, UpdatePeriodStatusError, UpdatePeriodWeekCountError,
+    UpdateSlotError, UpdateStudentError, UpdateStudentLimitsError, UpdateSubjectError,
+    UpdateTeacherError, UpdateWeekAnnotationError, UpdateWeekPatternError, UpdateWeekStatusError,
     WeekPatternsUpdateError,
 };
 use collomatique_ops::{DuplicatePreviousPeriodAssociationsError, UpdateError};
@@ -1110,14 +1110,27 @@ impl CollomatiqueFile {
         self_: PyRef<'_, Self>,
         params: group_lists::GroupListParameters,
     ) -> PyResult<group_lists::GroupListId> {
+        // The op carries a whole group list now; this method still takes the
+        // parameters only, so the filling is the automatic default.
+        let group_list = collomatique_state_colloscopes::group_lists::GroupList::new(
+            params.try_into()?,
+            Default::default(),
+        )
+        .expect("automatic filling is always consistent");
         let result = self_
             .file
             .apply_update(collomatique_ops::UpdateOp::GroupLists(
-                collomatique_ops::GroupListsUpdateOp::AddNewGroupList(params.try_into()?),
+                collomatique_ops::GroupListsUpdateOp::AddNewGroupList(group_list),
             ));
 
         match result {
             Ok(Some(collomatique_state_colloscopes::NewId::GroupListId(id))) => Ok(id.into()),
+            Err(UpdateError::GroupLists(GroupListsUpdateError::AddNewGroupList(e))) => match e {
+                AddNewGroupListError::InvalidStudentId(id) => Err(PyValueError::new_err(format!(
+                    "Invalid student id {:?}",
+                    id
+                ))),
+            },
             _ => panic!("Unexpected result: {:?}", result),
         }
     }

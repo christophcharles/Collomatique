@@ -277,8 +277,17 @@ impl Component for GroupLists {
             GroupListsInput::GroupListParamsSelected(params) => {
                 match self.params_selection_reason {
                     GroupListParamsSelectionReason::New => {
+                        // The op payload is a whole group list now; this dialog
+                        // still only edits the parameters, so the filling is the
+                        // automatic default it always implied.
+                        let group_list =
+                            collomatique_state_colloscopes::group_lists::GroupList::new(
+                                params,
+                                Default::default(),
+                            )
+                            .expect("automatic filling is always consistent");
                         sender
-                            .output(GroupListsUpdateOp::AddNewGroupList(params))
+                            .output(GroupListsUpdateOp::AddNewGroupList(group_list))
                             .unwrap();
                     }
                     GroupListParamsSelectionReason::Edit(group_list_id) => {

@@ -262,7 +262,17 @@ impl GroupListsUpdateWarning {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum GroupListsUpdateOp {
-    AddNewGroupList(collomatique_state_colloscopes::group_lists::GroupListParameters),
+    AddNewGroupList(collomatique_state_colloscopes::group_lists::GroupList),
+    /// Replaces a whole group list — parameters *and* filling — in one go.
+    ///
+    /// Transitional name: `UpdateGroupList` below still carries the
+    /// parameters-only payload it always had. Both it and `SetFilling` are
+    /// removed at the end of this migration, and this variant then takes the
+    /// `UpdateGroupList` name.
+    ReplaceGroupList(
+        collomatique_state_colloscopes::GroupListId,
+        collomatique_state_colloscopes::group_lists::GroupList,
+    ),
     UpdateGroupList(
         collomatique_state_colloscopes::GroupListId,
         collomatique_state_colloscopes::group_lists::GroupListParameters,
@@ -283,6 +293,10 @@ pub enum GroupListsUpdateOp {
 #[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum GroupListsUpdateError {
     #[error(transparent)]
+    AddNewGroupList(#[from] AddNewGroupListError),
+    #[error(transparent)]
+    ReplaceGroupList(#[from] ReplaceGroupListError),
+    #[error(transparent)]
     UpdateGroupList(#[from] UpdateGroupListError),
     #[error(transparent)]
     DeleteGroupList(#[from] DeleteGroupListError),
@@ -298,6 +312,23 @@ pub enum GroupListsUpdateError {
 pub enum UpdateGroupListError {
     #[error("Group list id ({0:?}) is invalid")]
     InvalidGroupListId(collomatique_state_colloscopes::GroupListId),
+}
+
+/// A caller-supplied filling can now name students, so adding a list can fail
+/// on a dangling student id — which `AddNewGroupList` could not do back when
+/// its payload was parameters only.
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+pub enum AddNewGroupListError {
+    #[error("Student id ({0:?}) is invalid")]
+    InvalidStudentId(collomatique_state_colloscopes::StudentId),
+}
+
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ReplaceGroupListError {
+    #[error("Group list id ({0:?}) is invalid")]
+    InvalidGroupListId(collomatique_state_colloscopes::GroupListId),
+    #[error("Student id ({0:?}) is invalid")]
+    InvalidStudentId(collomatique_state_colloscopes::StudentId),
 }
 
 #[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
@@ -341,6 +372,19 @@ pub enum DuplicatePreviousPeriodAssociationsError {
     FirstPeriodHasNoPreviousPeriod(collomatique_state_colloscopes::PeriodId),
 }
 
+/// Every student id a filling names, whichever variant it is.
+///
+/// `GroupListFilling::iter_students` deliberately covers the prefilled groups
+/// only, but a student-existence sweep must also see the excluded set of an
+/// automatic filling.
+fn students_of(
+    filling: &collomatique_state_colloscopes::group_lists::GroupListFilling,
+) -> impl Iterator<Item = collomatique_state_colloscopes::StudentId> + '_ {
+    filling
+        .iter_students()
+        .chain(filling.excluded_students().iter().copied())
+}
+
 impl GroupListsUpdateOp {
     pub(crate) fn get_next_cleaning_op<
         T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
@@ -349,7 +393,165 @@ impl GroupListsUpdateOp {
         data: &T,
     ) -> Option<CleaningOp<GroupListsUpdateWarning>> {
         match self {
-            GroupListsUpdateOp::AddNewGroupList(_params) => None,
+            GroupListsUpdateOp::AddNewGroupList(_group_list) => None,
+            GroupListsUpdateOp::ReplaceGroupList(group_list_id, new_group_list) => {
+                let Some(old_group_list) = data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .group_lists
+                    .group_list_map
+                    .get(group_list_id)
+                else {
+                    return None;
+                };
+
+                let new_count = new_group_list.params().group_names.len();
+
+                // The payload carries both halves, so every check that used to
+                // read "new params against the untouched filling" or "new
+                // filling against the untouched params" now reads the payload
+                // against the stored data.
+                //
+                // What is *not* checked here is the difference between the old
+                // filling and the payload's. The payload is the caller's whole
+                // description of the list, already validated: a group they
+                // deleted, or a student they took out of a group, is their own
+                // edit, not collateral damage this layer discovered for them.
+                // Cleaning is for the data that hangs off the list — colloscope
+                // placements and interrogation cells — which the caller never
+                // saw. (The split ops did warn there, because back then a
+                // parameters-only shrink had to guess what happened to a
+                // filling its caller could not touch.)
+
+                // Groups that the new count no longer has cannot stay in the
+                // colloscope placement row. (A prefilled list has no placement
+                // row, hence the guard on the payload's filling.)
+                if !new_group_list.is_prefilled()
+                    && let Some(placements) = data
+                        .get_data()
+                        .get_inner_data()
+                        .colloscope
+                        .group_list(*group_list_id)
+                {
+                    for (student_id, group) in placements {
+                        if (*group as usize) >= new_count {
+                            let mut new_placements = placements.clone();
+                            new_placements.remove(student_id);
+                            return Some(CleaningOp {
+                                warning: GroupListsUpdateWarning::LooseStudentGroupInColloscope(
+                                    *group_list_id,
+                                    *student_id,
+                                ),
+                                op: UpdateOp::Colloscope(
+                                    ColloscopeUpdateOp::UpdateColloscopeGroupList(
+                                        *group_list_id,
+                                        new_placements,
+                                    ),
+                                ),
+                            });
+                        }
+                    }
+                }
+
+                let inner = data.get_data().get_inner_data();
+                for ((assoc_period, subject_id), associated_group_list) in
+                    inner.params.group_lists.subjects_associations.iter()
+                {
+                    if *associated_group_list != *group_list_id {
+                        continue;
+                    }
+                    let Some(subject_slots) = inner.params.slots.slots_for_subject(subject_id)
+                    else {
+                        continue;
+                    };
+                    let slot_ids: Vec<_> = subject_slots.map(|(slot_id, _slot)| *slot_id).collect();
+                    for slot_id in slot_ids {
+                        for (week_id, groups) in inner.colloscope.interrogations_for_slot(slot_id) {
+                            let (row_period, _pos) = inner
+                                .params
+                                .weeks
+                                .week_position(week_id)
+                                .expect("week id from a live colloscope row is valid");
+                            if row_period != assoc_period {
+                                continue;
+                            }
+                            let new_assigned_groups: std::collections::BTreeSet<u32> = groups
+                                .iter()
+                                .copied()
+                                .filter(|group| (*group as usize) < new_count)
+                                .collect();
+                            if new_assigned_groups.len() != groups.len() {
+                                return Some(CleaningOp {
+                                    warning: GroupListsUpdateWarning::LooseGroupsInInterrogationsInColloscope(subject_id, assoc_period),
+                                    op: UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+                                        slot_id,
+                                        week_id,
+                                        new_assigned_groups,
+                                    )),
+                                });
+                            }
+                        }
+                    }
+                }
+
+                // Newly-excluded students cannot keep a group in the colloscope.
+                if let collomatique_state_colloscopes::group_lists::GroupListFilling::Automatic {
+                    excluded_students,
+                } = new_group_list.filling()
+                    && !old_group_list.is_prefilled()
+                    && let Some(placements) = data
+                        .get_data()
+                        .get_inner_data()
+                        .colloscope
+                        .group_list(*group_list_id)
+                {
+                    for student_id in placements.keys() {
+                        if excluded_students.contains(student_id) {
+                            let mut new_placements = placements.clone();
+                            new_placements.remove(student_id);
+                            return Some(CleaningOp {
+                                warning: GroupListsUpdateWarning::LooseStudentGroupInColloscope(
+                                    *group_list_id,
+                                    *student_id,
+                                ),
+                                op: UpdateOp::Colloscope(
+                                    ColloscopeUpdateOp::UpdateColloscopeGroupList(
+                                        *group_list_id,
+                                        new_placements,
+                                    ),
+                                ),
+                            });
+                        }
+                    }
+                }
+
+                // Becoming prefilled retires the placement row altogether.
+                if !old_group_list.is_prefilled()
+                    && new_group_list.is_prefilled()
+                    && let Some(placements) = data
+                        .get_data()
+                        .get_inner_data()
+                        .colloscope
+                        .group_list(*group_list_id)
+                    && let Some((student_id, _)) = placements.iter().next()
+                {
+                    let mut new_placements = placements.clone();
+                    new_placements.remove(student_id);
+                    return Some(CleaningOp {
+                        warning: GroupListsUpdateWarning::LooseStudentGroupInColloscope(
+                            *group_list_id,
+                            *student_id,
+                        ),
+                        op: UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeGroupList(
+                            *group_list_id,
+                            new_placements,
+                        )),
+                    });
+                }
+
+                None
+            }
             GroupListsUpdateOp::UpdateGroupList(group_list_id, params) => {
                 let Some(old_group_list) = data
                     .get_data()
@@ -827,19 +1029,27 @@ impl GroupListsUpdateOp {
         data: &mut T,
     ) -> Result<Option<collomatique_state_colloscopes::GroupListId>, GroupListsUpdateError> {
         match self {
-            Self::AddNewGroupList(params) => {
-                // The low-level op carries a whole `GroupList`; a new list is
-                // always automatic (the annotate default before the op-surface
-                // consolidation), which is trivially internally consistent.
-                let group_list = collomatique_state_colloscopes::group_lists::GroupList::new(
-                    params.clone(),
-                    collomatique_state_colloscopes::group_lists::GroupListFilling::default(),
-                )
-                .expect("automatic filling is always consistent");
+            Self::AddNewGroupList(group_list) => {
+                // The payload is a sealed `GroupList`, so its internal
+                // consistency is already settled; only student *existence* — a
+                // state-dependent fact — is left to check here.
+                for student_id in students_of(group_list.filling()) {
+                    if !data
+                        .get_data()
+                        .get_inner_data()
+                        .params
+                        .students
+                        .student_map
+                        .contains(&student_id)
+                    {
+                        return Err(AddNewGroupListError::InvalidStudentId(student_id).into());
+                    }
+                }
+
                 let result = data
                     .apply(
                         collomatique_state_colloscopes::Op::GroupList(
-                            collomatique_state_colloscopes::GroupListOp::Add(group_list),
+                            collomatique_state_colloscopes::GroupListOp::Add(group_list.clone()),
                         ),
                         self.get_desc(),
                     )
@@ -849,6 +1059,48 @@ impl GroupListsUpdateOp {
                     panic!("Unexpected result from GroupListOp::Add");
                 };
                 Ok(Some(new_id))
+            }
+            Self::ReplaceGroupList(group_list_id, group_list) => {
+                if !data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .group_lists
+                    .group_list_map
+                    .contains(group_list_id)
+                {
+                    return Err(ReplaceGroupListError::InvalidGroupListId(*group_list_id).into());
+                }
+
+                for student_id in students_of(group_list.filling()) {
+                    if !data
+                        .get_data()
+                        .get_inner_data()
+                        .params
+                        .students
+                        .student_map
+                        .contains(&student_id)
+                    {
+                        return Err(ReplaceGroupListError::InvalidStudentId(student_id).into());
+                    }
+                }
+
+                // No reshaping, no rebuild, no arity assert: the payload is a
+                // sealed value that already carries both halves.
+                let result = data
+                    .apply(
+                        collomatique_state_colloscopes::Op::GroupList(
+                            collomatique_state_colloscopes::GroupListOp::Update(
+                                *group_list_id,
+                                group_list.clone(),
+                            ),
+                        ),
+                        self.get_desc(),
+                    )
+                    .expect("All data should be valid at this point");
+                assert!(result.is_none());
+
+                Ok(None)
             }
             Self::UpdateGroupList(group_list_id, params) => {
                 use collomatique_state_colloscopes::group_lists::{
@@ -1213,8 +1465,11 @@ impl GroupListsUpdateOp {
         (
             OpCategory::GroupLists,
             match self {
-                GroupListsUpdateOp::AddNewGroupList(_params) => {
+                GroupListsUpdateOp::AddNewGroupList(_group_list) => {
                     "Ajouter une liste de groupes".into()
+                }
+                GroupListsUpdateOp::ReplaceGroupList(_id, _group_list) => {
+                    "Modifier une liste de groupes".into()
                 }
                 GroupListsUpdateOp::UpdateGroupList(_id, _params) => {
                     "Modifier les paramètres d'une liste de groupes".into()
