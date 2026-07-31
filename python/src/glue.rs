@@ -15,12 +15,12 @@ use collomatique_ops::{
     DeleteSubjectError, DeleteTeacherError, DeleteWeekPatternError, DuplicatePreviousPeriodError,
     GeneralPlanningUpdateError, GroupListsUpdateError, IncompatibilitiesUpdateError,
     MergeWithPreviousPeriodError, MoveSlotDownError, MoveSlotUpError, MoveSubjectDownError,
-    MoveSubjectUpError, RemoveStudentLimitsError, SetFillingError, SettingsUpdateError,
-    SlotsUpdateError, StudentsUpdateError, SubjectsUpdateError, TeachersUpdateError,
-    UpdateGroupListError, UpdateIncompatError, UpdatePeriodStatusError, UpdatePeriodWeekCountError,
-    UpdateSlotError, UpdateStudentError, UpdateStudentLimitsError, UpdateSubjectError,
-    UpdateTeacherError, UpdateWeekAnnotationError, UpdateWeekPatternError, UpdateWeekStatusError,
-    WeekPatternsUpdateError,
+    MoveSubjectUpError, RemoveStudentLimitsError, ReplaceGroupListError, SetFillingError,
+    SettingsUpdateError, SlotsUpdateError, StudentsUpdateError, SubjectsUpdateError,
+    TeachersUpdateError, UpdateGroupListError, UpdateIncompatError, UpdatePeriodStatusError,
+    UpdatePeriodWeekCountError, UpdateSlotError, UpdateStudentError, UpdateStudentLimitsError,
+    UpdateSubjectError, UpdateTeacherError, UpdateWeekAnnotationError, UpdateWeekPatternError,
+    UpdateWeekStatusError, WeekPatternsUpdateError,
 };
 use collomatique_ops::{DuplicatePreviousPeriodAssociationsError, UpdateError};
 
@@ -46,6 +46,7 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<slots::SlotParameters>()?;
     m.add_class::<week_patterns::WeekPattern>()?;
     m.add_class::<incompatibilities::Incompat>()?;
+    m.add_class::<group_lists::GroupList>()?;
     m.add_class::<group_lists::GroupListParameters>()?;
     m.add_class::<group_lists::GroupListFilling>()?;
     m.add_class::<group_lists::PrefilledGroup>()?;
@@ -1106,17 +1107,19 @@ impl CollomatiqueFile {
         }
     }
 
+    #[pyo3(signature = (params, filling=None))]
     fn group_lists_add(
         self_: PyRef<'_, Self>,
         params: group_lists::GroupListParameters,
+        filling: Option<group_lists::GroupListFilling>,
     ) -> PyResult<group_lists::GroupListId> {
-        // The op carries a whole group list now; this method still takes the
-        // parameters only, so the filling is the automatic default.
+        // The filling is optional: omitting it keeps the historical behaviour of
+        // creating a list with the automatic default.
         let group_list = collomatique_state_colloscopes::group_lists::GroupList::new(
             params.try_into()?,
-            Default::default(),
+            filling.map(Into::into).unwrap_or_default(),
         )
-        .expect("automatic filling is always consistent");
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
         let result = self_
             .file
             .apply_update(collomatique_ops::UpdateOp::GroupLists(
@@ -1155,6 +1158,35 @@ impl CollomatiqueFile {
                 UpdateGroupListError::InvalidGroupListId(id) => Err(PyValueError::new_err(
                     format!("Invalid group list id {:?}", id),
                 )),
+            },
+            e => panic!("Unexpected result: {:?}", e),
+        }
+    }
+
+    fn group_lists_replace(
+        self_: PyRef<'_, Self>,
+        id: group_lists::GroupListId,
+        group_list: group_lists::GroupList,
+    ) -> PyResult<()> {
+        let result = self_
+            .file
+            .apply_update(collomatique_ops::UpdateOp::GroupLists(
+                collomatique_ops::GroupListsUpdateOp::ReplaceGroupList(
+                    id.into(),
+                    group_list.try_into()?,
+                ),
+            ));
+
+        match result {
+            Ok(_) => Ok(()),
+            Err(UpdateError::GroupLists(GroupListsUpdateError::ReplaceGroupList(e))) => match e {
+                ReplaceGroupListError::InvalidGroupListId(id) => Err(PyValueError::new_err(
+                    format!("Invalid group list id {:?}", id),
+                )),
+                ReplaceGroupListError::InvalidStudentId(id) => Err(PyValueError::new_err(format!(
+                    "Invalid student id {:?}",
+                    id
+                ))),
             },
             e => panic!("Unexpected result: {:?}", e),
         }
