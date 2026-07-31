@@ -104,7 +104,7 @@ macro_rules! apply_new {
 
 /// A subject that runs interrogations, so it can host slots, an association, a
 /// balancing entry and colloscope cells.
-fn interrogation_subject(name: &str, excluded: BTreeSet<PeriodId>) -> Subject {
+pub(super) fn interrogation_subject(name: &str, excluded: BTreeSet<PeriodId>) -> Subject {
     Subject {
         parameters: SubjectParameters {
             name: name.into(),
@@ -131,7 +131,7 @@ fn interrogation_subject(name: &str, excluded: BTreeSet<PeriodId>) -> Subject {
 /// A subject with no interrogations. It cannot host a slot, an association or a
 /// balancing entry, so it stays inert: the cheapest way to own a
 /// `SubjectExcludedPeriods` reference and nothing else.
-fn plain_subject(name: &str, excluded: BTreeSet<PeriodId>) -> Subject {
+pub(super) fn plain_subject(name: &str, excluded: BTreeSet<PeriodId>) -> Subject {
     Subject {
         parameters: SubjectParameters {
             name: name.into(),
@@ -142,7 +142,7 @@ fn plain_subject(name: &str, excluded: BTreeSet<PeriodId>) -> Subject {
 }
 
 /// A student with default identity, excluding exactly `excluded`.
-fn plain_student(excluded: BTreeSet<PeriodId>) -> Student {
+pub(super) fn plain_student(excluded: BTreeSet<PeriodId>) -> Student {
     Student {
         desc: Default::default(),
         excluded_periods: excluded,
@@ -151,7 +151,7 @@ fn plain_student(excluded: BTreeSet<PeriodId>) -> Student {
 
 /// A slot starting at `hour:00`, well clear of the end of the day (the subjects
 /// above last an hour, so `SlotOverflowsDay` never fires).
-fn make_slot(
+pub(super) fn make_slot(
     subject_id: SubjectId,
     teacher_id: TeacherId,
     week_pattern: Option<WeekPatternId>,
@@ -174,7 +174,7 @@ fn make_slot(
 }
 
 /// An automatically-filled group list with `groups` unnamed groups.
-fn automatic_group_list(
+pub(super) fn automatic_group_list(
     name: &str,
     groups: usize,
     excluded_students: BTreeSet<StudentId>,
@@ -192,7 +192,7 @@ fn automatic_group_list(
 
 /// A prefilled group list holding exactly `groups`, one `group_names` entry per
 /// group (the count match is `GroupList::new`'s first value-internal invariant).
-fn prefilled_group_list(name: &str, groups: Vec<BTreeSet<StudentId>>) -> GroupList {
+pub(super) fn prefilled_group_list(name: &str, groups: Vec<BTreeSet<StudentId>>) -> GroupList {
     GroupList::new(
         GroupListParameters {
             name: name.into(),
@@ -209,7 +209,7 @@ fn prefilled_group_list(name: &str, groups: Vec<BTreeSet<StudentId>>) -> GroupLi
     .expect("the group count matches and no student sits in two groups")
 }
 
-fn pairing_rule(
+pub(super) fn pairing_rule(
     antecedent: SubjectId,
     consequent: SubjectId,
     excluded_periods: BTreeSet<PeriodId>,
@@ -229,7 +229,7 @@ fn pairing_rule(
     .expect("the two parts name distinct subjects")
 }
 
-fn slot_pairing_rule(
+pub(super) fn slot_pairing_rule(
     antecedent: SlotId,
     consequent: SlotId,
     excluded_periods: BTreeSet<PeriodId>,
@@ -260,81 +260,85 @@ fn slot_pairing_rule(
 // because each commit read only the handful of fields its arms needed. The
 // attribute came off with the last commit: every field is now read by some
 // test, which is the cheap check that nothing here was built for nobody.
+//
+// The fields are `pub(super)` because the sibling `attribution_tests` module
+// builds on the same document: it asks the arms about material that really is
+// there, where this module asks about material that is not.
 pub(super) struct ValidDocument {
     /// The active period: it holds the weeks, the assignments row, the
     /// association and the colloscope cell.
-    period: PeriodId,
+    pub(super) period: PeriodId,
     /// The period the exclusion sets name. Keeping the exclusions off `period`
     /// is what lets those rows be innocent without making the rest inert.
-    other_period: PeriodId,
+    pub(super) other_period: PeriodId,
     /// Active for `slot`, and carrying the colloscope cell.
-    week: WeekId,
+    pub(super) week: WeekId,
     /// Excluded by `week_pattern`.
-    other_week: WeekId,
+    pub(super) other_week: WeekId,
     /// The one week holding no colloscope cell, and so the only one a twin can
     /// move to another period without dragging the group bound in.
-    bare_week: WeekId,
+    pub(super) bare_week: WeekId,
     /// The one week of `other_period`. It exists so that §8.2 row 11 has a
     /// coordinate to aim at: that row needs a week whose period the cell's slot
     /// excludes, and `other_period` is the only excluded period there is.
-    excluded_period_week: WeekId,
+    pub(super) excluded_period_week: WeekId,
     /// Runs interrogations; hosts both slots, the association, the assignments
     /// row, the incompatibility and the balancing override.
-    subject: SubjectId,
+    pub(super) subject: SubjectId,
     /// Runs interrogations too, and is the pairing rule's consequent. It
     /// excludes `other_period`, and is associated to a group list on `period`.
-    other_subject: SubjectId,
+    pub(super) other_subject: SubjectId,
     /// Excludes `other_period`, and runs no interrogations.
-    excluded_subject: SubjectId,
+    pub(super) excluded_subject: SubjectId,
     /// Teaches `subject`, and is the teacher of all three slots.
-    teacher: TeacherId,
+    pub(super) teacher: TeacherId,
     /// Teaches `other_subject` only, and is the teacher of `other_subject_slot`.
     /// The live teacher a twin points a slot at to break the teacher-teaches
     /// check honestly.
-    other_teacher: TeacherId,
+    pub(super) other_teacher: TeacherId,
     /// Excludes `other_week`; worn by `slot` and by `incompat`.
-    week_pattern: WeekPatternId,
+    pub(super) week_pattern: WeekPatternId,
     /// Wears `week_pattern`, and carries the colloscope cell on `week`.
-    slot: SlotId,
+    pub(super) slot: SlotId,
     /// Same subject as `slot` (the slot pairing rule demands it), no pattern.
-    other_slot: SlotId,
+    pub(super) other_slot: SlotId,
     /// Same subject again, but referenced by nothing else at all: no pattern, no
     /// colloscope cell, no pairing rule. The slot to corrupt when the corruption
     /// changes what a slot *is*.
-    lone_slot: SlotId,
+    pub(super) lone_slot: SlotId,
     /// The only slot not on `subject`, and so the only one whose subject
     /// excludes a period. §8.2 row 11's twin puts a cell on it; §8.2 row 10's
     /// two twins point a rule part at it.
-    other_subject_slot: SlotId,
-    incompat: IncompatId,
-    pairing: PairingRuleId,
-    slot_pairing: SlotPairingRuleId,
+    pub(super) other_subject_slot: SlotId,
+    pub(super) incompat: IncompatId,
+    pub(super) pairing: PairingRuleId,
+    pub(super) slot_pairing: SlotPairingRuleId,
     /// In the prefilled list, the assignments row and the colloscope placements,
     /// and the holder of the per-student settings override.
-    student: StudentId,
+    pub(super) student: StudentId,
     /// The bystander: everywhere `student` is, so a rebuild has something to
     /// keep.
-    other_student: StudentId,
+    pub(super) other_student: StudentId,
     /// Excludes `other_period`, and is excluded by `excluding_group_list`. She
     /// is assigned on `period`, where she is present — the innocent witness
     /// §8.2 row 6 needs.
-    excluded_student: StudentId,
+    pub(super) excluded_student: StudentId,
     /// Automatic, associated to `(period, subject)`, and carrying the colloscope
     /// placements row.
-    group_list: GroupListId,
+    pub(super) group_list: GroupListId,
     /// Prefilled, holding both students.
-    prefilled_group_list: GroupListId,
+    pub(super) prefilled_group_list: GroupListId,
     /// Automatic, excluding `excluded_student`.
-    excluding_group_list: GroupListId,
+    pub(super) excluding_group_list: GroupListId,
 
-    dead_period: PeriodId,
-    dead_week: WeekId,
-    dead_subject: SubjectId,
-    dead_teacher: TeacherId,
-    dead_student: StudentId,
-    dead_week_pattern: WeekPatternId,
-    dead_slot: SlotId,
-    dead_group_list: GroupListId,
+    pub(super) dead_period: PeriodId,
+    pub(super) dead_week: WeekId,
+    pub(super) dead_subject: SubjectId,
+    pub(super) dead_teacher: TeacherId,
+    pub(super) dead_student: StudentId,
+    pub(super) dead_week_pattern: WeekPatternId,
+    pub(super) dead_slot: SlotId,
+    pub(super) dead_group_list: GroupListId,
 }
 
 /// The document shared by every test in this module.

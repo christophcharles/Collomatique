@@ -14,7 +14,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use collomatique_state::history::AggregatedOp;
-use collomatique_state::{ApplyError, ContentOrd, Fixable, InMemoryData, Operation, apply_cascade};
+use collomatique_state::{
+    ApplyError, ContentOrd, FixOp, Fixable, InMemoryData, Operation, apply_cascade,
+};
 
 /// Authors and books: every book's author must exist.
 ///
@@ -125,15 +127,40 @@ impl InMemoryData for LibraryData {
     }
 }
 
+/// The toy's repair vocabulary. `Grow` is the one the honest map never
+/// answers: it belongs to [GrowingLibraryData] below, and lives in the same
+/// enum because both maps repair the same invariant.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum LibraryFix {
+    /// Drop a book whose author is gone.
+    RemoveBook(u64),
+    /// "Repair" a dangling author by creating them — a contract violation, and
+    /// the point of [GrowingLibraryData].
+    AddAuthor(u64),
+}
+
+impl FixOp for LibraryFix {
+    type Op = LibraryOp;
+
+    fn to_annotated_op(&self) -> LibraryOp {
+        match self {
+            LibraryFix::RemoveBook(book) => LibraryOp::RemoveBook(*book),
+            LibraryFix::AddAuthor(author) => LibraryOp::AddAuthor(*author),
+        }
+    }
+}
+
 impl Fixable for LibraryData {
-    fn fix_invariant(&self, invariant: &LibraryInvariant) -> Option<LibraryOp> {
+    type Fix = LibraryFix;
+
+    fn fix_invariant(&self, invariant: &LibraryInvariant) -> Option<LibraryFix> {
         match invariant {
             // Presence of the removable material: `Some` only when the book
             // row actually exists in the current state.
             LibraryInvariant::DanglingBookAuthor(book) => self
                 .books
                 .contains_key(book)
-                .then(|| LibraryOp::RemoveBook(*book)),
+                .then(|| LibraryFix::RemoveBook(*book)),
         }
     }
 }
@@ -171,12 +198,14 @@ impl InMemoryData for GrowingLibraryData {
 }
 
 impl Fixable for GrowingLibraryData {
-    fn fix_invariant(&self, invariant: &LibraryInvariant) -> Option<LibraryOp> {
+    type Fix = LibraryFix;
+
+    fn fix_invariant(&self, invariant: &LibraryInvariant) -> Option<LibraryFix> {
         let LibraryInvariant::DanglingBookAuthor(book) = invariant;
         self.inner.books.get(book).map(|author| {
             // Adding the missing author repairs the invariant and grows the
             // document: a contract violation, not a fix.
-            LibraryOp::AddAuthor(*author)
+            LibraryFix::AddAuthor(*author)
         })
     }
 }
@@ -235,7 +264,8 @@ fn the_growing_maps_answer_lands_strictly_above() {
     let fix = dangling
         .fix_invariant(&LibraryInvariant::DanglingBookAuthor(10))
         .expect("the growing map always answers");
-    assert_eq!(fix, LibraryOp::AddAuthor(1));
+    assert_eq!(fix, LibraryFix::AddAuthor(1));
+    assert_eq!(fix.to_annotated_op(), LibraryOp::AddAuthor(1));
 
     let mut after = dangling.clone();
     after.inner.authors.insert(1);

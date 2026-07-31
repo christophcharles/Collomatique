@@ -14,7 +14,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::cascade::Fixable;
+use crate::cascade::{FixOp, Fixable};
 use crate::history::ReversibleOp;
 use crate::partial_order::ContentOrd;
 use crate::traits::{ApplyError, InMemoryData, Operation};
@@ -282,19 +282,42 @@ impl InMemoryData for QuoteData {
     }
 }
 
+/// The toy's repair vocabulary: deletive, one variant per meaning, exactly as
+/// the real map's is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QuoteFix {
+    /// Drop a quote whose author is gone.
+    RemoveQuote(u64),
+    /// Drop a note whose quote is gone.
+    RemoveNote(u64),
+}
+
+impl FixOp for QuoteFix {
+    type Op = QuoteOp;
+
+    fn to_annotated_op(&self) -> QuoteOp {
+        match self {
+            QuoteFix::RemoveQuote(quote) => QuoteOp::RemoveQuote(*quote),
+            QuoteFix::RemoveNote(note) => QuoteOp::RemoveNote(*note),
+        }
+    }
+}
+
 impl Fixable for QuoteData {
-    fn fix_invariant(&self, invariant: &QuoteInvariant) -> Option<QuoteOp> {
+    type Fix = QuoteFix;
+
+    fn fix_invariant(&self, invariant: &QuoteInvariant) -> Option<QuoteFix> {
         match invariant {
             // Presence of the removable material (design doc §5): Some only if
             // the quote row actually exists in the current state.
             QuoteInvariant::DanglingQuoteAuthor(quote) => self
                 .quotes
                 .contains_key(quote)
-                .then(|| QuoteOp::RemoveQuote(*quote)),
+                .then(|| QuoteFix::RemoveQuote(*quote)),
             QuoteInvariant::DanglingNoteQuote(note) => self
                 .notes
                 .contains_key(note)
-                .then(|| QuoteOp::RemoveNote(*note)),
+                .then(|| QuoteFix::RemoveNote(*note)),
         }
     }
 }
@@ -388,15 +411,35 @@ impl InMemoryData for EvilQuoteData {
     }
 }
 
+/// The evil map's vocabulary is *any* op, which is the whole point: the modes
+/// answer creations and sideways rewrites no honest vocabulary would name.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EvilQuoteFix(pub QuoteOp);
+
+impl FixOp for EvilQuoteFix {
+    type Op = QuoteOp;
+
+    fn to_annotated_op(&self) -> QuoteOp {
+        self.0.clone()
+    }
+}
+
 impl Fixable for EvilQuoteData {
-    fn fix_invariant(&self, invariant: &QuoteInvariant) -> Option<QuoteOp> {
+    type Fix = EvilQuoteFix;
+
+    fn fix_invariant(&self, invariant: &QuoteInvariant) -> Option<EvilQuoteFix> {
         // Every mode misbehaves on the quote level only; the note level is
         // answered honestly, so the existing evil tests read unchanged.
         let quote = match invariant {
             QuoteInvariant::DanglingQuoteAuthor(quote) => quote,
-            QuoteInvariant::DanglingNoteQuote(_) => return self.0.fix_invariant(invariant),
+            QuoteInvariant::DanglingNoteQuote(_) => {
+                return self
+                    .0
+                    .fix_invariant(invariant)
+                    .map(|fix| EvilQuoteFix(fix.to_annotated_op()));
+            }
         };
-        match &self.1 {
+        let op = match &self.1 {
             EvilMode::Blind => Some(QuoteOp::RemoveQuote(*quote)),
             EvilMode::WrongTargetElseNone => self
                 .0
@@ -425,7 +468,8 @@ impl Fixable for EvilQuoteData {
                     author: *author,
                 })
             }
-        }
+        };
+        op.map(EvilQuoteFix)
     }
 }
 

@@ -4,10 +4,19 @@
 //! ([collomatique_state::apply_cascade]) applies a target op; when the
 //! apply/check/rollback gate rejects it on broken invariants, the engine picks
 //! the canonically-first one and asks this map to repair it, then retries.
-//! Nothing here is exported: the map surfaces only through the [Fixable] impl.
+//!
+//! The answer is a [Fix]: one value of a closed, deletive vocabulary, with one
+//! variant per *meaning* the repair has for the user. [Fix] is the module's
+//! only export — the arms and the invariants stay private — and it is what
+//! travels downstream: the invariant that caused a repair never leaves the
+//! engine, so a consumer describing what happened matches on [Fix] alone.
+//! Translating a [Fix] into the op that performs it
+//! ([collomatique_state::FixOp::to_annotated_op]) is a pure, total function at
+//! the bottom of this file; the variants carry the rebuilt payloads that makes
+//! that possible.
 //!
 //! The whole job of an arm is one question — *can I remove, from the current
-//! state, the thing the invariant complains about?* If yes, `Some(op)`; if no,
+//! state, the thing the invariant complains about?* If yes, `Some(fix)`; if no,
 //! `None`. What the engine then does with `None` (convict the failing target,
 //! or panic when a fix op produced the invariant) is the engine's business, and
 //! no arm reasons about it.
@@ -42,15 +51,16 @@
 //!    a *different*, live id, the arm compares against the target before
 //!    acting; otherwise it destroys a perfectly valid reference. The criterion:
 //!    an arm needs an explicit identity test **exactly when the target id does
-//!    not appear in the op it emits**. `SetRow`, `SetSubject`, `SetStudent`,
-//!    `SetInterrogation`, `SetGroupList` and `AssignToSubject` carry the target
-//!    inside the op *when the target is the coordinate the op names* — and only
-//!    then: a wrong target is then not expressible and a plain lookup is the
-//!    whole test. `Remove(row)` and `Update(row, rebuilt)` name only the row,
-//!    and the identity test is the only thing that ties them to the target.
-//!    Element-removal rebuilds satisfy the criterion for free — the membership
-//!    test *is* the identity test. Two arms emit one of the carrying ops on a
-//!    target it does *not* name, and each carries its own test accordingly:
+//!    not appear in the op its fix translates to**. `SetRow`, `SetSubject`,
+//!    `SetStudent`, `SetInterrogation`, `SetGroupList` and `AssignToSubject`
+//!    carry the target inside the op *when the target is the coordinate the op
+//!    names* — and only then: a wrong target is then not expressible and a
+//!    plain lookup is the whole test. `Remove(row)` and `Update(row, rebuilt)`
+//!    name only the row, and the identity test is the only thing that ties
+//!    them to the target. Element-removal rebuilds satisfy the criterion for
+//!    free — the membership test *is* the identity test. Two arms emit one of
+//!    the carrying ops on a target it does *not* name, and each carries its
+//!    own test accordingly:
 //!    [GroupListRefSite::AssociationEntry] (target = the assigned group list,
 //!    op = `AssignToSubject(period, subject, None)`, which names the entry key
 //!    only) has the explicit `*assigned != group_list` test, and
@@ -84,17 +94,21 @@
 //! Correctness lives in these arms.
 
 #[cfg(test)]
+mod attribution_tests;
+#[cfg(test)]
 mod innocent_tests;
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use collomatique_state::Fixable;
+use collomatique_state::{FixOp, Fixable};
 
 use crate::Data;
 use crate::group_lists::{GroupList, GroupListFilling};
 use crate::ids::{
-    GroupListId, PeriodId, SlotId, StudentId, SubjectId, TeacherId, WeekId, WeekPatternId,
+    GroupListId, IncompatId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId,
+    SubjectId, TeacherId, WeekId, WeekPatternId,
 };
+use crate::incompats::Incompatibility;
 use crate::invariants::{Convergence, FixableInvariant};
 use crate::ops::{
     AnnotatedAssignmentOp, AnnotatedBalancingOp, AnnotatedColloscopeOp, AnnotatedGroupListOp,
@@ -108,9 +122,245 @@ use crate::refs::{
     TeacherRefSite, WeekPatternRefSite, WeekRefSite,
 };
 use crate::slot_pairings::SlotPairingRule;
+use crate::slots::Slot;
+use crate::students::Student;
+use crate::subjects::Subject;
+use crate::teachers::Teacher;
+use crate::week_patterns::WeekPattern;
+
+/// A repair the resolution map answers with: the closed, deletive vocabulary
+/// of everything the cascade can do to the document beyond the user's own op.
+///
+/// **One variant per rendered meaning**, not one per invariant and not one per
+/// op shape. Several invariants share a variant when the sentence a user would
+/// read is the same — a slot whose subject died and a slot whose teacher died
+/// both come out as [Fix::DeleteSlot]. Conversely one elementary op splits into
+/// two variants when the meanings differ: [Fix::DeleteOverflowingSlot] removes
+/// a slot too, but for a reason of its own, and [Fix::ClearSlotWeekPattern] is
+/// "this slot now runs every week", not merely "this slot was updated".
+///
+/// Every variant names its coordinates, and the ones that reduce to a
+/// whole-value op (`Update`, `SetRow`, `SetGroupList`, `SetInterrogation`)
+/// also carry the `rebuilt` value: the elementary op vocabulary is
+/// whole-value, so the payload has to travel with the fix for
+/// [FixOp::to_annotated_op] to stay a pure translation. The semantic fields
+/// beside it (which student left the row, which period stopped being excluded)
+/// are what a consumer describes the repair with; they are redundant with the
+/// rebuilt value on purpose.
+///
+/// Structurally deletive: creation is unrepresentable here. That is the
+/// vocabulary half of the cascade's termination argument — no variant can name
+/// a fresh id, because no variant can name a creation at all.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Fix {
+    /// The week goes with the period it belongs to.
+    DeleteWeek { week: WeekId },
+    /// A subject stops excluding a period that no longer exists.
+    RemoveSubjectPeriodExclusion {
+        subject: SubjectId,
+        period: PeriodId,
+        rebuilt: Subject,
+    },
+    /// A student stops excluding a period that no longer exists.
+    RemoveStudentPeriodExclusion {
+        student: StudentId,
+        period: PeriodId,
+        rebuilt: Student,
+    },
+    /// A pairing rule stops excluding a period that no longer exists.
+    RemovePairingRulePeriodExclusion {
+        rule: PairingRuleId,
+        period: PeriodId,
+        rebuilt: PairingRule,
+    },
+    /// A slot pairing rule stops excluding a period that no longer exists.
+    RemoveSlotPairingRulePeriodExclusion {
+        rule: SlotPairingRuleId,
+        period: PeriodId,
+        rebuilt: SlotPairingRule,
+    },
+    /// Every student enrolled in a subject on a period is unenrolled: the whole
+    /// row goes (rows are canonical-absent, so an empty row is no row).
+    ClearAssignmentRow {
+        period: PeriodId,
+        subject: SubjectId,
+    },
+    /// A subject stops using a group list on a period. The list itself stays:
+    /// a list nobody uses is a legal document.
+    UnassignGroupList {
+        period: PeriodId,
+        subject: SubjectId,
+    },
+    /// A week pattern stops excluding a week that no longer exists.
+    RemoveWeekPatternExclusion {
+        pattern: WeekPatternId,
+        week: WeekId,
+        rebuilt: WeekPattern,
+    },
+    /// The interrogations of one `(slot, week)` cell go.
+    ClearInterrogationCell { slot: SlotId, week: WeekId },
+    /// A teacher stops teaching a subject. The teacher stays.
+    RemoveTeacherSubject {
+        teacher: TeacherId,
+        subject: SubjectId,
+        rebuilt: Teacher,
+    },
+    /// A slot goes, because what it needs to exist (its subject, its teacher,
+    /// or the two of them together) no longer holds.
+    DeleteSlot { slot: SlotId },
+    /// A slot goes because it would now run past the end of its day. Same op as
+    /// [Fix::DeleteSlot], different sentence.
+    DeleteOverflowingSlot { slot: SlotId },
+    /// An incompatibility goes with the subject it belongs to.
+    DeleteIncompat { incompat: IncompatId },
+    /// A pairing rule goes with one of the two subjects it relates.
+    DeletePairingRule { rule: PairingRuleId },
+    /// A subject loses its own balancing options and falls back to the global
+    /// ones.
+    ClearSubjectBalancing { subject: SubjectId },
+    /// A student leaves the prefilled groups of a group list.
+    RemoveStudentFromGroupListPrefill {
+        group_list: GroupListId,
+        student: StudentId,
+        rebuilt: GroupList,
+    },
+    /// A group list stops excluding a student.
+    RemoveStudentGroupListExclusion {
+        group_list: GroupListId,
+        student: StudentId,
+        rebuilt: GroupList,
+    },
+    /// A student loses their own limits and falls back to the global ones.
+    ClearStudentSettings { student: StudentId },
+    /// One student is unenrolled from a subject on a period; the others stay.
+    RemoveStudentFromAssignmentRow {
+        period: PeriodId,
+        subject: SubjectId,
+        student: StudentId,
+        rebuilt: BTreeSet<StudentId>,
+    },
+    /// A student loses their group in a group list's colloscope placements.
+    RemoveStudentColloscopePlacement {
+        group_list: GroupListId,
+        student: StudentId,
+        rebuilt: BTreeMap<StudentId, u32>,
+    },
+    /// A slot stops following a week pattern — meaning it now runs *every*
+    /// week, which is why this is its own meaning and not a plain update.
+    ClearSlotWeekPattern { slot: SlotId, rebuilt: Slot },
+    /// An incompatibility stops following a week pattern, and so applies every
+    /// week.
+    ClearIncompatWeekPattern {
+        incompat: IncompatId,
+        rebuilt: Incompatibility,
+    },
+    /// A slot pairing rule goes with one of the two slots it relates.
+    DeleteSlotPairingRule { rule: SlotPairingRuleId },
+    /// A group list's whole colloscope placements row goes.
+    ClearColloscopeGroupListRow { group_list: GroupListId },
+    /// One group leaves a `(slot, week)` cell; the other groups stay.
+    RemoveGroupFromInterrogationCell {
+        slot: SlotId,
+        week: WeekId,
+        group: u32,
+        rebuilt: BTreeSet<u32>,
+    },
+}
+
+/// Pure translation, one arm per variant: no state is read, so the same [Fix]
+/// always yields the same op. Every op below is deletive, and the deletive
+/// ops' annotated forms are payload-identical to their plain forms — so the
+/// arms build [AnnotatedOp] values directly, with no `annotate` call and no
+/// issued id.
+impl FixOp for Fix {
+    type Op = AnnotatedOp;
+
+    fn to_annotated_op(&self) -> AnnotatedOp {
+        match self {
+            Fix::DeleteWeek { week } => AnnotatedWeekOp::Remove(*week).into(),
+            Fix::RemoveSubjectPeriodExclusion {
+                subject, rebuilt, ..
+            } => AnnotatedSubjectOp::Update(*subject, rebuilt.clone()).into(),
+            Fix::RemoveStudentPeriodExclusion {
+                student, rebuilt, ..
+            } => AnnotatedStudentOp::Update(*student, rebuilt.clone()).into(),
+            Fix::RemovePairingRulePeriodExclusion { rule, rebuilt, .. } => {
+                AnnotatedPairingOp::Update(*rule, rebuilt.clone()).into()
+            }
+            Fix::RemoveSlotPairingRulePeriodExclusion { rule, rebuilt, .. } => {
+                AnnotatedSlotPairingOp::Update(*rule, rebuilt.clone()).into()
+            }
+            Fix::ClearAssignmentRow { period, subject } => {
+                AnnotatedAssignmentOp::SetRow(*period, *subject, BTreeSet::new()).into()
+            }
+            Fix::UnassignGroupList { period, subject } => {
+                AnnotatedGroupListOp::AssignToSubject(*period, *subject, None).into()
+            }
+            Fix::RemoveWeekPatternExclusion {
+                pattern, rebuilt, ..
+            } => AnnotatedWeekPatternOp::Update(*pattern, rebuilt.clone()).into(),
+            Fix::ClearInterrogationCell { slot, week } => {
+                AnnotatedColloscopeOp::SetInterrogation(*slot, *week, BTreeSet::new()).into()
+            }
+            Fix::RemoveTeacherSubject {
+                teacher, rebuilt, ..
+            } => AnnotatedTeacherOp::Update(*teacher, rebuilt.clone()).into(),
+            Fix::DeleteSlot { slot } | Fix::DeleteOverflowingSlot { slot } => {
+                AnnotatedSlotOp::Remove(*slot).into()
+            }
+            Fix::DeleteIncompat { incompat } => AnnotatedIncompatOp::Remove(*incompat).into(),
+            Fix::DeletePairingRule { rule } => AnnotatedPairingOp::Remove(*rule).into(),
+            Fix::ClearSubjectBalancing { subject } => {
+                AnnotatedBalancingOp::SetSubject(*subject, None).into()
+            }
+            Fix::RemoveStudentFromGroupListPrefill {
+                group_list,
+                rebuilt,
+                ..
+            }
+            | Fix::RemoveStudentGroupListExclusion {
+                group_list,
+                rebuilt,
+                ..
+            } => AnnotatedGroupListOp::Update(*group_list, rebuilt.clone()).into(),
+            Fix::ClearStudentSettings { student } => {
+                AnnotatedSettingsOp::SetStudent(*student, None).into()
+            }
+            Fix::RemoveStudentFromAssignmentRow {
+                period,
+                subject,
+                rebuilt,
+                ..
+            } => AnnotatedAssignmentOp::SetRow(*period, *subject, rebuilt.clone()).into(),
+            Fix::RemoveStudentColloscopePlacement {
+                group_list,
+                rebuilt,
+                ..
+            } => AnnotatedColloscopeOp::SetGroupList(*group_list, rebuilt.clone()).into(),
+            Fix::ClearSlotWeekPattern { slot, rebuilt } => {
+                AnnotatedSlotOp::Update(*slot, rebuilt.clone()).into()
+            }
+            Fix::ClearIncompatWeekPattern { incompat, rebuilt } => {
+                AnnotatedIncompatOp::Update(*incompat, rebuilt.clone()).into()
+            }
+            Fix::DeleteSlotPairingRule { rule } => AnnotatedSlotPairingOp::Remove(*rule).into(),
+            Fix::ClearColloscopeGroupListRow { group_list } => {
+                AnnotatedColloscopeOp::SetGroupList(*group_list, BTreeMap::new()).into()
+            }
+            Fix::RemoveGroupFromInterrogationCell {
+                slot,
+                week,
+                rebuilt,
+                ..
+            } => AnnotatedColloscopeOp::SetInterrogation(*slot, *week, rebuilt.clone()).into(),
+        }
+    }
+}
 
 impl Fixable for Data {
-    fn fix_invariant(&self, invariant: &FixableInvariant) -> Option<AnnotatedOp> {
+    type Fix = Fix;
+
+    fn fix_invariant(&self, invariant: &FixableInvariant) -> Option<Fix> {
         match invariant {
             FixableInvariant::DanglingFk(reference) => self.fix_dangling(*reference),
             FixableInvariant::Convergence(convergence) => self.fix_convergence(convergence),
@@ -119,11 +369,11 @@ impl Fixable for Data {
 }
 
 impl Data {
-    /// Every op this map emits is deletive, and the deletive ops' annotated
-    /// forms are payload-identical to their plain forms — so the arms construct
-    /// [AnnotatedOp] values directly. No `annotate` call, no issued id (with
-    /// only `&self` the map cannot reach the id issuer at all).
-    fn fix_dangling(&self, reference: Reference) -> Option<AnnotatedOp> {
+    /// Each arm's single lookup does double duty: it is the presence test, and
+    /// it is where the rebuilt payload of a whole-value fix is built. That is
+    /// why the [Fix] variants carry those payloads — the translation at the
+    /// bottom of this file never looks anything up again.
+    fn fix_dangling(&self, reference: Reference) -> Option<Fix> {
         match reference {
             Reference::Period { target, site } => self.fix_period_ref(target, site),
             Reference::Week { target, site } => self.fix_week_ref(target, site),
@@ -139,7 +389,7 @@ impl Data {
     /// A week belongs to its period and cannot survive without it; every other
     /// site holds the period in a set or in a row key, so only the reference
     /// goes.
-    fn fix_period_ref(&self, period: PeriodId, site: PeriodRefSite) -> Option<AnnotatedOp> {
+    fn fix_period_ref(&self, period: PeriodId, site: PeriodRefSite) -> Option<Fix> {
         let params = &self.inner_data.params;
         match site {
             PeriodRefSite::WeekPeriodFk(week_id) => {
@@ -147,7 +397,7 @@ impl Data {
                 if week.period_id != period {
                     return None;
                 }
-                Some(AnnotatedWeekOp::Remove(week_id).into())
+                Some(Fix::DeleteWeek { week: week_id })
             }
             PeriodRefSite::SubjectExcludedPeriods(subject_id) => {
                 let subject = params.subjects.find_subject(subject_id)?;
@@ -156,7 +406,11 @@ impl Data {
                 }
                 let mut rebuilt = subject.clone();
                 rebuilt.excluded_periods.remove(&period);
-                Some(AnnotatedSubjectOp::Update(subject_id, rebuilt).into())
+                Some(Fix::RemoveSubjectPeriodExclusion {
+                    subject: subject_id,
+                    period,
+                    rebuilt,
+                })
             }
             PeriodRefSite::StudentExcludedPeriods(student_id) => {
                 let student = params.students.student_map.get(&student_id)?;
@@ -165,7 +419,11 @@ impl Data {
                 }
                 let mut rebuilt = student.clone();
                 rebuilt.excluded_periods.remove(&period);
-                Some(AnnotatedStudentOp::Update(student_id, rebuilt).into())
+                Some(Fix::RemoveStudentPeriodExclusion {
+                    student: student_id,
+                    period,
+                    rebuilt,
+                })
             }
             PeriodRefSite::PairingRuleExcludedPeriods(rule_id) => {
                 let rule = params.pairings.pairing_rule_map.get(&rule_id)?;
@@ -181,7 +439,11 @@ impl Data {
                 excluded_periods.remove(&period);
                 let rebuilt = PairingRule::new(antecedent, consequent, excluded_periods, soft)
                     .expect("removing an excluded period cannot make the parts share a subject");
-                Some(AnnotatedPairingOp::Update(rule_id, rebuilt).into())
+                Some(Fix::RemovePairingRulePeriodExclusion {
+                    rule: rule_id,
+                    period,
+                    rebuilt,
+                })
             }
             PeriodRefSite::SlotPairingRuleExcludedPeriods(rule_id) => {
                 let rule = params.slot_pairings.slot_pairing_rule_map.get(&rule_id)?;
@@ -193,7 +455,11 @@ impl Data {
                 excluded_periods.remove(&period);
                 let rebuilt = SlotPairingRule::new(antecedent, consequent, excluded_periods, soft)
                     .expect("removing an excluded period cannot make the parts share a slot");
-                Some(AnnotatedSlotPairingOp::Update(rule_id, rebuilt).into())
+                Some(Fix::RemoveSlotPairingRulePeriodExclusion {
+                    rule: rule_id,
+                    period,
+                    rebuilt,
+                })
             }
             PeriodRefSite::AssignmentsKey { subject } => {
                 if params.assignments.students(period, subject).is_none() {
@@ -201,7 +467,7 @@ impl Data {
                 }
                 // Canonical-absent: an emptied row is removed outright, so this
                 // is always a real change.
-                Some(AnnotatedAssignmentOp::SetRow(period, subject, BTreeSet::new()).into())
+                Some(Fix::ClearAssignmentRow { period, subject })
             }
             PeriodRefSite::AssociationEntry { subject } => {
                 if !params
@@ -215,12 +481,12 @@ impl Data {
                 // referenced by nothing — a legal state the invariants never
                 // complain about. Removing it would be destruction the
                 // invariant did not ask for.
-                Some(AnnotatedGroupListOp::AssignToSubject(period, subject, None).into())
+                Some(Fix::UnassignGroupList { period, subject })
             }
         }
     }
 
-    fn fix_week_ref(&self, week: WeekId, site: WeekRefSite) -> Option<AnnotatedOp> {
+    fn fix_week_ref(&self, week: WeekId, site: WeekRefSite) -> Option<Fix> {
         let params = &self.inner_data.params;
         match site {
             WeekRefSite::WeekPatternExcludedWeek(pattern_id) => {
@@ -230,7 +496,11 @@ impl Data {
                 }
                 let mut rebuilt = pattern.clone();
                 rebuilt.excluded_weeks.remove(&week);
-                Some(AnnotatedWeekPatternOp::Update(pattern_id, rebuilt).into())
+                Some(Fix::RemoveWeekPatternExclusion {
+                    pattern: pattern_id,
+                    week,
+                    rebuilt,
+                })
             }
             WeekRefSite::ColloscopeInterrogation { slot } => {
                 if self
@@ -241,7 +511,7 @@ impl Data {
                 {
                     return None;
                 }
-                Some(AnnotatedColloscopeOp::SetInterrogation(slot, week, BTreeSet::new()).into())
+                Some(Fix::ClearInterrogationCell { slot, week })
             }
         }
     }
@@ -252,7 +522,7 @@ impl Data {
     /// parts get **separate arms** even though both emit the same `Remove`,
     /// because a shared arm testing neither part would delete a rule whose two
     /// parts are both live.
-    fn fix_subject_ref(&self, subject: SubjectId, site: SubjectRefSite) -> Option<AnnotatedOp> {
+    fn fix_subject_ref(&self, subject: SubjectId, site: SubjectRefSite) -> Option<Fix> {
         let params = &self.inner_data.params;
         match site {
             SubjectRefSite::TeacherSubjects(teacher_id) => {
@@ -262,48 +532,54 @@ impl Data {
                 }
                 let mut rebuilt = teacher.clone();
                 rebuilt.subjects.remove(&subject);
-                Some(AnnotatedTeacherOp::Update(teacher_id, rebuilt).into())
+                Some(Fix::RemoveTeacherSubject {
+                    teacher: teacher_id,
+                    subject,
+                    rebuilt,
+                })
             }
             SubjectRefSite::SlotSubject(slot_id) => {
                 let slot = params.slots.find_slot(slot_id)?;
                 if slot.subject_id != subject {
                     return None;
                 }
-                Some(AnnotatedSlotOp::Remove(slot_id).into())
+                Some(Fix::DeleteSlot { slot: slot_id })
             }
             SubjectRefSite::IncompatSubject(incompat_id) => {
                 let incompat = params.incompats.incompat_map.get(&incompat_id)?;
                 if incompat.subject_id != subject {
                     return None;
                 }
-                Some(AnnotatedIncompatOp::Remove(incompat_id).into())
+                Some(Fix::DeleteIncompat {
+                    incompat: incompat_id,
+                })
             }
             SubjectRefSite::PairingRuleAntecedent(rule_id) => {
                 let rule = params.pairings.pairing_rule_map.get(&rule_id)?;
                 if rule.antecedent().subject_id != subject {
                     return None;
                 }
-                Some(AnnotatedPairingOp::Remove(rule_id).into())
+                Some(Fix::DeletePairingRule { rule: rule_id })
             }
             SubjectRefSite::PairingRuleConsequent(rule_id) => {
                 let rule = params.pairings.pairing_rule_map.get(&rule_id)?;
                 if rule.consequent().subject_id != subject {
                     return None;
                 }
-                Some(AnnotatedPairingOp::Remove(rule_id).into())
+                Some(Fix::DeletePairingRule { rule: rule_id })
             }
             SubjectRefSite::BalancingSubjectKey => {
                 if !params.balancing.subjects.contains(&subject) {
                     return None;
                 }
                 // The subject falls back to the global balancing options.
-                Some(AnnotatedBalancingOp::SetSubject(subject, None).into())
+                Some(Fix::ClearSubjectBalancing { subject })
             }
             SubjectRefSite::AssignmentsKey { period } => {
                 if params.assignments.students(period, subject).is_none() {
                     return None;
                 }
-                Some(AnnotatedAssignmentOp::SetRow(period, subject, BTreeSet::new()).into())
+                Some(Fix::ClearAssignmentRow { period, subject })
             }
             SubjectRefSite::AssociationEntry { period } => {
                 if !params
@@ -313,7 +589,7 @@ impl Data {
                 {
                     return None;
                 }
-                Some(AnnotatedGroupListOp::AssignToSubject(period, subject, None).into())
+                Some(Fix::UnassignGroupList { period, subject })
             }
         }
     }
@@ -324,7 +600,7 @@ impl Data {
     /// defensive — a slot's teacher *is* freely editable, so `SlotOp::Update`
     /// naming a dead teacher lands, and without the test this arm would delete
     /// a slot whose live teacher is perfectly valid.
-    fn fix_teacher_ref(&self, teacher: TeacherId, site: TeacherRefSite) -> Option<AnnotatedOp> {
+    fn fix_teacher_ref(&self, teacher: TeacherId, site: TeacherRefSite) -> Option<Fix> {
         let params = &self.inner_data.params;
         match site {
             TeacherRefSite::SlotTeacher(slot_id) => {
@@ -332,12 +608,12 @@ impl Data {
                 if slot.teacher_id != teacher {
                     return None;
                 }
-                Some(AnnotatedSlotOp::Remove(slot_id).into())
+                Some(Fix::DeleteSlot { slot: slot_id })
             }
         }
     }
 
-    fn fix_student_ref(&self, student: StudentId, site: StudentRefSite) -> Option<AnnotatedOp> {
+    fn fix_student_ref(&self, student: StudentId, site: StudentRefSite) -> Option<Fix> {
         let params = &self.inner_data.params;
         match site {
             StudentRefSite::GroupListPrefilledStudent(group_list_id) => {
@@ -355,7 +631,11 @@ impl Data {
                     "removing a member changes neither the group count \
                      nor introduces a duplicate",
                 );
-                Some(AnnotatedGroupListOp::Update(group_list_id, rebuilt).into())
+                Some(Fix::RemoveStudentFromGroupListPrefill {
+                    group_list: group_list_id,
+                    student,
+                    rebuilt,
+                })
             }
             StudentRefSite::GroupListExcludedStudent(group_list_id) => {
                 let group_list = params.group_lists.group_list_map.get(&group_list_id)?;
@@ -374,14 +654,18 @@ impl Data {
                     GroupListFilling::Automatic { excluded_students },
                 )
                 .expect("`GroupList::new` validates the prefilled branch only");
-                Some(AnnotatedGroupListOp::Update(group_list_id, rebuilt).into())
+                Some(Fix::RemoveStudentGroupListExclusion {
+                    group_list: group_list_id,
+                    student,
+                    rebuilt,
+                })
             }
             StudentRefSite::SettingsStudentKey => {
                 if !params.settings.students.contains(&student) {
                     return None;
                 }
                 // The student falls back to the global limits.
-                Some(AnnotatedSettingsOp::SetStudent(student, None).into())
+                Some(Fix::ClearStudentSettings { student })
             }
             StudentRefSite::AssignmentsStudent { period, subject } => {
                 let row = params.assignments.students(period, subject)?;
@@ -390,7 +674,12 @@ impl Data {
                 }
                 let mut rebuilt = row.clone();
                 rebuilt.remove(&student);
-                Some(AnnotatedAssignmentOp::SetRow(period, subject, rebuilt).into())
+                Some(Fix::RemoveStudentFromAssignmentRow {
+                    period,
+                    subject,
+                    student,
+                    rebuilt,
+                })
             }
             StudentRefSite::ColloscopeGroupListStudent(group_list_id) => {
                 // An absent row, and a row that does not place this student,
@@ -404,7 +693,11 @@ impl Data {
                 }
                 let mut rebuilt = placements.clone();
                 rebuilt.remove(&student);
-                Some(AnnotatedColloscopeOp::SetGroupList(group_list_id, rebuilt).into())
+                Some(Fix::RemoveStudentColloscopePlacement {
+                    group_list: group_list_id,
+                    student,
+                    rebuilt,
+                })
             }
         }
     }
@@ -420,7 +713,7 @@ impl Data {
         &self,
         week_pattern: WeekPatternId,
         site: WeekPatternRefSite,
-    ) -> Option<AnnotatedOp> {
+    ) -> Option<Fix> {
         let params = &self.inner_data.params;
         match site {
             WeekPatternRefSite::SlotWeekPattern(slot_id) => {
@@ -430,7 +723,10 @@ impl Data {
                 }
                 let mut rebuilt = slot.clone();
                 rebuilt.week_pattern = None;
-                Some(AnnotatedSlotOp::Update(slot_id, rebuilt).into())
+                Some(Fix::ClearSlotWeekPattern {
+                    slot: slot_id,
+                    rebuilt,
+                })
             }
             WeekPatternRefSite::IncompatWeekPattern(incompat_id) => {
                 let incompat = params.incompats.incompat_map.get(&incompat_id)?;
@@ -439,7 +735,10 @@ impl Data {
                 }
                 let mut rebuilt = incompat.clone();
                 rebuilt.week_pattern_id = None;
-                Some(AnnotatedIncompatOp::Update(incompat_id, rebuilt).into())
+                Some(Fix::ClearIncompatWeekPattern {
+                    incompat: incompat_id,
+                    rebuilt,
+                })
             }
         }
     }
@@ -447,7 +746,7 @@ impl Data {
     /// `SlotRulePart::slot_id` is a bare id, so a half-rule cannot exist and
     /// the rule goes. As for the pairing rules, the two parts get separate arms
     /// so that each tests its own part against the target.
-    fn fix_slot_ref(&self, slot: SlotId, site: SlotRefSite) -> Option<AnnotatedOp> {
+    fn fix_slot_ref(&self, slot: SlotId, site: SlotRefSite) -> Option<Fix> {
         let params = &self.inner_data.params;
         match site {
             SlotRefSite::SlotPairingRuleAntecedent(rule_id) => {
@@ -455,14 +754,14 @@ impl Data {
                 if rule.antecedent().slot_id != slot {
                     return None;
                 }
-                Some(AnnotatedSlotPairingOp::Remove(rule_id).into())
+                Some(Fix::DeleteSlotPairingRule { rule: rule_id })
             }
             SlotRefSite::SlotPairingRuleConsequent(rule_id) => {
                 let rule = params.slot_pairings.slot_pairing_rule_map.get(&rule_id)?;
                 if rule.consequent().slot_id != slot {
                     return None;
                 }
-                Some(AnnotatedSlotPairingOp::Remove(rule_id).into())
+                Some(Fix::DeleteSlotPairingRule { rule: rule_id })
             }
             SlotRefSite::ColloscopeInterrogation { week } => {
                 // The slot is half the row key, so clearing is forced. A
@@ -475,16 +774,12 @@ impl Data {
                 {
                     return None;
                 }
-                Some(AnnotatedColloscopeOp::SetInterrogation(slot, week, BTreeSet::new()).into())
+                Some(Fix::ClearInterrogationCell { slot, week })
             }
         }
     }
 
-    fn fix_group_list_ref(
-        &self,
-        group_list: GroupListId,
-        site: GroupListRefSite,
-    ) -> Option<AnnotatedOp> {
+    fn fix_group_list_ref(&self, group_list: GroupListId, site: GroupListRefSite) -> Option<Fix> {
         let params = &self.inner_data.params;
         match site {
             GroupListRefSite::AssociationEntry { period, subject } => {
@@ -497,14 +792,14 @@ impl Data {
                 if *assigned != group_list {
                     return None;
                 }
-                Some(AnnotatedGroupListOp::AssignToSubject(period, subject, None).into())
+                Some(Fix::UnassignGroupList { period, subject })
             }
             GroupListRefSite::ColloscopeGroupListKey => {
                 // The group list *is* the row key, so clearing is forced.
                 if self.inner_data.colloscope.group_list(group_list).is_none() {
                     return None;
                 }
-                Some(AnnotatedColloscopeOp::SetGroupList(group_list, BTreeMap::new()).into())
+                Some(Fix::ClearColloscopeGroupListRow { group_list })
             }
         }
     }
@@ -514,7 +809,7 @@ impl Data {
     /// subject, enabling interrogations, shortening a duration or moving a
     /// slot's start each *invent* data, and none of them shrinks the document,
     /// which is what the cascade's termination proof rests on.
-    fn fix_convergence(&self, convergence: &Convergence) -> Option<AnnotatedOp> {
+    fn fix_convergence(&self, convergence: &Convergence) -> Option<Fix> {
         let params = &self.inner_data.params;
         let colloscope = &self.inner_data.colloscope;
         match convergence {
@@ -526,7 +821,7 @@ impl Data {
                 if slot.teacher_id != *teacher || slot.subject_id != *subject {
                     return None;
                 }
-                Some(AnnotatedSlotOp::Remove(*slot_id).into())
+                Some(Fix::DeleteSlot { slot: *slot_id })
             }
             Convergence::TeacherSubjectWithoutInterrogations(teacher_id, subject) => {
                 // `Teacher::subjects` is a set: one element can leave and the
@@ -537,7 +832,11 @@ impl Data {
                 }
                 let mut rebuilt = teacher.clone();
                 rebuilt.subjects.remove(subject);
-                Some(AnnotatedTeacherOp::Update(*teacher_id, rebuilt).into())
+                Some(Fix::RemoveTeacherSubject {
+                    teacher: *teacher_id,
+                    subject: *subject,
+                    rebuilt,
+                })
             }
             Convergence::SlotForSubjectWithoutInterrogations(slot_id, subject) => {
                 // This arm's `Some` branch is structurally shadowed: any state
@@ -550,7 +849,7 @@ impl Data {
                 if slot.subject_id != *subject {
                     return None;
                 }
-                Some(AnnotatedSlotOp::Remove(*slot_id).into())
+                Some(Fix::DeleteSlot { slot: *slot_id })
             }
             Convergence::SlotOverflowsDay {
                 slot: slot_id,
@@ -564,7 +863,9 @@ impl Data {
                 if slot.start_time != *start {
                     return None;
                 }
-                Some(AnnotatedSlotOp::Remove(*slot_id).into())
+                // Same op as the plain slot removals above, but its own
+                // meaning: this slot goes because it would run past midnight.
+                Some(Fix::DeleteOverflowingSlot { slot: *slot_id })
             }
             Convergence::AssignmentForSubjectNotRunningOnPeriod(period, subject) => {
                 // Coordinate-shaped: the invariant names a coordinate, the op
@@ -574,7 +875,10 @@ impl Data {
                 if params.assignments.students(*period, *subject).is_none() {
                     return None;
                 }
-                Some(AnnotatedAssignmentOp::SetRow(*period, *subject, BTreeSet::new()).into())
+                Some(Fix::ClearAssignmentRow {
+                    period: *period,
+                    subject: *subject,
+                })
             }
             Convergence::AssignedStudentNotPresentForPeriod {
                 period,
@@ -587,7 +891,12 @@ impl Data {
                 }
                 let mut rebuilt = row.clone();
                 rebuilt.remove(student);
-                Some(AnnotatedAssignmentOp::SetRow(*period, *subject, rebuilt).into())
+                Some(Fix::RemoveStudentFromAssignmentRow {
+                    period: *period,
+                    subject: *subject,
+                    student: *student,
+                    rebuilt,
+                })
             }
             // Both name the same offending configuration — an association entry
             // at that coordinate — and both clear it. When they fire together
@@ -601,13 +910,16 @@ impl Data {
                 {
                     return None;
                 }
-                Some(AnnotatedGroupListOp::AssignToSubject(*period, *subject, None).into())
+                Some(Fix::UnassignGroupList {
+                    period: *period,
+                    subject: *subject,
+                })
             }
             Convergence::BalancingForSubjectWithoutInterrogations(subject) => {
                 if !params.balancing.subjects.contains(subject) {
                     return None;
                 }
-                Some(AnnotatedBalancingOp::SetSubject(*subject, None).into())
+                Some(Fix::ClearSubjectBalancing { subject: *subject })
             }
             Convergence::PairedSlotsNotInSameSubject(rule_id, antecedent_slot, consequent_slot) => {
                 // Which of the two slots is "wrong" is undecidable, and a rule
@@ -619,7 +931,7 @@ impl Data {
                 {
                     return None;
                 }
-                Some(AnnotatedSlotPairingOp::Remove(*rule_id).into())
+                Some(Fix::DeleteSlotPairingRule { rule: *rule_id })
             }
             // Same coordinate, same clearing op, same test (as above for the
             // two association variants).
@@ -628,7 +940,10 @@ impl Data {
                 if colloscope.interrogation(*slot, *week).is_none() {
                     return None;
                 }
-                Some(AnnotatedColloscopeOp::SetInterrogation(*slot, *week, BTreeSet::new()).into())
+                Some(Fix::ClearInterrogationCell {
+                    slot: *slot,
+                    week: *week,
+                })
             }
             Convergence::InterrogationGroupOutOfBounds(slot, week, group) => {
                 // Presence, not predicate: the bound is never re-checked, since
@@ -640,7 +955,12 @@ impl Data {
                 }
                 let mut rebuilt = cell.clone();
                 rebuilt.remove(group);
-                Some(AnnotatedColloscopeOp::SetInterrogation(*slot, *week, rebuilt).into())
+                Some(Fix::RemoveGroupFromInterrogationCell {
+                    slot: *slot,
+                    week: *week,
+                    group: *group,
+                    rebuilt,
+                })
             }
             Convergence::ColloscopeGroupListPrefilled(group_list) => {
                 // Presence is the whole test, and prefilled-ness is
@@ -653,7 +973,9 @@ impl Data {
                 if colloscope.group_list(*group_list).is_none() {
                     return None;
                 }
-                Some(AnnotatedColloscopeOp::SetGroupList(*group_list, BTreeMap::new()).into())
+                Some(Fix::ClearColloscopeGroupListRow {
+                    group_list: *group_list,
+                })
             }
             Convergence::ColloscopeStudentExcluded(group_list, student) => {
                 // The filling's excluded set is likewise not read: adding a
@@ -666,7 +988,11 @@ impl Data {
                 }
                 let mut rebuilt = placements.clone();
                 rebuilt.remove(student);
-                Some(AnnotatedColloscopeOp::SetGroupList(*group_list, rebuilt).into())
+                Some(Fix::RemoveStudentColloscopePlacement {
+                    group_list: *group_list,
+                    student: *student,
+                    rebuilt,
+                })
             }
             Convergence::ColloscopeStudentGroupOutOfBounds(group_list, student, group) => {
                 let placements = colloscope.group_list(*group_list)?;
@@ -675,7 +1001,11 @@ impl Data {
                 }
                 let mut rebuilt = placements.clone();
                 rebuilt.remove(student);
-                Some(AnnotatedColloscopeOp::SetGroupList(*group_list, rebuilt).into())
+                Some(Fix::RemoveStudentColloscopePlacement {
+                    group_list: *group_list,
+                    student: *student,
+                    rebuilt,
+                })
             }
         }
     }

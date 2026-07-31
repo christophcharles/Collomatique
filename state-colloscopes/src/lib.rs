@@ -53,8 +53,9 @@ pub mod pairings;
 mod partial_order_tests;
 pub mod periods;
 pub mod refs;
-// The cascade's resolution map. Private: it exports nothing, and surfaces only
-// through the `collomatique_state::Fixable` impl it holds for [Data].
+// The cascade's resolution map. Private: the arms stay in, and the module
+// surfaces through the `collomatique_state::Fixable` impl it holds for [Data]
+// and through the [Fix] vocabulary that impl answers with.
 mod resolution;
 pub mod settings;
 pub mod slot_pairings;
@@ -68,6 +69,9 @@ pub mod weeks;
 
 pub use invariants::{Convergence, FixableInvariant, LogicError};
 pub use non_empty_range::{EmptyRangeError, NonEmptyRangeInclusive};
+// The cascade's repair vocabulary: what the resolution map answers, and the
+// only part of a cascade's reasoning that reaches a consumer.
+pub use resolution::Fix;
 
 // Per-domain precheck error enums for [Data::force_apply] — the carve-out
 // subset of each domain's error surface (step-3 survey Table 2). Introduced in

@@ -44,7 +44,7 @@ use collomatique_testgen_colloscopes::rand::Rng;
 use collomatique_testgen_colloscopes::{ChaCha8Rng, generator, harness};
 
 use collomatique_state::traits::Manager;
-use collomatique_state::{ContentOrd, Fixable, InMemoryData};
+use collomatique_state::{ContentOrd, FixOp, Fixable, InMemoryData};
 use collomatique_state_colloscopes::{Data, Error, InnerData, Op};
 
 use harness::{OpLog, RunConfig};
@@ -121,7 +121,7 @@ fn every_fix_lands_strictly_below() {
                                 continue;
                             };
                             let mut fixed = data.clone();
-                            fixed.force_apply(&fix).expect(
+                            fixed.force_apply(&fix.to_annotated_op()).expect(
                                 "a fix op emitted by the resolution map must \
                                  pass the prechecks",
                             );

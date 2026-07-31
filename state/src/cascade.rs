@@ -5,8 +5,9 @@
 //!
 //! The engine works entirely in **annotated** ops (design doc D6): the caller
 //! annotates the target itself and keeps its `NewInfo`, then hands the
-//! [InMemoryData::AnnotatedOperation] to [apply_cascade]; fixes arrive already
-//! annotated from the map (which holds only `&self` and so cannot issue ids).
+//! [InMemoryData::AnnotatedOperation] to [apply_cascade]; fixes arrive from the
+//! map as [FixOp] values it translates into annotated ops (the map holds only
+//! `&self` and the translation is pure, so neither can issue ids).
 //! On success the return value is the history-ready [AggregatedOp] — the target
 //! is always its last entry, and `.rev()` is the compound undo. On failure the
 //! data is restored bit-identically from an entry snapshot (id issuer included),
@@ -33,12 +34,36 @@ use crate::history::{AggregatedOp, ReversibleOp};
 use crate::partial_order::ContentOrd;
 use crate::traits::{ApplyError, InMemoryData};
 
+/// A repair the resolution map can answer: one value of a closed vocabulary,
+/// one variant per *meaning* the repair has for the user.
+///
+/// The variant carries everything its op needs — ids for the pure cases, the
+/// rebuilt payload for the whole-value ops — so [FixOp::to_annotated_op] reads
+/// no state at all: it is total, pure, and testable in isolation. Neither the
+/// map (which holds only `&self`) nor this translation can reach the id
+/// issuer, so a fix physically cannot carry a fresh id.
+///
+/// Downstream reads the `Fix`, never the invariant that caused it: the
+/// vocabulary is what a warning renderer keys on, so a repair whose meaning
+/// changes is a new variant, and a renderer that forgot it is a compile error.
+pub trait FixOp: Clone + std::fmt::Debug {
+    /// The op vocabulary the fix translates into — the data's annotated op.
+    type Op;
+
+    /// The repair, as the op that performs it. Pure: same value in, same op
+    /// out, no state read.
+    fn to_annotated_op(&self) -> Self::Op;
+}
+
 /// Implemented by data whose broken invariants can be repaired by ops: the
 /// resolution map. ([ContentOrd] materializes the document order of the
 /// monotonicity contract; the engine checks every fix against it in-flight,
 /// and its content equivalence backs the no-op-fix panic — the engine never
 /// compares with `==`.)
 pub trait Fixable: InMemoryData + ContentOrd {
+    /// The repair vocabulary: the closed set of shapes the map can answer.
+    type Fix: FixOp<Op = Self::AnnotatedOperation>;
+
     /// One repair step for `invariant` on the current state, or `None` when
     /// the current state holds nothing that causes it (the invariant can then
     /// only come from the failing op's own payload — [apply_cascade] rejects
@@ -49,10 +74,10 @@ pub trait Fixable: InMemoryData + ContentOrd {
     /// States form a **well-founded** partial order — the document order,
     /// materialized by the [ContentOrd] supertrait bound (design doc §8,
     /// step 6.5); the empty document `Default::default()` is a minimal
-    /// element. Every returned op must land **strictly below** the current
+    /// element. Every returned fix must land **strictly below** the current
     /// state in that order: it removes a row or entity, clears an edge, or
     /// rewrites a value minus an element — never creates, and never lands
-    /// equivalent. Return `None`, or a strictly-decreasing op. Because the
+    /// equivalent. Return `None`, or a strictly-decreasing fix. Because the
     /// order is well-founded, this contract bounds the number of fixes that
     /// *land*, and [apply_cascade] asserts it after every one: a fix landing
     /// equivalent, above, or incomparable panics instead of hanging. Fix
@@ -61,10 +86,9 @@ pub trait Fixable: InMemoryData + ContentOrd {
     /// present in the state: such a map has finitely many answers on an
     /// unchanged state, so it either lands one or repeats a pick.
     ///
-    /// The return type is the *annotated* op on purpose: with only `&self`,
-    /// an implementation cannot reach the id issuer, so a fix physically
-    /// cannot carry a fresh id — the signature leans the same way the
-    /// contract does.
+    /// The signature leans the same way the contract does: with only `&self`
+    /// an implementation cannot reach the id issuer, and [FixOp]'s translation
+    /// is pure, so a fix physically cannot carry a fresh id.
     ///
     /// Total: every representable invariant has an arm; no wildcard match.
     /// One step per call: the engine retries the failing op and asks again,
@@ -72,8 +96,11 @@ pub trait Fixable: InMemoryData + ContentOrd {
     /// call seeing the then-current state. An arm decides by checking the
     /// **presence of the material it would remove**, never by re-evaluating
     /// the invariant's predicate (which may depend on the failing op's
-    /// payload).
-    fn fix_invariant(&self, invariant: &Self::Invariant) -> Option<Self::AnnotatedOperation>;
+    /// payload). The lookup an arm makes to test presence is the same one that
+    /// builds the fix's payload: a single lookup per call, which is why the
+    /// [FixOp] variants carry their rebuilt values rather than re-deriving
+    /// them at translation time.
+    fn fix_invariant(&self, invariant: &Self::Invariant) -> Option<Self::Fix>;
 }
 
 /// Apply `target`, resolving broken invariants by cascading fixes.
@@ -88,7 +115,9 @@ pub fn apply_cascade<T: Fixable>(
 ) -> Result<AggregatedOp<T::AnnotatedOperation>, ApplyError<T::InvalidOp, T::Invariant>> {
     // Failure = "*data = snapshot": bit-identical restore, id issuer included.
     let snapshot = data.clone();
-    let mut stack: Vec<T::AnnotatedOperation> = vec![target];
+    // Each entry is an op to land and the fix it was materialized from — the
+    // target itself is nobody's fix, hence the `None`.
+    let mut stack: Vec<(T::AnnotatedOperation, Option<T::Fix>)> = vec![(target, None)];
     let mut applied: Vec<ReversibleOp<T::AnnotatedOperation>> = Vec::new();
     // The target's most recent BrokenInvariants set: the informative error
     // when the target is convicted mid-cascade (D4 — the SlotOverflowsDay trace).
@@ -101,7 +130,7 @@ pub fn apply_cascade<T: Fixable>(
     let mut picks_since_landing: BTreeSet<T::Invariant> = BTreeSet::new();
 
     loop {
-        let Some(front) = stack.last().cloned() else {
+        let Some(front) = stack.last().map(|(op, _fix)| op.clone()) else {
             return Ok(AggregatedOp::new(applied));
         };
         let is_target = stack.len() == 1;
@@ -156,7 +185,11 @@ pub fn apply_cascade<T: Fixable>(
                     );
                 }
                 match data.fix_invariant(&pick) {
-                    Some(fix) => stack.push(fix),
+                    // Materialized here, once: when this fix itself fails and
+                    // gets a sub-fix, the retry replays *this* op, payload and
+                    // all. Translating lazily at retry time would silently
+                    // re-read a state the sub-fix has meanwhile changed.
+                    Some(fix) => stack.push((fix.to_annotated_op(), Some(fix))),
                     // None: nothing in the state causes `pick` — the failing
                     // op's own payload does.
                     None if is_target => {
