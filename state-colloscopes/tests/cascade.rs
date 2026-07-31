@@ -7,15 +7,24 @@
 //! test is the resolution map (`src/resolution.rs`) driven by the real engine,
 //! not the `AppState` surface.
 //!
+//! What a fixture reads is the cascade's [collomatique_state::CascadeReceipt]:
+//! the fixes it had to apply, each as the [Fix] value the map answered, with
+//! the target held apart. So the expected lists here are `Fix` values, not ops
+//! — the meaning of each repair, which is what a consumer sees. That a `Fix`
+//! translates to the right op is pinned once and for all by the attribution
+//! tests in `src/resolution/attribution_tests.rs`, so it is not re-asserted per
+//! fixture; and the target is not a fix, so it never appears in these lists —
+//! its landing is what the `Ok` means.
+//!
 //! Two rules govern the assertions in this file.
 //!
-//! **The expected op list is derived on paper first.** Every fixture asserts
-//! something about the ops that landed, and that list comes from the plan's
+//! **The expected fix list is derived on paper first.** Every fixture asserts
+//! something about the fixes that landed, and that list comes from the plan's
 //! §8.1 / §8.2 arm tables *before* the test is ever run. A difference between
 //! the hand-derived list and what the engine produced is a finding to explain —
 //! possibly a map bug — never a value to paste back in.
 //!
-//! **Sequence versus content.** Asserting the *order* of the landed ops is only
+//! **Sequence versus content.** Asserting the *order* of the landed fixes is only
 //! meaningful where the engine actually made a choice, i.e. where one failing
 //! apply reported more than one broken invariant and the engine picked
 //! `set.first()` out of the `BTreeSet`. Fixture `1a` is the one that pins that
@@ -32,9 +41,9 @@
 //! answered `Some` there, the cascade would quietly repair the state and the
 //! user would be told an edit succeeded that was in fact refused.
 
-use collomatique_state::{AppState, InMemoryData, apply_cascade, traits::Manager};
+use collomatique_state::{AppState, CascadeReceipt, InMemoryData, apply_cascade, traits::Manager};
 use collomatique_state_colloscopes::{
-    AssignmentOp, BalancingOp, ColloscopeOp, Convergence, Data, Error, FixableInvariant,
+    AssignmentOp, BalancingOp, ColloscopeOp, Convergence, Data, Error, Fix, FixableInvariant,
     GroupListOp, IncompatOp, NewId, NonEmptyRangeInclusive, Op, PairingOp, PeriodOp, Reference,
     SettingsOp, SlotOp, SlotPairingOp, StudentOp, StudentRefSite, Subject,
     SubjectInterrogationParameters, SubjectOp, SubjectParameters, SubjectPeriodicity,
@@ -46,12 +55,7 @@ use collomatique_state_colloscopes::{
         SubjectId, TeacherId, WeekId, WeekPatternId,
     },
     incompats::Incompatibility,
-    ops::{
-        AnnotatedAssignmentOp, AnnotatedBalancingOp, AnnotatedColloscopeOp, AnnotatedGroupListOp,
-        AnnotatedIncompatOp, AnnotatedOp, AnnotatedPairingOp, AnnotatedPeriodOp,
-        AnnotatedSettingsOp, AnnotatedSlotOp, AnnotatedSlotPairingOp, AnnotatedStudentOp,
-        AnnotatedSubjectOp, AnnotatedTeacherOp, AnnotatedWeekOp, AnnotatedWeekPatternOp,
-    },
+    ops::{AnnotatedOp, AnnotatedSlotOp},
     pairings::{PairingRule, RulePart},
     settings::Limits,
     slot_pairings::{SlotPairingRule, SlotRulePart},
@@ -258,29 +262,33 @@ fn prefilled_group_list(name: &str, groups: Vec<BTreeSet<StudentId>>) -> GroupLi
     .expect("the group count matches and no student sits in two groups")
 }
 
-/// The forward op of every landed step, in order.
-fn forward_ops(
-    applied: &collomatique_state::history::AggregatedOp<AnnotatedOp>,
-) -> Vec<AnnotatedOp> {
-    applied.inner().iter().map(|r| r.inner().clone()).collect()
+/// The meaning of every landed fix, in order. The target is not a fix, so it
+/// is not here.
+fn landed_fixes(receipt: &CascadeReceipt<Data>) -> Vec<Fix> {
+    receipt
+        .fixes()
+        .iter()
+        .map(|(_op, fix)| fix.clone())
+        .collect()
 }
 
-/// Content, not sequence: the same ops landed, in any order.
+/// Content, not sequence: the same fixes landed, in any order.
 ///
-/// Length plus `contains` catches an extra, a missing and a wrong op. The one
-/// case it misses — a duplicate paired with an omission — cannot occur, since a
-/// fix landing twice would be a perfect no-op and the engine panics on that.
-fn assert_same_ops(actual: &[AnnotatedOp], expected: &[AnnotatedOp]) {
-    for op in expected {
+/// Length plus `contains` catches an extra, a missing and a wrong fix. The one
+/// case it misses — a duplicate paired with an omission — cannot occur, since
+/// the same fix landing twice would be a perfect no-op and the engine panics on
+/// that.
+fn assert_same_fixes(actual: &[Fix], expected: &[Fix]) {
+    for fix in expected {
         assert!(
-            actual.contains(op),
-            "expected op never landed: {op:#?}\nlanded: {actual:#?}"
+            actual.contains(fix),
+            "expected fix never landed: {fix:#?}\nlanded: {actual:#?}"
         );
     }
     assert_eq!(
         actual.len(),
         expected.len(),
-        "landed op count\nlanded: {actual:#?}"
+        "landed fix count\nlanded: {actual:#?}"
     );
 }
 
@@ -358,20 +366,21 @@ fn fixture_1a_two_simultaneous_breaks_are_fixed_in_canonical_order() {
     let mut data = app.get_data().clone();
     let (target, _new_info) = data.annotate(Op::Period(PeriodOp::RemoveWithWeeks(period)));
 
-    let applied = apply_cascade(&mut data, target).expect("the cascade resolves both breaks");
+    let receipt = apply_cascade(&mut data, target).expect("the cascade resolves both breaks");
 
     assert_eq!(
-        forward_ops(&applied),
+        landed_fixes(&receipt),
         vec![
-            AnnotatedOp::from(AnnotatedSubjectOp::Update(
+            Fix::RemoveSubjectPeriodExclusion {
                 subject,
-                plain_subject("Math", BTreeSet::new()),
-            )),
-            AnnotatedOp::from(AnnotatedStudentOp::Update(
+                period,
+                rebuilt: plain_subject("Math", BTreeSet::new()),
+            },
+            Fix::RemoveStudentPeriodExclusion {
                 student,
-                plain_student(BTreeSet::new()),
-            )),
-            AnnotatedOp::from(AnnotatedPeriodOp::RemoveWithWeeks(period)),
+                period,
+                rebuilt: plain_student(BTreeSet::new()),
+            },
         ],
     );
 
@@ -495,19 +504,14 @@ fn fixture_1b_a_fix_of_a_fix_of_the_target_lands_in_order() {
     let mut data = app.get_data().clone();
     let (target, _new_info) = data.annotate(Op::Period(PeriodOp::RemoveWithWeeks(period)));
 
-    let applied = apply_cascade(&mut data, target).expect("the cascade resolves the chain");
+    let receipt = apply_cascade(&mut data, target).expect("the cascade resolves the chain");
 
     assert_eq!(
-        forward_ops(&applied),
+        landed_fixes(&receipt),
         vec![
-            AnnotatedOp::from(AnnotatedColloscopeOp::SetInterrogation(
-                slot,
-                week,
-                BTreeSet::new(),
-            )),
-            AnnotatedOp::from(AnnotatedWeekOp::Remove(week)),
-            AnnotatedOp::from(AnnotatedGroupListOp::AssignToSubject(period, subject, None,)),
-            AnnotatedOp::from(AnnotatedPeriodOp::RemoveWithWeeks(period)),
+            Fix::ClearInterrogationCell { slot, week },
+            Fix::DeleteWeek { week },
+            Fix::UnassignGroupList { period, subject },
         ],
     );
 
@@ -759,37 +763,39 @@ fn build_period_document(app: &mut AppState<Data, String>, depth: bool) -> Perio
 
 /// The seven flat fixes a period removal draws off `build_period_document`,
 /// hand-derived from the §8.1 table — one per `PeriodRefSite` variant, in
-/// declaration order. `1c` lands exactly these; `1e` lands these plus the ops
-/// of the two sub-cascades.
-fn seven_flat_period_fixes(doc: &PeriodDocument, week: WeekId) -> Vec<AnnotatedOp> {
+/// declaration order. `1c` lands exactly these; `1e` lands these plus the
+/// fixes of the two sub-cascades.
+fn seven_flat_period_fixes(doc: &PeriodDocument, week: WeekId) -> Vec<Fix> {
     vec![
-        AnnotatedOp::from(AnnotatedWeekOp::Remove(week)),
-        AnnotatedOp::from(AnnotatedSubjectOp::Update(
-            doc.excluded_subject,
-            plain_subject("Sport", BTreeSet::new()),
-        )),
-        AnnotatedOp::from(AnnotatedStudentOp::Update(
-            doc.excluded_student,
-            plain_student(BTreeSet::new()),
-        )),
-        AnnotatedOp::from(AnnotatedPairingOp::Update(
-            doc.pairing,
-            pairing_rule(doc.subject, doc.excluded_subject, BTreeSet::new()),
-        )),
-        AnnotatedOp::from(AnnotatedSlotPairingOp::Update(
-            doc.slot_pairing,
-            slot_pairing_rule(doc.slots[0], doc.slots[1], BTreeSet::new()),
-        )),
-        AnnotatedOp::from(AnnotatedAssignmentOp::SetRow(
-            doc.period,
-            doc.subject,
-            BTreeSet::new(),
-        )),
-        AnnotatedOp::from(AnnotatedGroupListOp::AssignToSubject(
-            doc.period,
-            doc.subject,
-            None,
-        )),
+        Fix::DeleteWeek { week },
+        Fix::RemoveSubjectPeriodExclusion {
+            subject: doc.excluded_subject,
+            period: doc.period,
+            rebuilt: plain_subject("Sport", BTreeSet::new()),
+        },
+        Fix::RemoveStudentPeriodExclusion {
+            student: doc.excluded_student,
+            period: doc.period,
+            rebuilt: plain_student(BTreeSet::new()),
+        },
+        Fix::RemovePairingRulePeriodExclusion {
+            rule: doc.pairing,
+            period: doc.period,
+            rebuilt: pairing_rule(doc.subject, doc.excluded_subject, BTreeSet::new()),
+        },
+        Fix::RemoveSlotPairingRulePeriodExclusion {
+            rule: doc.slot_pairing,
+            period: doc.period,
+            rebuilt: slot_pairing_rule(doc.slots[0], doc.slots[1], BTreeSet::new()),
+        },
+        Fix::ClearAssignmentRow {
+            period: doc.period,
+            subject: doc.subject,
+        },
+        Fix::UnassignGroupList {
+            period: doc.period,
+            subject: doc.subject,
+        },
     ]
 }
 
@@ -798,8 +804,8 @@ fn seven_flat_period_fixes(doc: &PeriodDocument, week: WeekId) -> Vec<AnnotatedO
 ///
 /// Note what this does *not* catch: an arm missing from the map is a compile
 /// error already, since `fix_period_ref` matches `PeriodRefSite` totally with
-/// no wildcard. What it catches is an arm that wrongly answers `None`, or emits
-/// the wrong op — including the two sealed rebuilds (`PairingRule` and
+/// no wildcard. What it catches is an arm that wrongly answers `None`, or
+/// answers the wrong fix — including the two sealed rebuilds (`PairingRule` and
 /// `SlotPairingRule`), whose `.expect` is exercised here for the first time.
 #[test]
 fn fixture_1c_all_seven_period_sites_are_repaired() {
@@ -809,13 +815,10 @@ fn fixture_1c_all_seven_period_sites_are_repaired() {
     let mut data = app.get_data().clone();
     let (target, _new_info) = data.annotate(Op::Period(PeriodOp::RemoveWithWeeks(doc.period)));
 
-    let applied = apply_cascade(&mut data, target).expect("the cascade resolves all seven sites");
+    let receipt = apply_cascade(&mut data, target).expect("the cascade resolves all seven sites");
 
-    let mut expected = seven_flat_period_fixes(&doc, doc.weeks[0]);
-    expected.push(AnnotatedOp::from(AnnotatedPeriodOp::RemoveWithWeeks(
-        doc.period,
-    )));
-    assert_same_ops(&forward_ops(&applied), &expected);
+    let expected = seven_flat_period_fixes(&doc, doc.weeks[0]);
+    assert_same_fixes(&landed_fixes(&receipt), &expected);
 
     assert_clean(&data);
     let inner = data.get_inner_data();
@@ -911,13 +914,14 @@ fn fixture_1c_all_seven_period_sites_are_repaired() {
 /// adds a student to `excluded_students` makes both
 /// `ColloscopeStudentExcluded(gl, st)` and
 /// `ColloscopeStudentGroupOutOfBounds(gl, st, 1)` fire against a live
-/// colloscope row placing `st` at group 1. Per §8.2 both arms emit
-/// `SetGroupList(gl, placements minus st)`.
+/// colloscope row placing `st` at group 1. Per §8.2 both arms answer the same
+/// [Fix::RemoveStudentColloscopePlacement] — the collapse the vocabulary makes
+/// explicit.
 ///
 /// The point of the fixture is the *second* half: whichever break is picked,
 /// the one fix kills both, the retry succeeds, and no second fix is ever
 /// requested. A redundant second fix would apply as a perfect no-op and the
-/// engine would panic — so "exactly two ops landed" is the real assertion here.
+/// engine would panic — so "exactly one fix landed" is the real assertion here.
 #[test]
 fn fixture_1d_two_invariants_resolved_by_one_fix() {
     let mut app = AppState::<Data, String>::new(Data::new());
@@ -956,17 +960,15 @@ fn fixture_1d_two_invariants_resolved_by_one_fix() {
         shrunk.clone(),
     )));
 
-    let applied = apply_cascade(&mut data, target).expect("the cascade resolves both breaks");
+    let receipt = apply_cascade(&mut data, target).expect("the cascade resolves both breaks");
 
-    assert_same_ops(
-        &forward_ops(&applied),
-        &[
-            AnnotatedOp::from(AnnotatedColloscopeOp::SetGroupList(
-                group_list,
-                BTreeMap::new(),
-            )),
-            AnnotatedOp::from(AnnotatedGroupListOp::Update(group_list, shrunk.clone())),
-        ],
+    assert_same_fixes(
+        &landed_fixes(&receipt),
+        &[Fix::RemoveStudentColloscopePlacement {
+            group_list,
+            student,
+            rebuilt: BTreeMap::new(),
+        }],
     );
 
     assert_clean(&data);
@@ -996,8 +998,8 @@ fn fixture_1d_two_invariants_resolved_by_one_fix() {
 ///   `WeekPattern(Update(pattern, minus second))`, then the removal lands;
 /// - the remaining six sites are then repaired flat, and the target lands.
 ///
-/// Eleven ops. Content, not sequence: round 1 makes a genuine pick and pinning
-/// that pick is `1a`'s job.
+/// Ten fixes, then the target. Content, not sequence: round 1 makes a genuine
+/// pick and pinning that pick is `1a`'s job.
 #[test]
 fn fixture_1e_the_flagship_period_removal() {
     let mut app = AppState::<Data, String>::new(Data::new());
@@ -1007,29 +1009,28 @@ fn fixture_1e_the_flagship_period_removal() {
     let mut data = app.get_data().clone();
     let (target, _new_info) = data.annotate(Op::Period(PeriodOp::RemoveWithWeeks(doc.period)));
 
-    let applied =
+    let receipt =
         apply_cascade(&mut data, target).expect("the cascade resolves the whole document");
 
     let mut expected = seven_flat_period_fixes(&doc, doc.weeks[0]);
     expected.extend([
         // The first week's sub-cascade.
-        AnnotatedOp::from(AnnotatedColloscopeOp::SetInterrogation(
-            doc.slots[0],
-            doc.weeks[0],
-            BTreeSet::new(),
-        )),
+        Fix::ClearInterrogationCell {
+            slot: doc.slots[0],
+            week: doc.weeks[0],
+        },
         // The second week, and its own sub-cascade.
-        AnnotatedOp::from(AnnotatedWeekPatternOp::Update(
+        Fix::RemoveWeekPatternExclusion {
             pattern,
-            WeekPattern {
+            week: doc.weeks[1],
+            rebuilt: WeekPattern {
                 name: "skip the second week".into(),
                 excluded_weeks: BTreeSet::new(),
             },
-        )),
-        AnnotatedOp::from(AnnotatedWeekOp::Remove(doc.weeks[1])),
-        AnnotatedOp::from(AnnotatedPeriodOp::RemoveWithWeeks(doc.period)),
+        },
+        Fix::DeleteWeek { week: doc.weeks[1] },
     ]);
-    assert_same_ops(&forward_ops(&applied), &expected);
+    assert_same_fixes(&landed_fixes(&receipt), &expected);
 
     assert_clean(&data);
     let inner = data.get_inner_data();
@@ -1131,7 +1132,7 @@ fn fixture_1e_the_flagship_period_removal() {
 /// dangling slot references. `SlotRefSite` declares `SlotPairingRuleAntecedent`
 /// before `ColloscopeInterrogation`, so the rule goes first, then the cell,
 /// then the slot; then the target is retried, `slot_b` is picked, its rule
-/// goes, the slot goes, and the teacher lands. Six ops. Which of the two slots
+/// goes, the slot goes, and the teacher lands. Five fixes. Which of the two slots
 /// is picked first is not asserted — that is `1a`'s job — so this fixture
 /// checks content, not sequence.
 #[test]
@@ -1268,21 +1269,16 @@ fn fixture_2_teacher_removal_fans_out_below_the_root() {
     let mut data = app.get_data().clone();
     let (target, _new_info) = data.annotate(Op::Teacher(TeacherOp::Remove(teacher)));
 
-    let applied = apply_cascade(&mut data, target).expect("the cascade resolves both fan-outs");
+    let receipt = apply_cascade(&mut data, target).expect("the cascade resolves both fan-outs");
 
     let expected = vec![
-        AnnotatedOp::from(AnnotatedSlotPairingOp::Remove(rule_ac)),
-        AnnotatedOp::from(AnnotatedColloscopeOp::SetInterrogation(
-            slot_a,
-            week,
-            BTreeSet::new(),
-        )),
-        AnnotatedOp::from(AnnotatedSlotOp::Remove(slot_a)),
-        AnnotatedOp::from(AnnotatedSlotPairingOp::Remove(rule_cb)),
-        AnnotatedOp::from(AnnotatedSlotOp::Remove(slot_b)),
-        AnnotatedOp::from(AnnotatedTeacherOp::Remove(teacher)),
+        Fix::DeleteSlotPairingRule { rule: rule_ac },
+        Fix::ClearInterrogationCell { slot: slot_a, week },
+        Fix::DeleteSlot { slot: slot_a },
+        Fix::DeleteSlotPairingRule { rule: rule_cb },
+        Fix::DeleteSlot { slot: slot_b },
     ];
-    assert_same_ops(&forward_ops(&applied), &expected);
+    assert_same_fixes(&landed_fixes(&receipt), &expected);
 
     assert_clean(&data);
     let inner = data.get_inner_data();
@@ -1362,7 +1358,7 @@ fn fixture_2_teacher_removal_fans_out_below_the_root() {
 ///   balancing breaks, which clear one per round in declaration order; then the
 ///   target lands.
 ///
-/// Five ops, not four — the extra one is the slot removal, attributed to
+/// Four fixes, not three — the extra one is the slot removal, attributed to
 /// `SlotTeacherDoesNotTeachSubject` rather than to the arm one would expect. The
 /// intermediate state that produces it — a teacher who has dropped a subject
 /// while a slot of theirs still runs on it — is one no user action can reach
@@ -1379,8 +1375,9 @@ fn fixture_2_teacher_removal_fans_out_below_the_root() {
 /// the shape of the teacher fix. `Teacher::subjects` is a set, so §8.2's row 2
 /// claims the offending *element* leaves and the teacher survives — and with a
 /// single-subject teacher the resulting empty set is indistinguishable from an
-/// arm that cleared the whole thing. The expected op is compared whole, so `S2`
-/// still being in it is the assertion that separates the two.
+/// arm that cleared the whole thing. The fix carries the rebuilt teacher and is
+/// compared whole, so `S2` still being in it is the assertion that separates the
+/// two.
 ///
 /// Content, not sequence: round 1 has four simultaneous breaks, so the engine
 /// genuinely picks, and pinning that pick is `1a`'s job.
@@ -1478,22 +1475,22 @@ fn fixture_3_a_rejected_fix_cascades_through_convergence_breaks() {
     let (target, _new_info) =
         data.annotate(Op::Subject(SubjectOp::Update(subject, subject_off.clone())));
 
-    let applied = apply_cascade(&mut data, target).expect("the cascade resolves the chain");
+    let receipt = apply_cascade(&mut data, target).expect("the cascade resolves the chain");
 
     let expected = vec![
-        AnnotatedOp::from(AnnotatedSlotOp::Remove(slot)),
-        AnnotatedOp::from(AnnotatedTeacherOp::Update(
+        Fix::DeleteSlot { slot },
+        Fix::RemoveTeacherSubject {
             teacher,
-            Teacher {
+            subject,
+            rebuilt: Teacher {
                 desc: Default::default(),
                 subjects: BTreeSet::from([other_subject]),
             },
-        )),
-        AnnotatedOp::from(AnnotatedGroupListOp::AssignToSubject(period, subject, None)),
-        AnnotatedOp::from(AnnotatedBalancingOp::SetSubject(subject, None)),
-        AnnotatedOp::from(AnnotatedSubjectOp::Update(subject, subject_off.clone())),
+        },
+        Fix::UnassignGroupList { period, subject },
+        Fix::ClearSubjectBalancing { subject },
     ];
-    assert_same_ops(&forward_ops(&applied), &expected);
+    assert_same_fixes(&landed_fixes(&receipt), &expected);
 
     assert_clean(&data);
     let inner = data.get_inner_data();
@@ -1559,7 +1556,8 @@ fn fixture_3_a_rejected_fix_cascades_through_convergence_breaks() {
 ///
 /// `StudentRefSite` has five variants (`refs.rs:154-169`) and this document
 /// holds all five at once, so `StudentOp::Remove(st)` breaks five references in
-/// a single round and every fix hangs flat off the target. Six ops land.
+/// a single round and every fix hangs flat off the target. Five fixes land,
+/// then the target.
 ///
 /// Covering the five needs **three** group lists, because a filling is either
 /// `Prefilled` or `Automatic` and one list cannot play two of the roles:
@@ -1587,11 +1585,11 @@ fn fixture_3_a_rejected_fix_cascades_through_convergence_breaks() {
 ///
 /// **A second student `st2`**, sitting in the *same* prefilled group, the *same*
 /// assignments row and the *same* colloscope row. Three of the five fixes carry
-/// a rebuilt collection inside the op, and the ops are compared whole, so `st2`
-/// still being in each of them is what separates "the offending element left"
-/// from "the collection was cleared". The other two fixes need no bystander: the
-/// settings fix names its key in the op itself, and `gl2`'s excluded set has
-/// only `st` in it by construction.
+/// a rebuilt collection, and the fixes are compared whole, so `st2` still being
+/// in each of them is what separates "the offending element left" from "the
+/// collection was cleared". The other two fixes need no bystander: the settings
+/// fix names its key, and `gl2`'s excluded set has only `st` in it by
+/// construction.
 ///
 /// Content, not sequence: five simultaneous breaks means the engine genuinely
 /// picks, and pinning that pick is `1a`'s job.
@@ -1719,33 +1717,36 @@ fn fixture_4_student_removal_covers_all_five_student_sites() {
     let mut data = app.get_data().clone();
     let (target, _new_info) = data.annotate(Op::Student(StudentOp::Remove(student)));
 
-    let applied = apply_cascade(&mut data, target).expect("the cascade repairs all five sites");
+    let receipt = apply_cascade(&mut data, target).expect("the cascade repairs all five sites");
 
     let expected = vec![
-        AnnotatedOp::from(AnnotatedGroupListOp::Update(
-            gl1,
-            prefilled_group_list(
+        Fix::RemoveStudentFromGroupListPrefill {
+            group_list: gl1,
+            student,
+            rebuilt: prefilled_group_list(
                 "Prérempli",
                 vec![BTreeSet::from([other_student]), BTreeSet::new()],
             ),
-        )),
-        AnnotatedOp::from(AnnotatedGroupListOp::Update(
-            gl2,
-            automatic_group_list("Exclusions", 2, BTreeSet::new()),
-        )),
-        AnnotatedOp::from(AnnotatedSettingsOp::SetStudent(student, None)),
-        AnnotatedOp::from(AnnotatedAssignmentOp::SetRow(
+        },
+        Fix::RemoveStudentGroupListExclusion {
+            group_list: gl2,
+            student,
+            rebuilt: automatic_group_list("Exclusions", 2, BTreeSet::new()),
+        },
+        Fix::ClearStudentSettings { student },
+        Fix::RemoveStudentFromAssignmentRow {
             period,
             subject,
-            BTreeSet::from([other_student]),
-        )),
-        AnnotatedOp::from(AnnotatedColloscopeOp::SetGroupList(
-            gl3,
-            BTreeMap::from([(other_student, 1)]),
-        )),
-        AnnotatedOp::from(AnnotatedStudentOp::Remove(student)),
+            student,
+            rebuilt: BTreeSet::from([other_student]),
+        },
+        Fix::RemoveStudentColloscopePlacement {
+            group_list: gl3,
+            student,
+            rebuilt: BTreeMap::from([(other_student, 1)]),
+        },
     ];
-    assert_same_ops(&forward_ops(&applied), &expected);
+    assert_same_fixes(&landed_fixes(&receipt), &expected);
 
     assert_clean(&data);
     let inner = data.get_inner_data();
@@ -1983,17 +1984,17 @@ fn build_week_pattern_document(app: &mut AppState<Data, String>) -> WeekPatternD
 /// One round, two breaks — `SlotWeekPattern(slot)` and
 /// `IncompatWeekPattern(incompat)` — whose fixes are independent. Content, not
 /// sequence: the order here would teach nothing `1a` does not already pin.
-/// Three ops, and that length is the concrete form of §8.1's argument that
+/// Two fixes, and that length is the concrete form of §8.1's argument that
 /// clearing to `None` can only ever *remove* instances of
 /// `InterrogationOnInactiveWeek`, never create one. If a future change made
 /// widening break something, the length is where it would surface.
 ///
-/// The two fix ops are compared **whole**. `SlotOp::Update` carries an entire
-/// `Slot`, so the exact op pins that *only* `week_pattern` moved — an arm that
-/// rebuilt the row from something else, or reset another field on the way, is
-/// caught here. "The row survives intact" is the whole claim of the divergence,
-/// so the test checks the whole row rather than one field. The builder gives
-/// both rows non-default fields precisely so that this comparison has teeth.
+/// The two fixes are compared **whole**. Each carries an entire rebuilt row, so
+/// the exact fix pins that *only* `week_pattern` moved — an arm that rebuilt the
+/// row from something else, or reset another field on the way, is caught here.
+/// "The row survives intact" is the whole claim of the divergence, so the test
+/// checks the whole row rather than one field. The builder gives both rows
+/// non-default fields precisely so that this comparison has teeth.
 ///
 /// **The semantic assertion is a before/after flip, not a final value.**
 /// Asserting `slot.week_pattern == None` would say a field moved; it would not
@@ -2065,21 +2066,23 @@ fn fixture_5a_week_pattern_removal_widens_its_rows_instead_of_deleting_them() {
     let mut data = app.get_data().clone();
     let (target, _new_info) = data.annotate(Op::WeekPattern(WeekPatternOp::Remove(doc.pattern)));
 
-    let applied = apply_cascade(&mut data, target).expect("the cascade clears both references");
+    let receipt = apply_cascade(&mut data, target).expect("the cascade clears both references");
 
     let mut widened_slot = slot_before.clone();
     widened_slot.week_pattern = None;
     let mut widened_incompat = incompat_before.clone();
     widened_incompat.week_pattern_id = None;
     let expected = vec![
-        AnnotatedOp::from(AnnotatedSlotOp::Update(doc.slot, widened_slot.clone())),
-        AnnotatedOp::from(AnnotatedIncompatOp::Update(
-            doc.incompat,
-            widened_incompat.clone(),
-        )),
-        AnnotatedOp::from(AnnotatedWeekPatternOp::Remove(doc.pattern)),
+        Fix::ClearSlotWeekPattern {
+            slot: doc.slot,
+            rebuilt: widened_slot.clone(),
+        },
+        Fix::ClearIncompatWeekPattern {
+            incompat: doc.incompat,
+            rebuilt: widened_incompat.clone(),
+        },
     ];
-    assert_same_ops(&forward_ops(&applied), &expected);
+    assert_same_fixes(&landed_fixes(&receipt), &expected);
 
     assert_clean(&data);
     let inner = data.get_inner_data();
@@ -2145,7 +2148,7 @@ fn fixture_5a_week_pattern_removal_widens_its_rows_instead_of_deleting_them() {
 /// Target: `WeekPatternOp::Update(WP, excluded_weeks + cell_week)`, with the
 /// slot's colloscope cell sitting on `cell_week`. One break,
 /// `InterrogationOnInactiveWeek(slot, cell_week)`; the fix clears the cell; then
-/// the update lands. Two ops.
+/// the update lands. One fix, then the target.
 ///
 /// It sits next to `5a` on purpose. When the pattern *narrows*, the map does
 /// what the legacy cleaning did — `UpdateWeekPattern`
@@ -2191,20 +2194,13 @@ fn fixture_5b_week_pattern_update_clears_the_newly_inactive_cell() {
         narrowed.clone(),
     )));
 
-    let applied = apply_cascade(&mut data, target).expect("the cascade clears the stranded cell");
+    let receipt = apply_cascade(&mut data, target).expect("the cascade clears the stranded cell");
 
-    let expected = vec![
-        AnnotatedOp::from(AnnotatedColloscopeOp::SetInterrogation(
-            doc.slot,
-            doc.cell_week,
-            BTreeSet::new(),
-        )),
-        AnnotatedOp::from(AnnotatedWeekPatternOp::Update(
-            doc.pattern,
-            narrowed.clone(),
-        )),
-    ];
-    assert_same_ops(&forward_ops(&applied), &expected);
+    let expected = vec![Fix::ClearInterrogationCell {
+        slot: doc.slot,
+        week: doc.cell_week,
+    }];
+    assert_same_fixes(&landed_fixes(&receipt), &expected);
 
     assert_clean(&data);
     let inner = data.get_inner_data();
@@ -2313,15 +2309,26 @@ fn fixture_6_a_no_op_target_lands_alone_and_does_not_panic() {
 
     let (target, _new_info) = data.annotate(Op::Slot(SlotOp::Update(slot, identical_slot.clone())));
 
-    let applied = apply_cascade(&mut data, target).expect("a no-op target is accepted, not fixed");
+    let receipt = apply_cascade(&mut data, target).expect("a no-op target is accepted, not fixed");
 
+    assert!(
+        receipt.fixes().is_empty(),
+        "nothing broke, so the map was never consulted: {:#?}",
+        landed_fixes(&receipt)
+    );
+    let landed: Vec<AnnotatedOp> = receipt
+        .into_aggregated_op()
+        .inner()
+        .iter()
+        .map(|step| step.inner().clone())
+        .collect();
     assert_eq!(
-        forward_ops(&applied),
+        landed,
         vec![AnnotatedOp::from(AnnotatedSlotOp::Update(
             slot,
             identical_slot
         ))],
-        "the target lands alone: nothing broke, so the map was never consulted"
+        "the target lands alone"
     );
 
     assert_clean(&data);
@@ -2464,9 +2471,9 @@ fn rejection_1a_a_slot_moved_past_midnight_is_convicted_not_deleted() {
 /// opposite verdict, and the only difference is which of the two operands the
 /// op moved.
 ///
-/// Two ops land, and content rather than sequence is asserted per this file's
-/// second rule: every round here reports exactly one break, so the order is
-/// forced by the data and pinning it would pin depth, not choice.
+/// One fix lands, then the target; content rather than sequence is asserted per
+/// this file's second rule: every round here reports exactly one break, so the
+/// order is forced by the data and pinning it would pin depth, not choice.
 ///
 /// This is also §8.2 row 4's only pin. That row has **no legacy behaviour to
 /// compare against**: `ops/src/subjects.rs` does not read `BrokenInvariants` at
@@ -2488,15 +2495,16 @@ fn rejection_1b_a_lengthened_interrogation_removes_the_slot_it_overflows() {
         longer_subject.clone(),
     )));
 
-    let applied = apply_cascade(&mut data, target)
+    let receipt = apply_cascade(&mut data, target)
         .expect("the arm removes the slot the lengthened interrogation overflows");
 
-    assert_same_ops(
-        &forward_ops(&applied),
-        &[
-            AnnotatedOp::from(AnnotatedSlotOp::Remove(slot)),
-            AnnotatedOp::from(AnnotatedSubjectOp::Update(subject, longer_subject.clone())),
-        ],
+    // The overflow arm has its own meaning — the slot goes *because it would
+    // spill over into the next day* — even though it emits the same op as
+    // [Fix::DeleteSlot]. That distinction is what this fixture is about, so it
+    // is asserted here rather than left to the translation.
+    assert_same_fixes(
+        &landed_fixes(&receipt),
+        &[Fix::DeleteOverflowingSlot { slot }],
     );
 
     assert_clean(&data);

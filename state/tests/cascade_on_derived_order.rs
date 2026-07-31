@@ -13,9 +13,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use collomatique_state::history::AggregatedOp;
 use collomatique_state::{
-    ApplyError, ContentOrd, FixOp, Fixable, InMemoryData, Operation, apply_cascade,
+    ApplyError, CascadeReceipt, ContentOrd, FixOp, Fixable, InMemoryData, Operation, apply_cascade,
 };
 
 /// Authors and books: every book's author must exist.
@@ -217,9 +216,14 @@ fn library(authors: &[u64], books: &[(u64, u64)]) -> LibraryData {
     }
 }
 
-/// The forward op of every landed step, in order.
-fn forward_ops(applied: &AggregatedOp<LibraryOp>) -> Vec<LibraryOp> {
-    applied.inner().iter().map(|r| r.inner().clone()).collect()
+/// The forward op of every landed step, in order — fixes first, target last.
+fn forward_ops(receipt: CascadeReceipt<LibraryData>) -> Vec<LibraryOp> {
+    receipt
+        .into_aggregated_op()
+        .inner()
+        .iter()
+        .map(|r| r.inner().clone())
+        .collect()
 }
 
 #[test]
@@ -227,10 +231,10 @@ fn a_cascade_repairs_through_a_derived_order() {
     let mut data = library(&[1], &[(10, 1), (20, 1)]);
     let (target, ()) = data.annotate(LibraryOp::RemoveAuthor(1));
 
-    let applied = apply_cascade(&mut data, target).expect("cascade resolves");
+    let receipt = apply_cascade(&mut data, target).expect("cascade resolves");
 
     assert_eq!(
-        forward_ops(&applied),
+        forward_ops(receipt),
         vec![
             LibraryOp::RemoveBook(10),
             LibraryOp::RemoveBook(20),
@@ -336,8 +340,8 @@ fn a_deterministic_walk_never_panics_and_errors_are_atomic() {
         let expected_target = target.clone();
 
         match apply_cascade(&mut data, target) {
-            Ok(applied) => {
-                let ops = forward_ops(&applied);
+            Ok(receipt) => {
+                let ops = forward_ops(receipt);
                 assert_eq!(
                     ops.last(),
                     Some(&expected_target),

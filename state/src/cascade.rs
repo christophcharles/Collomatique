@@ -8,10 +8,13 @@
 //! [InMemoryData::AnnotatedOperation] to [apply_cascade]; fixes arrive from the
 //! map as [FixOp] values it translates into annotated ops (the map holds only
 //! `&self` and the translation is pure, so neither can issue ids).
-//! On success the return value is the history-ready [AggregatedOp] — the target
-//! is always its last entry, and `.rev()` is the compound undo. On failure the
-//! data is restored bit-identically from an entry snapshot (id issuer included),
-//! so `Err ⇒ unchanged` holds literally; the collected backward ops are never
+//! On success the return value is a [CascadeReceipt]: the fixes that landed, in
+//! application order, each carrying the [FixOp] value it was materialized from,
+//! and the target separately. [CascadeReceipt::into_aggregated_op] rebuilds the
+//! history-ready [AggregatedOp] — the target is always its last entry, and
+//! `.rev()` is the compound undo. On failure the data is restored
+//! bit-identically from an entry snapshot (id issuer included), so
+//! `Err ⇒ unchanged` holds literally; the collected backward ops are never
 //! replayed.
 //!
 //! Termination rests on the resolution map's contract, and the engine holds it
@@ -103,22 +106,82 @@ pub trait Fixable: InMemoryData + ContentOrd {
     fn fix_invariant(&self, invariant: &Self::Invariant) -> Option<Self::Fix>;
 }
 
+/// Everything a successful cascade landed: the fixes in application order,
+/// each with the [FixOp] value it was materialized from, and the target.
+///
+/// The fixes carry their *meaning*, not their cause: which invariant was
+/// picked to produce them never leaves the engine (it feeds the no-progress
+/// ledger and nothing else). A consumer describing the cascade to a user reads
+/// the fix values; a consumer storing it in a modification history reads
+/// [CascadeReceipt::into_aggregated_op].
+#[derive(Clone, Debug)]
+pub struct CascadeReceipt<T: Fixable> {
+    /// The fixes, in the order they landed — deepest first, since the engine
+    /// unwinds depth-first.
+    fixes: Vec<(ReversibleOp<T::AnnotatedOperation>, T::Fix)>,
+    /// The target op, which lands last and is nobody's fix.
+    target: ReversibleOp<T::AnnotatedOperation>,
+}
+
+impl<T: Fixable> CascadeReceipt<T> {
+    /// Splits the engine's landing log into fixes and target.
+    ///
+    /// The target is the last entry by construction: it sits at the bottom of
+    /// the engine's stack, so it is popped last, and the loop only exits once
+    /// it has. The tags say the same thing, and are asserted rather than
+    /// trusted — a mismatch would be an engine bug, not bad input.
+    fn from_applied(
+        mut applied: Vec<(ReversibleOp<T::AnnotatedOperation>, Option<T::Fix>)>,
+    ) -> Self {
+        let (target, target_fix) = applied
+            .pop()
+            .expect("a successful cascade always lands at least the target");
+        assert!(
+            target_fix.is_none(),
+            "the last op a cascade lands must be the target, but it was tagged as a fix"
+        );
+        let fixes = applied
+            .into_iter()
+            .map(|(op, fix)| {
+                let fix = fix.expect("every op landed before the target is a fix");
+                (op, fix)
+            })
+            .collect();
+
+        CascadeReceipt { fixes, target }
+    }
+
+    /// The fixes the cascade had to apply, in application order, with their
+    /// meanings.
+    pub fn fixes(&self) -> &[(ReversibleOp<T::AnnotatedOperation>, T::Fix)] {
+        &self.fixes
+    }
+
+    /// The history-ready aggregated op: the fixes in order, then the target.
+    pub fn into_aggregated_op(self) -> AggregatedOp<T::AnnotatedOperation> {
+        let mut ops: Vec<_> = self.fixes.into_iter().map(|(op, _fix)| op).collect();
+        ops.push(self.target);
+        AggregatedOp::new(ops)
+    }
+}
+
 /// Apply `target`, resolving broken invariants by cascading fixes.
 ///
 /// See the module docs and [Fixable] for the full contract. Returns the
-/// history-ready [AggregatedOp] of every op that landed (target last) on
-/// success; on failure restores the entry snapshot and returns the target's
-/// most informative error (design doc D4).
+/// [CascadeReceipt] of everything that landed on success; on failure restores
+/// the entry snapshot and returns the target's most informative error (design
+/// doc D4).
 pub fn apply_cascade<T: Fixable>(
     data: &mut T,
     target: T::AnnotatedOperation,
-) -> Result<AggregatedOp<T::AnnotatedOperation>, ApplyError<T::InvalidOp, T::Invariant>> {
+) -> Result<CascadeReceipt<T>, ApplyError<T::InvalidOp, T::Invariant>> {
     // Failure = "*data = snapshot": bit-identical restore, id issuer included.
     let snapshot = data.clone();
     // Each entry is an op to land and the fix it was materialized from — the
     // target itself is nobody's fix, hence the `None`.
     let mut stack: Vec<(T::AnnotatedOperation, Option<T::Fix>)> = vec![(target, None)];
-    let mut applied: Vec<ReversibleOp<T::AnnotatedOperation>> = Vec::new();
+    // Landed ops keep the tag they were pushed with: the receipt splits on it.
+    let mut applied: Vec<(ReversibleOp<T::AnnotatedOperation>, Option<T::Fix>)> = Vec::new();
     // The target's most recent BrokenInvariants set: the informative error
     // when the target is convicted mid-cascade (D4 — the SlotOverflowsDay trace).
     let mut last_target_break: Option<BTreeSet<T::Invariant>> = None;
@@ -131,7 +194,7 @@ pub fn apply_cascade<T: Fixable>(
 
     loop {
         let Some(front) = stack.last().map(|(op, _fix)| op.clone()) else {
-            return Ok(AggregatedOp::new(applied));
+            return Ok(CascadeReceipt::from_applied(applied));
         };
         let is_target = stack.len() == 1;
 
@@ -163,11 +226,16 @@ pub fn apply_cascade<T: Fixable>(
                     }
                 }
                 picks_since_landing.clear();
-                stack.pop();
-                applied.push(ReversibleOp {
-                    forward: front,
-                    backward,
-                });
+                let (_op, fix) = stack
+                    .pop()
+                    .expect("the front op was just read from the stack");
+                applied.push((
+                    ReversibleOp {
+                        forward: front,
+                        backward,
+                    },
+                    fix,
+                ));
             }
             Err(ApplyError::BrokenInvariants(set)) => {
                 let pick = set
@@ -224,7 +292,7 @@ pub fn apply_cascade<T: Fixable>(
 mod tests {
     use super::*;
     use crate::test_utils::{
-        EvilMode, EvilQuoteData, QuoteData, QuoteInvalidOp, QuoteInvariant, QuoteOp,
+        EvilMode, EvilQuoteData, QuoteData, QuoteFix, QuoteInvalidOp, QuoteInvariant, QuoteOp,
     };
     use std::collections::BTreeSet;
 
@@ -244,9 +312,20 @@ mod tests {
         }
     }
 
-    /// The forward op of every landed step, in order.
-    fn forward_ops(applied: &AggregatedOp<QuoteOp>) -> Vec<QuoteOp> {
-        applied.inner().iter().map(|r| r.inner().clone()).collect()
+    /// The forward op of every landed step, in order — fixes first, target
+    /// last, i.e. the receipt read as the history entry it becomes.
+    fn forward_ops(receipt: CascadeReceipt<QuoteData>) -> Vec<QuoteOp> {
+        receipt
+            .into_aggregated_op()
+            .inner()
+            .iter()
+            .map(|r| r.inner().clone())
+            .collect()
+    }
+
+    /// The `Fix` value of every landed fix, in order.
+    fn landed_fixes(receipt: &CascadeReceipt<QuoteData>) -> Vec<QuoteFix> {
+        receipt.fixes().iter().map(|(_op, fix)| *fix).collect()
     }
 
     // 1. Two quotes by one student; removing the student cascades over two
@@ -258,10 +337,10 @@ mod tests {
         // The caller annotates the target itself — identity for the toy.
         let (target, ()) = data.annotate(QuoteOp::RemoveStudent(1));
 
-        let applied = apply_cascade(&mut data, target).expect("cascade resolves");
+        let receipt = apply_cascade(&mut data, target).expect("cascade resolves");
 
         assert_eq!(
-            forward_ops(&applied),
+            forward_ops(receipt),
             vec![
                 QuoteOp::RemoveQuote(10),
                 QuoteOp::RemoveQuote(20),
@@ -280,8 +359,8 @@ mod tests {
         let mut data = original.clone();
         let (target, ()) = data.annotate(QuoteOp::RemoveStudent(1));
 
-        let applied = apply_cascade(&mut data, target).expect("cascade resolves");
-        for rev_op in applied.inner().iter().rev() {
+        let receipt = apply_cascade(&mut data, target).expect("cascade resolves");
+        for rev_op in receipt.into_aggregated_op().inner().iter().rev() {
             data.apply(&rev_op.backward).expect("backward op applies");
         }
 
@@ -294,9 +373,10 @@ mod tests {
         let mut data = quote_data(&[1], &[]);
         let (target, ()) = data.annotate(QuoteOp::AddStudent(2));
 
-        let applied = apply_cascade(&mut data, target).expect("valid op");
+        let receipt = apply_cascade(&mut data, target).expect("valid op");
 
-        assert_eq!(applied.inner().len(), 1);
+        assert!(receipt.fixes().is_empty());
+        assert_eq!(receipt.into_aggregated_op().inner().len(), 1);
         assert!(data.students.contains(&2));
     }
 
@@ -496,10 +576,10 @@ mod tests {
         let mut data = quote_data_with_notes(&[1], &[(10, 1)], &[(5, 10)]);
         let (target, ()) = data.annotate(QuoteOp::RemoveStudent(1));
 
-        let applied = apply_cascade(&mut data, target).expect("cascade resolves");
+        let receipt = apply_cascade(&mut data, target).expect("cascade resolves");
 
         assert_eq!(
-            forward_ops(&applied),
+            forward_ops(receipt),
             vec![
                 QuoteOp::RemoveNote(5),
                 QuoteOp::RemoveQuote(10),
@@ -519,11 +599,40 @@ mod tests {
         let mut data = original.clone();
         let (target, ()) = data.annotate(QuoteOp::RemoveStudent(1));
 
-        let applied = apply_cascade(&mut data, target).expect("cascade resolves");
-        for rev_op in applied.inner().iter().rev() {
+        let receipt = apply_cascade(&mut data, target).expect("cascade resolves");
+        for rev_op in receipt.into_aggregated_op().inner().iter().rev() {
             data.apply(&rev_op.backward).expect("backward op applies");
         }
 
         assert_eq!(data, original);
+    }
+
+    // 16. The receipt's split, on test 1's two-round repair: the fixes come
+    //     back as the `Fix` values the map answered, in application order, and
+    //     the target is what is left over — it is nobody's fix, so it lands
+    //     outside the fix list entirely.
+    #[test]
+    fn the_receipt_tags_every_fix_and_holds_the_target_apart() {
+        let mut data = quote_data(&[1], &[(10, 1), (20, 1)]);
+        let (target, ()) = data.annotate(QuoteOp::RemoveStudent(1));
+
+        let receipt = apply_cascade(&mut data, target).expect("cascade resolves");
+
+        assert_eq!(
+            landed_fixes(&receipt),
+            vec![QuoteFix::RemoveQuote(10), QuoteFix::RemoveQuote(20)],
+        );
+        // Each tagged op is the one its fix translates to, and the target is
+        // the entry the aggregated op has beyond them — last, as history
+        // expects.
+        for (op, fix) in receipt.fixes() {
+            assert_eq!(op.inner(), &fix.to_annotated_op());
+        }
+        let aggregated = receipt.into_aggregated_op();
+        assert_eq!(aggregated.inner().len(), 3);
+        assert_eq!(
+            aggregated.inner().last().map(|r| r.inner().clone()),
+            Some(QuoteOp::RemoveStudent(1)),
+        );
     }
 }

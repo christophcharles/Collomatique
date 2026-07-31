@@ -77,7 +77,7 @@ use collomatique_testgen_colloscopes::rand::Rng;
 use collomatique_testgen_colloscopes::{ChaCha8Rng, generator, harness};
 
 use collomatique_state::traits::Manager;
-use collomatique_state::{InMemoryData, apply_cascade};
+use collomatique_state::{FixOp, InMemoryData, apply_cascade};
 use collomatique_state_colloscopes::{Data, Error, InnerData, Op};
 
 use harness::{OpLog, RunConfig, RunStats};
@@ -212,8 +212,8 @@ fn cascade_step(
     let (annotated, _new_id) = data.annotate(op);
     let before = data.clone();
 
-    let applied = match apply_cascade(data, annotated.clone()) {
-        Ok(applied) => applied,
+    let receipt = match apply_cascade(data, annotated.clone()) {
+        Ok(receipt) => receipt,
         Err(e) => {
             stats.record(category, false);
             // The two rejections are not the same event, and only one of them
@@ -244,26 +244,42 @@ fn cascade_step(
     // Honesty 1: what the cascade lands is fully valid.
     assert_clean(data);
 
-    // Honesty 2: the target is the last thing that landed, so `.rev()` undoes it
-    // first and the history slot reads right.
-    assert_eq!(
-        applied.inner().last().map(|step| step.inner()),
-        Some(&annotated),
-        "the target op must be the last entry of the aggregated op",
-    );
-
-    let fixes = applied.inner().len() - 1;
+    let fixes = receipt.fixes().len();
     if fixes > 0 {
         Counters::bump(&c.cascaded, 1);
         Counters::bump(&c.fix_ops, fixes);
         c.widest.set(c.widest.get().max(fixes));
     }
+    // Every fix is the op its `Fix` value translates to: the receipt's tagging
+    // is a claim about what landed, so the walk holds it to it.
+    for (step, fix) in receipt.fixes() {
+        assert_eq!(
+            step.inner(),
+            &fix.to_annotated_op(),
+            "a landed fix must be the op its Fix value translates to",
+        );
+    }
+
+    let aggregated = receipt.into_aggregated_op();
+
+    // Honesty 2: the target is the last thing that landed, so `.rev()` undoes it
+    // first and the history slot reads right.
+    assert_eq!(
+        aggregated.inner().last().map(|step| step.inner()),
+        Some(&annotated),
+        "the target op must be the last entry of the aggregated op",
+    );
+    assert_eq!(
+        aggregated.inner().len(),
+        fixes + 1,
+        "the aggregated op is the fixes plus the target, and nothing else",
+    );
 
     // Honesty 3: the compound undo works stepwise. Replaying the reverses in
     // reverse order walks back through the exact trajectory the cascade came by,
     // so every intermediate state is one the gate already accepted.
     let mut undone = data.clone();
-    for step in applied.rev().inner() {
+    for step in aggregated.rev().inner() {
         undone
             .force_apply(step.inner())
             .expect("the reverse of a landed cascade step must apply");
