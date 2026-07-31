@@ -219,7 +219,10 @@ fn data_ignores_the_id_issuer() {
         AnnotatedOp::Period(AnnotatedPeriodOp::AddFront(p)) => p,
         other => panic!("unexpected annotated op {other:?}"),
     };
-    apply(&mut round_trip, Op::Period(PeriodOp::Remove(issued)));
+    apply(
+        &mut round_trip,
+        Op::Period(PeriodOp::RemoveWithWeeks(issued)),
+    );
 
     assert_eq!(
         untouched.get_inner_data(),

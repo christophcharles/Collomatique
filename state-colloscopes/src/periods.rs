@@ -159,7 +159,7 @@ impl crate::Data {
                     .ordered_period_list
                     .insert_at(0, *period_id, ())
                     .expect("period id absence checked above");
-                Ok(AnnotatedPeriodOp::Remove(*period_id))
+                Ok(AnnotatedPeriodOp::RemoveWithWeeks(*period_id))
             }
             AnnotatedPeriodOp::AddAfter(period_id, after_id) => {
                 if self
@@ -188,9 +188,9 @@ impl crate::Data {
                     .ordered_period_list
                     .insert_at(position + 1, *period_id, ())
                     .expect("period id absence checked above");
-                Ok(AnnotatedPeriodOp::Remove(*period_id))
+                Ok(AnnotatedPeriodOp::RemoveWithWeeks(*period_id))
             }
-            AnnotatedPeriodOp::Remove(period_id) => {
+            AnnotatedPeriodOp::RemoveWithWeeks(period_id) => {
                 let Some(position) = self
                     .inner_data
                     .params

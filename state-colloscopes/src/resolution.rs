@@ -33,7 +33,7 @@
 //!    passed the full gate, and the entry document was validated on decode.
 //!    This is what makes the row-clearing fixes legal even though the target of
 //!    a dangling reference is "gone": it is *not* gone here. When
-//!    `PeriodOp::Remove(P)` fails, the data was rolled back and `P` is still in
+//!    `PeriodOp::RemoveWithWeeks(P)` fails, the data was rolled back and `P` is still in
 //!    the table, so `SetRow(P, subject, ∅)` — whose precheck demands the period
 //!    exist — applies cleanly. The hole appears only once the retried target
 //!    finally lands, by which time every row that would have dangled is gone.

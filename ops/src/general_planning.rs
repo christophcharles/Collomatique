@@ -1110,7 +1110,7 @@ impl GeneralPlanningUpdateOp {
                 let result = data
                     .apply(
                         collomatique_state_colloscopes::Op::Period(
-                            collomatique_state_colloscopes::PeriodOp::Remove(*period_id),
+                            collomatique_state_colloscopes::PeriodOp::RemoveWithWeeks(*period_id),
                         ),
                         self.get_desc(),
                     )
