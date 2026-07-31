@@ -267,11 +267,15 @@ impl StudentsUpdateOp {
                                         *student_id,
                                         *group_list_id,
                                     ),
-                                    op: UpdateOp::GroupLists(GroupListsUpdateOp::SetFilling(
+                                    op: UpdateOp::GroupLists(GroupListsUpdateOp::UpdateGroupList(
                                         *group_list_id,
-                                        collomatique_state_colloscopes::group_lists::GroupListFilling::Prefilled {
-                                            groups: new_groups,
-                                        },
+                                        collomatique_state_colloscopes::group_lists::GroupList::new(
+                                            group_list.params().clone(),
+                                            collomatique_state_colloscopes::group_lists::GroupListFilling::Prefilled {
+                                                groups: new_groups,
+                                            },
+                                        )
+                                        .expect("the rebuilt groups keep the existing group count"),
                                     )),
                                 });
                             }
@@ -285,11 +289,15 @@ impl StudentsUpdateOp {
                                         *student_id,
                                         *group_list_id,
                                     ),
-                                    op: UpdateOp::GroupLists(GroupListsUpdateOp::SetFilling(
+                                    op: UpdateOp::GroupLists(GroupListsUpdateOp::UpdateGroupList(
                                         *group_list_id,
-                                        collomatique_state_colloscopes::group_lists::GroupListFilling::Automatic {
-                                            excluded_students: new_excluded,
-                                        },
+                                        collomatique_state_colloscopes::group_lists::GroupList::new(
+                                            group_list.params().clone(),
+                                            collomatique_state_colloscopes::group_lists::GroupListFilling::Automatic {
+                                                excluded_students: new_excluded,
+                                            },
+                                        )
+                                        .expect("an automatic filling never constrains the group count"),
                                     )),
                                 });
                             }

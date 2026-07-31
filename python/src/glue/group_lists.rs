@@ -53,12 +53,13 @@ pub struct GroupList {
 #[pymethods]
 impl GroupList {
     #[new]
-    fn new(parameters: GroupListParameters) -> Self {
+    #[pyo3(signature = (parameters, filling=None))]
+    fn new(parameters: GroupListParameters, filling: Option<GroupListFilling>) -> Self {
         GroupList {
             parameters,
-            filling: GroupListFilling::Automatic {
+            filling: filling.unwrap_or(GroupListFilling::Automatic {
                 excluded_students: BTreeSet::new(),
-            },
+            }),
         }
     }
 
@@ -74,6 +75,17 @@ impl From<collomatique_state_colloscopes::group_lists::GroupList> for GroupList 
             parameters: value.params().clone().into(),
             filling: value.filling().clone().into(),
         }
+    }
+}
+
+impl TryFrom<GroupList> for collomatique_state_colloscopes::group_lists::GroupList {
+    type Error = PyErr;
+    fn try_from(value: GroupList) -> PyResult<Self> {
+        collomatique_state_colloscopes::group_lists::GroupList::new(
+            value.parameters.try_into()?,
+            value.filling.into(),
+        )
+        .map_err(|e| PyValueError::new_err(e.to_string()))
     }
 }
 

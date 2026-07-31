@@ -16,6 +16,11 @@ redesign (★ D15, user-driven design round of July 30 2026, after the first dra
 D15 revises D2 and D6 in place; their entries below are already rewritten to the
 final ruling.
 
+**One decision has since become void: D12.** The global-group-list work of July 31
+2026 (branch `global_grouplist_update`, landed before this step starts) removed its
+premise — see its entry in §0. The consequences are already folded in below: §2.3's
+`CascadeWarning` has one shape instead of two, and §3.14, §5-C5, §6 and §7 follow.
+
 ---
 
 ## 0. Decision ledger
@@ -106,20 +111,33 @@ Rationale is recorded so the executing session does not re-litigate.
   `dry_apply` / `apply` in commit 7. The final `apply` keeps today's exact signature
   (`&mut T` → `Result<Option<NewId>, UpdateError>`), so `python/src/glue.rs` ends the
   step textually unchanged.
-- ★ **D12 — Payload-inherent loss STILL warns, through one composite-emitted warning**
-  (user ruling, July 30, rejecting an earlier "accept the silence" proposal). The
-  reason: the GUI edits a list's group *count* and its *filling* in separate places, so
-  a user shrinking the count may never see that a dropped group held students — the old
-  `LooseStudentsInPrefilledGroupList` warning (`group_lists.rs:435-472`) must survive.
-  The loss happens *inside the op's own payload* (the composite truncates the groups
-  when rebuilding the sealed `GroupList`), so no invariant breaks and the cascade
-  cannot report it. `CascadeWarning` therefore has exactly **two** variants: the
-  cascade fix, and `DroppedPrefilledStudents { group_list, students }`, emitted by the
-  `UpdateGroupList` composite itself through a `pub(crate)` push on `CascadeSession`.
-  The hand-written-warning door reopens by exactly this much: crate-private
-  construction, one variant, and any future addition must argue its case here.
-  Colloscope placements referencing dropped groups still warn through the cascade
-  (`ColloscopeStudentGroupOutOfBounds`).
+- ★ **D12 — VOID since July 31 2026; its premise was removed.** The original ruling
+  (user, July 30, rejecting an earlier "accept the silence" proposal) said a prefilled
+  shrink must keep warning: the GUI edited a list's group *count* and its *filling* in
+  two separate dialogs, so a user shrinking the count might never see that a dropped
+  group held students, and `LooseStudentsInPrefilledGroupList` therefore had to
+  survive as a composite-emitted `DroppedPrefilledStudents` warning pushed through a
+  `pub(crate)` channel on `CascadeSession`.
+
+  The global-group-list work (branch `global_grouplist_update`, landed before this
+  step starts) removed **both** halves of that premise. The two dialogs are now one
+  window showing count and filling side by side, and
+  `GroupListsUpdateOp::UpdateGroupList` carries a whole sealed `GroupList` —
+  parameters *and* filling in one payload. The loss is therefore **authored by the
+  caller**, not discovered by this layer: a group they deleted and a student they took
+  out of a group are their own edits, and warning about them tells the user what they
+  just said. `LooseStudentsInPrefilledGroupList` and the shrink pre-empt that emitted
+  it are deleted (commit `93f83345`); the ops-level group-list op family also lost
+  `SetFilling` and the parameters-only `UpdateGroupList` there.
+
+  **Consequences for this plan.** `CascadeWarning` has exactly **one** shape, the
+  cascade fix (§2.3); `CascadeWarningView`, `DroppedPrefilledStudents` and
+  `push_dropped_prefilled_students` are never built; §3.14's composite has nothing to
+  detect and nothing to emit. The hand-written-warning door stays **shut** — every
+  warning in the new world is a cascade `Fix` — and re-opening it needs a fresh ruling
+  here. Unchanged: colloscope placements referencing dropped groups still warn through
+  the cascade (`ColloscopeStudentGroupOutOfBounds`); that half of D12 was never about
+  the payload.
 - ★ **D13 — `DeletePeriod` on a dead id stops crashing.** Today the variant
   `DeletePeriodError::InvalidPeriodId` (`general_planning.rs:277`) is **never
   constructed** — the arm has no precheck at all and a dead id dies on
@@ -223,7 +241,7 @@ Termination rests on nothing but each scan eventually returning `None`. The per-
 scanning the `BrokenInvariants` set in the old validator's order, with
 `panic!("… should be cleaned before …")` coupling translation to cleaning.
 
-The survey's totals, for scale: **35 warning variants** across 7 non-empty families (8
+The survey's totals, for scale: **34 warning variants** across 7 non-empty families (8
 families have empty warning enums); **6 explicit "should be cleaned before" panics**
 (`students.rs:461,503,509,515`, `week_patterns.rs:375,378`) plus implicit ones —
 `DeleteSlot` has **no** `BrokenInvariants` arm at all (`slots.rs:513-516`), and
@@ -386,45 +404,21 @@ issued ids), and the `ops/` layer runs on a clone that is dropped on error anywa
 
 ```rust
 // ops/src/cascade.rs (new module; `pub mod cascade; pub use cascade::*;` in lib.rs)
-/// One warning attached to an update: almost always a fix the cascade had to
-/// apply beyond the user's own ops, plus the single composite-detected case
-/// (D12). Content is private (crate-private construction, borrowed read-only
-/// view), so a warning can never desynchronize from what actually happened.
-/// No text is stored: rendering is a method, computed on demand against the
-/// composite's pre-state (D7).
+/// One warning attached to an update: a fix the cascade had to apply beyond the
+/// user's own ops. That is the *only* kind there is (D12 void) — no composite
+/// ever hand-writes one. Content is private (crate-private construction,
+/// borrowed read-only accessor), so a warning can never desynchronize from what
+/// actually happened. No text is stored: rendering is a method, computed on
+/// demand against the composite's pre-state (D7).
 pub struct CascadeWarning {
-    inner: WarningInner,   // private enum
-}
-
-enum WarningInner {
-    /// A fix the cascade applied, as its `Fix` meaning (D15) — the invariant
-    /// that caused it never leaves the engine.
-    CascadeFix {
-        fix: collomatique_state_colloscopes::Fix,
-    },
-    /// Students silently lost by shrinking a prefilled group list (D12): the
-    /// GUI edits group count and filling in separate places, so the
-    /// `UpdateGroupList` composite detects and reports this itself — the one
-    /// hand-written warning in the new world.
-    DroppedPrefilledStudents {
-        group_list: collomatique_state_colloscopes::GroupListId,
-        students: Vec<collomatique_state_colloscopes::StudentId>,
-    },
-}
-
-/// Borrowed view for reading/matching a warning's content.
-pub enum CascadeWarningView<'a> {
-    CascadeFix {
-        fix: &'a collomatique_state_colloscopes::Fix,
-    },
-    DroppedPrefilledStudents {
-        group_list: collomatique_state_colloscopes::GroupListId,
-        students: &'a [collomatique_state_colloscopes::StudentId],
-    },
+    /// The fix's `Fix` meaning (D15) — the invariant that caused it never
+    /// leaves the engine.
+    fix: collomatique_state_colloscopes::Fix,
 }
 
 impl CascadeWarning {
-    pub fn view(&self) -> CascadeWarningView<'_>;
+    /// Borrowed read-only view of the warning's content.
+    pub fn fix(&self) -> &collomatique_state_colloscopes::Fix;
     // commit 5 adds:
     /// French, effect-phrased description, rendered against the composite's
     /// PRE-state (D7). Panics if `data` does not hold the material the
@@ -455,11 +449,17 @@ impl<T: Manager<Data = Data, Desc = Desc>> CascadeSession<T> {
 }
 ```
 
+With one shape left, `CascadeWarning` is a newtype over `Fix` — and it stays a distinct
+type rather than collapsing to `Vec<Fix>`, because `text` has to live somewhere: `Fix`
+belongs to `state-colloscopes`, which carries no French and no presentation (D6), so the
+orphan rule puts the rendering method on an `ops/`-owned wrapper. Crate-private
+construction rides along for free.
+
 `apply` calls `self.session.apply_cascade(op, desc)` (2a) and extends the log — nothing
-more. Rendering never happens here (D7). One extra `pub(crate)` method,
-`push_dropped_prefilled_students(group_list, students)`, is the D12 channel — visible
-only to the family composites, so the set of hand-written warnings stays closed and
-reviewable.
+more. Rendering never happens here (D7). There is **no** hand-written-warning channel:
+the composites can only produce warnings by making the cascade fix something, so the
+warning set cannot drift from what actually happened. Re-opening that door (the void
+D12 wanted a `pub(crate)` push) needs a ruling in §0.
 
 `CascadeResult<T>` mirrors today's `DryResult<T>` (`lib.rs:290`):
 
@@ -822,19 +822,24 @@ The family where old cleaning and the cascade align almost 1:1 — worth pinning
 
 ### 3.14 `group_lists.rs`
 
-Six variants; `DuplicatePreviousPeriod` is the composite (snapshot previous-period
-associations, one `AssignToSubject` per eligible subject — no ids, no recursion). The
-old module's five cleaning scans (all colloscope-erasing) are replaced by
-`ColloscopeStudentGroupOutOfBounds` / `InterrogationGroupOutOfBounds` /
+Five variants since the global-group-list work (`AddNewGroupList`, `UpdateGroupList`,
+`DeleteGroupList`, `AssignGroupListToSubject`, `DuplicatePreviousPeriod` — the
+parameters-only `UpdateGroupList` and `SetFilling` are gone, merged into one op
+carrying a whole sealed `GroupList`). `DuplicatePreviousPeriod` is the composite
+(snapshot previous-period associations, one `AssignToSubject` per eligible subject —
+no ids, no recursion). The old module's four cleaning scans (all colloscope-erasing)
+are replaced by `ColloscopeStudentGroupOutOfBounds` / `InterrogationGroupOutOfBounds` /
 `ColloscopeStudentExcluded` / `ColloscopeGroupListPrefilled` convergence fixes and the
 two `GroupList@…` dangle arms. The old panic-only invariant scan
-(`panic!("Associated subjects should be properly cleaned")`, `group_lists.rs:963`)
-dies. **D12 lands here**: before applying the truncating `Update`, the composite
-collects the students of the dropped groups and calls
-`session.push_dropped_prefilled_students(...)` — the one hand-written warning; its
-fixture asserts it alongside the colloscope ones, mutation-checked (delete the push,
-watch red). All eleven ops-level prechecks kept, including `SetFilling`'s
-student-existence sweep.
+(`panic!("Associated subjects should be properly cleaned")`, `group_lists.rs:880`)
+dies.
+
+Both `AddNewGroupList` and `UpdateGroupList` hand the state layer a payload that is
+already whole and already validated, so the bodies neither pad nor truncate anything —
+and with D12 void there is nothing for them to detect and emit either. All eleven
+ops-level prechecks kept, including **both** student-existence sweeps
+(`AddNewGroupList`'s and `UpdateGroupList`'s — the merge moved the old `SetFilling`
+sweep onto the update and gave Add one of its own).
 
 ### 3.15 `general_planning.rs`
 
@@ -955,9 +960,9 @@ reachable fix) gets fuzzed for free.
 New `ops/src/warning_text.rs`: `pub(crate) fn render(data: &Data, fix: &Fix) ->
 String`, exhaustive over `Fix` with **no wildcard arm** — a new fix shape is a compile
 error here (D6/D15). The renderer never sees an invariant: one variant, one meaning,
-one template. `CascadeWarning::text` wraps it, with the outer match on
-`CascadeWarningView` — the two warning variants — then on the `Fix` inside
-`CascadeFix`. Name lookups (teacher/student names, subject names, group-list names,
+one template. `CascadeWarning::text` is a one-line wrapper forwarding its own `Fix` —
+there is no second warning shape to match on first (D12 void).
+Name lookups (teacher/student names, subject names, group-list names,
 slot day/time, week numbers) read `data` and **panic on a miss** (D7).
 `resolution.rs`'s module doc gains: *"Every `Fix` variant has a French description in
 `ops/src/warning_text.rs` — a new or changed variant must update its text."*
@@ -1007,12 +1012,8 @@ Rendering note on `UnassignGroupList`: the template names the list, which the fi
 not carry — the renderer reads the association entry at `(period, subject)` from the
 pre-state (the entry the fix clears, so it is present there; a miss panics per D7).
 
-**The composite-emitted variant (D12)** — not part of `Fix`; the second
-`CascadeWarningView` variant:
-
-| warning | template |
-| --- | --- |
-| `DroppedPrefilledStudents` | « Les élèves {noms} seront retirés des groupes supprimés de la liste « {liste} » » |
+The catalogue above is the **whole** warning vocabulary: with D12 void there is no
+composite-emitted template beside it.
 
 The old many-to-one collapses (several invariants → one effect → one sentence) are now
 explicit in the vocabulary itself: they are the multi-entry "produced by" cells.
@@ -1113,9 +1114,12 @@ convention); topic memory updated.
    H.3): rows survive with `week_pattern = None` where legacy deleted them and their
    colloscope data. The texts say what happens now ("il aura lieu toutes les
    semaines").
-4. **Prefilled-shrink student loss keeps its warning, by a different mechanism**
-   (★ D12): the composite detects and emits it (the one hand-written warning), since
-   no invariant breaks. The UX does not change; the machinery does.
+4. **Prefilled-shrink student loss warns nowhere — and that is *not* a divergence this
+   step introduces** (D12 void). The warning was already deleted by the
+   global-group-list work, before this step starts: with count and filling arriving in
+   one payload the loss is authored by the caller, so both the old and the new `ops/`
+   are silent about it and there is nothing here to diverge. Kept as an entry so the
+   executing session does not re-add it — see D12 in §0.
 5. **`DeletePeriod` / `MergeWithPreviousPeriod` stop reconciling exclusions.** Old
    cleaning re-included subjects (`UpdatePeriodStatus(.., true)`) and aligned student
    exclusions to the neighbour period before deleting; new: the dead period's
@@ -1141,8 +1145,8 @@ convention); topic memory updated.
 - **Fixtures are built in-process** from `AppState::new(Data::default())` + elementary
   ops, like the three existing `ops/tests/` files — no file fixtures.
 - **Expected warning lists derived by hand before the test runs** (H.5), as `Fix`
-  literals compared through `CascadeWarning::view()` (content is private — match the
-  `CascadeWarningView` variants; payload-carrying variants include their expected
+  literals compared through `CascadeWarning::fix()` (content is private — read it
+  through the accessor; payload-carrying variants include their expected
   rebuilt value, built from the same in-process builders as the document); sequence
   asserted only where the engine really chose it (an ordered literal is a tripwire on
   the derived `Ord`, not a confluence pin). Invariant→fix *attribution* is not pinned

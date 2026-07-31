@@ -446,8 +446,10 @@ def update_group_lists(s):
             group_names.append(group_name)
         params = group_list_current_params[group_list_id].parameters
         params.group_names = group_names
-        f.group_lists_update(group_list_id, params)
-        f.group_lists_set_filling(group_list_id, collomatique.GroupListFilling.prefilled(prefilled_groups))
+        new_group_list = collomatique.GroupList(
+            params, collomatique.GroupListFilling.prefilled(prefilled_groups)
+        )
+        f.group_lists_update(group_list_id, new_group_list)
 
 def build_subject_list_for_group_lists(s, main_period_id):
     f = s.get_current_collomatique_file()
