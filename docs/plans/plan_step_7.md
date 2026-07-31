@@ -690,7 +690,8 @@ are repeated here.
 
 Eleven **ops-level** variants (the user-facing granularity, each with its own French
 history description), but only **one** elementary op behind them since the pre-step-7
-sidework of July 31 2026 (`docs/plans/plan_export_config_op.md`): each variant reads the
+sidework of July 31 2026 (plan retired, pinned at
+`git show 15b59b1c:docs/plans/plan_export_config_op.md`): each variant reads the
 current config, patches its one field, and issues the single whole-struct
 `ExportConfigOp::Update`. Error enum **empty**, the one apply still
 `.expect("… should never fail")`.

@@ -348,7 +348,8 @@ before implementation.** Ordered by leverage:
    one sealed-`GroupList` payload; settings and balancing are whole-override-entry sets).
    The last residue — `ExportConfigOp`'s 11 per-field variants — collapsed into one
    whole-struct `Update(ExportConfig)` in the pre-step-7 sidework of July 31 2026
-   (three commits; plan: `docs/plans/plan_export_config_op.md`).
+   (three commits; plan retired, pinned at
+   `git show 15b59b1c:docs/plans/plan_export_config_op.md`).
    Elementary ops only need to be *reversible and replayable*; user-facing per-field
    granularity lives on in `ops/`' `ExportConfigUpdateOp` variants and their French history
    descriptions, exactly as this item prescribed. *Note (July 2026)*: independent of, but
