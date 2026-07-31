@@ -173,6 +173,57 @@ pub trait Manager: private::ManagerInternal {
         Ok(new_info)
     }
 
+    /// Apply an operation through the cascade (see [crate::cascade::apply_cascade])
+    /// and keep the modification history consistent: the whole cascade — the
+    /// fixes it had to apply and the operation itself — lands as **one** history
+    /// slot, so a single [Manager::undo] takes the document back where it was.
+    ///
+    /// Returns the annotation's [InMemoryData::NewInfo] and the fixes the
+    /// cascade applied, as their [crate::cascade::FixOp] meanings: what the
+    /// repairs *did*, never which invariant caused them (that never leaves the
+    /// engine). The order is the engine's application order.
+    ///
+    /// On `Err`, data and history are unchanged — the engine restores its entry
+    /// snapshot bit-identically on every failure, and nothing is stored in
+    /// history unless the cascade succeeded. The id allocator may however have
+    /// advanced: the annotation happens first, and its ids burn on failure,
+    /// never to be reused. That is the same contract [Manager::apply] has, and
+    /// the same relationship [Manager::undo] has to the allocator (undone ids
+    /// stay live because [Manager::redo] can restore them): the allocator is
+    /// monotone across the manager's whole life and is not part of rollback.
+    fn apply_cascade(
+        &mut self,
+        op: <<Self as private::ManagerInternal>::Data as InMemoryData>::OriginalOperation,
+        desc: <Self as private::ManagerInternal>::Desc,
+    ) -> Result<
+        (
+            <<Self as private::ManagerInternal>::Data as InMemoryData>::NewInfo,
+            Vec<<<Self as private::ManagerInternal>::Data as crate::cascade::Fixable>::Fix>,
+        ),
+        ApplyError<
+            <<Self as private::ManagerInternal>::Data as InMemoryData>::InvalidOp,
+            <<Self as private::ManagerInternal>::Data as InMemoryData>::Invariant,
+        >,
+    >
+    where
+        <Self as private::ManagerInternal>::Data: crate::cascade::Fixable,
+    {
+        let (annotated_op, new_info) = self.get_in_memory_data_mut().annotate(op);
+
+        let receipt = crate::cascade::apply_cascade(self.get_in_memory_data_mut(), annotated_op)?;
+
+        let fixes = receipt
+            .fixes()
+            .iter()
+            .map(|(_rev_op, fix)| fix.clone())
+            .collect();
+
+        self.get_modification_history_mut()
+            .store(receipt.into_aggregated_op(), desc);
+
+        Ok((new_info, fixes))
+    }
+
     /// Returns the name of the last operation if it exists
     fn get_undo_name(&self) -> Option<&<Self as private::ManagerInternal>::Desc> {
         self.get_modification_history().get_undo_name()
@@ -374,10 +425,23 @@ mod tests {
     use super::*;
     use crate::history::{AggregatedOp, ReversibleOp};
     use crate::state::AppState;
-    use crate::test_utils::{FakeData, FakeError, FakeOp, rev_set};
+    use crate::test_utils::{
+        FakeData, FakeError, FakeOp, QuoteData, QuoteFix, QuoteInvariant, QuoteOp, rev_set,
+    };
+    use std::collections::{BTreeMap, BTreeSet};
 
     fn new_state(value: i64) -> AppState<FakeData, &'static str> {
         AppState::new(FakeData::new(value))
+    }
+
+    /// A state over the cascade toy: the only [InMemoryData] here that is
+    /// [crate::cascade::Fixable], hence the only one `apply_cascade` accepts.
+    fn quote_state(students: &[u64], quotes: &[(u64, u64)]) -> AppState<QuoteData, &'static str> {
+        AppState::new(QuoteData {
+            students: students.iter().copied().collect(),
+            quotes: quotes.iter().copied().collect(),
+            notes: BTreeMap::new(),
+        })
     }
 
     #[test]
@@ -529,5 +593,109 @@ mod tests {
         let aggregated = state.get_aggregated_history();
 
         assert_eq!(aggregated.inner(), &vec![rev_set(0, 1), rev_set(1, 2)]);
+    }
+
+    // Removing a student whose two quotes must go first: the whole cascade —
+    // both fixes and the target — becomes a single history slot, and the fixes
+    // come back as the `Fix` values the map answered.
+    #[test]
+    fn apply_cascade_lands_fixes_and_target_in_one_history_slot() {
+        let original = quote_state(&[1], &[(10, 1), (20, 1)]);
+        let mut state = original.clone();
+
+        let (new_info, fixes) = state
+            .apply_cascade(QuoteOp::RemoveStudent(1), "remove student 1")
+            .expect("the cascade resolves");
+
+        // The toy annotates by identity, so its `NewInfo` is `()`: what this
+        // pins is the plumbing (the value handed back is the annotation's),
+        // not an interesting id.
+        assert_eq!(new_info, ());
+        assert_eq!(
+            fixes,
+            vec![QuoteFix::RemoveQuote(10), QuoteFix::RemoveQuote(20)],
+        );
+        assert!(state.get_data().students.is_empty());
+        assert!(state.get_data().quotes.is_empty());
+
+        // One slot, holding the fixes then the target — not three slots.
+        assert_eq!(state.get_undo_name(), Some(&"remove student 1"));
+        let slot = state.get_last_op().expect("one stored slot");
+        assert_eq!(
+            slot.inner()
+                .iter()
+                .map(|r| r.inner().clone())
+                .collect::<Vec<_>>(),
+            vec![
+                QuoteOp::RemoveQuote(10),
+                QuoteOp::RemoveQuote(20),
+                QuoteOp::RemoveStudent(1),
+            ],
+        );
+
+        // And it undoes in one step, back to the exact starting document.
+        state.undo().expect("one op to undo");
+        assert_eq!(state.get_data(), original.get_data());
+        assert!(!state.can_undo());
+    }
+
+    // An op that breaks nothing goes through the same door and reports no fix:
+    // the receipt's target lands alone, as a one-entry slot.
+    #[test]
+    fn apply_cascade_of_a_lone_op_reports_no_fix() {
+        let mut state = quote_state(&[1], &[]);
+
+        let (_new_info, fixes) = state
+            .apply_cascade(QuoteOp::AddStudent(2), "add student 2")
+            .expect("valid op");
+
+        assert_eq!(fixes, vec![]);
+        assert!(state.get_data().students.contains(&2));
+        let slot = state.get_last_op().expect("one stored slot");
+        assert_eq!(
+            slot.inner()
+                .iter()
+                .map(|r| r.inner().clone())
+                .collect::<Vec<_>>(),
+            vec![QuoteOp::AddStudent(2)],
+        );
+    }
+
+    // The `Err` contract: a target the map cannot fix (its break is caused by
+    // the op's own payload, not by anything in the state) leaves both data and
+    // history exactly as they were. The id allocator is deliberately outside
+    // this assertion — the annotation ran, and its ids burn.
+    #[test]
+    fn apply_cascade_convicted_leaves_data_and_history_unchanged() {
+        let mut state = quote_state(&[1], &[]);
+        state
+            .apply_cascade(QuoteOp::AddStudent(3), "add student 3")
+            .expect("valid op");
+        let data_before = state.get_data().clone();
+        let history_before = state.get_aggregated_history();
+        let last_op_before = state.get_last_op();
+
+        let err = state
+            .apply_cascade(
+                QuoteOp::SetQuote {
+                    quote: 99,
+                    author: 2,
+                },
+                "never happens",
+            )
+            .unwrap_err();
+
+        assert_eq!(
+            err,
+            ApplyError::BrokenInvariants(BTreeSet::from([QuoteInvariant::DanglingQuoteAuthor(99)])),
+        );
+        assert_eq!(state.get_data(), &data_before);
+        assert_eq!(state.get_aggregated_history(), history_before);
+        // The flattened history above cannot see a *spurious empty* slot (it
+        // contributes no op); the slot itself, and the name it would carry,
+        // can — hence both.
+        assert_eq!(state.get_last_op(), last_op_before);
+        assert_eq!(state.get_undo_name(), Some(&"add student 3"));
+        assert!(!state.can_redo());
     }
 }
