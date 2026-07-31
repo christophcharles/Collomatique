@@ -292,6 +292,8 @@ pub enum ColloscopeOp {
 /// export configuration we can do on a [Data]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExportConfigOp {
+    /// Replace the whole export configuration at once
+    Update(export_config::ExportConfig),
     UpdateGlobalConfig(export_config::GlobalConfig),
     UpdateColloscopeEnabled(bool),
     UpdateAllGroupsEnabled(bool),
@@ -738,6 +740,8 @@ pub enum AnnotatedColloscopeOp {
 /// See [collomatique_state::history] for a complete discussion of the problem.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AnnotatedExportConfigOp {
+    /// Replace the whole export configuration at once
+    Update(export_config::ExportConfig),
     UpdateGlobalConfig(export_config::GlobalConfig),
     UpdateColloscopeEnabled(bool),
     UpdateAllGroupsEnabled(bool),
@@ -1168,6 +1172,7 @@ impl AnnotatedExportConfigOp {
     /// Annotates the subcategory of operations [ExportConfigOp].
     fn annotate(export_config_op: ExportConfigOp) -> AnnotatedExportConfigOp {
         match export_config_op {
+            ExportConfigOp::Update(v) => AnnotatedExportConfigOp::Update(v),
             ExportConfigOp::UpdateGlobalConfig(v) => AnnotatedExportConfigOp::UpdateGlobalConfig(v),
             ExportConfigOp::UpdateColloscopeEnabled(v) => {
                 AnnotatedExportConfigOp::UpdateColloscopeEnabled(v)
