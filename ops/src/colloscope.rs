@@ -625,6 +625,17 @@ mod tests {
             })
     }
 
+    fn group_list_by_name(data: &Data, name: &str) -> GroupListId {
+        data.get_inner_data()
+            .params
+            .group_lists
+            .group_list_map
+            .iter()
+            .find(|(_id, group_list)| group_list.params().name == name)
+            .map(|(id, _group_list)| id)
+            .unwrap_or_else(|| panic!("the fixture should have a group list named {name}"))
+    }
+
     fn subject_of(data: &Data, subject: SubjectId) -> Subject {
         data.get_inner_data()
             .params
@@ -883,6 +894,54 @@ mod tests {
             .unwrap_err(),
             ColloscopeUpdateError::UpdateColloscopeGroupList(
                 UpdateColloscopeGroupListError::InvalidStudentId(dangling_student()),
+            ),
+        );
+
+        assert_eq!(session.get_data(), base.get_data());
+    }
+
+    /// A group list that fills its groups by hand has nothing for the
+    /// colloscope to store, so a row aimed at one is refused — and refused
+    /// *first*, before any of the three placement scans, since the placements
+    /// are beside the point once the target is the wrong kind of list.
+    ///
+    /// This is where the old world's guard sat, in both bodies that had one
+    /// (`git show 56510199^:state-colloscopes/src/colloscopes.rs`, ~`:361` and
+    /// `:206`), and `ops/` used to translate it — as the overloaded
+    /// `InvalidGroupListId`, but translate it. Step 4's `force_apply` copies
+    /// dropped the guard by design and the condition became a plain invariant
+    /// break that no scan named, so the op has panicked ever since. The pin
+    /// restores the answer with a name of its own.
+    ///
+    /// Hogwarts's own two lists are both prefilled, so no setup is needed:
+    /// « Liste principale » is the shape this is about.
+    #[test]
+    fn a_row_aimed_at_a_prefilled_list_is_refused_before_its_placements_are_read() {
+        let base = hogwarts();
+        let prefilled = group_list_by_name(base.get_data(), "Liste principale");
+        let harry = student_by_name(base.get_data(), "Potter", "Harry");
+
+        let mut session = CascadeSession::new(base.clone());
+
+        assert_eq!(
+            ColloscopeUpdateOp::UpdateColloscopeGroupList(prefilled, BTreeMap::from([(harry, 0)]),)
+                .apply_to_session(&mut session)
+                .unwrap_err(),
+            ColloscopeUpdateError::UpdateColloscopeGroupList(
+                UpdateColloscopeGroupListError::PrefilledGroupListInColloscope(prefilled),
+            ),
+        );
+        // And it wins over the placement scans, which is the half that moves an
+        // existing answer: before this pin the dangling student was reported.
+        assert_eq!(
+            ColloscopeUpdateOp::UpdateColloscopeGroupList(
+                prefilled,
+                BTreeMap::from([(dangling_student(), 0)]),
+            )
+            .apply_to_session(&mut session)
+            .unwrap_err(),
+            ColloscopeUpdateError::UpdateColloscopeGroupList(
+                UpdateColloscopeGroupListError::PrefilledGroupListInColloscope(prefilled),
             ),
         );
 
