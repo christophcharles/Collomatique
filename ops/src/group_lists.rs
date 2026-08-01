@@ -1854,10 +1854,10 @@ mod tests {
         assert_eq!(
             fixes(&warnings),
             vec![
-                Fix::RemoveGroupFromInterrogationCell {
+                Fix::RemoveGroupsFromInterrogationCell {
                     slot: placed.slot,
                     week: placed.week,
-                    group: 2,
+                    groups: BTreeSet::from([2]),
                     rebuilt: BTreeSet::from([0]),
                 },
                 Fix::RemoveStudentColloscopePlacement {
@@ -2015,8 +2015,9 @@ mod tests {
     /// twice. Dropping the association is what takes the group bound of that
     /// coordinate to zero, so the colles written there become out of range —
     /// and the engine lands a repair's own repairs before the repair itself.
-    /// The colles therefore die *first*, one group number at a time, then the
-    /// association, then the placement row, and only then the list.
+    /// The colles therefore die *first*, each cell emptied of all its groups in
+    /// one go, then the association, then the placement row, and only then the
+    /// list.
     #[test]
     fn deleting_a_list_takes_the_colles_its_associations_bounded_with_it() {
         let placed = placed_list();
@@ -2027,16 +2028,10 @@ mod tests {
         assert_eq!(
             fixes(&warnings),
             vec![
-                Fix::RemoveGroupFromInterrogationCell {
+                Fix::RemoveGroupsFromInterrogationCell {
                     slot: placed.slot,
                     week: placed.week,
-                    group: 0,
-                    rebuilt: BTreeSet::from([2]),
-                },
-                Fix::RemoveGroupFromInterrogationCell {
-                    slot: placed.slot,
-                    week: placed.week,
-                    group: 2,
+                    groups: BTreeSet::from([0, 2]),
                     rebuilt: BTreeSet::new(),
                 },
                 Fix::UnassignGroupList {
@@ -2053,11 +2048,6 @@ mod tests {
             expected_document(
                 &placed.base,
                 vec![
-                    Op::Colloscope(ColloscopeOp::SetInterrogation(
-                        placed.slot,
-                        placed.week,
-                        BTreeSet::from([2]),
-                    )),
                     Op::Colloscope(ColloscopeOp::SetInterrogation(
                         placed.slot,
                         placed.week,
@@ -2103,10 +2093,10 @@ mod tests {
 
         assert_eq!(
             fixes(&warnings),
-            vec![Fix::RemoveGroupFromInterrogationCell {
+            vec![Fix::RemoveGroupsFromInterrogationCell {
                 slot: placed.slot,
                 week: placed.week,
-                group: 2,
+                groups: BTreeSet::from([2]),
                 rebuilt: BTreeSet::from([0]),
             }],
         );
@@ -2132,11 +2122,11 @@ mod tests {
     }
 
     /// Taking the list away outright takes the bound to zero, so every group of
-    /// every colle at that coordinate is out of range and the cell empties one
-    /// group at a time. That is the shape §3.13 of the plan looked at and left
-    /// alone: here it reads the user's own edit back to them.
+    /// every colle at that coordinate is out of range and the cell empties in a
+    /// single fix naming all of them: here it reads the user's own edit back to
+    /// them.
     #[test]
-    fn unassigning_a_list_empties_the_colles_it_bounded_group_by_group() {
+    fn unassigning_a_list_empties_the_colles_it_bounded_in_one_go() {
         let placed = placed_list();
 
         let op = GroupListsUpdateOp::AssignGroupListToSubject(placed.period, placed.subject, None);
@@ -2144,31 +2134,18 @@ mod tests {
 
         assert_eq!(
             fixes(&warnings),
-            vec![
-                Fix::RemoveGroupFromInterrogationCell {
-                    slot: placed.slot,
-                    week: placed.week,
-                    group: 0,
-                    rebuilt: BTreeSet::from([2]),
-                },
-                Fix::RemoveGroupFromInterrogationCell {
-                    slot: placed.slot,
-                    week: placed.week,
-                    group: 2,
-                    rebuilt: BTreeSet::new(),
-                },
-            ],
+            vec![Fix::RemoveGroupsFromInterrogationCell {
+                slot: placed.slot,
+                week: placed.week,
+                groups: BTreeSet::from([0, 2]),
+                rebuilt: BTreeSet::new(),
+            }],
         );
         assert_eq!(
             state.get_data(),
             expected_document(
                 &placed.base,
                 vec![
-                    Op::Colloscope(ColloscopeOp::SetInterrogation(
-                        placed.slot,
-                        placed.week,
-                        BTreeSet::from([2]),
-                    )),
                     Op::Colloscope(ColloscopeOp::SetInterrogation(
                         placed.slot,
                         placed.week,
@@ -2397,10 +2374,10 @@ mod tests {
 
         assert_eq!(
             fixes(&warnings),
-            vec![Fix::RemoveGroupFromInterrogationCell {
+            vec![Fix::RemoveGroupsFromInterrogationCell {
                 slot,
                 week,
-                group: 6,
+                groups: BTreeSet::from([6]),
                 rebuilt: BTreeSet::from([1]),
             }],
         );

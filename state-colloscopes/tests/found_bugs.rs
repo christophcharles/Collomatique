@@ -332,8 +332,10 @@ fn update_shrinking_group_names_below_assigned_group_is_rejected() {
     assert_eq!(
         result,
         Err(Error::BrokenInvariants(BTreeSet::from([
-            FixableInvariant::Convergence(Convergence::InterrogationGroupOutOfBounds(
-                slot_id, week0, 2,
+            FixableInvariant::Convergence(Convergence::InterrogationGroupsOutOfBounds(
+                slot_id,
+                week0,
+                BTreeSet::from([2]),
             ))
         ]))),
     );

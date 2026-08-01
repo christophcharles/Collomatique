@@ -26,10 +26,10 @@
 //! 1. **Presence, never predicate.** An arm asks whether the material it would
 //!    remove is *there*; it never re-evaluates the invariant's own condition,
 //!    which may depend on the failing op's payload. So
-//!    [Convergence::InterrogationGroupOutOfBounds] asks "is that group still in
-//!    that cell?", never "is it out of bounds?" — after a group-list shrink is
-//!    itself repaired, the count read back from the state can be above the
-//!    offending group number while the group still has to go.
+//!    [Convergence::InterrogationGroupsOutOfBounds] asks "are those groups still
+//!    in that cell?", never "are they out of bounds?" — after a group-list
+//!    shrink is itself repaired, the count read back from the state can be above
+//!    the offending group numbers while the groups still have to go.
 //! 2. **No `expect` on a state lookup — a miss is `None`.** The invariant set
 //!    the engine hands the map was computed on this state *plus the op that
 //!    just failed*, and that op was rolled back. A row named by a site may
@@ -258,11 +258,11 @@ pub enum Fix {
     DeleteSlotPairingRule { rule: SlotPairingRuleId },
     /// A group list's whole colloscope placements row goes.
     ClearColloscopeGroupListRow { group_list: GroupListId },
-    /// One group leaves a `(slot, week)` cell; the other groups stay.
-    RemoveGroupFromInterrogationCell {
+    /// Some groups leave a `(slot, week)` cell together; the other groups stay.
+    RemoveGroupsFromInterrogationCell {
         slot: SlotId,
         week: WeekId,
-        group: u32,
+        groups: BTreeSet<u32>,
         rebuilt: BTreeSet<u32>,
     },
 }
@@ -347,7 +347,7 @@ impl FixOp for Fix {
             Fix::ClearColloscopeGroupListRow { group_list } => {
                 AnnotatedColloscopeOp::SetGroupList(*group_list, BTreeMap::new()).into()
             }
-            Fix::RemoveGroupFromInterrogationCell {
+            Fix::RemoveGroupsFromInterrogationCell {
                 slot,
                 week,
                 rebuilt,
@@ -945,20 +945,21 @@ impl Data {
                     week: *week,
                 })
             }
-            Convergence::InterrogationGroupOutOfBounds(slot, week, group) => {
+            Convergence::InterrogationGroupsOutOfBounds(slot, week, groups) => {
                 // Presence, not predicate: the bound is never re-checked, since
                 // a repaired group-list shrink legitimately needs this trim even
-                // though the group reads as in-bounds again.
+                // though the groups read as in-bounds again. All-or-nothing: if
+                // even one named group has already left the cell, the material
+                // this fix would remove is not there.
                 let cell = colloscope.interrogation(*slot, *week)?;
-                if !cell.contains(group) {
+                if !groups.is_subset(cell) {
                     return None;
                 }
-                let mut rebuilt = cell.clone();
-                rebuilt.remove(group);
-                Some(Fix::RemoveGroupFromInterrogationCell {
+                let rebuilt: BTreeSet<u32> = cell.difference(groups).copied().collect();
+                Some(Fix::RemoveGroupsFromInterrogationCell {
                     slot: *slot,
                     week: *week,
-                    group: *group,
+                    groups: groups.clone(),
                     rebuilt,
                 })
             }

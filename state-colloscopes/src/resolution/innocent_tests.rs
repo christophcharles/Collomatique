@@ -384,7 +384,7 @@ pub(super) fn build_valid_document() -> (Data, ValidDocument) {
     // cell — and a week that holds one cannot be moved into a dead period
     // surgically, because the cell's group bound is read from an association at
     // *that* period and a dead period has none, so the bound falls to 0 and
-    // `InterrogationGroupOutOfBounds` joins in. `PeriodRefSite::WeekPeriodFk`'s
+    // `InterrogationGroupsOutOfBounds` joins in. `PeriodRefSite::WeekPeriodFk`'s
     // twin moves this one.
     let bare_week = apply_new!(
         data,
@@ -1038,7 +1038,7 @@ fn slot_teacher_arm_spares_a_slot_whose_teacher_is_live() {
 /// alone. Every other week carries a cell, and moving one of *those* is not
 /// surgical: the cell's group bound is read from the association at the week's
 /// period, a dead period has none, so the bound falls to 0 and
-/// `InterrogationGroupOutOfBounds` fires alongside the dangle.
+/// `InterrogationGroupsOutOfBounds` fires alongside the dangle.
 ///
 /// The arm is asked about a document where that week sits in a live period, and
 /// must not delete it.
@@ -2782,7 +2782,7 @@ fn association_for_subject_not_running_on_period_arm_spares_a_missing_entry() {
 // at `(the week's period, the slot's subject)` — and an association *there* is
 // exactly row 8, so no valid document holds one. The bound therefore falls to
 // its missing-association default of 0, every group number in the cell is out of
-// bounds, and `InterrogationGroupOutOfBounds` fires beside row 11 every time.
+// bounds, and `InterrogationGroupsOutOfBounds` fires beside row 11 every time.
 // Row 11's test is a two-element-set test for that reason, like row 3's. Unlike
 // row 3 this is not a shadowing: row 11 is declared *before* row 13, so it
 // remains the canonical pick and its `Some` branch stays reachable.
@@ -2924,7 +2924,7 @@ fn paired_slots_not_in_same_subject_arm_spares_a_rule_with_another_consequent() 
 /// second two-element-set test of the series**, for the reason the block comment
 /// proves: the association that would bound this cell's group numbers is exactly
 /// row 8, so no valid document holds one, the bound is 0, and
-/// `InterrogationGroupOutOfBounds` always fires beside row 11.
+/// `InterrogationGroupsOutOfBounds` always fires beside row 11.
 ///
 /// The set is asserted whole, so the literal has to name both; the element under
 /// test is then selected explicitly. Row 11 happens to sort first, but nothing
@@ -2967,10 +2967,10 @@ fn interrogation_slot_not_running_on_period_arm_spares_a_missing_cell() {
                 doc.other_subject_slot,
                 doc.excluded_period_week,
             )),
-            FixableInvariant::Convergence(Convergence::InterrogationGroupOutOfBounds(
+            FixableInvariant::Convergence(Convergence::InterrogationGroupsOutOfBounds(
                 doc.other_subject_slot,
                 doc.excluded_period_week,
-                0,
+                BTreeSet::from([0]),
             )),
         ])
     );
@@ -3064,7 +3064,7 @@ fn interrogation_on_inactive_week_arm_spares_a_missing_cell() {
 // which is worse in a different way, because the resulting colloscope looks
 // perfectly ordinary.
 
-/// `Convergence::InterrogationGroupOutOfBounds` — §8.2 row 13.
+/// `Convergence::InterrogationGroupsOutOfBounds` — §8.2 row 13.
 ///
 /// The op is `SetInterrogation(slot, week, cell minus group)`: it carries the
 /// coordinate but not the group number being dropped, so the membership test is
@@ -3095,8 +3095,10 @@ fn interrogation_group_out_of_bounds_arm_spares_a_cell_of_in_bounds_groups() {
     assert_arm_finds_nothing(
         &valid,
         &corrupt,
-        FixableInvariant::Convergence(Convergence::InterrogationGroupOutOfBounds(
-            doc.slot, doc.week, 2,
+        FixableInvariant::Convergence(Convergence::InterrogationGroupsOutOfBounds(
+            doc.slot,
+            doc.week,
+            BTreeSet::from([2]),
         )),
         "the live cell does not hold the named group, so the arm has nothing to trim",
     );

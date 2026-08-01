@@ -1051,8 +1051,11 @@ ordering principle is claimed, and none of the other placements were revisited. 
 only the *pick* moves, and only where those two convergences co-occur — every fix list
 that reaches its cell repairs through a dangling reference is untouched, dangles sorting
 ahead of every convergence. And unassigning a group list **directly** still collapses
-the bound with no interrogation-row break in sight, so those cells still empty one group
-at a time; that case reads the user's own edit back to them, and is left alone.
+the bound with no interrogation-row break in sight, so those cells are emptied by the
+trim fix rather than cleared as colles; that case reads the user's own edit back to
+them, and is left alone. (Since then the break has been pluralized into
+`InterrogationGroupsOutOfBounds`, one per cell naming all its groups, so such a cell
+now empties in a single fix.)
 
 ### 3.14 `group_lists.rs`
 
@@ -1066,7 +1069,7 @@ on `UpdateGroupList` (all colloscope-erasing), five on `DeleteGroupList` (two
 colloscope-erasing, three pre-cleaning the doomed list's own filling and association),
 one interrogation-trimming scan each on `AssignGroupListToSubject` and
 `DuplicatePreviousPeriod` — are replaced by `ColloscopeStudentGroupOutOfBounds` /
-`InterrogationGroupOutOfBounds` / `ColloscopeStudentExcluded` /
+`InterrogationGroupsOutOfBounds` / `ColloscopeStudentExcluded` /
 `ColloscopeGroupListPrefilled` convergence fixes and the two `GroupList@…` dangle
 arms. The old panic-only invariant scan
 (`panic!("Associated subjects should be properly cleaned")`, `group_lists.rs:880`)
@@ -1248,7 +1251,7 @@ etc. are pre-state lookups.
 | `ClearIncompatWeekPattern { incompat, rebuilt }` | incompat `Update` | `WeekPattern@IncompatWeekPattern` | « L'incompatibilité « {nom} » ne suivra plus de motif : elle s'appliquera toutes les semaines » |
 | `DeleteSlotPairingRule { rule }` | slot-pairing-rule `Remove` | `Slot@SlotPairingRuleAntecedent/Consequent`, `Conv:PairedSlotsNotInSameSubject` | « La règle d'alternance de créneaux {desc} sera supprimée » |
 | `ClearColloscopeGroupListRow { group_list }` | `SetGroupList(list, ∅)` | `GroupList@ColloscopeGroupListKey`, `Conv:ColloscopeGroupListPrefilled` | « La répartition en groupes de « {liste} » dans le colloscope sera supprimée » |
-| `RemoveGroupFromInterrogationCell { slot, week, group, rebuilt }` | `SetInterrogation` | `Conv:InterrogationGroupOutOfBounds` | « Le groupe {g} sera retiré des colles du créneau {desc} en semaine {n} » |
+| `RemoveGroupsFromInterrogationCell { slot, week, groups, rebuilt }` | `SetInterrogation` | `Conv:InterrogationGroupsOutOfBounds` | « Les groupes {gs} seront retirés des colles du créneau {desc} en semaine {n} » |
 
 Rendering note on `UnassignGroupList`: the template names the list, which the fix does
 not carry — the renderer reads the association entry at `(period, subject)` from the

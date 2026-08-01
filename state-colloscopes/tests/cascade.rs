@@ -2639,16 +2639,16 @@ fn rejection_2_a_student_absent_from_the_period_convicts_the_assignment() {
     );
 }
 
-/// Rejection `3` — `InterrogationGroupOutOfBounds`. The op writes a group
+/// Rejection `3` — `InterrogationGroupsOutOfBounds`. The op writes a group
 /// number no group list has.
 ///
 /// A group list of **three** groups associated to `(P, S)`, and a colloscope
 /// cell at `(slot, week)` already holding group `0`. Target:
 /// `ColloscopeOp::SetInterrogation(slot, week, {0, 7})`. The op applies, the
 /// bound read from the association is `3`, and the checker reports
-/// `InterrogationGroupOutOfBounds(slot, week, 7)` (`invariants.rs:599-621`).
+/// `InterrogationGroupsOutOfBounds(slot, week, {7})` (`invariants.rs:599-621`).
 /// The gate rolls it back, and the arm is asked on the restored cell — which
-/// holds `0` alone. `cell.contains(7)` is false, the arm answers `None`, and
+/// holds `0` alone. `{7}` is not a subset of it, the arm answers `None`, and
 /// the target is convicted.
 ///
 /// §9ter.2 again, and it is the reason the cell pre-exists holding `0`: the arm
@@ -2662,7 +2662,7 @@ fn rejection_2_a_student_absent_from_the_period_convicts_the_assignment() {
 /// and an arm that can merely see a cell there has no way to tell this trace
 /// from a legitimate one.
 ///
-/// The counterfactual is the same as rejection `2`'s: were the `contains` test
+/// The counterfactual is the same as rejection `2`'s: were the subset test
 /// gone, removing `7` from `{0}` would give `{0}` back — a perfect no-op fix,
 /// and the engine's panic rather than a silent repair. Note also that the arm tests
 /// **presence, not the bound** — deliberately, per its own comment
@@ -2753,7 +2753,7 @@ fn rejection_3_an_out_of_bounds_group_convicts_the_interrogation() {
     assert_convicted_of(
         err,
         BTreeSet::from([FixableInvariant::Convergence(
-            Convergence::InterrogationGroupOutOfBounds(slot, week, 7),
+            Convergence::InterrogationGroupsOutOfBounds(slot, week, BTreeSet::from([7])),
         )]),
         "the target is convicted of exactly the group its own payload adds",
     );

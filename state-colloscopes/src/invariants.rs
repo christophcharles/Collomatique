@@ -39,10 +39,11 @@
 //! interrogation-row predicates are declared before the association ones**. An
 //! interrogation row's group numbers are bounded by the group list associated
 //! at its `(period, subject)` coordinate. So a repair that clears the
-//! association takes that bound to zero, and every group of every cell at that
-//! coordinate becomes its own [Convergence::InterrogationGroupOutOfBounds]
-//! break — the cells then die one group at a time, described to the user as
-//! « le groupe N sera retiré » rather than as the loss of the colle. Repairing
+//! association takes that bound to zero, and every cell at that coordinate
+//! becomes a [Convergence::InterrogationGroupsOutOfBounds] break naming all of
+//! its groups — the cells are then emptied group-set by group-set, described to
+//! the user as « les groupes N seront retirés » rather than as the loss of the
+//! colle. Repairing
 //! the rows first spares them that, and costs nothing here: an interrogation
 //! row is downstream data, so clearing one cannot invalidate an association.
 //!
@@ -191,8 +192,8 @@ pub enum Convergence {
     // module docs' "Canonical order" section. An interrogation row's group
     // numbers are bounded by the group list associated at its `(period,
     // subject)` coordinate, so clearing that association takes the bound to
-    // zero and turns every group in every cell there into a separate
-    // `InterrogationGroupOutOfBounds` break. Repairing the rows first spares
+    // zero and turns every cell there into an `InterrogationGroupsOutOfBounds`
+    // break that empties it group by group. Repairing the rows first spares
     // the user that: the cells go whole, each with the sentence it deserves.
     /// An interrogation whose slot's subject excludes the week's period
     #[error("interrogation ({0:?}, {1:?}): the slot's subject does not run on the week's period")]
@@ -200,10 +201,11 @@ pub enum Convergence {
     /// An interrogation on a week the slot's week pattern deactivates
     #[error("interrogation ({0:?}, {1:?}) is on an inactive week")]
     InterrogationOnInactiveWeek(SlotId, WeekId),
-    /// An interrogation assigning a group number ≥ the associated group list's
-    /// group count — one entry per offending group number
-    #[error("interrogation ({0:?}, {1:?}) assigns out-of-bounds group number {2}")]
-    InterrogationGroupOutOfBounds(SlotId, WeekId, u32),
+    /// An interrogation assigning group numbers ≥ the associated group list's
+    /// group count — one entry per cell, carrying every offending group number
+    /// (never empty)
+    #[error("interrogation ({0:?}, {1:?}) assigns out-of-bounds group numbers {2:?}")]
+    InterrogationGroupsOutOfBounds(SlotId, WeekId, BTreeSet<u32>),
     /// A group-list association whose subject has interrogations disabled
     #[error("association ({0:?}, {1:?}): the subject has interrogations disabled")]
     AssociationForSubjectWithoutInterrogations(PeriodId, SubjectId),
@@ -634,12 +636,12 @@ impl crate::InnerData {
                         .map(|gl| gl.params().group_names.len() as u32),
                 };
                 if let Some(bound) = bound {
-                    for &group_num in groups {
-                        if group_num >= bound {
-                            out.insert(Convergence::InterrogationGroupOutOfBounds(
-                                slot_id, week_id, group_num,
-                            ));
-                        }
+                    let offending: BTreeSet<u32> =
+                        groups.iter().copied().filter(|&g| g >= bound).collect();
+                    if !offending.is_empty() {
+                        out.insert(Convergence::InterrogationGroupsOutOfBounds(
+                            slot_id, week_id, offending,
+                        ));
                     }
                 }
             }
@@ -1144,7 +1146,7 @@ pub(crate) mod tests {
             },
             Convergence::InterrogationSlotNotRunningOnPeriod(slot, week),
             Convergence::InterrogationOnInactiveWeek(slot, week),
-            Convergence::InterrogationGroupOutOfBounds(slot, week, group),
+            Convergence::InterrogationGroupsOutOfBounds(slot, week, BTreeSet::from([group])),
             Convergence::AssociationForSubjectWithoutInterrogations(period, subject),
             Convergence::AssociationForSubjectNotRunningOnPeriod(period, subject),
             Convergence::BalancingForSubjectWithoutInterrogations(subject),
@@ -2175,7 +2177,7 @@ pub(crate) mod tests {
         assert_eq!(
             broken_invariants(&fx.data),
             Ok(BTreeSet::from([FixableInvariant::Convergence(
-                Convergence::InterrogationGroupOutOfBounds(fx.slot, fx.week, 2)
+                Convergence::InterrogationGroupsOutOfBounds(fx.slot, fx.week, BTreeSet::from([2]))
             )]))
         );
 
@@ -2185,6 +2187,26 @@ pub(crate) mod tests {
             .colloscope
             .set_interrogation(fx.slot, fx.week, BTreeSet::from([0, 1]));
         assert_eq!(broken_invariants(&fx.data), Ok(BTreeSet::new()));
+    }
+
+    #[test]
+    fn several_out_of_bounds_groups_make_one_break() {
+        // Group list has 2 groups: groups 5 and 7 are both out of range, but
+        // the cell yields a *single* break naming both of them; group 0 stays.
+        let mut fx = colloscope_fixture();
+        fx.data
+            .colloscope
+            .set_interrogation(fx.slot, fx.week, BTreeSet::from([0, 5, 7]));
+        assert_eq!(
+            broken_invariants(&fx.data),
+            Ok(BTreeSet::from([FixableInvariant::Convergence(
+                Convergence::InterrogationGroupsOutOfBounds(
+                    fx.slot,
+                    fx.week,
+                    BTreeSet::from([5, 7])
+                )
+            )]))
+        );
     }
 
     #[test]
@@ -2203,7 +2225,7 @@ pub(crate) mod tests {
         assert_eq!(
             broken_invariants(&fx.data),
             Ok(BTreeSet::from([FixableInvariant::Convergence(
-                Convergence::InterrogationGroupOutOfBounds(fx.slot, fx.week, 0)
+                Convergence::InterrogationGroupsOutOfBounds(fx.slot, fx.week, BTreeSet::from([0]))
             )]))
         );
     }

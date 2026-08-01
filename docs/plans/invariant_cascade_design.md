@@ -1116,7 +1116,7 @@ deletion (everything twinned in Table 1 retires in favor of the precise vocabula
   association — without one the group-number bound saturates to 0 (old checker
   `.unwrap_or(0)`, new checker `None => Some(0)`), so every interrogation placement at an
   association-less coordinate is invalid (`InvalidGroupNumInInterrogation` /
-  `Convergence::InterrogationGroupOutOfBounds`). Clearing an association out from under
+  `Convergence::InterrogationGroupsOutOfBounds`). Clearing an association out from under
   live interrogation placements therefore lands a *broken* state, in both checkers
   (re-verified Jul 21 2026 when a mis-reading of this finding briefly suggested
   otherwise).
@@ -1671,7 +1671,7 @@ Five frame points govern every arm:
 
 1. **Presence, never predicate.** An arm asks whether the material it would remove is
    *there*; it never re-evaluates the invariant's condition, which may depend on the failed
-   op's payload and is unknowable from the state. `InterrogationGroupOutOfBounds(slot, week, 3)`
+   op's payload and is unknowable from the state. `InterrogationGroupsOutOfBounds(slot, week, {3})`
    asks "is group 3 still in that cell", never "is 3 ≥ the group count" — after a group-list
    shrink is repaired the count can be back above 3 while group 3 still has to go.
 2. **No `expect` on a state lookup — a miss is `None`.** The invariant set was computed on

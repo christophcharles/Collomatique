@@ -686,7 +686,7 @@ fn a_doomed_colloscope_group_list_row_answers_clear_colloscope_group_list_row() 
 }
 
 #[test]
-fn an_out_of_bounds_group_answers_remove_group_from_interrogation_cell() {
+fn out_of_bounds_groups_answer_remove_groups_from_interrogation_cell() {
     let (mut data, doc) = build_valid_document();
     // The fixture's cells hold a single group, which would make the rebuild an
     // empty set — indistinguishable from a plain clear. A second group is added
@@ -704,13 +704,15 @@ fn an_out_of_bounds_group_answers_remove_group_from_interrogation_cell() {
 
     assert_fix(
         &data,
-        convergence(Convergence::InterrogationGroupOutOfBounds(
-            doc.slot, doc.week, 0,
+        convergence(Convergence::InterrogationGroupsOutOfBounds(
+            doc.slot,
+            doc.week,
+            BTreeSet::from([0]),
         )),
-        Fix::RemoveGroupFromInterrogationCell {
+        Fix::RemoveGroupsFromInterrogationCell {
             slot: doc.slot,
             week: doc.week,
-            group: 0,
+            groups: BTreeSet::from([0]),
             rebuilt: rebuilt.clone(),
         },
         AnnotatedColloscopeOp::SetInterrogation(doc.slot, doc.week, rebuilt).into(),
