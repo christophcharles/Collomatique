@@ -99,7 +99,7 @@ Rationale is recorded so the executing session does not re-litigate.
 
   The cases known so far, in the order they were found: balancing options on a subject
   whose interrogations are disabled (§3.3, fixed by commit **3.3bis**), the
-  teacher/non-interrogation-subject case (§3.4), `DeletePeriod`'s dead `InvalidPeriodId`
+  teacher/non-interrogation-subject case (§3.4), `DeletePeriodAndWeeks`'s dead `InvalidPeriodId`
   variant coming alive (D13), and — found while writing commit 3.12's fixtures — a
   colloscope group-list row aimed at a *prefilled* list (§3.12). The first two are the
   same shape, a `Convergence::…WithoutInterrogations` on a subject the op's own payload
@@ -151,24 +151,30 @@ Rationale is recorded so the executing session does not re-litigate.
   python/scripting route never renders. A failed lookup inside `text` panics — the
   descendant of the old `.expect("Warning should have a desc when applied on same
   state")` (`lib.rs:425`), an instrument for the tests per H.2's ruling.
-- ★ **D8 — Composites keep their structure, drop their cleaning; the elementary op is
-  renamed `PeriodOp::RemoveWithWeeks`** (revised July 31 2026 — the original entry
-  justified `DeletePeriod`'s structure with a week-empty **precheck** that does not
-  exist). What every composite body loses is its *reconciliation/cleaning* steps
-  (divergences are §6); the structural bodies stay. For `DeletePeriod` the reason is
-  **not** necessity: the state layer has no week-empty guard (`PeriodPrecheckError` is
-  target-existence + no-clobber only, `periods.rs:112`), a dangling `Week::period_id`
-  is deliberately a *fixable* `DanglingFk` (`weeks.rs:28-31`, design doc Appendix F.4)
-  repaired by `WeekOp::Remove` (`resolution.rs:145`), and `cascade.rs`'s fixture 1b
-  pins a bare period removal landing through exactly that chain. The composite still
-  removes the weeks itself first by the authored-loss doctrine that voided D12: the
-  weeks are part of what "delete this period" *says*, so authoring their removal keeps
-  the warning list down to the genuinely surprising effects — each week removal's own
-  cascade on colloscope cells and week-pattern bits — instead of one « la semaine X
-  sera supprimée » line per week restating the user's request. The old name `Remove`
-  invited exactly the misreading this entry used to contain, so `PeriodOp::Remove` /
-  `AnnotatedPeriodOp::Remove` become **`RemoveWithWeeks`** in commit 0 (mechanical; no
-  op enum carries serde, so no wire format moves).
+- ★ **D8 — Composites keep their structure, drop their cleaning; the names are split
+  by layer: the elementary op is `PeriodOp::Remove`, the composite is
+  `DeletePeriodAndWeeks`** (re-revised August 1 2026 — the July 31 revision renamed
+  the *elementary* op `RemoveWithWeeks`, which put the user-facing semantics on the
+  wrong layer; commit 0bis reverses commit 0's rename, commit 0ter renames the
+  composite instead). What every composite body loses is its
+  *reconciliation/cleaning* steps (divergences are §6); the structural bodies stay.
+  The layering doctrine: **elementary ops are elementary** — `PeriodOp::Remove`
+  removes the period and nothing else, and its name must say no more than it does.
+  The state layer has no week-empty guard (`PeriodPrecheckError` is target-existence
+  + no-clobber only, `periods.rs:112`); a dangling `Week::period_id` is deliberately
+  a *fixable* `DanglingFk` (`weeks.rs:28-31`, design doc Appendix F.4) repaired by
+  `WeekOp::Remove` (`resolution.rs:145`), and `cascade.rs`'s fixture 1b pins a bare
+  period removal landing through exactly that chain. The *semantic* fact — a user
+  deleting a period expects its weeks to go with it — belongs to the user-facing
+  layer, and to its **name**: `GeneralPlanningUpdateOp::DeletePeriodAndWeeks` says
+  explicitly that the weeks go, and authors their removal itself (weeks first, then
+  the period) by the authored-loss doctrine that voided D12. Authoring the week
+  removals keeps the warning list down to the genuinely surprising effects — each
+  week removal's own cascade on colloscope cells and week-pattern bits — instead of
+  one « la semaine X sera supprimée » line per week restating the user's request.
+  Both renames are mechanical; the elementary enums carry no serde, so no wire
+  format moves (the `ops/` enums do derive serde, but nothing in-tree serializes
+  them).
 - **D9 — Testing: fixtures on known documents, no differential fuzz, one
   non-differential walk.** Behaviour diverges from legacy on purpose (§6), so there is no
   reference to diff against. Every user-facing op gets fixtures asserting the exact
@@ -212,8 +218,9 @@ Rationale is recorded so the executing session does not re-litigate.
   here. Unchanged: colloscope placements referencing dropped groups still warn through
   the cascade (`ColloscopeStudentGroupOutOfBounds`); that half of D12 was never about
   the payload.
-- ★ **D13 — `DeletePeriod` on a dead id stops crashing.** Today the variant
-  `DeletePeriodError::InvalidPeriodId` (`general_planning.rs:277`) is **never
+- ★ **D13 — `DeletePeriodAndWeeks` on a dead id stops crashing.** Today the variant
+  `DeletePeriodAndWeeksError::InvalidPeriodId` (né `DeletePeriodError`, renamed in
+  commit 0ter; `general_planning.rs:277`) is **never
   constructed** — the arm has no precheck at all and a dead id dies on
   `.expect("All data should be valid at this point")` (`general_planning.rs:1117`),
   reachable from Python. Ruling (confirmed July 30): the new arm translates the state
@@ -687,7 +694,9 @@ to the scratchpad and grepped — never run twice).
 
 | commit | content | crates |
 | --- | --- | --- |
-| 0 | `PeriodOp::Remove` → `RemoveWithWeeks` mechanical rename (D8) | state-colloscopes, testgen-colloscopes, ops |
+| 0 | `PeriodOp::Remove` → `RemoveWithWeeks` rename (D8, first revision) — **reversed by 0bis** | state-colloscopes, testgen-colloscopes, ops |
+| 0bis | reverse commit 0: the elementary op is plain `Remove` again (D8, final) | state-colloscopes, testgen-colloscopes, ops |
+| 0ter | `DeletePeriod` → `DeletePeriodAndWeeks` user-facing rename (D8, final) | ops, gtk4, python |
 | 1a | `FixOp` trait + `Fix` enum + map refactor + attribution pins | state, state-colloscopes |
 | 1b | `CascadeReceipt` engine re-shape + test adaptation | state, state-colloscopes (tests) |
 | 2a | `Manager::apply_cascade` + toy tests | state |
@@ -715,21 +724,33 @@ general_planning.
 
 ## 4. Commits 0–2 in detail
 
-### Commit 0 — the `RemoveWithWeeks` rename
+### Commits 0, 0bis, 0ter — the naming of period removal
 
-Mechanical, standalone, first — so every later commit and every section of this plan
-speaks the new name. `PeriodOp::Remove` and `AnnotatedPeriodOp::Remove`
-(`state-colloscopes/src/ops.rs:76` / `:465`) become `RemoveWithWeeks`, making the
-elementary contract D8 documents readable at the call site: period removal has **no**
-week-empty guard, and any weeks still on the period dangle for the cascade to delete
-(`weeks.rs:28-31`, design doc Appendix F.4). No op enum carries serde, so no stored
-format moves; the sites are compiler-found (~20 across `state-colloscopes` src+tests,
-`testgen-colloscopes/src/generator.rs`, `ops/src/general_planning.rs:1113`). The two
-reverse-annotation arms in `force_apply_period` (`AddFront`/`AddAfter` answer
-`Remove(id)` as their reverse) rename with it, and stay honest: a freshly added period
-is week-less, and removing-with-weeks a week-less period is plain removal. The variant
-doc gains the sentence the old name obscured: leftover weeks are cascade-deleted,
-never rejected.
+Commit 0 renamed `PeriodOp::Remove` / `AnnotatedPeriodOp::Remove` to
+`RemoveWithWeeks`, reasoning that the name should advertise the cascade contract
+(no week-empty guard; leftover weeks are cascade-deleted). That reasoning put the
+user-facing semantics on the wrong layer, and commit 0bis reverses it: an
+elementary op's name must say what the op *does* — remove the period — not what
+the surrounding system does about the aftermath. The cascade contract lives on in
+the variant's doc comment, where commit 0 correctly moved it: period removal has
+**no** week-empty guard, and any weeks still on the period dangle at
+`Week::period_id` for the cascade to delete (`weeks.rs:28-31`, design doc
+Appendix F.4). The two reverse-annotation arms in `force_apply_period`
+(`AddFront`/`AddAfter` answer `Remove(id)` as their reverse) rename back with it,
+and are plainly honest: the reverse of adding an empty period is removing it. No
+elementary op enum carries serde, so no stored format moves; all sites are
+compiler-found (~20 across `state-colloscopes` src+tests,
+`testgen-colloscopes/src/generator.rs`, `ops/src/general_planning.rs:1113`).
+
+Commit 0ter puts the semantics where they belong: the user-facing
+`GeneralPlanningUpdateOp::DeletePeriod` becomes **`DeletePeriodAndWeeks`**,
+because that is what the user means and what the composite does — it removes the
+weeks first (authored, so the cascade never emits a per-week fix or warning for
+them), then the period. `DeletePeriodError` and the
+`GeneralPlanningUpdateError::DeletePeriod` variant rename to match
+(`DeletePeriodAndWeeksError`, `DeletePeriodAndWeeks`). The `ops/` enums derive
+serde (the variant name is the JSON tag), but nothing in-tree serializes them;
+the French UI label (« Supprimer une période ») is untouched.
 
 ### Commit 1a — the fix vocabulary
 
@@ -1070,13 +1091,14 @@ The big one. All nine variants keep their structural bodies (D8); the module kee
   (`Week@WeekPatternExcludedWeek`) with warnings; the
   `.expect("Cleaning made the removed weeks trivial")` (`:1068`) becomes
   `.expect("the cascade resolves everything a week removal breaks")`.
-- `DeletePeriod`: remove weeks in reverse (cascading as above), then
-  `PeriodOp::RemoveWithWeeks` — whose landing cascades the period-scoped remnants
+- `DeletePeriodAndWeeks`: remove weeks in reverse (cascading as above), then
+  `PeriodOp::Remove` — whose landing cascades the period-scoped remnants
   (`Period@SubjectExcludedPeriods/StudentExcludedPeriods/PairingRuleExcludedPeriods/
   SlotPairingRuleExcludedPeriods/AssignmentsKey/AssociationEntry`), all warned. The
   composite authors the week removals itself not out of necessity — the bare op would
-  cascade them away (D8) — but so the warning list carries only the surprising
-  effects, never one « semaine supprimée » line per week. The old
+  cascade them away (D8) — but because they are what its name promises: the user
+  asked for the weeks to go, so no « semaine supprimée » fix or warning may appear,
+  only each week removal's own cascade on genuinely surprising content. The old
   eight-phase cleaning dies. **D13**: translate `InvalidPeriodId` precheck instead of
   `.expect`ing (`:1117`).
 - `CutPeriod`: unchanged structurally (the five-step id-threading body incl. the
@@ -1084,10 +1106,10 @@ The big one. All nine variants keep their structural bodies (D8); the module kee
   `:1163-1167`) — it cleans nothing today (`:409`) and nothing changes.
 - `MergeWithPreviousPeriod`: **the fixme fix, §6.1.** Move the weeks (content travels
   with `WeekId` — cells are keyed `(SlotId, WeekId)` and untouched), then call the
-  sibling `DeletePeriod` `apply_to_session` directly (doctrine change 3, replacing
+  sibling `DeletePeriodAndWeeks` `apply_to_session` directly (doctrine change 3, replacing
   `rec_apply_no_session` at `:1381-1384`). The old reconcile-with-previous cleaning
   (six phases, `:670-893`) dies entirely: the dead period's config is dropped by
-  `DeletePeriod`'s cascade instead of being aligned first. Cells survive unless the
+  `DeletePeriodAndWeeks`'s cascade instead of being aligned first. Cells survive unless the
   surviving period's context genuinely invalidates them (then
   `InterrogationSlotNotRunningOnPeriod`/`ColloscopeStudentGroupOutOfBounds`-family
   fixes clear exactly those, warned).
@@ -1100,7 +1122,7 @@ Fixtures: **merge preserves colloscope data when group lists are compatible**
 (test-first in spirit, mutation-checked — the old path is not being fixed, so the pin is
 written against the new composite; delete `docs/todos/fixme_ops.md` only at commit 7);
 merge with *incompatible* group lists clears exactly the invalid cells; period shrink
-and delete with exact warning lists; `DeletePeriod` on a dead id returns
+and delete with exact warning lists; `DeletePeriodAndWeeks` on a dead id returns
 `InvalidPeriodId` (D13).
 
 ### 3.16 — dispatch + transitional API
@@ -1322,7 +1344,7 @@ convention); topic memory updated.
 
 1. **Merging periods preserves colloscope data** (closes `docs/todos/fixme_ops.md`).
    Old: the merge cleaning reconciled the two periods *before* the move and its emitted
-   cleaning ops + recursive `DeletePeriod` erased every cell it could not carry
+   cleaning ops + recursive `DeletePeriodAndWeeks` erased every cell it could not carry
    (`general_planning.rs:670-893`, `:1381-1384`; the body's own comment at `:1333`
    admits it). New: weeks move with their cells; only genuinely-invalidated cells are
    cleared, warned. Identical group lists ⇒ full preservation.
@@ -1340,12 +1362,12 @@ convention); topic memory updated.
    one payload the loss is authored by the caller, so both the old and the new `ops/`
    are silent about it and there is nothing here to diverge. Kept as an entry so the
    executing session does not re-add it — see D12 in §0.
-5. **`DeletePeriod` / `MergeWithPreviousPeriod` stop reconciling exclusions.** Old
+5. **`DeletePeriodAndWeeks` / `MergeWithPreviousPeriod` stop reconciling exclusions.** Old
    cleaning re-included subjects (`UpdatePeriodStatus(.., true)`) and aligned student
    exclusions to the neighbour period before deleting; new: the dead period's
    exclusion-set members are simply dropped by the cascade. Same end state for the
    surviving document, different warnings (drop-phrased instead of reconcile-phrased).
-6. **Four crashes become errors** (★ D13 + D5's growth rule): `DeletePeriod` on a dead
+6. **Four crashes become errors** (★ D13 + D5's growth rule): `DeletePeriodAndWeeks` on a dead
    id (`InvalidPeriodId` instead of `.expect` death), balancing options on a
    no-interrogation subject (`SubjectHasNoInterrogation` instead of `.expect` death —
    commit 3.3bis, §3.3), teacher ops naming a no-interrogation subject (the same variant
