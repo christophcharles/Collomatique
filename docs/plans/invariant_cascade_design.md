@@ -455,7 +455,8 @@ step 5 rewires production, so step 5 lands on a cleaner op surface. What changed
 - **B.1/B.2/B.3 (periods/weeks)** — `Periods` shrank to existence-only
   (`OrderedTable<PeriodId, ()>` + `first_week`); week data moved to a new `Weeks` module
   (twin of `slots.rs`: `week_map` + a sparse `ordering` sidecar). `PeriodOp::Remove`
-  (renamed `PeriodOp::RemoveWithWeeks` at step 7 commit 0) is no
+  (briefly renamed `RemoveWithWeeks` at step 7 commit 0, reversed at commit 0bis —
+  elementary ops keep elementary names) is no
   longer week-empty-gated in the *force* path (checked apply keeps its guard until step 5) —
   removing a week-bearing period now leaves dangling `WeekPeriodFk`s for the cascade. Read
   surface re-homed onto `Weeks`/`Parameters` (slots naming).
@@ -789,8 +790,11 @@ state; this appendix supersedes them as the description of the live model.
   empty; `Remove` requires week-empty (`PeriodStillHasWeeks`). *Loose-ends phase (Appendix
   F): the force path dropped this guard (checked apply keeps it until step 5); the
   elementary `GroupListOp` was also consolidated to carry a whole sealed `GroupList`.
-  Step 7 commit 0 renamed the variant `RemoveWithWeeks`: no week-empty guard survives
-  anywhere, and leftover weeks are cascade-deleted rather than rejected.*
+  No week-empty guard survives
+  anywhere, and leftover weeks are cascade-deleted rather than rejected; the
+  user-facing `DeletePeriodAndWeeks` composite carries the "weeks go with the
+  period" semantics (step 7 commits 0/0bis/0ter settled the naming: the elementary
+  variant stays plain `Remove`).*
 - **Colloscope ops are upserts**: `SetInterrogation(SlotId, WeekId, BTreeSet<u32>)` /
   `SetGroupList(GroupListId, BTreeMap<StudentId, u32>)`; empty payload = remove row;
   reverse = `Set…` with the prior payload (or empty).
@@ -1254,8 +1258,9 @@ checkers are still wired only in tests — step 5 still does the production rewi
   `weeks_for_period` etc. with slots-style `None = no row` semantics. `find_period` (the old
   borrowable-`Vec` accessor) is **deleted**; the `read_api` pointer-identity pin moved to
   `find_week`. `WeekPatterns::is_week_active(weeks: &Weeks, …)`.
-- **`PeriodOp::Remove` no longer week-empty-gated in the force path** (the variant is
-  called `PeriodOp::RemoveWithWeeks` since step 7 commit 0). Removing a
+- **`PeriodOp::Remove` no longer week-empty-gated in the force path** (step 7
+  commit 0 briefly renamed it `RemoveWithWeeks`; commit 0bis restored the
+  elementary name). Removing a
   week-bearing period is now representable and leaves each surviving week dangling at
   `WeekPeriodFk` for the cascade to repair. `PeriodPrecheckError::PeriodStillHasWeeks` and
   the guard in its `force_apply_period` arm are gone. **Checked `apply_period` keeps its
