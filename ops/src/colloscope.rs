@@ -349,10 +349,33 @@ impl ColloscopeUpdateOp {
                             // could name it looks for the offending placement, finds
                             // the old row innocent, and answers nothing. The engine
                             // convicts the target and the scans below turn the break
-                            // back into the bad input it came from. Old validator order
-                            // (validate_group_list_placements): excluded student, then
-                            // invalid student id, then group number out of bounds.
+                            // back into the bad input it came from. Old validator order:
+                            // the prefilled target first (the old bodies' guard ran
+                            // ahead of validate_group_list_placements), then that
+                            // validator's own order — excluded student, invalid student
+                            // id, group number out of bounds.
                             Error::BrokenInvariants(set) => {
+                                // A list that fills its groups by hand has no
+                                // colloscope row, so the placements are beside
+                                // the point: the target is the wrong kind of
+                                // list. The map does know this break — it
+                                // clears such a row — but a rolled-back write
+                                // leaves no row to clear, so it answers nothing
+                                // and the target is convicted. Until this scan
+                                // the break reached the catch-all below and the
+                                // op died there; it is the guard step 4 dropped
+                                // from `force_apply_colloscope`, restored here
+                                // under a name of its own (D5's growth rule).
+                                for inv in set {
+                                    if let FixableInvariant::Convergence(
+                                        Convergence::ColloscopeGroupListPrefilled(group_list),
+                                    ) = inv
+                                    {
+                                        return UpdateColloscopeGroupListError::PrefilledGroupListInColloscope(
+                                            *group_list,
+                                        );
+                                    }
+                                }
                                 for inv in set {
                                     if let FixableInvariant::Convergence(
                                         Convergence::ColloscopeStudentExcluded(group_list, student),
@@ -384,14 +407,11 @@ impl ColloscopeUpdateOp {
                                         );
                                     }
                                 }
-                                // One shape still dies here, exactly as it does
-                                // today: a row aimed at a *prefilled* list. The
-                                // map does know that break — it clears such a
-                                // row — but the rolled-back list has no row to
-                                // clear, so it answers nothing and the target is
-                                // convicted with a vocabulary that has no word
-                                // for it. Replicated verbatim: giving it one
-                                // would be an additive change nobody asked for.
+                                // The four scans above cover every break a
+                                // SetGroupList can cause, so this is the
+                                // instrument H.2 describes rather than a hole:
+                                // reaching it means the checker grew a case the
+                                // vocabulary has no word for.
                                 panic!("Unexpected invariant breaks during UpdateColloscopeGroupList: {set:?}");
                             }
                             _ => panic!("Unexpected error during UpdateColloscopeGroupList: {e:?}"),
