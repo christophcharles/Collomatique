@@ -7,12 +7,13 @@ doc first: the cascade engine, the resolution map and the `ContentOrd` terminati
 mechanism are delivered and tested, and **nothing in production calls them yet**. This
 step is the consumer.
 
-**Position (August 1 2026): commits 0 through 3.16 have landed** — the fix vocabulary,
-the engine wrapper, the session struct, **all fifteen families** and the dispatch above
-them, plus the riders 0bis/0ter, 3.3bis, 3.12+ and 3.13bis. The `landed` column of §3's
-table is the authoritative record. **Commit 3 is closed; the next commit is 4 (the
-property walk)**, then 5–7. `cascade_dry_apply` / `cascade_apply` now exist, but nothing
-in production calls them: no consumer moves before 6a.
+**Position (August 1 2026): commits 0 through 4 have landed** — the fix vocabulary,
+the engine wrapper, the session struct, **all fifteen families**, the dispatch above
+them and the property walk over that, plus the riders 0bis/0ter, 3.3bis, 3.12+ and
+3.13bis. The `landed` column of §3's table is the authoritative record. **Commit 3 is
+closed and the new path is fuzzed; the next commit is 5 (the renderer)**, then 6–7.
+`cascade_dry_apply` / `cascade_apply` now exist, but nothing in production calls them:
+no consumer moves before 6a.
 
 The migration pattern is the step-5 one: build the new world in parallel under
 transitional names, move consumers over, delete the old world, rename at the very end so
@@ -190,7 +191,7 @@ Rationale is recorded so the executing session does not re-litigate.
   hogwarts copy, §7). Behaviour-divergence fixtures must be
   **mutation-checked** (green-on-first-run proves nothing until seen red). The walk
   (commit 4) fires random `UpdateOp`s through the new path asserting no-panic + valid
-  result; `ops/` has zero fuzz today.
+  result; `ops/` had zero fuzz before it.
 - **D10 — Consumers.** gtk4 keeps its existing `Vec<String>` warning dialog fed by the
   new texts; a richer warning window is **out of scope**. Python keeps discarding
   warnings (the Python API revamp is separate work). `rpc-engine`'s `collomatique-ops`
@@ -717,7 +718,7 @@ lands.
 | 3.12+ | restore the prefilled-group-list error (D5's growth rule, §3.12): a) this plan, b) the variant with no emitter, c) the pin, **committed red**, d) the emitter on the new path only | docs, ops | `77fb1948`…`e30abb92` |
 | 3.13bis | move the interrogation-row convergences ahead of the association ones (§3.13) | state-colloscopes, ops | `9ef4299b` |
 | 3.16 | `UpdateOp` dispatch + `cascade_dry_apply`/`cascade_apply` | ops | `e00c62ff` |
-| 4 | the `UpdateOp` property walk (testgen dev-dep ⇒ **cargoHash**) | ops | — |
+| 4 | the `UpdateOp` property walk (testgen dev-dep ⇒ **cargoHash**) | ops | *this commit* |
 | 5 | `warning_text.rs` renderer + `CascadeWarning::text` + text pins | ops | — |
 | 6a | gtk4 switch | gtk4 | — |
 | 6b | python switch (contract scripts run here) | python | — |
@@ -1196,7 +1197,7 @@ Two deliberate deviations from the `property_cascade.rs` template, discovered at
 Skeleton:
 
 ```rust
-const CONFIG: RunConfig = RunConfig { seeds: 50, ops_per_run: 300, invalid_fraction: 0.15 };
+const CONFIG: RunConfig = RunConfig { seeds: 100, ops_per_run: 500, invalid_fraction: 0.15 };
 
 // In-file generator: gen_update_op(rng, data, invalid_fraction) -> (&'static str, UpdateOp)
 // - pools of live ids read from data.get_data().get_inner_data()
@@ -1237,6 +1238,43 @@ House rules apply: committed `CONFIG` const, no env vars, no `#[ignore]` tiers;
 shrinking is a later decision. Once commit 5 lands, extend the loop to call
 `w.text(pre_state.get_data())` on every warning — rendering totality (no panic on any
 reachable fix) gets fuzzed for free.
+
+**As landed** (this commit, `ops/tests/property_update_ops.rs`). Three things moved
+from the sketch above.
+
+*The width.* `CONFIG` landed at **100 × 500**, not 50 × 300 — the same width as the
+two elementary walks (`property_ops.rs` and `property_apply_gate.rs` run 100 × 1000)
+and wider than the cascade harness's 50 × 500. It costs 21s of a ~6min suite, which
+is a fair share for the only fuzz `ops/` has. The measured run: **37223 targets
+landed, 3483 of them needing a repair, 9214 repairs in all, 12777 rejected.**
+
+*The coverage guard grew a second half.* The three cross-seed counters are as
+sketched (landed / warned / errored, all > 0). On top of them the run keeps a
+per-family tally and asserts, for each of the fifteen, both that it was **drawn** and
+that it **landed at least once** — a family drawn and rejected every time would have
+had only its address checks fuzzed and its body never entered. Every family clears
+it; the thinnest is `slot_pairings` at 387/1983, which needs two slots that can
+legally be paired and keeps losing them to the walk's own deletions. The tallies are
+printed, so a future reader can see at a glance whether the walk has degenerated.
+
+*Every family needs a dead-address fallback.* A family whose pools have all run dry
+has no op left to express, and handing `weighted` an all-zero weight array is a
+test-side panic, not a finding. Two families were found this way on the first run —
+`slots` and `incompatibilities`, both after the walk deleted the last subject with
+interrogations — and both now answer with a `Delete` on a dangling id, which
+exercises the family's address check instead. The pairing families already had it.
+
+**The mutation check, and the false negative that came first.** A bare `panic!` at
+the head of `apply_to_session`'s `AddNewSlot` `BrokenInvariants` arm turns the walk
+**red on seed 0, inside 0.01s** — so the walk really does reach the new bodies'
+translation arms, which is what the no-panic claim rests on. The first attempt was a
+false negative, recorded because both of its causes are traps for the next session:
+turning that arm's dangling-teacher scan into a `break` stays **green**, because a
+dangling teacher also breaks `SlotTeacherDoesNotTeachSubject` and the very next scan
+catches it — the scans overlap, so sabotaging one proves nothing. And the edit had
+landed in `apply_no_cleaning`'s copy of the translation (`slots.rs:338`) rather than
+`apply_to_session`'s (`slots.rs:674`): the two bodies stand side by side until commit
+7, they read almost identically, and this walk drives only the second.
 
 ## 5-C5. Commit 5 — the renderer, and the `Fix` catalogue
 
