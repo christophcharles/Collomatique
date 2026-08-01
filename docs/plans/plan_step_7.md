@@ -97,13 +97,33 @@ Rationale is recorded so the executing session does not re-litigate.
   fixtures establish no input can produce, an instrument per H.2. The test is
   reachability, not taste.
 
-  The cases known so far: the teacher/non-interrogation-subject case that panics today
-  (§3.4), `DeletePeriod`'s dead `InvalidPeriodId` variant coming alive (D13), and — found
-  while writing commit 3.12's fixtures — a colloscope group-list row aimed at a
-  *prefilled* list (§3.12). That third one is not even new vocabulary: `ops/` answered it
-  cleanly until step 4 dropped the guard (see §3.12), so the follow-up **restores a lost
-  error**. Removals of dead variants are deferred to commit 7 (D14). Python's ~80
-  exception-matching sites in `python/src/glue.rs` stay intact.
+  The cases known so far, in the order they were found: balancing options on a subject
+  whose interrogations are disabled (§3.3, fixed by commit **3.3bis**), the
+  teacher/non-interrogation-subject case (§3.4), `DeletePeriod`'s dead `InvalidPeriodId`
+  variant coming alive (D13), and — found while writing commit 3.12's fixtures — a
+  colloscope group-list row aimed at a *prefilled* list (§3.12). The first two are the
+  same shape, a `Convergence::…WithoutInterrogations` on a subject the op's own payload
+  names, and both are genuinely new vocabulary (pre-step-4 the balancing body crashed
+  too, on `.expect("BalancingOp::Update should not fail")`). The fourth is the odd one
+  out: `ops/` answered it cleanly until step 4 dropped the guard (see §3.12), so its
+  follow-up **restores a lost error** rather than inventing one. Removals of dead
+  variants are deferred to commit 7 (D14). Python's ~80 exception-matching sites in
+  `python/src/glue.rs` stay intact.
+
+  **The audit rule, and its result for 3.1–3.11.** Finding these is mechanical, not a
+  matter of inspiration. The engine rolls the failing target back *before* asking the
+  map, and every map arm is a presence test — so an invariant a target breaks with its
+  **own written content** always finds its material gone, always answers `None`, and
+  always lands in that family's `BrokenInvariants` arm. An invariant broken by
+  invalidating **pre-existing** material survives the rollback and is repaired. So per
+  family the question is only: enumerate the reference sites originating in the row the
+  family writes, plus the convergence predicates whose offending fields the op writes,
+  and check each is scanned or excluded by an ops-level address check. Commits 3.1–3.11
+  were swept this way on August 1 2026 and hold no further case: every own-content break
+  is named, and the remaining panics (the `*IdAlreadyExists` arms, which only
+  `force_apply`'s `Add` branches emit; `SlotPrecheckError::CannotChangeSubject`, which
+  sits *after* `InvalidSlotId` and so cannot fire on the pinned subject; and
+  `InvalidOp::Logic`, unreachable from any elementary op) are instruments.
 - **D6 — Warning texts: keyed on the `Fix` variant, phrased as the effect, in `ops/`**
   (keying revised by ★ D15, July 30 — the original ruling keyed on `FixableInvariant`).
   Keyed on `Fix` so the `match` is exhaustive with no wildcard: a new fix shape is a
@@ -673,6 +693,7 @@ to the scratchpad and grepped — never run twice).
 | 2a | `Manager::apply_cascade` + toy tests | state |
 | 2b | `CascadeSession`/`CascadeWarning`/`CascadeResult` + struct tests; frozen hogwarts fixture copy + storage dev-dep (⇒ **cargoHash**) | ops |
 | 3.1–3.15 | one family per commit, `apply_to_session` + family fixtures | ops |
+| 3.3bis | typed rejection for balancing options on a no-interrogation subject (D5's growth rule, §3.3), built test-first: the crash pinned, then the variant, then the guard | ops |
 | 3.12+ | restore the prefilled-group-list error (D5's growth rule, §3.12): a) this plan, b) the variant with no emitter, c) the pin, **committed red**, d) the emitter on the new path only | docs, ops |
 | 3.16 | `UpdateOp` dispatch + `cascade_dry_apply`/`cascade_apply` | ops |
 | 4 | the `UpdateOp` property walk (testgen dev-dep ⇒ **cargoHash**) | ops |
@@ -815,11 +836,27 @@ round-trips, zero warnings.
 Three variants each, single elementary, errors are **all ops-level prechecks** including
 the deliberate "removing an absent override" detection (`SetStudent(_, None)` is a
 state-level no-op, so `ops/` detects `NoLimitsForStudent`/`NoOptionsForSubject` itself —
-`settings.rs:124-136`, `balancing.rs:124-136`). Keep all prechecks; swap the apply call;
-expects kept. No warnings possible as *targets*. Fixtures: error surface pins + zero
-warnings on the happy path. Also fix in passing (commit 3.2): `settings.rs:55`'s
+`settings.rs:124-136`, `balancing.rs:124-136`). Keep all prechecks; swap the apply call.
+No warnings possible as *targets*. Fixtures: error surface pins + zero warnings on the
+happy path. Also fix in passing (commit 3.2): `settings.rs:55`'s
 `get_next_cleaning_op` return type says `CleaningOp<WeekPatternsUpdateWarning>` — a
 copy-paste leftover; it dies in commit 7 anyway, so only note it, don't churn it.
+
+**The twins are not symmetric (commit 3.3bis, D5's growth rule).** "Expects kept" held
+for settings and *not* for balancing, and the sentence above hid the difference until
+commit 3.3 replicated the `.expect`s and found it. For settings a live student is
+enough: the settings table's only edge is the student key, and no convergence predicate
+mentions it. For balancing a live subject is **not** enough — only an interrogated
+subject may carry options (`Convergence::BalancingForSubjectWithoutInterrogations`), so
+`UpdateSubjectOptions` on a subject with interrogations disabled reached the state
+layer, got convicted (the map answers `None`: the rolled-back entry is not in the state,
+so there is nothing to repair) and killed the process on data-dependent input. Commit
+3.3bis added `UpdateSubjectOptionsError::SubjectHasNoInterrogation(SubjectId)` and the
+guard that emits it, beside the existing address check and reusing its single
+`find_subject` lookup. Nothing else needed wiring: the balancing family has no Python
+surface, and gtk4 renders update errors through `to_string()`. The old
+`apply_no_cleaning` body keeps the hole deliberately — it dies at commit 7, and gtk4
+cannot reach it (the balancing panel only lists subjects with interrogations).
 
 ### 3.4 `teachers.rs`
 
@@ -1279,12 +1316,14 @@ convention); topic memory updated.
    exclusions to the neighbour period before deleting; new: the dead period's
    exclusion-set members are simply dropped by the cascade. Same end state for the
    surviving document, different warnings (drop-phrased instead of reconcile-phrased).
-6. **Three crashes become errors** (★ D13 + D5's growth rule): `DeletePeriod` on a dead
-   id (`InvalidPeriodId` instead of `.expect` death), teacher ops naming a
-   no-interrogation subject (`SubjectHasNoInterrogation` instead of
+6. **Four crashes become errors** (★ D13 + D5's growth rule): `DeletePeriod` on a dead
+   id (`InvalidPeriodId` instead of `.expect` death), balancing options on a
+   no-interrogation subject (`SubjectHasNoInterrogation` instead of `.expect` death —
+   commit 3.3bis, §3.3), teacher ops naming a no-interrogation subject (the same variant
+   name on its own family's enum, instead of
    `panic!("Unexpected invariant breaks…")`), and a colloscope group-list row aimed at a
    prefilled list (`PrefilledGroupListInColloscope` instead of the same panic — a
-   *restoration*, the guard having been lost at step 4; see §3.12). The third one also
+   *restoration*, the guard having been lost at step 4; see §3.12). The fourth one also
    moves an existing answer: a prefilled list named with a dead student reports the
    prefilled case, not `InvalidStudentId`, which is where the old guard's precedence
    put it. And at commit 7 (★ D14): two dead error variants deleted, `MoveSlotDown`
