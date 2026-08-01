@@ -76,10 +76,33 @@ Rationale is recorded so the executing session does not re-litigate.
   is documented in-code as reproducing the old validator's first-error order (e.g.
   `slots.rs:324-330`, `assignments.rs:163-181`) and pinned by
   `ops/tests/assignments_error_surface.rs`. What changes: the "should be cleaned before"
-  panic arms become dead and are removed; the vocabulary may grow **additively only**.
-  The survey found the concrete candidates (§6.6): the teacher/non-interrogation-subject
-  case that panics today, and `DeletePeriod`'s dead `InvalidPeriodId` variant coming
-  alive (D13). Removals of dead variants are deferred to commit 7 (D14). Python's ~80
+  panic arms become dead and are removed.
+
+  ★ **The growth rule** (restated by the user, August 1 2026, after commit 3.12 — the
+  original wording said "the vocabulary may grow **additively only**" and then named two
+  concrete candidates, which read as a closed list it was never meant to be). Two
+  different things were being conflated, and they pull in opposite directions:
+  - **Prechecks must not grow.** An ops-level guard that refuses input the cascade
+    would happily repair is exactly what this step is deleting; re-adding one under a
+    new error name puts the cleaning phase back by the side door. None of those is ever
+    added.
+  - **A panic on reachable input must be dealt with.** Where a state-layer break can
+    reach a residual catch-all `panic!` — the target is convicted, the map has no repair
+    to offer, and no scan of the arm names the break — the family's vocabulary **gains a
+    variant**. A crash is not a contract. This is not a judgement call to weigh case by
+    case: whenever a family's fixtures or a reading of its arms turn one up, it gets a
+    typed error, in that family's own commit or in a follow-up.
+
+  The panics that *stay* are the ones for genuinely unreachable states — the arm the
+  fixtures establish no input can produce, an instrument per H.2. The test is
+  reachability, not taste.
+
+  The cases known so far: the teacher/non-interrogation-subject case that panics today
+  (§3.4), `DeletePeriod`'s dead `InvalidPeriodId` variant coming alive (D13), and — found
+  while writing commit 3.12's fixtures — a colloscope group-list row aimed at a
+  *prefilled* list (§3.12). That third one is not even new vocabulary: `ops/` answered it
+  cleanly until step 4 dropped the guard (see §3.12), so the follow-up **restores a lost
+  error**. Removals of dead variants are deferred to commit 7 (D14). Python's ~80
   exception-matching sites in `python/src/glue.rs` stay intact.
 - **D6 — Warning texts: keyed on the `Fix` variant, phrased as the effect, in `ops/`**
   (keying revised by ★ D15, July 30 — the original ruling keyed on `FixableInvariant`).
@@ -650,6 +673,7 @@ to the scratchpad and grepped — never run twice).
 | 2a | `Manager::apply_cascade` + toy tests | state |
 | 2b | `CascadeSession`/`CascadeWarning`/`CascadeResult` + struct tests; frozen hogwarts fixture copy + storage dev-dep (⇒ **cargoHash**) | ops |
 | 3.1–3.15 | one family per commit, `apply_to_session` + family fixtures | ops |
+| 3.12+ | restore the prefilled-group-list error (D5's growth rule, §3.12): a) this plan, b) the variant with no emitter, c) the pin, **committed red**, d) the emitter on the new path only | docs, ops |
 | 3.16 | `UpdateOp` dispatch + `cascade_dry_apply`/`cascade_apply` | ops |
 | 4 | the `UpdateOp` property walk (testgen dev-dep ⇒ **cargoHash**) | ops |
 | 5 | `warning_text.rs` renderer + `CascadeWarning::text` + text pins | ops |
@@ -895,6 +919,33 @@ colloscope content writes because the row was rolled back). The two erase compos
 keep their collect-then-clear shape and `.expect("No error possible for erasing")` —
 clearing only removes, so no cascade ever fires. Fixtures: error-surface pins (the
 five-variant interrogation surface), erase round-trips with zero warnings.
+
+**Follow-up (D5's growth rule, four commits after 3.12).** Writing the fixtures turned
+up one shape that reaches the group-list arm's residual catch-all on reachable input: a
+row aimed at a **prefilled** list. The state layer lets the write through (the
+`is_prefilled` guard is stripped from `force_apply_colloscope`,
+`colloscopes.rs:186`), the checker reports `Conv:ColloscopeGroupListPrefilled`
+(`invariants.rs:632`), and the map's arm for it (`resolution.rs:965`) tests row
+*presence* — which a rolled-back write on a prefilled list never has — so it answers
+`None` and the target is convicted with a break no scan names.
+
+Git says this is a **regression, not a gap**. Before step 4 the live path was the old
+checked apply, whose `SetGroupList` body rejected a prefilled target outright and
+`ops/` translated it (`git show 59008052^:ops/src/colloscope.rs` — the guard is at
+`git show 56510199^:state-colloscopes/src/colloscopes.rs`, ~`:361`, reusing
+`ColloscopeError::InvalidGroupListId` with a comment admitting the op "targets them by
+mistake"). Step 4's `force_apply` copies dropped the guard by design (step-3 survey
+Table 1: strip the semantic guards, keep coordinate existence), the condition became a
+plain invariant, and nothing in `ops/` was ever taught to name it.
+
+So the follow-up restores the error with a name of its own instead of the old overloaded
+one: `UpdateColloscopeGroupListError::PrefilledGroupListInColloscope(GroupListId)`. It is
+scanned **first**, above the three placement scans, because that is where the guard sat
+in both old bodies (before `validate_group_list_placements`). Consequence, stated
+plainly: a prefilled list named together with a dead student now answers the prefilled
+case where commit 3.12 answered `InvalidStudentId` — the historical answer, restored.
+Only `apply_to_session` is taught; the old `apply_no_cleaning` keeps the panic and dies
+with the rest of it at commit 7.
 
 ### 3.13 `subjects.rs`
 
@@ -1228,12 +1279,16 @@ convention); topic memory updated.
    exclusions to the neighbour period before deleting; new: the dead period's
    exclusion-set members are simply dropped by the cascade. Same end state for the
    surviving document, different warnings (drop-phrased instead of reconcile-phrased).
-6. **Two crashes become errors, one panic pair becomes typed** (★ D13 + D5):
-   `DeletePeriod` on a dead id (`InvalidPeriodId` instead of `.expect` death), and
-   teacher ops naming a no-interrogation subject
-   (`SubjectHasNoInterrogation` instead of `panic!("Unexpected invariant breaks…")`).
-   And at commit 7 (★ D14): two dead error variants deleted, `MoveSlotDown` returns
-   its own `InvalidSlotId` instead of `MoveSlotUpError`'s.
+6. **Three crashes become errors** (★ D13 + D5's growth rule): `DeletePeriod` on a dead
+   id (`InvalidPeriodId` instead of `.expect` death), teacher ops naming a
+   no-interrogation subject (`SubjectHasNoInterrogation` instead of
+   `panic!("Unexpected invariant breaks…")`), and a colloscope group-list row aimed at a
+   prefilled list (`PrefilledGroupListInColloscope` instead of the same panic — a
+   *restoration*, the guard having been lost at step 4; see §3.12). The third one also
+   moves an existing answer: a prefilled list named with a dead student reports the
+   prefilled case, not `InvalidStudentId`, which is where the old guard's precedence
+   put it. And at commit 7 (★ D14): two dead error variants deleted, `MoveSlotDown`
+   returns its own `InvalidSlotId` instead of `MoveSlotUpError`'s.
 7. **Warning granularity changes.** Legacy: deduplicated coarse statements ("Pertes des
    créneaux de colle du colleur X"). New: one entry per fix op, finer, in application
    order. gtk4 dedups exact-equal texts only.
