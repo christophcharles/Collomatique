@@ -321,7 +321,7 @@ impl Component for GeneralPlanning {
                     .unwrap();
             }
             GeneralPlanningInput::DeletePeriodClicked(period_id) => sender
-                .output(GeneralPlanningUpdateOp::DeletePeriod(period_id))
+                .output(GeneralPlanningUpdateOp::DeletePeriodAndWeeks(period_id))
                 .unwrap(),
             GeneralPlanningInput::MergePeriodClicked(period_id) => sender
                 .output(GeneralPlanningUpdateOp::MergeWithPreviousPeriod(period_id))

@@ -236,7 +236,11 @@ pub enum GeneralPlanningUpdateOp {
     UpdateFirstWeek(collomatique_time::WeekStart),
     AddNewPeriod(usize),
     UpdatePeriodWeekCount(collomatique_state_colloscopes::PeriodId, usize),
-    DeletePeriod(collomatique_state_colloscopes::PeriodId),
+    /// Delete a period *and all its weeks*
+    ///
+    /// The weeks are removed first (authored — the user asked for them to go,
+    /// so they generate no warnings), then the period itself.
+    DeletePeriodAndWeeks(collomatique_state_colloscopes::PeriodId),
     CutPeriod(collomatique_state_colloscopes::PeriodId, usize),
     MergeWithPreviousPeriod(collomatique_state_colloscopes::PeriodId),
     UpdateWeekStatus(collomatique_state_colloscopes::PeriodId, usize, bool),
@@ -252,7 +256,7 @@ pub enum GeneralPlanningUpdateError {
     #[error(transparent)]
     UpdatePeriodWeekCount(#[from] UpdatePeriodWeekCountError),
     #[error(transparent)]
-    DeletePeriod(#[from] DeletePeriodError),
+    DeletePeriodAndWeeks(#[from] DeletePeriodAndWeeksError),
     #[error(transparent)]
     CutPeriod(#[from] CutPeriodError),
     #[error(transparent)]
@@ -272,7 +276,7 @@ pub enum UpdatePeriodWeekCountError {
 }
 
 #[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
-pub enum DeletePeriodError {
+pub enum DeletePeriodAndWeeksError {
     #[error("Period ID {0:?} is invalid")]
     InvalidPeriodId(collomatique_state_colloscopes::PeriodId),
 }
@@ -438,7 +442,7 @@ impl GeneralPlanningUpdateOp {
                 None
             }
             GeneralPlanningUpdateOp::UpdateWeekAnnotation(_, _, _) => None,
-            GeneralPlanningUpdateOp::DeletePeriod(period_id) => {
+            GeneralPlanningUpdateOp::DeletePeriodAndWeeks(period_id) => {
                 let removed_week_ids: Vec<collomatique_state_colloscopes::WeekId> = data
                     .get_data()
                     .get_inner_data()
@@ -1074,7 +1078,7 @@ impl GeneralPlanningUpdateOp {
 
                 Ok(None)
             }
-            GeneralPlanningUpdateOp::DeletePeriod(period_id) => {
+            GeneralPlanningUpdateOp::DeletePeriodAndWeeks(period_id) => {
                 // Empty the period one week at a time — the cleaning cascade has
                 // already made every week trivial (empty cells, removable
                 // pattern bits) — then remove the now-empty period.
@@ -1378,10 +1382,11 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
-                let rec_result =
-                    UpdateOp::GeneralPlanning(GeneralPlanningUpdateOp::DeletePeriod(*period_id))
-                        .rec_apply_no_session(data)
-                        .expect("All data should be valid at this point");
+                let rec_result = UpdateOp::GeneralPlanning(
+                    GeneralPlanningUpdateOp::DeletePeriodAndWeeks(*period_id),
+                )
+                .rec_apply_no_session(data)
+                .expect("All data should be valid at this point");
 
                 let result = rec_result.new_id;
 
@@ -1496,7 +1501,9 @@ impl GeneralPlanningUpdateOp {
                 GeneralPlanningUpdateOp::UpdatePeriodWeekCount(_period_id, _week_count) => {
                     "Modifier une période".into()
                 }
-                GeneralPlanningUpdateOp::DeletePeriod(_period_id) => "Supprimer une période".into(),
+                GeneralPlanningUpdateOp::DeletePeriodAndWeeks(_period_id) => {
+                    "Supprimer une période".into()
+                }
                 GeneralPlanningUpdateOp::CutPeriod(_period_id, _new_week_count) => {
                     "Découper une période".into()
                 }

@@ -11,7 +11,7 @@ use collomatique_ops::{
     AddNewGroupListError, AddNewIncompatError, AddNewSlotError, AddNewStudentError,
     AddNewTeacherError, AddNewWeekPatternError, AssignAllError, AssignError,
     AssignGroupListToSubjectError, AssignmentsUpdateError, CutPeriodError, DeleteGroupListError,
-    DeleteIncompatError, DeletePeriodError, DeleteSlotError, DeleteStudentError,
+    DeleteIncompatError, DeletePeriodAndWeeksError, DeleteSlotError, DeleteStudentError,
     DeleteSubjectError, DeleteTeacherError, DeleteWeekPatternError, DuplicatePreviousPeriodError,
     GeneralPlanningUpdateError, GroupListsUpdateError, IncompatibilitiesUpdateError,
     MergeWithPreviousPeriodError, MoveSlotDownError, MoveSlotUpError, MoveSubjectDownError,
@@ -272,15 +272,15 @@ impl CollomatiqueFile {
         let result = self_
             .file
             .apply_update(collomatique_ops::UpdateOp::GeneralPlanning(
-                collomatique_ops::GeneralPlanningUpdateOp::DeletePeriod(id.into()),
+                collomatique_ops::GeneralPlanningUpdateOp::DeletePeriodAndWeeks(id.into()),
             ));
 
         match result {
             Ok(_) => Ok(()),
             Err(UpdateError::GeneralPlanning(
-                collomatique_ops::GeneralPlanningUpdateError::DeletePeriod(e),
+                collomatique_ops::GeneralPlanningUpdateError::DeletePeriodAndWeeks(e),
             )) => match e {
-                DeletePeriodError::InvalidPeriodId(id) => {
+                DeletePeriodAndWeeksError::InvalidPeriodId(id) => {
                     Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
                 }
             },
