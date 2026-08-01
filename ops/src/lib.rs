@@ -439,6 +439,81 @@ impl UpdateOp {
 
         Ok(RecApplyResult { warnings, new_id })
     }
+
+    /// Applies the op to `session`: the fifteen families all know how to write
+    /// themselves as elementary ops on a [CascadeSession], and this is the
+    /// dispatch that reaches the right one.
+    ///
+    /// The id the op created, if any, comes back widened to a
+    /// [collomatique_state_colloscopes::NewId] — the families answer with their
+    /// own id type.
+    fn apply_to_session<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
+        &self,
+        session: &mut CascadeSession<T>,
+    ) -> Result<Option<collomatique_state_colloscopes::NewId>, UpdateError> {
+        match self {
+            UpdateOp::GeneralPlanning(period_op) => {
+                let result = period_op.apply_to_session(session)?;
+                Ok(result.map(|x| x.into()))
+            }
+            UpdateOp::Subjects(subject_op) => {
+                let result = subject_op.apply_to_session(session)?;
+                Ok(result.map(|x| x.into()))
+            }
+            UpdateOp::Teachers(teacher_op) => {
+                let result = teacher_op.apply_to_session(session)?;
+                Ok(result.map(|x| x.into()))
+            }
+            UpdateOp::Students(student_op) => {
+                let result = student_op.apply_to_session(session)?;
+                Ok(result.map(|x| x.into()))
+            }
+            UpdateOp::Assignments(assignment_op) => {
+                assignment_op.apply_to_session(session)?;
+                Ok(None)
+            }
+            UpdateOp::WeekPatterns(week_pattern_op) => {
+                let result = week_pattern_op.apply_to_session(session)?;
+                Ok(result.map(|x| x.into()))
+            }
+            UpdateOp::Slots(slot_op) => {
+                let result = slot_op.apply_to_session(session)?;
+                Ok(result.map(|x| x.into()))
+            }
+            UpdateOp::Incompatibilities(incompat_op) => {
+                let result = incompat_op.apply_to_session(session)?;
+                Ok(result.map(|x| x.into()))
+            }
+            UpdateOp::Pairings(pairing_op) => {
+                let result = pairing_op.apply_to_session(session)?;
+                Ok(result.map(|x| x.into()))
+            }
+            UpdateOp::SlotPairings(slot_pairing_op) => {
+                let result = slot_pairing_op.apply_to_session(session)?;
+                Ok(result.map(|x| x.into()))
+            }
+            UpdateOp::GroupLists(group_list_op) => {
+                let result = group_list_op.apply_to_session(session)?;
+                Ok(result.map(|x| x.into()))
+            }
+            UpdateOp::Settings(settings_op) => {
+                settings_op.apply_to_session(session)?;
+                Ok(None)
+            }
+            UpdateOp::Balancing(balancing_op) => {
+                balancing_op.apply_to_session(session)?;
+                Ok(None)
+            }
+            UpdateOp::Colloscope(colloscope_op) => {
+                colloscope_op.apply_to_session(session)?;
+                Ok(None)
+            }
+            UpdateOp::ExportConfig(export_config_op) => {
+                export_config_op.apply_to_session(session)?;
+                Ok(None)
+            }
+        }
+    }
 }
 
 impl UpdateOp {
@@ -485,5 +560,49 @@ impl UpdateOp {
         *data = dry_result.new_state;
 
         Ok(dry_result.rec_apply_result.new_id)
+    }
+
+    /// Applies the op on a copy of `data` and hands the outcome back *without*
+    /// installing it: the caller sees the repairs the cascade had to make
+    /// ([CascadeResult::warnings]) before deciding whether to keep the new
+    /// state. That is what the gui does — it shows them and lets the user
+    /// cancel.
+    ///
+    /// The whole update — the composite's own elementary ops and every repair
+    /// they cascaded — lands as a single history slot on
+    /// [CascadeResult::new_state], so one undo takes the document back to where
+    /// the op found it.
+    ///
+    /// On `Err` there is nothing to unwind: the session owns a clone of `data`
+    /// and is dropped with it.
+    pub fn cascade_dry_apply<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
+        &self,
+        data: &T,
+    ) -> Result<CascadeResult<T>, UpdateError> {
+        let mut session = CascadeSession::new(data.clone());
+
+        let new_id = self.apply_to_session(&mut session)?;
+
+        let (new_state, warnings) = session.commit(self.get_desc());
+
+        Ok(CascadeResult {
+            warnings,
+            new_id,
+            new_state,
+        })
+    }
+
+    /// Applies the op to `data` in place, dropping the warnings — for callers
+    /// that have no way of showing them (the scripting api).
+    /// [UpdateOp::cascade_dry_apply] is the one that keeps them.
+    pub fn cascade_apply<T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>>(
+        &self,
+        data: &mut T,
+    ) -> Result<Option<collomatique_state_colloscopes::NewId>, UpdateError> {
+        let result = self.cascade_dry_apply(data)?;
+
+        *data = result.new_state;
+
+        Ok(result.new_id)
     }
 }
