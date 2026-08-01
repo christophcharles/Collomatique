@@ -36,6 +36,11 @@ pub enum BalancingUpdateError {
 pub enum UpdateSubjectOptionsError {
     #[error("Subject ID {0:?} is invalid")]
     InvalidSubjectId(collomatique_state_colloscopes::SubjectId),
+    /// The subject exists but runs no interrogations, and only an interrogated
+    /// subject may carry balancing options (the checker's
+    /// `BalancingForSubjectWithoutInterrogations`).
+    #[error("Subject {0:?} has interrogations disabled: it cannot have balancing options")]
+    SubjectHasNoInterrogation(collomatique_state_colloscopes::SubjectId),
 }
 
 #[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
@@ -184,27 +189,36 @@ impl BalancingUpdateOp {
                 // An ops-level address check: it decides whether there is an op
                 // to issue at all, so it stays here rather than being read back
                 // out of the state layer's precheck error.
-                if session
+                let interrogated = match session
                     .get_data()
                     .get_inner_data()
                     .params
                     .subjects
                     .find_subject(*subject_id)
-                    .is_none()
                 {
-                    return Err(UpdateSubjectOptionsError::InvalidSubjectId(*subject_id).into());
+                    Some(subject) => subject.parameters.interrogation_parameters.is_some(),
+                    None => {
+                        return Err(UpdateSubjectOptionsError::InvalidSubjectId(*subject_id).into());
+                    }
+                };
+
+                // And a content check on top of it, because a live subject is
+                // not enough: only an interrogated subject may carry balancing
+                // options (the checker's
+                // `BalancingForSubjectWithoutInterrogations`). Without this the
+                // op reaches the state layer, the map answers `None` for the
+                // break — the rolled-back entry is not in the state, so there
+                // is nothing to repair — the target is convicted, and the
+                // `.expect` below kills the process on data-dependent input.
+                // The old `apply_no_cleaning` body still has that hole; it is
+                // deleted at commit 7 rather than fixed twice, and gtk4 cannot
+                // reach it (it only lists interrogated subjects).
+                if !interrogated {
+                    return Err(
+                        UpdateSubjectOptionsError::SubjectHasNoInterrogation(*subject_id).into(),
+                    );
                 }
 
-                // Kept verbatim, including its blind spot: a live subject is
-                // not quite enough. An override on a subject whose
-                // interrogations are *disabled* breaks
-                // `BalancingForSubjectWithoutInterrogations`, the map answers
-                // `None` (the rolled-back entry is not in the state), the
-                // target is convicted and this `.expect` dies. The old body
-                // dies on exactly the same break with exactly the same
-                // message, so the migration changes nothing here; growing the
-                // error vocabulary (the twin of the teacher case, D5) is not
-                // this commit's business.
                 let result = session
                     .apply(
                         collomatique_state_colloscopes::Op::Balancing(
@@ -293,19 +307,19 @@ mod tests {
     //! says everything this family has to say, and the frozen hogwarts base
     //! (`tests/fixtures/`) would only add noise.
     //!
-    //! Two properties are worth the reading: the three ops-level prechecks (the
+    //! Two properties are worth the reading: the four ops-level prechecks (the
     //! whole error surface of the family — the state layer's own
     //! `BalancingPrecheckError::InvalidSubjectId` is unreachable behind the
     //! ops-level subject check, and the cascade never repairs anything), and
     //! the fact that those prechecks read the *session's* document rather than
     //! the state the composite started on.
     //!
-    //! The one subject these tests use runs interrogations, because that is
+    //! The subject the happy paths use runs interrogations, because that is
     //! what an override needs: the checker's
     //! `BalancingForSubjectWithoutInterrogations` says a subject with
-    //! interrogations disabled may not carry one. That corner is the family's
-    //! one residual `.expect` risk, described on `UpdateSubjectOptions` above —
-    //! it is out of this commit's scope, so no fixture pins it.
+    //! interrogations disabled may not carry one. The fourth precheck is what
+    //! turns that corner into a rejection instead of a dead process, and
+    //! `an_override_on_a_subject_without_interrogations_is_rejected` pins it.
 
     use super::*;
     use collomatique_state::AppState;
@@ -319,9 +333,14 @@ mod tests {
     };
     use std::num::NonZeroU32;
 
-    /// A document with one interrogated subject and no balancing entry of any
-    /// kind — the whole state these tests need to read.
-    fn one_subject() -> (AppState<Data, Desc>, SubjectId) {
+    /// A document with one subject and no balancing entry of any kind — the
+    /// whole state these tests need to read. Whether that subject runs
+    /// interrogations is the caller's choice, because it is the difference
+    /// between an override the checker accepts and one it forbids.
+    fn one_subject_with(
+        name: &str,
+        interrogation_parameters: Option<SubjectInterrogationParameters>,
+    ) -> (AppState<Data, Desc>, SubjectId) {
         let mut state = AppState::new(Data::default());
         let new_id = state
             .apply(
@@ -329,22 +348,8 @@ mod tests {
                     None,
                     Subject {
                         parameters: SubjectParameters {
-                            name: "Potions".into(),
-                            interrogation_parameters: Some(SubjectInterrogationParameters {
-                                students_per_group: NonEmptyRangeInclusive::new(
-                                    NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
-                                )
-                                .expect("statically non-empty"),
-                                groups_per_interrogation: NonEmptyRangeInclusive::new(
-                                    NonZeroU32::new(1).unwrap()..=NonZeroU32::new(1).unwrap(),
-                                )
-                                .expect("statically non-empty"),
-                                duration: collomatique_time::NonZeroMinutes::new(60).unwrap(),
-                                take_duration_into_account: true,
-                                periodicity: SubjectPeriodicity::ExactlyPeriodic {
-                                    periodicity_in_weeks: NonZeroU32::new(2).unwrap(),
-                                },
-                            }),
+                            name: name.into(),
+                            interrogation_parameters,
                         },
                         excluded_periods: std::collections::BTreeSet::new(),
                     },
@@ -357,6 +362,35 @@ mod tests {
         };
 
         (state, subject_id)
+    }
+
+    /// The document the happy paths run on: its subject runs interrogations, so
+    /// it may carry a balancing override.
+    fn one_subject() -> (AppState<Data, Desc>, SubjectId) {
+        one_subject_with(
+            "Potions",
+            Some(SubjectInterrogationParameters {
+                students_per_group: NonEmptyRangeInclusive::new(
+                    NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+                )
+                .expect("statically non-empty"),
+                groups_per_interrogation: NonEmptyRangeInclusive::new(
+                    NonZeroU32::new(1).unwrap()..=NonZeroU32::new(1).unwrap(),
+                )
+                .expect("statically non-empty"),
+                duration: collomatique_time::NonZeroMinutes::new(60).unwrap(),
+                take_duration_into_account: true,
+                periodicity: SubjectPeriodicity::ExactlyPeriodic {
+                    periodicity_in_weeks: NonZeroU32::new(2).unwrap(),
+                },
+            }),
+        )
+    }
+
+    /// A subject with interrogations *disabled* — live, so the address check
+    /// passes, but forbidden to carry a balancing override.
+    fn one_subject_without_interrogations() -> (AppState<Data, Desc>, SubjectId) {
+        one_subject_with("Vol sur balai", None)
     }
 
     /// An id no document ever issued.
@@ -494,5 +528,31 @@ mod tests {
         assert_eq!(session.get_data(), &before);
         let (_state, warnings) = session.commit((OpCategory::Balancing, "Rien".into()));
         assert!(warnings.is_empty(), "nothing was applied: {warnings:?}");
+    }
+
+    /// A balancing override on a subject whose interrogations are *disabled* is
+    /// forbidden by the checker (`BalancingForSubjectWithoutInterrogations`).
+    /// The subject is live, so the address check passes and the op reaches the
+    /// state layer, which convicts it — the user must get a typed rejection
+    /// back, not a dead process.
+    #[test]
+    fn an_override_on_a_subject_without_interrogations_is_rejected() {
+        let (state, subject) = one_subject_without_interrogations();
+
+        let mut session = CascadeSession::new(state);
+        let before = session.get_data().clone();
+
+        assert_eq!(
+            BalancingUpdateOp::UpdateSubjectOptions(subject, options(true))
+                .apply_to_session(&mut session)
+                .unwrap_err(),
+            BalancingUpdateError::UpdateSubjectOptions(
+                UpdateSubjectOptionsError::SubjectHasNoInterrogation(subject)
+            ),
+        );
+
+        // Rejected before any elementary op is issued, like every other
+        // precheck of the family: the document is exactly as it was.
+        assert_eq!(session.get_data(), &before);
     }
 }
