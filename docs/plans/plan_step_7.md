@@ -7,13 +7,12 @@ doc first: the cascade engine, the resolution map and the `ContentOrd` terminati
 mechanism are delivered and tested, and **nothing in production calls them yet**. This
 step is the consumer.
 
-**Position (August 1 2026): commits 0 through 3.15 have landed** — the fix vocabulary,
-the engine wrapper, the session struct and **all fifteen families**, plus the riders
-0bis/0ter, 3.3bis, 3.12+ and 3.13bis. The `landed` column of §3's table is the
-authoritative record. **The next commit is 3.16 (the `UpdateOp` dispatch)**, after which
-come commits 4–7. Nothing in production calls the new path yet:
-`cascade_dry_apply` / `cascade_apply` do not exist until 3.16 and no consumer moves
-before 6a.
+**Position (August 1 2026): commits 0 through 3.16 have landed** — the fix vocabulary,
+the engine wrapper, the session struct, **all fifteen families** and the dispatch above
+them, plus the riders 0bis/0ter, 3.3bis, 3.12+ and 3.13bis. The `landed` column of §3's
+table is the authoritative record. **Commit 3 is closed; the next commit is 4 (the
+property walk)**, then 5–7. `cascade_dry_apply` / `cascade_apply` now exist, but nothing
+in production calls them: no consumer moves before 6a.
 
 The migration pattern is the step-5 one: build the new world in parallel under
 transitional names, move consumers over, delete the old world, rename at the very end so
@@ -717,7 +716,7 @@ lands.
 | 3.3bis | typed rejection for balancing options on a no-interrogation subject (D5's growth rule, §3.3), built test-first: the crash pinned, then the variant, then the guard | ops | `9b8a7875` |
 | 3.12+ | restore the prefilled-group-list error (D5's growth rule, §3.12): a) this plan, b) the variant with no emitter, c) the pin, **committed red**, d) the emitter on the new path only | docs, ops | `77fb1948`…`e30abb92` |
 | 3.13bis | move the interrogation-row convergences ahead of the association ones (§3.13) | state-colloscopes, ops | `9ef4299b` |
-| 3.16 | `UpdateOp` dispatch + `cascade_dry_apply`/`cascade_apply` | ops | — |
+| 3.16 | `UpdateOp` dispatch + `cascade_dry_apply`/`cascade_apply` | ops | `e00c62ff` |
 | 4 | the `UpdateOp` property walk (testgen dev-dep ⇒ **cargoHash**) | ops | — |
 | 5 | `warning_text.rs` renderer + `CascadeWarning::text` + text pins | ops | — |
 | 6a | gtk4 switch | gtk4 | — |
@@ -1160,6 +1159,19 @@ own that builds an absent subject and an absent student first.
 contract) gets a twin running through `cascade_dry_apply`, proving the new path
 preserves content identically — the old file keeps running against the old path until
 commit 7.
+
+**As landed** (commit `e00c62ff`, three fixtures, four mutations). The document setup and
+the post-cut assertions became shared helpers, so the two paths are read back through the
+same sentences and the old half is a clean deletion at commit 7. The twin adds what only
+the new path has: the cut's warning list is **empty** — a cut that had to warn about a
+colle would be a cut that lost one — and the merge's is exactly one
+`UnassignGroupList` on the emptied period, the copy of the association the cut had given
+it. Both were derived by hand before the run and both held. The twin also pins §6.1
+end-to-end through the public API (the colle comes back with its week), which the family
+fixtures pin from inside. A third fixture covers `cascade_apply`, which has no warnings
+to show and must still install the state and hand the created id back. Mutations: the
+dispatch dropping the general-planning id, `cascade_dry_apply` emptying its warning list,
+`cascade_dry_apply` returning the pre-state, `cascade_apply` not installing.
 
 ---
 
