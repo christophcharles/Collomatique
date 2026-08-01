@@ -1685,17 +1685,16 @@ mod tests {
     /// the period's weeks. The old body cleaned exactly those three, one scan
     /// each, in that order.
     ///
-    /// The route to the colles is not the obvious one. The enrolment row goes
-    /// first (canonical order), then the association — and dropping the
-    /// association is what the cells cannot survive: with no group list at that
-    /// coordinate the group bound falls to zero, so every group number written
-    /// there is out of bounds. So the cells are cleared as the association's
-    /// own sub-fixes, one group at a time
-    /// ([Fix::RemoveGroupFromInterrogationCell], leaving each cell empty),
-    /// rather than as `InterrogationSlotNotRunningOnPeriod` — which never gets
-    /// a chance to fire, since the target that would break it is rolled back
-    /// while its fixes are tried. The document is the same either way; the
-    /// sentence the user reads is not.
+    /// The order is the canonical one, and the colles sit in the middle of it
+    /// on purpose: the checker declares the interrogation-row predicates ahead
+    /// of the association ones precisely so this fixture reads the way it does.
+    /// Were the association unassigned first, the group bound at that
+    /// coordinate would fall to zero, every group of every cell would become
+    /// its own out-of-bounds break, and the cells would die one group at a time
+    /// — « le groupe 0 sera retiré » instead of « les colles seront supprimées
+    /// ». The document would be identical; the sentence would not. That is what
+    /// the declaration order in `invariants.rs` buys, and this is the fixture
+    /// that would notice losing it.
     ///
     /// Hogwarts carries no colloscope, so the setup writes the two colles this
     /// fixture is about on the first Potions slot.
@@ -1733,12 +1732,7 @@ mod tests {
         expected_fixes.extend(
             weeks
                 .iter()
-                .map(|week| Fix::RemoveGroupFromInterrogationCell {
-                    slot,
-                    week: *week,
-                    group: 0,
-                    rebuilt: BTreeSet::new(),
-                }),
+                .map(|week| Fix::ClearInterrogationCell { slot, week: *week }),
         );
         expected_fixes.push(Fix::UnassignGroupList {
             period: first_period,

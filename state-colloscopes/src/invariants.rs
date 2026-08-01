@@ -34,6 +34,22 @@
 //! both dangling and convergence-broken, `min()` picks the precise row-removal
 //! fix over the lossy one.
 //!
+//! Inside [Convergence] one placement has been decided on purpose, and is
+//! written down here because nothing in the type says it: **the
+//! interrogation-row predicates are declared before the association ones**. An
+//! interrogation row's group numbers are bounded by the group list associated
+//! at its `(period, subject)` coordinate. So a repair that clears the
+//! association takes that bound to zero, and every group of every cell at that
+//! coordinate becomes its own [Convergence::InterrogationGroupOutOfBounds]
+//! break — the cells then die one group at a time, described to the user as
+//! « le groupe N sera retiré » rather than as the loss of the colle. Repairing
+//! the rows first spares them that, and costs nothing here: an interrogation
+//! row is downstream data, so clearing one cannot invalidate an association.
+//!
+//! That is a judgement about this pair, and about the sentences it produces —
+//! not a principle the rest of the order was derived from. Every other
+//! placement is as it was declared at step 6.
+//!
 //! The checker ([crate::InnerData]`::broken_invariants`) lives here too, in
 //! three layers: the logic-error sweep (layer A, the `Err` path), the
 //! dangling-reference sweep (layer B) and the convergence sweep (layer C), the
@@ -170,6 +186,24 @@ pub enum Convergence {
         subject: SubjectId,
         student: StudentId,
     },
+    // The three interrogation-row predicates are declared *before* the two
+    // association ones, and that is load-bearing rather than tidy — see the
+    // module docs' "Canonical order" section. An interrogation row's group
+    // numbers are bounded by the group list associated at its `(period,
+    // subject)` coordinate, so clearing that association takes the bound to
+    // zero and turns every group in every cell there into a separate
+    // `InterrogationGroupOutOfBounds` break. Repairing the rows first spares
+    // the user that: the cells go whole, each with the sentence it deserves.
+    /// An interrogation whose slot's subject excludes the week's period
+    #[error("interrogation ({0:?}, {1:?}): the slot's subject does not run on the week's period")]
+    InterrogationSlotNotRunningOnPeriod(SlotId, WeekId),
+    /// An interrogation on a week the slot's week pattern deactivates
+    #[error("interrogation ({0:?}, {1:?}) is on an inactive week")]
+    InterrogationOnInactiveWeek(SlotId, WeekId),
+    /// An interrogation assigning a group number ≥ the associated group list's
+    /// group count — one entry per offending group number
+    #[error("interrogation ({0:?}, {1:?}) assigns out-of-bounds group number {2}")]
+    InterrogationGroupOutOfBounds(SlotId, WeekId, u32),
     /// A group-list association whose subject has interrogations disabled
     #[error("association ({0:?}, {1:?}): the subject has interrogations disabled")]
     AssociationForSubjectWithoutInterrogations(PeriodId, SubjectId),
@@ -182,16 +216,6 @@ pub enum Convergence {
     /// A slot pairing rule whose two slots are on different subjects
     #[error("slot pairing rule {0:?} pairs slots {1:?} and {2:?} of different subjects")]
     PairedSlotsNotInSameSubject(SlotPairingRuleId, SlotId, SlotId),
-    /// An interrogation whose slot's subject excludes the week's period
-    #[error("interrogation ({0:?}, {1:?}): the slot's subject does not run on the week's period")]
-    InterrogationSlotNotRunningOnPeriod(SlotId, WeekId),
-    /// An interrogation on a week the slot's week pattern deactivates
-    #[error("interrogation ({0:?}, {1:?}) is on an inactive week")]
-    InterrogationOnInactiveWeek(SlotId, WeekId),
-    /// An interrogation assigning a group number ≥ the associated group list's
-    /// group count — one entry per offending group number
-    #[error("interrogation ({0:?}, {1:?}) assigns out-of-bounds group number {2}")]
-    InterrogationGroupOutOfBounds(SlotId, WeekId, u32),
     /// A colloscope row for a prefilled group list
     #[error("colloscope holds a row for prefilled group list {0:?}")]
     ColloscopeGroupListPrefilled(GroupListId),
@@ -1118,13 +1142,13 @@ pub(crate) mod tests {
                 subject,
                 student,
             },
+            Convergence::InterrogationSlotNotRunningOnPeriod(slot, week),
+            Convergence::InterrogationOnInactiveWeek(slot, week),
+            Convergence::InterrogationGroupOutOfBounds(slot, week, group),
             Convergence::AssociationForSubjectWithoutInterrogations(period, subject),
             Convergence::AssociationForSubjectNotRunningOnPeriod(period, subject),
             Convergence::BalancingForSubjectWithoutInterrogations(subject),
             Convergence::PairedSlotsNotInSameSubject(slot_pairing_rule, slot, slot),
-            Convergence::InterrogationSlotNotRunningOnPeriod(slot, week),
-            Convergence::InterrogationOnInactiveWeek(slot, week),
-            Convergence::InterrogationGroupOutOfBounds(slot, week, group),
             Convergence::ColloscopeGroupListPrefilled(group_list),
             Convergence::ColloscopeStudentExcluded(group_list, student),
             Convergence::ColloscopeStudentGroupOutOfBounds(group_list, student, group),
