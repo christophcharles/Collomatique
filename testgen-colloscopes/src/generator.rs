@@ -333,7 +333,7 @@ fn gen_student(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
 fn gen_period(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
     if invalid {
         let op = if rng.random_bool(0.5) {
-            PeriodOp::RemoveWithWeeks(unsafe { PeriodId::new(dangling(rng)) })
+            PeriodOp::Remove(unsafe { PeriodId::new(dangling(rng)) })
         } else {
             PeriodOp::AddAfter(unsafe { PeriodId::new(dangling(rng)) })
         };
@@ -362,7 +362,7 @@ fn gen_period(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
                 PeriodOp::AddAfter(pick(rng, &pools.period_ids))
             }
         }
-        _ => PeriodOp::RemoveWithWeeks(pick(rng, &pools.period_ids)),
+        _ => PeriodOp::Remove(pick(rng, &pools.period_ids)),
     };
     Op::Period(op)
 }
@@ -1272,10 +1272,7 @@ fn gen_force_remove(rng: &mut ChaCha8Rng, pools: &Pools) -> Option<Op> {
         ))));
     }
     if !pools.period_ids.is_empty() {
-        candidates.push(Op::Period(PeriodOp::RemoveWithWeeks(pick(
-            rng,
-            &pools.period_ids,
-        ))));
+        candidates.push(Op::Period(PeriodOp::Remove(pick(rng, &pools.period_ids))));
     }
     if !pools.week_ids.is_empty() {
         candidates.push(Op::Week(WeekOp::Remove(pick(rng, &pools.week_ids))));

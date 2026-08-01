@@ -2551,7 +2551,7 @@ pub(crate) mod tests {
     #[test]
     fn dangling_period_from_forced_removal_is_reported() {
         // A period holding one week, then force-removed. `force_apply_period`
-        // `RemoveWithWeeks` drops the `PeriodStillHasWeeks` guard, so its only mutation
+        // `Remove` drops the `PeriodStillHasWeeks` guard, so its only mutation
         // is `ordered_period_list.remove_at(position)`: the `week_map` entry and
         // the ordering row stay, leaving the week's `period_id` FK dangling.
         let period = unsafe { PeriodId::new(1) };

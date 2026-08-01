@@ -77,7 +77,7 @@ fn add_subject_referencing_period_then_remove_period() {
 
     // Remove second period
     let result = app_state.apply(
-        Op::Period(PeriodOp::RemoveWithWeeks(id2)),
+        Op::Period(PeriodOp::Remove(id2)),
         "Remove unused period".into(),
     );
 
@@ -170,7 +170,7 @@ fn add_subject_referencing_period_then_remove_period_and_then_undo() {
 
     // Remove second period
     let Ok(None) = app_state.apply(
-        Op::Period(PeriodOp::RemoveWithWeeks(id2)),
+        Op::Period(PeriodOp::Remove(id2)),
         "Remove unused period".into(),
     ) else {
         panic!("Unexpected result after removing unused period");

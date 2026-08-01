@@ -888,7 +888,7 @@ pub(super) fn build_valid_document() -> (Data, ValidDocument) {
     );
     apply(
         &mut data,
-        Op::Period(PeriodOp::RemoveWithWeeks(dead_period)),
+        Op::Period(PeriodOp::Remove(dead_period)),
         "removing the dead period",
     );
 

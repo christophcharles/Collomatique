@@ -318,7 +318,7 @@ fn assert_convicted_of(err: Error, expected: BTreeSet<FixableInvariant>, why: &s
 /// *chooses*.
 ///
 /// A period `P` excluded by one subject and by one student, and referenced by
-/// nothing else. `PeriodOp::RemoveWithWeeks(P)` therefore fails its first apply with
+/// nothing else. `PeriodOp::Remove(P)` therefore fails its first apply with
 /// **two** broken invariants at once — `DanglingFk(Period { P,
 /// SubjectExcludedPeriods(S) })` and `DanglingFk(Period { P,
 /// StudentExcludedPeriods(St) })` — whose fixes are two *different* ops.
@@ -364,7 +364,7 @@ fn fixture_1a_two_simultaneous_breaks_are_fixed_in_canonical_order() {
     };
 
     let mut data = app.get_data().clone();
-    let (target, _new_info) = data.annotate(Op::Period(PeriodOp::RemoveWithWeeks(period)));
+    let (target, _new_info) = data.annotate(Op::Period(PeriodOp::Remove(period)));
 
     let receipt = apply_cascade(&mut data, target).expect("the cascade resolves both breaks");
 
@@ -407,7 +407,7 @@ fn fixture_1a_two_simultaneous_breaks_are_fixed_in_canonical_order() {
 /// cell on `w`, and no week pattern excluding `w`. The chain the fixture is
 /// for:
 ///
-/// - round 1, `PeriodOp::RemoveWithWeeks(P)` dangles `Week::period_id` → fix
+/// - round 1, `PeriodOp::Remove(P)` dangles `Week::period_id` → fix
 ///   `Week(Remove(w))`;
 /// - round 2, that fix itself fails: the colloscope row keyed `(slot, w)`
 ///   dangles on the week → fix `Colloscope(SetInterrogation(slot, w, ∅))`;
@@ -502,7 +502,7 @@ fn fixture_1b_a_fix_of_a_fix_of_the_target_lands_in_order() {
     );
 
     let mut data = app.get_data().clone();
-    let (target, _new_info) = data.annotate(Op::Period(PeriodOp::RemoveWithWeeks(period)));
+    let (target, _new_info) = data.annotate(Op::Period(PeriodOp::Remove(period)));
 
     let receipt = apply_cascade(&mut data, target).expect("the cascade resolves the chain");
 
@@ -813,7 +813,7 @@ fn fixture_1c_all_seven_period_sites_are_repaired() {
     let doc = build_period_document(&mut app, false);
 
     let mut data = app.get_data().clone();
-    let (target, _new_info) = data.annotate(Op::Period(PeriodOp::RemoveWithWeeks(doc.period)));
+    let (target, _new_info) = data.annotate(Op::Period(PeriodOp::Remove(doc.period)));
 
     let receipt = apply_cascade(&mut data, target).expect("the cascade resolves all seven sites");
 
@@ -1007,7 +1007,7 @@ fn fixture_1e_the_flagship_period_removal() {
     let pattern = doc.week_pattern.expect("built with depth");
 
     let mut data = app.get_data().clone();
-    let (target, _new_info) = data.annotate(Op::Period(PeriodOp::RemoveWithWeeks(doc.period)));
+    let (target, _new_info) = data.annotate(Op::Period(PeriodOp::Remove(doc.period)));
 
     let receipt =
         apply_cascade(&mut data, target).expect("the cascade resolves the whole document");

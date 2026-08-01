@@ -84,17 +84,20 @@ pub enum PeriodOp {
     AddFront,
     /// Add a new (empty) period after an existing period
     AddAfter(PeriodId),
-    /// Remove an existing period, weeks and all
+    /// Remove an existing period
     ///
-    /// There is **no** week-empty guard: leftover weeks are never a reason to
-    /// reject the removal, they are cascade-deleted. `force_apply` lands the
-    /// removal and leaves the weeks' `Week::period_id` FKs dangling; the
-    /// dangling FK is a *fixable* invariant break, so the cascade repairs it by
-    /// removing each leftover week (with whatever hangs off it). Only a bare
-    /// `apply` — the apply/check/rollback gate with no cascade above it — sees
-    /// the break as `Error::BrokenInvariants`; there, empty the period first
-    /// with [WeekOp::Remove].
-    RemoveWithWeeks(PeriodId),
+    /// Elementary: this removes the period row and nothing else. There is
+    /// **no** week-empty guard: leftover weeks are never a reason to reject
+    /// the removal, they are cascade-deleted. `force_apply` lands the removal
+    /// and leaves the weeks' `Week::period_id` FKs dangling; the dangling FK
+    /// is a *fixable* invariant break, so the cascade repairs it by removing
+    /// each leftover week (with whatever hangs off it). Only a bare `apply` —
+    /// the apply/check/rollback gate with no cascade above it — sees the
+    /// break as `Error::BrokenInvariants`; there, empty the period first with
+    /// [WeekOp::Remove]. The user-facing "delete a period *and its weeks*"
+    /// semantics live in `ops`' `DeletePeriodAndWeeks`, which authors the
+    /// week removals itself before calling this op.
+    Remove(PeriodId),
 }
 
 /// Week operation enumeration
@@ -477,11 +480,11 @@ pub enum AnnotatedPeriodOp {
     ///
     /// The first parameter is the period id for the new period.
     AddAfter(PeriodId, PeriodId),
-    /// Remove an existing period, weeks and all
+    /// Remove an existing period
     ///
-    /// See [PeriodOp::RemoveWithWeeks]: leftover weeks are cascade-deleted,
-    /// never a reason to reject the removal.
-    RemoveWithWeeks(PeriodId),
+    /// See [PeriodOp::Remove]: leftover weeks are cascade-deleted, never a
+    /// reason to reject the removal.
+    Remove(PeriodId),
 }
 
 /// Week annotated operation enumeration
@@ -881,9 +884,7 @@ impl AnnotatedPeriodOp {
                 let new_id = id_issuer.get_period_id();
                 (AnnotatedPeriodOp::AddAfter(new_id, after_id), Some(new_id))
             }
-            PeriodOp::RemoveWithWeeks(period_id) => {
-                (AnnotatedPeriodOp::RemoveWithWeeks(period_id), None)
-            }
+            PeriodOp::Remove(period_id) => (AnnotatedPeriodOp::Remove(period_id), None),
         }
     }
 }

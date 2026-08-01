@@ -8,7 +8,7 @@
 //! **Why a live document is the right input.** The map runs on the state the
 //! gate rolled back, so the material an invariant names is still fully alive
 //! when an arm is asked about it (module docs, rule 3): when
-//! `PeriodOp::RemoveWithWeeks(P)` fails, `P` and its weeks are all still there,
+//! `PeriodOp::Remove(P)` fails, `P` and its weeks are all still there,
 //! which is what makes the repair expressible at all. Handing a valid document
 //! an invariant that names live material is therefore the engine's own calling
 //! convention, not a contrivance.
