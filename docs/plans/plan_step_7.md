@@ -1,10 +1,19 @@
 # Step 7 session plan — the `ops/` remaster
 
-Status: **DRAFT — awaiting sign-off.** Session plan for step 7 of
+Status: **IN FLIGHT.** Session plan for step 7 of
 `docs/plans/invariant_cascade_design.md` (§8, "migrate `ops/`"), designed with the user on
-July 30 2026. Read Appendices H and I of the design doc first: the cascade engine, the
-resolution map and the `ContentOrd` termination mechanism are delivered and tested, and
-**nothing in production calls them yet**. This step is the consumer.
+July 30 2026 and proof-read with them on July 31. Read Appendices H and I of the design
+doc first: the cascade engine, the resolution map and the `ContentOrd` termination
+mechanism are delivered and tested, and **nothing in production calls them yet**. This
+step is the consumer.
+
+**Position (August 1 2026): commits 0 through 3.14 have landed** — the fix vocabulary,
+the engine wrapper, the session struct and fourteen of the fifteen families, plus the
+riders 0bis/0ter, 3.3bis, 3.12+ and 3.13bis. The `landed` column of §3's table is the
+authoritative record. **The next commit is 3.15 (`general_planning.rs`)**, after which
+come 3.16 (dispatch) and commits 4–7. Nothing in production calls the new path yet:
+`cascade_dry_apply` / `cascade_apply` do not exist until 3.16 and no consumer moves
+before 6a.
 
 The migration pattern is the step-5 one: build the new world in parallel under
 transitional names, move consumers over, delete the old world, rename at the very end so
@@ -692,27 +701,35 @@ renderer's lookup panic are where a violation would surface.
 Every commit builds green and runs the full workspace suite (background, captured once
 to the scratchpad and grepped — never run twice).
 
-| commit | content | crates |
-| --- | --- | --- |
-| 0 | `PeriodOp::Remove` → `RemoveWithWeeks` rename (D8, first revision) — **reversed by 0bis** | state-colloscopes, testgen-colloscopes, ops |
-| 0bis | reverse commit 0: the elementary op is plain `Remove` again (D8, final) | state-colloscopes, testgen-colloscopes, ops |
-| 0ter | `DeletePeriod` → `DeletePeriodAndWeeks` user-facing rename (D8, final) | ops, gtk4, python |
-| 1a | `FixOp` trait + `Fix` enum + map refactor + attribution pins | state, state-colloscopes |
-| 1b | `CascadeReceipt` engine re-shape + test adaptation | state, state-colloscopes (tests) |
-| 2a | `Manager::apply_cascade` + toy tests | state |
-| 2b | `CascadeSession`/`CascadeWarning`/`CascadeResult` + struct tests; frozen hogwarts fixture copy + storage dev-dep (⇒ **cargoHash**) | ops |
-| 3.1–3.15 | one family per commit, `apply_to_session` + family fixtures | ops |
-| 3.3bis | typed rejection for balancing options on a no-interrogation subject (D5's growth rule, §3.3), built test-first: the crash pinned, then the variant, then the guard | ops |
-| 3.12+ | restore the prefilled-group-list error (D5's growth rule, §3.12): a) this plan, b) the variant with no emitter, c) the pin, **committed red**, d) the emitter on the new path only | docs, ops |
-| 3.13bis | move the interrogation-row convergences ahead of the association ones (§3.13) | state-colloscopes, ops |
-| 3.16 | `UpdateOp` dispatch + `cascade_dry_apply`/`cascade_apply` | ops |
-| 4 | the `UpdateOp` property walk (testgen dev-dep ⇒ **cargoHash**) | ops |
-| 5 | `warning_text.rs` renderer + `CascadeWarning::text` + text pins | ops |
-| 6a | gtk4 switch | gtk4 |
-| 6b | python switch (contract scripts run here) | python |
-| 6c | drop dead rpc-engine dep (⇒ **cargoHash**) | rpc-engine |
-| 7 | delete the old world + final rename + test re-cuts | ops, gtk4, python |
-| close-out | design doc Appendix J, §8, retire this plan, memory | docs |
+The `landed` column is the authoritative position record — fill it in as each commit
+lands.
+
+| commit | content | crates | landed |
+| --- | --- | --- | --- |
+| 0 | `PeriodOp::Remove` → `RemoveWithWeeks` rename (D8, first revision) — **reversed by 0bis** | state-colloscopes, testgen-colloscopes, ops | `8e53118b` |
+| 0bis | reverse commit 0: the elementary op is plain `Remove` again (D8, final) | state-colloscopes, testgen-colloscopes, ops | `8e81a16b` |
+| 0ter | `DeletePeriod` → `DeletePeriodAndWeeks` user-facing rename (D8, final) | ops, gtk4, python | `04f90645` |
+| 1a | `FixOp` trait + `Fix` enum + map refactor + attribution pins | state, state-colloscopes | `ec14c9b2` |
+| 1b | `CascadeReceipt` engine re-shape + test adaptation | state, state-colloscopes (tests) | `51f04459` |
+| 2a | `Manager::apply_cascade` + toy tests | state | `0040e4e4` |
+| 2b | `CascadeSession`/`CascadeWarning`/`CascadeResult` + struct tests; frozen hogwarts fixture copy + storage dev-dep (⇒ **cargoHash**) | ops | `8ebea0cd` |
+| 3.1–3.15 | one family per commit, `apply_to_session` + family fixtures | ops | 3.1 `0b948537` … 3.14 `f837ff0a`; **3.15 is next** |
+| 3.3bis | typed rejection for balancing options on a no-interrogation subject (D5's growth rule, §3.3), built test-first: the crash pinned, then the variant, then the guard | ops | `9b8a7875` |
+| 3.12+ | restore the prefilled-group-list error (D5's growth rule, §3.12): a) this plan, b) the variant with no emitter, c) the pin, **committed red**, d) the emitter on the new path only | docs, ops | `77fb1948`…`e30abb92` |
+| 3.13bis | move the interrogation-row convergences ahead of the association ones (§3.13) | state-colloscopes, ops | `9ef4299b` |
+| 3.16 | `UpdateOp` dispatch + `cascade_dry_apply`/`cascade_apply` | ops | — |
+| 4 | the `UpdateOp` property walk (testgen dev-dep ⇒ **cargoHash**) | ops | — |
+| 5 | `warning_text.rs` renderer + `CascadeWarning::text` + text pins | ops | — |
+| 6a | gtk4 switch | gtk4 | — |
+| 6b | python switch (contract scripts run here) | python | — |
+| 6c | drop dead rpc-engine dep (⇒ **cargoHash**) | rpc-engine | — |
+| 7 | delete the old world + final rename + test re-cuts | ops, gtk4, python | — |
+| close-out | design doc Appendix J, §8, retire this plan, memory | docs | — |
+
+Interstitial work landed between step-7 commits, recorded here so the history reads
+straight: `16c3c0b5` + `c2fc945b` (the D8 re-ruling and its design-doc note, between 3.14
+and 0bis) and `7b7da087` (the `InterrogationGroupsOutOfBounds` pluralization, §5-C5's
+last catalogue row).
 
 Family order for commit 3, simple → complex (grouping trivial ones is fine if they stay
 reviewable): 3.1 export_config, 3.2 settings, 3.3 balancing, 3.4 teachers, 3.5
@@ -1039,12 +1056,10 @@ ruling, same day). `UpdatePeriodStatus(false)` never reaches
 `InterrogationSlotNotRunningOnPeriod` — that break describes the state the rolled-back
 target *would* produce, and the association break outranked it — so the association was
 cleared first, the group bound at that coordinate fell to zero, and every group of every
-cell there became its own `InterrogationGroupOutOfBounds`. Those fire one per group
-number and the map trims one per call, so the colles died group by group. Relabelling
-the trim when it empties a cell was considered and **rejected**: a four-group cell would
-still give three trims and one clear, worse than one wrong sentence used consistently.
-So the three interrogation-row predicates move ahead of the two association ones in
-`invariants.rs`, as a block, leaving association-before-balancing untouched.
+cell there became its own `InterrogationGroupOutOfBounds` — the variant's shape at the
+time, one break per group number, so the colles died group by group. The fix: the three
+interrogation-row predicates move ahead of the two association ones in `invariants.rs`,
+as a block, leaving association-before-balancing untouched.
 
 This is a judgement about that one pair and the sentences it produces. No general
 ordering principle is claimed, and none of the other placements were revisited. Scope:
@@ -1085,14 +1100,15 @@ sweep onto the update and gave Add one of its own).
 ### 3.15 `general_planning.rs`
 
 The big one. All nine variants keep their structural bodies (D8); the module keeps its
-**zero-translation** style except where D13 adds one:
+**zero-translation** style except where D13 adds one. *(Line numbers below re-verified
+August 1 2026, after commit 0ter shifted this file by four lines.)*
 
 - `AddNewPeriod` / grow-branch `UpdatePeriodWeekCount`: id-threading loops unchanged
   (`WeekOp::AddFront`/`AddAfter` chains); infallible, expects kept.
 - `UpdatePeriodWeekCount` shrink: the loop `WeekOp::Remove(week_id)` per dropped week —
   each removal cascades cells (`Week@ColloscopeInterrogation`) and pattern bits
   (`Week@WeekPatternExcludedWeek`) with warnings; the
-  `.expect("Cleaning made the removed weeks trivial")` (`:1068`) becomes
+  `.expect("Cleaning made the removed weeks trivial")` (`:1072`) becomes
   `.expect("the cascade resolves everything a week removal breaks")`.
 - `DeletePeriodAndWeeks`: remove weeks in reverse (cascading as above), then
   `PeriodOp::Remove` — whose landing cascades the period-scoped remnants
@@ -1103,15 +1119,15 @@ The big one. All nine variants keep their structural bodies (D8); the module kee
   asked for the weeks to go, so no « semaine supprimée » fix or warning may appear,
   only each week removal's own cascade on genuinely surprising content. The old
   eight-phase cleaning dies. **D13**: translate `InvalidPeriodId` precheck instead of
-  `.expect`ing (`:1117`).
+  `.expect`ing (`:1121`).
 - `CutPeriod`: unchanged structurally (the five-step id-threading body incl. the
   exclusion/assignment/association copies that must precede the moves,
-  `:1163-1167`) — it cleans nothing today (`:409`) and nothing changes.
+  `:1167-1172`) — it cleans nothing today (`:413`) and nothing changes.
 - `MergeWithPreviousPeriod`: **the fixme fix, §6.1.** Move the weeks (content travels
   with `WeekId` — cells are keyed `(SlotId, WeekId)` and untouched), then call the
   sibling `DeletePeriodAndWeeks` `apply_to_session` directly (doctrine change 3, replacing
-  `rec_apply_no_session` at `:1381-1384`). The old reconcile-with-previous cleaning
-  (six phases, `:670-893`) dies entirely: the dead period's config is dropped by
+  `rec_apply_no_session` at `:1388`). The old reconcile-with-previous cleaning
+  (six phases, `:674-897`) dies entirely: the dead period's config is dropped by
   `DeletePeriodAndWeeks`'s cascade instead of being aligned first. Cells survive unless the
   surviving period's context genuinely invalidates them (then
   `InterrogationSlotNotRunningOnPeriod`/`ColloscopeStudentGroupOutOfBounds`-family
@@ -1119,7 +1135,8 @@ The big one. All nine variants keep their structural bodies (D8); the module kee
 - `UpdateWeekStatus(false)`: old colloscope cleaning → `InterrogationOnInactiveWeek`
   fixes on the week's cells.
 - Dead variant `UpdatePeriodWeekCountError::SubjectImpliesMinimumWeekCount`
-  (`:271`) stays dead (D14 logic: vocabulary is frozen).
+  (`:275`) stays dead **in this commit** — D14 deletes it at commit 7, and until then
+  the old surface is replicated verbatim so commit 3 stays mechanical.
 
 Fixtures: **merge preserves colloscope data when group lists are compatible**
 (test-first in spirit, mutation-checked — the old path is not being fixed, so the pin is

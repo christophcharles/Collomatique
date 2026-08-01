@@ -564,10 +564,24 @@ Fuzz test (b) shipped as prescribed: `state-colloscopes/tests/property_content_o
 over generated broken states, every `fix_invariant` answer is `None` or an op whose applied
 result sits strictly below the pre-fix state — never above, never equivalent.
 
-**Step 7 — migrate `ops/` (the remaster).** Each natural op becomes: open a session, run
-`apply_cascade`, present the extra ops to the user (dry-run preview, §5), commit or cancel.
-The `Warning` enums, `get_next_cleaning_op`, and the hand-written consequence detection retire;
-an op-list rendering layer replaces the warning texts.
+**Step 7 — migrate `ops/` (the remaster) — IN FLIGHT since July 31 2026.** Each natural op
+becomes: open a session, run `apply_cascade`, present the extra ops to the user (dry-run
+preview, §5), commit or cancel. The `Warning` enums, `get_next_cleaning_op`, and the
+hand-written consequence detection retire; an op-list rendering layer replaces the warning
+texts.
+
+  The session plan is **`docs/plans/plan_step_7.md`**, live in the tree (its §0 decision
+  ledger is the authority on every ★ ruling of this step, and its §3 table records which
+  commits have landed). Position on August 1 2026: commits 0–3.14 landed — the `Fix`
+  vocabulary and `FixOp` trait, the `CascadeReceipt` re-shape, `Manager::apply_cascade`,
+  the `ops/` `CascadeSession`, and fourteen of the fifteen families; next is 3.15
+  (`general_planning.rs`), then the dispatch, the property walk, the renderer, the
+  consumers and the deletion of the old world. Nothing in production runs on the new path
+  yet. Two op-surface facts already settled here rather than in the plan: period removal
+  keeps its elementary name (`PeriodOp::Remove`) while the composite says what it does
+  (`DeletePeriodAndWeeks`), and `Convergence::InterrogationGroupOutOfBounds` became
+  `InterrogationGroupsOutOfBounds`, carrying a `BTreeSet<u32>` so a cell's out-of-bounds
+  groups are one break and one fix (see the H.4 rider).
 
 ## 9. Impact on the existing plans
 
@@ -1785,6 +1799,16 @@ None of these is the step-7 remaster; each is spelling forced from below.
 - **Commit 5 — `InterrogationGroupOutOfBounds` gains the offending group.** The survey of
   all 16 `Convergence` variants and every `DanglingFk` site found exactly one
   information-poor payload; this was it.
+
+  ★ **Superseded in shape during step 7** (August 1 2026, commit `7b7da087`): the variant
+  is now **`InterrogationGroupsOutOfBounds(SlotId, WeekId, BTreeSet<u32>)`** — one break
+  per cell carrying *every* offending group number, rather than one break per group. The
+  elementary op was always able to express it (`SetInterrogation` rewrites a whole cell),
+  and the fix follows: `Fix::RemoveGroupsFromInterrogationCell` trims all the named groups
+  in one op. Its presence test is the plural analogue of the old `cell.contains(group)` —
+  **all-or-nothing**, so one already-departed group answers `None`. Frame point 1's
+  example in H.3 is written in the new spelling; the variant's position in the
+  declaration order did not move.
 - **Commit 5.97 — five more `Convergence` variants enriched**:
   `SlotTeacherDoesNotTeachSubject`, `SlotForSubjectWithoutInterrogations`,
   `SlotOverflowsDay` (the only variant where an id cannot do the job — it needs `start` and
