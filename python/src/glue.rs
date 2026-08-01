@@ -566,6 +566,9 @@ impl CollomatiqueFile {
                     "Invalid subject id {:?}",
                     id
                 ))),
+                AddNewTeacherError::SubjectHasNoInterrogation(id) => Err(PyValueError::new_err(
+                    format!("Subject id {:?} does not have interrogations", id),
+                )),
             },
             _ => panic!("Unexpected result: {:?}", result),
         }
@@ -584,16 +587,19 @@ impl CollomatiqueFile {
 
         match result {
             Ok(_) => Ok(()),
-            Err(UpdateError::Teachers(TeachersUpdateError::UpdateTeacher(e))) => {
-                match e {
-                    UpdateTeacherError::InvalidTeacherId(id) => Err(PyValueError::new_err(
-                        format!("Invalid teacher id {:?}", id),
-                    )),
-                    UpdateTeacherError::InvalidSubjectId(id) => Err(PyValueError::new_err(
-                        format!("Invalid subject id {:?}", id),
-                    )),
-                }
-            }
+            Err(UpdateError::Teachers(TeachersUpdateError::UpdateTeacher(e))) => match e {
+                UpdateTeacherError::InvalidTeacherId(id) => Err(PyValueError::new_err(format!(
+                    "Invalid teacher id {:?}",
+                    id
+                ))),
+                UpdateTeacherError::InvalidSubjectId(id) => Err(PyValueError::new_err(format!(
+                    "Invalid subject id {:?}",
+                    id
+                ))),
+                UpdateTeacherError::SubjectHasNoInterrogation(id) => Err(PyValueError::new_err(
+                    format!("Subject id {:?} does not have interrogations", id),
+                )),
+            },
             e => panic!("Unexpected result: {:?}", e),
         }
     }

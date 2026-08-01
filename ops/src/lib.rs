@@ -21,6 +21,9 @@ use thiserror::Error;
 pub mod cascade;
 pub use cascade::*;
 
+#[cfg(test)]
+mod test_utils;
+
 pub mod general_planning;
 pub use general_planning::*;
 pub mod subjects;
