@@ -695,6 +695,7 @@ to the scratchpad and grepped — never run twice).
 | 3.1–3.15 | one family per commit, `apply_to_session` + family fixtures | ops |
 | 3.3bis | typed rejection for balancing options on a no-interrogation subject (D5's growth rule, §3.3), built test-first: the crash pinned, then the variant, then the guard | ops |
 | 3.12+ | restore the prefilled-group-list error (D5's growth rule, §3.12): a) this plan, b) the variant with no emitter, c) the pin, **committed red**, d) the emitter on the new path only | docs, ops |
+| 3.13bis | move the interrogation-row convergences ahead of the association ones (§3.13) | state-colloscopes, ops |
 | 3.16 | `UpdateOp` dispatch + `cascade_dry_apply`/`cascade_apply` | ops |
 | 4 | the `UpdateOp` property walk (testgen dev-dep ⇒ **cargoHash**) | ops |
 | 5 | `warning_text.rs` renderer + `CascadeWarning::text` + text pins | ops |
@@ -1003,6 +1004,34 @@ The family where old cleaning and the cascade align almost 1:1 — worth pinning
   Fixture is the ops-level twin of step 6's fixture 1b, mutation-checked.
 - `DeleteSubject` keeps the module's sole `PrecheckError` translation
   (`subjects.rs:772-788`); the documented catch-all (`:786`) stays.
+
+**What the fixtures found about ordering** (August 1 2026), two things that must not be
+confused. The first needs no action: the engine is depth-first *and* rolls the failing
+target back while it hunts for a fix, so a repair that cannot land yet has its own
+repairs land before it — striking a subject off a teacher's list is refused while that
+teacher still holds its slots, so the slots go first. The warning list is therefore not
+in the checker's order, and the removal and interrogation fixtures pin that inversion.
+That is what the design does; nothing to change.
+
+The second was a real defect in what the user reads, fixed in commit **3.13bis** (user
+ruling, same day). `UpdatePeriodStatus(false)` never reaches
+`InterrogationSlotNotRunningOnPeriod` — that break describes the state the rolled-back
+target *would* produce, and the association break outranked it — so the association was
+cleared first, the group bound at that coordinate fell to zero, and every group of every
+cell there became its own `InterrogationGroupOutOfBounds`. Those fire one per group
+number and the map trims one per call, so the colles died group by group. Relabelling
+the trim when it empties a cell was considered and **rejected**: a four-group cell would
+still give three trims and one clear, worse than one wrong sentence used consistently.
+So the three interrogation-row predicates move ahead of the two association ones in
+`invariants.rs`, as a block, leaving association-before-balancing untouched.
+
+This is a judgement about that one pair and the sentences it produces. No general
+ordering principle is claimed, and none of the other placements were revisited. Scope:
+only the *pick* moves, and only where those two convergences co-occur — every fix list
+that reaches its cell repairs through a dangling reference is untouched, dangles sorting
+ahead of every convergence. And unassigning a group list **directly** still collapses
+the bound with no interrogation-row break in sight, so those cells still empty one group
+at a time; that case reads the user's own edit back to them, and is left alone.
 
 ### 3.14 `group_lists.rs`
 
@@ -1334,6 +1363,12 @@ convention); topic memory updated.
 8. **Per-composite warning-set differences are pinned family by family** in the
    commit-3 fixtures; any surprise found while writing them is brought back to the
    user, not silently accepted.
+9. **One convergence placement moved during this step** (§3.13, commit 3.13bis): the
+   interrogation-row predicates now outrank the association ones. A divergence from
+   step 6 as delivered, not from legacy — no behaviour of the *old* world is involved.
+   What changes is which repair the cascade picks where both break, and so the sentence
+   a user reads when a subject stops running on a period: the colles are lost whole
+   instead of group by group.
 
 ---
 
