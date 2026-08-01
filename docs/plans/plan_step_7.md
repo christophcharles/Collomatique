@@ -7,11 +7,11 @@ doc first: the cascade engine, the resolution map and the `ContentOrd` terminati
 mechanism are delivered and tested, and **nothing in production calls them yet**. This
 step is the consumer.
 
-**Position (August 1 2026): commits 0 through 3.14 have landed** — the fix vocabulary,
-the engine wrapper, the session struct and fourteen of the fifteen families, plus the
-riders 0bis/0ter, 3.3bis, 3.12+ and 3.13bis. The `landed` column of §3's table is the
-authoritative record. **The next commit is 3.15 (`general_planning.rs`)**, after which
-come 3.16 (dispatch) and commits 4–7. Nothing in production calls the new path yet:
+**Position (August 1 2026): commits 0 through 3.15 have landed** — the fix vocabulary,
+the engine wrapper, the session struct and **all fifteen families**, plus the riders
+0bis/0ter, 3.3bis, 3.12+ and 3.13bis. The `landed` column of §3's table is the
+authoritative record. **The next commit is 3.16 (the `UpdateOp` dispatch)**, after which
+come commits 4–7. Nothing in production calls the new path yet:
 `cascade_dry_apply` / `cascade_apply` do not exist until 3.16 and no consumer moves
 before 6a.
 
@@ -713,7 +713,7 @@ lands.
 | 1b | `CascadeReceipt` engine re-shape + test adaptation | state, state-colloscopes (tests) | `51f04459` |
 | 2a | `Manager::apply_cascade` + toy tests | state | `0040e4e4` |
 | 2b | `CascadeSession`/`CascadeWarning`/`CascadeResult` + struct tests; frozen hogwarts fixture copy + storage dev-dep (⇒ **cargoHash**) | ops | `8ebea0cd` |
-| 3.1–3.15 | one family per commit, `apply_to_session` + family fixtures | ops | 3.1 `0b948537` … 3.14 `f837ff0a`; **3.15 is next** |
+| 3.1–3.15 | one family per commit, `apply_to_session` + family fixtures | ops | 3.1 `0b948537` … 3.14 `f837ff0a`, 3.15 `4d77427c` — **all fifteen landed** |
 | 3.3bis | typed rejection for balancing options on a no-interrogation subject (D5's growth rule, §3.3), built test-first: the crash pinned, then the variant, then the guard | ops | `9b8a7875` |
 | 3.12+ | restore the prefilled-group-list error (D5's growth rule, §3.12): a) this plan, b) the variant with no emitter, c) the pin, **committed red**, d) the emitter on the new path only | docs, ops | `77fb1948`…`e30abb92` |
 | 3.13bis | move the interrogation-row convergences ahead of the association ones (§3.13) | state-colloscopes, ops | `9ef4299b` |
@@ -1144,6 +1144,15 @@ written against the new composite; delete `docs/todos/fixme_ops.md` only at comm
 merge with *incompatible* group lists clears exactly the invalid cells; period shrink
 and delete with exact warning lists; `DeletePeriodAndWeeks` on a dead id returns
 `InvalidPeriodId` (D13).
+
+**As landed** (commit `4d77427c`, fourteen fixtures, twenty-three mutations). The audit
+turned up no reachable panic to name: D13's translation is the module's only one, and
+every `.expect` kept got a message saying why nothing can fail. The one argument worth
+recording is `CutPeriod`'s: its four copy loops run *before* the weeks move precisely so
+that a copied row or association is valid at the new coordinate for the same reason it
+is valid at the old one — which is also what makes the cut lose no colle. Hogwarts
+excludes nobody from anything, so the two exclusion copy loops needed a fixture of their
+own that builds an absent subject and an absent student first.
 
 ### 3.16 — dispatch + transitional API
 
