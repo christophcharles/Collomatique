@@ -55,6 +55,17 @@ pub enum UpdateColloscopeGroupListError {
         collomatique_state_colloscopes::GroupListId,
         collomatique_state_colloscopes::StudentId,
     ),
+    /// The target list fills its groups by hand, so the colloscope has no say
+    /// in it and holds no row for it.
+    ///
+    /// A restored error, not a new one: the old checked apply rejected such a
+    /// write outright (as the overloaded [Self::InvalidGroupListId]) until
+    /// step 4's `force_apply` copies dropped the guard by design, after which
+    /// the condition became a plain invariant break that nothing in `ops/`
+    /// named — so the op panicked instead. Emitted by `apply_to_session` only;
+    /// the old `apply_no_cleaning` keeps the panic and dies with it.
+    #[error("group list {0:?} is prefilled and has no colloscope row")]
+    PrefilledGroupListInColloscope(collomatique_state_colloscopes::GroupListId),
 }
 
 #[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
