@@ -75,7 +75,7 @@ impl CascadeWarning {
     /// rather than an outcome to handle: the callers that must not fail panic
     /// on it.
     pub fn text(&self, data: &Data) -> Result<String, MissingId> {
-        crate::warning_text::render(data, &self.fix)
+        crate::warning_text::render(&data.get_inner_data().params, &self.fix)
     }
 }
 

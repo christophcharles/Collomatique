@@ -1,11 +1,27 @@
 //! How `ops/` names a document entity to a user.
 //!
-//! One function per id kind, each taking the [Data] the id is to be read
-//! against and doing its own lookups. Every renderer is **noun-less**: it
-//! answers « 5 (du 28/09/2026 au 04/10/2026) », never « Semaine 5 … ». The
-//! caller owns the sentence, and so owns the noun, the article and the
-//! agreement — « La semaine {} sera supprimée » and « les semaines {} et {} »
-//! are the same rendered week in two different sentences.
+//! One function per id kind, each doing its own lookups. Every renderer is
+//! **noun-less**: it answers « 5 (du 28/09/2026 au 04/10/2026) », never
+//! « Semaine 5 … ». The caller owns the sentence, and so owns the noun, the
+//! article and the agreement — « La semaine {} sera supprimée » and « les
+//! semaines {} et {} » are the same rendered week in two different sentences.
+//!
+//! # What a renderer takes
+//!
+//! The parts of the document it reads, in
+//! [Parameters](collomatique_state_colloscopes::colloscope_params::Parameters)
+//! field order, then the ids. A week is named from `(&Periods, &Weeks)`, a slot
+//! from `(&Subjects, &Teachers, &Slots)`, a group from `&GroupLists`.
+//!
+//! Taking the whole document instead would be shorter to write here and
+//! unusable at the other end: gtk4's panels are relm4 components that own
+//! *subset clones* of the document — a `Periods` and a `Weeks`, or a `Subjects`
+//! and a `Pairings` — and never a `Data`. Only the top-level editor holds one.
+//! A `&Data` signature would therefore force every title to be rendered up
+//! there and threaded back down through the message tree, which is a lot of
+//! plumbing to hide the fact that naming a week reads two tables. The one
+//! caller that *does* hold the whole document, [crate::warning_text], projects
+//! it in one line.
 //!
 //! # Why `Result` and not `Option`
 //!
@@ -26,9 +42,19 @@
 //! degrades to a `{:?}` fallback. The formats below are shared with it and with
 //! gtk4; the miss policy is not.
 
-use collomatique_state_colloscopes::colloscope_params::Parameters;
+use collomatique_state_colloscopes::group_lists::GroupLists;
+use collomatique_state_colloscopes::incompats::Incompats;
+use collomatique_state_colloscopes::pairings::Pairings;
+use collomatique_state_colloscopes::periods::Periods;
+use collomatique_state_colloscopes::slot_pairings::SlotPairings;
+use collomatique_state_colloscopes::slots::Slots;
+use collomatique_state_colloscopes::students::Students;
+use collomatique_state_colloscopes::subjects::Subjects;
+use collomatique_state_colloscopes::teachers::Teachers;
+use collomatique_state_colloscopes::week_patterns::WeekPatterns;
+use collomatique_state_colloscopes::weeks::Weeks;
 use collomatique_state_colloscopes::{
-    Data, GroupListId, IncompatId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId,
+    GroupListId, IncompatId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId,
     SubjectId, TeacherId, WeekId, WeekPatternId,
 };
 
@@ -110,20 +136,12 @@ impl From<(PeriodId, SubjectId)> for MissingId {
     }
 }
 
-fn params(data: &Data) -> &Parameters {
-    &data.get_inner_data().params
-}
-
 /// A week, as its global 1-based number, with its dates when the document has a
 /// start date: « 5 (du 28/09/2026 au 04/10/2026) », or bare « 5 ».
-pub fn render_week(data: &Data, id: WeekId) -> Result<String, MissingId> {
-    let params = params(data);
-    let week_num = params
-        .weeks
-        .global_week_position(&params.periods, id)
-        .ok_or(id)?;
+pub fn render_week(periods: &Periods, weeks: &Weeks, id: WeekId) -> Result<String, MissingId> {
+    let week_num = weeks.global_week_position(periods, id).ok_or(id)?;
 
-    Ok(match &params.periods.first_week {
+    Ok(match &periods.first_week {
         Some(global_start_date) => {
             let start_date = global_start_date
                 .monday()
@@ -146,15 +164,13 @@ pub fn render_week(data: &Data, id: WeekId) -> Result<String, MissingId> {
 /// A period, as its 1-based number followed by what it spans:
 /// « 1 (du 31/08/2026 au 27/09/2026 - semaines 1 à 4) », « 3 (semaine 12) »,
 /// « 2 (vide) ».
-pub fn render_period(data: &Data, id: PeriodId) -> Result<String, MissingId> {
-    let params = params(data);
-    let (index, first_week_num) = params
-        .weeks
-        .find_period_position_and_first_week(&params.periods, id)
+pub fn render_period(periods: &Periods, weeks: &Weeks, id: PeriodId) -> Result<String, MissingId> {
+    let (index, first_week_num) = weeks
+        .find_period_position_and_first_week(periods, id)
         .ok_or(id)?;
     // A period with no ordering row has no weeks — the same thing an empty row
     // means.
-    let week_count = params.weeks.week_count_for_period(id).unwrap_or(0);
+    let week_count = weeks.week_count_for_period(id).unwrap_or(0);
 
     if week_count == 0 {
         return Ok(format!("{} (vide)", index + 1));
@@ -168,7 +184,7 @@ pub fn render_period(data: &Data, id: PeriodId) -> Result<String, MissingId> {
         format!("semaine {}", start_week)
     };
 
-    Ok(match &params.periods.first_week {
+    Ok(match &periods.first_week {
         Some(global_start_date) => {
             let start_date = global_start_date
                 .monday()
@@ -190,14 +206,14 @@ pub fn render_period(data: &Data, id: PeriodId) -> Result<String, MissingId> {
 }
 
 /// A subject, as its bare name.
-pub fn render_subject(data: &Data, id: SubjectId) -> Result<String, MissingId> {
-    let subject = params(data).subjects.find_subject(id).ok_or(id)?;
+pub fn render_subject(subjects: &Subjects, id: SubjectId) -> Result<String, MissingId> {
+    let subject = subjects.find_subject(id).ok_or(id)?;
     Ok(subject.parameters.name.clone())
 }
 
 /// A teacher, as « {firstname} {surname} ».
-pub fn render_teacher(data: &Data, id: TeacherId) -> Result<String, MissingId> {
-    let teacher = params(data).teachers.teacher_map.get(&id).ok_or(id)?;
+pub fn render_teacher(teachers: &Teachers, id: TeacherId) -> Result<String, MissingId> {
+    let teacher = teachers.teacher_map.get(&id).ok_or(id)?;
     Ok(format!(
         "{} {}",
         teacher.desc.firstname, teacher.desc.surname
@@ -205,8 +221,8 @@ pub fn render_teacher(data: &Data, id: TeacherId) -> Result<String, MissingId> {
 }
 
 /// A student, as « {firstname} {surname} ».
-pub fn render_student(data: &Data, id: StudentId) -> Result<String, MissingId> {
-    let student = params(data).students.student_map.get(&id).ok_or(id)?;
+pub fn render_student(students: &Students, id: StudentId) -> Result<String, MissingId> {
+    let student = students.student_map.get(&id).ok_or(id)?;
     Ok(format!(
         "{} {}",
         student.desc.firstname, student.desc.surname
@@ -214,24 +230,23 @@ pub fn render_student(data: &Data, id: StudentId) -> Result<String, MissingId> {
 }
 
 /// A week pattern, as its bare name.
-pub fn render_week_pattern(data: &Data, id: WeekPatternId) -> Result<String, MissingId> {
-    let pattern = params(data)
-        .week_patterns
-        .week_pattern_map
-        .get(&id)
-        .ok_or(id)?;
+pub fn render_week_pattern(
+    week_patterns: &WeekPatterns,
+    id: WeekPatternId,
+) -> Result<String, MissingId> {
+    let pattern = week_patterns.week_pattern_map.get(&id).ok_or(id)?;
     Ok(pattern.name.clone())
 }
 
 /// A group list, as its bare name.
-pub fn render_group_list(data: &Data, id: GroupListId) -> Result<String, MissingId> {
-    let group_list = params(data).group_lists.group_list_map.get(&id).ok_or(id)?;
+pub fn render_group_list(group_lists: &GroupLists, id: GroupListId) -> Result<String, MissingId> {
+    let group_list = group_lists.group_list_map.get(&id).ok_or(id)?;
     Ok(group_list.params().name.clone())
 }
 
 /// An incompatibility, as its bare name.
-pub fn render_incompat(data: &Data, id: IncompatId) -> Result<String, MissingId> {
-    let incompat = params(data).incompats.incompat_map.get(&id).ok_or(id)?;
+pub fn render_incompat(incompats: &Incompats, id: IncompatId) -> Result<String, MissingId> {
+    let incompat = incompats.incompat_map.get(&id).ok_or(id)?;
     Ok(incompat.name.clone())
 }
 
@@ -241,10 +256,15 @@ pub fn render_incompat(data: &Data, id: IncompatId) -> Result<String, MissingId>
 /// subject trails in parentheses because it is context rather than the slot
 /// itself. All three parts are needed — a teacher may hold several slots at the
 /// same hour in different subjects.
-pub fn render_slot(data: &Data, id: SlotId) -> Result<String, MissingId> {
-    let (subject_id, _slot) = params(data).slots.find_slot_with_subject(id).ok_or(id)?;
-    let slot_text = render_slot_in_subject(data, id)?;
-    let subject = render_subject(data, subject_id)?;
+pub fn render_slot(
+    subjects: &Subjects,
+    teachers: &Teachers,
+    slots: &Slots,
+    id: SlotId,
+) -> Result<String, MissingId> {
+    let (subject_id, _slot) = slots.find_slot_with_subject(id).ok_or(id)?;
+    let slot_text = render_slot_in_subject(teachers, slots, id)?;
+    let subject = render_subject(subjects, subject_id)?;
     Ok(format!("{} ({})", slot_text, subject))
 }
 
@@ -254,9 +274,13 @@ pub fn render_slot(data: &Data, id: SlotId) -> Result<String, MissingId> {
 /// noise: the slot pairing rule notation names it once and then uses this form
 /// twice, and gtk4's slot pairings tab is grouped by subject throughout (its
 /// `build_slot_description` is this exact format).
-pub fn render_slot_in_subject(data: &Data, id: SlotId) -> Result<String, MissingId> {
-    let slot = params(data).slots.find_slot(id).ok_or(id)?;
-    let teacher = render_teacher(data, slot.teacher_id)?;
+pub fn render_slot_in_subject(
+    teachers: &Teachers,
+    slots: &Slots,
+    id: SlotId,
+) -> Result<String, MissingId> {
+    let slot = slots.find_slot(id).ok_or(id)?;
+    let teacher = render_teacher(teachers, slot.teacher_id)?;
     Ok(format!("{} - {}", teacher, slot.start_time))
 }
 
@@ -265,10 +289,14 @@ pub fn render_slot_in_subject(data: &Data, id: SlotId) -> Result<String, Missing
 ///
 /// Softness is deliberately left out: it is a property of the rule, not part of
 /// what identifies it. The list views append « (souple) » themselves.
-pub fn render_pairing_rule(data: &Data, id: PairingRuleId) -> Result<String, MissingId> {
-    let rule = params(data).pairings.pairing_rule_map.get(&id).ok_or(id)?;
-    let ant_name = render_subject(data, rule.antecedent().subject_id)?;
-    let con_name = render_subject(data, rule.consequent().subject_id)?;
+pub fn render_pairing_rule(
+    subjects: &Subjects,
+    pairings: &Pairings,
+    id: PairingRuleId,
+) -> Result<String, MissingId> {
+    let rule = pairings.pairing_rule_map.get(&id).ok_or(id)?;
+    let ant_name = render_subject(subjects, rule.antecedent().subject_id)?;
+    let con_name = render_subject(subjects, rule.consequent().subject_id)?;
     Ok(format!(
         "{} {} \u{27F9} {} {}",
         have_condition(rule.antecedent().should_have),
@@ -290,29 +318,27 @@ fn have_condition(should_have: bool) -> &'static str {
 /// belong to that same subject (a rule pairing slots of two subjects is not a
 /// legal document), so the antecedent's answers for both, and each part is
 /// rendered without its own subject parentheses.
-pub fn render_slot_pairing_rule(data: &Data, id: SlotPairingRuleId) -> Result<String, MissingId> {
-    let params = params(data);
-    let rule = params
-        .slot_pairings
-        .slot_pairing_rule_map
-        .get(&id)
-        .ok_or(id)?;
+pub fn render_slot_pairing_rule(
+    subjects: &Subjects,
+    teachers: &Teachers,
+    slots: &Slots,
+    slot_pairings: &SlotPairings,
+    id: SlotPairingRuleId,
+) -> Result<String, MissingId> {
+    let rule = slot_pairings.slot_pairing_rule_map.get(&id).ok_or(id)?;
     let ant_slot = rule.antecedent().slot_id;
     let con_slot = rule.consequent().slot_id;
 
-    let (subject_id, _slot) = params
-        .slots
-        .find_slot_with_subject(ant_slot)
-        .ok_or(ant_slot)?;
-    let subject = render_subject(data, subject_id)?;
+    let (subject_id, _slot) = slots.find_slot_with_subject(ant_slot).ok_or(ant_slot)?;
+    let subject = render_subject(subjects, subject_id)?;
 
     Ok(format!(
         "{} : [{}] {} \u{27F9} [{}] {}",
         subject,
         use_condition(rule.antecedent().should_have),
-        render_slot_in_subject(data, ant_slot)?,
+        render_slot_in_subject(teachers, slots, ant_slot)?,
         use_condition(rule.consequent().should_have),
-        render_slot_in_subject(data, con_slot)?,
+        render_slot_in_subject(teachers, slots, con_slot)?,
     ))
 }
 
@@ -327,12 +353,11 @@ fn use_condition(should_have: bool) -> &'static str {
 /// The name of a group of a group list, if it has one. `Ok(None)` means the
 /// group exists and is unnamed — only `Err` means it does not exist.
 pub fn render_group_name(
-    data: &Data,
+    group_lists: &GroupLists,
     group_list: GroupListId,
     index: u32,
 ) -> Result<Option<String>, MissingId> {
-    let list = params(data)
-        .group_lists
+    let list = group_lists
         .group_list_map
         .get(&group_list)
         .ok_or(group_list)?;
@@ -346,8 +371,12 @@ pub fn render_group_name(
 
 /// A group of a group list: its name if it has one, otherwise its 1-based
 /// number — « B2 » or « 4 », never both.
-pub fn render_group(data: &Data, group_list: GroupListId, index: u32) -> Result<String, MissingId> {
-    Ok(match render_group_name(data, group_list, index)? {
+pub fn render_group(
+    group_lists: &GroupLists,
+    group_list: GroupListId,
+    index: u32,
+) -> Result<String, MissingId> {
+    Ok(match render_group_name(group_lists, group_list, index)? {
         Some(name) => name,
         None => (index + 1).to_string(),
     })
@@ -384,10 +413,15 @@ mod tests {
     use crate::{Desc, OpCategory};
     use collomatique_state::AppState;
     use collomatique_state::traits::Manager;
-    use collomatique_state_colloscopes::{NewId, Op, PeriodOp, WeekOp, weeks::WeekDesc};
+    use collomatique_state_colloscopes::colloscope_params::Parameters;
+    use collomatique_state_colloscopes::{Data, NewId, Op, PeriodOp, WeekOp, weeks::WeekDesc};
 
     fn desc() -> Desc {
         (OpCategory::GeneralPlanning, "Construire le document".into())
+    }
+
+    fn params(data: &Data) -> &Parameters {
+        &data.get_inner_data().params
     }
 
     /// Three periods, spanning four weeks, one week and no week at all — the
@@ -453,33 +487,41 @@ mod tests {
     #[test]
     fn render_period_without_a_start_date_says_which_weeks() {
         let (data, periods) = three_periods(None);
+        let params = params(&data);
 
         assert_eq!(
-            render_period(&data, periods[0]),
+            render_period(&params.periods, &params.weeks, periods[0]),
             Ok("1 (semaines 1 à 4)".to_string())
         );
         assert_eq!(
-            render_period(&data, periods[1]),
+            render_period(&params.periods, &params.weeks, periods[1]),
             Ok("2 (semaine 5)".to_string())
         );
-        assert_eq!(render_period(&data, periods[2]), Ok("3 (vide)".to_string()));
+        assert_eq!(
+            render_period(&params.periods, &params.weeks, periods[2]),
+            Ok("3 (vide)".to_string())
+        );
     }
 
     #[test]
     fn render_period_with_a_start_date_adds_the_dates() {
         let (data, periods) = three_periods(Some(start_date()));
+        let params = params(&data);
 
         assert_eq!(
-            render_period(&data, periods[0]),
+            render_period(&params.periods, &params.weeks, periods[0]),
             Ok("1 (du 31/08/2026 au 27/09/2026 - semaines 1 à 4)".to_string()),
         );
         assert_eq!(
-            render_period(&data, periods[1]),
+            render_period(&params.periods, &params.weeks, periods[1]),
             Ok("2 (du 28/09/2026 au 04/10/2026 - semaine 5)".to_string()),
         );
         // The empty branch wins over the dates: a period with no week has no
         // span to print.
-        assert_eq!(render_period(&data, periods[2]), Ok("3 (vide)".to_string()));
+        assert_eq!(
+            render_period(&params.periods, &params.weeks, periods[2]),
+            Ok("3 (vide)".to_string())
+        );
     }
 
     #[test]
@@ -491,9 +533,10 @@ mod tests {
         state
             .apply(Op::Period(PeriodOp::Remove(dead)), desc())
             .expect("the period is empty, so removing it breaks nothing");
+        let params = params(state.get_data());
 
         assert_eq!(
-            render_period(state.get_data(), dead),
+            render_period(&params.periods, &params.weeks, dead),
             Err(MissingId::Period(dead)),
         );
     }

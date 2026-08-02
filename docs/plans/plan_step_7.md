@@ -13,9 +13,11 @@ them and the property walk over that, plus the riders 0bis/0ter, 3.3bis, 3.12+ a
 3.13bis. The `landed` column of §3's table is the authoritative record. **Commit 3 is
 closed and the new path is fuzzed; commit 5 is closed — 5.0, 5.1 and 5.2 have
 all landed (this section was reviewed and re-planned with the user August 2),
-so the next commit is 6.1**, then 6.2–6.4 and 7. `cascade_dry_apply` /
-`cascade_apply` now exist, but nothing in production calls them: no consumer
-moves before 6.2.
+and commit 6.0 has landed on top of it**, so the next commit is 6.1, then
+6.2–6.4 and 7. Commit 6.0 was not in the original plan: surveying gtk4 for 6.1
+showed the rendering helpers could not be called there at all, and §5-C6's 6.0
+records why and what changed. `cascade_dry_apply` / `cascade_apply` now exist,
+but nothing in production calls them: no consumer moves before 6.2.
 
 The migration pattern is the step-5 one: build the new world in parallel under
 transitional names, move consumers over, delete the old world, rename at the very end so
@@ -732,7 +734,8 @@ lands.
 | 4 | the `UpdateOp` property walk (testgen dev-dep ⇒ **cargoHash**) | ops | `6ca28b95` |
 | 5.0 | `rendering.rs` — shared noun-less id renderers + `MissingId` + `join_french` | ops | `509fb83c` |
 | 5.1 | `warning_text.rs` renderer + `CascadeWarning::text` | ops | `883657bb` |
-| 5.2 | all the tests: walk renders every warning; rendering unit tests | ops | *this commit* |
+| 5.2 | all the tests: walk renders every warning; rendering unit tests | ops | `b043b8a2` |
+| 6.0 | the rendering helpers take the document parts they read, not `&Data` — the precondition for 6.1 | ops | *this commit* |
 | 6.1 | gtk4 helper dedup — local renderers replaced by `ops::rendering` | gtk4 | — |
 | 6.2 | gtk4 warning-dialog switch (gtk4 smoke here covers 6.1 too) | gtk4 | — |
 | 6.3 | python switch (contract scripts run here) | python | — |
@@ -1366,7 +1369,10 @@ gives a period's global first-week number). The formats, all settled:
   lacks the tab's per-subject context), each part in the slot format minus its
   subject parens.
 
-**As landed** (this commit, `ops/src/rendering.rs`, no tests — they are 5.2's). The
+**As landed** (this commit, `ops/src/rendering.rs`, no tests — they are 5.2's).
+*The signatures below were superseded by commit 6.0 — every renderer now takes
+the document parts it reads instead of `&Data`; the formats and the miss policy
+are untouched. Read §5-C6's 6.0 before this paragraph's `data: &Data`.* The
 module is `pub mod rendering;` with **no** glob re-export, unlike every other `ops/`
 module: the renderers are a named vocabulary and read better as
 `collomatique_ops::rendering::render_week(…)` at gtk4's call sites than dumped into
@@ -1590,14 +1596,76 @@ dropping the empty-period short-circuit, forcing the plural « semaines n à m �
 mis-computing the period end date and changing `join_french`'s separator each go
 red on exactly the assertion that covers them.
 
-## 5-C6/C7. Commits 6.1–6.4 and 7
+## 5-C6/C7. Commits 6.0–6.4 and 7
+
+### 6.0 — the rendering helpers take the document parts they read
+
+*(Not in the original plan. Designed with the user August 2 2026, after surveying
+gtk4 for 6.1 and finding that commit could not be written as specified.)*
+
+**The finding.** `ops::rendering` landed taking `&Data`, and **no gtk4 panel holds
+a `Data`.** Only `EditorPanel` does (`gtk4/src/editor.rs`, field
+`data: AppState<Data, Desc>`); every panel below it receives *subset clones* —
+a `Periods` and a `Weeks`, a `Subjects` and a `Pairings` — pushed in on each
+update (`editor.rs:325-577`). The row factories below *those* hold neither, just
+precomputed numbers, and several hold no id at all
+(`subjects_display::PeriodSwitchData` is `{global_first_week, period_num,
+first_week_in_period, week_count, state}`; `week_patterns::dialog::PeriodData` and
+`students::dialog::PeriodData` have the same shape). Read literally, 6.1's
+"call the ops renderers where the full data is at hand and pass rendered strings
+down" therefore meant rendering every period and week title in `editor.rs` and
+threading strings through two or three layers of relm4 messages — fifteen files of
+message churn for a dedup commit.
+
+**What unblocks it.** Every renderer went through one private accessor,
+`fn params(data: &Data) -> &Parameters`, and then touched one or two fields of
+`Parameters`. `render_period` reads `periods` and `weeks`; `render_slot_in_subject`
+reads `slots` and `teachers`; `render_group_name` reads `group_lists`. `&Data` was
+never the input these functions need — it is the widest thing that contains it.
+
+**The change**, `ops/` only:
+
+- Each renderer takes the parts it reads, **in `Parameters` field order, then the
+  ids** — `render_week(periods, weeks, id)`,
+  `render_slot(subjects, teachers, slots, id)`,
+  `render_slot_pairing_rule(subjects, teachers, slots, slot_pairings, id)`,
+  `render_group(group_lists, id, index)`. `MissingId`, its `From` impls and
+  `join_french` are untouched, and so is every rendered string.
+- `warning_text::render` takes `&Parameters`, as do its two private helpers
+  (`association`, `cell_group_list`). Its twenty-five arms grow one field
+  reference per call and are otherwise unchanged.
+- **`CascadeWarning::text(&self, data: &Data) -> Result<String, MissingId>` keeps
+  its exact signature** (user constraint) and does the projection itself:
+  `crate::warning_text::render(&data.get_inner_data().params, &self.fix)`. That
+  line is now the only place `Data` meets the renderers.
+
+Rejected while planning: a private `&Parameters` adapter in `warning_text.rs` (a
+newtype with fifteen one-line forwarding methods) to keep the arms as short as they
+were. It buys ~15 characters per call and costs a whole indirection layer that
+exists for nothing else. The arms stay explicit.
+
+No new tests: this is a pure signature refactor, so the existing suite is the proof
+it moved code without changing it — the framing commit 1a used. The load-bearing
+ones are 5.2's property walk (renders every collected warning at full width and
+pins per-`Fix`-variant coverage) and the four `rendering.rs` unit tests, whose
+expected strings are unchanged, so any format shift turns them red. No `Cargo.lock`
+change, so no `cargoHash` refresh.
+
+**What this makes possible in 6.1.** Checked panel by panel, every 6.1 call site
+now has its arguments in hand: `students.rs`, `group_lists.rs`, `subjects.rs`,
+`week_patterns.rs`, `assignments.rs` and `general_planning.rs` all hold `periods`
+and `weeks`; `pairings.rs` holds `subjects` and `pairings`; `slot_pairings.rs`
+holds `subjects`, `teachers`, `slots` and `slot_pairings`; `colloscope.rs` and its
+`config_dialog.rs` hold the whole `Parameters`. So a panel calls ops directly and
+passes one finished `title: String` down to its row factories — which *shrinks*
+those structs, since `global_first_week` / `first_week_num` / `week_count` exist
+there only to feed a title.
 
 ### 6.1 — gtk4 helper dedup
 
-gtk4's local renderers are deleted and their call sites switched to `ops::rendering`
-— zero visual change, the 5.0 bodies being adapted copies of exactly these functions.
-The sites: `generate_week_title` / `generate_period_title` /
-`generate_week_succession_title` (`editor.rs`), `GroupEntry::generate_group_name`
+gtk4's local renderers are deleted and their call sites switched to `ops::rendering`.
+The sites: `generate_week_title` / `generate_period_title` (`editor.rs`),
+`GroupEntry::generate_group_name`
 (`editor/colloscope/interrogation_dialog.rs` — rebuilds « Groupe {n} : {name} » on top
 of `render_group_name`), the group/week bind logic
 (`editor/colloscope/colloscope_display.rs`), both rule `generate_summary`s
@@ -1605,10 +1673,33 @@ of `render_group_name`), the group/week bind logic
 joining → `join_french` (`editor/pairings/pairings_display.rs`,
 `editor/slot_pairings/slot_pairings_display.rs`), and
 `SlotPairings::build_slot_description` (`editor/slot_pairings.rs:48`) →
-`render_slot_in_subject`, which 5.0 made public for it. Note the components hold subset
-copies of the document, not `&Data` — call the ops renderers where the full data is at
-hand and pass rendered strings down, as `slot_pairings.rs` already does with its
-`slot_desc_map`. The 6.2 smoke covers this commit too.
+`render_slot_in_subject`, which 5.0 made public for it. Commit 6.0 is what makes
+these calls possible at all — a panel holds the sub-structures each renderer takes,
+and passes one finished title down to its row factories. The 6.2 smoke covers this
+commit too.
+
+Three corrections to the paragraph above, from the August 2 2026 survey. They are
+recorded here rather than folded into a rewrite: 6.1 gets its own planning pass.
+
+- **The original claim of "zero visual change" was wrong and is struck.** 5.0 chose
+  its formats deliberately and those choices stand (user ruling, August 2), so the
+  divergences below are voluntary and simply land with this commit:
+  `Semaine 5 du 28/09/2026 au 04/10/2026` → `Semaine 5 (du 28/09/2026 au
+  04/10/2026)`; `Période 1 du 31/08/2026 au 27/09/2026 (semaines 1 à 4)` →
+  `Période 1 (du 31/08/2026 au 27/09/2026 - semaines 1 à 4)`; and
+  `Rolanda Bibine - Jeudi 12h00` → `Rolanda Bibine - jeudi 12h00`, because
+  `build_slot_description` calls `start_time.capitalize()`
+  (`gtk4/src/editor/slot_pairings.rs:57`) and `render_slot_in_subject` does not.
+- **`generate_week_succession_title` survives**, and is no longer on the deletion
+  list above. `subject_params::Block::generate_title_text` renders a *block* inside
+  a subject — a week succession with no `PeriodId` — so no ops renderer can serve
+  it. The helper stays in gtk4 for that one caller; `generate_week_title` and
+  `generate_period_title` still go.
+- **Open decision for 6.1's own planning pass: the miss policy at the gtk4 sites
+  that degrade today.** `build_slot_description` and `pairings_display::subject_name`
+  answer `"???"` for a missing teacher or subject; the ops renderers answer `Err`.
+  Whether those sites `.expect` (the D7 instrument reading) or keep a fallback (the
+  UI-robustness reading) is settled when 6.1 is planned, not here.
 
 ### 6.2 — gtk4 warning-dialog switch
 

@@ -37,7 +37,8 @@
 //! (see [crate::cascade]). `Err(MissingId)` is the instrument that surfaces a
 //! violation of it, and the callers that must not fail panic on it.
 
-use collomatique_state_colloscopes::{Data, Fix, GroupListId, PeriodId, SlotId, SubjectId, WeekId};
+use collomatique_state_colloscopes::colloscope_params::Parameters;
+use collomatique_state_colloscopes::{Fix, GroupListId, PeriodId, SlotId, SubjectId, WeekId};
 
 use crate::rendering::{
     MissingId, join_french, render_group, render_group_list, render_incompat, render_pairing_rule,
@@ -45,66 +46,75 @@ use crate::rendering::{
     render_teacher, render_week, render_week_pattern,
 };
 
-/// The French, effect-phrased description of one repair, read against `data`.
-pub(crate) fn render(data: &Data, fix: &Fix) -> Result<String, MissingId> {
+/// The French, effect-phrased description of one repair, read against `params`.
+pub(crate) fn render(params: &Parameters, fix: &Fix) -> Result<String, MissingId> {
     Ok(match fix {
         Fix::DeleteWeek { week } => {
-            format!("La semaine {} sera supprimée", render_week(data, *week)?)
+            format!(
+                "La semaine {} sera supprimée",
+                render_week(&params.periods, &params.weeks, *week)?
+            )
         }
         Fix::RemoveSubjectPeriodExclusion { subject, .. } => {
             format!(
                 "{} : l'exclusion de période sera levée",
-                render_subject(data, *subject)?
+                render_subject(&params.subjects, *subject)?
             )
         }
         Fix::RemoveStudentPeriodExclusion { student, .. } => {
             format!(
                 "{} : l'exclusion de période sera levée",
-                render_student(data, *student)?
+                render_student(&params.students, *student)?
             )
         }
         Fix::RemovePairingRulePeriodExclusion { rule, .. } => {
             format!(
                 "Règle « {} » : l'exclusion de période sera levée",
-                render_pairing_rule(data, *rule)?
+                render_pairing_rule(&params.subjects, &params.pairings, *rule)?
             )
         }
         Fix::RemoveSlotPairingRulePeriodExclusion { rule, .. } => {
             format!(
                 "Règle de créneaux « {} » : l'exclusion de période sera levée",
-                render_slot_pairing_rule(data, *rule)?
+                render_slot_pairing_rule(
+                    &params.subjects,
+                    &params.teachers,
+                    &params.slots,
+                    &params.slot_pairings,
+                    *rule
+                )?
             )
         }
         Fix::ClearAssignmentRow { period, subject } => {
             format!(
                 "Les inscriptions en {} sur la période {} seront supprimées",
-                render_subject(data, *subject)?,
-                render_period(data, *period)?,
+                render_subject(&params.subjects, *subject)?,
+                render_period(&params.periods, &params.weeks, *period)?,
             )
         }
         Fix::UnassignGroupList { period, subject } => {
             // The list is not in the fix — it is what the entry the fix clears
             // holds, and that entry is present in the pre-state by definition.
-            let group_list = association(data, *period, *subject)?;
+            let group_list = association(params, *period, *subject)?;
             format!(
                 "L'association de la liste « {} » en {} sur la période {} sera supprimée",
-                render_group_list(data, group_list)?,
-                render_subject(data, *subject)?,
-                render_period(data, *period)?,
+                render_group_list(&params.group_lists, group_list)?,
+                render_subject(&params.subjects, *subject)?,
+                render_period(&params.periods, &params.weeks, *period)?,
             )
         }
         Fix::RemoveWeekPatternExclusion { pattern, week, .. } => {
             format!(
                 "Motif « {} » : l'exclusion de la semaine {} sera levée",
-                render_week_pattern(data, *pattern)?,
-                render_week(data, *week)?,
+                render_week_pattern(&params.week_patterns, *pattern)?,
+                render_week(&params.periods, &params.weeks, *week)?,
             )
         }
         Fix::ClearInterrogationCell { slot, week } => {
             format!(
                 "La colle du créneau {} en semaine {} sera supprimée",
-                render_slot(data, *slot)?,
-                render_week(data, *week)?,
+                render_slot(&params.subjects, &params.teachers, &params.slots, *slot)?,
+                render_week(&params.periods, &params.weeks, *week)?,
             )
         }
         Fix::RemoveTeacherSubject {
@@ -112,35 +122,38 @@ pub(crate) fn render(data: &Data, fix: &Fix) -> Result<String, MissingId> {
         } => {
             format!(
                 "{} n'interviendra plus en {}",
-                render_teacher(data, *teacher)?,
-                render_subject(data, *subject)?,
+                render_teacher(&params.teachers, *teacher)?,
+                render_subject(&params.subjects, *subject)?,
             )
         }
         Fix::DeleteSlot { slot } => {
-            format!("Le créneau {} sera supprimé", render_slot(data, *slot)?)
+            format!(
+                "Le créneau {} sera supprimé",
+                render_slot(&params.subjects, &params.teachers, &params.slots, *slot)?
+            )
         }
         Fix::DeleteOverflowingSlot { slot } => {
             format!(
                 "Le créneau {} sera supprimé (il déborderait sur le jour suivant)",
-                render_slot(data, *slot)?
+                render_slot(&params.subjects, &params.teachers, &params.slots, *slot)?
             )
         }
         Fix::DeleteIncompat { incompat } => {
             format!(
                 "L'incompatibilité « {} » sera supprimée",
-                render_incompat(data, *incompat)?
+                render_incompat(&params.incompats, *incompat)?
             )
         }
         Fix::DeletePairingRule { rule } => {
             format!(
                 "La règle « {} » sera supprimée",
-                render_pairing_rule(data, *rule)?
+                render_pairing_rule(&params.subjects, &params.pairings, *rule)?
             )
         }
         Fix::ClearSubjectBalancing { subject } => {
             format!(
                 "L'équilibrage de {} prendra les valeurs par défaut",
-                render_subject(data, *subject)?
+                render_subject(&params.subjects, *subject)?
             )
         }
         Fix::RemoveStudentFromGroupListPrefill {
@@ -150,8 +163,8 @@ pub(crate) fn render(data: &Data, fix: &Fix) -> Result<String, MissingId> {
         } => {
             format!(
                 "{} sera retiré(e) des groupes préremplis de « {} »",
-                render_student(data, *student)?,
-                render_group_list(data, *group_list)?,
+                render_student(&params.students, *student)?,
+                render_group_list(&params.group_lists, *group_list)?,
             )
         }
         Fix::RemoveStudentGroupListExclusion {
@@ -161,14 +174,14 @@ pub(crate) fn render(data: &Data, fix: &Fix) -> Result<String, MissingId> {
         } => {
             format!(
                 "{} : l'exclusion de la liste « {} » sera levée",
-                render_student(data, *student)?,
-                render_group_list(data, *group_list)?,
+                render_student(&params.students, *student)?,
+                render_group_list(&params.group_lists, *group_list)?,
             )
         }
         Fix::ClearStudentSettings { student } => {
             format!(
                 "Les paramètres de {} prendront les valeurs par défaut",
-                render_student(data, *student)?
+                render_student(&params.students, *student)?
             )
         }
         Fix::RemoveStudentFromAssignmentRow {
@@ -179,9 +192,9 @@ pub(crate) fn render(data: &Data, fix: &Fix) -> Result<String, MissingId> {
         } => {
             format!(
                 "L'inscription de {} en {} sur la période {} sera supprimée",
-                render_student(data, *student)?,
-                render_subject(data, *subject)?,
-                render_period(data, *period)?,
+                render_student(&params.students, *student)?,
+                render_subject(&params.subjects, *subject)?,
+                render_period(&params.periods, &params.weeks, *period)?,
             )
         }
         Fix::RemoveStudentColloscopePlacement {
@@ -191,44 +204,50 @@ pub(crate) fn render(data: &Data, fix: &Fix) -> Result<String, MissingId> {
         } => {
             format!(
                 "{} sera retiré(e) de son groupe de « {} » dans le colloscope",
-                render_student(data, *student)?,
-                render_group_list(data, *group_list)?,
+                render_student(&params.students, *student)?,
+                render_group_list(&params.group_lists, *group_list)?,
             )
         }
         Fix::ClearSlotWeekPattern { slot, .. } => {
             format!(
                 "Le créneau {} ne suivra plus de motif : il aura lieu toutes les semaines",
-                render_slot(data, *slot)?
+                render_slot(&params.subjects, &params.teachers, &params.slots, *slot)?
             )
         }
         Fix::ClearIncompatWeekPattern { incompat, .. } => {
             format!(
                 "L'incompatibilité « {} » ne suivra plus de motif : elle s'appliquera toutes les semaines",
-                render_incompat(data, *incompat)?
+                render_incompat(&params.incompats, *incompat)?
             )
         }
         Fix::DeleteSlotPairingRule { rule } => {
             format!(
                 "La règle de créneaux « {} » sera supprimée",
-                render_slot_pairing_rule(data, *rule)?
+                render_slot_pairing_rule(
+                    &params.subjects,
+                    &params.teachers,
+                    &params.slots,
+                    &params.slot_pairings,
+                    *rule
+                )?
             )
         }
         Fix::ClearColloscopeGroupListRow { group_list } => {
             format!(
                 "La répartition en groupes de « {} » dans le colloscope sera supprimée",
-                render_group_list(data, *group_list)?
+                render_group_list(&params.group_lists, *group_list)?
             )
         }
         Fix::RemoveGroupsFromInterrogationCell {
             slot, week, groups, ..
         } => {
-            let group_list = cell_group_list(data, *slot, *week)?;
+            let group_list = cell_group_list(params, *slot, *week)?;
             let names = groups
                 .iter()
-                .map(|group| render_group(data, group_list, *group))
+                .map(|group| render_group(&params.group_lists, group_list, *group))
                 .collect::<Result<Vec<_>, _>>()?;
-            let slot_text = render_slot(data, *slot)?;
-            let week_text = render_week(data, *week)?;
+            let slot_text = render_slot(&params.subjects, &params.teachers, &params.slots, *slot)?;
+            let week_text = render_week(&params.periods, &params.weeks, *week)?;
             if names.len() > 1 {
                 format!(
                     "Les groupes {} seront retirés de la colle du créneau {} en semaine {}",
@@ -250,12 +269,11 @@ pub(crate) fn render(data: &Data, fix: &Fix) -> Result<String, MissingId> {
 
 /// The group list a subject uses on a period.
 fn association(
-    data: &Data,
+    params: &Parameters,
     period: PeriodId,
     subject: SubjectId,
 ) -> Result<GroupListId, MissingId> {
-    data.get_inner_data()
-        .params
+    params
         .group_lists
         .subjects_associations
         .get(&(period, subject))
@@ -266,10 +284,13 @@ fn association(
 /// The group list an interrogation cell's group numbers are numbered against:
 /// the one associated at the cell's `(period, subject)` coordinate, which the
 /// cell names through its week and its slot.
-fn cell_group_list(data: &Data, slot: SlotId, week: WeekId) -> Result<GroupListId, MissingId> {
-    let params = &data.get_inner_data().params;
+fn cell_group_list(
+    params: &Parameters,
+    slot: SlotId,
+    week: WeekId,
+) -> Result<GroupListId, MissingId> {
     let (subject, _slot) = params.slots.find_slot_with_subject(slot).ok_or(slot)?;
     let (period, _position) = params.weeks.week_position(week).ok_or(week)?;
 
-    association(data, period, subject)
+    association(params, period, subject)
 }
