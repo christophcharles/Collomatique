@@ -740,7 +740,7 @@ lands.
 | 5.2 | all the tests: walk renders every warning; rendering unit tests | ops | `b043b8a2` |
 | 6.0 | the rendering helpers take the document parts they read, not `&Data` — the precondition for 6.1 | ops | `d21b61e3` |
 | 6.1 | gtk4 helper dedup — local renderers replaced by `ops::rendering` | gtk4 | `7fe0aed8` |
-| 6.1bis | the slot renderers capitalize the weekday (§5-C6) | ops | — |
+| 6.1bis | the slot renderers capitalize the weekday (§5-C6) | ops | `20ae85bb` |
 | 6.2 | gtk4 warning-dialog switch (gtk4 smoke here covers 6.1 too) | gtk4 | — |
 | 6.3 | python switch (contract scripts run here) | python | — |
 | 6.4 | drop dead rpc-engine dep (⇒ **cargoHash**) | rpc-engine | — |
