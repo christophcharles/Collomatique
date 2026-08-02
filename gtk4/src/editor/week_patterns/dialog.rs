@@ -13,7 +13,13 @@ pub struct Dialog {
     hidden: bool,
     should_redraw: bool,
     periods: collomatique_state_colloscopes::periods::Periods,
-    week_pattern: collomatique_state_colloscopes::week_patterns::WeekPattern,
+    weeks_state: collomatique_state_colloscopes::weeks::Weeks,
+    /// The pattern's name being edited.
+    name: String,
+    /// The pattern edited positionally: one bit per week in global walk order,
+    /// `true` = active (not excluded). Converted to/from the sparse core
+    /// `WeekPattern` (its `excluded_weeks` set) at the `Show`/`Accept` boundary.
+    weeks: Vec<bool>,
     period_entries: FactoryVecDeque<PeriodEntry>,
 }
 
@@ -21,6 +27,7 @@ pub struct Dialog {
 pub enum DialogInput {
     Show(
         collomatique_state_colloscopes::periods::Periods,
+        collomatique_state_colloscopes::weeks::Weeks,
         collomatique_state_colloscopes::week_patterns::WeekPattern,
     ),
     Cancel,
@@ -89,7 +96,7 @@ impl SimpleComponent for Dialog {
                                 set_hexpand: true,
                                 set_title: "Nom du modèle",
                                 #[track(model.should_redraw)]
-                                set_text: &model.week_pattern.name,
+                                set_text: &model.name,
                                 connect_text_notify[sender] => move |widget| {
                                     let text : String = widget.text().into();
                                     sender.input(DialogInput::UpdateName(text));
@@ -162,10 +169,7 @@ impl SimpleComponent for Dialog {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let periods = collomatique_state_colloscopes::periods::Periods::default();
-        let week_pattern = collomatique_state_colloscopes::week_patterns::WeekPattern {
-            name: "Placeholder".into(),
-            weeks: vec![],
-        };
+        let weeks_state = collomatique_state_colloscopes::weeks::Weeks::default();
 
         let period_entries = FactoryVecDeque::builder()
             .launch(gtk::Box::default())
@@ -179,7 +183,9 @@ impl SimpleComponent for Dialog {
             hidden: true,
             should_redraw: false,
             periods,
-            week_pattern,
+            weeks_state,
+            name: "Placeholder".into(),
+            weeks: vec![],
             period_entries,
         };
 
@@ -207,11 +213,20 @@ impl SimpleComponent for Dialog {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         self.should_redraw = false;
         match msg {
-            DialogInput::Show(periods, week_pattern) => {
+            DialogInput::Show(periods, weeks_state, week_pattern) => {
                 self.hidden = false;
                 self.should_redraw = true;
+                // Project the sparse core pattern into positional bits, in the
+                // global walk order the UI is indexed by.
+                self.weeks = weeks_state
+                    .walk(&periods)
+                    .map(|(_period_id, week_id, _week)| {
+                        !week_pattern.excluded_weeks.contains(&week_id)
+                    })
+                    .collect();
+                self.name = week_pattern.name;
                 self.periods = periods;
-                self.week_pattern = week_pattern;
+                self.weeks_state = weeks_state;
 
                 self.update_factory();
             }
@@ -220,37 +235,41 @@ impl SimpleComponent for Dialog {
             }
             DialogInput::Accept => {
                 self.hidden = true;
-                sender
-                    .output(DialogOutput::Accepted(self.week_pattern.clone()))
-                    .unwrap();
+                // Fold the positional bits back into the sparse exclusion set.
+                let excluded_weeks = self
+                    .weeks_state
+                    .walk(&self.periods)
+                    .zip(self.weeks.iter())
+                    .filter_map(|((_period_id, week_id, _week), active)| {
+                        (!*active).then_some(week_id)
+                    })
+                    .collect();
+                let week_pattern = collomatique_state_colloscopes::week_patterns::WeekPattern {
+                    name: self.name.clone(),
+                    excluded_weeks,
+                };
+                sender.output(DialogOutput::Accepted(week_pattern)).unwrap();
             }
             DialogInput::UpdateName(new_name) => {
-                if self.week_pattern.name == new_name {
+                if self.name == new_name {
                     return;
                 }
-                self.week_pattern.name = new_name;
+                self.name = new_name;
             }
             DialogInput::UpdateStatusInPattern(week_num, new_status) => {
-                if self
-                    .week_pattern
-                    .weeks
-                    .get(week_num)
-                    .cloned()
-                    .unwrap_or(true)
-                    == new_status
-                {
+                if self.weeks.get(week_num).cloned().unwrap_or(true) == new_status {
                     return;
                 }
-                self.week_pattern.weeks[week_num] = new_status;
+                self.weeks[week_num] = new_status;
             }
             DialogInput::AllWeeksClicked => {
-                for status in &mut self.week_pattern.weeks {
+                for status in &mut self.weeks {
                     *status = true;
                 }
                 self.update_factory();
             }
             DialogInput::NoWeeksClicked => {
-                for status in &mut self.week_pattern.weeks {
+                for status in &mut self.weeks {
                     *status = false;
                 }
                 self.update_factory();
@@ -262,7 +281,7 @@ impl SimpleComponent for Dialog {
                 let first_week_number = global_first_week.monday().iso_week().week();
 
                 let mut next_status = (first_week_number % 2) == 0;
-                for status in &mut self.week_pattern.weeks {
+                for status in &mut self.weeks {
                     *status = next_status;
                     next_status = !next_status;
                 }
@@ -276,7 +295,7 @@ impl SimpleComponent for Dialog {
                 let first_week_number = global_first_week.monday().iso_week().week();
 
                 let mut next_status = (first_week_number % 2) == 1;
-                for status in &mut self.week_pattern.weeks {
+                for status in &mut self.weeks {
                     *status = next_status;
                     next_status = !next_status;
                 }
@@ -287,12 +306,7 @@ impl SimpleComponent for Dialog {
                 let mut next_status = false;
 
                 let status_in_periods = self.build_status_in_periods();
-                for (status, week_desc) in self
-                    .week_pattern
-                    .weeks
-                    .iter_mut()
-                    .zip(status_in_periods.iter())
-                {
+                for (status, week_desc) in self.weeks.iter_mut().zip(status_in_periods.iter()) {
                     if week_desc.interrogations {
                         *status = next_status;
                         next_status = !next_status;
@@ -307,12 +321,7 @@ impl SimpleComponent for Dialog {
                 let mut next_status = true;
 
                 let status_in_periods = self.build_status_in_periods();
-                for (status, week_desc) in self
-                    .week_pattern
-                    .weeks
-                    .iter_mut()
-                    .zip(status_in_periods.iter())
-                {
+                for (status, week_desc) in self.weeks.iter_mut().zip(status_in_periods.iter()) {
                     if week_desc.interrogations {
                         *status = next_status;
                         next_status = !next_status;
@@ -336,10 +345,10 @@ impl SimpleComponent for Dialog {
 }
 
 impl Dialog {
-    fn build_status_in_periods(&self) -> Vec<collomatique_state_colloscopes::periods::WeekDesc> {
+    fn build_status_in_periods(&self) -> Vec<collomatique_state_colloscopes::weeks::WeekDesc> {
         let mut output = vec![];
-        for (_id, period) in &self.periods.ordered_period_list {
-            output.extend(period.iter().cloned());
+        for (_id, _week_id, week) in self.weeks_state.walk(&self.periods) {
+            output.push(week.desc());
         }
         output
     }
@@ -347,19 +356,40 @@ impl Dialog {
     fn update_factory(&mut self) {
         let new_data = self
             .periods
-            .ordered_period_list
-            .iter()
-            .scan(0usize, |acc, (_id, desc)| {
+            .period_ids()
+            .scan(0usize, |acc, id| {
+                let desc = self
+                    .weeks_state
+                    .weeks_desc_vec_for_period(id)
+                    .unwrap_or_default();
                 let current_first_week = *acc;
                 *acc += desc.len();
                 Some(PeriodData {
-                    global_first_week: self.periods.first_week.clone(),
+                    title: collomatique_ops::rendering::render_period(
+                        &self.periods,
+                        &self.weeks_state,
+                        id,
+                    )
+                    .expect("the period comes from the document being displayed"),
+                    week_titles: self
+                        .weeks_state
+                        .weeks_for_period(id)
+                        .into_iter()
+                        .flatten()
+                        .map(|(week_id, _week)| {
+                            collomatique_ops::rendering::render_week(
+                                &self.periods,
+                                &self.weeks_state,
+                                *week_id,
+                            )
+                            .expect("the week comes from the document being displayed")
+                        })
+                        .collect(),
                     first_week_num: current_first_week,
                     period_desc: desc.iter().map(|x| x.interrogations).collect(),
                     weeks_in_pattern: (current_first_week..(current_first_week + desc.len()))
                         .map(|index| {
                             *self
-                                .week_pattern
                                 .weeks
                                 .get(index)
                                 .expect("Week pattern should be large enough at this point")
@@ -379,7 +409,10 @@ impl Dialog {
 
 #[derive(Debug, Clone)]
 struct PeriodData {
-    global_first_week: Option<collomatique_time::WeekStart>,
+    /// The period as [collomatique_ops::rendering::render_period] names it.
+    title: String,
+    /// One week title per week of the period, in order.
+    week_titles: Vec<String>,
     first_week_num: usize,
     period_desc: Vec<bool>,
     weeks_in_pattern: Vec<bool>,
@@ -388,7 +421,6 @@ struct PeriodData {
 #[derive(Debug)]
 struct PeriodEntry {
     data: PeriodData,
-    index: DynamicIndex,
     should_redraw: bool,
     week_entries: FactoryVecDeque<WeekEntry>,
 }
@@ -406,12 +438,7 @@ enum PeriodOutput {
 
 impl PeriodEntry {
     fn generate_period_title(&self) -> String {
-        super::super::generate_period_title(
-            &self.data.global_first_week,
-            self.index.current_index(),
-            self.data.first_week_num,
-            self.data.period_desc.len(),
-        )
+        format!("Période {}", self.data.title)
     }
 }
 
@@ -437,7 +464,7 @@ impl FactoryComponent for PeriodEntry {
         },
     }
 
-    fn init_model(data: Self::Init, index: &DynamicIndex, sender: FactorySender<Self>) -> Self {
+    fn init_model(data: Self::Init, _index: &DynamicIndex, sender: FactorySender<Self>) -> Self {
         let week_entries = FactoryVecDeque::builder()
             .launch(adw::PreferencesGroup::default())
             .forward(sender.input_sender(), |msg| match msg {
@@ -448,7 +475,6 @@ impl FactoryComponent for PeriodEntry {
 
         let mut model = Self {
             data,
-            index: index.clone(),
             should_redraw: false,
             week_entries,
         };
@@ -510,8 +536,7 @@ impl PeriodEntry {
                 .iter()
                 .enumerate()
                 .map(|(index, status_in_pattern)| WeekData {
-                    global_first_week: self.data.global_first_week.clone(),
-                    first_week_num: self.data.first_week_num,
+                    title: self.data.week_titles[index].clone(),
                     status_in_period: self.data.period_desc[index],
                     status_in_pattern: *status_in_pattern,
                 }),
@@ -522,8 +547,8 @@ impl PeriodEntry {
 
 #[derive(Debug, Clone)]
 struct WeekData {
-    global_first_week: Option<collomatique_time::WeekStart>,
-    first_week_num: usize,
+    /// The week as [collomatique_ops::rendering::render_week] names it.
+    title: String,
     status_in_period: bool,
     status_in_pattern: bool,
 }
@@ -548,8 +573,7 @@ enum WeekOutput {
 
 impl WeekEntry {
     fn generate_week_title(&self) -> String {
-        let week_number = self.data.first_week_num + self.index.current_index();
-        super::super::generate_week_title(&self.data.global_first_week, week_number)
+        format!("Semaine {}", self.data.title)
     }
 }
 

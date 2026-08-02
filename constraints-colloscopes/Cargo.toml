@@ -6,9 +6,12 @@ authors.workspace = true
 
 [dependencies]
 collomatique-state-colloscopes = { path = "../state-colloscopes" }
-collomatique-sqlite-state = { path = "../sqlite-state" }
 collomatique-ilp = { path = "../ilp" }
 collomatique-time = { path = "../time" }
 collomatique-ilp-modeler = { path = "../ilp-modeler" }
-sqlx = { workspace = true, features = ["runtime-tokio", "sqlite"] }
 ordered-float.workspace = true
+
+[dev-dependencies]
+collomatique-storage = { path = "../storage" }
+collomatique-state = { path = "../state" }
+collomatique-testgen-colloscopes = { path = "../testgen-colloscopes" }

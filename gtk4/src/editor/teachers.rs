@@ -261,11 +261,11 @@ impl Teachers {
         subject_id: collomatique_state_colloscopes::SubjectId,
     ) -> Option<usize> {
         let mut pos = 0usize;
-        for (id, subject) in &self.subjects.ordered_subject_list {
+        for (id, subject) in self.subjects.ordered_subject_list.iter() {
             if subject.parameters.interrogation_parameters.is_none() {
                 continue;
             }
-            if subject_id == *id {
+            if subject_id == id {
                 return Some(pos);
             }
             pos += 1;
@@ -278,12 +278,12 @@ impl Teachers {
         pos: usize,
     ) -> Option<collomatique_state_colloscopes::SubjectId> {
         let mut current_pos = 0usize;
-        for (subject_id, subject) in &self.subjects.ordered_subject_list {
+        for (subject_id, subject) in self.subjects.ordered_subject_list.iter() {
             if subject.parameters.interrogation_parameters.is_none() {
                 continue;
             }
             if current_pos == pos {
-                return Some(*subject_id);
+                return Some(subject_id);
             }
             current_pos += 1;
         }
@@ -293,7 +293,7 @@ impl Teachers {
     fn update_filter_droplist(&mut self) {
         let mut list = vec!["Toutes les matières".into(), "Aucune matière".into()];
 
-        for (_subject_id, subject) in &self.subjects.ordered_subject_list {
+        for (_subject_id, subject) in self.subjects.ordered_subject_list.iter() {
             if subject.parameters.interrogation_parameters.is_none() {
                 continue;
             }
@@ -323,7 +323,7 @@ impl Teachers {
     fn update_current_list(&mut self) {
         self.current_list = vec![];
 
-        for (teacher_id, teacher) in &self.teachers.teacher_map {
+        for (teacher_id, teacher) in self.teachers.teacher_map.iter() {
             let keep_teacher = match self.current_filter {
                 TeacherFilter::NoFilter => true,
                 TeacherFilter::NoSubjectLinked => teacher.subjects.is_empty(),
@@ -332,7 +332,7 @@ impl Teachers {
 
             if keep_teacher {
                 self.current_list.push(ContactInfo {
-                    id: *teacher_id,
+                    id: teacher_id,
                     contact: teacher.desc.clone(),
                     extra: {
                         let subject_list: Vec<_> = teacher

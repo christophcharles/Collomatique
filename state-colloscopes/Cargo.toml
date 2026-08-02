@@ -11,3 +11,6 @@ thiserror.workspace = true
 non-empty-string = { workspace = true, features = ["serde"] }
 chrono = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+
+[dev-dependencies]
+collomatique-testgen-colloscopes = { path = "../testgen-colloscopes" }

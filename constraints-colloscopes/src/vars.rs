@@ -14,11 +14,8 @@ impl std::ops::Deref for VarEnv {
 }
 
 impl VarEnv {
-    pub async fn load(pool: &sqlx::SqlitePool) -> VarEnv {
-        let inner_data = collomatique_sqlite_state::sqlite_to_inner_data(pool)
-            .await
-            .expect("Failed to load data from database");
-        VarEnv(inner_data.params)
+    pub fn new(params: Parameters) -> VarEnv {
+        VarEnv(params)
     }
 }
 
@@ -52,17 +49,11 @@ impl Var {
             Some(data) => data,
             None => return 0.,
         };
-        (group_list_data.params.group_names.len() as i32 - 1) as f64
+        (group_list_data.params().group_names.len() as i32 - 1) as f64
     }
 
     pub fn compute_slot_range(env: &VarEnv) -> Vec<SlotId> {
-        env.slots
-            .subject_map
-            .iter()
-            .flat_map(|(_subject_id, subject_slots)| {
-                subject_slots.ordered_slots.iter().map(|(id, _)| *id)
-            })
-            .collect()
+        env.slots.all_slots().map(|(id, _)| *id).collect()
     }
 
     pub fn enumerate_weeks_for_slot(env: &VarEnv, slot: &SlotId) -> Vec<GlobalWeek> {
@@ -86,22 +77,22 @@ impl Var {
             Some((id, _)) => id,
             None => return default,
         };
-        let period_associations = match env.group_lists.subjects_associations.get(&period_id) {
-            Some(period_associations) => period_associations,
-            None => return default,
-        };
-        let group_list_id = match period_associations.get(&subject_id) {
+        let group_list_id = match env
+            .group_lists
+            .subjects_associations
+            .get(&(period_id, subject_id))
+        {
             Some(id) => id,
             None => return default,
         };
-        if !env.group_lists.group_list_map.contains_key(group_list_id) {
+        if !env.group_lists.group_list_map.contains(group_list_id) {
             return default;
         }
         GroupNum::enumerate(env, *group_list_id).collect()
     }
 
     pub fn compute_group_list_range(env: &VarEnv) -> Vec<GroupListId> {
-        env.group_lists.group_list_map.keys().copied().collect()
+        env.group_lists.group_list_map.keys().collect()
     }
 
     pub fn compute_student_ids(env: &VarEnv, group_list: &GroupListId) -> Vec<StudentId> {
@@ -109,7 +100,7 @@ impl Var {
             Some(group_list) => group_list,
             None => return Vec::new(),
         };
-        match &group_list_data.filling {
+        match group_list_data.filling() {
             collomatique_state_colloscopes::group_lists::GroupListFilling::Automatic {
                 excluded_students,
             } => env
@@ -117,7 +108,6 @@ impl Var {
                 .student_map
                 .keys()
                 .filter(|student_id| !excluded_students.contains(student_id))
-                .copied()
                 .collect(),
             collomatique_state_colloscopes::group_lists::GroupListFilling::Prefilled { groups } => {
                 groups
@@ -143,7 +133,7 @@ impl Var {
         };
 
         if group_list_data
-            .filling
+            .filling()
             .excluded_students()
             .contains(student)
         {
@@ -151,12 +141,12 @@ impl Var {
         }
 
         let collomatique_state_colloscopes::group_lists::GroupListFilling::Prefilled { .. } =
-            &group_list_data.filling
+            group_list_data.filling()
         else {
             return None;
         };
 
-        let Some(num) = group_list_data.filling.find_student_group(*student) else {
+        let Some(num) = group_list_data.filling().find_student_group(*student) else {
             return Some(-1.0);
         };
 

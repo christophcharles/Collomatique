@@ -10,16 +10,20 @@ pub fn group_list_for_slot(
     slot: SlotId,
 ) -> Option<GroupListId> {
     let (subject_id, _) = params.slots.find_slot_subject_and_position(slot)?;
-    let period_associations = params.group_lists.subjects_associations.get(&period)?;
-    period_associations.get(&subject_id).copied()
+    params
+        .group_lists
+        .subjects_associations
+        .get(&(period, subject_id))
+        .copied()
 }
 
 pub fn week_to_period_id(params: &Parameters, week: usize) -> Option<(PeriodId, usize)> {
     let mut current_week = 0usize;
-    for (period_id, period_desc) in &params.periods.ordered_period_list {
-        let next_period_week = current_week + period_desc.len();
+    for period_id in params.periods.period_ids() {
+        let period_len = params.weeks.week_count_for_period(period_id).unwrap_or(0);
+        let next_period_week = current_week + period_len;
         if week >= current_week && week < next_period_week {
-            return Some((*period_id, week - current_week));
+            return Some((period_id, week - current_week));
         }
         current_week = next_period_week;
     }
@@ -27,10 +31,9 @@ pub fn week_to_period_id(params: &Parameters, week: usize) -> Option<(PeriodId, 
 }
 
 pub(crate) fn enumerate_weeks_for_slot_id(params: &Parameters, slot: SlotId) -> Vec<usize> {
-    let Some((subject_id, pos)) = params.slots.find_slot_subject_and_position(slot) else {
+    let Some((subject_id, slot_desc)) = params.slots.find_slot_with_subject(slot) else {
         return vec![];
     };
-    let slot_desc = &params.slots.subject_map[&subject_id].ordered_slots[pos].1;
     let subject_desc = params
         .subjects
         .find_subject(subject_id)
@@ -64,35 +67,8 @@ pub fn extract_week_pattern(
     params: &Parameters,
     week_pattern_id: Option<WeekPatternId>,
 ) -> Vec<bool> {
-    let mut output = vec![];
-
-    let week_pattern = match week_pattern_id {
-        Some(id) => params
-            .week_patterns
-            .week_pattern_map
-            .get(&id)
-            .expect("WeekPatternId should be valid")
-            .weeks
-            .clone(),
-        None => vec![true; params.periods.count_weeks()],
-    };
-
-    let mut current_first_week = 0usize;
-    for (_period_id, period_desc) in &params.periods.ordered_period_list {
-        for (num, week_desc) in period_desc.iter().enumerate() {
-            if !week_desc.interrogations {
-                output.push(false);
-                continue;
-            }
-
-            let week_num = current_first_week + num;
-            let week_status = week_pattern
-                .get(week_num)
-                .expect("Week number should be valid");
-            output.push(*week_status);
-        }
-        current_first_week += period_desc.len();
-    }
-
-    output
+    params
+        .walk_weeks()
+        .map(|(_period_id, week_id, _week_desc)| params.is_week_active(week_id, week_pattern_id))
+        .collect()
 }

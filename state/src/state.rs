@@ -164,3 +164,160 @@ impl<T: traits::Manager, D: Description> traits::private::ManagerInternal for Ap
         &mut self.session_history
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::{FakeData, FakeOp};
+    use crate::traits::{HistoryError, Manager};
+
+    fn set(old: i64, new: i64) -> FakeOp {
+        FakeOp::Set { old, new }
+    }
+
+    fn new_state(value: i64) -> AppState<FakeData, &'static str> {
+        AppState::new(FakeData::new(value))
+    }
+
+    #[test]
+    fn max_history_size_is_wired_to_history() {
+        let mut state =
+            AppState::<_, &'static str>::with_max_history_size(FakeData::new(0), Some(2));
+        assert_eq!(state.get_max_history_size(), Some(2));
+
+        state.apply(set(0, 1), "set to 1").expect("valid op");
+        state.apply(set(1, 2), "set to 2").expect("valid op");
+        state.apply(set(2, 3), "set to 3").expect("valid op");
+
+        // Oldest op was forgotten: only two undos are possible
+        state.undo().expect("one op to undo");
+        state.undo().expect("one op to undo");
+        assert_eq!(state.undo(), Err(HistoryError::HistoryDepleted));
+        assert_eq!(state.get_data().value, 1);
+    }
+
+    #[test]
+    fn set_max_history_size_shrinks_existing_history() {
+        let mut state = new_state(0);
+        state.apply(set(0, 1), "set to 1").expect("valid op");
+        state.apply(set(1, 2), "set to 2").expect("valid op");
+        state.apply(set(2, 3), "set to 3").expect("valid op");
+
+        state.set_max_history_size(Some(1));
+
+        state.undo().expect("one op to undo");
+        assert_eq!(state.undo(), Err(HistoryError::HistoryDepleted));
+        assert_eq!(state.get_data().value, 2);
+    }
+
+    #[test]
+    fn session_cancel_restores_state_and_leaves_parent_history_untouched() {
+        let mut state = new_state(0);
+        state.apply(set(0, 1), "set to 1").expect("valid op");
+
+        let mut session = AppSession::<_, &'static str>::new(state);
+        session.apply(set(1, 2), "set to 2").expect("valid op");
+        session.apply(set(2, 3), "set to 3").expect("valid op");
+
+        let state = session.cancel();
+
+        assert_eq!(state.get_data().value, 1);
+        assert_eq!(state.get_undo_name(), Some(&"set to 1"));
+        assert!(!state.can_redo());
+    }
+
+    #[test]
+    fn session_commit_is_a_single_atomic_parent_slot() {
+        let mut state = new_state(0);
+        state.apply(set(0, 1), "set to 1").expect("valid op");
+
+        let mut session = AppSession::<_, &'static str>::new(state);
+        session.apply(set(1, 2), "set to 2").expect("valid op");
+        session.apply(set(2, 3), "set to 3").expect("valid op");
+        session.apply(set(3, 4), "set to 4").expect("valid op");
+
+        let mut state = session.commit("batch");
+
+        assert_eq!(state.get_data().value, 4);
+        assert_eq!(state.get_undo_name(), Some(&"batch"));
+
+        // One undo cancels the whole session at once
+        state.undo().expect("one op to undo");
+        assert_eq!(state.get_data().value, 1);
+        assert_eq!(state.get_undo_name(), Some(&"set to 1"));
+
+        state.redo().expect("one op to redo");
+        assert_eq!(state.get_data().value, 4);
+    }
+
+    #[test]
+    fn session_commit_excludes_ops_undone_within_the_session() {
+        let state = new_state(0);
+
+        let mut session = AppSession::<_, &'static str>::new(state);
+        session.apply(set(0, 1), "set to 1").expect("valid op");
+        session.apply(set(1, 2), "set to 2").expect("valid op");
+        session.undo().expect("one op to undo");
+
+        let mut state = session.commit("batch");
+
+        assert_eq!(state.get_data().value, 1);
+        state.undo().expect("one op to undo");
+        assert_eq!(state.get_data().value, 0);
+    }
+
+    #[test]
+    fn zero_op_session_commit_stores_an_empty_slot() {
+        // Pins current behavior: committing an empty session still
+        // takes one slot in the parent history (undoing it is a no-op)
+        let state = new_state(0);
+
+        let session = AppSession::<_, &'static str>::new(state);
+        let mut state = session.commit("empty batch");
+
+        assert!(state.can_undo());
+        assert_eq!(state.get_undo_name(), Some(&"empty batch"));
+        let undone = state.undo().expect("one (empty) op to undo");
+        assert!(undone.inner().is_empty());
+        assert_eq!(state.get_data().value, 0);
+    }
+
+    #[test]
+    fn nested_session_commit_then_outer_cancel_restores_initial_state() {
+        let state = new_state(0);
+
+        let mut outer = AppSession::<_, &'static str>::new(state);
+        outer.apply(set(0, 1), "set to 1").expect("valid op");
+
+        let mut inner = AppSession::<_, &'static str>::new(outer);
+        inner.apply(set(1, 2), "set to 2").expect("valid op");
+
+        let outer = inner.commit("inner batch");
+        assert_eq!(outer.get_data().value, 2);
+
+        let state = outer.cancel();
+        assert_eq!(state.get_data().value, 0);
+        assert!(!state.can_undo());
+    }
+
+    #[test]
+    fn nested_session_commit_both_makes_one_parent_slot() {
+        let state = new_state(0);
+
+        let mut outer = AppSession::<_, &'static str>::new(state);
+        outer.apply(set(0, 1), "set to 1").expect("valid op");
+
+        let mut inner = AppSession::<_, &'static str>::new(outer);
+        inner.apply(set(1, 2), "set to 2").expect("valid op");
+
+        let outer = inner.commit("inner batch");
+        let mut state = outer.commit("outer batch");
+
+        assert_eq!(state.get_data().value, 2);
+        assert_eq!(state.get_undo_name(), Some(&"outer batch"));
+
+        state.undo().expect("one op to undo");
+        assert_eq!(state.get_data().value, 0);
+        assert!(!state.can_undo());
+    }
+}

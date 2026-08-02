@@ -10,13 +10,9 @@ use std::num::NonZeroU32;
 
 fn all_interrogation_weeks(env: &VarEnv) -> Vec<(GlobalWeek, PeriodId)> {
     let mut result = Vec::new();
-    let mut global_week = 0;
-    for (period_id, period_desc) in &env.periods.ordered_period_list {
-        for week_desc in period_desc {
-            if week_desc.interrogations {
-                result.push((GlobalWeek(global_week), *period_id));
-            }
-            global_week += 1;
+    for (global_week, (period_id, _week_id, week_desc)) in env.walk_weeks().enumerate() {
+        if week_desc.interrogations {
+            result.push((GlobalWeek(global_week), period_id));
         }
     }
     result
@@ -24,26 +20,23 @@ fn all_interrogation_weeks(env: &VarEnv) -> Vec<(GlobalWeek, PeriodId)> {
 
 fn effective_max_per_day(env: &VarEnv, student: StudentId) -> Option<&SoftParam<NonZeroU32>> {
     env.settings
-        .students
-        .get(&student)
-        .and_then(|s| s.max_interrogations_per_day.as_ref())
-        .or(env.settings.global.max_interrogations_per_day.as_ref())
+        .limits_for(student)
+        .max_interrogations_per_day
+        .as_ref()
 }
 
 fn effective_max_per_week(env: &VarEnv, student: StudentId) -> Option<&SoftParam<u32>> {
     env.settings
-        .students
-        .get(&student)
-        .and_then(|s| s.interrogations_per_week_max.as_ref())
-        .or(env.settings.global.interrogations_per_week_max.as_ref())
+        .limits_for(student)
+        .interrogations_per_week_max
+        .as_ref()
 }
 
 fn effective_min_per_week(env: &VarEnv, student: StudentId) -> Option<&SoftParam<u32>> {
     env.settings
-        .students
-        .get(&student)
-        .and_then(|s| s.interrogations_per_week_min.as_ref())
-        .or(env.settings.global.interrogations_per_week_min.as_ref())
+        .limits_for(student)
+        .interrogations_per_week_min
+        .as_ref()
 }
 
 fn counted_slots_for_student_week(
@@ -53,7 +46,7 @@ fn counted_slots_for_student_week(
     period: PeriodId,
 ) -> Vec<(SlotId, Weekday)> {
     let mut result = Vec::new();
-    for (&subject_id, subject_slots) in &env.slots.subject_map {
+    for subject_id in env.slots.subjects_with_slots() {
         let Some(subject) = env.subjects.find_subject(subject_id) else {
             continue;
         };
@@ -68,14 +61,17 @@ fn counted_slots_for_student_week(
         }
         let enrolled = env
             .assignments
-            .period_map
-            .get(&period)
-            .and_then(|pa| pa.subject_map.get(&subject_id))
+            .students(period, subject_id)
             .is_some_and(|students| students.contains(&student));
         if !enrolled {
             continue;
         }
-        for (slot_id, slot_data) in &subject_slots.ordered_slots {
+        for (slot_id, slot_data) in env
+            .slots
+            .slots_for_subject(subject_id)
+            .into_iter()
+            .flatten()
+        {
             let active = crate::tools::extract_week_pattern(env, slot_data.week_pattern);
             if !active.get(week.0).copied().unwrap_or(false) {
                 continue;
@@ -113,7 +109,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
 
     let interrogation_weeks = all_interrogation_weeks(env);
 
-    for (&student, student_data) in &env.students.student_map {
+    for (student, student_data) in env.students.student_map.iter() {
         let max_per_day = effective_max_per_day(env, student);
         let max_per_week = effective_max_per_week(env, student);
         let min_per_week = effective_min_per_week(env, student);

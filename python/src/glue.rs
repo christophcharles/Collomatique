@@ -9,17 +9,17 @@ use collomatique_rpc::{
 
 use collomatique_ops::{
     AddNewGroupListError, AddNewIncompatError, AddNewSlotError, AddNewStudentError,
-    AddNewSubjectError, AddNewTeacherError, AddNewWeekPatternError, AssignAllError, AssignError,
+    AddNewTeacherError, AddNewWeekPatternError, AssignAllError, AssignError,
     AssignGroupListToSubjectError, AssignmentsUpdateError, CutPeriodError, DeleteGroupListError,
-    DeleteIncompatError, DeletePeriodError, DeleteSlotError, DeleteStudentError,
+    DeleteIncompatError, DeletePeriodAndWeeksError, DeleteSlotError, DeleteStudentError,
     DeleteSubjectError, DeleteTeacherError, DeleteWeekPatternError, DuplicatePreviousPeriodError,
     GeneralPlanningUpdateError, GroupListsUpdateError, IncompatibilitiesUpdateError,
     MergeWithPreviousPeriodError, MoveSlotDownError, MoveSlotUpError, MoveSubjectDownError,
-    MoveSubjectUpError, RemoveStudentLimitsError, SetFillingError, SettingsUpdateError,
-    SlotsUpdateError, StudentsUpdateError, SubjectsUpdateError, TeachersUpdateError,
-    UpdateGroupListError, UpdateIncompatError, UpdatePeriodStatusError, UpdatePeriodWeekCountError,
-    UpdateSlotError, UpdateStudentError, UpdateStudentLimitsError, UpdateSubjectError,
-    UpdateTeacherError, UpdateWeekAnnotationError, UpdateWeekPatternError, UpdateWeekStatusError,
+    MoveSubjectUpError, RemoveStudentLimitsError, SettingsUpdateError, SlotsUpdateError,
+    StudentsUpdateError, SubjectsUpdateError, TeachersUpdateError, UpdateGroupListError,
+    UpdateIncompatError, UpdatePeriodStatusError, UpdatePeriodWeekCountError, UpdateSlotError,
+    UpdateStudentError, UpdateStudentLimitsError, UpdateSubjectError, UpdateTeacherError,
+    UpdateWeekAnnotationError, UpdateWeekPatternError, UpdateWeekStatusError,
     WeekPatternsUpdateError,
 };
 use collomatique_ops::{DuplicatePreviousPeriodAssociationsError, UpdateError};
@@ -46,6 +46,7 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<slots::SlotParameters>()?;
     m.add_class::<week_patterns::WeekPattern>()?;
     m.add_class::<incompatibilities::Incompat>()?;
+    m.add_class::<group_lists::GroupList>()?;
     m.add_class::<group_lists::GroupListParameters>()?;
     m.add_class::<group_lists::GroupListFilling>()?;
     m.add_class::<group_lists::PrefilledGroup>()?;
@@ -256,12 +257,6 @@ impl CollomatiqueFile {
                 UpdatePeriodWeekCountError::InvalidPeriodId(id) => {
                     Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
                 }
-                UpdatePeriodWeekCountError::SubjectImpliesMinimumWeekCount(id, wc) => {
-                    Err(PyValueError::new_err(format!(
-                        "Minimum week count of {} required by subject {:?}",
-                        wc, id
-                    )))
-                }
             },
             e => panic!("Unexpected result: {:?}", e),
         }
@@ -271,15 +266,15 @@ impl CollomatiqueFile {
         let result = self_
             .file
             .apply_update(collomatique_ops::UpdateOp::GeneralPlanning(
-                collomatique_ops::GeneralPlanningUpdateOp::DeletePeriod(id.into()),
+                collomatique_ops::GeneralPlanningUpdateOp::DeletePeriodAndWeeks(id.into()),
             ));
 
         match result {
             Ok(_) => Ok(()),
             Err(UpdateError::GeneralPlanning(
-                collomatique_ops::GeneralPlanningUpdateError::DeletePeriod(e),
+                collomatique_ops::GeneralPlanningUpdateError::DeletePeriodAndWeeks(e),
             )) => match e {
-                DeletePeriodError::InvalidPeriodId(id) => {
+                DeletePeriodAndWeeksError::InvalidPeriodId(id) => {
                     Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
                 }
             },
@@ -423,22 +418,11 @@ impl CollomatiqueFile {
         let result = self_
             .file
             .apply_update(collomatique_ops::UpdateOp::Subjects(
-                collomatique_ops::SubjectsUpdateOp::AddNewSubject(subject_params.into()),
+                collomatique_ops::SubjectsUpdateOp::AddNewSubject(subject_params.try_into()?),
             ));
 
         match result {
             Ok(Some(collomatique_state_colloscopes::NewId::SubjectId(id))) => Ok(id.into()),
-            Err(UpdateError::Subjects(SubjectsUpdateError::AddNewSubject(e))) => match e {
-                AddNewSubjectError::GroupsPerInterrogationRangeIsEmpty => Err(
-                    PyValueError::new_err("groups per interrogation range cannot be empty"),
-                ),
-                AddNewSubjectError::StudentsPerGroupRangeIsEmpty => Err(PyValueError::new_err(
-                    "students per group range cannot be empty",
-                )),
-                AddNewSubjectError::InterrogationCountRangeIsEmpty => Err(PyValueError::new_err(
-                    "interrogation count range cannot be empty",
-                )),
-            },
             _ => panic!("Unexpected result: {:?}", result),
         }
     }
@@ -453,26 +437,17 @@ impl CollomatiqueFile {
             .apply_update(collomatique_ops::UpdateOp::Subjects(
                 collomatique_ops::SubjectsUpdateOp::UpdateSubject(
                     id.into(),
-                    new_subject_params.into(),
+                    new_subject_params.try_into()?,
                 ),
             ));
 
         match result {
             Ok(_) => Ok(()),
             Err(UpdateError::Subjects(SubjectsUpdateError::UpdateSubject(e))) => match e {
-                UpdateSubjectError::GroupsPerInterrogationRangeIsEmpty => Err(
-                    PyValueError::new_err("groups per interrogation range cannot be empty"),
-                ),
-                UpdateSubjectError::StudentsPerGroupRangeIsEmpty => Err(PyValueError::new_err(
-                    "students per group range cannot be empty",
-                )),
                 UpdateSubjectError::InvalidSubjectId(id) => Err(PyValueError::new_err(format!(
                     "Invalid subject id {:?}",
                     id
                 ))),
-                UpdateSubjectError::InterrogationCountRangeIsEmpty => Err(PyValueError::new_err(
-                    "interrogation count range cannot be empty",
-                )),
             },
             e => panic!("Unexpected result: {:?}", e),
         }
@@ -585,6 +560,9 @@ impl CollomatiqueFile {
                     "Invalid subject id {:?}",
                     id
                 ))),
+                AddNewTeacherError::SubjectHasNoInterrogation(id) => Err(PyValueError::new_err(
+                    format!("Subject id {:?} does not have interrogations", id),
+                )),
             },
             _ => panic!("Unexpected result: {:?}", result),
         }
@@ -603,16 +581,19 @@ impl CollomatiqueFile {
 
         match result {
             Ok(_) => Ok(()),
-            Err(UpdateError::Teachers(TeachersUpdateError::UpdateTeacher(e))) => {
-                match e {
-                    UpdateTeacherError::InvalidTeacherId(id) => Err(PyValueError::new_err(
-                        format!("Invalid teacher id {:?}", id),
-                    )),
-                    UpdateTeacherError::InvalidSubjectId(id) => Err(PyValueError::new_err(
-                        format!("Invalid subject id {:?}", id),
-                    )),
-                }
-            }
+            Err(UpdateError::Teachers(TeachersUpdateError::UpdateTeacher(e))) => match e {
+                UpdateTeacherError::InvalidTeacherId(id) => Err(PyValueError::new_err(format!(
+                    "Invalid teacher id {:?}",
+                    id
+                ))),
+                UpdateTeacherError::InvalidSubjectId(id) => Err(PyValueError::new_err(format!(
+                    "Invalid subject id {:?}",
+                    id
+                ))),
+                UpdateTeacherError::SubjectHasNoInterrogation(id) => Err(PyValueError::new_err(
+                    format!("Subject id {:?} does not have interrogations", id),
+                )),
+            },
             e => panic!("Unexpected result: {:?}", e),
         }
     }
@@ -815,18 +796,24 @@ impl CollomatiqueFile {
         self_: PyRef<'_, Self>,
         week_pattern: week_patterns::WeekPattern,
     ) -> PyResult<WeekPatternId> {
+        let week_ids = self_.file.week_ids_in_order();
         let result = self_
             .file
             .apply_update(collomatique_ops::UpdateOp::WeekPatterns(
-                collomatique_ops::WeekPatternsUpdateOp::AddNewWeekPattern(week_pattern.into()),
+                collomatique_ops::WeekPatternsUpdateOp::AddNewWeekPattern(
+                    week_pattern.into_mem(&week_ids),
+                ),
             ));
 
         match result {
             Ok(Some(collomatique_state_colloscopes::NewId::WeekPatternId(id))) => Ok(id.into()),
             Err(UpdateError::WeekPatterns(WeekPatternsUpdateError::AddNewWeekPattern(e))) => {
                 match e {
-                    AddNewWeekPatternError::BadWeekCountInWeekPattern => {
-                        Err(PyValueError::new_err("Bad week count in week pattern"))
+                    AddNewWeekPatternError::WeekPatternExcludesInvalidWeek(week_id) => {
+                        Err(PyValueError::new_err(format!(
+                            "Invalid week {:?} in week pattern",
+                            week_id
+                        )))
                     }
                 }
             }
@@ -839,12 +826,13 @@ impl CollomatiqueFile {
         id: WeekPatternId,
         new_week_pattern: week_patterns::WeekPattern,
     ) -> PyResult<()> {
+        let week_ids = self_.file.week_ids_in_order();
         let result = self_
             .file
             .apply_update(collomatique_ops::UpdateOp::WeekPatterns(
                 collomatique_ops::WeekPatternsUpdateOp::UpdateWeekPattern(
                     id.into(),
-                    new_week_pattern.into(),
+                    new_week_pattern.into_mem(&week_ids),
                 ),
             ));
 
@@ -855,8 +843,11 @@ impl CollomatiqueFile {
                     UpdateWeekPatternError::InvalidWeekPatternId(id) => Err(PyValueError::new_err(
                         format!("Invalid week pattern id {:?}", id),
                     )),
-                    UpdateWeekPatternError::BadWeekCountInWeekPattern => {
-                        Err(PyValueError::new_err("Bad week count in week pattern"))
+                    UpdateWeekPatternError::WeekPatternExcludesInvalidWeek(week_id) => {
+                        Err(PyValueError::new_err(format!(
+                            "Invalid week {:?} in week pattern",
+                            week_id
+                        )))
                     }
                 }
             }
@@ -940,10 +931,6 @@ impl CollomatiqueFile {
                 UpdateSlotError::InvalidSlotId(id) => {
                     Err(PyValueError::new_err(format!("Invalid slot id {:?}", id)))
                 }
-                UpdateSlotError::InvalidSubjectId(id) => Err(PyValueError::new_err(format!(
-                    "Invalid subject id {:?}",
-                    id
-                ))),
                 UpdateSlotError::InvalidTeacherId(id) => Err(PyValueError::new_err(format!(
                     "Invalid teacher id {:?}",
                     id
@@ -1116,22 +1103,32 @@ impl CollomatiqueFile {
         }
     }
 
+    #[pyo3(signature = (params, filling=None))]
     fn group_lists_add(
         self_: PyRef<'_, Self>,
         params: group_lists::GroupListParameters,
+        filling: Option<group_lists::GroupListFilling>,
     ) -> PyResult<group_lists::GroupListId> {
+        // The filling is optional: omitting it keeps the historical behaviour of
+        // creating a list with the automatic default.
+        let group_list = collomatique_state_colloscopes::group_lists::GroupList::new(
+            params.try_into()?,
+            filling.map(Into::into).unwrap_or_default(),
+        )
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
         let result = self_
             .file
             .apply_update(collomatique_ops::UpdateOp::GroupLists(
-                collomatique_ops::GroupListsUpdateOp::AddNewGroupList(params.into()),
+                collomatique_ops::GroupListsUpdateOp::AddNewGroupList(group_list),
             ));
 
         match result {
             Ok(Some(collomatique_state_colloscopes::NewId::GroupListId(id))) => Ok(id.into()),
             Err(UpdateError::GroupLists(GroupListsUpdateError::AddNewGroupList(e))) => match e {
-                AddNewGroupListError::StudentsPerGroupRangeIsEmpty => {
-                    Err(PyValueError::new_err("Empty students per group range"))
-                }
+                AddNewGroupListError::InvalidStudentId(id) => Err(PyValueError::new_err(format!(
+                    "Invalid student id {:?}",
+                    id
+                ))),
             },
             _ => panic!("Unexpected result: {:?}", result),
         }
@@ -1140,12 +1137,15 @@ impl CollomatiqueFile {
     fn group_lists_update(
         self_: PyRef<'_, Self>,
         id: group_lists::GroupListId,
-        new_params: group_lists::GroupListParameters,
+        group_list: group_lists::GroupList,
     ) -> PyResult<()> {
         let result = self_
             .file
             .apply_update(collomatique_ops::UpdateOp::GroupLists(
-                collomatique_ops::GroupListsUpdateOp::UpdateGroupList(id.into(), new_params.into()),
+                collomatique_ops::GroupListsUpdateOp::UpdateGroupList(
+                    id.into(),
+                    group_list.try_into()?,
+                ),
             ));
 
         match result {
@@ -1154,9 +1154,10 @@ impl CollomatiqueFile {
                 UpdateGroupListError::InvalidGroupListId(id) => Err(PyValueError::new_err(
                     format!("Invalid group list id {:?}", id),
                 )),
-                UpdateGroupListError::StudentsPerGroupRangeIsEmpty => {
-                    Err(PyValueError::new_err("Empty students per group range"))
-                }
+                UpdateGroupListError::InvalidStudentId(id) => Err(PyValueError::new_err(format!(
+                    "Invalid student id {:?}",
+                    id
+                ))),
             },
             e => panic!("Unexpected result: {:?}", e),
         }
@@ -1175,33 +1176,6 @@ impl CollomatiqueFile {
                 DeleteGroupListError::InvalidGroupListId(id) => Err(PyValueError::new_err(
                     format!("Invalid group list id {:?}", id),
                 )),
-            },
-            e => panic!("Unexpected result: {:?}", e),
-        }
-    }
-
-    fn group_lists_set_filling(
-        self_: PyRef<'_, Self>,
-        id: group_lists::GroupListId,
-        filling: group_lists::GroupListFilling,
-    ) -> PyResult<()> {
-        let result = self_
-            .file
-            .apply_update(collomatique_ops::UpdateOp::GroupLists(
-                collomatique_ops::GroupListsUpdateOp::SetFilling(id.into(), filling.into()),
-            ));
-
-        match result {
-            Ok(_) => Ok(()),
-            Err(UpdateError::GroupLists(GroupListsUpdateError::SetFilling(e))) => match e {
-                SetFillingError::InvalidGroupListId(id) => Err(PyValueError::new_err(format!(
-                    "Invalid group list id {:?}",
-                    id
-                ))),
-                SetFillingError::InvalidStudentId(id) => Err(PyValueError::new_err(format!(
-                    "Invalid student id {:?}",
-                    id
-                ))),
             },
             e => panic!("Unexpected result: {:?}", e),
         }
@@ -1352,7 +1326,8 @@ impl CollomatiqueFile {
     }
 
     fn get_colloscope(self_: PyRef<'_, Self>) -> colloscopes::Colloscope {
-        self_.file.get_inner_data().colloscope.into()
+        let inner = self_.file.get_inner_data();
+        colloscopes::Colloscope::from_mem(&inner.colloscope, &inner.params)
     }
 }
 
@@ -1381,5 +1356,19 @@ impl InternalFile {
         use collomatique_state::traits::Manager;
         let state = self.state.lock().unwrap();
         state.get_data().get_inner_data().clone()
+    }
+
+    /// The schedule's week ids in global walk order — the coordinate system the
+    /// dense positional pyclass `WeekPattern` view is indexed by.
+    fn week_ids_in_order(&self) -> Vec<collomatique_state_colloscopes::WeekId> {
+        use collomatique_state::traits::Manager;
+        let state = self.state.lock().unwrap();
+        state
+            .get_data()
+            .get_inner_data()
+            .params
+            .walk_weeks()
+            .map(|(_period_id, week_id, _week)| week_id)
+            .collect()
     }
 }

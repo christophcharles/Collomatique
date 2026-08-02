@@ -11,7 +11,7 @@ pub struct Dialog {
     should_redraw: bool,
     students: collomatique_state_colloscopes::students::Students,
     group_list: collomatique_state_colloscopes::group_lists::GroupList,
-    collo_group_list: collomatique_state_colloscopes::colloscopes::ColloscopeGroupList,
+    groups_for_students: std::collections::BTreeMap<collomatique_state_colloscopes::StudentId, u32>,
     student_entries: FactoryVecDeque<StudentEntry>,
     list_model: gtk::StringList,
     students_to_display: Vec<(collomatique_state_colloscopes::StudentId, String, String)>,
@@ -22,7 +22,7 @@ pub enum DialogInput {
     Show(
         collomatique_state_colloscopes::students::Students,
         collomatique_state_colloscopes::group_lists::GroupList,
-        collomatique_state_colloscopes::colloscopes::ColloscopeGroupList,
+        std::collections::BTreeMap<collomatique_state_colloscopes::StudentId, u32>,
     ),
     Cancel,
     Accept,
@@ -32,7 +32,7 @@ pub enum DialogInput {
 
 #[derive(Debug)]
 pub enum DialogOutput {
-    Accepted(collomatique_state_colloscopes::colloscopes::ColloscopeGroupList),
+    Accepted(std::collections::BTreeMap<collomatique_state_colloscopes::StudentId, u32>),
 }
 
 impl Dialog {
@@ -51,7 +51,7 @@ impl Dialog {
     }
 
     fn generate_list_name(&self) -> String {
-        format!("Liste concernée : {}", self.group_list.params.name)
+        format!("Liste concernée : {}", self.group_list.params().name)
     }
 }
 
@@ -133,8 +133,7 @@ impl SimpleComponent for Dialog {
             should_redraw: false,
             students: collomatique_state_colloscopes::students::Students::default(),
             group_list: collomatique_state_colloscopes::group_lists::GroupList::default(),
-            collo_group_list:
-                collomatique_state_colloscopes::colloscopes::ColloscopeGroupList::default(),
+            groups_for_students: std::collections::BTreeMap::new(),
             student_entries,
             list_model: gtk::StringList::default(),
             students_to_display: vec![],
@@ -149,12 +148,12 @@ impl SimpleComponent for Dialog {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         self.should_redraw = false;
         match msg {
-            DialogInput::Show(students, group_list, collo_group_list) => {
+            DialogInput::Show(students, group_list, groups_for_students) => {
                 self.hidden = false;
                 self.should_redraw = true;
                 self.students = students;
                 self.group_list = group_list;
-                self.collo_group_list = collo_group_list;
+                self.groups_for_students = groups_for_students;
 
                 self.update_students_to_display();
                 self.update_list_model();
@@ -167,20 +166,16 @@ impl SimpleComponent for Dialog {
             DialogInput::Accept => {
                 self.hidden = true;
                 sender
-                    .output(DialogOutput::Accepted(self.collo_group_list.clone()))
+                    .output(DialogOutput::Accepted(self.groups_for_students.clone()))
                     .unwrap();
             }
             DialogInput::UpdateStudentGroup(student_id, selected) => {
                 match Self::selected_to_group_opt(selected) {
                     Some(group) => {
-                        self.collo_group_list
-                            .groups_for_students
-                            .insert(student_id, group);
+                        self.groups_for_students.insert(student_id, group);
                     }
                     None => {
-                        self.collo_group_list
-                            .groups_for_students
-                            .remove(&student_id);
+                        self.groups_for_students.remove(&student_id);
                     }
                 }
             }
@@ -202,7 +197,8 @@ impl Dialog {
             .student_map
             .iter()
             .filter_map(|(id, student)| {
-                if self.group_list.filling.excluded_students().contains(id) {
+                let id = &id;
+                if self.group_list.filling().excluded_students().contains(id) {
                     return None;
                 }
                 Some((
@@ -220,7 +216,7 @@ impl Dialog {
     fn update_list_model(&mut self) {
         let group_names_list: Vec<_> = ["(Aucun groupe)".into()]
             .into_iter()
-            .chain(self.group_list.params.group_names.iter().enumerate().map(
+            .chain(self.group_list.params().group_names.iter().enumerate().map(
                 |(num, group_name)| match group_name {
                     Some(name) => {
                         format!("Groupe {} : {}", num + 1, name)
@@ -241,7 +237,7 @@ impl Dialog {
             self.students_to_display
                 .iter()
                 .map(|(id, firstname, surname)| {
-                    let group_opt = self.collo_group_list.groups_for_students.get(id).copied();
+                    let group_opt = self.groups_for_students.get(id).copied();
 
                     StudentData {
                         list_model: self.list_model.clone(),

@@ -224,7 +224,7 @@ impl Settings {
             .iter()
             .map(|(id, student)| {
                 (
-                    *id,
+                    id,
                     student.desc.firstname.clone(),
                     student.desc.surname.clone(),
                 )

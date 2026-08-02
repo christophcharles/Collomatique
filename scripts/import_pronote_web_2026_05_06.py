@@ -72,7 +72,7 @@ def split_student_name(student_full_name):
 
 def add_student_from_csv_line(session, csv_line, subject_ids):
     file = session.get_current_collomatique_file()
-    student_full_name = csv_line['\ufeffÉlèves'][0]
+    student_full_name = csv_line['\ufeff'][0]
     if not student_full_name:
         collomatique.log("Bad line: {}".format(csv_line))
         return

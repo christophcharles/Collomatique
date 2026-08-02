@@ -371,7 +371,7 @@ impl Dialog {
             .subjects
             .ordered_subject_list
             .iter()
-            .map(|(subject_id, subject)| (*subject_id, subject.parameters.name.clone()))
+            .map(|(subject_id, subject)| (subject_id, subject.parameters.name.clone()))
             .collect();
         subjects.sort_by_key(|(id, name)| (name.clone(), *id));
         self.ordered_subjects = subjects;
@@ -382,7 +382,7 @@ impl Dialog {
             .week_patterns
             .week_pattern_map
             .iter()
-            .map(|(week_pattern_id, week_pattern)| (*week_pattern_id, week_pattern.name.clone()))
+            .map(|(week_pattern_id, week_pattern)| (week_pattern_id, week_pattern.name.clone()))
             .collect();
         week_patterns.sort_by_key(|(id, name)| (name.clone(), *id));
         self.ordered_week_patterns = week_patterns;

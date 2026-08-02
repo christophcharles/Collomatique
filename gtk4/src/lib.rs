@@ -358,9 +358,11 @@ impl Component for AppModel {
                     .editor
                     .sender()
                     .send(editor::EditorInput::NewFile {
-                        file_name: path,
+                        file_name: match path {
+                            Some(p) => editor::FileName::OkFile(p),
+                            None => editor::FileName::NewFile,
+                        },
                         data: collomatique_state_colloscopes::Data::new(),
-                        dirty: true,
                     })
                     .unwrap();
             }
@@ -374,9 +376,8 @@ impl Component for AppModel {
                     .editor
                     .sender()
                     .send(editor::EditorInput::NewFile {
-                        file_name: None,
+                        file_name: editor::FileName::NewFile,
                         data: collomatique_state_colloscopes::Data::new(),
-                        dirty: false,
                     })
                     .unwrap();
                 self.state = GlobalState::LoadingScreen;
@@ -403,6 +404,13 @@ impl Component for AppModel {
                     return;
                 }
                 self.state = GlobalState::EditorScreen;
+                // A file loaded with caveats is suspect: keep its path but mark
+                // it so "Enregistrer" won't overwrite it silently.
+                let file_name = if caveats.is_empty() {
+                    editor::FileName::OkFile(path.clone())
+                } else {
+                    editor::FileName::CaveatFile(path.clone())
+                };
                 if !caveats.is_empty() {
                     self.controllers
                         .file_caveats
@@ -416,11 +424,7 @@ impl Component for AppModel {
                 self.controllers
                     .editor
                     .sender()
-                    .send(editor::EditorInput::NewFile {
-                        file_name: Some(path),
-                        data,
-                        dirty: false,
-                    })
+                    .send(editor::EditorInput::NewFile { file_name, data })
                     .unwrap();
             }
             AppInput::ColloscopeLoadingFailed(path, error) => {
@@ -488,9 +492,8 @@ impl Component for AppModel {
                     .editor
                     .sender()
                     .send(editor::EditorInput::NewFile {
-                        file_name: None,
+                        file_name: editor::FileName::NewFile,
                         data: collomatique_state_colloscopes::Data::new(),
-                        dirty: false,
                     })
                     .unwrap();
                 self.controllers
@@ -545,7 +548,7 @@ impl Component for AppModel {
             AppInput::UpdateActions => {
                 self.actions
                     .save_action
-                    .set_enabled(self.controllers.editor.model().is_dirty());
+                    .set_enabled(self.controllers.editor.model().can_save());
                 self.actions
                     .undo_action
                     .set_enabled(self.controllers.editor.model().can_undo());

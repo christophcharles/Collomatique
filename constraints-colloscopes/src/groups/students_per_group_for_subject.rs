@@ -9,67 +9,64 @@ use collomatique_state_colloscopes::group_lists::GroupListFilling;
 
 pub(super) fn build(env: &VarEnv) -> MyBundle {
     let mut bundle = MyBundle::new();
-    for (&period, subject_map) in &env.group_lists.subjects_associations {
-        for (&subject, &group_list) in subject_map {
-            let Some(interrog_params) = subject_interrogation_params(env, subject) else {
-                continue;
-            };
-            let min_students = interrog_params.students_per_group.start().get();
-            let max_students = interrog_params.students_per_group.end().get();
+    for ((period, subject), &group_list) in env.group_lists.subjects_associations.iter() {
+        let Some(interrog_params) = subject_interrogation_params(env, subject) else {
+            continue;
+        };
+        let min_students = interrog_params.students_per_group.start().get();
+        let max_students = interrog_params.students_per_group.end().get();
 
-            let Some(gl) = env.group_lists.group_list_map.get(&group_list) else {
-                continue;
-            };
+        let Some(gl) = env.group_lists.group_list_map.get(&group_list) else {
+            continue;
+        };
 
-            for group in GroupNum::enumerate(env, group_list) {
-                bundle = add_reification(env, bundle, group_list, gl, group, subject, period);
+        for group in GroupNum::enumerate(env, group_list) {
+            bundle = add_reification(env, bundle, group_list, gl, group, subject, period);
 
-                let students = students_for_subject_period_group_list(env, gl, subject, period);
+            let students = students_for_subject_period_group_list(env, gl, subject, period);
 
-                let count: IntLinExpr<V> = students
-                    .iter()
-                    .map(|&student| {
-                        IntLinExpr::var(extra_var(ExtraVarName::StudentInGroup {
-                            student,
-                            group_list,
-                            group,
-                        }))
-                    })
-                    .sum();
-
-                let group_has =
-                    IntLinExpr::var(extra_var(ExtraVarName::GroupHasStudentsForSubject {
+            let count: IntLinExpr<V> = students
+                .iter()
+                .map(|&student| {
+                    IntLinExpr::var(extra_var(ExtraVarName::StudentInGroup {
+                        student,
                         group_list,
                         group,
-                        subject,
-                        period,
-                    }));
-                let min_constraint = count.clone().geq(&(i64::from(min_students) * group_has));
-                bundle = bundle.with_constraint(
-                    min_constraint,
-                    ProgressiveConstraint::StudentsPerGroupForSubjectMin {
-                        group_list,
-                        group,
-                        subject,
-                        period,
-                        min_students,
-                    }
-                    .into(),
-                );
+                    }))
+                })
+                .sum();
 
-                let max_constraint = count.leq(&IntLinExpr::constant(i64::from(max_students)));
-                bundle = bundle.with_constraint(
-                    max_constraint,
-                    QualityConstraint::StudentsPerGroupForSubjectMax {
-                        group_list,
-                        group,
-                        subject,
-                        period,
-                        max_students,
-                    }
-                    .into(),
-                );
-            }
+            let group_has = IntLinExpr::var(extra_var(ExtraVarName::GroupHasStudentsForSubject {
+                group_list,
+                group,
+                subject,
+                period,
+            }));
+            let min_constraint = count.clone().geq(&(i64::from(min_students) * group_has));
+            bundle = bundle.with_constraint(
+                min_constraint,
+                ProgressiveConstraint::StudentsPerGroupForSubjectMin {
+                    group_list,
+                    group,
+                    subject,
+                    period,
+                    min_students,
+                }
+                .into(),
+            );
+
+            let max_constraint = count.leq(&IntLinExpr::constant(i64::from(max_students)));
+            bundle = bundle.with_constraint(
+                max_constraint,
+                QualityConstraint::StudentsPerGroupForSubjectMax {
+                    group_list,
+                    group,
+                    subject,
+                    period,
+                    max_students,
+                }
+                .into(),
+            );
         }
     }
     bundle
@@ -91,13 +88,9 @@ fn add_reification(
         period,
     };
 
-    match &gl.filling {
+    match gl.filling() {
         GroupListFilling::Prefilled { groups } => {
-            let enrolled = env
-                .assignments
-                .period_map
-                .get(&period)
-                .and_then(|pa| pa.subject_map.get(&subject));
+            let enrolled = env.assignments.students(period, subject);
             let has_students = groups.get(group.index()).is_some_and(|g| {
                 g.students
                     .iter()

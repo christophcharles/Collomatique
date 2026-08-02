@@ -8,46 +8,43 @@ use relm4::{adw, gtk};
 use collomatique_ops::GroupListsUpdateOp;
 
 mod associations_display;
+mod edit_dialog;
 mod group_lists_display;
-mod params_dialog;
-mod prefill_dialog;
 
 #[derive(Debug)]
 pub enum GroupListsInput {
     Update(
         collomatique_state_colloscopes::periods::Periods,
+        collomatique_state_colloscopes::weeks::Weeks,
         collomatique_state_colloscopes::subjects::Subjects,
         collomatique_state_colloscopes::students::Students,
         collomatique_state_colloscopes::group_lists::GroupLists,
     ),
 
     EditGroupList(collomatique_state_colloscopes::GroupListId),
-    PrefillGroupList(collomatique_state_colloscopes::GroupListId),
     DeleteGroupList(collomatique_state_colloscopes::GroupListId),
     AddGroupList,
-    GroupListParamsSelected(collomatique_state_colloscopes::group_lists::GroupListParameters),
-    GroupListPrefillSelected(collomatique_state_colloscopes::group_lists::GroupListFilling),
+    GroupListSelected(collomatique_state_colloscopes::group_lists::GroupList),
 }
 
 #[derive(Debug)]
-enum GroupListParamsSelectionReason {
+enum GroupListSelectionReason {
     New,
     Edit(collomatique_state_colloscopes::GroupListId),
 }
 
 pub struct GroupLists {
     periods: collomatique_state_colloscopes::periods::Periods,
+    weeks: collomatique_state_colloscopes::weeks::Weeks,
     subjects: collomatique_state_colloscopes::subjects::Subjects,
     students: collomatique_state_colloscopes::students::Students,
     group_lists: collomatique_state_colloscopes::group_lists::GroupLists,
 
     group_list_entries: FactoryVecDeque<group_lists_display::Entry>,
     period_entries: FactoryVecDeque<associations_display::PeriodEntry>,
-    params_dialog: Controller<params_dialog::Dialog>,
-    prefill_dialog: Controller<prefill_dialog::Dialog>,
+    edit_dialog: Controller<edit_dialog::Dialog>,
 
-    params_selection_reason: GroupListParamsSelectionReason,
-    prefill_group_list_id: Option<collomatique_state_colloscopes::GroupListId>,
+    selection_reason: GroupListSelectionReason,
 }
 
 #[relm4::component(pub)]
@@ -140,9 +137,6 @@ impl Component for GroupLists {
                 group_lists_display::EntryOutput::EditGroupList(id) => {
                     GroupListsInput::EditGroupList(id)
                 }
-                group_lists_display::EntryOutput::PrefillGroupList(id) => {
-                    GroupListsInput::PrefillGroupList(id)
-                }
                 group_lists_display::EntryOutput::DeleteGroupList(id) => {
                     GroupListsInput::DeleteGroupList(id)
                 }
@@ -165,35 +159,25 @@ impl Component for GroupLists {
                 }
             });
 
-        let params_dialog = params_dialog::Dialog::builder()
+        let edit_dialog = edit_dialog::Dialog::builder()
             .transient_for(&root)
             .launch(())
             .forward(sender.input_sender(), |msg| match msg {
-                params_dialog::DialogOutput::Accepted(params) => {
-                    GroupListsInput::GroupListParamsSelected(params)
-                }
-            });
-
-        let prefill_dialog = prefill_dialog::Dialog::builder()
-            .transient_for(&root)
-            .launch(())
-            .forward(sender.input_sender(), |msg| match msg {
-                prefill_dialog::DialogOutput::Accepted(prefill) => {
-                    GroupListsInput::GroupListPrefillSelected(prefill)
+                edit_dialog::DialogOutput::Accepted(group_list) => {
+                    GroupListsInput::GroupListSelected(group_list)
                 }
             });
 
         let model = GroupLists {
             periods: collomatique_state_colloscopes::periods::Periods::default(),
+            weeks: collomatique_state_colloscopes::weeks::Weeks::default(),
             subjects: collomatique_state_colloscopes::subjects::Subjects::default(),
             students: collomatique_state_colloscopes::students::Students::default(),
             group_lists: collomatique_state_colloscopes::group_lists::GroupLists::default(),
             group_list_entries,
             period_entries,
-            params_dialog,
-            params_selection_reason: GroupListParamsSelectionReason::New,
-            prefill_dialog,
-            prefill_group_list_id: None,
+            edit_dialog,
+            selection_reason: GroupListSelectionReason::New,
         };
 
         let list_box = model.group_list_entries.widget();
@@ -205,8 +189,9 @@ impl Component for GroupLists {
 
     fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match message {
-            GroupListsInput::Update(periods, subjects, students, group_lists) => {
+            GroupListsInput::Update(periods, weeks, subjects, students, group_lists) => {
                 self.periods = periods;
+                self.weeks = weeks;
                 self.subjects = subjects;
                 self.students = students;
                 self.group_lists = group_lists;
@@ -215,96 +200,99 @@ impl Component for GroupLists {
                 self.update_period_entries();
             }
             GroupListsInput::AddGroupList => {
-                self.params_selection_reason = GroupListParamsSelectionReason::New;
+                self.selection_reason = GroupListSelectionReason::New;
 
                 let mut group_list_params =
                     collomatique_state_colloscopes::group_lists::GroupListParameters::default();
                 let max_group_count = (self.students.student_map.len() as u32)
                     / (group_list_params.students_per_group.start().get());
-                group_list_params.group_names = vec![None; max_group_count.max(1) as usize];
+                let group_count = max_group_count.max(1) as usize;
+                group_list_params.group_names = vec![None; group_count];
 
-                self.params_dialog
-                    .sender()
-                    .send(params_dialog::DialogInput::Show(group_list_params))
-                    .unwrap();
+                // A brand new list opens on the prefilled mode: the point of the
+                // merged dialog is to fill the groups while setting them up.
+                let group_list_filling =
+                    collomatique_state_colloscopes::group_lists::GroupListFilling::Prefilled {
+                        groups: vec![
+                            collomatique_state_colloscopes::group_lists::PrefilledGroup::default();
+                            group_count
+                        ],
+                    };
+
+                let group_list = collomatique_state_colloscopes::group_lists::GroupList::new(
+                    group_list_params,
+                    group_list_filling,
+                )
+                .expect("as many empty prefilled groups as group names");
+
+                self.show_edit_dialog(group_list);
             }
             GroupListsInput::EditGroupList(group_list_id) => {
-                let group_list_params = self
-                    .group_lists
-                    .group_list_map
-                    .get(&group_list_id)
-                    .expect("Group list ID should be valid")
-                    .params
-                    .clone();
-                self.params_selection_reason = GroupListParamsSelectionReason::Edit(group_list_id);
-                self.params_dialog
-                    .sender()
-                    .send(params_dialog::DialogInput::Show(group_list_params))
-                    .unwrap();
-            }
-            GroupListsInput::PrefillGroupList(group_list_id) => {
                 let group_list = self
                     .group_lists
                     .group_list_map
                     .get(&group_list_id)
                     .expect("Group list ID should be valid")
                     .clone();
-                // Pass all students - exclusion is now handled in the prefill dialog
-                let filtered_students = self.students.student_map.clone();
-                self.prefill_group_list_id = Some(group_list_id);
-                self.prefill_dialog
-                    .sender()
-                    .send(prefill_dialog::DialogInput::Show(
-                        group_list,
-                        filtered_students,
-                    ))
-                    .unwrap();
+                self.selection_reason = GroupListSelectionReason::Edit(group_list_id);
+
+                self.show_edit_dialog(group_list);
             }
             GroupListsInput::DeleteGroupList(id) => {
                 sender
                     .output(GroupListsUpdateOp::DeleteGroupList(id))
                     .unwrap();
             }
-            GroupListsInput::GroupListParamsSelected(params) => {
-                match self.params_selection_reason {
-                    GroupListParamsSelectionReason::New => {
-                        sender
-                            .output(GroupListsUpdateOp::AddNewGroupList(params))
-                            .unwrap();
-                    }
-                    GroupListParamsSelectionReason::Edit(group_list_id) => {
-                        sender
-                            .output(GroupListsUpdateOp::UpdateGroupList(group_list_id, params))
-                            .unwrap();
-                    }
+            GroupListsInput::GroupListSelected(group_list) => match self.selection_reason {
+                GroupListSelectionReason::New => {
+                    sender
+                        .output(GroupListsUpdateOp::AddNewGroupList(group_list))
+                        .unwrap();
                 }
-            }
-            GroupListsInput::GroupListPrefillSelected(filling) => {
-                let group_list_id = self
-                    .prefill_group_list_id
-                    .take()
-                    .expect("There should be a currently edited group list ID");
-                sender
-                    .output(GroupListsUpdateOp::SetFilling(group_list_id, filling))
-                    .unwrap();
-            }
+                GroupListSelectionReason::Edit(group_list_id) => {
+                    sender
+                        .output(GroupListsUpdateOp::UpdateGroupList(
+                            group_list_id,
+                            group_list,
+                        ))
+                        .unwrap();
+                }
+            },
         }
     }
 }
 
 impl GroupLists {
+    fn show_edit_dialog(&self, group_list: collomatique_state_colloscopes::group_lists::GroupList) {
+        // Pass all students - exclusion is handled inside the dialog
+        let filtered_students = self
+            .students
+            .student_map
+            .iter()
+            .map(|(id, student)| (id, student.clone()))
+            .collect();
+
+        self.edit_dialog
+            .sender()
+            .send(edit_dialog::DialogInput::Show(
+                group_list,
+                filtered_students,
+            ))
+            .unwrap();
+    }
+
     fn update_group_list_entries(&mut self) {
         let mut group_lists_vec: Vec<_> = self
             .group_lists
             .group_list_map
             .iter()
             .map(|(id, group_list)| group_lists_display::EntryData {
-                id: *id,
+                id,
                 group_list: group_list.clone(),
             })
             .collect();
 
-        group_lists_vec.sort_by_key(|data| (data.group_list.params.name.clone(), data.id));
+        group_lists_vec.sort_by_key(|data| (data.group_list.params().name.clone(), data.id));
 
         crate::tools::factories::update_vec_deque(
             &mut self.group_list_entries,
@@ -316,19 +304,15 @@ impl GroupLists {
     fn update_period_entries(&mut self) {
         let periods_vec: Vec<_> = self
             .periods
-            .ordered_period_list
-            .iter()
-            .enumerate()
-            .scan(0usize, |acc, (num, (id, desc))| {
-                let out = associations_display::PeriodEntryData {
+            .period_ids()
+            .map(|id| {
+                let id = &id;
+                let period =
+                    collomatique_ops::rendering::render_period(&self.periods, &self.weeks, *id)
+                        .expect("the period comes from the document being displayed");
+                associations_display::PeriodEntryData {
                     period_id: *id,
-                    period_text: super::generate_week_succession_title(
-                        "Associations pour la période",
-                        &self.periods.first_week,
-                        num,
-                        *acc,
-                        desc.len(),
-                    ),
+                    period_text: format!("Associations pour la période {}", period),
                     subjects: self
                         .subjects
                         .ordered_subject_list
@@ -339,21 +323,24 @@ impl GroupLists {
                             }
                             subject.parameters.interrogation_parameters.as_ref()?;
 
-                            Some((*subject_id, subject.clone()))
+                            Some((subject_id, subject.clone()))
                         })
                         .collect(),
                     group_list_associations: self
                         .group_lists
                         .subjects_associations
-                        .get(id)
-                        .expect("Period ID should be valid")
-                        .clone(),
-                    group_lists: self.group_lists.group_list_map.clone(),
-                };
-
-                *acc += desc.len();
-
-                Some(out)
+                        .iter()
+                        .filter_map(|((period, subject), group_list)| {
+                            (period == *id).then_some((subject, *group_list))
+                        })
+                        .collect(),
+                    group_lists: self
+                        .group_lists
+                        .group_list_map
+                        .iter()
+                        .map(|(id, gl)| (id, gl.clone()))
+                        .collect(),
+                }
             })
             .collect();
         crate::tools::factories::update_vec_deque(

@@ -83,7 +83,7 @@ impl Dialog {
 
 impl Dialog {
     fn has_periods(&self) -> bool {
-        !self.params.periods.ordered_period_list.is_empty()
+        !self.params.periods.is_empty()
     }
 
     fn has_automatic_groups(&self) -> bool {
@@ -96,22 +96,17 @@ impl Dialog {
 
     /// One human-readable title per period, in order.
     fn period_titles(&self) -> Vec<String> {
-        let global_first_week = self.params.periods.first_week.clone();
         self.params
             .periods
-            .ordered_period_list
-            .iter()
-            .enumerate()
-            .scan(0usize, |first_week_num, (index, (_id, weeks))| {
-                let week_count = weeks.len();
-                let title = crate::editor::generate_period_title(
-                    &global_first_week,
-                    index,
-                    *first_week_num,
-                    week_count,
-                );
-                *first_week_num += week_count;
-                Some(title)
+            .period_ids()
+            .map(|id| {
+                let period = collomatique_ops::rendering::render_period(
+                    &self.params.periods,
+                    &self.params.weeks,
+                    id,
+                )
+                .expect("the period comes from the document being displayed");
+                format!("Période {}", period)
             })
             .collect()
     }
@@ -123,7 +118,7 @@ impl Dialog {
             .group_list_map
             .values()
             .filter(|group_list| !group_list.is_prefilled())
-            .map(|group_list| group_list.params.name.clone())
+            .map(|group_list| group_list.params().name.clone())
             .collect()
     }
 
@@ -133,17 +128,16 @@ impl Dialog {
     fn set_data_from_config(&mut self, config: SolveConfig) {
         let sanitized_config = config.sanitize(&self.params);
         // Look up each period/list by id rather than zipping against `.values()`: the titles are
-        // produced in `ordered_period_list` display order, whereas the config maps iterate in
+        // produced in period display order, whereas the config maps iterate in
         // `PeriodId`/`GroupListId` order, which need not match. `sanitize` guarantees an entry for
         // every current period and non-prefilled group list, so the indexing is total.
         self.periods_data = self
             .params
             .periods
-            .ordered_period_list
-            .iter()
+            .period_ids()
             .zip(self.period_titles())
-            .map(|((id, _), title)| {
-                let data = &sanitized_config.periods[id];
+            .map(|(id, title)| {
+                let data = &sanitized_config.periods[&id];
                 period_group::Data {
                     title,
                     recompute: data.recompute,
@@ -159,7 +153,7 @@ impl Dialog {
             .filter(|(_id, group_list)| !group_list.is_prefilled())
             .zip(self.group_list_names())
             .map(|((id, _), title)| {
-                let data = &sanitized_config.group_lists[id];
+                let data = &sanitized_config.group_lists[&id];
                 group_list_group::Data {
                     title,
                     recompute: data.recompute.is_some(),
@@ -179,12 +173,11 @@ impl Dialog {
             periods: self
                 .params
                 .periods
-                .ordered_period_list
-                .iter()
+                .period_ids()
                 .zip(self.periods_data.iter())
-                .map(|((id, _), data)| {
+                .map(|(id, data)| {
                     (
-                        id.clone(),
+                        id,
                         PeriodSolveData {
                             recompute: data.recompute,
                             use_current_values: data.use_current_values,

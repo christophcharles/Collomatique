@@ -1,6 +1,9 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
+use crate::ops::AnnotatedExportConfigOp;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Color {
@@ -71,6 +74,13 @@ pub struct ExportConfig {
     pub prefilled_groups_config: PerStudentGroupsConfig,
     pub per_group_list_config: PerGroupListConfig,
 }
+
+// One composite presentation preference: colors, orientations and toggles are
+// choices, not content that can be added or removed, so the document order
+// treats the whole configuration as one atom (plan step 6.5, decision 13).
+// Two different configurations are incomparable — including the default
+// against a modified one.
+collomatique_state::impl_content_ord_atom!(ExportConfig);
 
 impl Default for GlobalConfig {
     fn default() -> Self {
@@ -174,5 +184,140 @@ impl Default for ExportConfig {
             prefilled_groups_config: PerStudentGroupsConfig::default_prefilled_groups(),
             per_group_list_config: PerGroupListConfig::default(),
         }
+    }
+}
+
+/// Precondition errors of the forced export-config op — the carve-out subset
+/// (step-3 survey Table 2). Export config is pure value data with no guards of
+/// any kind, so this enum is empty; kept for
+/// uniformity across the [crate::PrecheckError] family.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum ExportConfigPrecheckError {}
+
+impl crate::Data {
+    /// Used internally by [crate::Data::force_apply]
+    ///
+    /// Force-applies an export-config op. Export config is pure value data
+    /// with no guards of any kind, so this copy is byte-identical to the original
+    /// and its [ExportConfigPrecheckError] is empty; kept for uniformity across
+    /// the force_apply family.
+    pub(crate) fn force_apply_export_config(
+        &mut self,
+        export_config_op: &AnnotatedExportConfigOp,
+    ) -> std::result::Result<AnnotatedExportConfigOp, ExportConfigPrecheckError> {
+        let backward = match export_config_op {
+            AnnotatedExportConfigOp::Update(v) => {
+                let old = std::mem::replace(&mut self.inner_data.export_config, v.clone());
+                AnnotatedExportConfigOp::Update(old)
+            }
+        };
+        Ok(backward)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Data;
+
+    /// A configuration away from the default on every field, so a partial
+    /// replace cannot pass the round-trip below by accident.
+    fn non_default_config() -> ExportConfig {
+        ExportConfig {
+            global: GlobalConfig {
+                background_color: Color {
+                    red: 1,
+                    green: 2,
+                    blue: 3,
+                },
+                stripes_color_enabled: false,
+                stripes_color: Color {
+                    red: 4,
+                    green: 5,
+                    blue: 6,
+                },
+            },
+            colloscope_enabled: false,
+            all_groups_enabled: false,
+            automatic_groups_enabled: true,
+            prefilled_groups_enabled: true,
+            per_group_list_enabled: false,
+            colloscope_config: ColloscopeConfig {
+                sheet_name: "Feuille".into(),
+                extra_info_column_enabled: false,
+                extra_info_column_name: "Notes".into(),
+                teacher_email_enabled: false,
+                teacher_email: "email".into(),
+                teacher_tel_enabled: true,
+                teacher_tel: "tel".into(),
+                orientation: PageOrientation::Portrait,
+                display_week_dates: false,
+                display_annotations: false,
+                no_interrogation_color: Color {
+                    red: 7,
+                    green: 8,
+                    blue: 9,
+                },
+                annotation_color_enabled: false,
+                annotation_color: Color {
+                    red: 10,
+                    green: 11,
+                    blue: 12,
+                },
+                extra_colors: BTreeMap::from([(
+                    "Vacances".to_string(),
+                    Color {
+                        red: 13,
+                        green: 14,
+                        blue: 15,
+                    },
+                )]),
+            },
+            all_groups_config: PerStudentGroupsConfig {
+                sheet_name: "Tous".into(),
+                orientation: Some(PageOrientation::Landscape),
+                show_emails: false,
+                show_tel: true,
+            },
+            automatic_groups_config: PerStudentGroupsConfig {
+                sheet_name: "Auto".into(),
+                orientation: Some(PageOrientation::Portrait),
+                show_emails: false,
+                show_tel: true,
+            },
+            prefilled_groups_config: PerStudentGroupsConfig {
+                sheet_name: "Prérempli".into(),
+                orientation: Some(PageOrientation::Landscape),
+                show_emails: false,
+                show_tel: true,
+            },
+            per_group_list_config: PerGroupListConfig {
+                orientation: PageOrientation::Landscape,
+                show_emails: false,
+                show_tel: true,
+                center_vertically: true,
+            },
+        }
+    }
+
+    /// The whole-struct op replaces the configuration, and the backward op it
+    /// returns puts the previous one back verbatim — the reversibility pin for
+    /// the new arm.
+    #[test]
+    fn update_replaces_the_whole_config_and_is_reversible() {
+        let mut data = Data::default();
+        let original = data.get_inner_data().export_config.clone();
+        let new_config = non_default_config();
+        assert_ne!(original, new_config);
+
+        let backward = data
+            .force_apply_export_config(&AnnotatedExportConfigOp::Update(new_config.clone()))
+            .expect("export config has no preconditions");
+        assert_eq!(data.get_inner_data().export_config, new_config);
+        assert_eq!(backward, AnnotatedExportConfigOp::Update(original.clone()));
+
+        data.force_apply_export_config(&backward)
+            .expect("export config has no preconditions");
+        assert_eq!(data.get_inner_data().export_config, original);
     }
 }

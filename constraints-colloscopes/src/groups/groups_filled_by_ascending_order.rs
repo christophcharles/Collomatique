@@ -6,8 +6,8 @@ use collomatique_state_colloscopes::group_lists::GroupListFilling;
 
 pub(super) fn build(env: &VarEnv) -> MyBundle {
     let mut bundle = MyBundle::new();
-    for (&group_list, gl) in &env.group_lists.group_list_map {
-        let GroupListFilling::Automatic { .. } = &gl.filling else {
+    for (group_list, gl) in env.group_lists.group_list_map.iter() {
+        let GroupListFilling::Automatic { .. } = gl.filling() else {
             continue;
         };
         let groups = groups_for_group_list(env, group_list);

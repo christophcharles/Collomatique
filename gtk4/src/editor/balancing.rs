@@ -230,7 +230,7 @@ impl Balancing {
             .ordered_subject_list
             .iter()
             .filter(|(_, subject)| subject.parameters.interrogation_parameters.is_some())
-            .map(|(id, subject)| (*id, subject.parameters.name.clone()))
+            .map(|(id, subject)| (id, subject.parameters.name.clone()))
             .collect();
 
         subjects.sort_by_key(|(id, name)| (name.clone(), *id));

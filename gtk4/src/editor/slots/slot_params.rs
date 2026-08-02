@@ -8,6 +8,9 @@ use relm4::{adw, gtk};
 pub struct Dialog {
     hidden: bool,
     should_redraw: bool,
+    /// Subject of the slot being edited/created, echoed back on Accept
+    /// (a slot cannot change subject).
+    subject_id: Option<collomatique_state_colloscopes::SubjectId>,
     subject_name: String,
     teachers: BTreeMap<
         collomatique_state_colloscopes::TeacherId,
@@ -330,6 +333,7 @@ impl SimpleComponent for Dialog {
         let model = Dialog {
             hidden: true,
             should_redraw: false,
+            subject_id: None,
             subject_name: String::new(),
             teachers: BTreeMap::new(),
             week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatterns::default(),
@@ -399,6 +403,7 @@ impl SimpleComponent for Dialog {
 impl Dialog {
     fn update_data_from_params(&mut self, params: &collomatique_state_colloscopes::slots::Slot) {
         use chrono::Timelike;
+        self.subject_id = Some(params.subject_id);
         self.teacher_selected = self.teacher_id_to_selected(params.teacher_id);
         self.day_selected = Self::day_enum_to_selected(params.start_time.weekday);
         self.hour_selected = params.start_time.start_time.hour();
@@ -431,7 +436,7 @@ impl Dialog {
             .week_patterns
             .week_pattern_map
             .iter()
-            .map(|(week_pattern_id, week_pattern)| (*week_pattern_id, week_pattern.name.clone()))
+            .map(|(week_pattern_id, week_pattern)| (week_pattern_id, week_pattern.name.clone()))
             .collect();
         week_patterns.sort_by_key(|(id, name)| (name.clone(), *id));
         self.ordered_week_patterns = week_patterns;
@@ -440,6 +445,9 @@ impl Dialog {
     fn build_params_from_data(&self) -> collomatique_state_colloscopes::slots::Slot {
         let teacher_id = self.teacher_selected_to_id(self.teacher_selected);
         collomatique_state_colloscopes::slots::Slot {
+            subject_id: self
+                .subject_id
+                .expect("A slot dialog is always shown for a subject before Accept"),
             teacher_id,
             start_time: collomatique_time::SlotStart {
                 weekday: Self::day_selected_to_enum(self.day_selected),

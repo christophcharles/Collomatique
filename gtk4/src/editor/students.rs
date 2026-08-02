@@ -12,6 +12,7 @@ mod dialog;
 pub enum StudentsInput {
     Update(
         collomatique_state_colloscopes::periods::Periods,
+        collomatique_state_colloscopes::weeks::Weeks,
         collomatique_state_colloscopes::students::Students,
     ),
     EditStudentClicked(collomatique_state_colloscopes::StudentId),
@@ -38,6 +39,7 @@ use crate::widgets::contact_list::ContactInfo;
 
 pub struct Students {
     periods: collomatique_state_colloscopes::periods::Periods,
+    weeks: collomatique_state_colloscopes::weeks::Weeks,
     students: collomatique_state_colloscopes::students::Students,
 
     student_modification_reason: StudentModificationReason,
@@ -159,6 +161,7 @@ impl Component for Students {
             });
         let model = Students {
             periods: collomatique_state_colloscopes::periods::Periods::default(),
+            weeks: collomatique_state_colloscopes::weeks::Weeks::default(),
             students: collomatique_state_colloscopes::students::Students::default(),
             student_modification_reason: StudentModificationReason::New,
             current_filter: StudentFilter::NoFilter,
@@ -175,8 +178,9 @@ impl Component for Students {
 
     fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match message {
-            StudentsInput::Update(new_periods, new_students) => {
+            StudentsInput::Update(new_periods, new_weeks, new_students) => {
                 self.periods = new_periods;
+                self.weeks = new_weeks;
                 self.students = new_students;
                 self.fix_current_filter_if_necessary();
                 self.update_filter_droplist();
@@ -196,6 +200,7 @@ impl Component for Students {
                     .sender()
                     .send(dialog::DialogInput::Show(
                         self.periods.clone(),
+                        self.weeks.clone(),
                         student_data.clone(),
                     ))
                     .unwrap();
@@ -206,6 +211,7 @@ impl Component for Students {
                     .sender()
                     .send(dialog::DialogInput::Show(
                         self.periods.clone(),
+                        self.weeks.clone(),
                         collomatique_state_colloscopes::students::Student::default(),
                     ))
                     .unwrap();
@@ -217,9 +223,12 @@ impl Component for Students {
                     Some(1) => StudentFilter::NoSubjectLinked,
                     Some(x) => {
                         let index = x - 2;
-                        assert!(index < self.periods.ordered_period_list.len());
 
-                        StudentFilter::Period(self.periods.ordered_period_list[index].0)
+                        StudentFilter::Period(
+                            self.periods
+                                .period_id_at(index)
+                                .expect("index within bounds"),
+                        )
                     }
                 };
                 self.update_current_list();
@@ -256,17 +265,11 @@ impl Students {
     fn update_filter_droplist(&mut self) {
         let mut list = vec!["Toutes les périodes".into(), "Aucune période".into()];
 
-        let mut first_week_num = 0usize;
-        for (index, (_id, period)) in self.periods.ordered_period_list.iter().enumerate() {
-            list.push(super::generate_week_succession_title(
-                "La période",
-                &self.periods.first_week,
-                index,
-                first_week_num,
-                period.len(),
-            ));
-
-            first_week_num += period.len();
+        for period_id in self.periods.period_ids() {
+            let period =
+                collomatique_ops::rendering::render_period(&self.periods, &self.weeks, period_id)
+                    .expect("the period comes from the document being displayed");
+            list.push(format!("La période {}", period));
         }
 
         let num = match self.current_filter {
@@ -293,18 +296,18 @@ impl Students {
     fn update_current_list(&mut self) {
         self.current_list = vec![];
 
-        for (student_id, student) in &self.students.student_map {
+        for (student_id, student) in self.students.student_map.iter() {
             let keep_student = match self.current_filter {
                 StudentFilter::NoFilter => true,
                 StudentFilter::NoSubjectLinked => {
-                    student.excluded_periods.len() == self.periods.ordered_period_list.len()
+                    student.excluded_periods.len() == self.periods.period_count()
                 }
                 StudentFilter::Period(period_id) => !student.excluded_periods.contains(&period_id),
             };
 
             if keep_student {
                 self.current_list.push(ContactInfo {
-                    id: *student_id,
+                    id: student_id,
                     contact: student.desc.clone(),
                     extra: {
                         let mut excluded_period_list: Vec<_> = student

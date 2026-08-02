@@ -107,3 +107,75 @@ impl IdIssuerHelper {
         RootId(current_id)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_from_empty_starts_at_zero() {
+        let issuer = IdIssuerHelper::new(std::iter::empty()).expect("no duplicates");
+
+        assert_eq!(issuer.get_internal_counter(), 0);
+    }
+
+    #[test]
+    fn new_from_existing_ids_starts_after_the_largest() {
+        let issuer = IdIssuerHelper::new([0, 5, 7].into_iter()).expect("no duplicates");
+
+        assert_eq!(issuer.get_internal_counter(), 8);
+    }
+
+    #[test]
+    fn new_rejects_duplicated_ids() {
+        let result = IdIssuerHelper::new([0, 5, 5].into_iter());
+
+        assert_eq!(result.err(), Some(IdError::DuplicatedId));
+    }
+
+    #[test]
+    fn new_rejects_ids_beyond_half_the_id_space() {
+        let result = IdIssuerHelper::new([(u64::MAX >> 1) + 1].into_iter());
+
+        assert_eq!(result.err(), Some(IdError::EndOfTheUniverse));
+
+        // The boundary value itself is still accepted
+        let issuer = IdIssuerHelper::new([u64::MAX >> 1].into_iter()).expect("boundary is valid");
+        assert_eq!(issuer.get_internal_counter(), (u64::MAX >> 1) + 1);
+    }
+
+    #[test]
+    fn get_new_id_is_monotonic() {
+        let mut issuer = IdIssuerHelper::new(std::iter::empty()).expect("no duplicates");
+
+        assert_eq!(issuer.get_new_id(), RootId(0));
+        assert_eq!(issuer.get_new_id(), RootId(1));
+        assert_eq!(issuer.get_new_id(), RootId(2));
+        assert_eq!(issuer.get_internal_counter(), 3);
+    }
+
+    #[test]
+    fn skip_to_id_advances_but_never_goes_back() {
+        let mut issuer = IdIssuerHelper::new([0, 1, 2].into_iter()).expect("no duplicates");
+        assert_eq!(issuer.get_internal_counter(), 3);
+
+        issuer.skip_to_id(10).expect("valid id");
+        assert_eq!(issuer.get_internal_counter(), 10);
+
+        // Skipping behind the counter is a no-op
+        issuer.skip_to_id(5).expect("valid id");
+        assert_eq!(issuer.get_internal_counter(), 10);
+
+        assert_eq!(issuer.get_new_id(), RootId(10));
+    }
+
+    #[test]
+    fn skip_to_id_rejects_ids_beyond_half_the_id_space() {
+        let mut issuer = IdIssuerHelper::new(std::iter::empty()).expect("no duplicates");
+
+        let result = issuer.skip_to_id((u64::MAX >> 1) + 1);
+
+        assert_eq!(result, Err(IdError::EndOfTheUniverse));
+        assert_eq!(issuer.get_internal_counter(), 0);
+    }
+}

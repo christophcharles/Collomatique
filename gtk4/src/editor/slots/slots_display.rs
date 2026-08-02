@@ -16,7 +16,10 @@ pub struct EntryData {
         collomatique_state_colloscopes::teachers::Teacher,
     >,
     pub week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatterns,
-    pub subject_slots: collomatique_state_colloscopes::slots::SubjectSlots,
+    pub subject_slots: Vec<(
+        collomatique_state_colloscopes::SlotId,
+        collomatique_state_colloscopes::slots::Slot,
+    )>,
 }
 
 #[derive(Debug)]
@@ -28,7 +31,10 @@ pub struct Entry {
         collomatique_state_colloscopes::teachers::Teacher,
     >,
     week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatterns,
-    subject_slots: collomatique_state_colloscopes::slots::SubjectSlots,
+    subject_slots: Vec<(
+        collomatique_state_colloscopes::SlotId,
+        collomatique_state_colloscopes::slots::Slot,
+    )>,
     slots: FactoryVecDeque<Slot>,
 }
 
@@ -70,7 +76,7 @@ impl Entry {
             None => "Toutes les semaines".into(),
         };
         let slot_start = slot.start_time.clone();
-        let slot_count = self.subject_slots.ordered_slots.len();
+        let slot_count = self.subject_slots.len();
         SlotData {
             slot_id,
             teacher,
@@ -165,7 +171,6 @@ impl FactoryComponent for Entry {
 
         let slots_vec: Vec<_> = model
             .subject_slots
-            .ordered_slots
             .iter()
             .map(|(slot_id, slot)| model.slot_data_from_slot(*slot_id, slot))
             .collect();
@@ -200,7 +205,6 @@ impl FactoryComponent for Entry {
 
                 let slots_vec: Vec<_> = self
                     .subject_slots
-                    .ordered_slots
                     .iter()
                     .map(|(slot_id, slot)| self.slot_data_from_slot(*slot_id, slot))
                     .collect();

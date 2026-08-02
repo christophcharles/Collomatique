@@ -10,14 +10,19 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
 
     let slots_with_duration: Vec<_> = {
         let mut result = Vec::new();
-        for (&subject_id, subject_slots) in &env.slots.subject_map {
+        for subject_id in env.slots.subjects_with_slots() {
             let Some(subject) = env.subjects.find_subject(subject_id) else {
                 continue;
             };
             let Some(params) = subject.parameters.interrogation_parameters.as_ref() else {
                 continue;
             };
-            for (slot_id, slot_data) in &subject_slots.ordered_slots {
+            for (slot_id, slot_data) in env
+                .slots
+                .slots_for_subject(subject_id)
+                .into_iter()
+                .flatten()
+            {
                 let Some(swd) =
                     SlotWithDuration::new(slot_data.start_time.clone(), params.duration)
                 else {
@@ -52,7 +57,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                 .collect();
 
             for &week in weeks_a.intersection(&weeks_b) {
-                for &student in env.students.student_map.keys() {
+                for student in env.students.student_map.keys() {
                     if !is_student_enrolled(env, student, *subject_a, week)
                         || !is_student_enrolled(env, student, *subject_b, week)
                     {

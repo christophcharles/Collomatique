@@ -11,5 +11,6 @@ ordered-float = { workspace = true, features = ["serde"] }
 anyhow.workspace = true
 thiserror.workspace = true
 collomatique-state-colloscopes = { path = "../state-colloscopes" }
+collomatique-storage = { path = "../storage" }
 collomatique-ilp = { path = "../ilp", features = ["serde"] }
 collomatique-time = { path = "../time" }

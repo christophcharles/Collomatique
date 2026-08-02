@@ -81,13 +81,10 @@ pub fn run(mode: DebugMode, file: PathBuf) -> Result<(), anyhow::Error> {
         eprintln!("  File loaded in {:.2?}", t.elapsed());
 
         eprintln!("Building ILP model...");
-        let pool = sqlx::SqlitePool::connect(":memory:").await?;
-        collomatique_sqlite_state::create_schema(&pool).await?;
-        collomatique_sqlite_state::inner_data_to_sqlite(&pool, &inner_data).await?;
-        let model = collomatique_constraints_colloscopes::build_model_with_log(&pool, &mut |msg| {
-            eprintln!("  {msg}")
-        })
-        .await;
+        let model = collomatique_constraints_colloscopes::build_model_with_log(
+            &inner_data.params,
+            &mut |msg| eprintln!("  {msg}"),
+        );
         let stats = model.stats();
         eprintln!("  Model statistics:");
         eprintln!("    Base variables: {}", stats.base_variable_count);

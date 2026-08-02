@@ -1,6 +1,8 @@
 use super::*;
 use pyo3::types::PyString;
 
+use collomatique_state_colloscopes::NonEmptyRangeInclusive;
+
 #[pyclass(eq, hash, frozen)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct GroupListId {
@@ -51,12 +53,13 @@ pub struct GroupList {
 #[pymethods]
 impl GroupList {
     #[new]
-    fn new(parameters: GroupListParameters) -> Self {
+    #[pyo3(signature = (parameters, filling=None))]
+    fn new(parameters: GroupListParameters, filling: Option<GroupListFilling>) -> Self {
         GroupList {
             parameters,
-            filling: GroupListFilling::Automatic {
+            filling: filling.unwrap_or(GroupListFilling::Automatic {
                 excluded_students: BTreeSet::new(),
-            },
+            }),
         }
     }
 
@@ -69,9 +72,20 @@ impl GroupList {
 impl From<collomatique_state_colloscopes::group_lists::GroupList> for GroupList {
     fn from(value: collomatique_state_colloscopes::group_lists::GroupList) -> Self {
         GroupList {
-            parameters: value.params.into(),
-            filling: value.filling.into(),
+            parameters: value.params().clone().into(),
+            filling: value.filling().clone().into(),
         }
+    }
+}
+
+impl TryFrom<GroupList> for collomatique_state_colloscopes::group_lists::GroupList {
+    type Error = PyErr;
+    fn try_from(value: GroupList) -> PyResult<Self> {
+        collomatique_state_colloscopes::group_lists::GroupList::new(
+            value.parameters.try_into()?,
+            value.filling.into(),
+        )
+        .map_err(|e| PyValueError::new_err(e.to_string()))
     }
 }
 
@@ -126,19 +140,25 @@ impl From<collomatique_state_colloscopes::group_lists::GroupListParameters>
     }
 }
 
-impl From<GroupListParameters>
+impl TryFrom<GroupListParameters>
     for collomatique_state_colloscopes::group_lists::GroupListParameters
 {
-    fn from(value: GroupListParameters) -> Self {
-        collomatique_state_colloscopes::group_lists::GroupListParameters {
-            name: value.name,
-            students_per_group: value.students_per_group_min..=value.students_per_group_max,
-            group_names: value
-                .group_names
-                .into_iter()
-                .map(|opt| opt.and_then(|s| non_empty_string::NonEmptyString::new(s).ok()))
-                .collect(),
-        }
+    type Error = PyErr;
+    fn try_from(value: GroupListParameters) -> PyResult<Self> {
+        Ok(
+            collomatique_state_colloscopes::group_lists::GroupListParameters {
+                name: value.name,
+                students_per_group: NonEmptyRangeInclusive::new(
+                    value.students_per_group_min..=value.students_per_group_max,
+                )
+                .ok_or_else(|| PyValueError::new_err("Empty students per group range"))?,
+                group_names: value
+                    .group_names
+                    .into_iter()
+                    .map(|opt| opt.and_then(|s| non_empty_string::NonEmptyString::new(s).ok()))
+                    .collect(),
+            },
+        )
     }
 }
 

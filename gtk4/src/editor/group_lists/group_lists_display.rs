@@ -20,24 +20,22 @@ pub enum EntryInput {
     UpdateData(EntryData),
 
     EditClicked,
-    PrefillClicked,
     DeleteClicked,
 }
 
 #[derive(Debug)]
 pub enum EntryOutput {
     EditGroupList(collomatique_state_colloscopes::GroupListId),
-    PrefillGroupList(collomatique_state_colloscopes::GroupListId),
     DeleteGroupList(collomatique_state_colloscopes::GroupListId),
 }
 
 impl Entry {
     fn generate_list_name(&self) -> String {
-        self.data.group_list.params.name.clone()
+        self.data.group_list.params().name.clone()
     }
 
     fn generate_students_per_group_text(&self) -> String {
-        let range = &self.data.group_list.params.students_per_group;
+        let range = &self.data.group_list.params().students_per_group;
         if range.start() == range.end() {
             format!("<b>Élèves par groupe :</b> {}", range.start())
         } else {
@@ -52,7 +50,7 @@ impl Entry {
     fn generate_group_count_text(&self) -> String {
         format!(
             "<b>Nombre de groupes :</b> {}",
-            self.data.group_list.params.group_names.len()
+            self.data.group_list.params().group_names.len()
         )
     }
 }
@@ -76,7 +74,7 @@ impl FactoryComponent for Entry {
                 set_icon_name: "edit-symbolic",
                 add_css_class: "flat",
                 connect_clicked => EntryInput::EditClicked,
-                set_tooltip_text: Some("Modifier les paramètres"),
+                set_tooltip_text: Some("Modifier la liste"),
             },
             gtk::Separator {
                 set_orientation: gtk::Orientation::Vertical,
@@ -89,12 +87,6 @@ impl FactoryComponent for Entry {
                 #[watch]
                 set_label: &self.generate_list_name(),
                 set_size_request: (150, -1),
-            },
-            gtk::Button {
-                set_icon_name: "view-list-bullet-symbolic",
-                add_css_class: "flat",
-                connect_clicked => EntryInput::PrefillClicked,
-                set_tooltip_text: Some("Préremplir la liste"),
             },
             gtk::Separator {
                 set_orientation: gtk::Orientation::Vertical,
@@ -169,11 +161,6 @@ impl FactoryComponent for Entry {
             EntryInput::EditClicked => {
                 sender
                     .output(EntryOutput::EditGroupList(self.data.id))
-                    .unwrap();
-            }
-            EntryInput::PrefillClicked => {
-                sender
-                    .output(EntryOutput::PrefillGroupList(self.data.id))
                     .unwrap();
             }
             EntryInput::DeleteClicked => {

@@ -1,17 +1,20 @@
 use std::collections::BTreeMap;
 
 use rust_xlsxwriter::{Url, Worksheet};
-use sqlx::{Row, SqlitePool};
+
+use collomatique_state_colloscopes::InnerData;
+use collomatique_state_colloscopes::group_lists::GroupListFilling;
+use collomatique_state_colloscopes::ids::{GroupListId, StudentId};
 
 use crate::Error;
 use crate::formats;
 use crate::get_group_name;
 
-pub async fn build(
+pub fn build(
     worksheet: &mut Worksheet,
-    pool: &SqlitePool,
+    data: &InnerData,
     global: &crate::GlobalConfig,
-    gl_id: i64,
+    gl_id: GroupListId,
     gl_name: &str,
     show_emails: bool,
     show_tel: bool,
@@ -23,56 +26,46 @@ pub async fn build(
         .map(|c| c.to_xlsx())
         .unwrap_or(bg);
 
-    // 1. Fetch group names for this group list
-    let group_name_rows = sqlx::query(
-        "SELECT group_index, name FROM group_list_group_names \
-         WHERE group_list_id = ? ORDER BY group_index",
-    )
-    .bind(gl_id)
-    .fetch_all(pool)
-    .await?;
+    let group_list = data.params.group_lists.group_list_map.get(&gl_id);
 
-    let mut group_names: Vec<String> = Vec::new();
-    for row in &group_name_rows {
-        let group_index: i64 = row.get(0);
-        let name: String = row.get(1);
-        let idx = group_index as usize;
-        if group_names.len() <= idx {
-            group_names.resize(idx + 1, String::new());
+    // 1. Group names for this group list
+    let group_names: Vec<String> = group_list.map(crate::group_names_vec).unwrap_or_default();
+
+    // 2. Students per group (both automatic and prefilled sources)
+    let mut members: Vec<(i64, StudentId)> = Vec::new();
+    if let Some(placements) = data.colloscope.group_list(gl_id) {
+        for (student_id, group_number) in placements {
+            members.push((*group_number as i64, *student_id));
         }
-        group_names[idx] = name;
+    }
+    if let Some(GroupListFilling::Prefilled { groups }) = group_list.map(|gl| gl.filling()) {
+        for (group_index, group) in groups.iter().enumerate() {
+            for student_id in &group.students {
+                members.push((group_index as i64, *student_id));
+            }
+        }
     }
 
-    // 2. Fetch students per group (both automatic and prefilled sources)
-    let student_rows = sqlx::query(
-        "SELECT s.surname, s.firstname, s.email, s.tel, sg.group_idx \
-         FROM students s \
-         JOIN ( \
-             SELECT student_id, group_number AS group_idx \
-             FROM colloscope_group_list_students WHERE group_list_id = ? \
-             UNION ALL \
-             SELECT student_id, group_index AS group_idx \
-             FROM prefilled_group_students WHERE group_list_id = ? \
-         ) sg ON s.id = sg.student_id \
-         ORDER BY sg.group_idx, s.surname, s.firstname",
-    )
-    .bind(gl_id)
-    .bind(gl_id)
-    .fetch_all(pool)
-    .await?;
-
-    // 3. Build data structure: group_index -> list of (surname, firstname, email, tel)
+    // 3. Build data structure: group_index -> list of (surname, firstname, email, tel),
+    //    sorted by name within each group
     let mut groups: BTreeMap<i64, Vec<(String, String, String, String)>> = BTreeMap::new();
-    for row in &student_rows {
-        let surname: String = row.get(0);
-        let firstname: String = row.get(1);
-        let email: String = row.get(2);
-        let tel: String = row.get(3);
-        let group_idx: i64 = row.get(4);
-        groups
-            .entry(group_idx)
-            .or_default()
-            .push((surname, firstname, email, tel));
+    for (group_idx, student_id) in members {
+        let Some(student) = data.params.students.student_map.get(&student_id) else {
+            continue;
+        };
+        let desc = &student.desc;
+        groups.entry(group_idx).or_default().push((
+            desc.surname.clone(),
+            desc.firstname.clone(),
+            desc.email
+                .as_ref()
+                .map(|e| e.to_string())
+                .unwrap_or_default(),
+            desc.tel.as_ref().map(|t| t.to_string()).unwrap_or_default(),
+        ));
+    }
+    for students in groups.values_mut() {
+        students.sort_by(|a, b| (&a.0, &a.1).cmp(&(&b.0, &b.1)));
     }
 
     // 4. Title row

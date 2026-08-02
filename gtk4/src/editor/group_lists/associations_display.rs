@@ -209,7 +209,7 @@ impl SubjectEntry {
             .data
             .group_lists
             .iter()
-            .map(|(id, group_list)| (*id, group_list.params.name.clone()))
+            .map(|(id, group_list)| (*id, group_list.params().name.clone()))
             .collect();
 
         self.ordered_group_lists

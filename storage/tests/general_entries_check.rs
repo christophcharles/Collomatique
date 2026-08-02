@@ -81,7 +81,10 @@ fn decode_fails_with_unknown_needed_entry() {
 }
 
 #[test]
-fn decode_fails_with_unknown_entry_with_wrong_minimum_spec() {
+fn decode_fails_on_retired_spec1_entry() {
+    // A spec-1 entry is rejected as a retired-format file before any
+    // payload interpretation — the tombstone fires on the declared
+    // version, regardless of the (here unknown) block name.
     let content = r#"{
     "header": {
         "file_type": "Collomatique",
@@ -108,9 +111,5 @@ fn decode_fails_with_unknown_entry_with_wrong_minimum_spec() {
 
     let r = collomatique_storage::deserialize_data(&content);
     let error = r.expect_err("Should have an error");
-    let DeserializationError::Decode(decode_error) = error else {
-        panic!("Error should be in the decode process");
-    };
-
-    assert_eq!(decode_error, DecodeError::ProbablyIllformedEntry);
+    assert!(matches!(error, DeserializationError::RetiredSpec1Format));
 }

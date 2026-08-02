@@ -14,6 +14,7 @@ mod subjects_display;
 pub enum SubjectsInput {
     Update(
         collomatique_state_colloscopes::periods::Periods,
+        collomatique_state_colloscopes::weeks::Weeks,
         collomatique_state_colloscopes::subjects::Subjects,
     ),
     AddSubjectClicked,
@@ -35,6 +36,7 @@ enum SubjectParamsSelectionReason {
 
 pub struct Subjects {
     periods: collomatique_state_colloscopes::periods::Periods,
+    weeks: collomatique_state_colloscopes::weeks::Weeks,
     subjects: collomatique_state_colloscopes::subjects::Subjects,
     subjects_list: FactoryVecDeque<subjects_display::Entry>,
 
@@ -118,6 +120,7 @@ impl Component for Subjects {
 
         let model = Subjects {
             periods: collomatique_state_colloscopes::periods::Periods::default(),
+            weeks: collomatique_state_colloscopes::weeks::Weeks::default(),
             subjects: collomatique_state_colloscopes::subjects::Subjects::default(),
             subjects_list,
             subject_params_selection_reason: SubjectParamsSelectionReason::New,
@@ -131,29 +134,36 @@ impl Component for Subjects {
 
     fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match message {
-            SubjectsInput::Update(new_periods, new_subjects) => {
+            SubjectsInput::Update(new_periods, new_weeks, new_subjects) => {
                 self.periods = new_periods;
+                self.weeks = new_weeks;
                 self.subjects = new_subjects;
 
                 crate::tools::factories::update_vec_deque(
                     &mut self.subjects_list,
-                    self.subjects.ordered_subject_list.iter().map(|(id, desc)| {
-                        subjects_display::EntryData {
+                    self.subjects
+                        .ordered_subject_list
+                        .iter()
+                        .map(|(id, desc)| subjects_display::EntryData {
                             subject_params: desc.parameters.clone(),
-                            global_first_week: self.periods.first_week.clone(),
                             periods: self
                                 .periods
-                                .ordered_period_list
-                                .iter()
-                                .map(|(id, period_desc)| subjects_display::PeriodData {
-                                    week_count: period_desc.len(),
-                                    status: !desc.excluded_periods.contains(id),
+                                .period_ids()
+                                .map(|id| subjects_display::PeriodData {
+                                    title: collomatique_ops::rendering::render_period(
+                                        &self.periods,
+                                        &self.weeks,
+                                        id,
+                                    )
+                                    .expect("the period comes from the document being displayed"),
+                                    status: !desc.excluded_periods.contains(&id),
                                 })
                                 .collect(),
-                            subject_id: *id,
+                            subject_id: id,
                             subject_count: self.subjects.ordered_subject_list.len(),
-                        }
-                    }),
+                        })
+                        .collect::<Vec<_>>()
+                        .into_iter(),
                     subjects_display::EntryInput::UpdateData,
                 );
             }
@@ -193,7 +203,9 @@ impl Component for Subjects {
                 sender
                     .output(SubjectsUpdateOp::UpdatePeriodStatus(
                         id,
-                        self.periods.ordered_period_list[period_num].0,
+                        self.periods
+                            .period_id_at(period_num)
+                            .expect("valid period index"),
                         status,
                     ))
                     .unwrap();

@@ -61,19 +61,31 @@ pub struct InternalDataStream {
     serialized: String,
 }
 
-impl From<&collomatique_state_colloscopes::InnerData> for InternalDataStream {
-    fn from(value: &collomatique_state_colloscopes::InnerData) -> Self {
+// The data stream carries the storage crate's file-format (spec-2) JSON, not a
+// raw serde dump of the in-memory data. The file format is decoupled from the
+// in-memory types (it goes through the storage layer's own `format` structs), so
+// it is guaranteed serializable no matter how the in-memory representation
+// evolves — it does not depend on any `Serialize` impl of `Data` or the tables
+// it contains.
+//
+// The conversion is `To`/`From Data` (not `InnerData`) on purpose: `Data`
+// carries the "is valid" invariant, so serialization is genuinely infallible,
+// whereas an arbitrary `InnerData` is not guaranteed to be a valid document.
+impl From<&collomatique_state_colloscopes::Data> for InternalDataStream {
+    fn from(value: &collomatique_state_colloscopes::Data) -> Self {
         InternalDataStream {
-            serialized: serde_json::to_string(value)
-                .expect("Serialization of InnerData should never fail"),
+            serialized: collomatique_storage::serialize_data(value),
         }
     }
 }
 
-impl From<InternalDataStream> for collomatique_state_colloscopes::InnerData {
+impl From<InternalDataStream> for collomatique_state_colloscopes::Data {
     fn from(value: InternalDataStream) -> Self {
-        serde_json::from_str::<collomatique_state_colloscopes::InnerData>(&value.serialized)
-            .expect("Data from data stream should always be deserializable")
+        // Round-tripping our own writer's output must always succeed; any
+        // caveats only arise for foreign or newer-version files, never here.
+        let (data, _caveats) = collomatique_storage::deserialize_data(&value.serialized)
+            .expect("data from our own data stream should always be deserializable");
+        data
     }
 }
 
@@ -90,7 +102,7 @@ pub enum ResultMsg {
 
 impl ResultMsg {
     pub fn generate_data_msg(data: &collomatique_state_colloscopes::Data) -> ResultMsg {
-        ResultMsg::Data(data.get_inner_data().into())
+        ResultMsg::Data(data.into())
     }
 }
 

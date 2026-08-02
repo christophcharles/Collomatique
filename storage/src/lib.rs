@@ -12,6 +12,7 @@
 
 mod decode;
 mod encode;
+mod format;
 mod json;
 
 pub use decode::{Caveat, DecodeError};
@@ -38,6 +39,44 @@ pub enum DeserializationError {
     /// Well-formed JSON structure but issues when decoding it
     #[error("Error whild decoding the colloscope file: {0}")]
     Decode(#[from] DecodeError),
+    /// The file uses the retired pre-alpha format (spec 1)
+    ///
+    /// Spec 1 was a raw dump of the in-memory data, used before any
+    /// release. It is permanently retired: such files can no longer be
+    /// opened. This is the tombstone described in `docs/file_format.md` —
+    /// a spec-1 file (any entry declaring `minimum_spec_version: 1`) is
+    /// rejected with this clear error rather than a generic decode failure.
+    #[error(
+        "This file uses the retired pre-alpha format (spec 1), which is no longer supported and cannot be opened"
+    )]
+    RetiredSpec1Format,
+    /// The entries declare a spec version that cannot exist
+    ///
+    /// Spec version 0 does not exist.
+    #[error("Unsupported spec versions in entries ({versions:?}): spec version 0 does not exist")]
+    UnsupportedSpecVersions { versions: BTreeSet<u32> },
+}
+
+/// Rejects entries the current reader cannot decode, based only on their
+/// declared `minimum_spec_version`, before any payload interpretation.
+///
+/// Spec 1 (the pre-alpha dump format) is permanently retired: any file
+/// carrying a spec-1 entry is rejected with [DeserializationError::RetiredSpec1Format]
+/// (the tombstone). Spec version 0 never existed. Everything else —
+/// spec 2 and later — is routed to the spec-2 pipeline, which applies
+/// the forward-compatibility rules.
+fn reject_retired_or_invalid_spec_versions(
+    entries: &[json::RawEntry],
+) -> Result<(), DeserializationError> {
+    if entries.iter().any(|e| e.minimum_spec_version == 1) {
+        return Err(DeserializationError::RetiredSpec1Format);
+    }
+    if entries.iter().any(|e| e.minimum_spec_version == 0) {
+        return Err(DeserializationError::UnsupportedSpecVersions {
+            versions: entries.iter().map(|e| e.minimum_spec_version).collect(),
+        });
+    }
+    Ok(())
 }
 
 /// Deserialize the content of a colloscope file
@@ -54,20 +93,37 @@ pub enum DeserializationError {
 pub fn deserialize_data(
     file_content: &str,
 ) -> Result<(Data, BTreeSet<Caveat>), DeserializationError> {
-    let json_data = serde_json::from_str::<json::JsonData>(file_content)?;
-    Ok(decode::decode(json_data)?)
+    let raw_data = serde_json::from_str::<json::RawJsonData>(file_content)?;
+
+    // The header check is path-independent: it must run before the
+    // spec-version check so that e.g. an unknown file content is reported
+    // the same way whatever the spec version of the entries.
+    let mut caveats = BTreeSet::new();
+    decode::check_header(&raw_data.header, &mut caveats)?;
+
+    // Retired (spec 1) and impossible (spec 0) versions are rejected here,
+    // before any payload interpretation. Everything else is spec 2 or later.
+    reject_retired_or_invalid_spec_versions(&raw_data.entries)?;
+
+    let data = decode::spec2::decode(
+        &raw_data.entries,
+        &raw_data.header.produced_with_version,
+        &mut caveats,
+    )?;
+    Ok((data, caveats))
 }
 
 /// Serialize the content of a colloscope file
 ///
 /// This function takes an in-memory [Data] representation
 /// and serialize it into the content of a colloscope file
-/// represented as a UTF-8 string.
+/// represented as a UTF-8 string. The file is written in the
+/// current (spec-2) format.
 ///
 /// This cannot fail as [Data] is always a valid representation.
 pub fn serialize_data(data: &Data) -> String {
-    let json_data = encode::encode(data);
-    serde_json::to_string_pretty(&json_data).expect("Serializing to JSON should not fail")
+    let document = encode::spec2::encode(data);
+    serde_json::to_string_pretty(&document).expect("Serializing to JSON should not fail")
 }
 
 /// Errors when loading data from a file
@@ -107,7 +163,7 @@ pub async fn load_data_from_file(file_path: &Path) -> Result<(Data, BTreeSet<Cav
 /// The method can fail for various reasons like wrong permissions.
 /// This will be reported as an [io::Error].
 ///
-/// This is a convenience function encapsulating [deserialize_data].
+/// This is a convenience function encapsulating [serialize_data].
 pub async fn save_data_to_file(data: &Data, file_path: &Path) -> Result<(), io::Error> {
     use tokio::fs;
     let content = serialize_data(data);

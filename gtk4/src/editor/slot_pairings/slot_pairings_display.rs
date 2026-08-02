@@ -205,19 +205,23 @@ pub enum RuleOutput {
 
 impl Rule {
     fn generate_summary(&self) -> String {
-        let ant_desc = self.slot_desc(&self.data.rule.antecedent.slot_id);
-        let con_desc = self.slot_desc(&self.data.rule.consequent.slot_id);
-        let ant_cond = if self.data.rule.antecedent.should_have {
+        let ant_desc = self.slot_desc(&self.data.rule.antecedent().slot_id);
+        let con_desc = self.slot_desc(&self.data.rule.consequent().slot_id);
+        let ant_cond = if self.data.rule.antecedent().should_have {
             "utilisé"
         } else {
             "non utilisé"
         };
-        let con_cond = if self.data.rule.consequent.should_have {
+        let con_cond = if self.data.rule.consequent().should_have {
             "utilisé"
         } else {
             "non utilisé"
         };
-        let soft_text = if self.data.rule.soft { " (souple)" } else { "" };
+        let soft_text = if self.data.rule.soft() {
+            " (souple)"
+        } else {
+            ""
+        };
         format!(
             "[{}] {} \u{27F9} [{}] {}{}",
             ant_cond, ant_desc, con_cond, con_desc, soft_text
@@ -229,14 +233,14 @@ impl Rule {
             .slot_desc_map
             .get(slot_id)
             .cloned()
-            .unwrap_or_else(|| "???".into())
+            .expect("the rule's slots are slots of the subject this row was built from")
     }
 
     fn generate_excluded_periods_info(&self) -> String {
         let mut excluded_period_list: Vec<_> = self
             .data
             .rule
-            .excluded_periods
+            .excluded_periods()
             .iter()
             .map(|period_id| {
                 self.data
@@ -258,9 +262,8 @@ impl Rule {
             0 => String::new(),
             1 => format!("Désactivée sur la période {}", excluded_period_list[0]),
             _ => format!(
-                "Désactivée sur les périodes {} et {}",
-                excluded_period_list[..excluded_period_list.len() - 1].join(", "),
-                excluded_period_list.last().unwrap()
+                "Désactivée sur les périodes {}",
+                collomatique_ops::rendering::join_french(&excluded_period_list)
             ),
         }
     }
@@ -312,7 +315,7 @@ impl FactoryComponent for Rule {
                 set_label: &self.generate_excluded_periods_info(),
                 set_attributes: Some(&gtk::pango::AttrList::from_string("style italic, scale 0.8").unwrap()),
                 #[watch]
-                set_visible: !self.data.rule.excluded_periods.is_empty(),
+                set_visible: !self.data.rule.excluded_periods().is_empty(),
             },
             gtk::Separator {
                 set_orientation: gtk::Orientation::Vertical,

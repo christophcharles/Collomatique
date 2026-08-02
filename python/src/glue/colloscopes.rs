@@ -24,19 +24,90 @@ impl Colloscope {
     }
 }
 
-impl From<collomatique_state_colloscopes::colloscopes::Colloscope> for Colloscope {
-    fn from(value: collomatique_state_colloscopes::colloscopes::Colloscope) -> Self {
+impl Colloscope {
+    /// Builds the dense Python view from the (possibly sparse) mem colloscope
+    /// and its parameters.
+    ///
+    /// The dense skeleton — which period runs which slots, and which weeks each
+    /// slot can hold an interrogation — is re-derived from the parameters
+    /// (`is_interrogation_possible` mirrors the old Some-cell rule); the cell
+    /// contents come from the sparse surface. On validated data this yields the
+    /// exact byte-for-byte pyclass the previous `From` produced, but reads the
+    /// colloscope only through its surface, so 1d's repr swap leaves this glue
+    /// untouched.
+    pub fn from_mem(
+        colloscope: &collomatique_state_colloscopes::colloscopes::Colloscope,
+        params: &collomatique_state_colloscopes::colloscope_params::Parameters,
+    ) -> Self {
+        let period_map = params
+            .periods
+            .period_ids()
+            .map(|period_id| {
+                let week_ids = params
+                    .weeks
+                    .weeks_for_period(period_id)
+                    .into_iter()
+                    .flatten()
+                    .map(|(week_id, _week)| *week_id)
+                    .collect::<Vec<_>>();
+                let mut slot_map = BTreeMap::new();
+                for (subject_id, subject) in params.subjects.ordered_subject_list.iter() {
+                    if subject.excluded_periods.contains(&period_id) {
+                        continue;
+                    }
+                    if subject.parameters.interrogation_parameters.is_none() {
+                        continue;
+                    }
+                    let Some(subject_slots) = params.slots.slots_for_subject(subject_id) else {
+                        continue;
+                    };
+                    for (slot_id, _slot) in subject_slots {
+                        let interrogations = week_ids
+                            .iter()
+                            .map(|&week_id| {
+                                if params.is_interrogation_possible(*slot_id, week_id) {
+                                    let assigned_groups = colloscope
+                                        .interrogation(*slot_id, week_id)
+                                        .cloned()
+                                        .unwrap_or_default();
+                                    Some(ColloscopeInterrogation { assigned_groups })
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect();
+                        slot_map.insert((*slot_id).into(), ColloscopeSlot { interrogations });
+                    }
+                }
+                (period_id.into(), ColloscopePeriod { slot_map })
+            })
+            .collect();
+
+        let group_lists = params
+            .group_lists
+            .group_list_map
+            .iter()
+            .filter(|(_id, group_list)| !group_list.is_prefilled())
+            .map(|(id, _group_list)| {
+                let groups_for_students = colloscope
+                    .group_list(id)
+                    .cloned()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|(student_id, group)| (student_id.into(), group))
+                    .collect();
+                (
+                    id.into(),
+                    ColloscopeGroupList {
+                        groups_for_students,
+                    },
+                )
+            })
+            .collect();
+
         Colloscope {
-            period_map: value
-                .period_map
-                .into_iter()
-                .map(|(id, period)| (id.into(), period.into()))
-                .collect(),
-            group_lists: value
-                .group_lists
-                .into_iter()
-                .map(|(id, gl)| (id.into(), gl.into()))
-                .collect(),
+            period_map,
+            group_lists,
         }
     }
 }
@@ -56,18 +127,6 @@ impl ColloscopePeriod {
     }
 }
 
-impl From<collomatique_state_colloscopes::colloscopes::ColloscopePeriod> for ColloscopePeriod {
-    fn from(value: collomatique_state_colloscopes::colloscopes::ColloscopePeriod) -> Self {
-        ColloscopePeriod {
-            slot_map: value
-                .slot_map
-                .into_iter()
-                .map(|(id, slot)| (id.into(), slot.into()))
-                .collect(),
-        }
-    }
-}
-
 #[pyclass(frozen)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ColloscopeSlot {
@@ -80,18 +139,6 @@ impl ColloscopeSlot {
     fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
         let output = format!("{:?}", *self_);
         PyString::new(self_.py(), output.as_str())
-    }
-}
-
-impl From<collomatique_state_colloscopes::colloscopes::ColloscopeSlot> for ColloscopeSlot {
-    fn from(value: collomatique_state_colloscopes::colloscopes::ColloscopeSlot) -> Self {
-        ColloscopeSlot {
-            interrogations: value
-                .interrogations
-                .into_iter()
-                .map(|opt| opt.map(|i| i.into()))
-                .collect(),
-        }
     }
 }
 
@@ -110,16 +157,6 @@ impl ColloscopeInterrogation {
     }
 }
 
-impl From<collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation>
-    for ColloscopeInterrogation
-{
-    fn from(value: collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation) -> Self {
-        ColloscopeInterrogation {
-            assigned_groups: value.assigned_groups,
-        }
-    }
-}
-
 #[pyclass(frozen)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ColloscopeGroupList {
@@ -132,19 +169,5 @@ impl ColloscopeGroupList {
     fn __repr__(self_: PyRef<'_, Self>) -> Bound<'_, PyString> {
         let output = format!("{:?}", *self_);
         PyString::new(self_.py(), output.as_str())
-    }
-}
-
-impl From<collomatique_state_colloscopes::colloscopes::ColloscopeGroupList>
-    for ColloscopeGroupList
-{
-    fn from(value: collomatique_state_colloscopes::colloscopes::ColloscopeGroupList) -> Self {
-        ColloscopeGroupList {
-            groups_for_students: value
-                .groups_for_students
-                .into_iter()
-                .map(|(id, group)| (id.into(), group))
-                .collect(),
-        }
     }
 }

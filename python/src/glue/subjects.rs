@@ -1,6 +1,7 @@
 use super::*;
 use pyo3::types::PyString;
 
+use collomatique_state_colloscopes::NonEmptyRangeInclusive;
 use std::collections::BTreeSet;
 use std::num::NonZeroU32;
 
@@ -79,12 +80,16 @@ impl From<collomatique_state_colloscopes::SubjectParameters> for SubjectParamete
     }
 }
 
-impl From<SubjectParameters> for collomatique_state_colloscopes::SubjectParameters {
-    fn from(value: SubjectParameters) -> Self {
-        collomatique_state_colloscopes::SubjectParameters {
+impl TryFrom<SubjectParameters> for collomatique_state_colloscopes::SubjectParameters {
+    type Error = PyErr;
+    fn try_from(value: SubjectParameters) -> PyResult<Self> {
+        Ok(collomatique_state_colloscopes::SubjectParameters {
             name: value.name,
-            interrogation_parameters: value.interrogation_parameters.map(|x| x.into()),
-        }
+            interrogation_parameters: value
+                .interrogation_parameters
+                .map(|x| x.try_into())
+                .transpose()?,
+        })
     }
 }
 
@@ -139,18 +144,28 @@ impl From<collomatique_state_colloscopes::SubjectInterrogationParameters>
     }
 }
 
-impl From<SubjectInterrogationParameters>
+impl TryFrom<SubjectInterrogationParameters>
     for collomatique_state_colloscopes::SubjectInterrogationParameters
 {
-    fn from(value: SubjectInterrogationParameters) -> Self {
-        collomatique_state_colloscopes::SubjectInterrogationParameters {
-            students_per_group: value.students_per_group_min..=value.students_per_group_max,
-            groups_per_interrogation: value.groups_per_interrogation_min
-                ..=value.groups_per_interrogation_max,
-            duration: value.duration.into(),
-            take_duration_into_account: value.take_duration_into_account,
-            periodicity: value.periodicity.into(),
-        }
+    type Error = PyErr;
+    fn try_from(value: SubjectInterrogationParameters) -> PyResult<Self> {
+        Ok(
+            collomatique_state_colloscopes::SubjectInterrogationParameters {
+                students_per_group: NonEmptyRangeInclusive::new(
+                    value.students_per_group_min..=value.students_per_group_max,
+                )
+                .ok_or_else(|| PyValueError::new_err("students per group range cannot be empty"))?,
+                groups_per_interrogation: NonEmptyRangeInclusive::new(
+                    value.groups_per_interrogation_min..=value.groups_per_interrogation_max,
+                )
+                .ok_or_else(|| {
+                    PyValueError::new_err("groups per interrogation range cannot be empty")
+                })?,
+                duration: value.duration.into(),
+                take_duration_into_account: value.take_duration_into_account,
+                periodicity: value.periodicity.try_into()?,
+            },
+        )
     }
 }
 
@@ -245,9 +260,10 @@ impl From<collomatique_state_colloscopes::SubjectPeriodicity> for SubjectPeriodi
     }
 }
 
-impl From<SubjectPeriodicity> for collomatique_state_colloscopes::SubjectPeriodicity {
-    fn from(value: SubjectPeriodicity) -> Self {
-        match value {
+impl TryFrom<SubjectPeriodicity> for collomatique_state_colloscopes::SubjectPeriodicity {
+    type Error = PyErr;
+    fn try_from(value: SubjectPeriodicity) -> PyResult<Self> {
+        Ok(match value {
             SubjectPeriodicity::OnceForEveryBlockOfWeeks {
                 weeks_per_block,
                 minimum_week_separation,
@@ -265,8 +281,12 @@ impl From<SubjectPeriodicity> for collomatique_state_colloscopes::SubjectPeriodi
                 interrogation_count_in_year_max,
                 minimum_week_separation,
             } => collomatique_state_colloscopes::SubjectPeriodicity::AmountInYear {
-                interrogation_count_in_year: interrogation_count_in_year_min
-                    ..=interrogation_count_in_year_max,
+                interrogation_count_in_year: NonEmptyRangeInclusive::new(
+                    interrogation_count_in_year_min..=interrogation_count_in_year_max,
+                )
+                .ok_or_else(|| {
+                    PyValueError::new_err("interrogation count range cannot be empty")
+                })?,
                 minimum_week_separation,
             },
             SubjectPeriodicity::OnceForEveryArbitraryBlock {
@@ -274,9 +294,12 @@ impl From<SubjectPeriodicity> for collomatique_state_colloscopes::SubjectPeriodi
                 minimum_week_separation,
             } => collomatique_state_colloscopes::SubjectPeriodicity::AmountForEveryArbitraryBlock {
                 minimum_week_separation,
-                blocks: blocks.into_iter().map(|b| b.into()).collect(),
+                blocks: blocks
+                    .into_iter()
+                    .map(|b| b.try_into())
+                    .collect::<PyResult<Vec<_>>>()?,
             },
-        }
+        })
     }
 }
 
@@ -299,14 +322,17 @@ impl From<collomatique_state_colloscopes::subjects::WeekBlock> for SubjectWeekBl
     }
 }
 
-impl From<SubjectWeekBlock> for collomatique_state_colloscopes::subjects::WeekBlock {
-    fn from(value: SubjectWeekBlock) -> Self {
-        collomatique_state_colloscopes::subjects::WeekBlock {
+impl TryFrom<SubjectWeekBlock> for collomatique_state_colloscopes::subjects::WeekBlock {
+    type Error = PyErr;
+    fn try_from(value: SubjectWeekBlock) -> PyResult<Self> {
+        Ok(collomatique_state_colloscopes::subjects::WeekBlock {
             delay_in_weeks: value.delay_in_weeks,
             size_in_weeks: value.size_in_weeks,
-            interrogation_count_in_block: value.interrogation_count_in_block_min
-                ..=value.interrogation_count_in_block_max,
-        }
+            interrogation_count_in_block: NonEmptyRangeInclusive::new(
+                value.interrogation_count_in_block_min..=value.interrogation_count_in_block_max,
+            )
+            .ok_or_else(|| PyValueError::new_err("interrogation count range cannot be empty"))?,
+        })
     }
 }
 

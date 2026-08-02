@@ -19,36 +19,25 @@ pub fn send_exit() {
     encoded_msg.send();
 }
 
-async fn try_solve() -> Result<(), anyhow::Error> {
+fn try_solve() -> Result<(), anyhow::Error> {
     use anyhow::anyhow;
     use std::time::Instant;
 
     let data_msg =
         EncodedMsg::send_rpc(CmdMsg::GetData).map_err(|e| anyhow!("Error on GetData: {}", e))?;
     let inner_data = match data_msg {
-        ResultMsg::Data(data) => collomatique_state_colloscopes::InnerData::from(data),
+        ResultMsg::Data(data) => collomatique_state_colloscopes::Data::from(data).into_inner_data(),
         _ => return Err(anyhow!("Bad Data packet: {:?}", data_msg)),
     };
 
     let t_build = Instant::now();
     eprintln!("Building ILP problem...");
 
-    let pool = sqlx::SqlitePool::connect(":memory:")
-        .await
-        .map_err(|e| anyhow!("Error connecting to in-memory DB: {}", e))?;
-    collomatique_sqlite_state::create_schema(&pool)
-        .await
-        .map_err(|e| anyhow!("Error creating schema: {}", e))?;
-    collomatique_sqlite_state::inner_data_to_sqlite(&pool, &inner_data)
-        .await
-        .map_err(|e| anyhow!("Error populating DB: {}", e))?;
-
     let export_config = inner_data.export_config;
     let env = inner_data.params;
-    let problem = collomatique_constraints_colloscopes::build_model_with_log(&pool, &mut |msg| {
+    let problem = collomatique_constraints_colloscopes::build_model_with_log(&env, &mut |msg| {
         eprintln!("  {msg}")
-    })
-    .await;
+    });
     eprintln!("ILP problem built in {:.2?}", t_build.elapsed());
     let stats = problem.stats();
     eprintln!("  Model statistics:");
@@ -82,7 +71,9 @@ async fn try_solve() -> Result<(), anyhow::Error> {
         colloscope: new_colloscope,
         export_config,
     };
-    let data_stream = InternalDataStream::from(&new_inner_data);
+    let new_data = collomatique_state_colloscopes::Data::from_inner_data(new_inner_data)
+        .map_err(|e| anyhow!("Solver produced invalid data: {}", e))?;
+    let data_stream = InternalDataStream::from(&new_data);
     EncodedMsg::send_rpc(CmdMsg::SetData(data_stream))
         .map_err(|e| anyhow!("Error on SetData: {}", e))?;
 
@@ -324,12 +315,10 @@ pub fn run_rpc_engine() -> Result<(), anyhow::Error> {
             eprintln!("Receiving file data...");
             let data_msg = EncodedMsg::send_rpc(CmdMsg::GetData)
                 .map_err(|e| anyhow!("Error on GetData: {}", e))?;
-            let inner_data = match data_msg {
-                ResultMsg::Data(data) => collomatique_state_colloscopes::InnerData::from(data),
+            let data = match data_msg {
+                ResultMsg::Data(data) => collomatique_state_colloscopes::Data::from(data),
                 _ => return Err(anyhow!("Bad Data packet: {:?}", data_msg)),
             };
-            let data = collomatique_state_colloscopes::Data::from_inner_data(inner_data)
-                .map_err(|e| anyhow!("Error building Data: {}", e))?;
             let app_state = collomatique_state::AppState::new(data);
             let shared = std::sync::Arc::new(std::sync::Mutex::new(app_state));
 
@@ -343,16 +332,14 @@ pub fn run_rpc_engine() -> Result<(), anyhow::Error> {
                 let state = shared.lock().unwrap();
                 if state.can_undo() {
                     eprintln!("Sending final file data...");
-                    let inner_data = state.get_data().get_inner_data();
-                    let data_stream = InternalDataStream::from(inner_data);
+                    let data_stream = InternalDataStream::from(state.get_data());
                     EncodedMsg::send_rpc(CmdMsg::SetData(data_stream))
                         .map_err(|e| anyhow!("Error on SetData: {}", e))?;
                 }
             }
         }
         InitMsg::SolveColloscope => {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(try_solve())?;
+            try_solve()?;
         }
         InitMsg::SolveIlp(serialized) => {
             solve_ilp(serialized)?;

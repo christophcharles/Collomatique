@@ -655,7 +655,7 @@ fn slot_pairing_info(
         Some(r) => {
             let subj = env
                 .slots
-                .find_slot_subject_and_position(r.antecedent.slot_id)
+                .find_slot_subject_and_position(r.antecedent().slot_id)
                 .and_then(|(subj_id, _)| {
                     env.subjects
                         .ordered_subject_list
@@ -666,8 +666,8 @@ fn slot_pairing_info(
                 .unwrap_or_else(|| format!("{:?}", rule));
             (
                 subj,
-                slot_teacher_and_time(env, r.antecedent.slot_id),
-                slot_teacher_and_time(env, r.consequent.slot_id),
+                slot_teacher_and_time(env, r.antecedent().slot_id),
+                slot_teacher_and_time(env, r.consequent().slot_id),
             )
         }
         None => (
@@ -699,8 +699,8 @@ fn pairing_subject_names(
     let rule_data = env.pairings.pairing_rule_map.get(&rule);
     match rule_data {
         Some(r) => (
-            subject_name(env, r.antecedent.subject_id),
-            subject_name(env, r.consequent.subject_id),
+            subject_name(env, r.antecedent().subject_id),
+            subject_name(env, r.consequent().subject_id),
         ),
         None => (format!("{:?}", rule), format!("{:?}", rule)),
     }
@@ -745,9 +745,7 @@ fn period_position(
     period: PeriodId,
 ) -> usize {
     env.periods
-        .ordered_period_list
-        .iter()
-        .position(|(id, _)| *id == period)
+        .find_period_position(period)
         .map(|p| p + 1)
         .unwrap_or(0)
 }
@@ -760,13 +758,8 @@ fn slot_name(
     let subject = env
         .slots
         .find_slot_subject_and_position(slot)
-        .and_then(|(subj_id, _)| {
-            env.subjects
-                .ordered_subject_list
-                .iter()
-                .find(|(id, _)| *id == subj_id)
-                .map(|(_, s)| s.parameters.name.as_str())
-        });
+        .and_then(|(subj_id, _)| env.subjects.find_subject(subj_id))
+        .map(|s| s.parameters.name.as_str());
     match (subject, slot_data) {
         (Some(subj), Some(data)) => format!("{} ({})", subj, data.start_time),
         (Some(subj), None) => subj.to_string(),
@@ -792,7 +785,7 @@ fn group_list_name(
     env.group_lists
         .group_list_map
         .get(&group_list)
-        .map(|gl| gl.params.name.clone())
+        .map(|gl| gl.params().name.clone())
         .unwrap_or_else(|| format!("{:?}", group_list))
 }
 
@@ -806,7 +799,7 @@ fn group_name(
         .group_lists
         .group_list_map
         .get(&group_list)
-        .and_then(|gl| gl.params.group_names.get(group.index()))
+        .and_then(|gl| gl.params().group_names.get(group.index()))
         .and_then(|name| name.as_ref());
     match name {
         Some(name) => format!("{} ({})", number, name),

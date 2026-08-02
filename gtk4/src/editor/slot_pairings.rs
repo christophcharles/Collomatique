@@ -45,17 +45,11 @@ pub struct SlotPairings {
 }
 
 impl SlotPairings {
-    fn build_slot_description(
-        slot: &collomatique_state_colloscopes::slots::Slot,
-        teachers: &collomatique_state_colloscopes::teachers::Teachers,
-    ) -> String {
-        let teacher_name = teachers
-            .teacher_map
-            .get(&slot.teacher_id)
-            .map(|t| format!("{} {}", t.desc.firstname, t.desc.surname))
-            .unwrap_or_else(|| "???".into());
-        let time_text = slot.start_time.capitalize();
-        format!("{} - {}", teacher_name, time_text)
+    /// This whole tab is grouped by subject, so a slot is named without its
+    /// own — exactly [collomatique_ops::rendering::render_slot_in_subject].
+    fn build_slot_description(&self, slot_id: collomatique_state_colloscopes::SlotId) -> String {
+        collomatique_ops::rendering::render_slot_in_subject(&self.teachers, &self.slots, slot_id)
+            .expect("the slot comes from the document being displayed")
     }
 
     fn ordered_slots_for_subject(
@@ -63,15 +57,10 @@ impl SlotPairings {
         subject_id: collomatique_state_colloscopes::SubjectId,
     ) -> Vec<(collomatique_state_colloscopes::SlotId, String)> {
         self.slots
-            .subject_map
-            .get(&subject_id)
+            .slots_for_subject(subject_id)
             .map(|subject_slots| {
                 subject_slots
-                    .ordered_slots
-                    .iter()
-                    .map(|(slot_id, slot)| {
-                        (*slot_id, Self::build_slot_description(slot, &self.teachers))
-                    })
+                    .map(|(slot_id, _slot)| (*slot_id, self.build_slot_description(*slot_id)))
                     .collect()
             })
             .unwrap_or_default()
@@ -81,14 +70,9 @@ impl SlotPairings {
         &self,
         slot_id: collomatique_state_colloscopes::SlotId,
     ) -> Option<collomatique_state_colloscopes::SubjectId> {
-        for (subject_id, subject_slots) in &self.slots.subject_map {
-            for (sid, _) in &subject_slots.ordered_slots {
-                if *sid == slot_id {
-                    return Some(*subject_id);
-                }
-            }
-        }
-        None
+        self.slots
+            .find_slot_subject_and_position(slot_id)
+            .map(|(subject_id, _)| subject_id)
     }
 }
 
@@ -180,14 +164,14 @@ impl Component for SlotPairings {
                     .ordered_subject_list
                     .iter()
                     .filter_map(|(id, desc)| {
+                        let id = &id;
                         desc.parameters.interrogation_parameters.as_ref()?;
 
-                        let subject_slots = self
-                            .slots
-                            .subject_map
-                            .get(id)
-                            .expect("Subject should appear in slots if it can have interrogations")
-                            .clone();
+                        // Sparse slots ordering: a subject with interrogations
+                        // but no slots yet has no row; render it with an empty
+                        // slot list (matching the pre-sparse dense behavior).
+                        let subject_slots =
+                            self.slots.slots_vec_for_subject(*id).unwrap_or_default();
 
                         // Collect slot pairing rules for this subject
                         let rules: Vec<_> = self
@@ -197,19 +181,17 @@ impl Component for SlotPairings {
                             .filter(|(_rule_id, rule)| {
                                 // Check if antecedent slot belongs to this subject
                                 subject_slots
-                                    .ordered_slots
                                     .iter()
-                                    .any(|(slot_id, _)| *slot_id == rule.antecedent.slot_id)
+                                    .any(|(slot_id, _)| *slot_id == rule.antecedent().slot_id)
                             })
-                            .map(|(rule_id, rule)| (*rule_id, rule.clone()))
+                            .map(|(rule_id, rule)| (rule_id, rule.clone()))
                             .collect();
 
                         // Build slot descriptions for this subject
                         let slot_descriptions: Vec<_> = subject_slots
-                            .ordered_slots
                             .iter()
-                            .map(|(slot_id, slot)| {
-                                (*slot_id, Self::build_slot_description(slot, &self.teachers))
+                            .map(|(slot_id, _slot)| {
+                                (*slot_id, self.build_slot_description(*slot_id))
                             })
                             .collect();
 
@@ -245,7 +227,7 @@ impl Component for SlotPairings {
                     .expect("Rule ID should be valid")
                     .clone();
                 let subject_id = self
-                    .find_slot_subject(current_rule.antecedent.slot_id)
+                    .find_slot_subject(current_rule.antecedent().slot_id)
                     .expect("Antecedent slot should belong to a subject");
                 let subject_name = self
                     .subjects
@@ -297,18 +279,20 @@ impl Component for SlotPairings {
                     .get(1)
                     .map(|(id, _)| *id)
                     .unwrap_or(first_slot_id);
-                let default_rule = collomatique_state_colloscopes::slot_pairings::SlotPairingRule {
-                    antecedent: collomatique_state_colloscopes::slot_pairings::SlotRulePart {
-                        slot_id: first_slot_id,
-                        should_have: true,
-                    },
-                    consequent: collomatique_state_colloscopes::slot_pairings::SlotRulePart {
-                        slot_id: second_slot_id,
-                        should_have: true,
-                    },
-                    excluded_periods: BTreeSet::new(),
-                    soft: false,
-                };
+                let default_rule =
+                    collomatique_state_colloscopes::slot_pairings::SlotPairingRule::new(
+                        collomatique_state_colloscopes::slot_pairings::SlotRulePart {
+                            slot_id: first_slot_id,
+                            should_have: true,
+                        },
+                        collomatique_state_colloscopes::slot_pairings::SlotRulePart {
+                            slot_id: second_slot_id,
+                            should_have: true,
+                        },
+                        BTreeSet::new(),
+                        false,
+                    )
+                    .expect("the Ajouter button is gated on len() >= 2");
                 self.slot_pairing_params_dialog
                     .sender()
                     .send(slot_pairing_params::DialogInput::Show(

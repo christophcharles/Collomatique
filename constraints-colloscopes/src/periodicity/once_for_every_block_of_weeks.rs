@@ -13,7 +13,8 @@ use super::helpers::{
 pub(super) fn build(env: &VarEnv, mut bundle: MyBundle) -> MyBundle {
     let all_active_weeks = all_active_global_weeks(env);
 
-    for (subject_id, subject) in &env.subjects.ordered_subject_list {
+    for (subject_id, subject) in env.subjects.ordered_subject_list.iter() {
+        let subject_id = &subject_id;
         let Some(params) = subject_interrogation_params(env, *subject_id) else {
             continue;
         };
@@ -34,29 +35,29 @@ pub(super) fn build(env: &VarEnv, mut bundle: MyBundle) -> MyBundle {
 
         // Per-period block constraints
         let mut global_week_offset = 0usize;
-        for (period_id, period_desc) in &env.periods.ordered_period_list {
+        for period_id in env.periods.period_ids() {
+            let period_len = env.weeks.week_count_for_period(period_id).unwrap_or(0);
+            let period_id = &period_id;
             let first_global_week = GlobalWeek(global_week_offset);
-            let last_global_week =
-                GlobalWeek(global_week_offset + period_desc.len().saturating_sub(1));
+            let last_global_week = GlobalWeek(global_week_offset + period_len.saturating_sub(1));
 
-            let active_weeks_in_period: Vec<GlobalWeek> = period_desc
-                .iter()
+            let active_weeks_in_period: Vec<GlobalWeek> = env
+                .weeks
+                .weeks_for_period(*period_id)
+                .into_iter()
+                .flatten()
                 .enumerate()
-                .filter(|(_, wd)| wd.interrogations)
+                .filter(|(_, (_, wd))| wd.interrogations)
                 .map(|(i, _)| GlobalWeek(global_week_offset + i))
                 .collect();
 
-            global_week_offset += period_desc.len();
+            global_week_offset += period_len;
 
             if subject.excluded_periods.contains(period_id) {
                 continue;
             }
 
-            let period_students = env
-                .assignments
-                .period_map
-                .get(period_id)
-                .and_then(|pa| pa.subject_map.get(subject_id));
+            let period_students = env.assignments.students(*period_id, *subject_id);
             let Some(period_students) = period_students else {
                 continue;
             };

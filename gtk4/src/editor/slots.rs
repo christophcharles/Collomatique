@@ -65,7 +65,7 @@ impl Component for Slots {
                 gtk::Label {
                     set_margin_top: 10,
                     #[watch]
-                    set_visible: model.slots.subject_map.is_empty(),
+                    set_visible: model.slots.is_empty(),
                     set_halign: gtk::Align::Start,
                     set_label: "<big><b>Aucune matière à afficher</b></big>",
                     set_use_markup: true,
@@ -77,7 +77,7 @@ impl Component for Slots {
                     set_margin_top: 20,
                     set_spacing: 30,
                     #[watch]
-                    set_visible: !model.slots.subject_map.is_empty(),
+                    set_visible: !model.slots.is_empty(),
                 },
             }
         }
@@ -138,14 +138,14 @@ impl Component for Slots {
                     .ordered_subject_list
                     .iter()
                     .filter_map(|(id, desc)| {
+                        let id = &id;
                         desc.parameters.interrogation_parameters.as_ref()?;
 
-                        let subject_slots = self
-                            .slots
-                            .subject_map
-                            .get(id)
-                            .expect("Subject should appear in slots if it can have interrogations")
-                            .clone();
+                        // Sparse slots ordering: a subject with interrogations
+                        // but no slots yet has no row; render it with an empty
+                        // slot list (matching the pre-sparse dense behavior).
+                        let subject_slots =
+                            self.slots.slots_vec_for_subject(*id).unwrap_or_default();
                         Some(slots_display::EntryData {
                             subject_params: desc.parameters.clone(),
                             subject_id: *id,
@@ -218,6 +218,7 @@ impl Component for Slots {
                     .expect("There should be at least one teacher for the subject")
                     .0;
                 let default_slot = collomatique_state_colloscopes::slots::Slot {
+                    subject_id,
                     teacher_id,
                     start_time: collomatique_time::SlotStart {
                         weekday: collomatique_time::Weekday(chrono::Weekday::Mon),
@@ -276,7 +277,7 @@ impl Slots {
             .iter()
             .filter_map(|(teacher_id, teacher)| {
                 if teacher.subjects.contains(&subject_id) {
-                    Some((*teacher_id, teacher.clone()))
+                    Some((teacher_id, teacher.clone()))
                 } else {
                     None
                 }

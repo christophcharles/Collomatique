@@ -19,6 +19,36 @@ use crate::tools;
 
 pub const DEFAULT_FILE_STEM: &str = "FichierSansNom";
 
+/// The save target associated with the currently open document.
+///
+/// This distinguishes three situations that must drive display and save
+/// behavior differently:
+/// - [FileName::OkFile]: a clean file we can overwrite silently.
+/// - [FileName::CaveatFile]: a file that was loaded with caveats (most
+///   likely produced by a different version of Collomatique). We keep its
+///   full path but must not overwrite it silently — "Enregistrer" behaves
+///   like "Enregistrer sous".
+/// - [FileName::NewFile]: a brand-new document that was never saved.
+#[derive(Debug)]
+pub enum FileName {
+    OkFile(PathBuf),
+    CaveatFile(PathBuf),
+    NewFile,
+}
+
+impl FileName {
+    /// The path backing this document, if any.
+    ///
+    /// Returns `Some` for both [FileName::OkFile] and [FileName::CaveatFile],
+    /// and `None` for [FileName::NewFile].
+    pub fn path(&self) -> Option<&PathBuf> {
+        match self {
+            FileName::OkFile(path) | FileName::CaveatFile(path) => Some(path),
+            FileName::NewFile => None,
+        }
+    }
+}
+
 mod error_dialog;
 
 mod assignments;
@@ -48,9 +78,8 @@ mod warning_op;
 pub enum EditorInput {
     Ignore,
     NewFile {
-        file_name: Option<PathBuf>,
+        file_name: FileName,
         data: collomatique_state_colloscopes::Data,
-        dirty: bool,
     },
     SaveCurrentFileAs(PathBuf),
     SaveAsClicked,
@@ -68,7 +97,6 @@ pub enum EditorInput {
     NewStateFromSecondInstance(AppState<Data, Desc>),
     UpdateFullColloscope(collomatique_state_colloscopes::colloscopes::Colloscope),
     ExportColloscopeAs(PathBuf, collomatique_xlsx::Config),
-    ExportSqliteAs(PathBuf),
     ExportMpsAs(PathBuf, export_panel::IlpInnerProblem),
     UpdateIlpProblem(Option<export_panel::IlpInnerProblem>),
 }
@@ -95,8 +123,6 @@ pub enum EditorCommandOutput {
     ScriptLoadingFailed(PathBuf, String),
     ExportXlsxSuccessful(PathBuf),
     ExportXlsxFailed(PathBuf, String),
-    ExportSqliteSuccessful(PathBuf),
-    ExportSqliteFailed(PathBuf, String),
     ExportMpsSuccessful(PathBuf),
     ExportMpsFailed(PathBuf, String),
 }
@@ -195,7 +221,7 @@ impl PanelNumbers {
 }
 
 pub struct EditorPanel {
-    file_name: Option<PathBuf>,
+    file_name: FileName,
     data: AppState<Data, Desc>,
     dirty: bool,
     toast_info: Option<ToastInfo>,
@@ -234,6 +260,16 @@ impl EditorPanel {
         self.dirty
     }
 
+    /// Whether a "save" is meaningful right now.
+    ///
+    /// True either because there are unsaved edits (`dirty`) or because there
+    /// is no clean overwrite target yet (a new or caveat-loaded file). This
+    /// drives the asterisk, the Save button sensitivity and the Save action —
+    /// as opposed to [Self::is_dirty], which drives only the close guard.
+    pub fn can_save(&self) -> bool {
+        self.dirty || !matches!(self.file_name, FileName::OkFile(_))
+    }
+
     pub fn can_undo(&self) -> bool {
         self.data.can_undo()
     }
@@ -246,14 +282,14 @@ impl EditorPanel {
 impl EditorPanel {
     fn generate_subtitle(&self) -> String {
         let default_name = "Fichier sans nom".into();
-        let name = match &self.file_name {
+        let name = match self.file_name.path() {
             Some(path) => match path.file_name() {
                 Some(file_name) => file_name.to_string_lossy().to_string(),
                 None => default_name,
             },
             None => default_name,
         };
-        if self.dirty {
+        if self.can_save() {
             String::from("*") + &name
         } else {
             name
@@ -261,9 +297,23 @@ impl EditorPanel {
     }
 
     fn generate_tooltip_text(&self) -> String {
-        match &self.file_name {
+        match self.file_name.path() {
             Some(x) => x.to_string_lossy().into(),
             None => "(Fichier non enregistré)".into(),
+        }
+    }
+
+    /// Tooltip for the "Enregistrer" button.
+    ///
+    /// Only caveat-loaded files get an explanation: saving them will ask for a
+    /// new location rather than overwriting the suspect original in place.
+    fn save_button_tooltip(&self) -> Option<String> {
+        match self.file_name {
+            FileName::CaveatFile(_) => Some(
+                "Ce fichier utilise un format qui n'est pas entièrement pris en charge (il provient probablement d'une version plus récente) : « Enregistrer » demandera un nouvel emplacement."
+                    .into(),
+            ),
+            FileName::OkFile(_) | FileName::NewFile => None,
         }
     }
 
@@ -273,12 +323,14 @@ impl EditorPanel {
             .sender()
             .send(general_planning::GeneralPlanningInput::Update(
                 self.data.get_data().get_inner_data().params.periods.clone(),
+                self.data.get_data().get_inner_data().params.weeks.clone(),
             ))
             .unwrap();
         self.subjects
             .sender()
             .send(subjects::SubjectsInput::Update(
                 self.data.get_data().get_inner_data().params.periods.clone(),
+                self.data.get_data().get_inner_data().params.weeks.clone(),
                 self.data
                     .get_data()
                     .get_inner_data()
@@ -308,6 +360,7 @@ impl EditorPanel {
             .sender()
             .send(students::StudentsInput::Update(
                 self.data.get_data().get_inner_data().params.periods.clone(),
+                self.data.get_data().get_inner_data().params.weeks.clone(),
                 self.data
                     .get_data()
                     .get_inner_data()
@@ -320,6 +373,7 @@ impl EditorPanel {
             .sender()
             .send(assignments::AssignmentsInput::Update(
                 self.data.get_data().get_inner_data().params.periods.clone(),
+                self.data.get_data().get_inner_data().params.weeks.clone(),
                 self.data
                     .get_data()
                     .get_inner_data()
@@ -344,6 +398,7 @@ impl EditorPanel {
             .sender()
             .send(week_patterns::WeekPatternsInput::Update(
                 self.data.get_data().get_inner_data().params.periods.clone(),
+                self.data.get_data().get_inner_data().params.weeks.clone(),
                 self.data
                     .get_data()
                     .get_inner_data()
@@ -446,6 +501,7 @@ impl EditorPanel {
             .sender()
             .send(group_lists::GroupListsInput::Update(
                 self.data.get_data().get_inner_data().params.periods.clone(),
+                self.data.get_data().get_inner_data().params.weeks.clone(),
                 self.data
                     .get_data()
                     .get_inner_data()
@@ -512,17 +568,14 @@ impl EditorPanel {
             .get_data()
             .get_inner_data()
             .params
-            .periods
-            .ordered_period_list
-            .iter()
-            .flat_map(|(_, weeks)| weeks.iter())
-            .filter_map(|w| w.annotation.as_ref().map(|a| a.to_string()))
+            .walk_weeks()
+            .filter_map(|(_, _, w)| w.annotation.as_ref().map(|a| a.to_string()))
             .collect();
         self.export_panel
             .sender()
             .send(export_panel::ExportPanelInput::Update(
                 self.data.get_data().get_inner_data().export_config.clone(),
-                self.file_name.clone(),
+                self.file_name.path().cloned(),
                 annotations,
             ))
             .unwrap();
@@ -661,7 +714,9 @@ impl Component for EditorPanel {
                             add_css_class: "linked",
                             gtk::Button::with_label("Enregistrer") {
                                 #[watch]
-                                set_sensitive: model.dirty,
+                                set_sensitive: model.can_save(),
+                                #[watch]
+                                set_tooltip_text: model.save_button_tooltip().as_deref(),
                                 connect_clicked => EditorInput::SaveClicked,
                             },
                             gtk::Button {
@@ -824,9 +879,6 @@ impl Component for EditorPanel {
                     export_panel::ExportPanelOutput::ExportColloscopeAs(path, config) => {
                         EditorInput::ExportColloscopeAs(path, config)
                     }
-                    export_panel::ExportPanelOutput::ExportSqliteAs(path) => {
-                        EditorInput::ExportSqliteAs(path)
-                    }
                     export_panel::ExportPanelOutput::ExportMpsAs(path, problem) => {
                         EditorInput::ExportMpsAs(path, problem)
                     }
@@ -871,7 +923,7 @@ impl Component for EditorPanel {
             BTreeMap::from_iter(PanelNumbers::iter().map(|x| (x.panel_name(), x.panel_title())));
 
         let model = EditorPanel {
-            file_name: None,
+            file_name: FileName::NewFile,
             data: AppState::new(Data::new()),
             dirty: false,
             toast_info: None,
@@ -931,13 +983,9 @@ impl Component for EditorPanel {
         self.show_particular_panel = None;
         match message {
             EditorInput::Ignore => {}
-            EditorInput::NewFile {
-                file_name,
-                data,
-                dirty,
-            } => {
+            EditorInput::NewFile { file_name, data } => {
                 self.file_name = file_name;
-                self.dirty = dirty;
+                self.dirty = false;
                 self.show_particular_panel = Some(PanelNumbers::GeneralPlanning);
                 self.update_data(DataUpdate::Replace(AppState::new(data)));
                 self.colloscope
@@ -947,19 +995,21 @@ impl Component for EditorPanel {
                 self.send_msg_for_interface_update(sender);
             }
             EditorInput::SaveClicked => match &self.file_name {
-                Some(path) => {
+                // Only a clean file overwrites in place; new and caveat files
+                // go through the Save-As dialog so nothing is silently clobbered.
+                FileName::OkFile(path) => {
                     sender.input(EditorInput::SaveCurrentFileAs(path.clone()));
                 }
-                None => {
+                FileName::CaveatFile(_) | FileName::NewFile => {
                     sender.input(EditorInput::SaveAsClicked);
                 }
             },
             EditorInput::SaveAsClicked => {
-                let file_name = self.file_name.clone();
+                let default_path = self.file_name.path().cloned();
                 sender.output(EditorOutput::StartOpenSaveDialog).unwrap();
                 sender.oneshot_command(async move {
-                    match tools::open_save::save_collomatique_dialog(match &file_name {
-                        Some(path) => tools::open_save::DefaultSaveFile::ExistingFile(path.clone()),
+                    match tools::open_save::save_collomatique_dialog(match default_path {
+                        Some(path) => tools::open_save::DefaultSaveFile::ExistingFile(path),
                         None => tools::open_save::DefaultSaveFile::SuggestedName(
                             format!("{DEFAULT_FILE_STEM}.collomatique").into(),
                         ),
@@ -974,7 +1024,8 @@ impl Component for EditorPanel {
             EditorInput::SaveCurrentFileAs(path) => {
                 let data_copy = self.data.get_data().clone();
                 self.dirty = false;
-                self.file_name = Some(path.clone());
+                // A successful save graduates any state to a clean file.
+                self.file_name = FileName::OkFile(path.clone());
                 self.send_msg_for_interface_update(sender.clone());
 
                 self.toast_info = Some(ToastInfo::Toast {
@@ -1009,21 +1060,28 @@ impl Component for EditorPanel {
             }
             EditorInput::UpdateOp(op) => {
                 match op.dry_apply(&self.data) {
-                    Ok(dry_result) => {
-                        if dry_result.rec_apply_result.warnings.is_empty() {
-                            sender.input(EditorInput::CommitUpdateOp(dry_result.new_state));
+                    Ok(result) => {
+                        if result.warnings.is_empty() {
+                            sender.input(EditorInput::CommitUpdateOp(result.new_state));
                         } else {
-                            self.state_to_commit = Some(dry_result.new_state);
+                            // self.data still holds the pre-state the interface is
+                            // showing, which is exactly the state a warning must be
+                            // rendered against.
+                            let mut seen = std::collections::BTreeSet::new();
+                            let texts: Vec<String> = result
+                                .warnings
+                                .iter()
+                                .map(|w| {
+                                    w.text(self.data.get_data())
+                                        .expect("warning must render against the pre-state")
+                                })
+                                .filter(|t| seen.insert(t.clone()))
+                                .collect();
+
+                            self.state_to_commit = Some(result.new_state);
                             self.warning_op_dialog
                                 .sender()
-                                .send(warning_op::DialogInput::Show(
-                                    dry_result
-                                        .rec_apply_result
-                                        .warnings
-                                        .into_iter()
-                                        .map(|x| x.1)
-                                        .collect(),
-                                ))
+                                .send(warning_op::DialogInput::Show(texts))
                                 .unwrap();
                         }
                     }
@@ -1109,23 +1167,10 @@ impl Component for EditorPanel {
                     timeout: None,
                 });
                 let inner_data = self.data.get_data().get_inner_data().clone();
-                sender.oneshot_command(async move {
-                    match export::export_to_xlsx(&inner_data, &path, &xlsx_config).await {
+                sender.spawn_oneshot_command(move || {
+                    match export::export_to_xlsx(&inner_data, &path, &xlsx_config) {
                         Ok(()) => EditorCommandOutput::ExportXlsxSuccessful(path),
                         Err(e) => EditorCommandOutput::ExportXlsxFailed(path, e.to_string()),
-                    }
-                });
-            }
-            EditorInput::ExportSqliteAs(path) => {
-                self.toast_info = Some(ToastInfo::Toast {
-                    text: format!("Export en cours de {}...", path.to_string_lossy()),
-                    timeout: None,
-                });
-                let inner_data = self.data.get_data().get_inner_data().clone();
-                sender.oneshot_command(async move {
-                    match diagnostics::export_to_sqlite(&inner_data, &path).await {
-                        Ok(()) => EditorCommandOutput::ExportSqliteSuccessful(path),
-                        Err(e) => EditorCommandOutput::ExportSqliteFailed(path, e.to_string()),
                     }
                 });
             }
@@ -1169,7 +1214,7 @@ impl Component for EditorPanel {
                 });
             }
             EditorCommandOutput::SaveFailed(path, error) => {
-                if Some(&path) != self.file_name.as_ref() {
+                if self.file_name.path() != Some(&path) {
                     return;
                 }
                 self.toast_info = Some(ToastInfo::Dismiss);
@@ -1207,18 +1252,6 @@ impl Component for EditorPanel {
                 });
             }
             EditorCommandOutput::ExportXlsxFailed(path, error) => {
-                self.toast_info = Some(ToastInfo::Dismiss);
-                sender
-                    .output(EditorOutput::ExportError(path, error))
-                    .unwrap();
-            }
-            EditorCommandOutput::ExportSqliteSuccessful(path) => {
-                self.toast_info = Some(ToastInfo::Toast {
-                    text: format!("{} exporté", path.to_string_lossy()),
-                    timeout: DEFAULT_TOAST_TIMEOUT,
-                });
-            }
-            EditorCommandOutput::ExportSqliteFailed(path, error) => {
                 self.toast_info = Some(ToastInfo::Dismiss);
                 sender
                     .output(EditorOutput::ExportError(path, error))
@@ -1313,47 +1346,12 @@ impl EditorPanel {
     }
 }
 
-fn generate_week_title(
-    global_first_week: &Option<collomatique_time::WeekStart>,
-    week_number: usize,
-) -> String {
-    match global_first_week {
-        Some(global_start_date) => {
-            let start_date = global_start_date
-                .monday()
-                .checked_add_days(chrono::Days::new(7 * (week_number as u64)))
-                .expect("Valid start date");
-            let end_date = start_date
-                .checked_add_days(chrono::Days::new(6))
-                .expect("Valid end date");
-            format!(
-                "Semaine {} du {} au {}",
-                week_number + 1,
-                start_date.format("%d/%m/%Y"),
-                end_date.format("%d/%m/%Y"),
-            )
-        }
-        None => {
-            format!("Semaine {}", week_number + 1)
-        }
-    }
-}
-
-fn generate_period_title(
-    global_first_week: &Option<collomatique_time::WeekStart>,
-    index: usize,
-    first_week_num: usize,
-    week_count: usize,
-) -> String {
-    generate_week_succession_title(
-        "Période",
-        global_first_week,
-        index,
-        first_week_num,
-        week_count,
-    )
-}
-
+/// Names a run of consecutive weeks — a period, or a block inside a subject.
+///
+/// Periods are named by [collomatique_ops::rendering::render_period], the
+/// shared vocabulary the warning texts use; this helper survives for the one
+/// caller that has no period to name at all, `subject_params::Block`, whose
+/// blocks are a week succession with no id behind them.
 fn generate_week_succession_title(
     name: &str,
     global_first_week: &Option<collomatique_time::WeekStart>,

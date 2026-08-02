@@ -15,7 +15,10 @@ mod select_start_date;
 
 #[derive(Debug)]
 pub enum GeneralPlanningInput {
-    Update(collomatique_state_colloscopes::periods::Periods),
+    Update(
+        collomatique_state_colloscopes::periods::Periods,
+        collomatique_state_colloscopes::weeks::Weeks,
+    ),
 
     DeleteFirstWeekClicked,
     EditFirstWeekClicked,
@@ -42,6 +45,7 @@ enum WeekCountSelectionReason {
 
 pub struct GeneralPlanning {
     periods: collomatique_state_colloscopes::periods::Periods,
+    weeks: collomatique_state_colloscopes::weeks::Weeks,
     week_selection_reason: WeekCountSelectionReason,
     periods_list: FactoryVecDeque<periods_display::Entry>,
 
@@ -68,11 +72,9 @@ impl GeneralPlanning {
 
     fn count_interrogation_weeks(&self) -> usize {
         let mut count = 0usize;
-        for (_id, desc) in &self.periods.ordered_period_list {
-            for v in desc {
-                if v.interrogations {
-                    count += 1;
-                }
+        for (_id, _week_id, v) in self.weeks.walk(&self.periods) {
+            if v.interrogations {
+                count += 1;
             }
         }
         count
@@ -83,6 +85,31 @@ impl GeneralPlanning {
             "<b>Nombre total de semaines de colles :</b> {}",
             self.count_interrogation_weeks()
         )
+    }
+
+    /// The period as the shared vocabulary names it, noun-less — the row
+    /// factory owns the « Période » in front.
+    fn render_period(&self, id: collomatique_state_colloscopes::PeriodId) -> String {
+        collomatique_ops::rendering::render_period(&self.periods, &self.weeks, id)
+            .expect("the period comes from the document being displayed")
+    }
+
+    /// One `(week title, week state)` pair per week of a period, in order.
+    fn render_weeks(
+        &self,
+        id: collomatique_state_colloscopes::PeriodId,
+    ) -> Vec<(String, collomatique_state_colloscopes::weeks::WeekDesc)> {
+        let Some(weeks) = self.weeks.weeks_for_period(id) else {
+            return Vec::new();
+        };
+        weeks
+            .map(|(week_id, week)| {
+                let title =
+                    collomatique_ops::rendering::render_week(&self.periods, &self.weeks, *week_id)
+                        .expect("the week comes from the document being displayed");
+                (title, week.desc())
+            })
+            .collect()
     }
 }
 
@@ -143,7 +170,7 @@ impl Component for GeneralPlanning {
                     set_margin_top: 20,
                     set_spacing: 30,
                     #[watch]
-                    set_visible: !model.periods.ordered_period_list.is_empty(),
+                    set_visible: !model.periods.is_empty(),
                 },
                 gtk::Button {
                     set_margin_top: 10,
@@ -218,6 +245,7 @@ impl Component for GeneralPlanning {
             });
         let model = GeneralPlanning {
             periods: collomatique_state_colloscopes::periods::Periods::default(),
+            weeks: collomatique_state_colloscopes::weeks::Weeks::default(),
             week_selection_reason: WeekCountSelectionReason::New,
             periods_list,
             select_start_date_dialog,
@@ -234,22 +262,17 @@ impl Component for GeneralPlanning {
 
     fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match message {
-            GeneralPlanningInput::Update(new_periods) => {
+            GeneralPlanningInput::Update(new_periods, new_weeks) => {
                 self.periods = new_periods;
+                self.weeks = new_weeks;
 
                 let new_data = self
                     .periods
-                    .ordered_period_list
-                    .iter()
-                    .scan(0usize, |acc, (id, desc)| {
-                        let current_first_week = *acc;
-                        *acc += desc.len();
-                        Some(periods_display::EntryData {
-                            global_first_week: self.periods.first_week.clone(),
-                            first_week_num: current_first_week,
-                            desc: desc.clone(),
-                            period_id: *id,
-                        })
+                    .period_ids()
+                    .map(|id| periods_display::EntryData {
+                        title: self.render_period(id),
+                        weeks: self.render_weeks(id),
+                        period_id: id,
                     })
                     .collect::<Vec<_>>();
 
@@ -302,11 +325,7 @@ impl Component for GeneralPlanning {
                 .unwrap(),
             GeneralPlanningInput::EditPeriodClicked(period_id) => {
                 self.week_selection_reason = WeekCountSelectionReason::Edit(period_id);
-                let pos = self
-                    .periods
-                    .find_period_position(period_id)
-                    .expect("valid position");
-                let current_week_count = self.periods.ordered_period_list[pos].1.len();
+                let current_week_count = self.weeks.week_count_for_period(period_id).unwrap_or(0);
                 self.period_duration_dialog
                     .sender()
                     .send(period_duration::DialogInput::Show(current_week_count))
@@ -314,18 +333,14 @@ impl Component for GeneralPlanning {
             }
             GeneralPlanningInput::CutPeriodClicked(period_id) => {
                 self.week_selection_reason = WeekCountSelectionReason::Cut(period_id);
-                let pos = self
-                    .periods
-                    .find_period_position(period_id)
-                    .expect("valid position");
-                let current_week_count = self.periods.ordered_period_list[pos].1.len();
+                let current_week_count = self.weeks.week_count_for_period(period_id).unwrap_or(0);
                 self.period_cut_dialog
                     .sender()
                     .send(period_cut::DialogInput::Show(current_week_count))
                     .unwrap();
             }
             GeneralPlanningInput::DeletePeriodClicked(period_id) => sender
-                .output(GeneralPlanningUpdateOp::DeletePeriod(period_id))
+                .output(GeneralPlanningUpdateOp::DeletePeriodAndWeeks(period_id))
                 .unwrap(),
             GeneralPlanningInput::MergePeriodClicked(period_id) => sender
                 .output(GeneralPlanningUpdateOp::MergeWithPreviousPeriod(period_id))
@@ -338,10 +353,12 @@ impl Component for GeneralPlanning {
             GeneralPlanningInput::EditAnnotationClicked(period_id, week_num) => {
                 self.week_being_annotated = Some((period_id, week_num));
                 let current_annotation = self
-                    .periods
-                    .find_period(period_id)
-                    .expect("Period ID should be valid")
-                    .get(week_num)
+                    .weeks
+                    .weeks_for_period(period_id)
+                    .into_iter()
+                    .flatten()
+                    .map(|(_, w)| w)
+                    .nth(week_num)
                     .expect("Week number should be valid")
                     .annotation
                     .clone()

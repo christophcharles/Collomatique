@@ -1,9 +1,21 @@
 //! Decode submodule
 //!
-//! This module contains the logic that builds
-//! a [Data] from a [json::JsonData].
+//! This module contains the logic that builds a [Data] from a file
+//! document via [spec2::decode], the spec-2 pipeline. (Spec 1, the
+//! pre-alpha dump format, is permanently retired and rejected before
+//! decoding — see the versioning notes in `docs/file_format.md`.)
 //!
-//! The main function for this is [self::decode]
+//! Decoding is never trusted for semantic integrity: it funnels through
+//! [Data::from_inner_data], the single trust boundary that revalidates
+//! any [InnerData](collomatique_state_colloscopes::InnerData) regardless
+//! of provenance. A decoder that happens to catch a problem earlier is a
+//! convenience, not a guarantee.
+//!
+//! Diagnostics ([DecodeError]) distinguish an *unrecognised* block
+//! (handled by the forward-compatibility rules — a [Caveat] or
+//! [DecodeError::UnknownNeededEntry]) from a *recognised block with a
+//! bad payload* ([DecodeError::IllformedBlock], which carries the serde
+//! diagnostics); the latter is never silently swallowed.
 
 use super::*;
 use crate::json::*;
@@ -13,22 +25,83 @@ use crate::json::*;
 /// This error type describes error that happen when interpreting the file content.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum DecodeError {
-    #[error("Unknown file type - this might be from a more recent version of Collomatique")]
+    #[error(
+        "Unknown file type - this might be from a more recent version of Collomatique (file written by version {0})"
+    )]
     UnknownFileType(Version),
+    #[error(
+        "Unknown file content - this might be from a more recent version of Collomatique (file written by version {0})"
+    )]
+    UnknownFileContent(Version),
     #[error("An unknown entry requires a newer version of Collomatique")]
     UnknownNeededEntry(Version),
-    #[error("An entry has the wrong spec requirements")]
-    MismatchedSpecRequirementInEntry,
+    #[error("Entry for block {0:?} has the wrong spec requirements")]
+    MismatchedSpecRequirementInEntry(&'static str),
     #[error("An entry is probably ill-formed (and thus not recognized)")]
     ProbablyIllformedEntry,
+    #[error("An entry's content should be an object with exactly one key (the block name)")]
+    MalformedEntryContent,
+    #[error("Block {0:?} appears more than once")]
+    DuplicatedBlock(&'static str),
+    #[error("Block {block:?} is ill-formed: {detail}")]
+    IllformedBlock {
+        block: &'static str,
+        /// The rendered serde diagnostics (field name, expected type,
+        /// position relative to the block's entry content)
+        detail: String,
+    },
+    #[error("An incompatibility slot crosses midnight")]
+    SlotCrossesMidnight,
+    #[error("The colloscope references an unknown slot id ({0})")]
+    UnknownSlotInColloscope(u64),
+    #[error("The colloscope interrogation cell (slot id {slot_id}, week {week}) does not exist")]
+    InvalidInterrogationCell { slot_id: u64, week: u32 },
+    #[error("The colloscope fills group list id {0} which is not an automatic group list")]
+    InvalidColloscopeGroupList(u64),
+    #[error(
+        "Group list id {0} has an internally inconsistent filling (prefill group count or duplicated student)"
+    )]
+    InconsistentGroupList(u64),
+    #[error("Pairing rule id {0} has its antecedent and consequent on the same subject")]
+    InconsistentPairingRule(u64),
+    #[error("Slot pairing rule id {0} has its antecedent and consequent on the same slot")]
+    InconsistentSlotPairingRule(u64),
     #[error("generating new IDs is not secure, half the usable IDs have been used already")]
     EndOfTheUniverse,
+    /// Two ids collide across the whole document, without a single block
+    /// being able to name the culprit
+    ///
+    /// This is the cross-kind check run by [Data::from_inner_data]; the
+    /// in-block collisions carry their block and id, see
+    /// [DecodeError::DuplicatedIdInBlock].
     #[error("Duplicated ID")]
     DuplicatedID,
-    #[error("InnerDataDump entry should only be used on non-modified inner-data")]
-    InnerDataDumpUsedOnModifiedInnerData,
-    #[error(transparent)]
-    InnerDataError(#[from] collomatique_state_colloscopes::InnerDataError),
+    #[error("Duplicated ID {id} in block {block:?}")]
+    DuplicatedIdInBlock { block: &'static str, id: u64 },
+    #[error("The assignments reference an unknown period (period id {0})")]
+    UnknownPeriodInAssignments(u64),
+    #[error("The assignments reference an unknown subject (subject id {0})")]
+    UnknownSubjectInAssignments(u64),
+    #[error(
+        "The assignments have a row for subject id {subject_id} on period id {period_id}, but the subject is excluded from that period"
+    )]
+    AssignmentOnExcludedPeriod { period_id: u64, subject_id: u64 },
+    #[error("The slots reference an unknown subject (subject id {0})")]
+    UnknownSubjectInSlots(u64),
+    #[error("The slots have a row for subject id {0} which has no interrogations")]
+    SlotsForSubjectWithoutInterrogations(u64),
+    #[error(
+        "Week pattern id {week_pattern_id} has {found} week entries but the schedule has {expected} weeks"
+    )]
+    WrongWeekCountInWeekPattern {
+        week_pattern_id: u64,
+        expected: usize,
+        found: usize,
+    },
+    #[error("The loaded data is logically impossible: {0:?}")]
+    LogicError(BTreeSet<collomatique_state_colloscopes::LogicError>),
+    #[error("The loaded data breaks an invariant: {0:?}")]
+    BrokenInvariants(BTreeSet<collomatique_state_colloscopes::FixableInvariant>),
 }
 
 impl From<collomatique_state_colloscopes::FromInnerDataError> for DecodeError {
@@ -40,7 +113,8 @@ impl From<collomatique_state_colloscopes::FromInnerDataError> for DecodeError {
                 IdError::DuplicatedId => DecodeError::DuplicatedID,
                 IdError::EndOfTheUniverse => DecodeError::EndOfTheUniverse,
             },
-            FromInnerDataError::InnerDataError(inner_data_error) => inner_data_error.into(),
+            FromInnerDataError::Logic(set) => DecodeError::LogicError(set),
+            FromInnerDataError::BrokenInvariants(set) => DecodeError::BrokenInvariants(set),
         }
     }
 }
@@ -67,9 +141,20 @@ pub enum Caveat {
     UnknownEntries,
 }
 
-fn check_header(header: &Header, caveats: &mut BTreeSet<Caveat>) -> Result<(), DecodeError> {
-    if let FileContent::UnknownFileContent(_value) = &header.file_content {
+pub(crate) fn check_header(
+    header: &Header,
+    caveats: &mut BTreeSet<Caveat>,
+) -> Result<(), DecodeError> {
+    // The two header discriminants are tolerated at parse (untagged
+    // unknown-value arms) so that an unrecognized one is reported here as
+    // itself, rather than as a generic serde failure on the envelope.
+    if let FileType::UnknownFileType(_value) = &header.file_type {
         return Err(DecodeError::UnknownFileType(
+            header.produced_with_version.clone(),
+        ));
+    }
+    if let FileContent::UnknownFileContent(_value) = &header.file_content {
+        return Err(DecodeError::UnknownFileContent(
             header.produced_with_version.clone(),
         ));
     }
@@ -81,71 +166,4 @@ fn check_header(header: &Header, caveats: &mut BTreeSet<Caveat>) -> Result<(), D
     Ok(())
 }
 
-fn check_entries_consistency(
-    entries: &[Entry],
-    caveats: &mut BTreeSet<Caveat>,
-    version: &Version,
-) -> Result<(), DecodeError> {
-    for entry in entries {
-        match &entry.content {
-            EntryContent::UnknownEntry => {
-                if entry.minimum_spec_version <= CURRENT_SPEC_VERSION {
-                    return Err(DecodeError::ProbablyIllformedEntry);
-                }
-                if entry.needed_entry {
-                    return Err(DecodeError::UnknownNeededEntry(version.clone()));
-                }
-                caveats.insert(Caveat::UnknownEntries);
-            }
-            EntryContent::ValidEntry(valid_entry) => {
-                if entry.minimum_spec_version != valid_entry.minimum_spec_version() {
-                    return Err(DecodeError::MismatchedSpecRequirementInEntry);
-                }
-                if entry.needed_entry != valid_entry.needed_entry() {
-                    return Err(DecodeError::MismatchedSpecRequirementInEntry);
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
-pub fn decode(json_data: JsonData) -> Result<(Data, BTreeSet<Caveat>), DecodeError> {
-    let mut caveats = BTreeSet::new();
-
-    check_header(&json_data.header, &mut caveats)?;
-    check_entries_consistency(
-        &json_data.entries,
-        &mut caveats,
-        &json_data.header.produced_with_version,
-    )?;
-
-    let data = decode_entries(json_data.entries)?;
-    Ok((data, caveats))
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
-struct PreData {
-    inner_data: collomatique_state_colloscopes::InnerData,
-}
-
-mod inner_data_dump;
-
-fn decode_entries(entries: Vec<Entry>) -> Result<Data, DecodeError> {
-    let mut pre_data = PreData::default();
-
-    for entry in entries {
-        let EntryContent::ValidEntry(valid_entry) = entry.content else {
-            continue;
-        };
-
-        match *valid_entry {
-            ValidEntry::InnerDataDump(inner_data) => {
-                inner_data_dump::decode_entry(inner_data, &mut pre_data)?;
-            }
-        }
-    }
-
-    let data = Data::from_inner_data(pre_data.inner_data)?;
-    Ok(data)
-}
+pub(crate) mod spec2;

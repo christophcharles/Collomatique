@@ -91,17 +91,12 @@ fn to_xlsx_per_student_groups(
     }
 }
 
-pub async fn export_to_xlsx(
+pub fn export_to_xlsx(
     data: &collomatique_state_colloscopes::InnerData,
     path: &std::path::Path,
     xlsx_config: &collomatique_xlsx::Config,
 ) -> Result<(), anyhow::Error> {
-    let pool = sqlx::SqlitePool::connect(":memory:").await?;
-    collomatique_sqlite_state::create_schema(&pool).await?;
-    collomatique_sqlite_state::inner_data_to_sqlite(&pool, data).await?;
-
-    collomatique_xlsx::write_xlsx(&pool, path, xlsx_config)
-        .await
+    collomatique_xlsx::write_xlsx(data, path, xlsx_config)
         .map_err(|e| anyhow::anyhow!("Failed to write XLSX: {e}"))?;
     Ok(())
 }

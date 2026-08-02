@@ -84,22 +84,22 @@ impl Dialog {
         &mut self,
         rule: &collomatique_state_colloscopes::slot_pairings::SlotPairingRule,
     ) {
-        self.antecedent_condition_selected = if rule.antecedent.should_have { 0 } else { 1 };
-        self.antecedent_slot_selected = self.slot_id_to_selected(rule.antecedent.slot_id);
-        self.consequent_condition_selected = if rule.consequent.should_have { 0 } else { 1 };
-        self.consequent_slot_selected = self.slot_id_to_selected(rule.consequent.slot_id);
-        self.soft = rule.soft;
+        self.antecedent_condition_selected = if rule.antecedent().should_have { 0 } else { 1 };
+        self.antecedent_slot_selected = self.slot_id_to_selected(rule.antecedent().slot_id);
+        self.consequent_condition_selected = if rule.consequent().should_have { 0 } else { 1 };
+        self.consequent_slot_selected = self.slot_id_to_selected(rule.consequent().slot_id);
+        self.soft = rule.soft();
 
         self.period_data = self
             .periods
-            .ordered_period_list
-            .iter()
+            .period_ids()
             .enumerate()
-            .map(|(i, (period_id, _desc))| {
+            .map(|(i, period_id)| {
+                let period_id = &period_id;
                 let subject_excluded = self.subject_excluded_periods.contains(period_id);
                 PeriodData {
                     period_index: i,
-                    enabled: !rule.excluded_periods.contains(period_id),
+                    enabled: !rule.excluded_periods().contains(period_id),
                     subject_excluded,
                 }
             })
@@ -123,25 +123,26 @@ impl Dialog {
             .enumerate()
             .filter_map(|(i, pd)| {
                 if !pd.enabled {
-                    Some(self.periods.ordered_period_list[i].0)
+                    self.periods.period_id_at(i)
                 } else {
                     None
                 }
             })
             .collect();
 
-        collomatique_state_colloscopes::slot_pairings::SlotPairingRule {
-            antecedent: collomatique_state_colloscopes::slot_pairings::SlotRulePart {
+        collomatique_state_colloscopes::slot_pairings::SlotPairingRule::new(
+            collomatique_state_colloscopes::slot_pairings::SlotRulePart {
                 slot_id: self.slot_selected_to_id(self.antecedent_slot_selected),
                 should_have: self.antecedent_condition_selected == 0,
             },
-            consequent: collomatique_state_colloscopes::slot_pairings::SlotRulePart {
+            collomatique_state_colloscopes::slot_pairings::SlotRulePart {
                 slot_id: self.slot_selected_to_id(self.consequent_slot_selected),
                 should_have: self.consequent_condition_selected == 0,
             },
             excluded_periods,
-            soft: self.soft,
-        }
+            self.soft,
+        )
+        .expect("the Valider button is insensitive while both parts share a slot")
     }
 
     fn slots_are_same(&self) -> bool {

@@ -46,14 +46,13 @@ pub enum ColloscopeInput {
     ),
 
     EditGroupList(collomatique_state_colloscopes::GroupListId),
-    GroupListAccepted(collomatique_state_colloscopes::colloscopes::ColloscopeGroupList),
+    GroupListAccepted(std::collections::BTreeMap<collomatique_state_colloscopes::StudentId, u32>),
 
     EditInterrogation(
         collomatique_state_colloscopes::SlotId,
-        collomatique_state_colloscopes::PeriodId,
-        usize,
+        collomatique_state_colloscopes::WeekId,
     ),
-    InterrogationAccepted(collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation),
+    InterrogationAccepted(std::collections::BTreeSet<u32>),
 
     SolveColloscopeClicked,
     ResetSolveConfig,
@@ -174,8 +173,7 @@ pub struct Colloscope {
     edited_group_list: Option<collomatique_state_colloscopes::GroupListId>,
     edited_interrogation: Option<(
         collomatique_state_colloscopes::SlotId,
-        collomatique_state_colloscopes::PeriodId,
-        usize,
+        collomatique_state_colloscopes::WeekId,
     )>,
 
     // The instant of the last `Update` signal, used to debounce recomputation.
@@ -334,7 +332,7 @@ impl Component for Colloscope {
                     },
                     gtk::Button {
                         #[watch]
-                        set_sensitive: !model.colloscope.is_empty(),
+                        set_sensitive: !model.colloscope.are_interrogations_empty(),
                         set_icon_name: "edit-delete-symbolic",
                         add_css_class: "flat",
                         set_tooltip_text: Some("Effacer le colloscope"),
@@ -463,7 +461,12 @@ impl Component for Colloscope {
                 set_orientation: gtk::Orientation::Vertical,
                 set_margin_all: 5,
                 #[watch]
-                set_visible: !model.colloscope.group_lists.is_empty(),
+                set_visible: model
+                    .params
+                    .group_lists
+                    .group_list_map
+                    .iter()
+                    .any(|(_id, group_list)| !group_list.is_prefilled()),
                 gtk::Box {
                     set_hexpand: true,
                     set_orientation: gtk::Orientation::Vertical,
@@ -535,11 +538,9 @@ impl Component for Colloscope {
         let colloscope_display = colloscope_display::Display::builder().launch(()).forward(
             sender.input_sender(),
             |msg| match msg {
-                colloscope_display::DisplayOutput::InterrogationClicked(
-                    slot_id,
-                    period_id,
-                    week_in_period,
-                ) => ColloscopeInput::EditInterrogation(slot_id, period_id, week_in_period),
+                colloscope_display::DisplayOutput::InterrogationClicked(slot_id, week_id) => {
+                    ColloscopeInput::EditInterrogation(slot_id, week_id)
+                }
             },
         );
 
@@ -644,14 +645,13 @@ impl Component for Colloscope {
                             .cloned()
                             .expect("Group list ID should be valid"),
                         self.colloscope
-                            .group_lists
-                            .get(&group_list_id)
+                            .group_list(group_list_id)
                             .cloned()
-                            .expect("Group list ID should be valid"),
+                            .unwrap_or_default(),
                     ))
                     .unwrap();
             }
-            ColloscopeInput::GroupListAccepted(collo_group_list) => {
+            ColloscopeInput::GroupListAccepted(groups_for_students) => {
                 let group_list_id = self
                     .edited_group_list
                     .take()
@@ -660,73 +660,83 @@ impl Component for Colloscope {
                     .output(ColloscopeOutput::UpdateOp(
                         ColloscopeUpdateOp::UpdateColloscopeGroupList(
                             group_list_id,
-                            collo_group_list,
+                            groups_for_students,
                         ),
                     ))
                     .unwrap();
             }
-            ColloscopeInput::EditInterrogation(slot_id, period_id, week_in_period) => {
-                self.edited_interrogation = Some((slot_id, period_id, week_in_period));
+            ColloscopeInput::EditInterrogation(slot_id, week_id) => {
+                // The edit is only meaningful on a possible interrogation cell.
+                if !self.params.is_interrogation_possible(slot_id, week_id) {
+                    return;
+                }
+                self.edited_interrogation = Some((slot_id, week_id));
 
+                let (period_id, _pos) = self
+                    .params
+                    .weeks
+                    .week_position(week_id)
+                    .expect("week id should be valid");
                 let (subject_id, _pos) = self
                     .params
                     .slots
                     .find_slot_subject_and_position(slot_id)
                     .expect("Slot ID should be valid");
-                let period_associations = self
+                let group_list_id = self
                     .params
                     .group_lists
                     .subjects_associations
-                    .get(&period_id)
-                    .expect("Period ID should be valid");
-                let group_list_id = period_associations
-                    .get(&subject_id)
+                    .get(&(period_id, subject_id))
                     .expect("A group list is needed to be able to edit a slot");
                 let group_list = self
                     .params
                     .group_lists
                     .group_list_map
                     .get(group_list_id)
-                    .expect("Group list ID should be valid")
-                    .clone();
+                    .expect("Group list ID should be valid");
 
-                let collo_period = self
+                // « Groupe 3 » or « Groupe 3 : B2 » — the number always shows
+                // here, because it is what the colloscope cell stores.
+                let group_titles: Vec<_> = (0..group_list.params().group_names.len() as u32)
+                    .map(|num| {
+                        let name = collomatique_ops::rendering::render_group_name(
+                            &self.params.group_lists,
+                            *group_list_id,
+                            num,
+                        )
+                        .expect("the group comes from the document being displayed");
+                        match name {
+                            Some(name) => format!("Groupe {} : {}", num + 1, name),
+                            None => format!("Groupe {}", num + 1),
+                        }
+                    })
+                    .collect();
+
+                let assigned_groups = self
                     .colloscope
-                    .period_map
-                    .get(&period_id)
-                    .expect("Period ID should be valid");
-                let collo_slot = collo_period
-                    .slot_map
-                    .get(&slot_id)
-                    .expect("Slot ID should be valid for this period");
-                let interrogation_opt = collo_slot
-                    .interrogations
-                    .get(week_in_period)
-                    .expect("Week number should be valid");
-                let interrogation = interrogation_opt
-                    .clone()
-                    .expect("There should be an interrogation to edit!");
+                    .interrogation(slot_id, week_id)
+                    .cloned()
+                    .unwrap_or_default();
 
                 self.interrogation_dialog
                     .sender()
                     .send(interrogation_dialog::DialogInput::Show(
-                        group_list,
-                        interrogation,
+                        group_titles,
+                        assigned_groups,
                     ))
                     .unwrap();
             }
-            ColloscopeInput::InterrogationAccepted(interrogation) => {
-                let (slot_id, period_id, week_in_period) = self
+            ColloscopeInput::InterrogationAccepted(assigned_groups) => {
+                let (slot_id, week_id) = self
                     .edited_interrogation
                     .take()
                     .expect("Interrogation information should have been stored for edition");
                 sender
                     .output(ColloscopeOutput::UpdateOp(
                         ColloscopeUpdateOp::UpdateColloscopeInterrogation(
-                            period_id,
                             slot_id,
-                            week_in_period,
-                            interrogation,
+                            week_id,
+                            assigned_groups,
                         ),
                     ))
                     .unwrap();
@@ -898,32 +908,15 @@ impl Colloscope {
         self.inflight_cmd.computation = InflightComputation::IlpProblem;
 
         let params = self.params.clone();
-        let colloscope = self.colloscope.clone();
 
-        sender.oneshot_command(async move {
-            let inner_data = collomatique_state_colloscopes::InnerData {
-                params,
-                colloscope,
-                ..Default::default()
-            };
-            let env = inner_data.params.clone();
-
+        sender.spawn_oneshot_command(move || {
             let result: Result<collomatique_constraints_colloscopes::ColloscopeModel, String> =
-                async {
-                    let pool = sqlx::SqlitePool::connect(":memory:")
-                        .await
-                        .map_err(|e| format!("{}", e))?;
-                    collomatique_sqlite_state::create_schema(&pool)
-                        .await
-                        .map_err(|e| format!("{}", e))?;
-                    collomatique_sqlite_state::inner_data_to_sqlite(&pool, &inner_data)
-                        .await
-                        .map_err(|e| format!("{}", e))?;
-                    Ok(collomatique_constraints_colloscopes::build_model(&pool).await)
-                }
-                .await;
+                Ok(collomatique_constraints_colloscopes::build_model(&params));
 
-            ColloscopeCommandOutput::IlpProblemComputed { env, result }
+            ColloscopeCommandOutput::IlpProblemComputed {
+                env: params,
+                result,
+            }
         });
     }
 
@@ -1089,19 +1082,14 @@ impl Colloscope {
             .iter()
             .filter(|(_id, group_list)| !group_list.is_prefilled())
             .map(|(id, group_list)| group_lists_display::EntryData {
-                id: *id,
+                id,
                 group_list: group_list.clone(),
-                collo_group_list: self
-                    .colloscope
-                    .group_lists
-                    .get(id)
-                    .expect("Non-prefilled group list should have colloscope entry")
-                    .clone(),
+                groups_for_students: self.colloscope.group_list(id).cloned().unwrap_or_default(),
                 total_student_count: self.params.students.student_map.len(),
             })
             .collect();
 
-        group_lists_vec.sort_by_key(|data| (data.group_list.params.name.clone(), data.id));
+        group_lists_vec.sort_by_key(|data| (data.group_list.params().name.clone(), data.id));
 
         crate::tools::factories::update_vec_deque(
             &mut self.group_list_entries,
@@ -1115,11 +1103,13 @@ impl Colloscope {
             .sender()
             .send(colloscope_display::DisplayInput::Update(
                 self.params.periods.clone(),
+                self.params.weeks.clone(),
                 self.params.subjects.clone(),
                 self.params.slots.clone(),
                 self.params.teachers.clone(),
                 self.params.students.clone(),
                 self.params.group_lists.clone(),
+                self.params.week_patterns.clone(),
                 self.colloscope.clone(),
             ))
             .unwrap();

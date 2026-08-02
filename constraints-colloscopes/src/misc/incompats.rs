@@ -13,14 +13,19 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
 
     let all_interrog_slots: Vec<_> = {
         let mut result = Vec::new();
-        for (&subject_id, subject_slots) in &env.slots.subject_map {
+        for subject_id in env.slots.subjects_with_slots() {
             let Some(subject) = env.subjects.find_subject(subject_id) else {
                 continue;
             };
             let Some(params) = subject.parameters.interrogation_parameters.as_ref() else {
                 continue;
             };
-            for (slot_id, slot_data) in &subject_slots.ordered_slots {
+            for (slot_id, slot_data) in env
+                .slots
+                .slots_for_subject(subject_id)
+                .into_iter()
+                .flatten()
+            {
                 let Some(swd) =
                     SlotWithDuration::new(slot_data.start_time.clone(), params.duration)
                 else {
@@ -38,7 +43,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         result
     };
 
-    for (&incompat_id, incompat) in &env.incompats.incompat_map {
+    for (incompat_id, incompat) in env.incompats.incompat_map.iter() {
         let Some(subject) = env.subjects.find_subject(incompat.subject_id) else {
             continue;
         };
@@ -53,11 +58,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                 continue;
             };
 
-            let enrolled_in_subject = env
-                .assignments
-                .period_map
-                .get(&period_id)
-                .and_then(|pa| pa.subject_map.get(&incompat.subject_id));
+            let enrolled_in_subject = env.assignments.students(period_id, incompat.subject_id);
             let Some(enrolled_students) = enrolled_in_subject else {
                 continue;
             };

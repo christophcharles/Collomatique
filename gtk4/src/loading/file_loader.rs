@@ -103,6 +103,14 @@ impl FileLoader {
                 DeserializationError::Decode(decode_error) => {
                     Self::generate_decode_error_message(decode_error)
                 }
+                DeserializationError::RetiredSpec1Format => (
+                    "Ce fichier utilise un format pré-alpha (spec 1) qui n'est plus pris en charge et ne peut plus être ouvert."
+                )
+                .into(),
+                DeserializationError::UnsupportedSpecVersions { versions } => format!(
+                    "Le fichier est mal formé et est probablement corrompu.\n(Combinaison de versions de spécification non prise en charge dans les entrées : {:?})",
+                    versions
+                ),
             },
         }
     }
@@ -111,7 +119,14 @@ impl FileLoader {
         match decode_error {
             DecodeError::EndOfTheUniverse => "Le fichier est probablement un fichier malicieux ou est corrompu.\n(Dernier ID utilisé supérieur à 2^63)".into(),
             DecodeError::DuplicatedID => "Le fichier est mal formé et est probablement corrompu.\n(ID en double)".into(),
-            DecodeError::MismatchedSpecRequirementInEntry => "Le fichier est mal formé et est probablement corrompu.\n(Information de version erronée dans une entrée)".into(),
+            DecodeError::DuplicatedIdInBlock { block, id } => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(L'ID {} apparaît en double dans le bloc {})",
+                id, block
+            ),
+            DecodeError::MismatchedSpecRequirementInEntry(block) => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(Information de version erronée dans l'entrée du bloc {})",
+                block
+            ),
             DecodeError::ProbablyIllformedEntry => "Le fichier est mal formé et est probablement corrompu.\n(Entrée dans les spécifications mais non reconnue)".into(),
             DecodeError::UnknownNeededEntry(version) => format!(
                 "Le fichier a été produit avec une version plus récente de Collomatique et ne peut être ouvert.\nUtiliser la version {} pour ouvrir ce fichier.",
@@ -121,10 +136,75 @@ impl FileLoader {
                 "Type de fichier Collomatique inconnu.\nCe fichier a peut-être été produit avec une version plus récente ({}).",
                 version
             ),
-            DecodeError::InnerDataDumpUsedOnModifiedInnerData => "Fichier mal formé et est probablement corrompu.\n(Entrée InnerDataDump utilisée sur des données déjà remplies)".into(),
-            DecodeError::InnerDataError(error) => format!(
+            DecodeError::UnknownFileContent(version) => format!(
+                "Contenu de fichier Collomatique inconnu.\nCe fichier a peut-être été produit avec une version plus récente ({}).",
+                version
+            ),
+            DecodeError::MalformedEntryContent => "Le fichier est mal formé et est probablement corrompu.\n(Le contenu d'une entrée n'est pas un objet avec exactement une clé)".into(),
+            DecodeError::DuplicatedBlock(block) => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(Le bloc {} apparaît plusieurs fois)",
+                block
+            ),
+            DecodeError::IllformedBlock { block, detail } => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(Le bloc {} est mal formé : {})",
+                block, detail
+            ),
+            DecodeError::SlotCrossesMidnight => "Le fichier est mal formé et est probablement corrompu.\n(Un créneau d'incompatibilité dépasse minuit)".into(),
+            DecodeError::UnknownSlotInColloscope(slot_id) => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(Le colloscope référence un créneau inconnu, id {})",
+                slot_id
+            ),
+            DecodeError::InvalidInterrogationCell { slot_id, week } => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(Le colloscope place une interrogation sur une case inexistante : créneau {}, semaine {})",
+                slot_id, week
+            ),
+            DecodeError::InvalidColloscopeGroupList(group_list_id) => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(Le colloscope remplit une liste de groupes invalide, id {})",
+                group_list_id
+            ),
+            DecodeError::InconsistentGroupList(group_list_id) => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(Une liste de groupes est incohérente : nombre de groupes préremplis ou élève en double, id {})",
+                group_list_id
+            ),
+            DecodeError::InconsistentPairingRule(rule_id) => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(Une règle d'appariement utilise la même matière des deux côtés, id {})",
+                rule_id
+            ),
+            DecodeError::InconsistentSlotPairingRule(rule_id) => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(Un appariement de créneaux utilise le même créneau des deux côtés, id {})",
+                rule_id
+            ),
+            DecodeError::UnknownPeriodInAssignments(period_id) => format!(
+                "Fichier mal formé et est probablement corrompu.\n(Les affectations référencent une période inconnue, id {})",
+                period_id
+            ),
+            DecodeError::UnknownSubjectInAssignments(subject_id) => format!(
+                "Fichier mal formé et est probablement corrompu.\n(Les affectations référencent une matière inconnue, id {})",
+                subject_id
+            ),
+            DecodeError::AssignmentOnExcludedPeriod { period_id, subject_id } => format!(
+                "Fichier mal formé et est probablement corrompu.\n(Les affectations ont une ligne pour la matière {} sur la période {}, dont elle est exclue)",
+                subject_id, period_id
+            ),
+            DecodeError::UnknownSubjectInSlots(subject_id) => format!(
+                "Fichier mal formé et est probablement corrompu.\n(Les créneaux référencent une matière inconnue, id {})",
+                subject_id
+            ),
+            DecodeError::SlotsForSubjectWithoutInterrogations(subject_id) => format!(
+                "Fichier mal formé et est probablement corrompu.\n(Les créneaux ont une ligne pour la matière {}, qui n'a pas d'interrogations)",
+                subject_id
+            ),
+            DecodeError::WrongWeekCountInWeekPattern { week_pattern_id, expected, found } => format!(
+                "Fichier mal formé et est probablement corrompu.\n(Le motif de semaines {} décrit {} semaines alors que le calendrier en compte {})",
+                week_pattern_id, found, expected
+            ),
+            DecodeError::LogicError(set) => format!(
+                "Fichier mal formé et est probablement corrompu.\n(Les données sont logiquement impossibles : {})",
+                set.iter().map(|e| e.to_string()).collect::<Vec<_>>().join(" ; ")
+            ),
+            DecodeError::BrokenInvariants(set) => format!(
                 "Fichier mal formé et est probablement corrompu.\n(Les données ne vérifient pas un invariant : {})",
-                error
+                set.iter().map(|e| e.to_string()).collect::<Vec<_>>().join(" ; ")
             ),
         }
     }

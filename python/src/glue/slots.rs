@@ -110,6 +110,12 @@ impl From<collomatique_state_colloscopes::slots::Slot> for SlotParameters {
 impl From<SlotParameters> for collomatique_state_colloscopes::slots::Slot {
     fn from(value: SlotParameters) -> Self {
         collomatique_state_colloscopes::slots::Slot {
+            // SlotParameters carries no subject: the ops layer (AddNewSlot /
+            // UpdateSlot) overwrites this with the authoritative subject before
+            // the state op runs, so this placeholder is never read.
+            subject_id: unsafe {
+                <collomatique_state_colloscopes::SubjectId as collomatique_state_colloscopes::ids::Id>::new(0)
+            },
             teacher_id: value.teacher_id.into(),
             start_time: value.start_time.into(),
             extra_info: value.extra_info,
