@@ -1059,7 +1059,7 @@ impl Component for EditorPanel {
                 }
             }
             EditorInput::UpdateOp(op) => {
-                match op.cascade_dry_apply(&self.data) {
+                match op.dry_apply(&self.data) {
                     Ok(result) => {
                         if result.warnings.is_empty() {
                             sender.input(EditorInput::CommitUpdateOp(result.new_state));

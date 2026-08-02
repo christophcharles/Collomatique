@@ -1227,7 +1227,7 @@ fn assert_clean(data: &Data) {
     assert_eq!(
         data.get_inner_data().broken_invariants(),
         Ok(BTreeSet::new()),
-        "cascade_dry_apply returned Ok but the committed document is not valid",
+        "dry_apply returned Ok but the committed document is not valid",
     );
 }
 
@@ -1266,7 +1266,7 @@ fn update_ops_never_panic_and_land_valid() {
                 log.borrow_mut()
                     .push(format!("[{position}] {family}: {entry}"));
 
-                match op.cascade_dry_apply(&state) {
+                match op.dry_apply(&state) {
                     Ok(result) => {
                         assert_clean(result.new_state.get_data());
                         Counters::bump(&counters.landed, 1);

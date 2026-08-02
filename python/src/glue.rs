@@ -257,12 +257,6 @@ impl CollomatiqueFile {
                 UpdatePeriodWeekCountError::InvalidPeriodId(id) => {
                     Err(PyValueError::new_err(format!("Invalid period id {:?}", id)))
                 }
-                UpdatePeriodWeekCountError::SubjectImpliesMinimumWeekCount(id, wc) => {
-                    Err(PyValueError::new_err(format!(
-                        "Minimum week count of {} required by subject {:?}",
-                        wc, id
-                    )))
-                }
             },
             e => panic!("Unexpected result: {:?}", e),
         }
@@ -937,10 +931,6 @@ impl CollomatiqueFile {
                 UpdateSlotError::InvalidSlotId(id) => {
                     Err(PyValueError::new_err(format!("Invalid slot id {:?}", id)))
                 }
-                UpdateSlotError::InvalidSubjectId(id) => Err(PyValueError::new_err(format!(
-                    "Invalid subject id {:?}",
-                    id
-                ))),
                 UpdateSlotError::InvalidTeacherId(id) => Err(PyValueError::new_err(format!(
                     "Invalid teacher id {:?}",
                     id
@@ -1359,7 +1349,7 @@ impl InternalFile {
         op: collomatique_ops::UpdateOp,
     ) -> Result<Option<collomatique_state_colloscopes::NewId>, collomatique_ops::UpdateError> {
         let mut state = self.state.lock().unwrap();
-        op.cascade_apply(&mut *state)
+        op.apply(&mut *state)
     }
 
     fn get_inner_data(&self) -> collomatique_state_colloscopes::InnerData {

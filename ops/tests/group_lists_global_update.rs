@@ -8,7 +8,7 @@
 //! * the *error* surface grows a student-existence sweep on both ops (the
 //!   filling can name students, so `AddNewGroupList` can fail for the first
 //!   time), and
-//! * the *cleaning* surface must still repair everything that hangs off the
+//! * the *repair* surface must still fix everything that hangs off the
 //!   list — colloscope placements and interrogation cells — while saying
 //!   nothing about the payload itself.
 //!
@@ -19,20 +19,20 @@
 //! the whole list, so a group they deleted is their own edit and gets no
 //! warning. The colloscope, which they never saw, still does.
 //!
-//! The tests below pin one check each, in the order the cleaning scan runs
-//! them: out-of-range placements, out-of-range interrogation groups,
-//! newly-excluded students, and the non-prefilled → prefilled transition —
-//! plus the silence of the shrink.
+//! The tests below pin one case each: out-of-range placements, out-of-range
+//! interrogation groups, newly-excluded students, and the non-prefilled →
+//! prefilled transition — plus the silence of the shrink. Since step 7 the
+//! repairs are the cascade's, so each is read back as the [Fix] it landed.
 
 use collomatique_ops::{
-    AddNewGroupListError, GroupListsUpdateError, GroupListsUpdateOp, GroupListsUpdateWarning,
-    OpCategory, UpdateError, UpdateGroupListError, UpdateOp, UpdateWarning,
+    AddNewGroupListError, CascadeWarning, GroupListsUpdateError, GroupListsUpdateOp, OpCategory,
+    UpdateError, UpdateGroupListError, UpdateOp,
 };
 use collomatique_state::{AppState, traits::Manager};
 use collomatique_state_colloscopes::ids::{GroupListId, PeriodId, StudentId};
 use collomatique_state_colloscopes::students::Student;
 use collomatique_state_colloscopes::{
-    ColloscopeOp, Data, GroupListOp, NewId, NonEmptyRangeInclusive, Op, PeriodOp, SlotOp,
+    ColloscopeOp, Data, Fix, GroupListOp, NewId, NonEmptyRangeInclusive, Op, PeriodOp, SlotOp,
     StudentOp, Subject, SubjectInterrogationParameters, SubjectOp, SubjectParameters,
     SubjectPeriodicity, TeacherOp, WeekOp,
     group_lists::{GroupList, GroupListFilling, GroupListParameters, PrefilledGroup},
@@ -148,19 +148,10 @@ fn update_err(
     }
 }
 
-/// The group-list warnings an `UpdateGroupList` raised, in the cascade's own
-/// order-insensitive form.
-fn group_list_warnings(
-    result: &collomatique_ops::RecApplyResult,
-) -> BTreeSet<GroupListsUpdateWarning> {
-    result
-        .warnings
-        .iter()
-        .map(|(warning, _desc)| match warning {
-            UpdateWarning::GroupLists(w) => w.clone(),
-            other => panic!("unexpected warning family: {other:?}"),
-        })
-        .collect()
+/// The repairs a cascade logged, read back as the [Fix] values the fixtures
+/// write down.
+fn fixes(warnings: &[CascadeWarning]) -> Vec<Fix> {
+    warnings.iter().map(|w| w.fix().clone()).collect()
 }
 
 #[test]
@@ -247,10 +238,7 @@ fn shrinking_a_prefilled_list_lands_verbatim_and_says_nothing() {
         .dry_apply(&app)
         .expect("shrinking a prefilled list must succeed");
 
-    assert_eq!(
-        group_list_warnings(&outcome.rec_apply_result),
-        BTreeSet::new()
-    );
+    assert_eq!(fixes(&outcome.warnings), Vec::new());
 
     let stored = outcome
         .new_state
@@ -279,10 +267,12 @@ fn shrinking_removes_the_placements_of_groups_that_disappear() {
         .expect("shrinking past a placement must auto-clean, not fail");
 
     assert_eq!(
-        group_list_warnings(&outcome.rec_apply_result),
-        BTreeSet::from([GroupListsUpdateWarning::LooseStudentGroupInColloscope(
-            id, s1
-        )]),
+        fixes(&outcome.warnings),
+        vec![Fix::RemoveStudentColloscopePlacement {
+            group_list: id,
+            student: s1,
+            rebuilt: BTreeMap::from([(s0, 0)]),
+        }],
     );
     assert_eq!(
         outcome
@@ -309,10 +299,12 @@ fn excluding_a_placed_student_removes_the_placement() {
         .expect("excluding a placed student must auto-clean, not fail");
 
     assert_eq!(
-        group_list_warnings(&outcome.rec_apply_result),
-        BTreeSet::from([GroupListsUpdateWarning::LooseStudentGroupInColloscope(
-            id, s1
-        )]),
+        fixes(&outcome.warnings),
+        vec![Fix::RemoveStudentColloscopePlacement {
+            group_list: id,
+            student: s1,
+            rebuilt: BTreeMap::from([(s0, 0)]),
+        }],
     );
     assert_eq!(
         outcome
@@ -333,8 +325,10 @@ fn becoming_prefilled_empties_the_colloscope_placement_row() {
     let id = add_group_list(&mut app, params(2), GroupListFilling::default());
     set_placements(&mut app, id, BTreeMap::from([(s0, 0), (s1, 1)]));
 
-    // A prefilled list holds no colloscope row at all, so the whole row goes —
-    // one student (and one warning) at a time.
+    // A prefilled list holds no colloscope row at all, so the whole row goes at
+    // once: for a prefilled list there is no single element to blame, so the
+    // cascade clears the row and says so in one sentence (the old cleaning path
+    // took the students out one at a time and warned once per student).
     let payload = GroupList::new(
         params(2),
         prefilled([BTreeSet::from([s0]), BTreeSet::from([s1])]),
@@ -345,11 +339,8 @@ fn becoming_prefilled_empties_the_colloscope_placement_row() {
         .expect("prefilling a placed list must auto-clean, not fail");
 
     assert_eq!(
-        group_list_warnings(&outcome.rec_apply_result),
-        BTreeSet::from([
-            GroupListsUpdateWarning::LooseStudentGroupInColloscope(id, s0),
-            GroupListsUpdateWarning::LooseStudentGroupInColloscope(id, s1),
-        ]),
+        fixes(&outcome.warnings),
+        vec![Fix::ClearColloscopeGroupListRow { group_list: id }],
     );
     assert_eq!(
         outcome
@@ -483,10 +474,13 @@ fn shrinking_trims_out_of_range_interrogation_groups() {
         .expect("shrinking past an interrogation group must auto-clean, not fail");
 
     assert_eq!(
-        group_list_warnings(&outcome.rec_apply_result),
-        BTreeSet::from([
-            GroupListsUpdateWarning::LooseGroupsInInterrogationsInColloscope(subject_id, period),
-        ]),
+        fixes(&outcome.warnings),
+        vec![Fix::RemoveGroupsFromInterrogationCell {
+            slot: slot_id,
+            week: week0,
+            groups: BTreeSet::from([2]),
+            rebuilt: BTreeSet::from([0]),
+        }],
     );
     assert_eq!(
         outcome
@@ -536,10 +530,10 @@ fn adding_a_list_keeps_the_prefilled_filling_it_was_given() {
         .dry_apply(&app)
         .expect("adding a prefilled list must succeed");
 
-    let Some(NewId::GroupListId(new_id)) = outcome.rec_apply_result.new_id else {
+    let Some(NewId::GroupListId(new_id)) = outcome.new_id else {
         panic!(
             "adding a group list should return its id, got {:?}",
-            outcome.rec_apply_result.new_id
+            outcome.new_id
         );
     };
     // The point of the widened payload: the filling survives the trip, where

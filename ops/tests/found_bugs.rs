@@ -4,15 +4,12 @@
 //! workflow, every test is committed *before* the corresponding fix and
 //! was verified to fail against the unfixed code.
 
-use collomatique_ops::{
-    GeneralPlanningUpdateOp, GeneralPlanningUpdateWarning, OpCategory, SubjectsUpdateOp, UpdateOp,
-    UpdateWarning,
-};
+use collomatique_ops::{GeneralPlanningUpdateOp, OpCategory, SubjectsUpdateOp, UpdateOp};
 use collomatique_state::{AppState, traits::Manager};
 use collomatique_state_colloscopes::{
-    ColloscopeOp, Data, GroupListOp, NewId, NonEmptyRangeInclusive, Op, PeriodOp, SlotOp, Subject,
-    SubjectInterrogationParameters, SubjectOp, SubjectParameters, SubjectPeriodicity, TeacherOp,
-    WeekOp,
+    ColloscopeOp, Data, Fix, GroupListOp, NewId, NonEmptyRangeInclusive, Op, PeriodOp, SlotOp,
+    Subject, SubjectInterrogationParameters, SubjectOp, SubjectParameters, SubjectPeriodicity,
+    TeacherOp, WeekOp,
     group_lists::{GroupList, GroupListFilling, GroupListParameters},
     ids::PeriodId,
     slots::Slot,
@@ -50,15 +47,14 @@ fn add_active_period(app: &mut AppState<Data, Desc>, weeks: usize) -> PeriodId {
 }
 
 /// Shrinking a period must auto-clean the colloscope interrogations that
-/// fall on the weeks being removed. The composite
-/// `GeneralPlanningUpdateOp::UpdatePeriodWeekCount` op relies on
-/// `get_next_cleaning_op` to empty those cells *before* the underlying
-/// `PeriodOp::Update` shortens the period. Before the fix, the
-/// colloscope-scan loop iterated over `old_week_count..week_count`, an
-/// always-empty range when shrinking (`week_count < old_week_count`), so
-/// the cleaning op never fired: the shrink then hit
-/// `NotCompatibleSlotInColloscope` and panicked
-/// (`Unexpected error for UpdatePeriodWeekCount!`).
+/// fall on the weeks being removed. The bug this pins was in the old cleaning
+/// machinery: the composite's colloscope-scan loop iterated over
+/// `old_week_count..week_count`, an always-empty range when shrinking
+/// (`week_count < old_week_count`), so the cleaning op never fired and the
+/// shrink hit `NotCompatibleSlotInColloscope` and panicked
+/// (`Unexpected error for UpdatePeriodWeekCount!`). Since step 7 the composite
+/// simply removes the doomed weeks and the cascade clears what hangs off them,
+/// which is what the fix list below reads back.
 #[test]
 fn shrinking_a_period_cleans_colloscope_on_removed_weeks() {
     let mut app_state = AppState::<_, Desc>::new(Data::new());
@@ -180,21 +176,16 @@ fn shrinking_a_period_cleans_colloscope_on_removed_weeks() {
                 "shrinking a period past a non-empty interrogation must auto-clean it, not fail",
             );
 
-    // The cleaning cascade fired and reported the colloscope loss.
-    assert!(
-        outcome
-            .rec_apply_result
-            .warnings
-            .iter()
-            .any(|(warning, _)| matches!(
-                warning,
-                UpdateWarning::GeneralPlanning(
-                    GeneralPlanningUpdateWarning::LoosePeriodDataInColloscope(p)
-                ) if *p == period_id
-            )),
-        "shrinking a period must emit a colloscope-loss cleaning warning \
-         for the removed week; got {:?}",
-        outcome.rec_apply_result.warnings,
+    // The cascade fired and reported the colloscope loss.
+    let fixes: Vec<Fix> = outcome.warnings.iter().map(|w| w.fix().clone()).collect();
+    assert_eq!(
+        fixes,
+        vec![Fix::ClearInterrogationCell {
+            slot: slot_id,
+            week: week2,
+        }],
+        "shrinking a period must clear the interrogation on the removed week, \
+         and warn about exactly that",
     );
 
     // The shrink actually went through: the single period is now two weeks

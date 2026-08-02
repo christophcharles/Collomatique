@@ -749,7 +749,7 @@ lands.
 | 6.2 | gtk4 warning-dialog switch (gtk4 smoke here covers 6.1 too) | gtk4 | `c157f931` |
 | 6.3 | python switch (contract scripts run here) | python | `8f781257` |
 | 6.4 | drop dead rpc-engine dep (⇒ **cargoHash**) | rpc-engine | `404ae5bf` |
-| 7 | delete the old world + final rename + test re-cuts | ops, gtk4, python | — |
+| 7 | delete the old world + final rename + test re-cuts | ops, gtk4, python | landed |
 | close-out | design doc Appendix J, §8, retire this plan, memory | docs | — |
 
 Interstitial work landed between step-7 commits, recorded here so the history reads
