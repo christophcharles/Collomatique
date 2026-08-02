@@ -1059,22 +1059,29 @@ impl Component for EditorPanel {
                 }
             }
             EditorInput::UpdateOp(op) => {
-                match op.dry_apply(&self.data) {
-                    Ok(dry_result) => {
-                        if dry_result.rec_apply_result.warnings.is_empty() {
-                            sender.input(EditorInput::CommitUpdateOp(dry_result.new_state));
+                match op.cascade_dry_apply(&self.data) {
+                    Ok(result) => {
+                        if result.warnings.is_empty() {
+                            sender.input(EditorInput::CommitUpdateOp(result.new_state));
                         } else {
-                            self.state_to_commit = Some(dry_result.new_state);
+                            // self.data still holds the pre-state the interface is
+                            // showing, which is exactly the state a warning must be
+                            // rendered against.
+                            let mut seen = std::collections::BTreeSet::new();
+                            let texts: Vec<String> = result
+                                .warnings
+                                .iter()
+                                .map(|w| {
+                                    w.text(self.data.get_data())
+                                        .expect("warning must render against the pre-state")
+                                })
+                                .filter(|t| seen.insert(t.clone()))
+                                .collect();
+
+                            self.state_to_commit = Some(result.new_state);
                             self.warning_op_dialog
                                 .sender()
-                                .send(warning_op::DialogInput::Show(
-                                    dry_result
-                                        .rec_apply_result
-                                        .warnings
-                                        .into_iter()
-                                        .map(|x| x.1)
-                                        .collect(),
-                                ))
+                                .send(warning_op::DialogInput::Show(texts))
                                 .unwrap();
                         }
                     }
