@@ -1,5 +1,6 @@
 //! Regression tests for the bugs found by the Phase-0 property harness
-//! (see the status section of docs/state_consolidation_plan.md).
+//! (see §3 of the retired state consolidation plan, pinned at
+//! `git show 42c95756:docs/plans/state_consolidation_plan.md`).
 //!
 //! Each test pins one bug deterministically, independent of
 //! property-test seed luck. Following the test-first workflow, every
