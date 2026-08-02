@@ -13,14 +13,17 @@ them and the property walk over that, plus the riders 0bis/0ter, 3.3bis, 3.12+ a
 3.13bis. The `landed` column of §3's table is the authoritative record. **Commit 3 is
 closed and the new path is fuzzed; commit 5 is closed — 5.0, 5.1 and 5.2 have
 all landed (this section was reviewed and re-planned with the user August 2),
-and commits 6.0 and 6.1 have landed on top of it**, so the next commit is 6.2,
-then 6.3–6.4 and 7. Commit 6.0 was not in the original plan: surveying gtk4 for
+and commits 6.0 through 6.3 have landed on top of it**, so the next commit is
+6.4, then 7. Commit 6.0 was not in the original plan: surveying gtk4 for
 6.1 showed the rendering helpers could not be called there at all, and §5-C6's
 6.0 records why and what changed. gtk4 now names periods, weeks, slots, groups
 and pairing rules through `ops::rendering` (6.1), so the warning dialog 6.2
-switches on will speak the same words as the screen behind it.
-`cascade_dry_apply` / `cascade_apply` now exist, but nothing in production calls
-them: no consumer moves before 6.2.
+switched on speaks the same words as the screen behind it.
+**Both consumers are now on the cascade**: gtk4 (6.2) and python (6.3) call
+`cascade_dry_apply` / `cascade_apply`, so the new path is what the application
+actually runs. The user-run gates for those two commits — the gtk4 smoke
+(covering 6.1) and the three contract scripts — are taken together at the end
+of 6.3, so the smoke exercises the updated Python backend as well.
 
 The migration pattern is the step-5 one: build the new world in parallel under
 transitional names, move consumers over, delete the old world, rename at the very end so
@@ -741,8 +744,8 @@ lands.
 | 6.0 | the rendering helpers take the document parts they read, not `&Data` — the precondition for 6.1 | ops | `d21b61e3` |
 | 6.1 | gtk4 helper dedup — local renderers replaced by `ops::rendering` | gtk4 | `7fe0aed8` |
 | 6.1bis | the slot renderers capitalize the weekday (§5-C6) | ops | `20ae85bb` |
-| 6.2 | gtk4 warning-dialog switch (gtk4 smoke here covers 6.1 too) | gtk4 | — |
-| 6.3 | python switch (contract scripts run here) | python | — |
+| 6.2 | gtk4 warning-dialog switch (gtk4 smoke here covers 6.1 too) | gtk4 | `c157f931` |
+| 6.3 | python switch (contract scripts run here) | python | `8f781257` |
 | 6.4 | drop dead rpc-engine dep (⇒ **cargoHash**) | rpc-engine | — |
 | 7 | delete the old world + final rename + test re-cuts | ops, gtk4, python | — |
 | close-out | design doc Appendix J, §8, retire this plan, memory | docs | — |
