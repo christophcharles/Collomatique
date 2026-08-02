@@ -353,9 +353,10 @@ fn assert_merged_structure(app_state: &AppState<Data, Desc>, document: &Document
 ///
 /// The merge that follows is where the cascade parts company with the old
 /// cleaning path: the weeks move first and take their colles with them, so the
-/// cell survives here where the old path dropped it. All the cascade has to
-/// repair is what the emptied period was keyed on — its own copy of the
-/// group-list association.
+/// cell survives here where the old path dropped it. And it says nothing on the
+/// way: the only thing the emptied period was keyed on is the group-list
+/// association the cut had copied from the very period it merges back into, so
+/// dropping it changes nothing. Cut then merge is a silent round trip.
 #[test]
 fn cutting_a_period_preserves_tail_colloscope_and_pattern() {
     let (mut app_state, document) = build_document();
@@ -384,11 +385,10 @@ fn cutting_a_period_preserves_tail_colloscope_and_pattern() {
     assert!(merge.new_id.is_none());
     assert_eq!(
         fixes(&merge.warnings),
-        vec![Fix::UnassignGroupList {
-            period: new_period_id,
-            subject: document.subject_id,
-        }],
-        "the emptied period's own association is all the merge has to drop",
+        Vec::new(),
+        "a cut followed by a merge is a round trip: the tail period's association \
+         is the copy the cut made of the head's, so dropping it changes nothing \
+         and the merge says nothing",
     );
     app_state = merge.new_state;
 

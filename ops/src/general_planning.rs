@@ -676,9 +676,18 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
+                // The weeks are out; what is left on the dying period is the
+                // material keyed on it, which the removal below drops with one
+                // warning each. Those warnings are only worth reading when the
+                // drop changes what the merged document says — so the entries
+                // the surviving period repeats are dropped here instead,
+                // silently. See the helper for why this cannot run any earlier.
+                self.drop_material_the_previous_period_repeats(session, previous_id, *period_id);
+
                 // The emptied period goes, and with it everything that was keyed
-                // on it: the six phases of the old reconcile-with-previous
-                // cleaning are replaced by that removal's own cascade.
+                // on it *and not repeated by the period it merged into*: the six
+                // phases of the old reconcile-with-previous cleaning are
+                // replaced by that removal's own cascade.
                 let result = GeneralPlanningUpdateOp::DeletePeriodAndWeeks(*period_id)
                     .apply_to_session(session)
                     // The period was found at the top of this arm, and nothing
@@ -793,6 +802,247 @@ impl GeneralPlanningUpdateOp {
         }
     }
 
+    /// Drops from `merged` every period-keyed entry the surviving `previous`
+    /// period already repeats, *authored* — so the period removal that follows
+    /// finds nothing left to warn about there.
+    ///
+    /// A period is named from exactly seven sites — the
+    /// [collomatique_state_colloscopes::refs::PeriodRefSite] variants. One is
+    /// its weeks, which the merge has already moved by the time this runs; the
+    /// six others are dropped by the removal below, one warning each. Those
+    /// warnings are worth reading when the drop *changes what the document says
+    /// about the moved weeks*, and noise when it does not: an association the
+    /// surviving period repeats bounds the moved colles exactly as it did
+    /// before, and an exclusion the surviving period repeats keeps them just as
+    /// excluded. So the repeated ones are dropped here, silently, and only the
+    /// rest reach the user.
+    ///
+    /// Every op below is the very op the matching fix would have applied
+    /// (`Fix::to_annotated_op`), so the merged document is exactly what it was
+    /// before this existed. Only the warning list gets shorter.
+    ///
+    /// **This must run after the week move.** With the weeks still on the dying
+    /// period, clearing an association takes the group bound of every colle
+    /// written on them to zero and the cascade empties the cells one by one.
+    /// Once the period is empty, nothing reads its material and none of these
+    /// ops cascades anything.
+    fn drop_material_the_previous_period_repeats<
+        T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
+    >(
+        &self,
+        session: &mut CascadeSession<T>,
+        previous: collomatique_state_colloscopes::PeriodId,
+        merged: collomatique_state_colloscopes::PeriodId,
+    ) {
+        use collomatique_state_colloscopes::{
+            AssignmentOp, GroupListOp, Op, PairingOp, SlotPairingOp, StudentOp, SubjectOp,
+        };
+
+        // ---- Subjects excluded from both periods.
+        let subjects: Vec<_> = session
+            .get_data()
+            .get_inner_data()
+            .params
+            .subjects
+            .ordered_subject_list
+            .iter()
+            .filter(|(_id, subject)| {
+                subject.excluded_periods.contains(&merged)
+                    && subject.excluded_periods.contains(&previous)
+            })
+            .map(|(id, subject)| (id, subject.clone()))
+            .collect();
+        for (subject_id, subject) in subjects {
+            let mut rebuilt = subject;
+            rebuilt.excluded_periods.remove(&merged);
+            let result = session
+                .apply(
+                    Op::Subject(SubjectOp::Update(subject_id, rebuilt)),
+                    self.get_desc(),
+                )
+                // Lifting an exclusion only ever permits more: each of the three
+                // predicates that read a subject's excluded periods — its
+                // assignment rows, its associations, the colles on its slots —
+                // fires on the exclusion being *there*.
+                .expect("lifting a subject's period exclusion contradicts nothing");
+            if result.is_some() {
+                panic!("Unexpected result! {:?}", result);
+            }
+        }
+
+        // ---- Students absent from both periods.
+        let students: Vec<_> = session
+            .get_data()
+            .get_inner_data()
+            .params
+            .students
+            .student_map
+            .iter()
+            .filter(|(_id, student)| {
+                student.excluded_periods.contains(&merged)
+                    && student.excluded_periods.contains(&previous)
+            })
+            .map(|(id, student)| (id, student.clone()))
+            .collect();
+        for (student_id, student) in students {
+            let mut rebuilt = student;
+            rebuilt.excluded_periods.remove(&merged);
+            let result = session
+                .apply(
+                    Op::Student(StudentOp::Update(student_id, rebuilt)),
+                    self.get_desc(),
+                )
+                // Same argument: the one predicate reading a student's excluded
+                // periods asks whether an assignment row lists them on a period
+                // they skip, which lifting the exclusion can only settle.
+                .expect("lifting a student's period exclusion contradicts nothing");
+            if result.is_some() {
+                panic!("Unexpected result! {:?}", result);
+            }
+        }
+
+        // ---- Pairing rules disabled on both periods.
+        let pairing_rules: Vec<_> = session
+            .get_data()
+            .get_inner_data()
+            .params
+            .pairings
+            .pairing_rule_map
+            .iter()
+            .filter(|(_id, rule)| {
+                rule.excluded_periods().contains(&merged)
+                    && rule.excluded_periods().contains(&previous)
+            })
+            .map(|(id, rule)| (id, rule.clone()))
+            .collect();
+        for (rule_id, rule) in pairing_rules {
+            // Sealed value: `into_parts` is the door for callers that rebuild,
+            // and `PairingRule::new`'s only failure is the two parts naming one
+            // subject — which dropping a period cannot cause.
+            let (antecedent, consequent, mut excluded_periods, soft) = rule.into_parts();
+            excluded_periods.remove(&merged);
+            let rebuilt = collomatique_state_colloscopes::pairings::PairingRule::new(
+                antecedent,
+                consequent,
+                excluded_periods,
+                soft,
+            )
+            .expect("removing an excluded period cannot make the parts share a subject");
+            let result = session
+                .apply(
+                    Op::Pairing(PairingOp::Update(rule_id, rebuilt)),
+                    self.get_desc(),
+                )
+                // A pairing rule's excluded periods are named by no convergence
+                // predicate at all — only by the reference sweep, and the period
+                // they name is still there.
+                .expect("a pairing rule's excluded periods contradict nothing");
+            if result.is_some() {
+                panic!("Unexpected result! {:?}", result);
+            }
+        }
+
+        // ---- Slot pairing rules disabled on both periods.
+        let slot_pairing_rules: Vec<_> = session
+            .get_data()
+            .get_inner_data()
+            .params
+            .slot_pairings
+            .slot_pairing_rule_map
+            .iter()
+            .filter(|(_id, rule)| {
+                rule.excluded_periods().contains(&merged)
+                    && rule.excluded_periods().contains(&previous)
+            })
+            .map(|(id, rule)| (id, rule.clone()))
+            .collect();
+        for (rule_id, rule) in slot_pairing_rules {
+            let (antecedent, consequent, mut excluded_periods, soft) = rule.into_parts();
+            excluded_periods.remove(&merged);
+            let rebuilt = collomatique_state_colloscopes::slot_pairings::SlotPairingRule::new(
+                antecedent,
+                consequent,
+                excluded_periods,
+                soft,
+            )
+            .expect("removing an excluded period cannot make the parts share a slot");
+            let result = session
+                .apply(
+                    Op::SlotPairing(SlotPairingOp::Update(rule_id, rebuilt)),
+                    self.get_desc(),
+                )
+                .expect("a slot pairing rule's excluded periods contradict nothing");
+            if result.is_some() {
+                panic!("Unexpected result! {:?}", result);
+            }
+        }
+
+        // ---- Assignment rows the surviving period's own row already covers.
+        // Subset, not equality: what makes the warning noise is that no student
+        // loses their inscription, and a surviving row holding *more* students
+        // loses none either.
+        let rows: Vec<_> = {
+            let assignments = &session.get_data().get_inner_data().params.assignments;
+            assignments
+                .subjects_for_period(merged)
+                .filter(|(subject_id, students)| {
+                    assignments
+                        .students(previous, *subject_id)
+                        .is_some_and(|kept| students.is_subset(kept))
+                })
+                .map(|(subject_id, _students)| subject_id)
+                .collect()
+        };
+        for subject_id in rows {
+            let result = session
+                .apply(
+                    Op::Assignment(AssignmentOp::SetRow(
+                        merged,
+                        subject_id,
+                        std::collections::BTreeSet::new(),
+                    )),
+                    self.get_desc(),
+                )
+                // Rows are canonical-absent, so an empty set removes this one.
+                // Both predicates that read a row need the row to be there.
+                .expect("clearing an assignment row contradicts nothing");
+            if result.is_some() {
+                panic!("Unexpected result! {:?}", result);
+            }
+        }
+
+        // ---- Associations the surviving period repeats, same group list.
+        let associations: Vec<_> = {
+            let subjects_associations = &session
+                .get_data()
+                .get_inner_data()
+                .params
+                .group_lists
+                .subjects_associations;
+            subjects_associations
+                .iter()
+                .filter_map(|((period, subject), group_list)| {
+                    (period == merged
+                        && subjects_associations.get(&(previous, subject)) == Some(group_list))
+                    .then_some(subject)
+                })
+                .collect()
+        };
+        for subject_id in associations {
+            let result = session
+                .apply(
+                    Op::GroupList(GroupListOp::AssignToSubject(merged, subject_id, None)),
+                    self.get_desc(),
+                )
+                // The one thing an association bounds is the colles on its
+                // period's weeks — and this period has none left.
+                .expect("unassigning on a period with no week left contradicts nothing");
+            if result.is_some() {
+                panic!("Unexpected result! {:?}", result);
+            }
+        }
+    }
+
     pub fn get_desc(&self) -> (OpCategory, String) {
         (
             OpCategory::GeneralPlanning,
@@ -878,9 +1128,14 @@ mod tests {
     use collomatique_state::AppState;
     use collomatique_state::traits::Manager;
     use collomatique_state_colloscopes::{
-        AssignmentOp, ColloscopeOp, Fix, GroupListOp, Op, PeriodOp, StudentOp, Subject, SubjectOp,
-        WeekOp, WeekPatternOp,
-        ids::{Id, PeriodId, SlotId, StudentId, SubjectId, WeekId, WeekPatternId},
+        AssignmentOp, ColloscopeOp, Fix, GroupListOp, NewId, Op, PairingOp, PeriodOp,
+        SlotPairingOp, StudentOp, Subject, SubjectOp, WeekOp, WeekPatternOp,
+        ids::{
+            Id, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId, SubjectId, WeekId,
+            WeekPatternId,
+        },
+        pairings::{PairingRule, RulePart},
+        slot_pairings::SlotPairingRule,
         students::Student,
         week_patterns::WeekPattern,
         weeks::WeekDesc,
@@ -1164,6 +1419,17 @@ mod tests {
             (OpCategory::GeneralPlanning, "Préparation".into()),
         )
         .unwrap_or_else(|e| panic!("the preparation op {op:?} should land, got {e:?}"));
+    }
+
+    /// Applies one preparation op that creates something, and hands back the id
+    /// it issued.
+    fn prepare_new(base: &mut AppState<Data, Desc>, op: Op) -> NewId {
+        base.apply(
+            op.clone(),
+            (OpCategory::GeneralPlanning, "Préparation".into()),
+        )
+        .unwrap_or_else(|e| panic!("the preparation op {op:?} should land, got {e:?}"))
+        .unwrap_or_else(|| panic!("the preparation op {op:?} should have issued an id"))
     }
 
     /// Runs one op alone on `base` and hands back what the document became,
@@ -1644,10 +1910,11 @@ mod tests {
     /// its new coordinate as it was at the old one: **it survives**, where the
     /// old body erased every cell its reconciliation could not carry.
     ///
-    /// What *is* warned is the dead period's own keyed material, dropped rather
-    /// than reconciled (the plan's divergence 5): its eight assignment rows and
-    /// its six associations. The rows are byte-identical to the surviving
-    /// period's here, so the document loses nothing by it.
+    /// The dead period's own keyed material — its eight assignment rows and its
+    /// six associations — is dropped rather than reconciled (the plan's
+    /// divergence 5), and **in silence**: every one of them is byte-identical to
+    /// the surviving period's, so the merged weeks read exactly as they did and
+    /// there is nothing to tell the user about.
     #[test]
     fn merging_two_periods_keeps_the_colles_of_the_one_that_goes() {
         let mut base = hogwarts();
@@ -1676,7 +1943,9 @@ mod tests {
 
         assert_eq!(
             fixes(&warnings),
-            period_scoped_fixes(base.get_data(), merged),
+            Vec::new(),
+            "the two periods carry the same rows and the same associations, so \
+             dropping the dying period's copies changes nothing and says nothing",
         );
         assert_eq!(
             state
@@ -1760,14 +2029,26 @@ mod tests {
         let op = GeneralPlanningUpdateOp::MergeWithPreviousPeriod(merged);
         let (state, warnings, _new_id) = apply_alone(&base, &op);
 
-        let mut expected_fixes = vec![Fix::RemoveGroupsFromInterrogationCell {
-            slot: trimmed_slot,
-            week,
-            groups: BTreeSet::from([6]),
-            rebuilt: BTreeSet::new(),
-        }];
-        expected_fixes.extend(period_scoped_fixes(base.get_data(), merged));
-        assert_eq!(fixes(&warnings), expected_fixes);
+        assert_eq!(
+            fixes(&warnings),
+            vec![
+                Fix::RemoveGroupsFromInterrogationCell {
+                    slot: trimmed_slot,
+                    week,
+                    groups: BTreeSet::from([6]),
+                    rebuilt: BTreeSet::new(),
+                },
+                // The one association the two periods disagree on: Potions is
+                // bound by the small Divination list on the surviving period and
+                // by the main list on the dying one, so dropping the dying copy
+                // really does change what bounds the moved weeks. The five
+                // associations they share, and all eight rows, go silently.
+                Fix::UnassignGroupList {
+                    period: merged,
+                    subject,
+                },
+            ],
+        );
 
         let colloscope = &state.get_data().get_inner_data().colloscope;
         assert_eq!(
@@ -1791,6 +2072,295 @@ mod tests {
                 Op::Week(WeekOp::Move(*week, previous, append_start + offset))
             }),
         );
+        ops.extend(period_removal_ops(base.get_data(), merged));
+
+        assert_eq!(state.get_data(), expected_document(&base, ops).get_data());
+    }
+
+    /// The four « périodes exclues » sets, both ways round. An exclusion the
+    /// surviving period repeats is dropped in silence: the merged weeks stay
+    /// exactly as excluded as they were, because the period they land on
+    /// excludes the same thing. An exclusion only the dying period holds is a
+    /// real change — those weeks start being covered — and that is the one the
+    /// user is told about.
+    ///
+    /// The four reported repairs come in the canonical reference order: subject,
+    /// student, pairing rule, slot pairing rule. The base's own rows and
+    /// associations are identical across the two periods, so they add nothing.
+    #[test]
+    fn merging_reports_only_the_exclusions_the_surviving_period_does_not_repeat() {
+        /// Excluding a subject from a period contradicts the row and the
+        /// association it holds there, so both go first — by the preparation,
+        /// not by the merge.
+        fn clear_subject_on(base: &mut AppState<Data, Desc>, subject: SubjectId, period: PeriodId) {
+            prepare(
+                base,
+                Op::Assignment(AssignmentOp::SetRow(period, subject, BTreeSet::new())),
+            );
+            prepare(
+                base,
+                Op::GroupList(GroupListOp::AssignToSubject(period, subject, None)),
+            );
+        }
+
+        /// Same for a student: they may not be listed in an assignment row of a
+        /// period they skip, so take them out of the period's rows first. The
+        /// rows only ever shrink, so each stays a subset of the surviving
+        /// period's and none of them turns into a warning of its own.
+        fn withdraw_student_from(
+            base: &mut AppState<Data, Desc>,
+            student: StudentId,
+            period: PeriodId,
+        ) {
+            let rows: Vec<(SubjectId, BTreeSet<StudentId>)> = base
+                .get_data()
+                .get_inner_data()
+                .params
+                .assignments
+                .subjects_for_period(period)
+                .filter(|(_subject, students)| students.contains(&student))
+                .map(|(subject, students)| {
+                    let mut without = students.clone();
+                    without.remove(&student);
+                    (subject, without)
+                })
+                .collect();
+            for (subject, students) in rows {
+                prepare(
+                    base,
+                    Op::Assignment(AssignmentOp::SetRow(period, subject, students)),
+                );
+            }
+        }
+
+        fn pairing_rule_of(data: &Data, rule: PairingRuleId) -> PairingRule {
+            data.get_inner_data()
+                .params
+                .pairings
+                .pairing_rule_map
+                .get(&rule)
+                .expect("the fixture's pairing rule should be live")
+                .clone()
+        }
+
+        fn slot_pairing_rule_of(data: &Data, rule: SlotPairingRuleId) -> SlotPairingRule {
+            data.get_inner_data()
+                .params
+                .slot_pairings
+                .slot_pairing_rule_map
+                .get(&rule)
+                .expect("the fixture's slot pairing rule should be live")
+                .clone()
+        }
+
+        fn pairing_rule_excluding(
+            data: &Data,
+            rule: PairingRuleId,
+            periods: BTreeSet<PeriodId>,
+        ) -> PairingRule {
+            let (antecedent, consequent, _excluded, soft) =
+                pairing_rule_of(data, rule).into_parts();
+            PairingRule::new(antecedent, consequent, periods, soft)
+                .expect("the parts are the fixture's own, so they name two subjects")
+        }
+
+        fn slot_pairing_rule_excluding(
+            data: &Data,
+            rule: SlotPairingRuleId,
+            periods: BTreeSet<PeriodId>,
+        ) -> SlotPairingRule {
+            let (antecedent, consequent, _excluded, soft) =
+                slot_pairing_rule_of(data, rule).into_parts();
+            SlotPairingRule::new(antecedent, consequent, periods, soft)
+                .expect("the parts are the fixture's own, so they name two slots")
+        }
+
+        let mut base = hogwarts();
+        let previous = period_at(base.get_data(), 0);
+        let merged = period_at(base.get_data(), 1);
+
+        // The base's last two subjects are the ones that hold no group-list
+        // association, so excluding them costs one row apiece.
+        let subjects = subjects_in_id_order(base.get_data());
+        let (shared_subject, lone_subject) = (subjects[6], subjects[7]);
+        for period in [previous, merged] {
+            clear_subject_on(&mut base, shared_subject, period);
+        }
+        clear_subject_on(&mut base, lone_subject, merged);
+        for (subject, periods) in [
+            (shared_subject, BTreeSet::from([previous, merged])),
+            (lone_subject, BTreeSet::from([merged])),
+        ] {
+            let mut rebuilt = subject_of(base.get_data(), subject);
+            rebuilt.excluded_periods = periods;
+            prepare(&mut base, Op::Subject(SubjectOp::Update(subject, rebuilt)));
+        }
+
+        let shared_student = student_by_name(base.get_data(), "Granger", "Hermione");
+        let lone_student = student_by_name(base.get_data(), "Weasley", "Ron");
+        for period in [previous, merged] {
+            withdraw_student_from(&mut base, shared_student, period);
+        }
+        withdraw_student_from(&mut base, lone_student, merged);
+        for (student, periods) in [
+            (shared_student, BTreeSet::from([previous, merged])),
+            (lone_student, BTreeSet::from([merged])),
+        ] {
+            let mut rebuilt = student_of(base.get_data(), student);
+            rebuilt.excluded_periods = periods;
+            prepare(&mut base, Op::Student(StudentOp::Update(student, rebuilt)));
+        }
+
+        // The base holds no subject pairing rule at all, so this fixture writes
+        // its own two: « avoir Potions ⇒ avoir Métamorphose », excluded from
+        // both periods and then from the dying one only.
+        let part = |subject| RulePart {
+            subject_id: subject,
+            should_have: true,
+        };
+        let rule_parts = (
+            part(subject_by_name(base.get_data(), "Potions")),
+            part(subject_by_name(base.get_data(), "Métamorphose")),
+        );
+        let mut pairing_rules = Vec::new();
+        for periods in [BTreeSet::from([previous, merged]), BTreeSet::from([merged])] {
+            let rule = PairingRule::new(rule_parts.0.clone(), rule_parts.1.clone(), periods, false)
+                .expect("the two parts name two different subjects");
+            match prepare_new(&mut base, Op::Pairing(PairingOp::Add(rule))) {
+                NewId::PairingRuleId(id) => pairing_rules.push(id),
+                other => panic!("Unexpected id after adding a pairing rule: {other:?}"),
+            }
+        }
+        let (shared_rule, lone_rule) = (pairing_rules[0], pairing_rules[1]);
+
+        // The base's two slot pairing rules exclude nothing yet, so they take
+        // the same two roles.
+        let slot_rules: Vec<SlotPairingRuleId> = base
+            .get_data()
+            .get_inner_data()
+            .params
+            .slot_pairings
+            .slot_pairing_rule_map
+            .keys()
+            .collect();
+        assert_eq!(slot_rules.len(), 2, "the base holds two slot pairing rules");
+        let (shared_slot_rule, lone_slot_rule) = (slot_rules[0], slot_rules[1]);
+        for (rule, periods) in [
+            (shared_slot_rule, BTreeSet::from([previous, merged])),
+            (lone_slot_rule, BTreeSet::from([merged])),
+        ] {
+            let rebuilt = slot_pairing_rule_excluding(base.get_data(), rule, periods);
+            prepare(
+                &mut base,
+                Op::SlotPairing(SlotPairingOp::Update(rule, rebuilt)),
+            );
+        }
+
+        let append_start = week_count(base.get_data(), previous);
+        let moved: Vec<WeekId> = (0..week_count(base.get_data(), merged))
+            .map(|position| week_at(base.get_data(), merged, position))
+            .collect();
+
+        // What each of the eight entities looks like once the dying period is
+        // out of its set — the payload of the repair, or of the authored drop.
+        let without_merged_subject = |subject| {
+            let mut rebuilt = subject_of(base.get_data(), subject);
+            rebuilt.excluded_periods.remove(&merged);
+            rebuilt
+        };
+        let (shared_subject_rebuilt, lone_subject_rebuilt) = (
+            without_merged_subject(shared_subject),
+            without_merged_subject(lone_subject),
+        );
+        let without_merged_student = |student| {
+            let mut rebuilt = student_of(base.get_data(), student);
+            rebuilt.excluded_periods.remove(&merged);
+            rebuilt
+        };
+        let (shared_student_rebuilt, lone_student_rebuilt) = (
+            without_merged_student(shared_student),
+            without_merged_student(lone_student),
+        );
+        let shared_rule_rebuilt =
+            pairing_rule_excluding(base.get_data(), shared_rule, BTreeSet::from([previous]));
+        let lone_rule_rebuilt = pairing_rule_excluding(base.get_data(), lone_rule, BTreeSet::new());
+        let shared_slot_rule_rebuilt = slot_pairing_rule_excluding(
+            base.get_data(),
+            shared_slot_rule,
+            BTreeSet::from([previous]),
+        );
+        let lone_slot_rule_rebuilt =
+            slot_pairing_rule_excluding(base.get_data(), lone_slot_rule, BTreeSet::new());
+
+        let op = GeneralPlanningUpdateOp::MergeWithPreviousPeriod(merged);
+        let (state, warnings, _new_id) = apply_alone(&base, &op);
+
+        assert_eq!(
+            fixes(&warnings),
+            vec![
+                Fix::RemoveSubjectPeriodExclusion {
+                    subject: lone_subject,
+                    period: merged,
+                    rebuilt: lone_subject_rebuilt.clone(),
+                },
+                Fix::RemoveStudentPeriodExclusion {
+                    student: lone_student,
+                    period: merged,
+                    rebuilt: lone_student_rebuilt.clone(),
+                },
+                Fix::RemovePairingRulePeriodExclusion {
+                    rule: lone_rule,
+                    period: merged,
+                    rebuilt: lone_rule_rebuilt.clone(),
+                },
+                Fix::RemoveSlotPairingRulePeriodExclusion {
+                    rule: lone_slot_rule,
+                    period: merged,
+                    rebuilt: lone_slot_rule_rebuilt.clone(),
+                },
+            ],
+            "only the four exclusions the surviving period does not repeat are worth a word",
+        );
+
+        // The shared four lost the dying period from their sets just the same —
+        // silently. The document is what it would have been either way, which is
+        // the whole claim.
+        let mut ops: Vec<Op> = moved
+            .iter()
+            .enumerate()
+            .map(|(offset, week)| Op::Week(WeekOp::Move(*week, previous, append_start + offset)))
+            .collect();
+        ops.push(Op::Subject(SubjectOp::Update(
+            shared_subject,
+            shared_subject_rebuilt,
+        )));
+        ops.push(Op::Subject(SubjectOp::Update(
+            lone_subject,
+            lone_subject_rebuilt,
+        )));
+        ops.push(Op::Student(StudentOp::Update(
+            shared_student,
+            shared_student_rebuilt,
+        )));
+        ops.push(Op::Student(StudentOp::Update(
+            lone_student,
+            lone_student_rebuilt,
+        )));
+        ops.push(Op::Pairing(PairingOp::Update(
+            shared_rule,
+            shared_rule_rebuilt,
+        )));
+        ops.push(Op::Pairing(PairingOp::Update(lone_rule, lone_rule_rebuilt)));
+        ops.push(Op::SlotPairing(SlotPairingOp::Update(
+            shared_slot_rule,
+            shared_slot_rule_rebuilt,
+        )));
+        ops.push(Op::SlotPairing(SlotPairingOp::Update(
+            lone_slot_rule,
+            lone_slot_rule_rebuilt,
+        )));
+        // The two subjects cleared above hold no row and no association on the
+        // dying period any more, so their entries here are no-ops.
         ops.extend(period_removal_ops(base.get_data(), merged));
 
         assert_eq!(state.get_data(), expected_document(&base, ops).get_data());
