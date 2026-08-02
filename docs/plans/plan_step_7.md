@@ -13,11 +13,14 @@ them and the property walk over that, plus the riders 0bis/0ter, 3.3bis, 3.12+ a
 3.13bis. The `landed` column of §3's table is the authoritative record. **Commit 3 is
 closed and the new path is fuzzed; commit 5 is closed — 5.0, 5.1 and 5.2 have
 all landed (this section was reviewed and re-planned with the user August 2),
-and commit 6.0 has landed on top of it**, so the next commit is 6.1, then
-6.2–6.4 and 7. Commit 6.0 was not in the original plan: surveying gtk4 for 6.1
-showed the rendering helpers could not be called there at all, and §5-C6's 6.0
-records why and what changed. `cascade_dry_apply` / `cascade_apply` now exist,
-but nothing in production calls them: no consumer moves before 6.2.
+and commits 6.0 and 6.1 have landed on top of it**, so the next commit is 6.2,
+then 6.3–6.4 and 7. Commit 6.0 was not in the original plan: surveying gtk4 for
+6.1 showed the rendering helpers could not be called there at all, and §5-C6's
+6.0 records why and what changed. gtk4 now names periods, weeks, slots, groups
+and pairing rules through `ops::rendering` (6.1), so the warning dialog 6.2
+switches on will speak the same words as the screen behind it.
+`cascade_dry_apply` / `cascade_apply` now exist, but nothing in production calls
+them: no consumer moves before 6.2.
 
 The migration pattern is the step-5 one: build the new world in parallel under
 transitional names, move consumers over, delete the old world, rename at the very end so
@@ -736,7 +739,7 @@ lands.
 | 5.1 | `warning_text.rs` renderer + `CascadeWarning::text` | ops | `883657bb` |
 | 5.2 | all the tests: walk renders every warning; rendering unit tests | ops | `b043b8a2` |
 | 6.0 | the rendering helpers take the document parts they read, not `&Data` — the precondition for 6.1 | ops | `d21b61e3` |
-| 6.1 | gtk4 helper dedup — local renderers replaced by `ops::rendering` | gtk4 | — |
+| 6.1 | gtk4 helper dedup — local renderers replaced by `ops::rendering` | gtk4 | `7fe0aed8` |
 | 6.2 | gtk4 warning-dialog switch (gtk4 smoke here covers 6.1 too) | gtk4 | — |
 | 6.3 | python switch (contract scripts run here) | python | — |
 | 6.4 | drop dead rpc-engine dep (⇒ **cargoHash**) | rpc-engine | — |
