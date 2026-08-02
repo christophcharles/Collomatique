@@ -33,6 +33,7 @@ use collomatique_state::traits::Manager;
 use collomatique_state_colloscopes::{Data, Error, Fix, NewId, Op};
 
 use crate::Desc;
+use crate::rendering::MissingId;
 
 /// One warning attached to an update: a repair the cascade had to apply beyond
 /// the ops the user's own action asked for.
@@ -43,8 +44,8 @@ use crate::Desc;
 ///
 /// What it carries is the repair's *meaning* (the [Fix] vocabulary), never the
 /// invariant that caused it: which invariant the engine picked never leaves the
-/// engine. No text is stored either — rendering is a method computed on demand
-/// against the composite's pre-state, and it arrives with the renderer.
+/// engine. No text is stored either — [CascadeWarning::text] computes it on
+/// demand, against the composite's pre-state.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CascadeWarning {
     fix: Fix,
@@ -58,6 +59,23 @@ impl CascadeWarning {
     /// Borrowed read-only view of what the repair did.
     pub fn fix(&self) -> &Fix {
         &self.fix
+    }
+
+    /// The French, effect-phrased sentence describing the repair, read against
+    /// `data`.
+    ///
+    /// `data` must be the **pre-state** of the composite the warning came from —
+    /// the document the user is still looking at when the dialog appears. That
+    /// is where the material this warning names is to be found: rendering
+    /// against the post-state would look for entities the update has just
+    /// removed.
+    ///
+    /// `Err(MissingId)` means `data` does not hold that material, which is a
+    /// violation of the frame rule's rendering corollary (see the module docs)
+    /// rather than an outcome to handle: the callers that must not fail panic
+    /// on it.
+    pub fn text(&self, data: &Data) -> Result<String, MissingId> {
+        crate::warning_text::render(data, &self.fix)
     }
 }
 

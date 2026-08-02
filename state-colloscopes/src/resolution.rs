@@ -15,6 +15,9 @@
 //! the bottom of this file; the variants carry the rebuilt payloads that makes
 //! that possible.
 //!
+//! Every [Fix] variant has a French description in `ops/src/warning_text.rs` —
+//! a new or changed variant must update its text.
+//!
 //! The whole job of an arm is one question — *can I remove, from the current
 //! state, the thing the invariant complains about?* If yes, `Some(fix)`; if no,
 //! `None`. What the engine then does with `None` (convict the failing target,

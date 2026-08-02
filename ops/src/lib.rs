@@ -27,6 +27,10 @@ pub use cascade::*;
 // words.
 pub mod rendering;
 
+// Private: the crate's only rendering door for warnings is
+// [cascade::CascadeWarning::text].
+mod warning_text;
+
 #[cfg(test)]
 mod test_utils;
 

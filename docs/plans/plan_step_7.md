@@ -11,10 +11,11 @@ step is the consumer.
 the engine wrapper, the session struct, **all fifteen families**, the dispatch above
 them and the property walk over that, plus the riders 0bis/0ter, 3.3bis, 3.12+ and
 3.13bis. The `landed` column of §3's table is the authoritative record. **Commit 3 is
-closed and the new path is fuzzed; commit 5.0 has landed, so the next commits are
-5.1 then 5.2 (the renderer and its tests — reviewed and re-planned with the user
-August 2)**, then 6.1–6.4 and 7. `cascade_dry_apply` / `cascade_apply` now exist, but nothing in
-production calls them: no consumer moves before 6.2.
+closed and the new path is fuzzed; commits 5.0 and 5.1 have landed, so the next
+commit is 5.2 (the rendering tests — this section was reviewed and re-planned
+with the user August 2)**, then 6.1–6.4 and 7. `cascade_dry_apply` /
+`cascade_apply` now exist, but nothing in production calls them: no consumer
+moves before 6.2.
 
 The migration pattern is the step-5 one: build the new world in parallel under
 transitional names, move consumers over, delete the old world, rename at the very end so
@@ -729,8 +730,8 @@ lands.
 | 3.13bis | move the interrogation-row convergences ahead of the association ones (§3.13) | state-colloscopes, ops | `9ef4299b` |
 | 3.16 | `UpdateOp` dispatch + `cascade_dry_apply`/`cascade_apply` | ops | `e00c62ff` |
 | 4 | the `UpdateOp` property walk (testgen dev-dep ⇒ **cargoHash**) | ops | `6ca28b95` |
-| 5.0 | `rendering.rs` — shared noun-less id renderers + `MissingId` + `join_french` | ops | *this commit* |
-| 5.1 | `warning_text.rs` renderer + `CascadeWarning::text` | ops | — |
+| 5.0 | `rendering.rs` — shared noun-less id renderers + `MissingId` + `join_french` | ops | `509fb83c` |
+| 5.1 | `warning_text.rs` renderer + `CascadeWarning::text` | ops | *this commit* |
 | 5.2 | all the tests: walk renders every warning; rendering unit tests | ops | — |
 | 6.1 | gtk4 helper dedup — local renderers replaced by `ops::rendering` | gtk4 | — |
 | 6.2 | gtk4 warning-dialog switch (gtk4 smoke here covers 6.1 too) | gtk4 | — |
@@ -1484,6 +1485,38 @@ composite-emitted template beside it.
 
 The old many-to-one collapses (several invariants → one effect → one sentence) are now
 explicit in the vocabulary itself: they are the multi-entry "produced by" cells.
+
+**As landed** (this commit, `ops/src/warning_text.rs`, no tests — they are 5.2's).
+The twenty-five templates went in as the catalogue has them. Three things worth
+recording.
+
+*The module is private.* `mod warning_text;` — not `pub mod`, unlike `rendering`:
+`render` is `pub(crate)` and [CascadeWarning::text] is the only door out, so there
+is no reason for the module path to exist in the public API at all.
+
+*Two lookups the placeholder notation hid.* `{groupes}` reads as "just call
+`render_group`", but `RemoveGroupsFromInterrogationCell` carries no group list —
+group numbers in a cell are bounded by the list associated at the cell's
+`(period, subject)` coordinate, and the fix names that coordinate only through its
+slot and its week. So the arm resolves slot → subject, week → period, then the
+association, in a private `cell_group_list` helper; `UnassignGroupList` needs the
+last step of the same chain and they share the `association` helper under it. Both
+are sound for the pre-state reason the catalogue's rendering note gives, and both
+`Err` as `MissingId::Association` — the variant 5.0 added for exactly this.
+
+*Eyeballed against the frozen hogwarts base* on a throwaway test since deleted,
+the same way 5.0 checked its formats: « Le créneau Severus Rogue - jeudi 13h00
+(Potions) sera supprimé », « Severus Rogue n'interviendra plus en Potions »,
+« L'association de la liste « Liste principale » en Potions sur la période 1 (du
+04/09/1995 au 01/10/1995 - semaines 1 à 4) sera supprimée », « Les groupes 1 et 3
+seront retirés de la colle du créneau Severus Rogue - jeudi 13h00 (Potions) en
+semaine 3 (du 18/09/1995 au 24/09/1995) ». Eleven variants had a live example
+there; the other fourteen did not, because hogwarts excludes nobody from anything,
+holds no pairing rule and no slot pairing rule, and has no per-student settings —
+the same gap 5.0 recorded for `render_pairing_rule`, wider. **That is what 5.2's
+property walk is for**: it is the first thing to render the period-exclusion, rule
+and settings templates at all, so a run that shows those `Fix` variants never
+drawn would mean the walk, not the renderer, needs work.
 
 ### 5.2 — all the tests (5.0 and 5.1 land test-less)
 
