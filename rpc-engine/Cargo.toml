@@ -9,7 +9,6 @@ collomatique-rpc = { path = "../rpc" }
 collomatique-python = { path = "../python" }
 collomatique-state = { path = "../state" }
 collomatique-state-colloscopes = { path = "../state-colloscopes" }
-collomatique-ops = { path = "../ops" }
 collomatique-constraints-colloscopes = { path = "../constraints-colloscopes" }
 collomatique-ilp = { path = "../ilp", features = ["serde", "collo_cbc"] }
 collomatique-ilp-modeler = { path = "../ilp-modeler", features = ["serde"] }

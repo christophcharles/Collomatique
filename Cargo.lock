@@ -509,7 +509,6 @@ dependencies = [
  "collomatique-constraints-colloscopes",
  "collomatique-ilp",
  "collomatique-ilp-modeler",
- "collomatique-ops",
  "collomatique-python",
  "collomatique-rpc",
  "collomatique-state",
