@@ -137,6 +137,12 @@ still exist*:
 
 ### Status (July 2026)
 
+*This is the phase-0 record as written, and some of its details are of that era: the harness
+originally asserted `check_invariants` (now `broken_invariants`), and the "16 op categories"
+count predates the invariant-cascade re-cuts of the op surface. The harness moved with the
+stack in the same changes each time. Appendix A.10 describes the safety net as it stands
+today.*
+
 - **Item 3 — DONE** (commit `7628f303`): in-crate `#[cfg(test)]` tests for `state/` —
   history pointer math and truncation, `Manager::apply` failure paths, mid-aggregate
   rollback (success, rollback-on-failure, panic-on-failed-rollback), session
