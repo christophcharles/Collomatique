@@ -11,9 +11,9 @@ step is the consumer.
 the engine wrapper, the session struct, **all fifteen families**, the dispatch above
 them and the property walk over that, plus the riders 0bis/0ter, 3.3bis, 3.12+ and
 3.13bis. The `landed` column of §3's table is the authoritative record. **Commit 3 is
-closed and the new path is fuzzed; commits 5.0 and 5.1 have landed, so the next
-commit is 5.2 (the rendering tests — this section was reviewed and re-planned
-with the user August 2)**, then 6.1–6.4 and 7. `cascade_dry_apply` /
+closed and the new path is fuzzed; commit 5 is closed — 5.0, 5.1 and 5.2 have
+all landed (this section was reviewed and re-planned with the user August 2),
+so the next commit is 6.1**, then 6.2–6.4 and 7. `cascade_dry_apply` /
 `cascade_apply` now exist, but nothing in production calls them: no consumer
 moves before 6.2.
 
@@ -731,8 +731,8 @@ lands.
 | 3.16 | `UpdateOp` dispatch + `cascade_dry_apply`/`cascade_apply` | ops | `e00c62ff` |
 | 4 | the `UpdateOp` property walk (testgen dev-dep ⇒ **cargoHash**) | ops | `6ca28b95` |
 | 5.0 | `rendering.rs` — shared noun-less id renderers + `MissingId` + `join_french` | ops | `509fb83c` |
-| 5.1 | `warning_text.rs` renderer + `CascadeWarning::text` | ops | *this commit* |
-| 5.2 | all the tests: walk renders every warning; rendering unit tests | ops | — |
+| 5.1 | `warning_text.rs` renderer + `CascadeWarning::text` | ops | `883657bb` |
+| 5.2 | all the tests: walk renders every warning; rendering unit tests | ops | *this commit* |
 | 6.1 | gtk4 helper dedup — local renderers replaced by `ops::rendering` | gtk4 | — |
 | 6.2 | gtk4 warning-dialog switch (gtk4 smoke here covers 6.1 too) | gtk4 | — |
 | 6.3 | python switch (contract scripts run here) | python | — |
@@ -1531,6 +1531,64 @@ churn on every polish:
 - Unit tests in `rendering.rs` for the branchy leaves: `join_french` (one / two /
   three items) and the period renderer (multi-week, single-week, « (vide) », each
   with and without a start date).
+
+**As landed** (this commit). Both pieces went in as planned, and the walk grew a
+third guard on top of them.
+
+*The walk renders, and the rendering is checked against the right document.*
+Each collected warning is rendered with `w.text(state.get_data())` where `state`
+is still the pre-state — the assignment `state = result.new_state` comes after —
+and an `Err` panics with both the `MissingId` and the `Fix`. Mutation-checked by
+rendering against `result.new_state` instead: **red on seed 0 after five ops**,
+`Slot id (SlotId(26)) is invalid (fix: DeleteSlot { slot: SlotId(26) })` — which
+is the point of D7 in one line, a repair's own target being gone from the state
+it produced.
+
+*A per-`Fix`-variant coverage guard, pinned both ways.* Rendering totality is
+only worth what the walk actually renders, so the run tallies warnings per `Fix`
+variant, prints the tally, and asserts every variant of `FIX_VARIANTS` was
+rendered at least once — and that nothing outside the list was, so a
+twenty-sixth variant cannot arrive unnoticed. `report()` now runs *before*
+`assert_covered()`, so a run that fails a guard still prints the numbers that
+explain it. Two variants were missing on the first run, for opposite reasons:
+
+- **`DeleteOverflowingSlot` was the walk's fault, and is fixed here.**
+  `testgen`'s synthesizers keep interrogation durations at 30 or 60 minutes and
+  slot starts between 8:00 and 18:00 *precisely so* a slot can never overflow its
+  day (`synth.rs:103-106`), so nothing built from them ever reaches
+  `Convergence::SlotOverflowsDay`. The ops walk now stretches an
+  `UpdateSubject`'s duration to ten hours one time in ten: every slot of the
+  subject starting after 14:00 then runs past midnight, and the cascade deletes
+  it. 11 renders over the run — thin, but the shape is reached, and the pre-
+  existing-material path is exactly the one the « il déborderait sur le jour
+  suivant » sentence is written for.
+- **`DeleteWeek` is unreachable from `ops/`, by design.** It answers a dangling
+  `Week::period_id`, which only a bare `PeriodOp::Remove` leaves — and no
+  composite emits a bare one, because `DeletePeriodAndWeeks` authors its weeks'
+  removal first (★ D8). Rather than quietly leaving it off the list, it sits in
+  its own `OPS_UNREACHABLE_FIX_VARIANTS` const, with the reasoning, and is
+  asserted **absent**: the day a composite grows a bare period removal, the walk
+  says so and the name moves. Its French template stays — the state-layer path
+  that reaches it is fixture 1b of `state-colloscopes/tests/cascade.rs`.
+
+The other twenty-three were all rendered without any generator work, most in the
+hundreds; the thinnest are `RemoveGroupsFromInterrogationCell` (5),
+`RemoveSlotPairingRulePeriodExclusion` (10) and `ClearInterrogationCell` (18).
+So the fourteen variants 5.1 recorded as having no live example in hogwarts —
+the period-exclusion, rule and settings templates — are read here for the first
+time, which is what that note asked for.
+
+*The unit tests.* `join_french` on one / two / three items (plus the empty
+branch, unreachable from any fix but present in the code, so it says what it
+does), and `render_period` over the six planned shapes, built from
+`Data::default()` by elementary ops — three periods of four, one and zero weeks,
+rendered with and without the document start date, the « (vide) » branch pinned
+to win over the dates. One test beyond the plan's list: `render_period` on a
+removed period id returns `Err(MissingId::Period(id))`, the miss policy the whole
+module is built on, pinned once where it is cheap. All four mutation-checked —
+dropping the empty-period short-circuit, forcing the plural « semaines n à m »,
+mis-computing the period end date and changing `join_french`'s separator each go
+red on exactly the assertion that covers them.
 
 ## 5-C6/C7. Commits 6.1–6.4 and 7
 

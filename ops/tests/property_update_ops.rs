@@ -11,12 +11,19 @@
 //!   bodies keep a residual catch-all `panic!` per translation site, each
 //!   meaning "the state layer produced an error this op cannot produce". Those
 //!   arms are claims about reachability, and a fuzz walk is the only thing that
-//!   argues with them. (Commit 5 will extend the loop to render every warning,
-//!   so the renderer's own lookup panics get fuzzed for free.)
+//!   argues with them.
 //! * **`Ok` ⇒ the committed document is valid.** The composite's own elementary
 //!   ops and every repair they cascaded land together, so the state the caller
 //!   is handed must satisfy the whole-model checker — no dangling reference, no
 //!   convergence break, no logic error.
+//! * **`Ok` ⇒ every warning renders.** `CascadeWarning::text` is called on
+//!   each collected warning against the **pre-state** — the document the user
+//!   is still looking at when the dialog appears, which is what the texts are
+//!   written against. A miss means a repair reached material that document
+//!   never held, i.e. a violation of the frame rule's rendering corollary, and
+//!   it fails the walk. This is the whole verification of the renderer: the
+//!   texts carry no per-variant pins, so what has to be argued is not their
+//!   wording but that every reachable repair *has* one and can resolve it.
 //! * **`Err` is fine.** A clean rejection is a legitimate outcome (bad address,
 //!   convicted target); the walk never predicts which ops will land.
 //!
@@ -34,7 +41,12 @@
 //! whose every op was rejected, or that never made the cascade repair anything,
 //! would pass just as happily while proving nothing. So the run counts what it
 //! saw and insists on all three outcomes — ops that landed, ops that cascaded a
-//! repair, ops that were rejected — plus at least one attempt per family.
+//! repair, ops that were rejected — plus at least one attempt per family and,
+//! since the renderer arrived, at least one rendered warning per *reachable*
+//! [`Fix`] variant: the vocabulary is closed and small enough to ask for all of
+//! it, and an unrendered variant is a template nothing ever read. The one shape
+//! no user-facing op can produce is named and asserted absent rather than left
+//! off the list — see [`OPS_UNREACHABLE_FIX_VARIANTS`].
 //!
 //! On failure the seed and the full op log are printed, so the sequence replays
 //! exactly.
@@ -50,7 +62,7 @@ use collomatique_ops::{
 };
 use collomatique_state::{AppState, traits::Manager};
 use collomatique_state_colloscopes::{
-    Data, InnerData,
+    Data, Fix, InnerData,
     group_lists::{GroupList, GroupListFilling},
     ids::{
         GroupListId, Id, IncompatId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId,
@@ -95,6 +107,53 @@ const FAMILIES: [&str; 15] = [
     "colloscope",
     "export_config",
 ];
+
+/// The [`Fix`] variants a user-facing op can reach, for the rendering coverage
+/// guard. The list is pinned **both ways**: a variant the walk never renders
+/// fails the run (its French template was never read by anything), and a
+/// variant the walk renders that is on neither this list nor
+/// [`OPS_UNREACHABLE_FIX_VARIANTS`] fails it too (the vocabulary grew and this
+/// guard has to be told). Names as [`Fix`]'s own `Debug` prints them.
+const FIX_VARIANTS: [&str; 24] = [
+    "RemoveSubjectPeriodExclusion",
+    "RemoveStudentPeriodExclusion",
+    "RemovePairingRulePeriodExclusion",
+    "RemoveSlotPairingRulePeriodExclusion",
+    "ClearAssignmentRow",
+    "UnassignGroupList",
+    "RemoveWeekPatternExclusion",
+    "ClearInterrogationCell",
+    "RemoveTeacherSubject",
+    "DeleteSlot",
+    "DeleteOverflowingSlot",
+    "DeleteIncompat",
+    "DeletePairingRule",
+    "ClearSubjectBalancing",
+    "RemoveStudentFromGroupListPrefill",
+    "RemoveStudentGroupListExclusion",
+    "ClearStudentSettings",
+    "RemoveStudentFromAssignmentRow",
+    "RemoveStudentColloscopePlacement",
+    "ClearSlotWeekPattern",
+    "ClearIncompatWeekPattern",
+    "DeleteSlotPairingRule",
+    "ClearColloscopeGroupListRow",
+    "RemoveGroupsFromInterrogationCell",
+];
+
+/// The one repair shape no user-facing op can produce, asserted absent rather
+/// than quietly left off [`FIX_VARIANTS`].
+///
+/// `Fix::DeleteWeek` answers a dangling `Week::period_id` — a week whose period
+/// is gone. Only a bare elementary [`collomatique_state_colloscopes::PeriodOp::Remove`]
+/// leaves one, and no composite emits a bare one: `DeletePeriodAndWeeks`
+/// *authors* its weeks' removal first, precisely so the user is not told « la
+/// semaine X sera supprimée » about weeks they asked to delete (★ D8). The
+/// state-layer path that does reach it is pinned by fixture 1b of
+/// `state-colloscopes/tests/cascade.rs`, and its French template is written for
+/// the day a composite legitimately grows a bare period removal — the day this
+/// name moves to [`FIX_VARIANTS`].
+const OPS_UNREACHABLE_FIX_VARIANTS: [&str; 1] = ["DeleteWeek"];
 
 /// Base for ids that are guaranteed dangling — the same convention as
 /// `testgen`'s own generator. Real ids are issued sequentially from 0 and never
@@ -420,10 +479,22 @@ fn gen_subjects(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> SubjectsU
             // what makes the cascade drop the subject's slots, its balancing
             // options and its group-list associations.
             let with_interrogation = rng.random_bool(0.6);
-            SubjectsUpdateOp::UpdateSubject(
-                subject_id,
-                synth::subject(rng, &pools.period_ids, with_interrogation).parameters,
-            )
+            let mut parameters =
+                synth::subject(rng, &pools.period_ids, with_interrogation).parameters;
+            // …and so is the duration, occasionally. testgen keeps its
+            // durations at 30 or 60 minutes and its start times between 8:00
+            // and 18:00 precisely so a slot can never overflow its day, so
+            // nothing built from the shared synthesizers ever reaches
+            // `Convergence::SlotOverflowsDay`. A ten-hour interrogation does:
+            // every one of the subject's slots starting after 14:00 now runs
+            // past midnight, and the cascade deletes it.
+            if let Some(interrogation) = parameters.interrogation_parameters.as_mut()
+                && rng.random_bool(0.1)
+            {
+                interrogation.duration =
+                    collomatique_time::NonZeroMinutes::new(10 * 60).expect("statically non-zero");
+            }
+            SubjectsUpdateOp::UpdateSubject(subject_id, parameters)
         }
         2 => SubjectsUpdateOp::DeleteSubject(pick(rng, &pools.subject_ids)),
         3 => SubjectsUpdateOp::MoveSubjectUp(pick(rng, &pools.subject_ids)),
@@ -1028,6 +1099,9 @@ struct Counters {
     /// asserted (beyond "was it drawn at all"): the numbers are what tells a
     /// reader the walk did not degenerate into one family's error loop.
     per_family: RefCell<BTreeMap<&'static str, (usize, usize)>>,
+    /// Per [`Fix`] variant: warnings rendered. Asserted against
+    /// [`FIX_VARIANTS`].
+    per_fix: RefCell<BTreeMap<String, usize>>,
 }
 
 impl Counters {
@@ -1042,6 +1116,14 @@ impl Counters {
         if landed {
             entry.1 += 1;
         }
+    }
+
+    fn record_fix(&self, fix: &Fix) {
+        *self
+            .per_fix
+            .borrow_mut()
+            .entry(fix_variant(fix))
+            .or_default() += 1;
     }
 
     /// The guards that make a green run mean something.
@@ -1076,6 +1158,34 @@ impl Counters {
                  fuzzed and its bodies were not",
             );
         }
+        let per_fix = self.per_fix.borrow();
+        for variant in FIX_VARIANTS {
+            assert!(
+                per_fix.contains_key(variant),
+                "no warning of shape `Fix::{variant}` was ever rendered — its \
+                 French template is unread, so nothing argues that it resolves \
+                 the material it names. The renderer is not what needs work \
+                 here: teach the generator to produce the repair.",
+            );
+        }
+        for variant in OPS_UNREACHABLE_FIX_VARIANTS {
+            assert!(
+                !per_fix.contains_key(variant),
+                "a warning of shape `Fix::{variant}` was rendered, which no \
+                 user-facing op was supposed to be able to produce — either a \
+                 composite grew a repair it should have authored itself, or the \
+                 reasoning behind `OPS_UNREACHABLE_FIX_VARIANTS` no longer \
+                 holds and the name belongs in `FIX_VARIANTS`",
+            );
+        }
+        for variant in per_fix.keys() {
+            assert!(
+                FIX_VARIANTS.contains(&variant.as_str()),
+                "the walk rendered a warning of shape `Fix::{variant}`, which \
+                 `FIX_VARIANTS` does not list — the repair vocabulary grew and \
+                 this guard has to be told",
+            );
+        }
     }
 
     fn report(&self) {
@@ -1089,7 +1199,26 @@ impl Counters {
         for (family, (attempted, landed)) in self.per_family.borrow().iter() {
             eprintln!("  {family}: {landed} landed / {attempted} drawn");
         }
+        eprintln!("update-op fuzz: warnings rendered, per repair shape:");
+        for (variant, count) in self.per_fix.borrow().iter() {
+            eprintln!("  Fix::{variant}: {count}");
+        }
     }
+}
+
+/// The [`Fix`] variant a warning carries, as a name for the tally. Read off
+/// `Debug` rather than written out as a twenty-five-arm table: the names are
+/// the tally's keys and its guard reads them from [`FIX_VARIANTS`], so a
+/// second copy of the vocabulary here would only be one more thing to keep in
+/// step.
+fn fix_variant(fix: &Fix) -> String {
+    let debug = format!("{fix:?}");
+
+    debug
+        .split([' ', '('])
+        .next()
+        .expect("`split` always yields at least one piece")
+        .to_string()
 }
 
 /// The invariant oracle: what the new path commits must satisfy the whole-model
@@ -1145,6 +1274,22 @@ fn update_ops_never_panic_and_land_valid() {
                             Counters::bump(&counters.warned, 1);
                             Counters::bump(&counters.warnings, result.warnings.len());
                         }
+                        // Rendered against `state`, which is still the
+                        // *pre*-state here: that is the document the dialog
+                        // appears over, and the one the texts are written
+                        // against (D7). An `Err` means a repair named material
+                        // the pre-state never held — the frame rule's
+                        // rendering corollary broken — and the seed replays it.
+                        for warning in &result.warnings {
+                            counters.record_fix(warning.fix());
+                            if let Err(missing) = warning.text(state.get_data()) {
+                                panic!(
+                                    "a warning could not be rendered against the pre-state: \
+                                     {missing} (fix: {:?})",
+                                    warning.fix(),
+                                );
+                            }
+                        }
                         counters.record(family, true);
                         state = result.new_state;
                     }
@@ -1169,8 +1314,10 @@ fn update_ops_never_panic_and_land_valid() {
         }
     }
 
-    counters.assert_covered();
+    // Reported before the guards are checked, so a run that fails one still
+    // prints the numbers that explain it.
     counters.report();
+    counters.assert_covered();
     eprintln!(
         "update-op fuzz: {} seeds × {} ops in {:.2?}",
         CONFIG.seeds,

@@ -362,3 +362,139 @@ pub fn join_french(items: &[String]) -> String {
         [head @ .., last] => format!("{} et {}", head.join(", "), last),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    //! The two branchy leaves of this module.
+    //!
+    //! Everything else here is one lookup and one `format!`, and the property
+    //! walk (`tests/property_update_ops.rs`) drives all of them at full width
+    //! through the warning texts — what it cannot do is *choose* the shapes,
+    //! and these two have shapes worth choosing. [join_french] has three, and
+    //! [render_period] has six: a period spanning several weeks, a period
+    //! spanning one (the singular « semaine {n} »), and an empty one (« (vide) »,
+    //! which must win over everything else), each with and without a document
+    //! start date.
+    //!
+    //! Deliberately no French text pins beyond these: with typed ids a
+    //! cross-field mix-up does not compile, and pinning wording would only
+    //! manufacture fixture churn on every polish.
+
+    use super::*;
+    use crate::{Desc, OpCategory};
+    use collomatique_state::AppState;
+    use collomatique_state::traits::Manager;
+    use collomatique_state_colloscopes::{NewId, Op, PeriodOp, WeekOp, weeks::WeekDesc};
+
+    fn desc() -> Desc {
+        (OpCategory::GeneralPlanning, "Construire le document".into())
+    }
+
+    /// Three periods, spanning four weeks, one week and no week at all — the
+    /// three branches of [render_period], in display order so their numbers
+    /// read 1, 2, 3.
+    fn three_periods(first_week: Option<collomatique_time::WeekStart>) -> (Data, Vec<PeriodId>) {
+        let mut state = AppState::<_, Desc>::new(Data::default());
+
+        state
+            .apply(Op::Period(PeriodOp::ChangeStartDate(first_week)), desc())
+            .expect("setting the start date should land");
+
+        let mut periods = Vec::new();
+        for _ in 0..3 {
+            let op = match periods.last() {
+                None => PeriodOp::AddFront,
+                Some(previous) => PeriodOp::AddAfter(*previous),
+            };
+            match state.apply(Op::Period(op), desc()) {
+                Ok(Some(NewId::PeriodId(id))) => periods.push(id),
+                other => panic!("adding a period should return a period id, got {other:?}"),
+            }
+        }
+
+        for (period, week_count) in [(periods[0], 4), (periods[1], 1), (periods[2], 0)] {
+            let mut previous = None;
+            for _ in 0..week_count {
+                let op = match previous {
+                    None => WeekOp::AddFront(period, WeekDesc::new(true)),
+                    Some(week) => WeekOp::AddAfter(week, WeekDesc::new(true)),
+                };
+                match state.apply(Op::Week(op), desc()) {
+                    Ok(Some(NewId::WeekId(id))) => previous = Some(id),
+                    other => panic!("adding a week should return a week id, got {other:?}"),
+                }
+            }
+        }
+
+        (state.get_data().clone(), periods)
+    }
+
+    /// Monday 31 August 2026 — the document's first week.
+    fn start_date() -> collomatique_time::WeekStart {
+        collomatique_time::WeekStart::new(
+            chrono::NaiveDate::from_ymd_opt(2026, 8, 31).expect("valid date"),
+        )
+        .expect("31 August 2026 is a Monday")
+    }
+
+    #[test]
+    fn join_french_reads_as_a_sentence() {
+        assert_eq!(join_french(&["a".to_string()]), "a");
+        assert_eq!(join_french(&["a".to_string(), "b".to_string()]), "a et b");
+        assert_eq!(
+            join_french(&["a".to_string(), "b".to_string(), "c".to_string()]),
+            "a, b et c",
+        );
+        // No caller can reach this one — a fix naming zero groups is not a fix
+        // — but the branch exists, so it says what it does.
+        assert_eq!(join_french(&[]), "");
+    }
+
+    #[test]
+    fn render_period_without_a_start_date_says_which_weeks() {
+        let (data, periods) = three_periods(None);
+
+        assert_eq!(
+            render_period(&data, periods[0]),
+            Ok("1 (semaines 1 à 4)".to_string())
+        );
+        assert_eq!(
+            render_period(&data, periods[1]),
+            Ok("2 (semaine 5)".to_string())
+        );
+        assert_eq!(render_period(&data, periods[2]), Ok("3 (vide)".to_string()));
+    }
+
+    #[test]
+    fn render_period_with_a_start_date_adds_the_dates() {
+        let (data, periods) = three_periods(Some(start_date()));
+
+        assert_eq!(
+            render_period(&data, periods[0]),
+            Ok("1 (du 31/08/2026 au 27/09/2026 - semaines 1 à 4)".to_string()),
+        );
+        assert_eq!(
+            render_period(&data, periods[1]),
+            Ok("2 (du 28/09/2026 au 04/10/2026 - semaine 5)".to_string()),
+        );
+        // The empty branch wins over the dates: a period with no week has no
+        // span to print.
+        assert_eq!(render_period(&data, periods[2]), Ok("3 (vide)".to_string()));
+    }
+
+    #[test]
+    fn render_period_on_a_dead_id_names_the_period() {
+        let (data, periods) = three_periods(None);
+        let dead = periods[2];
+
+        let mut state = AppState::<_, Desc>::new(data);
+        state
+            .apply(Op::Period(PeriodOp::Remove(dead)), desc())
+            .expect("the period is empty, so removing it breaks nothing");
+
+        assert_eq!(
+            render_period(state.get_data(), dead),
+            Err(MissingId::Period(dead)),
+        );
+    }
+}
