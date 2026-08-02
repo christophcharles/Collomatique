@@ -2,14 +2,24 @@ use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
 use relm4::gtk;
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
 
+/// One line of the warning list: the rendered sentence and its nesting depth.
+///
+/// Depth 0 is a repair one of the user's own ops needed; a deeper line is a
+/// sub-repair of the nearest line above it at the previous depth.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WarningLine {
+    pub text: String,
+    pub depth: usize,
+}
+
 pub struct Dialog {
     hidden: bool,
-    warnings: Vec<String>,
+    warnings: Vec<WarningLine>,
 }
 
 #[derive(Debug)]
 pub enum DialogInput {
-    Show(Vec<String>),
+    Show(Vec<WarningLine>),
     Continue,
     Cancel,
 }
@@ -26,9 +36,17 @@ impl Dialog {
             "L'opération est potentiellement destructive et aura les conséquences suivantes :",
         );
 
+        // A sub-repair is indented one step under the repair that needed it.
+        // The label justifies multi-line text left, so leading spaces read as
+        // indentation; a line long enough to wrap does not indent its own
+        // continuation, which a real list widget would fix.
         for warning in &self.warnings {
-            output += "\n - ";
-            output += warning;
+            output += "\n";
+            for _ in 0..warning.depth {
+                output += "    ";
+            }
+            output += " - ";
+            output += &warning.text;
         }
 
         output
