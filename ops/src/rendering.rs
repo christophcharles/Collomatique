@@ -250,7 +250,7 @@ pub fn render_incompat(incompats: &Incompats, id: IncompatId) -> Result<String, 
     Ok(incompat.name.clone())
 }
 
-/// A slot: « Séverus Rogue - lundi 14h00 (Physique) ».
+/// A slot: « Séverus Rogue - Lundi 14h00 (Physique) ».
 ///
 /// The teacher comes first because that is how a user *finds* a slot; the
 /// subject trails in parentheses because it is context rather than the slot
@@ -268,7 +268,7 @@ pub fn render_slot(
     Ok(format!("{} ({})", slot_text, subject))
 }
 
-/// A slot with its subject left out: « Séverus Rogue - lundi 14h00 ».
+/// A slot with its subject left out: « Séverus Rogue - Lundi 14h00 ».
 ///
 /// For anywhere the subject is already established and repeating it would be
 /// noise: the slot pairing rule notation names it once and then uses this form
@@ -281,7 +281,7 @@ pub fn render_slot_in_subject(
 ) -> Result<String, MissingId> {
     let slot = slots.find_slot(id).ok_or(id)?;
     let teacher = render_teacher(teachers, slot.teacher_id)?;
-    Ok(format!("{} - {}", teacher, slot.start_time))
+    Ok(format!("{} - {}", teacher, slot.start_time.capitalize()))
 }
 
 /// A pairing rule, in the notation its own tab uses:
@@ -310,8 +310,8 @@ fn have_condition(should_have: bool) -> &'static str {
     if should_have { "Avoir" } else { "Ne pas avoir" }
 }
 
-/// A slot pairing rule: « Physique : [utilisé] Séverus Rogue - lundi 14h00 ⟹
-/// [non utilisé] Minerve McGonagall - mardi 15h00 ».
+/// A slot pairing rule: « Physique : [utilisé] Séverus Rogue - Lundi 14h00 ⟹
+/// [non utilisé] Minerve McGonagall - Mardi 15h00 ».
 ///
 /// The subject is fronted once — the rule's own tab groups rules by subject and
 /// so never repeats it, but a warning arrives without that context. Both slots

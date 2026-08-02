@@ -740,6 +740,7 @@ lands.
 | 5.2 | all the tests: walk renders every warning; rendering unit tests | ops | `b043b8a2` |
 | 6.0 | the rendering helpers take the document parts they read, not `&Data` — the precondition for 6.1 | ops | `d21b61e3` |
 | 6.1 | gtk4 helper dedup — local renderers replaced by `ops::rendering` | gtk4 | `7fe0aed8` |
+| 6.1bis | the slot renderers capitalize the weekday (§5-C6) | ops | — |
 | 6.2 | gtk4 warning-dialog switch (gtk4 smoke here covers 6.1 too) | gtk4 | — |
 | 6.3 | python switch (contract scripts run here) | python | — |
 | 6.4 | drop dead rpc-engine dep (⇒ **cargoHash**) | rpc-engine | — |
@@ -1360,15 +1361,16 @@ gives a period's global first-week number). The formats, all settled:
   `generate_week_succession_title` are kept verbatim.
 - **Student / teacher**: `{firstname} {surname}`. **Subject / group list / incompat /
   week pattern**: the bare name.
-- **Slot**: « Séverus Rogue - lundi 14h00 (Physique) » — teacher first (it is how a
-  user *finds* a slot), then lowercase weekday + time; the subject trails in parens
+- **Slot**: « Séverus Rogue - Lundi 14h00 (Physique) » — teacher first (it is how a
+  user *finds* a slot), then the weekday + time; the subject trails in parens
   because it is context, not the slot itself. All three are needed to identify one.
+  (The weekday was lowercase until 6.1bis, which capitalized it — see §5-C6.)
 - **Group**: name *or* 1-based number, never both — « B2 » or « 4 ».
 - **Pairing rule**: the existing tab notation, adopted as-is — « Avoir Physique ⟹ Ne
   pas avoir Chimie » (U+27F9; no « (souple) » — softness is a property, not identity;
   list views append it themselves).
-- **Slot pairing rule**: « Physique : [utilisé] Séverus Rogue - lundi 14h00 ⟹
-  [non utilisé] Minerve McGonagall - mardi 15h00 » — subject fronted once (a warning
+- **Slot pairing rule**: « Physique : [utilisé] Séverus Rogue - Lundi 14h00 ⟹
+  [non utilisé] Minerve McGonagall - Mardi 15h00 » — subject fronted once (a warning
   lacks the tab's per-subject context), each part in the slot format minus its
   subject parens.
 
@@ -1693,6 +1695,9 @@ it never wrote down. With these three and 6.0 landed, the commit is planned.
   `Rolanda Bibine - Jeudi 12h00` → `Rolanda Bibine - jeudi 12h00`, because
   `build_slot_description` calls `start_time.capitalize()`
   (`gtk4/src/editor/slot_pairings.rs:57`) and `render_slot_in_subject` does not.
+  **The third of those was reverted by 6.1bis below**: seen in the running UI the
+  lowercase weekday read worse than what it replaced, so the renderer capitalizes
+  and the slot pairings tab is byte-identical to before after all.
 - **`generate_week_succession_title` survives**, and is no longer on the deletion
   list above. `subject_params::Block::generate_title_text` renders a *block* inside
   a subject — a week succession with no `PeriodId` — so no ops renderer can serve
@@ -1767,6 +1772,28 @@ the format into gtk4, and neither is worth it for one label.
 with the summary moving up to the panel. Every new `ops::rendering` call site
 `.expect`s with the same sentence — the id came out of the document being
 displayed.
+
+### 6.1bis — the slot renderers capitalize the weekday
+
+*(Not in the original plan. User call, August 2 2026, after 6.1 landed and the
+lowercase form could be seen in the running UI.)*
+
+One line in `render_slot_in_subject`: `slot.start_time` becomes
+`slot.start_time.capitalize()`, so a slot reads « Séverus Rogue - Lundi 14h00 »
+again. It carries to `render_slot` and `render_slot_pairing_rule`, which both
+build on it, and therefore to every `{créneau}` in the warning templates —
+« Le créneau Severus Rogue - Jeudi 13h00 (Potions) sera supprimé ». The
+capitalization mid-sentence is a little unusual in French, and accepted: a slot
+name is a label the user recognizes at a glance, not prose, and the same label
+appears in the tab they just came from.
+
+No test moves: 5.2 deliberately pinned no French slot text (typed ids make a
+cross-field mix-up a compile error, and pinning wording only manufactures churn),
+so the suite is the proof nothing else shifted.
+
+**Every earlier example in this file that shows a lowercase weekday predates
+this commit** — the 5.0 and 5.1 "eyeballed against hogwarts" paragraphs are left
+as the record of what was actually read at the time.
 
 ### 6.2 — gtk4 warning-dialog switch
 
