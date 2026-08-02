@@ -1678,8 +1678,8 @@ these calls possible at all — a panel holds the sub-structures each renderer t
 and passes one finished title down to its row factories. The 6.2 smoke covers this
 commit too.
 
-Three corrections to the paragraph above, from the August 2 2026 survey. They are
-recorded here rather than folded into a rewrite: 6.1 gets its own planning pass.
+Two corrections to the paragraph above, from the August 2 2026 survey, and one rule
+it never wrote down. With these three and 6.0 landed, the commit is planned.
 
 - **The original claim of "zero visual change" was wrong and is struck.** 5.0 chose
   its formats deliberately and those choices stand (user ruling, August 2), so the
@@ -1695,11 +1695,18 @@ recorded here rather than folded into a rewrite: 6.1 gets its own planning pass.
   a subject — a week succession with no `PeriodId` — so no ops renderer can serve
   it. The helper stays in gtk4 for that one caller; `generate_week_title` and
   `generate_period_title` still go.
-- **Open decision for 6.1's own planning pass: the miss policy at the gtk4 sites
-  that degrade today.** `build_slot_description` and `pairings_display::subject_name`
-  answer `"???"` for a missing teacher or subject; the ops renderers answer `Err`.
-  Whether those sites `.expect` (the D7 instrument reading) or keep a fallback (the
-  UI-robustness reading) is settled when 6.1 is planned, not here.
+- **The new gtk4 code `.expect`s a missing id. It does not degrade.** Settled long
+  ago and simply never written down here; it is D7's rule — which this plan only
+  ever spelled out for the warning dialog — holding everywhere gtk4 calls a
+  renderer. A `MissingId` is a *logic bug*: the id came out of the document the UI
+  is showing, so a miss means the UI and the document disagree, and the right
+  answer is to fail fast and loud rather than paint a plausible screen over it.
+  The three sites that answer `"???"` today all lose that fallback with the switch
+  — `SlotPairings::build_slot_description` on a missing teacher
+  (`gtk4/src/editor/slot_pairings.rs:56`), `pairings_display::Entry::subject_name`
+  on a missing subject (`editor/pairings/pairings_display.rs:62`), and
+  `slot_pairings_display::Rule::slot_desc` on a slot absent from the
+  `slot_desc_map` its own panel built (`.../slot_pairings_display.rs:236`).
 
 ### 6.2 — gtk4 warning-dialog switch
 
