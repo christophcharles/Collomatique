@@ -142,7 +142,12 @@ impl Component for Pairings {
                     .map(|(rule_id, rule)| pairings_display::EntryData {
                         rule_id,
                         rule: rule.clone(),
-                        subjects: self.subjects.clone(),
+                        summary: collomatique_ops::rendering::render_pairing_rule(
+                            &self.subjects,
+                            &self.pairings,
+                            rule_id,
+                        )
+                        .expect("the rule comes from the document being displayed"),
                         periods: self.periods.clone(),
                     })
                     .collect();

@@ -1708,6 +1708,63 @@ it never wrote down. With these three and 6.0 landed, the commit is planned.
   `slot_pairings_display::Rule::slot_desc` on a slot absent from the
   `slot_desc_map` its own panel built (`.../slot_pairings_display.rs:236`).
 
+**As landed** (this commit, gtk4 only; no test moves — gtk4 has none, and the
+workspace suite is the proof nothing below it shifted). Nineteen files, and the
+whole change is one shape repeated: a panel that holds the document renders, and
+its row factories receive a finished `String`. Five things worth recording.
+
+*The row structs shrank, exactly as 6.0 predicted.* `global_first_week`,
+`first_week_num`, `week_count`, `first_week_in_period` and `period_num` existed
+in those structs only to recompute a title one layer too low, and most of them
+are gone: `assignments_display::PeriodEntryData`, `subjects_display::{PeriodData,
+EntryData, PeriodSwitchData}`, `students::dialog::PeriodData`,
+`week_patterns::dialog::{PeriodData, WeekData}` and
+`periods_display::{EntryData, WeekData}` all carry a `title: String` now. What
+stayed is what feeds an *output* message rather than a label —
+`week_num_in_period`, `period_num`, `assignments`' `first_week_num` (a
+`set_visible` test), and the `DynamicIndex` of the factories that report their
+own position. Two fields died outright with their last reader:
+`assignments_display::PeriodEntry::index` and
+`week_patterns::dialog::PeriodEntry::index`.
+
+*Two panels changed shape rather than shrinking.*
+`interrogation_dialog::DialogInput::Show` used to carry a whole `GroupList` and
+no id, so `render_group_name` could not be called there at all — it now carries
+the finished `Vec<String>` of row titles, built in `colloscope.rs` where the id
+is (« Groupe 3 » / « Groupe 3 : B2 », the dialog's own format, on top of the
+renderer). Same reason in `colloscope_display`: `SlotPeriodData::slots` was
+`Vec<Option<BTreeMap<u32, Option<NonEmptyString>>>>` and the `bind` did the
+name-or-number choice by hand; it is now `Vec<Option<Vec<String>>>` filled by
+`render_group` in `update_view_wrapper`, and `bind` is a `join(",")`.
+
+*The pairings and slot-pairings tabs took different halves of the vocabulary,
+and that is deliberate.* The pairings row uses `render_pairing_rule` whole (its
+existing notation, adopted verbatim by 5.0, so the string is unchanged) and
+appends « (souple) » itself. The slot-pairings row does **not** use
+`render_slot_pairing_rule`: that renderer fronts the subject once, which a
+warning needs and this tab — grouped by subject throughout — would only repeat.
+It keeps its own `[utilisé] … ⟹ [non utilisé] …` composition and takes
+`render_slot_in_subject` underneath, through `build_slot_description`, which is
+the call site 5.0 made that renderer public for.
+
+*Two more format divergences than the three listed above, both the same one.*
+`students`' period filter droplist (« La période … ») and `group_lists`'
+association headers (« Associations pour la période … ») were the other two
+callers of `generate_week_succession_title`, and they name a *period*, so they
+moved to `render_period` with the noun in front. They pick up the period-format
+change already accepted above. The visible residual: `subject_params::Block`
+keeps the old « Bloc 1 du … (semaines 1 à 4) » shape, because a block has no
+`PeriodId` and no renderer can serve it — so blocks and periods now print their
+week spans differently. Recorded rather than fixed: aligning them means either
+teaching `ops::rendering` about a coordinate that is not an id, or hand-copying
+the format into gtk4, and neither is worth it for one label.
+
+*The three `"???"` fallbacks are gone, as ruled.* `build_slot_description` and
+`Rule::slot_desc` `.expect` instead; `Entry::subject_name` disappeared entirely
+with the summary moving up to the panel. Every new `ops::rendering` call site
+`.expect`s with the same sentence — the id came out of the document being
+displayed.
+
 ### 6.2 — gtk4 warning-dialog switch
 
 The single consumer site (`gtk4/src/editor.rs:1061`):

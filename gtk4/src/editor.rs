@@ -1339,47 +1339,12 @@ impl EditorPanel {
     }
 }
 
-fn generate_week_title(
-    global_first_week: &Option<collomatique_time::WeekStart>,
-    week_number: usize,
-) -> String {
-    match global_first_week {
-        Some(global_start_date) => {
-            let start_date = global_start_date
-                .monday()
-                .checked_add_days(chrono::Days::new(7 * (week_number as u64)))
-                .expect("Valid start date");
-            let end_date = start_date
-                .checked_add_days(chrono::Days::new(6))
-                .expect("Valid end date");
-            format!(
-                "Semaine {} du {} au {}",
-                week_number + 1,
-                start_date.format("%d/%m/%Y"),
-                end_date.format("%d/%m/%Y"),
-            )
-        }
-        None => {
-            format!("Semaine {}", week_number + 1)
-        }
-    }
-}
-
-fn generate_period_title(
-    global_first_week: &Option<collomatique_time::WeekStart>,
-    index: usize,
-    first_week_num: usize,
-    week_count: usize,
-) -> String {
-    generate_week_succession_title(
-        "Période",
-        global_first_week,
-        index,
-        first_week_num,
-        week_count,
-    )
-}
-
+/// Names a run of consecutive weeks — a period, or a block inside a subject.
+///
+/// Periods are named by [collomatique_ops::rendering::render_period], the
+/// shared vocabulary the warning texts use; this helper survives for the one
+/// caller that has no period to name at all, `subject_params::Block`, whose
+/// blocks are a week succession with no id behind them.
 fn generate_week_succession_title(
     name: &str,
     global_first_week: &Option<collomatique_time::WeekStart>,

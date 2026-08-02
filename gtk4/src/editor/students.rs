@@ -265,18 +265,11 @@ impl Students {
     fn update_filter_droplist(&mut self) {
         let mut list = vec!["Toutes les périodes".into(), "Aucune période".into()];
 
-        let mut first_week_num = 0usize;
-        for (index, period_id) in self.periods.period_ids().enumerate() {
-            let period_len = self.weeks.week_count_for_period(period_id).unwrap_or(0);
-            list.push(super::generate_week_succession_title(
-                "La période",
-                &self.periods.first_week,
-                index,
-                first_week_num,
-                period_len,
-            ));
-
-            first_week_num += period_len;
+        for period_id in self.periods.period_ids() {
+            let period =
+                collomatique_ops::rendering::render_period(&self.periods, &self.weeks, period_id)
+                    .expect("the period comes from the document being displayed");
+            list.push(format!("La période {}", period));
         }
 
         let num = match self.current_filter {

@@ -9,7 +9,9 @@ use relm4::prelude::{DynamicIndex, FactoryComponent};
 pub struct EntryData {
     pub rule_id: collomatique_state_colloscopes::PairingRuleId,
     pub rule: collomatique_state_colloscopes::pairings::PairingRule,
-    pub subjects: collomatique_state_colloscopes::subjects::Subjects,
+    /// The rule as [collomatique_ops::rendering::render_pairing_rule] names it.
+    /// Softness is not part of it — this row appends « (souple) » itself.
+    pub summary: String,
     pub periods: collomatique_state_colloscopes::periods::Periods,
 }
 
@@ -31,35 +33,12 @@ pub enum EntryOutput {
 
 impl Entry {
     fn generate_summary(&self) -> String {
-        let ant_name = self.subject_name(self.data.rule.antecedent().subject_id);
-        let con_name = self.subject_name(self.data.rule.consequent().subject_id);
-        let ant_cond = if self.data.rule.antecedent().should_have {
-            "Avoir"
-        } else {
-            "Ne pas avoir"
-        };
-        let con_cond = if self.data.rule.consequent().should_have {
-            "Avoir"
-        } else {
-            "Ne pas avoir"
-        };
         let soft_text = if self.data.rule.soft() {
             " (souple)"
         } else {
             ""
         };
-        format!(
-            "{} {} \u{27F9} {} {}{}",
-            ant_cond, ant_name, con_cond, con_name, soft_text
-        )
-    }
-
-    fn subject_name(&self, subject_id: collomatique_state_colloscopes::SubjectId) -> String {
-        self.data
-            .subjects
-            .find_subject(subject_id)
-            .map(|s| s.parameters.name.clone())
-            .unwrap_or_else(|| "???".into())
+        format!("{}{}", self.data.summary, soft_text)
     }
 
     fn generate_excluded_periods_info(&self) -> String {
@@ -88,9 +67,8 @@ impl Entry {
             0 => String::new(),
             1 => format!("Désactivée sur la période {}", excluded_period_list[0]),
             _ => format!(
-                "Désactivée sur les périodes {} et {}",
-                excluded_period_list[..excluded_period_list.len() - 1].join(", "),
-                excluded_period_list.last().unwrap()
+                "Désactivée sur les périodes {}",
+                collomatique_ops::rendering::join_french(&excluded_period_list)
             ),
         }
     }

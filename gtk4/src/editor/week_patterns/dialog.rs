@@ -365,7 +365,26 @@ impl Dialog {
                 let current_first_week = *acc;
                 *acc += desc.len();
                 Some(PeriodData {
-                    global_first_week: self.periods.first_week.clone(),
+                    title: collomatique_ops::rendering::render_period(
+                        &self.periods,
+                        &self.weeks_state,
+                        id,
+                    )
+                    .expect("the period comes from the document being displayed"),
+                    week_titles: self
+                        .weeks_state
+                        .weeks_for_period(id)
+                        .into_iter()
+                        .flatten()
+                        .map(|(week_id, _week)| {
+                            collomatique_ops::rendering::render_week(
+                                &self.periods,
+                                &self.weeks_state,
+                                *week_id,
+                            )
+                            .expect("the week comes from the document being displayed")
+                        })
+                        .collect(),
                     first_week_num: current_first_week,
                     period_desc: desc.iter().map(|x| x.interrogations).collect(),
                     weeks_in_pattern: (current_first_week..(current_first_week + desc.len()))
@@ -390,7 +409,10 @@ impl Dialog {
 
 #[derive(Debug, Clone)]
 struct PeriodData {
-    global_first_week: Option<collomatique_time::WeekStart>,
+    /// The period as [collomatique_ops::rendering::render_period] names it.
+    title: String,
+    /// One week title per week of the period, in order.
+    week_titles: Vec<String>,
     first_week_num: usize,
     period_desc: Vec<bool>,
     weeks_in_pattern: Vec<bool>,
@@ -399,7 +421,6 @@ struct PeriodData {
 #[derive(Debug)]
 struct PeriodEntry {
     data: PeriodData,
-    index: DynamicIndex,
     should_redraw: bool,
     week_entries: FactoryVecDeque<WeekEntry>,
 }
@@ -417,12 +438,7 @@ enum PeriodOutput {
 
 impl PeriodEntry {
     fn generate_period_title(&self) -> String {
-        super::super::generate_period_title(
-            &self.data.global_first_week,
-            self.index.current_index(),
-            self.data.first_week_num,
-            self.data.period_desc.len(),
-        )
+        format!("Période {}", self.data.title)
     }
 }
 
@@ -448,7 +464,7 @@ impl FactoryComponent for PeriodEntry {
         },
     }
 
-    fn init_model(data: Self::Init, index: &DynamicIndex, sender: FactorySender<Self>) -> Self {
+    fn init_model(data: Self::Init, _index: &DynamicIndex, sender: FactorySender<Self>) -> Self {
         let week_entries = FactoryVecDeque::builder()
             .launch(adw::PreferencesGroup::default())
             .forward(sender.input_sender(), |msg| match msg {
@@ -459,7 +475,6 @@ impl FactoryComponent for PeriodEntry {
 
         let mut model = Self {
             data,
-            index: index.clone(),
             should_redraw: false,
             week_entries,
         };
@@ -521,8 +536,7 @@ impl PeriodEntry {
                 .iter()
                 .enumerate()
                 .map(|(index, status_in_pattern)| WeekData {
-                    global_first_week: self.data.global_first_week.clone(),
-                    first_week_num: self.data.first_week_num,
+                    title: self.data.week_titles[index].clone(),
                     status_in_period: self.data.period_desc[index],
                     status_in_pattern: *status_in_pattern,
                 }),
@@ -533,8 +547,8 @@ impl PeriodEntry {
 
 #[derive(Debug, Clone)]
 struct WeekData {
-    global_first_week: Option<collomatique_time::WeekStart>,
-    first_week_num: usize,
+    /// The week as [collomatique_ops::rendering::render_week] names it.
+    title: String,
     status_in_period: bool,
     status_in_pattern: bool,
 }
@@ -559,8 +573,7 @@ enum WeekOutput {
 
 impl WeekEntry {
     fn generate_week_title(&self) -> String {
-        let week_number = self.data.first_week_num + self.index.current_index();
-        super::super::generate_week_title(&self.data.global_first_week, week_number)
+        format!("Semaine {}", self.data.title)
     }
 }
 

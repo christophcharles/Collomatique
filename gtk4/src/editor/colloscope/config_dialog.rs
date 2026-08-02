@@ -96,21 +96,17 @@ impl Dialog {
 
     /// One human-readable title per period, in order.
     fn period_titles(&self) -> Vec<String> {
-        let global_first_week = self.params.periods.first_week.clone();
         self.params
             .periods
             .period_ids()
-            .enumerate()
-            .scan(0usize, |first_week_num, (index, id)| {
-                let week_count = self.params.weeks.week_count_for_period(id).unwrap_or(0);
-                let title = crate::editor::generate_period_title(
-                    &global_first_week,
-                    index,
-                    *first_week_num,
-                    week_count,
-                );
-                *first_week_num += week_count;
-                Some(title)
+            .map(|id| {
+                let period = collomatique_ops::rendering::render_period(
+                    &self.params.periods,
+                    &self.params.weeks,
+                    id,
+                )
+                .expect("the period comes from the document being displayed");
+                format!("Période {}", period)
             })
             .collect()
     }

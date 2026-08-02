@@ -86,6 +86,31 @@ impl GeneralPlanning {
             self.count_interrogation_weeks()
         )
     }
+
+    /// The period as the shared vocabulary names it, noun-less — the row
+    /// factory owns the « Période » in front.
+    fn render_period(&self, id: collomatique_state_colloscopes::PeriodId) -> String {
+        collomatique_ops::rendering::render_period(&self.periods, &self.weeks, id)
+            .expect("the period comes from the document being displayed")
+    }
+
+    /// One `(week title, week state)` pair per week of a period, in order.
+    fn render_weeks(
+        &self,
+        id: collomatique_state_colloscopes::PeriodId,
+    ) -> Vec<(String, collomatique_state_colloscopes::weeks::WeekDesc)> {
+        let Some(weeks) = self.weeks.weeks_for_period(id) else {
+            return Vec::new();
+        };
+        weeks
+            .map(|(week_id, week)| {
+                let title =
+                    collomatique_ops::rendering::render_week(&self.periods, &self.weeks, *week_id)
+                        .expect("the week comes from the document being displayed");
+                (title, week.desc())
+            })
+            .collect()
+    }
 }
 
 #[relm4::component(pub)]
@@ -244,16 +269,10 @@ impl Component for GeneralPlanning {
                 let new_data = self
                     .periods
                     .period_ids()
-                    .scan(0usize, |acc, id| {
-                        let desc = self.weeks.weeks_desc_vec_for_period(id).unwrap_or_default();
-                        let current_first_week = *acc;
-                        *acc += desc.len();
-                        Some(periods_display::EntryData {
-                            global_first_week: self.periods.first_week.clone(),
-                            first_week_num: current_first_week,
-                            desc,
-                            period_id: id,
-                        })
+                    .map(|id| periods_display::EntryData {
+                        title: self.render_period(id),
+                        weeks: self.render_weeks(id),
+                        period_id: id,
                     })
                     .collect::<Vec<_>>();
 

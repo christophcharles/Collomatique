@@ -233,7 +233,7 @@ impl Rule {
             .slot_desc_map
             .get(slot_id)
             .cloned()
-            .unwrap_or_else(|| "???".into())
+            .expect("the rule's slots are slots of the subject this row was built from")
     }
 
     fn generate_excluded_periods_info(&self) -> String {
@@ -262,9 +262,8 @@ impl Rule {
             0 => String::new(),
             1 => format!("Désactivée sur la période {}", excluded_period_list[0]),
             _ => format!(
-                "Désactivée sur les périodes {} et {}",
-                excluded_period_list[..excluded_period_list.len() - 1].join(", "),
-                excluded_period_list.last().unwrap()
+                "Désactivée sur les périodes {}",
+                collomatique_ops::rendering::join_french(&excluded_period_list)
             ),
         }
     }

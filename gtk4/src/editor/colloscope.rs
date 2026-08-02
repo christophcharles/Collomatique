@@ -693,8 +693,24 @@ impl Component for Colloscope {
                     .group_lists
                     .group_list_map
                     .get(group_list_id)
-                    .expect("Group list ID should be valid")
-                    .clone();
+                    .expect("Group list ID should be valid");
+
+                // « Groupe 3 » or « Groupe 3 : B2 » — the number always shows
+                // here, because it is what the colloscope cell stores.
+                let group_titles: Vec<_> = (0..group_list.params().group_names.len() as u32)
+                    .map(|num| {
+                        let name = collomatique_ops::rendering::render_group_name(
+                            &self.params.group_lists,
+                            *group_list_id,
+                            num,
+                        )
+                        .expect("the group comes from the document being displayed");
+                        match name {
+                            Some(name) => format!("Groupe {} : {}", num + 1, name),
+                            None => format!("Groupe {}", num + 1),
+                        }
+                    })
+                    .collect();
 
                 let assigned_groups = self
                     .colloscope
@@ -705,7 +721,7 @@ impl Component for Colloscope {
                 self.interrogation_dialog
                     .sender()
                     .send(interrogation_dialog::DialogInput::Show(
-                        group_list,
+                        group_titles,
                         assigned_groups,
                     ))
                     .unwrap();

@@ -146,12 +146,16 @@ impl Component for Subjects {
                         .iter()
                         .map(|(id, desc)| subjects_display::EntryData {
                             subject_params: desc.parameters.clone(),
-                            global_first_week: self.periods.first_week.clone(),
                             periods: self
                                 .periods
                                 .period_ids()
                                 .map(|id| subjects_display::PeriodData {
-                                    week_count: self.weeks.week_count_for_period(id).unwrap_or(0),
+                                    title: collomatique_ops::rendering::render_period(
+                                        &self.periods,
+                                        &self.weeks,
+                                        id,
+                                    )
+                                    .expect("the period comes from the document being displayed"),
                                     status: !desc.excluded_periods.contains(&id),
                                 })
                                 .collect(),

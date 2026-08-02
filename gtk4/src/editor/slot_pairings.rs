@@ -45,17 +45,11 @@ pub struct SlotPairings {
 }
 
 impl SlotPairings {
-    fn build_slot_description(
-        slot: &collomatique_state_colloscopes::slots::Slot,
-        teachers: &collomatique_state_colloscopes::teachers::Teachers,
-    ) -> String {
-        let teacher_name = teachers
-            .teacher_map
-            .get(&slot.teacher_id)
-            .map(|t| format!("{} {}", t.desc.firstname, t.desc.surname))
-            .unwrap_or_else(|| "???".into());
-        let time_text = slot.start_time.capitalize();
-        format!("{} - {}", teacher_name, time_text)
+    /// This whole tab is grouped by subject, so a slot is named without its
+    /// own — exactly [collomatique_ops::rendering::render_slot_in_subject].
+    fn build_slot_description(&self, slot_id: collomatique_state_colloscopes::SlotId) -> String {
+        collomatique_ops::rendering::render_slot_in_subject(&self.teachers, &self.slots, slot_id)
+            .expect("the slot comes from the document being displayed")
     }
 
     fn ordered_slots_for_subject(
@@ -66,9 +60,7 @@ impl SlotPairings {
             .slots_for_subject(subject_id)
             .map(|subject_slots| {
                 subject_slots
-                    .map(|(slot_id, slot)| {
-                        (*slot_id, Self::build_slot_description(slot, &self.teachers))
-                    })
+                    .map(|(slot_id, _slot)| (*slot_id, self.build_slot_description(*slot_id)))
                     .collect()
             })
             .unwrap_or_default()
@@ -198,8 +190,8 @@ impl Component for SlotPairings {
                         // Build slot descriptions for this subject
                         let slot_descriptions: Vec<_> = subject_slots
                             .iter()
-                            .map(|(slot_id, slot)| {
-                                (*slot_id, Self::build_slot_description(slot, &self.teachers))
+                            .map(|(slot_id, _slot)| {
+                                (*slot_id, self.build_slot_description(*slot_id))
                             })
                             .collect();
 

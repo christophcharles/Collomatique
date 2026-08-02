@@ -11,9 +11,9 @@ use std::collections::{BTreeMap, BTreeSet};
 #[derive(Debug, Clone)]
 pub struct PeriodEntryData {
     pub period_id: collomatique_state_colloscopes::PeriodId,
-    pub global_first_week: Option<collomatique_time::WeekStart>,
+    /// The period as [collomatique_ops::rendering::render_period] names it.
+    pub title: String,
     pub first_week_num: usize,
-    pub week_count: usize,
     pub filtered_subjects: Vec<(
         collomatique_state_colloscopes::SubjectId,
         collomatique_state_colloscopes::subjects::Subject,
@@ -31,7 +31,6 @@ pub struct PeriodEntryData {
 use crate::tools::dynamic_column_view::{DynamicColumnView, LabelColumn, RelmColumn};
 
 pub struct PeriodEntry {
-    index: DynamicIndex,
     data: PeriodEntryData,
     subjects_dropdown: Controller<crate::widgets::droplist::Widget>,
     current_subject: Option<collomatique_state_colloscopes::SubjectId>,
@@ -73,15 +72,7 @@ pub enum PeriodEntryOutput {
 
 impl PeriodEntry {
     fn generate_title_text(&self) -> String {
-        format!(
-            "<b><big>{}</big></b>",
-            super::super::generate_period_title(
-                &self.data.global_first_week,
-                self.index.current_index(),
-                self.data.first_week_num,
-                self.data.week_count
-            )
-        )
+        format!("<b><big>Période {}</big></b>", self.data.title)
     }
 }
 
@@ -208,7 +199,6 @@ impl FactoryComponent for PeriodEntry {
         let column_view = DynamicColumnView::new();
 
         let mut model = Self {
-            index: index.clone(),
             data,
             column_view,
             current_items: vec![],

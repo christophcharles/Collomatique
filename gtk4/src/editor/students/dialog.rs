@@ -206,16 +206,14 @@ impl SimpleComponent for Dialog {
                 let transformed_data: Vec<_> = self
                     .periods
                     .period_ids()
-                    .scan(0usize, |current_week, id| {
-                        let week_count = self.weeks.week_count_for_period(id).unwrap_or(0);
-                        let new_period = PeriodData {
-                            global_first_week: self.periods.first_week.clone(),
-                            first_week_num: *current_week,
-                            week_count,
-                            enable: !self.student_data.excluded_periods.contains(&id),
-                        };
-                        *current_week += week_count;
-                        Some(new_period)
+                    .map(|id| PeriodData {
+                        title: collomatique_ops::rendering::render_period(
+                            &self.periods,
+                            &self.weeks,
+                            id,
+                        )
+                        .expect("the period comes from the document being displayed"),
+                        enable: !self.student_data.excluded_periods.contains(&id),
                     })
                     .collect();
 
@@ -286,9 +284,8 @@ impl SimpleComponent for Dialog {
 
 #[derive(Debug, Clone)]
 struct PeriodData {
-    global_first_week: Option<collomatique_time::WeekStart>,
-    first_week_num: usize,
-    week_count: usize,
+    /// The period as [collomatique_ops::rendering::render_period] names it.
+    title: String,
     enable: bool,
 }
 
@@ -325,12 +322,7 @@ impl FactoryComponent for PeriodEntry {
             set_hexpand: true,
             set_use_markup: false,
             #[watch]
-            set_title: &super::super::generate_period_title(
-                &self.data.global_first_week,
-                self.index.current_index(),
-                self.data.first_week_num,
-                self.data.week_count
-            ),
+            set_title: &format!("Période {}", self.data.title),
             #[track(self.should_redraw)]
             set_active: self.data.enable,
             connect_active_notify[sender] => move |widget| {

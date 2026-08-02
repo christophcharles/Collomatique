@@ -203,9 +203,13 @@ impl Assignments {
 
                 Some(assignments_display::PeriodEntryData {
                     period_id: *id,
-                    global_first_week: self.periods.first_week.clone(),
+                    title: collomatique_ops::rendering::render_period(
+                        &self.periods,
+                        &self.weeks,
+                        *id,
+                    )
+                    .expect("the period comes from the document being displayed"),
                     first_week_num: current_first_week,
-                    week_count: period_len,
                     filtered_subjects,
                     filtered_students,
                     period_assignments: self

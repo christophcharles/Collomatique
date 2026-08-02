@@ -305,19 +305,14 @@ impl GroupLists {
         let periods_vec: Vec<_> = self
             .periods
             .period_ids()
-            .enumerate()
-            .scan(0usize, |acc, (num, id)| {
-                let period_len = self.weeks.week_count_for_period(id).unwrap_or(0);
+            .map(|id| {
                 let id = &id;
-                let out = associations_display::PeriodEntryData {
+                let period =
+                    collomatique_ops::rendering::render_period(&self.periods, &self.weeks, *id)
+                        .expect("the period comes from the document being displayed");
+                associations_display::PeriodEntryData {
                     period_id: *id,
-                    period_text: super::generate_week_succession_title(
-                        "Associations pour la période",
-                        &self.periods.first_week,
-                        num,
-                        *acc,
-                        period_len,
-                    ),
+                    period_text: format!("Associations pour la période {}", period),
                     subjects: self
                         .subjects
                         .ordered_subject_list
@@ -345,11 +340,7 @@ impl GroupLists {
                         .iter()
                         .map(|(id, gl)| (id, gl.clone()))
                         .collect(),
-                };
-
-                *acc += period_len;
-
-                Some(out)
+                }
             })
             .collect();
         crate::tools::factories::update_vec_deque(

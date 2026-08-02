@@ -303,19 +303,20 @@ impl Display {
                             Some(
                                 assigned
                                     .iter()
-                                    .map(|num| {
-                                        (
+                                    .map(|num| match group_list_id {
+                                        Some(list_id) => collomatique_ops::rendering::render_group(
+                                            &self.group_lists,
+                                            *list_id,
                                             *num,
-                                            match group_list {
-                                                Some(list) => list
-                                                    .params()
-                                                    .group_names
-                                                    .get(*num as usize)
-                                                    .cloned()
-                                                    .flatten(),
-                                                None => None,
-                                            },
                                         )
+                                        .expect(
+                                            "a cell's groups are bounded by the list associated \
+                                             at its coordinate",
+                                        ),
+                                        // No association means no bound, so no
+                                        // name to read: the raw number is all
+                                        // there is to show.
+                                        None => (*num + 1).to_string(),
                                     })
                                     .collect(),
                             )
@@ -374,7 +375,9 @@ impl Display {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct SlotPeriodData {
     has_group_list: bool,
-    slots: Vec<Option<BTreeMap<u32, Option<non_empty_string::NonEmptyString>>>>,
+    /// One entry per week of the period: `None` for an impossible cell,
+    /// otherwise the cell's groups already rendered, in group order.
+    slots: Vec<Option<Vec<String>>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -498,14 +501,7 @@ impl RelmColumn for WeekColumn {
 
         match groups_opt {
             Some(groups) => {
-                let group_str: Vec<_> = groups
-                    .iter()
-                    .map(|(num, name_opt)| match name_opt {
-                        Some(name) => name.clone().into_inner(),
-                        None => (*num + 1).to_string(),
-                    })
-                    .collect();
-                root.set_label(&group_str.join(","));
+                root.set_label(&groups.join(","));
                 root.set_visible(true);
                 root.set_sensitive(period_slots.has_group_list);
                 if period_slots.has_group_list {
