@@ -44,21 +44,32 @@ use crate::rendering::MissingId;
 ///
 /// What it carries is the repair's *meaning* (the [Fix] vocabulary), never the
 /// invariant that caused it: which invariant the engine picked never leaves the
-/// engine. No text is stored either — [CascadeWarning::text] computes it on
+/// engine. It does carry a link to the repair that needed it
+/// ([CascadeWarning::parent]), so the warning list can be read as the tree it
+/// came from. No text is stored either — [CascadeWarning::text] computes it on
 /// demand, against the composite's pre-state.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CascadeWarning {
     fix: Fix,
+    parent: Option<usize>,
 }
 
 impl CascadeWarning {
-    pub(crate) fn new(fix: Fix) -> Self {
-        CascadeWarning { fix }
+    pub(crate) fn new(fix: Fix, parent: Option<usize>) -> Self {
+        CascadeWarning { fix, parent }
     }
 
     /// Borrowed read-only view of what the repair did.
     pub fn fix(&self) -> &Fix {
         &self.fix
+    }
+
+    /// The repair that needed this one, as an index into the warning list this
+    /// warning came in; `None` for a repair one of the composite's own ops
+    /// needed directly. A repair lands before the one that needed it, so the
+    /// index always points to a later entry of the same list.
+    pub fn parent(&self) -> Option<usize> {
+        self.parent
     }
 
     /// The French, effect-phrased sentence describing the repair, read against
@@ -123,8 +134,15 @@ impl<T: Manager<Data = Data, Desc = Desc>> CascadeSession<T> {
     pub fn apply(&mut self, op: Op, desc: Desc) -> Result<Option<NewId>, Error> {
         let (new_id, fixes) = self.session.apply_cascade(op, desc)?;
 
-        self.warnings
-            .extend(fixes.into_iter().map(CascadeWarning::new));
+        // The engine's parent indices are local to this op's cascade; the
+        // warning log spans the whole composite, so shift them past what is
+        // already logged. A parent never crosses into another op's block.
+        let offset = self.warnings.len();
+        self.warnings.extend(
+            fixes
+                .into_iter()
+                .map(|(fix, parent)| CascadeWarning::new(fix, parent.map(|p| p + offset))),
+        );
 
         Ok(new_id)
     }

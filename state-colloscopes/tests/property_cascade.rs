@@ -251,13 +251,23 @@ fn cascade_step(
         c.widest.set(c.widest.get().max(fixes));
     }
     // Every fix is the op its `Fix` value translates to: the receipt's tagging
-    // is a claim about what landed, so the walk holds it to it.
-    for (step, fix) in receipt.fixes() {
+    // is a claim about what landed, so the walk holds it to it. The parent
+    // links are held to their own claim: a fix lands before the fix that
+    // needed it, so a parent is always a later entry of the same list — which
+    // is exactly what the display side relies on to rebuild the tree.
+    for (i, landed) in receipt.fixes().iter().enumerate() {
         assert_eq!(
-            step.inner(),
-            &fix.to_annotated_op(),
+            landed.op().inner(),
+            &landed.fix().to_annotated_op(),
             "a landed fix must be the op its Fix value translates to",
         );
+        if let Some(parent) = landed.parent() {
+            assert!(
+                i < parent && parent < fixes,
+                "a fix's parent must be a later entry of the fix list \
+                 (fix {i} claims parent {parent}, out of {fixes})",
+            );
+        }
     }
 
     let aggregated = receipt.into_aggregated_op();

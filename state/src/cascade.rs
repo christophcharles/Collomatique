@@ -106,19 +106,51 @@ pub trait Fixable: InMemoryData + ContentOrd {
     fn fix_invariant(&self, invariant: &Self::Invariant) -> Option<Self::Fix>;
 }
 
+/// One landed fix: the reversible op it landed as, the [FixOp] meaning it was
+/// materialized from, and a link to the fix that needed it.
+#[derive(Clone, Debug)]
+pub struct LandedFix<T: Fixable> {
+    op: ReversibleOp<T::AnnotatedOperation>,
+    fix: T::Fix,
+    /// Index, in the receipt's fix list, of the fix whose failure made the
+    /// engine materialize this one — `None` when the target's own failure did.
+    /// A child lands before its parent, so `parent` always points forward.
+    parent: Option<usize>,
+}
+
+impl<T: Fixable> LandedFix<T> {
+    /// The reversible op this fix landed as.
+    pub fn op(&self) -> &ReversibleOp<T::AnnotatedOperation> {
+        &self.op
+    }
+
+    /// What the repair did, as its [FixOp] meaning.
+    pub fn fix(&self) -> &T::Fix {
+        &self.fix
+    }
+
+    /// The fix that needed this one, as an index into the same fix list;
+    /// `None` for a fix the target itself needed.
+    pub fn parent(&self) -> Option<usize> {
+        self.parent
+    }
+}
+
 /// Everything a successful cascade landed: the fixes in application order,
 /// each with the [FixOp] value it was materialized from, and the target.
 ///
-/// The fixes carry their *meaning*, not their cause: which invariant was
-/// picked to produce them never leaves the engine (it feeds the no-progress
-/// ledger and nothing else). A consumer describing the cascade to a user reads
-/// the fix values; a consumer storing it in a modification history reads
+/// The fixes carry their *meaning*, not the invariant that caused them: which
+/// invariant was picked to produce them never leaves the engine (it feeds the
+/// no-progress ledger and nothing else). What each fix does carry of its cause
+/// is a link to the fix that needed it, so the cascade can be read as the tree
+/// it was. A consumer describing the cascade to a user reads the fix values; a
+/// consumer storing it in a modification history reads
 /// [CascadeReceipt::into_aggregated_op].
 #[derive(Clone, Debug)]
 pub struct CascadeReceipt<T: Fixable> {
     /// The fixes, in the order they landed — deepest first, since the engine
-    /// unwinds depth-first.
-    fixes: Vec<(ReversibleOp<T::AnnotatedOperation>, T::Fix)>,
+    /// unwinds depth-first. The parent links encode the cause tree.
+    fixes: Vec<LandedFix<T>>,
     /// The target op, which lands last and is nobody's fix.
     target: ReversibleOp<T::AnnotatedOperation>,
 }
@@ -131,20 +163,39 @@ impl<T: Fixable> CascadeReceipt<T> {
     /// it has. The tags say the same thing, and are asserted rather than
     /// trusted — a mismatch would be an engine bug, not bad input.
     fn from_applied(
-        mut applied: Vec<(ReversibleOp<T::AnnotatedOperation>, Option<T::Fix>)>,
+        mut applied: Vec<(ReversibleOp<T::AnnotatedOperation>, Option<T::Fix>, usize)>,
     ) -> Self {
-        let (target, target_fix) = applied
+        let (target, target_fix, target_depth) = applied
             .pop()
             .expect("a successful cascade always lands at least the target");
         assert!(
             target_fix.is_none(),
             "the last op a cascade lands must be the target, but it was tagged as a fix"
         );
+        assert_eq!(
+            target_depth, 1,
+            "the target lands from the bottom of the engine's stack"
+        );
+
+        // Post-order + depth → parent links: a fix's parent is the next later
+        // landing at exactly one level up. It exists because the parent sits
+        // below the child on the stack and only lands once the child (and any
+        // later siblings, all at depth >= the child's) are done. Depth 2 is a
+        // root fix: its parent is the target.
+        let depths: Vec<usize> = applied.iter().map(|(_op, _fix, depth)| *depth).collect();
         let fixes = applied
             .into_iter()
-            .map(|(op, fix)| {
+            .enumerate()
+            .map(|(i, (op, fix, depth))| {
                 let fix = fix.expect("every op landed before the target is a fix");
-                (op, fix)
+                let parent = (depth > 2).then(|| {
+                    depths[i + 1..]
+                        .iter()
+                        .position(|&d| d == depth - 1)
+                        .map(|offset| i + 1 + offset)
+                        .expect("a fix's parent lands after it")
+                });
+                LandedFix { op, fix, parent }
             })
             .collect();
 
@@ -153,13 +204,13 @@ impl<T: Fixable> CascadeReceipt<T> {
 
     /// The fixes the cascade had to apply, in application order, with their
     /// meanings.
-    pub fn fixes(&self) -> &[(ReversibleOp<T::AnnotatedOperation>, T::Fix)] {
+    pub fn fixes(&self) -> &[LandedFix<T>] {
         &self.fixes
     }
 
     /// The history-ready aggregated op: the fixes in order, then the target.
     pub fn into_aggregated_op(self) -> AggregatedOp<T::AnnotatedOperation> {
-        let mut ops: Vec<_> = self.fixes.into_iter().map(|(op, _fix)| op).collect();
+        let mut ops: Vec<_> = self.fixes.into_iter().map(|landed| landed.op).collect();
         ops.push(self.target);
         AggregatedOp::new(ops)
     }
@@ -180,8 +231,11 @@ pub fn apply_cascade<T: Fixable>(
     // Each entry is an op to land and the fix it was materialized from — the
     // target itself is nobody's fix, hence the `None`.
     let mut stack: Vec<(T::AnnotatedOperation, Option<T::Fix>)> = vec![(target, None)];
-    // Landed ops keep the tag they were pushed with: the receipt splits on it.
-    let mut applied: Vec<(ReversibleOp<T::AnnotatedOperation>, Option<T::Fix>)> = Vec::new();
+    // Landed ops keep the tag they were pushed with (the receipt splits on
+    // it) and the stack depth they landed from: the log is a post-order
+    // traversal of the fix tree, and post-order plus depth rebuilds the
+    // parent links exactly. Depth 1 is the target.
+    let mut applied: Vec<(ReversibleOp<T::AnnotatedOperation>, Option<T::Fix>, usize)> = Vec::new();
     // The target's most recent BrokenInvariants set: the informative error
     // when the target is convicted mid-cascade (D4 — the SlotOverflowsDay trace).
     let mut last_target_break: Option<BTreeSet<T::Invariant>> = None;
@@ -226,6 +280,7 @@ pub fn apply_cascade<T: Fixable>(
                     }
                 }
                 picks_since_landing.clear();
+                let depth = stack.len();
                 let (_op, fix) = stack
                     .pop()
                     .expect("the front op was just read from the stack");
@@ -235,6 +290,7 @@ pub fn apply_cascade<T: Fixable>(
                         backward,
                     },
                     fix,
+                    depth,
                 ));
             }
             Err(ApplyError::BrokenInvariants(set)) => {
@@ -325,7 +381,16 @@ mod tests {
 
     /// The `Fix` value of every landed fix, in order.
     fn landed_fixes(receipt: &CascadeReceipt<QuoteData>) -> Vec<QuoteFix> {
-        receipt.fixes().iter().map(|(_op, fix)| *fix).collect()
+        receipt.fixes().iter().map(|landed| *landed.fix()).collect()
+    }
+
+    /// The parent link of every landed fix, in order.
+    fn fix_parents(receipt: &CascadeReceipt<QuoteData>) -> Vec<Option<usize>> {
+        receipt
+            .fixes()
+            .iter()
+            .map(|landed| landed.parent())
+            .collect()
     }
 
     // 1. Two quotes by one student; removing the student cascades over two
@@ -339,6 +404,8 @@ mod tests {
 
         let receipt = apply_cascade(&mut data, target).expect("cascade resolves");
 
+        // Both quote removals are the target's own repairs: root fixes.
+        assert_eq!(fix_parents(&receipt), vec![None, None]);
         assert_eq!(
             forward_ops(receipt),
             vec![
@@ -622,11 +689,12 @@ mod tests {
             landed_fixes(&receipt),
             vec![QuoteFix::RemoveQuote(10), QuoteFix::RemoveQuote(20)],
         );
+        assert_eq!(fix_parents(&receipt), vec![None, None]);
         // Each tagged op is the one its fix translates to, and the target is
         // the entry the aggregated op has beyond them — last, as history
         // expects.
-        for (op, fix) in receipt.fixes() {
-            assert_eq!(op.inner(), &fix.to_annotated_op());
+        for landed in receipt.fixes() {
+            assert_eq!(landed.op().inner(), &landed.fix().to_annotated_op());
         }
         let aggregated = receipt.into_aggregated_op();
         assert_eq!(aggregated.inner().len(), 3);
@@ -634,5 +702,27 @@ mod tests {
             aggregated.inner().last().map(|r| r.inner().clone()),
             Some(QuoteOp::RemoveStudent(1)),
         );
+    }
+
+    // 17. Two quotes by one student, two notes on the first quote: the parent
+    //     links rebuild the exact fix tree — both note removals hang off the
+    //     first quote removal, both quote removals off the target.
+    #[test]
+    fn parent_links_rebuild_the_fix_tree() {
+        let mut data = quote_data_with_notes(&[1], &[(10, 1), (20, 1)], &[(100, 10), (200, 10)]);
+        let (target, ()) = data.annotate(QuoteOp::RemoveStudent(1));
+
+        let receipt = apply_cascade(&mut data, target).expect("cascade resolves");
+
+        assert_eq!(
+            landed_fixes(&receipt),
+            vec![
+                QuoteFix::RemoveNote(100),
+                QuoteFix::RemoveNote(200),
+                QuoteFix::RemoveQuote(10),
+                QuoteFix::RemoveQuote(20),
+            ],
+        );
+        assert_eq!(fix_parents(&receipt), vec![Some(2), Some(2), None, None]);
     }
 }
