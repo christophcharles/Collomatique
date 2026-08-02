@@ -1135,12 +1135,9 @@ mod tests {
 
     /// The move ops' error surface, all of it ops-level: both ends of the list
     /// refuse to go further, and a dead id is caught before any elementary op
-    /// is issued.
-    ///
-    /// `MoveSlotDown` answers a dead id with `MoveSlotUpError::InvalidSlotId`,
-    /// across the two enums. That is the wart D14 fixes at the end of the step;
-    /// until then it is replicated verbatim, and this assert is what will have
-    /// to be re-cut when it goes.
+    /// is issued. Each direction answers a dead id in its own error enum —
+    /// `MoveSlotDown` used to borrow `MoveSlotUpError::InvalidSlotId`, the wart
+    /// D14 removed.
     #[test]
     fn the_moves_report_the_ends_of_the_list_and_a_dead_id() {
         let base = hogwarts();
@@ -1171,7 +1168,7 @@ mod tests {
             SlotsUpdateOp::MoveSlotDown(dangling_slot())
                 .apply_to_session(&mut session)
                 .unwrap_err(),
-            SlotsUpdateError::MoveSlotUp(MoveSlotUpError::InvalidSlotId(dangling_slot())),
+            SlotsUpdateError::MoveSlotDown(MoveSlotDownError::InvalidSlotId(dangling_slot())),
         );
 
         assert_eq!(session.get_data(), base.get_data());
