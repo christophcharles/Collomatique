@@ -735,7 +735,7 @@ lands.
 | 5.0 | `rendering.rs` — shared noun-less id renderers + `MissingId` + `join_french` | ops | `509fb83c` |
 | 5.1 | `warning_text.rs` renderer + `CascadeWarning::text` | ops | `883657bb` |
 | 5.2 | all the tests: walk renders every warning; rendering unit tests | ops | `b043b8a2` |
-| 6.0 | the rendering helpers take the document parts they read, not `&Data` — the precondition for 6.1 | ops | *this commit* |
+| 6.0 | the rendering helpers take the document parts they read, not `&Data` — the precondition for 6.1 | ops | `d21b61e3` |
 | 6.1 | gtk4 helper dedup — local renderers replaced by `ops::rendering` | gtk4 | — |
 | 6.2 | gtk4 warning-dialog switch (gtk4 smoke here covers 6.1 too) | gtk4 | — |
 | 6.3 | python switch (contract scripts run here) | python | — |
