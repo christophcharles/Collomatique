@@ -25,7 +25,12 @@ Appendix H. **Step 6.5 completed July 29 2026** — the document order materiali
 `ContentOrd` trait, adopted across `state-colloscopes/`, and asserted in the cascade loop
 after every fix; the one hole step 6 knowingly left open is closed. Its session plan is
 retired (pinned at `git show 8bfd0b64:docs/plans/plan_step_6_5.md`), the delivered state is
-recorded in Appendix I. Next up: **step 7** (the `ops/` remaster).
+recorded in Appendix I. **Step 7 completed August 2 2026** — the `ops/` remaster: the
+hand-written cleaning machinery is deleted, every user-facing composite runs on the
+cascade, and both consumers (gtk4, Python) are on the new path. Its session plan is retired
+(pinned at `git show 89b1452f:docs/plans/plan_step_7.md`), the delivered state is recorded
+in Appendix J. **With step 7 the plan of action of §8 is complete**: the cascade is the
+production path from the elementary ops up to the UI.
 This doc started as an exploration after phase C of the table-registry plan shipped (item 2's
 detailed plan, since delivered in full and retired; pinned at
 `git show 77695338:docs/table_registry_plan.md`); it now
@@ -564,24 +569,32 @@ Fuzz test (b) shipped as prescribed: `state-colloscopes/tests/property_content_o
 over generated broken states, every `fix_invariant` answer is `None` or an op whose applied
 result sits strictly below the pre-fix state — never above, never equivalent.
 
-**Step 7 — migrate `ops/` (the remaster) — IN FLIGHT since July 31 2026.** Each natural op
-becomes: open a session, run `apply_cascade`, present the extra ops to the user (dry-run
-preview, §5), commit or cancel. The `Warning` enums, `get_next_cleaning_op`, and the
-hand-written consequence detection retire; an op-list rendering layer replaces the warning
-texts.
+**Step 7 — migrate `ops/` (the remaster) — COMPLETED August 2 2026.** Each natural op
+became: open a session, run `apply_cascade`, present the fixes to the user (dry-run
+preview, §5), commit or cancel. The `Warning` enums, `get_next_cleaning_op` and the
+hand-written consequence detection are deleted; a `Fix`-keyed rendering layer replaces the
+warning texts. Planned July 30–31 2026, proof-read with the user July 31, and delivered
+across 57 commits (`8e53118b`…`89b1452f`). Its session plan is retired (pinned
+`git show 89b1452f:docs/plans/plan_step_7.md` — its §0 ledger holds the full argument
+behind every ★ ruling of the step); **the delivered state is Appendix J.**
 
-  The session plan is **`docs/plans/plan_step_7.md`**, live in the tree (its §0 decision
-  ledger is the authority on every ★ ruling of this step, and its §3 table records which
-  commits have landed). Position on August 1 2026: commits 0–3.14 landed — the `Fix`
-  vocabulary and `FixOp` trait, the `CascadeReceipt` re-shape, `Manager::apply_cascade`,
-  the `ops/` `CascadeSession`, and fourteen of the fifteen families; next is 3.15
-  (`general_planning.rs`), then the dispatch, the property walk, the renderer, the
-  consumers and the deletion of the old world. Nothing in production runs on the new path
-  yet. Two op-surface facts already settled here rather than in the plan: period removal
-  keeps its elementary name (`PeriodOp::Remove`) while the composite says what it does
-  (`DeletePeriodAndWeeks`), and `Convergence::InterrogationGroupOutOfBounds` became
-  `InterrogationGroupsOutOfBounds`, carrying a `BTreeSet<u32>` so a cell's out-of-bounds
-  groups are one break and one fix (see the H.4 rider).
+  **The cascade is now what the application runs.** gtk4 and Python both call the new
+  path, there is no second path left, and `apply_cascade` has the `Manager`-level wrapper
+  H.6 left open — bounded `where Self::Data: Fixable`, with the allocator deliberately
+  outside rollback (★ D3, J.5).
+
+  Three things were settled here rather than in the plan, because they changed the op
+  surface: period removal keeps its elementary name (`PeriodOp::Remove`) while the
+  composite says what it does and authors it (`DeletePeriodAndWeeks`, ★ D8);
+  `Convergence::InterrogationGroupOutOfBounds` became `InterrogationGroupsOutOfBounds`,
+  carrying a `BTreeSet<u32>` so a cell's out-of-bounds groups are one break and one fix
+  (the H.4 rider); and the resolution map now answers a **`Fix` enum** rather than a raw
+  op (★ D15) — one variant per rendered meaning, which is what makes the renderer a
+  function of `Fix` alone.
+
+  ★ End-of-step gate: full workspace suite (1456 passed, 0 failed, no warnings),
+  500-seed property crank, byte-stability + hogwarts pristine, contract scripts and gtk4
+  smoke passed; user sign-off August 2 2026.
 
 ## 9. Impact on the existing plans
 
@@ -602,14 +615,16 @@ texts.
 - **Table-registry-plan phase C artifacts** — `Join` kept; `References`/`for_each_ref`
   recast as the step-2 sweep engine; `RefSite`/`references_to_*` likely retired (§7, pending a
   gtk4 claim); `Lookup`/`resolve`/`all_ids` unaffected. Phases D/E completed July 16 2026.
-- **`ops/` — step 7 is the promised remaster.** Until then, decision 6 of the registry plan
-  (touch `ops/` minimally) stands. Supporting evidence for computed-over-hand-written
+- **`ops/` — step 7 was the promised remaster; delivered August 2 2026 (Appendix J).**
+  Decision 6 of the registry plan (touch `ops/` minimally) is discharged. Supporting
+  evidence for computed-over-hand-written
   consequences: the suspected dormant drift bug in `general_planning.rs`
   (`UpdatePeriodWeekCount`'s colloscope-cleaning loop iterated
   `old_week_count..*week_count`, an empty range under its own guard — bounds swapped, so the
   cleaning op could never fire) **was confirmed real and fixed in step 1 phase 0**
   (test-first, `1418d4bf` + `f8e34128`, regression pinned in `ops/tests/found_bugs.rs`);
-  the class disappears at step 7.
+  **the class is gone with step 7** — no composite enumerates its own consequences anymore,
+  so there is no enumeration left to get wrong (J.1).
 - **The safety net** — the property harness stays the oracle throughout and gains the step-4
   differential fuzz; `found_bugs.rs` keeps its regression *scenarios* but its exact-variant
   asserts are rewritten at step 5 to the new error vocabulary. *(Done: at step 5 the
@@ -1328,7 +1343,8 @@ the grow/shrink pad-and-truncate then `Update(id, new(...).expect(...))`; the hi
 > sealed value, `SetFilling` and the parameters-only `UpdateGroupList` are deleted, and the
 > translators reshape nothing. Six variants down to five, one warning variant
 > (`LooseStudentsInPrefilledGroupList`) deleted with the shrink pre-empt that emitted it.
-> Consequences for step 7 are recorded in `docs/plans/plan_step_7.md` (D12, now void).
+> Consequences for step 7: this voided its ★ D12 before the step began, which is why the
+> delivered world has no hand-written warnings at all — see J.5.
 
 ### F.4 Mirror-consistency `LogicError`s (supersedes C.3's "Mirrors" bullet + §8's panic plan)
 
@@ -2133,9 +2149,263 @@ the moment it happens, naming the offending fix and its `content_cmp`. Everythin
 6 left for step 7 is untouched and still standing — `apply_cascade` still has no
 `Manager`-level wrapper (H.6), the ops-layer cleaning phases and `Warning` machinery, the
 frozen `UpdateError` vocabulary, the dry-run/preview UX (§5), and gtk4's
-itemized-`Display`-only error dialogs.
+itemized-`Display`-only error dialogs. *(Step 7 has since delivered all of that — see
+Appendix J. The `UpdateError` vocabulary is still frozen, minus the two dead variants
+★ D14 removed.)*
 
 One standing obligation for anyone touching `state-colloscopes/`: **a new field on an
 ordered type is a compile error until it gets a rule**, and the rule is a design decision,
 not boilerplate. Ask the identity question of I.3 before reaching for an attribute, and
 remember that the order is over content, never over meaning (D5.1).
+
+## Appendix J — step 7 as delivered (August 2 2026)
+
+Commit span `8e53118b`…`89b1452f` (57 commits); session plan retired, pinned
+`git show 89b1452f:docs/plans/plan_step_7.md`. That plan's §0 decision ledger holds the
+full argument behind every ★ ruling of the step and is the place to read before
+re-opening one; this appendix records the delivered state, and supersedes Appendices H
+and I wherever the three disagree.
+
+Step 6 built the cascade and step 6.5 made its termination checkable, but **nothing in
+production called either**. Step 7 is the consumer: `ops/` — the fifteen families of
+user-facing composites that gtk4 and Python drive — stopped hand-detecting the
+consequences of an edit and started letting the cascade discover them. The old world is
+deleted, not deprecated. Net over the step: **+17787 / −5088 across 71 files**, and the
+`ops/` crate itself came out roughly the size it went in despite absorbing a renderer and
+a fuzz harness, because the machinery it lost was larger than what replaced it.
+
+### J.1 What was deleted
+
+Per family (fifteen times over) : the `XxxUpdateWarning` enum and its `build_desc_from_data`
+renderer, the `get_next_cleaning_op` scan, and the `apply_no_cleaning` body. Above them:
+the `UpdateWarning` union with its fifteen `From` impls and dispatch, `CleaningOp` and its
+up/downcasts, `rec_apply_no_session` (the fixpoint driver — apply, scan for a cleaning op,
+apply it, rescan), `RecApplyResult`, `DryResult`, and the old `dry_apply` / `apply`.
+
+The shape that is gone is worth naming, because it is the class of bug this step closes.
+Every composite carried a **hand-written model of its own consequences**: a scan that had
+to enumerate, correctly and exhaustively, everything in the document that could be
+invalidated by the edit it was about to make. Nothing checked that enumeration against the
+invariants — a scan that missed a case did not fail, it silently corrupted or crashed. Two
+of `found_bugs.rs`'s pins are exactly that (an always-empty loop range that made a cleaning
+op unreachable; a stale `.expect` that outlived a data reshape). With the cascade, the
+enumeration is the checker's job and the repair is the map's, both of which are total by
+construction and tested as such.
+
+The residual "should be cleaned before" panics went with the scans: under the old design
+they were the assertion that the hand-written model had been complete. There is nothing
+left for them to assert.
+
+### J.2 The delivered API, bottom-up
+
+**`state/src/cascade.rs`** — `FixOp` (one method, `to_annotated_op(&self) -> Self::Op`,
+pure), and `Fixable::fix_invariant` now answering `Option<Self::Fix>` instead of a raw op.
+`CascadeReceipt` carries `Vec<(ReversibleOp, T::Fix)>` plus the target held separately, so
+"fix without a meaning" and "target among the fixes" are both unrepresentable. The picked
+invariant never leaves the engine: it feeds the no-progress ledger and nothing else.
+
+**`state/src/traits.rs`** — `Manager::apply_cascade`, a defaulted method beside `apply`,
+bounded `where Self::Data: Fixable`. Original op in; `(NewInfo, Vec<Fix>)` out; the whole
+cascade lands as **one history slot**, so one `undo` takes the document back. Its `Err`
+contract is uniform with `apply`'s and needs no manager-level snapshot: the engine restores
+its entry snapshot bit-identically on every failure and `store` runs only on `Ok`.
+
+**`ops/src/cascade.rs`** — `CascadeSession<T>` owns a manager, applies one elementary op at
+a time through `apply_cascade`, hands ids back inline and accumulates every fix as a
+`CascadeWarning`; `commit(desc)` collapses the lot into one history slot, `cancel()` throws
+it away. `CascadeWarning` is a newtype over `Fix` with private content, read through
+`fix()` and rendered through `text(&Data)`.
+
+**`ops/src/lib.rs`** — `UpdateOp::apply_to_session` (the fifteen-arm dispatch) under the
+two public entry points, which carry the names the old ones had: `dry_apply(&T) ->
+Result<CascadeResult<T>, UpdateError>` and `apply(&mut T) -> Result<Option<NewId>,
+UpdateError>`. `apply`'s signature is byte-for-byte what it was before the step, which is
+why `python/src/glue.rs`'s call site ends the step textually unchanged.
+
+### J.3 The `Fix` vocabulary (★ D15)
+
+`state-colloscopes/src/resolution.rs` — public `Fix`, **25 variants**, in the same file as
+the map arms that answer them and the translation that consumes them, so the three stay on
+one screen. It is **structurally deletive**: creation is unrepresentable, and neither the
+map (which holds `&self`) nor the translation can reach the id issuer, so a fix physically
+cannot carry a fresh id.
+
+Two design points do the load-bearing work:
+
+* **Granularity is one variant per *rendered meaning*** — not per invariant, not per op
+  shape. Several invariants collapse into one variant when the sentence a user reads is
+  the same (a dead subject and a dead teacher both give `DeleteSlot`); one elementary op
+  splits into two variants when the meaning differs (`DeleteOverflowingSlot` carries the
+  « il déborderait sur le jour suivant » nuance; `ClearSlotWeekPattern` means "this slot
+  now runs every week", not merely "updated"). The consequence is what makes the renderer
+  possible: **it is a function of `Fix` alone**, and never inspects the invariant.
+* **Single lookup, payload-carrying variants.** A split where `fix_invariant` merely
+  presence-tests and a later `to_annotated_op(&data)` re-looks-up and materializes was
+  rejected: it doubles every lookup and its second half needs `.expect`s justified only by
+  call-timing discipline. Instead each variant carries everything its op needs — ids for
+  the pure cases, the rebuilt payload for the whole-value ops, since the elementary
+  vocabulary is whole-value and frozen. `to_annotated_op` is therefore total, pure, and
+  testable in isolation, and the engine's contract sentence "the map is a pure function of
+  (state, invariant)" stays literally true.
+
+The accepted residual, named consciously at the time: a payload-carrying variant holds the
+semantic delta and the rebuilt value three lines apart in one arm, and nothing *forces*
+them to agree. The exact-post-state fixtures pin the payload, so the drift class shrank
+from "cross-crate and invisible" to "same screen and pinned" rather than disappearing.
+
+### J.4 Rendering — where the French lives
+
+`ops/src/rendering.rs` is a **shared, noun-less id-rendering vocabulary**: `render_week`,
+`render_period`, `render_slot`, `render_group`, … each returning `Result<String,
+MissingId>`, each taking *the document parts it reads* rather than `&Data`. That last
+point was not in the original plan — surveying gtk4 for the consumer commit showed the
+helpers could not be called there at all, because no gtk4 panel holds a whole `Data`
+(commit 6.0 fixed the signatures, 6.1 then deleted gtk4's local duplicates). The result is
+the property that motivated the module: **a warning and the screen behind it name the same
+entity with the same words.**
+
+`ops/src/warning_text.rs` is private — the crate's only rendering door for a warning is
+`CascadeWarning::text`. It matches on `Fix` with no wildcard, so a new fix shape is a
+compile error in the renderer. Texts are phrased as the **effect only** (« L'interrogation
+de X sera supprimée », never « … car son colleur a été supprimé »): the user just performed
+the action, and does not need to be told what they did.
+
+**Rendering is lazy, against the composite's pre-state.** `CascadeWarning` stores no text;
+`text` is computed where it is needed, which is only gtk4 (Python discards warnings). The
+pre-state is the right state because it is the document the user is looking at when the
+dialog appears. A lookup miss returns `Err(MissingId)` naming the missing material — a
+panic is a bad API for code that merely *tries* to render — and the callers that must not
+fail panic on the `Err` themselves.
+
+### J.5 Doctrine that outlives the plan
+
+* **The prefix-survival frame rule** (engraved in `CascadeSession`'s doc). A composite must
+  be written so each of its ops is valid against the state produced by its own earlier ops
+  *and their cascades*. A composite whose later op is convicted because an earlier op's
+  cascade ate its target is a bug in the composite, not bad user input. **Rendering
+  corollary:** a composite's cascades must only touch material present in the composite's
+  pre-state — a warning about material the same composite just created would be
+  incomprehensible (« cette colle n'a jamais existé dans mon document »), so the case is
+  outlawed rather than rendered.
+* ★ **The growth rule.** Two things pull in opposite directions and must not be conflated.
+  **Prechecks must not grow**: an ops-level guard refusing input the cascade would happily
+  repair is exactly what this step deleted, and re-adding one under a new error name puts
+  the cleaning phase back by the side door. But **a panic on reachable input must be dealt
+  with**: where a state-layer break can reach a residual catch-all `panic!`, the family's
+  error vocabulary *gains a variant*. A crash is not a contract. The test is
+  **reachability, not taste** — the panics that stay are the ones the fixtures establish no
+  input can produce.
+* **The audit rule that makes the growth rule mechanical.** The engine rolls the failing
+  target back *before* asking the map, and every map arm is a presence test. So an
+  invariant broken by a target's **own written content** always finds its material gone,
+  always answers `None`, and always surfaces as that family's `BrokenInvariants` — while an
+  invariant broken by invalidating **pre-existing** material survives the rollback and is
+  repaired. Per family the question is therefore finite: enumerate the reference sites
+  originating in the row the family writes, plus the convergence predicates whose fields it
+  writes, and check each is scanned or excluded by an address check.
+* **The allocator is outside rollback** (★ D3). The manager's rollback-managed state is
+  *document + history*; the id issuer is monotone across the manager's whole life. `apply`
+  already burned annotation ids on failure and `undo` deliberately does not rewind the
+  issuer (undone ids stay live because `redo` can restore them), so `apply_cascade` is
+  uniform with the rest: `Err` ⇒ data and history unchanged, allocator possibly advanced.
+  Burned ids never appear anywhere. The tempting alternative — a public `annotate` door so
+  the caller annotates and the engine can promise bit-identity — was rejected because
+  annotated ops are deliberately never publicly *injectable*, and opening an input door
+  invites transplanted ids.
+* **`UpdateError` scan order is public API.** The per-family translation of state-layer
+  errors stays at the call sites, copied from the old bodies *including the order in which
+  they scan*, which reproduces the old validator's first-error order and is pinned by
+  `ops/tests/assignments_error_surface.rs`. Python has ~80 exception-matching sites keyed
+  on this vocabulary.
+* **The hand-written-warning door is shut.** Every warning in the delivered world is a
+  cascade `Fix`; no composite emits one of its own. This was a near miss — ★ D12 originally
+  ruled that a prefilled group-list shrink must keep warning, which required a
+  composite-emitted warning shape and a `pub(crate)` channel on `CascadeSession`. The
+  global-group-list work (branch `global_grouplist_update`) removed the premise before the
+  step started: with a list's count and filling arriving in **one sealed payload**, the
+  student loss is *authored by the caller*, and warning about it tells the user what they
+  just said. Re-opening the door needs a fresh ruling.
+* **Names split by layer** (★ D8, after one false start in the other direction).
+  Elementary ops are elementary: `PeriodOp::Remove` removes the period and nothing else,
+  and its name must say no more than it does — the dangling weeks are a *fixable*
+  `DanglingFk` the cascade repairs. The semantic fact that a user deleting a period expects
+  its weeks to go belongs to the user-facing layer and to its name:
+  `GeneralPlanningUpdateOp::DeletePeriodAndWeeks` says the weeks go, and **authors their
+  removal itself**. Authoring is what keeps the warning list down to the genuinely
+  surprising effects instead of one « la semaine X sera supprimée » line per week restating
+  the request.
+
+### J.6 Divergences from legacy behaviour, all deliberate
+
+1. **Merging periods preserves colloscope data** — closing a long-standing FIXME. The old
+   merge reconciled the two periods *before* moving the weeks, and its cleaning erased
+   every cell it could not carry (the body's own comment admitted it). Weeks now move with
+   their cells; only genuinely-invalidated cells are cleared, and warned.
+2. **A subject update that makes a slot overflow its day no longer aborts** — the cascade
+   removes the overflowing slot and warns. On a *slot* update naming a bad start time the
+   old rejection survives unchanged, because there the offending content is the target's
+   own: the map answers `None` and the target is convicted.
+3. **Deleting a week pattern keeps the slots and incompatibilities that referenced it**,
+   with `week_pattern = None`, where legacy deleted them and their colloscope data.
+4. **`DeletePeriodAndWeeks` and `MergeWithPreviousPeriod` stop reconciling exclusions** —
+   the dead period's exclusion-set members are simply dropped. Same end state, differently
+   phrased warnings.
+5. **Four crashes became errors**: a dead period id on `DeletePeriodAndWeeks`, balancing
+   options on a subject whose interrogations are off, a teacher op naming a
+   no-interrogation subject, and a colloscope group-list row aimed at a prefilled list.
+   The fourth is a *restoration* — that guard existed until step 4 dropped it.
+6. **Two dead error variants deleted and one cross-enum wart fixed** (★ D14):
+   `UpdateSlotError::InvalidSubjectId` and
+   `UpdatePeriodWeekCountError::SubjectImpliesMinimumWeekCount` were unconstructible;
+   `MoveSlotDown` on a dead id returned `MoveSlotUpError::InvalidSlotId` and now returns
+   its own.
+7. **Warning granularity is finer**: one entry per fix op, in application order, where
+   legacy emitted deduplicated coarse statements. gtk4 dedups exact-equal texts only.
+8. **One convergence placement moved** (a divergence from step 6, not from legacy): the
+   interrogation-row predicates now outrank the association ones, so when a subject stops
+   running on a period the colles are lost whole instead of group by group.
+
+### J.7 Tests as delivered
+
+**The default fixture base is a frozen hogwarts copy** —
+`ops/tests/fixtures/hogwarts.collomatique`, copied from `examples/` and deliberately
+decoupled so the living example can evolve without touching the tests. Fixtures decode it
+(asserting no caveats), set up corner shapes by applying ops on top, and assert the **exact**
+resulting document: build the expected state by applying the expected elementary ops in
+cascade order to a clone of the base and compare with `==`, which pins that the cascade
+landed precisely those ops and no others.
+
+**Expected warning lists are derived by hand before the test runs**, as `Fix` literals read
+through `CascadeWarning::fix()`. Invariant→fix *attribution* is deliberately not pinned
+here — it lives in direct `fix_invariant` unit tests in `state-colloscopes`, which is the
+seam the map became unit-testable at when it started answering `Fix`.
+
+**`ops/tests/property_update_ops.rs`** is the first fuzz `ops/` has ever had: 100 seeds ×
+500 random `UpdateOp`s through the new path, asserting no panic and a valid result, and
+rendering **every** warning it collects against the true pre-state (the totality backstop
+for the renderer). It is coverage-guarded — landed > 0, warned > 0, errored > 0 — because a
+walk that never cascaded proves nothing. Its reference crank: **60 000 ops, 47 787 landed,
+3 483 of those needing a repair, 9 214 repairs in all.**
+
+Behaviour-divergence fixtures were **mutation-checked**: a pin that passes on its first run
+proves nothing until the code under it has been broken and watched go red.
+
+Full workspace suite at close-out: **1456 passed, 0 failed, no warnings.**
+
+### J.8 What this leaves standing
+
+The cascade is now what the application runs — both consumers are on it, and there is no
+second path. `state_consolidation_plan.md` §6's decision 6 ("touch `ops/` minimally until
+the remaster") is discharged.
+
+Known and deliberately out of scope: gtk4 still shows warnings as a flat `Vec<String>`
+dialog (a richer warning window is separate work), and Python still discards warnings
+entirely (the Python API revamp is separate work). Both consume the same `Fix` values, so
+either can be improved without touching this layer.
+
+The standing obligation for anyone adding to `state-colloscopes/`'s resolution map: **a new
+map arm needs a `Fix` variant, and the variant is chosen by the sentence the user will
+read** — not by which invariant fired and not by which op performs the repair. If two
+invariants would produce the same sentence they share a variant; if one op needs two
+sentences it gets two. Then the renderer stops compiling until the new meaning has words,
+which is the intended order of events.

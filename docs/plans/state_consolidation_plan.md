@@ -442,10 +442,11 @@ When in doubt, ask the user to run the real scripts/files rather than guessing.
   one → completeness audit → differential fuzz → switch elementary ops to
   apply/check/restore → the cascade → the `ops/` remaster. It supersedes item 3 (direction
   reversed) and dissolves item 5; item 4 rode along its reshapes and closed July 31 2026.
-  **Steps 1 through 6.5 are complete** (July 18 → July 29 2026; each ★ gate ran clean, each
+  **All seven steps are complete** (July 18 → August 2 2026; each ★ gate ran clean, each
   session plan is retired behind a `git show` pin recorded in the design doc's §8, and the
-  delivered state of each is an appendix of that doc — B through I). **Step 7, the `ops/`
-  remaster, is in flight**: its session plan is `docs/plans/plan_step_7.md`, live in the
-  tree, and the position as of August 1 2026 is commits 0–3.14 landed, 3.15
-  (`general_planning.rs`) next. Read the design doc's §8 for the step-by-step record and
-  `plan_step_7.md` §0 for the rulings governing the work in progress.
+  delivered state of each is an appendix of that doc — B through J). Step 7, the `ops/`
+  remaster, closed August 2 2026: the hand-written cleaning machinery is deleted, every
+  user-facing composite runs on the cascade, and both consumers (gtk4, Python) are on the
+  new path. Read the design doc's §8 for the step-by-step record and its appendices for
+  what each step delivered; Appendix J carries the doctrine of the `ops/` layer as it now
+  stands.
