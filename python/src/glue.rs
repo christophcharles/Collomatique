@@ -1359,7 +1359,7 @@ impl InternalFile {
         op: collomatique_ops::UpdateOp,
     ) -> Result<Option<collomatique_state_colloscopes::NewId>, collomatique_ops::UpdateError> {
         let mut state = self.state.lock().unwrap();
-        op.apply(&mut *state)
+        op.cascade_apply(&mut *state)
     }
 
     fn get_inner_data(&self) -> collomatique_state_colloscopes::InnerData {
