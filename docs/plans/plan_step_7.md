@@ -11,9 +11,10 @@ step is the consumer.
 the engine wrapper, the session struct, **all fifteen families**, the dispatch above
 them and the property walk over that, plus the riders 0bis/0ter, 3.3bis, 3.12+ and
 3.13bis. The `landed` column of §3's table is the authoritative record. **Commit 3 is
-closed and the new path is fuzzed; the next commit is 5 (the renderer)**, then 6–7.
-`cascade_dry_apply` / `cascade_apply` now exist, but nothing in production calls them:
-no consumer moves before 6a.
+closed and the new path is fuzzed; the next commits are 5.0–5.2 (the rendering
+vocabulary and the renderer — reviewed and re-planned with the user August 2)**, then
+6.1–6.4 and 7. `cascade_dry_apply` / `cascade_apply` now exist, but nothing in
+production calls them: no consumer moves before 6.2.
 
 The migration pattern is the step-5 one: build the new world in parallel under
 transitional names, move consumers over, delete the old world, rename at the very end so
@@ -144,9 +145,13 @@ Rationale is recorded so the executing session does not re-litigate.
   serde, and rendering needs entity *names* — a data-snapshot read, exactly what today's
   `build_desc_from_data` does. The desync risk the original D6 had to accept (a
   resolution arm silently changing its fix shape under an unchanged invariant) is now
-  closed structurally by D15; text-pinning fixtures stay as the backstop, plus a pointer
-  line in `resolution.rs`'s module doc ("every `Fix` variant has a French description
-  in `ops/src/warning_text.rs`").
+  closed structurally by D15; the backstop is commit 5.2's fuzz totality check (the
+  property walk renders every warning it collects against the true pre-state), plus a
+  pointer line in `resolution.rs`'s module doc ("every `Fix` variant has a French
+  description in `ops/src/warning_text.rs`"). The renderer sits on
+  `ops/src/rendering.rs` (commit 5.0) — the shared, noun-less id-rendering vocabulary
+  that gtk4 itself adopts in commit 6.1, so a warning and the UI describe the same
+  entity with the same words (revised August 2, review of this section with the user).
 - **D7 — Rendering is lazy, against the composite's pre-state** (revised July 30,
   superseding an earlier per-op-pre-state rule). In principle a later op's cascade could
   touch material *created* by an earlier op of the same composite, which the pre-state
@@ -156,10 +161,14 @@ Rationale is recorded so the executing session does not re-litigate.
   rule the composite pre-state is sound, and it is the *right* state: it is the document
   the user is looking at when the dialog appears (gtk4 stashes `new_state`; the UI still
   shows the old one). Mechanically: `CascadeWarning` stores no text — it exposes
-  `text(&self, data: &Data) -> String`, computed only where needed (gtk4). The
-  python/scripting route never renders. A failed lookup inside `text` panics — the
-  descendant of the old `.expect("Warning should have a desc when applied on same
-  state")` (`lib.rs:425`), an instrument for the tests per H.2's ruling.
+  `text(&self, data: &Data) -> Result<String, MissingId>`, computed only where needed
+  (gtk4). The python/scripting route never renders. A failed lookup inside `text`
+  returns `Err(MissingId)` naming the missing material (revised August 2 — a panic is
+  a bad API for code that merely *tries* to render); the callers that must not fail
+  panic on the `Err` themselves — gtk4 `.expect`s it, the 5.2 property walk panics
+  printing both the error and the fix — which keeps the old `.expect("Warning should
+  have a desc when applied on same state")` (`lib.rs:425`) role as an instrument for
+  the tests per H.2's ruling.
 - ★ **D8 — Composites keep their structure, drop their cleaning; the names are split
   by layer: the elementary op is `PeriodOp::Remove`, the composite is
   `DeletePeriodAndWeeks`** (re-revised August 1 2026 — the July 31 revision renamed
@@ -521,11 +530,12 @@ pub struct CascadeWarning {
 impl CascadeWarning {
     /// Borrowed read-only view of the warning's content.
     pub fn fix(&self) -> &collomatique_state_colloscopes::Fix;
-    // commit 5 adds:
+    // commit 5.1 adds:
     /// French, effect-phrased description, rendered against the composite's
-    /// PRE-state (D7). Panics if `data` does not hold the material the
-    /// warning names (the frame rule's rendering corollary was violated).
-    pub fn text(&self, data: &Data) -> String;
+    /// PRE-state (D7). `Err(MissingId)` if `data` does not hold the material
+    /// the warning names (the frame rule's rendering corollary was violated);
+    /// callers that must not fail (gtk4, the property walk) panic on it.
+    pub fn text(&self, data: &Data) -> Result<String, MissingId>;
 }
 
 /// A modification session applying elementary ops through the cascade,
@@ -719,10 +729,13 @@ lands.
 | 3.13bis | move the interrogation-row convergences ahead of the association ones (§3.13) | state-colloscopes, ops | `9ef4299b` |
 | 3.16 | `UpdateOp` dispatch + `cascade_dry_apply`/`cascade_apply` | ops | `e00c62ff` |
 | 4 | the `UpdateOp` property walk (testgen dev-dep ⇒ **cargoHash**) | ops | *this commit* |
-| 5 | `warning_text.rs` renderer + `CascadeWarning::text` + text pins | ops | — |
-| 6a | gtk4 switch | gtk4 | — |
-| 6b | python switch (contract scripts run here) | python | — |
-| 6c | drop dead rpc-engine dep (⇒ **cargoHash**) | rpc-engine | — |
+| 5.0 | `rendering.rs` — shared noun-less id renderers + `MissingId` + `join_french` | ops | — |
+| 5.1 | `warning_text.rs` renderer + `CascadeWarning::text` | ops | — |
+| 5.2 | all the tests: walk renders every warning; rendering unit tests | ops | — |
+| 6.1 | gtk4 helper dedup — local renderers replaced by `ops::rendering` | gtk4 | — |
+| 6.2 | gtk4 warning-dialog switch (gtk4 smoke here covers 6.1 too) | gtk4 | — |
+| 6.3 | python switch (contract scripts run here) | python | — |
+| 6.4 | drop dead rpc-engine dep (⇒ **cargoHash**) | rpc-engine | — |
 | 7 | delete the old world + final rename + test re-cuts | ops, gtk4, python | — |
 | close-out | design doc Appendix J, §8, retire this plan, memory | docs | — |
 
@@ -1235,9 +1248,10 @@ fn update_ops_never_panic_and_land_valid() {
 ```
 
 House rules apply: committed `CONFIG` const, no env vars, no `#[ignore]` tiers;
-shrinking is a later decision. Once commit 5 lands, extend the loop to call
-`w.text(pre_state.get_data())` on every warning — rendering totality (no panic on any
-reachable fix) gets fuzzed for free.
+shrinking is a later decision. Once commits 5.0–5.1 land, commit 5.2 extends the loop
+to call `w.text(pre_state.get_data())` on every warning, panicking on `Err` with both
+the `MissingId` and the `Fix` — rendering totality (every reachable fix resolves all
+its ids against the true pre-state) gets fuzzed for free.
 
 **As landed** (this commit, `ops/tests/property_update_ops.rs`). Three things moved
 from the sketch above.
@@ -1276,73 +1290,210 @@ landed in `apply_no_cleaning`'s copy of the translation (`slots.rs:338`) rather 
 `apply_to_session`'s (`slots.rs:674`): the two bodies stand side by side until commit
 7, they read almost identically, and this walk drives only the second.
 
-## 5-C5. Commit 5 — the renderer, and the `Fix` catalogue
+## 5-C5. Commits 5.0–5.2 — the rendering vocabulary, the renderer, and the `Fix` catalogue
 
-New `ops/src/warning_text.rs`: `pub(crate) fn render(data: &Data, fix: &Fix) ->
-String`, exhaustive over `Fix` with **no wildcard arm** — a new fix shape is a compile
-error here (D6/D15). The renderer never sees an invariant: one variant, one meaning,
-one template. `CascadeWarning::text` is a one-line wrapper forwarding its own `Fix` —
-there is no second warning shape to match on first (D12 void).
-Name lookups (teacher/student names, subject names, group-list names,
-slot day/time, week numbers) read `data` and **panic on a miss** (D7).
-`resolution.rs`'s module doc gains: *"Every `Fix` variant has a French description in
-`ops/src/warning_text.rs` — a new or changed variant must update its text."*
+*(Section rewritten August 2 2026 after a point-by-point review with the user; the
+partition and both id columns of the catalogue are unchanged.)*
 
-**The catalogue** — this table IS the `Fix` enum (commit 1a builds the type from it,
-commit 5 the templates). Conventions: fields in braces; `rebuilt` marks a
+### 5.0 — `ops/src/rendering.rs`, the shared id-rendering vocabulary
+
+One function per id kind, each **noun-less** (it says « 5 (du 28/09/2026 au
+04/10/2026) », never « Semaine 5 … » — the caller owns the sentence and the noun), each
+taking `&Data` plus the id and doing its own lookups:
+
+```rust
+/// What a failed lookup names. One variant per id kind, plus the two
+/// structural lookups that are not a bare id.
+pub enum MissingId {
+    Period(PeriodId), Week(WeekId), Subject(SubjectId), Teacher(TeacherId),
+    Student(StudentId), WeekPattern(WeekPatternId), Slot(SlotId),
+    GroupList(GroupListId), Incompat(IncompatId), PairingRule(PairingRuleId),
+    SlotPairingRule(SlotPairingRuleId),
+    /// The association entry at (period, subject) — read by `UnassignGroupList`'s
+    /// template to name the list; neither id alone is the missing thing.
+    Association { period: PeriodId, subject: SubjectId },
+    /// A group index out of bounds is not a missing list.
+    Group { group_list: GroupListId, index: u32 },
+}
+// From<each id type> ×11, From<(PeriodId, SubjectId)> for Association.
+
+pub fn render_week(data: &Data, id: WeekId) -> Result<String, MissingId>;
+pub fn render_period(data: &Data, id: PeriodId) -> Result<String, MissingId>;
+// … render_subject / render_teacher / render_student / render_group_list /
+//   render_incompat / render_week_pattern / render_slot / render_pairing_rule /
+//   render_slot_pairing_rule, same shape.
+pub fn render_group_name(data: &Data, list: GroupListId, index: u32)
+    -> Result<Option<String>, MissingId>;  // Ok(None) = exists but unnamed
+pub fn render_group(data: &Data, list: GroupListId, index: u32)
+    -> Result<String, MissingId>;          // name if named, else 1-based number
+pub fn join_french(items: &[String]) -> String; // "a" / "a et b" / "a, b et c"
+```
+
+`Result` over `Option` is deliberate: lookups chain (a slot resolves its subject and
+teacher; a rule resolves its two endpoints), and a fuzz panic must name the *true*
+missing thing, not the outer id the caller happened to hold. The two structural
+variants exist because the group pair must distinguish the error path from the
+legitimate no-name path.
+
+The bodies are **adapted copies of the gtk4 helpers** (which stay in place until
+commit 6.1): `generate_week_title` / `generate_period_title` /
+`generate_week_succession_title` (`gtk4/src/editor.rs`),
+`GroupEntry::generate_group_name` (`editor/colloscope/interrogation_dialog.rs`), the
+group/week bind logic (`editor/colloscope/colloscope_display.rs`), and both rule
+`generate_summary`s (`editor/pairings/pairings_display.rs`,
+`editor/slot_pairings/slot_pairings_display.rs`). The gtk4 versions take precomputed
+numbers; the ops versions compute them (`weeks.find_period_position_and_first_week`
+gives a period's global first-week number). The formats, all settled:
+
+- **Week**: global 1-based number; « 5 (du 28/09/2026 au 04/10/2026) » when
+  `periods.first_week` is `Some` (dates moved into parens for clarity), bare « 5 »
+  otherwise.
+- **Period**: « 1 (du 31/08/2026 au 27/09/2026 - semaines 1 à 4) »; the singular
+  « semaine {n} » and empty « (vide) » branches of
+  `generate_week_succession_title` are kept verbatim.
+- **Student / teacher**: `{firstname} {surname}`. **Subject / group list / incompat /
+  week pattern**: the bare name.
+- **Slot**: « Séverus Rogue - lundi 14h00 (Physique) » — teacher first (it is how a
+  user *finds* a slot), then lowercase weekday + time; the subject trails in parens
+  because it is context, not the slot itself. All three are needed to identify one.
+- **Group**: name *or* 1-based number, never both — « B2 » or « 4 ».
+- **Pairing rule**: the existing tab notation, adopted as-is — « Avoir Physique ⟹ Ne
+  pas avoir Chimie » (U+27F9; no « (souple) » — softness is a property, not identity;
+  list views append it themselves).
+- **Slot pairing rule**: « Physique : [utilisé] Séverus Rogue - lundi 14h00 ⟹
+  [non utilisé] Minerve McGonagall - mardi 15h00 » — subject fronted once (a warning
+  lacks the tab's per-subject context), each part in the slot format minus its
+  subject parens.
+
+Ruled and recorded so it isn't re-litigated:
+`constraints-colloscopes/src/types/user_readable.rs` overlaps but stays untouched, as
+format *reference* only — its miss policy is deliberately different (solver
+diagnostics degrade to a `{:?}` fallback and must stay printable; ops rendering is
+strict, the strictness being the frame-rule instrument), and the only clean shared
+home would be a new crate. Not worth it for ~150 lines of stable lookups.
+
+### 5.1 — `ops/src/warning_text.rs`, the `Fix` renderer
+
+`pub(crate) fn render(data: &Data, fix: &Fix) -> Result<String, MissingId>`,
+exhaustive over `Fix` with **no wildcard arm** — a new fix shape is a compile error
+here (D6/D15). The renderer never sees an invariant: one variant, one meaning, one
+template, built from the 5.0 vocabulary with bare `?`. `CascadeWarning::text` is a
+one-line wrapper forwarding its own `Fix` — there is no second warning shape to match
+on first (D12 void), and it stays the crate's only public rendering door (`render`
+stays `pub(crate)`). `resolution.rs`'s module doc gains: *"Every `Fix` variant has a
+French description in `ops/src/warning_text.rs` — a new or changed variant must
+update its text."*
+
+Template conventions: « » quotes around free-form names that can't be read without
+context (group lists, week patterns, incompat names, both rule notations); bare for
+proper-noun-like names (subjects, people) and numbers. Templates naming groups branch
+on cardinality — « Le groupe B2 sera retiré … » / « Les groupes 3, A1 et B2 seront
+retirés … » via `join_french`.
+
+**The catalogue** — this table IS the `Fix` enum (commit 1a built the type from it,
+commit 5.1 the templates). Conventions: fields in braces; `rebuilt` marks a
 payload-carrying variant (the variant reduces to a whole-value op — `Update`,
 `SetRow`, `SetGroupList` — and carries the rebuilt value so `to_annotated_op` stays
 pure, D15); all other variants are id-only and translate structurally. The
 "translates to" column is the map's current op output (survey-verified) —
 `to_annotated_op` reproduces it verbatim. The "produced by" column is the
 `fix_invariant` arm inventory: which invariants answer this variant (`Conv:` =
-`Convergence`). Variant names and French wording are templates to polish at
-implementation; the *partition* — which invariants share a variant, driven by
-one-variant-per-rendered-meaning — is the settled part. `{sujet}`, `{colleur}`, `{n}`,
-etc. are pre-state lookups.
+`Convergence`). The French wording was walked row by row with the user (August 2)
+and is settled alongside the *partition* (which invariants share a variant, driven
+by one-variant-per-rendered-meaning); residual micro-polish at implementation is
+fine, but the forms below are the reviewed ones. Placeholders are the 5.0 renderers: `{semaine}` = `render_week`,
+`{période}` = `render_period`, `{créneau}` = `render_slot`, `{règle}` = the matching
+rule renderer, `{groupes}` = `join_french` over `render_group`; `{sujet}`,
+`{colleur}`, `{élève}`, `{liste}`, `{motif}`, `{nom}` are the name renderers.
+A coordinate implied by *every* producer may drop, but only from the complement
+position — the sentence's grammatical subject always stays ({élève} leads the
+prefill row even though only a student deletion produces it). The four
+period-exclusion fixes fire only when a period dies (the user knows which), so they
+name no period; `ClearAssignmentRow` also fires once per period on a *subject*
+deletion, so there the period is the discriminating information and stays. The week
+in `RemoveWeekPatternExclusion` survives the same test by the composite case:
+`DeletePeriodAndWeeks` can lift several exclusions of one motif in one dialog, and
+without `{semaine}` those lines would be identical and dedup-collapsed. Periods
+join a sentence as « sur la période {période} », never as a parenthetical —
+`render_period`'s own output carries parens, and nesting them reads badly.
 
 | `Fix` variant | translates to | produced by | template |
 | --- | --- | --- | --- |
-| `DeleteWeek { week }` | `WeekOp::Remove` | `Period@WeekPeriodFk` | « La semaine {n} sera supprimée » |
-| `RemoveSubjectPeriodExclusion { subject, period, rebuilt }` | subject `Update` | `Period@SubjectExcludedPeriods` | « {sujet} : l'exclusion de la période disparue sera levée » |
-| `RemoveStudentPeriodExclusion { student, period, rebuilt }` | student `Update` | `Period@StudentExcludedPeriods` | « {élève} : l'exclusion de la période disparue sera levée » |
-| `RemovePairingRulePeriodExclusion { rule, period, rebuilt }` | pairing-rule `Update` | `Period@PairingRuleExcludedPeriods` | « Règle d'alternance {sujets} : l'exclusion de période sera levée » |
-| `RemoveSlotPairingRulePeriodExclusion { rule, period, rebuilt }` | slot-pairing-rule `Update` | `Period@SlotPairingRuleExcludedPeriods` | « Alternance de créneaux {desc} : l'exclusion de période sera levée » |
-| `ClearAssignmentRow { period, subject }` | `SetRow(period, subject, ∅)` | `Period@AssignmentsKey`, `Subject@AssignmentsKey`, `Conv:AssignmentForSubjectNotRunningOnPeriod` | « Les inscriptions en {sujet} (période {p}) seront supprimées » |
-| `UnassignGroupList { period, subject }` | `AssignToSubject(period, subject, None)` | `Period@AssociationEntry`, `Subject@AssociationEntry`, `GroupList@AssociationEntry`, `Conv:AssociationForSubject{WithoutInterrogations,NotRunningOnPeriod}` | « L'association de la liste « {liste} » en {sujet} (période {p}) sera supprimée » |
-| `RemoveWeekPatternExclusion { pattern, week, rebuilt }` | week-pattern `Update` | `Week@WeekPatternExcludedWeek` | « Motif « {motif} » : l'exclusion de la semaine {n} sera levée » |
-| `ClearInterrogationCell { slot, week }` | `SetInterrogation(slot, week, ∅)` | `Week@ColloscopeInterrogation`, `Slot@ColloscopeInterrogation`, `Conv:InterrogationSlotNotRunningOnPeriod`, `Conv:InterrogationOnInactiveWeek` | « Les colles du créneau {desc} en semaine {n} seront supprimées » |
+| `DeleteWeek { week }` | `WeekOp::Remove` | `Period@WeekPeriodFk` | « La semaine {semaine} sera supprimée » |
+| `RemoveSubjectPeriodExclusion { subject, period, rebuilt }` | subject `Update` | `Period@SubjectExcludedPeriods` | « {sujet} : l'exclusion de période sera levée » |
+| `RemoveStudentPeriodExclusion { student, period, rebuilt }` | student `Update` | `Period@StudentExcludedPeriods` | « {élève} : l'exclusion de période sera levée » |
+| `RemovePairingRulePeriodExclusion { rule, period, rebuilt }` | pairing-rule `Update` | `Period@PairingRuleExcludedPeriods` | « Règle « {règle} » : l'exclusion de période sera levée » |
+| `RemoveSlotPairingRulePeriodExclusion { rule, period, rebuilt }` | slot-pairing-rule `Update` | `Period@SlotPairingRuleExcludedPeriods` | « Règle de créneaux « {règle} » : l'exclusion de période sera levée » |
+| `ClearAssignmentRow { period, subject }` | `SetRow(period, subject, ∅)` | `Period@AssignmentsKey`, `Subject@AssignmentsKey`, `Conv:AssignmentForSubjectNotRunningOnPeriod` | « Les inscriptions en {sujet} sur la période {période} seront supprimées » |
+| `UnassignGroupList { period, subject }` | `AssignToSubject(period, subject, None)` | `Period@AssociationEntry`, `Subject@AssociationEntry`, `GroupList@AssociationEntry`, `Conv:AssociationForSubject{WithoutInterrogations,NotRunningOnPeriod}` | « L'association de la liste « {liste} » en {sujet} sur la période {période} sera supprimée » |
+| `RemoveWeekPatternExclusion { pattern, week, rebuilt }` | week-pattern `Update` | `Week@WeekPatternExcludedWeek` | « Motif « {motif} » : l'exclusion de la semaine {semaine} sera levée » |
+| `ClearInterrogationCell { slot, week }` | `SetInterrogation(slot, week, ∅)` | `Week@ColloscopeInterrogation`, `Slot@ColloscopeInterrogation`, `Conv:InterrogationSlotNotRunningOnPeriod`, `Conv:InterrogationOnInactiveWeek` | « La colle du créneau {créneau} en semaine {semaine} sera supprimée » |
 | `RemoveTeacherSubject { teacher, subject, rebuilt }` | teacher `Update` | `Subject@TeacherSubjects`, `Conv:TeacherSubjectWithoutInterrogations` | « {colleur} n'interviendra plus en {sujet} » |
-| `DeleteSlot { slot }` | `SlotOp::Remove` | `Subject@SlotSubject`, `Teacher@SlotTeacher`, `Conv:SlotTeacherDoesNotTeachSubject`, `Conv:SlotForSubjectWithoutInterrogations` | « Le créneau de colle {desc} sera supprimé » |
-| `DeleteOverflowingSlot { slot }` | `SlotOp::Remove` | `Conv:SlotOverflowsDay` | « Le créneau de colle {desc} sera supprimé (il déborderait sur le jour suivant) » |
-| `DeleteIncompat { incompat }` | `IncompatOp::Remove` | `Subject@IncompatSubject` | « L'incompatibilité horaire « {nom} » sera supprimée » |
-| `DeletePairingRule { rule }` | pairing-rule `Remove` | `Subject@PairingRuleAntecedent/Consequent` | « La règle d'alternance entre {sujet₁} et {sujet₂} sera supprimée » |
-| `ClearSubjectBalancing { subject }` | `SetSubject(subject, None)` | `Subject@BalancingSubjectKey`, `Conv:BalancingForSubjectWithoutInterrogations` | « Les options d'équilibrage propres à {sujet} seront supprimées » |
+| `DeleteSlot { slot }` | `SlotOp::Remove` | `Subject@SlotSubject`, `Teacher@SlotTeacher`, `Conv:SlotTeacherDoesNotTeachSubject`, `Conv:SlotForSubjectWithoutInterrogations` | « Le créneau {créneau} sera supprimé » |
+| `DeleteOverflowingSlot { slot }` | `SlotOp::Remove` | `Conv:SlotOverflowsDay` | « Le créneau {créneau} sera supprimé (il déborderait sur le jour suivant) » |
+| `DeleteIncompat { incompat }` | `IncompatOp::Remove` | `Subject@IncompatSubject` | « L'incompatibilité « {nom} » sera supprimée » |
+| `DeletePairingRule { rule }` | pairing-rule `Remove` | `Subject@PairingRuleAntecedent/Consequent` | « La règle « {règle} » sera supprimée » |
+| `ClearSubjectBalancing { subject }` | `SetSubject(subject, None)` | `Subject@BalancingSubjectKey`, `Conv:BalancingForSubjectWithoutInterrogations` | « L'équilibrage de {sujet} prendra les valeurs par défaut » |
 | `RemoveStudentFromGroupListPrefill { group_list, student, rebuilt }` | group-list `Update` | `Student@GroupListPrefilledStudent` | « {élève} sera retiré(e) des groupes préremplis de « {liste} » » |
 | `RemoveStudentGroupListExclusion { group_list, student, rebuilt }` | group-list `Update` | `Student@GroupListExcludedStudent` | « {élève} : l'exclusion de la liste « {liste} » sera levée » |
-| `ClearStudentSettings { student }` | `SetStudent(student, None)` | `Student@SettingsStudentKey` | « Les limites propres à {élève} seront supprimées » |
-| `RemoveStudentFromAssignmentRow { period, subject, student, rebuilt }` | `SetRow` | `Student@AssignmentsStudent`, `Conv:AssignedStudentNotPresentForPeriod` | « L'inscription de {élève} en {sujet} (période {p}) sera supprimée » |
-| `RemoveStudentColloscopePlacement { group_list, student, rebuilt }` | `SetGroupList` | `Student@ColloscopeGroupListStudent`, `Conv:ColloscopeStudentExcluded`, `Conv:ColloscopeStudentGroupOutOfBounds` | « {élève} sera retiré(e) de son groupe dans « {liste} » (colloscope) » |
-| `ClearSlotWeekPattern { slot, rebuilt }` | slot `Update` | `WeekPattern@SlotWeekPattern` | « Le créneau {desc} ne suivra plus de motif : il aura lieu toutes les semaines » |
+| `ClearStudentSettings { student }` | `SetStudent(student, None)` | `Student@SettingsStudentKey` | « Les paramètres de {élève} prendront les valeurs par défaut » |
+| `RemoveStudentFromAssignmentRow { period, subject, student, rebuilt }` | `SetRow` | `Student@AssignmentsStudent`, `Conv:AssignedStudentNotPresentForPeriod` | « L'inscription de {élève} en {sujet} sur la période {période} sera supprimée » |
+| `RemoveStudentColloscopePlacement { group_list, student, rebuilt }` | `SetGroupList` | `Student@ColloscopeGroupListStudent`, `Conv:ColloscopeStudentExcluded`, `Conv:ColloscopeStudentGroupOutOfBounds` | « {élève} sera retiré(e) de son groupe de « {liste} » dans le colloscope » |
+| `ClearSlotWeekPattern { slot, rebuilt }` | slot `Update` | `WeekPattern@SlotWeekPattern` | « Le créneau {créneau} ne suivra plus de motif : il aura lieu toutes les semaines » |
 | `ClearIncompatWeekPattern { incompat, rebuilt }` | incompat `Update` | `WeekPattern@IncompatWeekPattern` | « L'incompatibilité « {nom} » ne suivra plus de motif : elle s'appliquera toutes les semaines » |
-| `DeleteSlotPairingRule { rule }` | slot-pairing-rule `Remove` | `Slot@SlotPairingRuleAntecedent/Consequent`, `Conv:PairedSlotsNotInSameSubject` | « La règle d'alternance de créneaux {desc} sera supprimée » |
+| `DeleteSlotPairingRule { rule }` | slot-pairing-rule `Remove` | `Slot@SlotPairingRuleAntecedent/Consequent`, `Conv:PairedSlotsNotInSameSubject` | « La règle de créneaux « {règle} » sera supprimée » |
 | `ClearColloscopeGroupListRow { group_list }` | `SetGroupList(list, ∅)` | `GroupList@ColloscopeGroupListKey`, `Conv:ColloscopeGroupListPrefilled` | « La répartition en groupes de « {liste} » dans le colloscope sera supprimée » |
-| `RemoveGroupsFromInterrogationCell { slot, week, groups, rebuilt }` | `SetInterrogation` | `Conv:InterrogationGroupsOutOfBounds` | « Les groupes {gs} seront retirés des colles du créneau {desc} en semaine {n} » |
+| `RemoveGroupsFromInterrogationCell { slot, week, groups, rebuilt }` | `SetInterrogation` | `Conv:InterrogationGroupsOutOfBounds` | « Le groupe {groupes} sera retiré / Les groupes {groupes} seront retirés de la colle du créneau {créneau} en semaine {semaine} » (cardinality branch) |
 
-Rendering note on `UnassignGroupList`: the template names the list, which the fix does
+Rendering note: chained lookups are the norm, not the exception — a fix carrying only
+an id often needs material *behind* it (`DeletePairingRule` reads the rule to name its
+two subjects; every `{créneau}` reads the slot, then its subject and teacher). All are
+sound for the same reason: the entity a fix touches is present in the composite
+pre-state, and a miss is a frame-rule violation surfacing as `Err` per D7. The least
+obvious case is `UnassignGroupList`: the template names the list, which the fix does
 not carry — the renderer reads the association entry at `(period, subject)` from the
-pre-state (the entry the fix clears, so it is present there; a miss panics per D7).
+pre-state (the entry the fix clears, so it is present there; its absence is
+`MissingId::Association`).
 
 The catalogue above is the **whole** warning vocabulary: with D12 void there is no
 composite-emitted template beside it.
 
 The old many-to-one collapses (several invariants → one effect → one sentence) are now
 explicit in the vocabulary itself: they are the multi-entry "produced by" cells.
-Fixtures pin one rendered string per **variant** plus every name-lookup path.
 
-## 5-C6/C7. Commits 6–7
+### 5.2 — all the tests (5.0 and 5.1 land test-less)
 
-### 6a — gtk4
+Two pieces, and deliberately **no per-variant French text pins** — with typed ids a
+cross-field mix-up doesn't compile, and pinning UI wording only manufactures fixture
+churn on every polish:
+
+- Extend `ops/tests/property_update_ops.rs` (§5-C4): render every collected warning
+  with `w.text(pre_state.get_data())`, panicking on `Err` with both the `MissingId`
+  and the `Fix`. This is the main verification — rendering totality over every
+  reachable fix, against the true pre-state, at the walk's full width.
+- Unit tests in `rendering.rs` for the branchy leaves: `join_french` (one / two /
+  three items) and the period renderer (multi-week, single-week, « (vide) », each
+  with and without a start date).
+
+## 5-C6/C7. Commits 6.1–6.4 and 7
+
+### 6.1 — gtk4 helper dedup
+
+gtk4's local renderers are deleted and their call sites switched to `ops::rendering`
+— zero visual change, the 5.0 bodies being adapted copies of exactly these functions.
+The sites: `generate_week_title` / `generate_period_title` /
+`generate_week_succession_title` (`editor.rs`), `GroupEntry::generate_group_name`
+(`editor/colloscope/interrogation_dialog.rs` — rebuilds « Groupe {n} : {name} » on top
+of `render_group_name`), the group/week bind logic
+(`editor/colloscope/colloscope_display.rs`), both rule `generate_summary`s
+(re-appending « (souple) ») and `generate_excluded_periods_info`'s hand-rolled list
+joining → `join_french` (`editor/pairings/pairings_display.rs`,
+`editor/slot_pairings/slot_pairings_display.rs`). Note the components hold subset
+copies of the document, not `&Data` — call the ops renderers where the full data is at
+hand and pass rendered strings down, as `slot_pairings.rs` already does with its
+`slot_desc_map`. The 6.2 smoke covers this commit too.
+
+### 6.2 — gtk4 warning-dialog switch
 
 The single consumer site (`gtk4/src/editor.rs:1061`):
 
@@ -1359,7 +1510,10 @@ EditorInput::UpdateOp(op) => {
                 let texts: Vec<String> = result
                     .warnings
                     .iter()
-                    .map(|w| w.text(self.data.get_data()))
+                    .map(|w| {
+                        w.text(self.data.get_data())
+                            .expect("warning must render against the pre-state")
+                    })
                     .filter(|t| seen.insert(t.clone()))
                     .collect();
                 self.state_to_commit = Some(result.new_state);
@@ -1376,15 +1530,15 @@ EditorInput::UpdateOp(op) => {
 
 Application order kept (meaningful); exact-duplicate strings dropped (preserves today's
 `BTreeSet` dedup). `warning_op.rs`, `ContinueOp`/`CancelOp`, `state_to_commit` and the
-undo-label plumbing untouched. User runs a gtk4 smoke here.
+undo-label plumbing untouched. User runs a gtk4 smoke here (covering 6.1 as well).
 
-### 6b — python
+### 6.3 — python
 
 `python/src/glue.rs:1356`: `op.apply(&mut *state)` → `op.cascade_apply(&mut *state)`.
 One line; behaviour switches here, so the **three contract scripts run at this commit**
 (user).
 
-### 6c — rpc-engine
+### 6.4 — rpc-engine
 
 Drop `collomatique-ops` from `rpc-engine/Cargo.toml` (declared, zero references in
 source). Cargo.lock changes ⇒ **cargoHash refresh (user)**.
@@ -1518,7 +1672,8 @@ convention); topic memory updated.
 - Milestones: property harness at 500 seeds after commit 3.16 and before close-out;
   storage byte-stability + `examples/` pristine throughout (this step touches no
   storage bytes and no elementary-op vocabulary — they must never move).
-- User-run: contract scripts at 6b; gtk4 smoke at 6a and after 7; cargoHash refresh at
-  commits 2b, 4 and 6c (2b's may be a no-op — the storage dev-dep adds no external
+- User-run: contract scripts at 6.3; gtk4 smoke at 6.2 (covering 6.1) and after 7;
+  cargoHash refresh at commits 2b, 4 and 6.4 (2b's may be a no-op — the storage
+  dev-dep adds no external
   crate — but the lock file moves, so the check runs); ★ end-of-step acceptance
   before close-out.
