@@ -21,6 +21,12 @@ use thiserror::Error;
 pub mod cascade;
 pub use cascade::*;
 
+// Not glob-re-exported: the renderers are a named vocabulary, called as
+// `collomatique_ops::rendering::render_week(…)` — by the warning texts here and
+// by gtk4, so a warning and the UI describe the same entity with the same
+// words.
+pub mod rendering;
+
 #[cfg(test)]
 mod test_utils;
 

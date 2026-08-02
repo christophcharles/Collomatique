@@ -11,9 +11,9 @@ step is the consumer.
 the engine wrapper, the session struct, **all fifteen families**, the dispatch above
 them and the property walk over that, plus the riders 0bis/0ter, 3.3bis, 3.12+ and
 3.13bis. The `landed` column of §3's table is the authoritative record. **Commit 3 is
-closed and the new path is fuzzed; the next commits are 5.0–5.2 (the rendering
-vocabulary and the renderer — reviewed and re-planned with the user August 2)**, then
-6.1–6.4 and 7. `cascade_dry_apply` / `cascade_apply` now exist, but nothing in
+closed and the new path is fuzzed; commit 5.0 has landed, so the next commits are
+5.1 then 5.2 (the renderer and its tests — reviewed and re-planned with the user
+August 2)**, then 6.1–6.4 and 7. `cascade_dry_apply` / `cascade_apply` now exist, but nothing in
 production calls them: no consumer moves before 6.2.
 
 The migration pattern is the step-5 one: build the new world in parallel under
@@ -728,8 +728,8 @@ lands.
 | 3.12+ | restore the prefilled-group-list error (D5's growth rule, §3.12): a) this plan, b) the variant with no emitter, c) the pin, **committed red**, d) the emitter on the new path only | docs, ops | `77fb1948`…`e30abb92` |
 | 3.13bis | move the interrogation-row convergences ahead of the association ones (§3.13) | state-colloscopes, ops | `9ef4299b` |
 | 3.16 | `UpdateOp` dispatch + `cascade_dry_apply`/`cascade_apply` | ops | `e00c62ff` |
-| 4 | the `UpdateOp` property walk (testgen dev-dep ⇒ **cargoHash**) | ops | *this commit* |
-| 5.0 | `rendering.rs` — shared noun-less id renderers + `MissingId` + `join_french` | ops | — |
+| 4 | the `UpdateOp` property walk (testgen dev-dep ⇒ **cargoHash**) | ops | `6ca28b95` |
+| 5.0 | `rendering.rs` — shared noun-less id renderers + `MissingId` + `join_french` | ops | *this commit* |
 | 5.1 | `warning_text.rs` renderer + `CascadeWarning::text` | ops | — |
 | 5.2 | all the tests: walk renders every warning; rendering unit tests | ops | — |
 | 6.1 | gtk4 helper dedup — local renderers replaced by `ops::rendering` | gtk4 | — |
@@ -1365,6 +1365,30 @@ gives a period's global first-week number). The formats, all settled:
   lacks the tab's per-subject context), each part in the slot format minus its
   subject parens.
 
+**As landed** (this commit, `ops/src/rendering.rs`, no tests — they are 5.2's). The
+module is `pub mod rendering;` with **no** glob re-export, unlike every other `ops/`
+module: the renderers are a named vocabulary and read better as
+`collomatique_ops::rendering::render_week(…)` at gtk4's call sites than dumped into
+the crate root. Two things not in the sketch above. The list gained a twelfth
+renderer, `render_slot_in_subject` — « Séverus Rogue - lundi 14h00 », `render_slot`
+minus its subject parentheses, of which the public one is now just that plus the
+parentheses. It arrived as a private helper (the slot pairing rule notation fronts
+the subject once and then needs the shorter form twice) and was made public on the
+user's call: gtk4's slot pairings tab is grouped by subject throughout and its
+`build_slot_description` is this exact format, so commit 6.1 has a real call site
+for it. And the eleven `From<XxxId>` impls are a local `macro_rules!` rather
+than eleven hand-written blocks: they exist only so a renderer can write
+`.ok_or(id)?` and let `?` lift the id into [MissingId], which is not eleven separate
+decisions.
+
+Every format was eyeballed against the frozen hogwarts base before the commit, on a
+throwaway test since deleted: « 1 (du 04/09/1995 au 01/10/1995 - semaines 1 à 4) »,
+« 2 (du 11/09/1995 au 17/09/1995) », « Severus Rogue - jeudi 13h00 (Potions) »,
+« Métamorphose : [utilisé] Rolanda Bibine - jeudi 12h00 ⟹ [non utilisé] Rolanda
+Bibine - vendredi 18h00 ». One gap for 5.2 to keep in mind: hogwarts holds **no
+pairing rule at all**, so `render_pairing_rule` is the one renderer with no live
+example behind it — the property walk is what will first exercise it.
+
 Ruled and recorded so it isn't re-litigated:
 `constraints-colloscopes/src/types/user_readable.rs` overlaps but stays untouched, as
 format *reference* only — its miss policy is deliberately different (solver
@@ -1488,7 +1512,9 @@ of `render_group_name`), the group/week bind logic
 (`editor/colloscope/colloscope_display.rs`), both rule `generate_summary`s
 (re-appending « (souple) ») and `generate_excluded_periods_info`'s hand-rolled list
 joining → `join_french` (`editor/pairings/pairings_display.rs`,
-`editor/slot_pairings/slot_pairings_display.rs`). Note the components hold subset
+`editor/slot_pairings/slot_pairings_display.rs`), and
+`SlotPairings::build_slot_description` (`editor/slot_pairings.rs:48`) →
+`render_slot_in_subject`, which 5.0 made public for it. Note the components hold subset
 copies of the document, not `&Data` — call the ops renderers where the full data is at
 hand and pass rendered strings down, as `slot_pairings.rs` already does with its
 `slot_desc_map`. The 6.2 smoke covers this commit too.
