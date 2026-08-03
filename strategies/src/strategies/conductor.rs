@@ -340,18 +340,23 @@ pub struct IncrementalConfig {
     /// Per-epoch after-incumbent solve time limit handed to the queued `IncrementalStrategy`
     /// (see [`IncrementalStrategy::epoch_incumbent_time_limit`](crate::IncrementalStrategy)).
     /// Independent of [`IncrementalConfig::epoch_time_limit`]; each epoch stops at whichever
-    /// deadline comes first. Does not affect the final reconstruction solve.
+    /// deadline comes first. Does not affect the final reconstruction solve. Defaults to five
+    /// minutes, unlike [`IncrementalStrategy`](crate::IncrementalStrategy)'s own unbounded default.
     pub epoch_incumbent_time_limit: collomatique_time::TimeLimit,
 }
 
 impl Default for IncrementalConfig {
     fn default() -> Self {
-        // Match IncrementalStrategy's own defaults.
+        // Match IncrementalStrategy's own defaults, except for the after-incumbent limit: the
+        // conductor is the opinionated user-facing layer, and an epoch that already holds a
+        // feasible solution rarely earns its keep by grinding on. The bare strategy stays neutral.
         Self {
             l1_weight: 1000.0,
             distance_tolerance: 5.0,
             epoch_time_limit: collomatique_time::TimeLimit::none(),
-            epoch_incumbent_time_limit: collomatique_time::TimeLimit::none(),
+            epoch_incumbent_time_limit: collomatique_time::TimeLimit::minutes(
+                NonZeroU32::new(5).expect("5 is non-zero"),
+            ),
         }
     }
 }
@@ -1804,6 +1809,27 @@ mod tests {
             incremental_config: None,
             fuzzy_config: f.then(FuzzyConfig::default),
         }
+    }
+
+    #[test]
+    fn conductor_caps_each_epoch_five_minutes_past_its_first_solution() {
+        // The conductor is the opinionated layer: its default incremental config carries a
+        // five-minute after-incumbent limit, and hands it to the strategy it builds.
+        let five_minutes =
+            collomatique_time::TimeLimit::minutes(NonZeroU32::new(5).expect("5 is non-zero"));
+        let cfg = IncrementalConfig::default();
+        assert_eq!(cfg.epoch_incumbent_time_limit, five_minutes);
+        assert_eq!(
+            conductor(1, true, false, false)
+                .incremental_substrategy(&cfg)
+                .epoch_incumbent_time_limit,
+            five_minutes,
+        );
+        // The bare strategy stays neutral — no limit unless someone asks for one.
+        assert_eq!(
+            IncrementalStrategy::default().epoch_incumbent_time_limit,
+            collomatique_time::TimeLimit::none(),
+        );
     }
 
     #[test]
