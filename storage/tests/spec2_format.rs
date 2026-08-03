@@ -1073,3 +1073,130 @@ fn duplicate_subject_id_names_its_block() {
         }
     );
 }
+
+// Integer widths (§3 of the spec). Apart from ids, every integer field
+// of the format is 32 bits wide: unsigned 0..=2^32 - 1 (or 1..=2^32 - 1
+// where a minimum of 1 is stated), and the one signed field — a slot's
+// `cost` — is -2^31..=2^31 - 1. The format structs carry those widths,
+// so an out-of-width value is a plain serde failure and comes out as
+// `IllformedBlock` naming its block, like an inverted range does. The
+// four tests below pin one value per width family.
+
+/// The scheduling setup of [scheduling_entries], with the slot's `cost`
+/// written verbatim (so a test can put an out-of-width literal there)
+fn document_with_slot_cost(cost: &str) -> String {
+    let mut entries = scheduling_entries(true, false);
+    entries.pop().expect("The Slots entry is pushed last");
+    entries.push(entry(&format!(
+        r#"{{ "Slots": [
+            {{ "subject_id": 2, "slots": [
+                {{ "id": 7, "teacher_id": 3, "start": {{ "day": "monday", "time": "14:00" }}, "extra_info": "", "week_pattern_id": null, "cost": {cost} }}
+            ] }}
+        ] }}"#
+    )));
+    document(&entries)
+}
+
+#[test]
+fn slot_cost_out_of_signed_32_bits_is_rejected() {
+    // Both boundaries of the signed 32-bit range decode...
+    for cost in ["-2147483648", "2147483647"] {
+        let content = document_with_slot_cost(cost);
+        let (_data, caveats) = deserialize_data(&content)
+            .unwrap_or_else(|error| panic!("Cost {cost} should decode, got {error:?}"));
+        assert!(caveats.is_empty());
+    }
+
+    // ... and one step past the top does not.
+    let content = document_with_slot_cost("2147483648");
+    let error = expect_decode_error(&content);
+    let DecodeError::IllformedBlock { block, detail } = error else {
+        panic!("The error should be IllformedBlock, got {error:?}");
+    };
+    assert_eq!(block, "Slots");
+    assert!(
+        detail.contains("2147483648"),
+        "The serde diagnostics should surface the out-of-width cost, got {detail:?}"
+    );
+}
+
+#[test]
+fn duration_out_of_32_bits_is_rejected() {
+    // The `0` end of the duration range is pinned by the `scalars` unit
+    // test `duration_is_a_positive_number_of_minutes`; this is the top end.
+    let content = document(&[entry(
+        r#"{ "Subjects": [
+                {
+                    "id": 2,
+                    "name": "Mathématiques",
+                    "interrogation_parameters": {
+                        "students_per_group": { "min": 1, "max": 2 },
+                        "groups_per_interrogation": { "min": 1, "max": 1 },
+                        "duration_minutes": 4294967296,
+                        "take_duration_into_account": true,
+                        "periodicity": { "ExactlyPeriodic": { "periodicity_in_weeks": 2 } }
+                    },
+                    "excluded_periods": []
+                }
+            ] }"#,
+    )]);
+
+    let error = expect_decode_error(&content);
+    let DecodeError::IllformedBlock { block, detail } = error else {
+        panic!("The error should be IllformedBlock, got {error:?}");
+    };
+    assert_eq!(block, "Subjects");
+    assert!(
+        detail.contains("4294967296"),
+        "The serde diagnostics should surface the out-of-width duration, got {detail:?}"
+    );
+}
+
+#[test]
+fn settings_limit_value_out_of_32_bits_is_rejected() {
+    let content = document(&[entry(
+        r#"{ "Settings": {
+            "global": {
+                "interrogations_per_week_min": null,
+                "interrogations_per_week_max": { "soft": true, "value": 4294967296 },
+                "max_interrogations_per_day": null
+            },
+            "students": []
+        } }"#,
+    )]);
+
+    let error = expect_decode_error(&content);
+    let DecodeError::IllformedBlock { block, detail } = error else {
+        panic!("The error should be IllformedBlock, got {error:?}");
+    };
+    assert_eq!(block, "Settings");
+    assert!(
+        detail.contains("4294967296"),
+        "The serde diagnostics should surface the out-of-width limit, got {detail:?}"
+    );
+}
+
+#[test]
+fn colloscope_week_out_of_32_bits_is_rejected() {
+    // Distinct from `colloscope_row_on_out_of_range_week_is_rejected`,
+    // which uses an in-width week past the end of the schedule and is
+    // caught later, by the placement check.
+    let content = scheduling_document(
+        true,
+        false,
+        r#"{ "Colloscope": {
+            "interrogations": [ { "slot_id": 7, "week": 4294967296, "assigned_groups": [] } ],
+            "group_lists": []
+        } }"#,
+    );
+
+    let error = expect_decode_error(&content);
+    let DecodeError::IllformedBlock { block, detail } = error else {
+        panic!("The error should be IllformedBlock, got {error:?}");
+    };
+    assert_eq!(block, "Colloscope");
+    assert!(
+        detail.contains("4294967296"),
+        "The serde diagnostics should surface the out-of-width week, got {detail:?}"
+    );
+}
