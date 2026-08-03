@@ -2884,6 +2884,124 @@ fn rejection_4_an_unknown_student_convicts_the_assignment() {
     );
 }
 
+/// Rejection `5` — a *new* pairing rule naming a subject that runs no
+/// interrogations is the target's own payload at fault: the rule goes back with
+/// the rolled-back op, the map's arm finds no rule to remove, and the op is
+/// convicted.
+///
+/// A pairing rule is an implication between two subjects' interrogations
+/// ("a student with a Quidditch interrogation this week must also have a
+/// Physique one"). If one of the two subjects runs no interrogations at all,
+/// the rule is either vacuous or impossible — never meaningful — so the
+/// document must not hold it.
+///
+/// Committed **red**: no invariant forbids this yet, so today the rule simply
+/// lands and `apply_cascade` answers `Ok`. Commit 3 turns it green and commit 4
+/// pins the exact conviction.
+#[test]
+fn rejection_5_a_new_rule_naming_a_subject_without_interrogations_is_convicted() {
+    let mut app = AppState::<Data, String>::new(Data::new());
+
+    let physique: SubjectId = apply_new!(
+        app,
+        Op::Subject(SubjectOp::AddAfter(
+            None,
+            interrogation_subject("Physique", BTreeSet::new())
+        )),
+        NewId::SubjectId,
+        "adding the interrogated subject"
+    );
+    let quidditch: SubjectId = apply_new!(
+        app,
+        Op::Subject(SubjectOp::AddAfter(
+            Some(physique),
+            plain_subject("Quidditch", BTreeSet::new())
+        )),
+        NewId::SubjectId,
+        "adding the subject without interrogations"
+    );
+
+    let mut data = app.get_data().clone();
+    let before = data.get_inner_data().clone();
+
+    let (target, _new_info) = data.annotate(Op::Pairing(PairingOp::Add(pairing_rule(
+        quidditch,
+        physique,
+        BTreeSet::new(),
+    ))));
+
+    apply_cascade(&mut data, target)
+        .expect_err("a rule naming a subject without interrogations must be refused");
+
+    assert_eq!(
+        data.get_inner_data(),
+        &before,
+        "a convicted target leaves the document bit-identical"
+    );
+}
+
+/// Rejection `6` — the plain-gate half of the pair: without the cascade,
+/// turning a subject's interrogations off while a pairing rule names it must
+/// come back as `BrokenInvariants`, leaving the document untouched.
+/// `fixture_7` is the cascade mirror, which repairs instead of refusing.
+///
+/// The document is minimal on purpose — no slot, teacher, association or
+/// balancing entry — so that the pairing rule is the **only** thing the update
+/// can break; commit 4 asserts that set exactly.
+///
+/// Committed **red**: today the update just lands. Commit 3 turns it green and
+/// commit 4 pins the exact broken set.
+#[test]
+fn rejection_6_turning_interrogations_off_under_a_pairing_rule_is_convicted_by_the_plain_gate() {
+    let mut app = AppState::<Data, String>::new(Data::new());
+
+    let maths: SubjectId = apply_new!(
+        app,
+        Op::Subject(SubjectOp::AddAfter(
+            None,
+            interrogation_subject("Maths", BTreeSet::new())
+        )),
+        NewId::SubjectId,
+        "adding the subject to turn off"
+    );
+    let physique: SubjectId = apply_new!(
+        app,
+        Op::Subject(SubjectOp::AddAfter(
+            Some(maths),
+            interrogation_subject("Physique", BTreeSet::new())
+        )),
+        NewId::SubjectId,
+        "adding the consequent subject"
+    );
+    let _rule: PairingRuleId = apply_new!(
+        app,
+        Op::Pairing(PairingOp::Add(pairing_rule(
+            maths,
+            physique,
+            BTreeSet::new()
+        ))),
+        NewId::PairingRuleId,
+        "adding the rule Maths => Physique"
+    );
+
+    let before = app.get_data().get_inner_data().clone();
+
+    app.apply(
+        Op::Subject(SubjectOp::Update(
+            maths,
+            plain_subject("Maths", BTreeSet::new()),
+        )),
+        "turning the interrogations off".into(),
+    )
+    .expect_err("the plain gate must refuse: the rule would name a subject without interrogations");
+
+    assert_eq!(
+        app.get_data().get_inner_data(),
+        &before,
+        "a refused op leaves the document bit-identical"
+    );
+}
+
 /// The incompatibility the identity-pin document carries, as a value, so that
 /// the fixture and its assertion cannot drift apart.
 fn identity_pin_incompat(subject_id: SubjectId) -> Incompatibility {
