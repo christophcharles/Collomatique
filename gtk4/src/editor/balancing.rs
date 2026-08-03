@@ -268,7 +268,11 @@ fn options_to_string(options: &BalancingOptions) -> String {
         parts.push("rotation des colleurs par période");
     }
 
-    parts.join("    ―    ")
+    if parts.is_empty() {
+        String::from("aucune contrainte stricte")
+    } else {
+        parts.join("    ―    ")
+    }
 }
 
 #[derive(Debug)]
