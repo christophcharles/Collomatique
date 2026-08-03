@@ -4,9 +4,10 @@ mod tests;
 use std::collections::HashMap;
 
 use super::{
-    CallbackSolution, CallbackSolverModel, IncumbentInfo, ProblemRepr, ProgressBounds,
-    ProgressIncumbentData, ProgressIncumbentInfo, ProgressStats, Solver, SolverModel,
-    TimeLimitSolution, TimeLimitSolverModel, WarmSolver,
+    CallbackSolution, CallbackSolverModel, IncumbentInfo, IncumbentTimeLimitSolverModel,
+    ProblemRepr, ProgressBounds, ProgressIncumbentData, ProgressIncumbentInfo, ProgressStats,
+    Solver, SolverModel, StopReason, TimeLimitSolution, TimeLimitSolverModel, TimeLimitsSolution,
+    WarmSolver,
 };
 use crate::{ConfigData, FeasibleConfig, ObjectiveSense, Problem, UsableData, linexpr::EqSymbol};
 use collomatique_time::TimeLimit;
@@ -355,6 +356,94 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> CallbackSolverModel<'a
         CallbackSolution {
             config: self.reconstruct_config(&result),
             stopped_by_callback,
+        }
+    }
+}
+
+/// Tracks the two solve deadlines: the global one (armed at construction) and
+/// the incumbent one (armed on the first incumbent).
+///
+/// See [IncumbentTimeLimitSolverModel] for the min-composition contract.
+struct SolveDeadlines {
+    global_deadline: Option<std::time::Instant>,
+    incumbent_duration: Option<std::time::Duration>,
+    incumbent_deadline: Option<std::time::Instant>,
+}
+
+impl SolveDeadlines {
+    fn new(
+        time_limit: Option<std::time::Duration>,
+        incumbent_time_limit: Option<std::time::Duration>,
+    ) -> Self {
+        SolveDeadlines {
+            global_deadline: time_limit.map(|d| std::time::Instant::now() + d),
+            incumbent_duration: incumbent_time_limit,
+            incumbent_deadline: None,
+        }
+    }
+
+    /// Call on every progress event. `Some` once a deadline has passed.
+    ///
+    /// The global deadline is checked first, so it wins when both have passed —
+    /// that is the `min` of the two.
+    fn check(&mut self, has_incumbent: bool) -> Option<StopReason> {
+        let now = std::time::Instant::now();
+
+        if self.incumbent_deadline.is_none() && has_incumbent {
+            self.incumbent_deadline = self.incumbent_duration.map(|d| now + d);
+        }
+
+        if self.global_deadline.is_some_and(|d| now >= d) {
+            return Some(StopReason::TimeLimit);
+        }
+        if self.incumbent_deadline.is_some_and(|d| now >= d) {
+            return Some(StopReason::IncumbentTimeLimit);
+        }
+
+        None
+    }
+}
+
+impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> IncumbentTimeLimitSolverModel<'a, V, C, P>
+    for ColloCbcBuiltModel<'a, V, C, P>
+{
+    fn solve_with_time_limits<F>(
+        self,
+        time_limit: TimeLimit,
+        incumbent_time_limit: TimeLimit,
+        mut callback: F,
+    ) -> TimeLimitsSolution<'a, V, C, P>
+    where
+        F: FnMut(&Self::Progress) -> bool,
+    {
+        let mut deadlines =
+            SolveDeadlines::new(time_limit.duration(), incumbent_time_limit.duration());
+
+        // Only ever set on the event that stops the solve: the deadlines are
+        // checked last, and their `Some` immediately returns `false` below.
+        let mut limit_stop = None;
+
+        let result = self.solve_with_callback(|progress| {
+            // The caller comes first, so a stop it asked for is attributed to
+            // it rather than to a deadline that passed on the same event.
+            if !callback(progress) {
+                return false;
+            }
+
+            limit_stop = deadlines.check(progress.incumbent_info().is_some());
+            limit_stop.is_none()
+        });
+
+        TimeLimitsSolution {
+            config: result.config,
+            stopped: match (result.stopped_by_callback, limit_stop) {
+                // One of our deadlines fired.
+                (true, Some(reason)) => Some(reason),
+                // The caller stopped the solve.
+                (true, None) => Some(StopReason::Callback),
+                // The solve ran to completion.
+                (false, _) => None,
+            },
         }
     }
 }
