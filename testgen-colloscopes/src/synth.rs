@@ -360,22 +360,8 @@ pub fn limits(rng: &mut ChaCha8Rng) -> Limits {
 
 pub fn balancing_options(rng: &mut ChaCha8Rng) -> BalancingOptions {
     BalancingOptions {
-        teacher_rotation: if rng.random_bool(0.5) {
-            Some(SoftParam {
-                soft: rng.random_bool(0.5),
-                value: (),
-            })
-        } else {
-            None
-        },
-        slot_rotation: if rng.random_bool(0.3) {
-            Some(SoftParam {
-                soft: rng.random_bool(0.5),
-                value: (),
-            })
-        } else {
-            None
-        },
+        teacher_rotation: rng.random_bool(0.5),
+        slot_rotation: rng.random_bool(0.5),
         avoid_twice_in_a_row: rng.random_bool(0.5),
         year_teacher_rotation: rng.random_bool(0.3),
         period_teacher_rotation: rng.random_bool(0.3),

@@ -402,8 +402,8 @@ fn entry_content_must_be_an_object_with_exactly_one_key() {
             "Colloscope": { "interrogations": [], "group_lists": [] },
             "Balancing": {
                 "global": {
-                    "teacher_rotation": { "soft": true },
-                    "slot_rotation": null,
+                    "teacher_rotation": false,
+                    "slot_rotation": false,
                     "avoid_twice_in_a_row": true,
                     "year_teacher_rotation": false,
                     "period_teacher_rotation": false

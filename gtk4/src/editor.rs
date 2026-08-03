@@ -212,7 +212,7 @@ impl PanelNumbers {
             PanelNumbers::Incompats => "Incompatibilités horaires",
             PanelNumbers::GroupLists => "Groupes de colles",
             PanelNumbers::Pairings => "Appariements des matières",
-            PanelNumbers::Balancing => "Équilibrage des colles",
+            PanelNumbers::Balancing => "Équilibrage strict des colles",
             PanelNumbers::ExtraSettings => "Paramètres par élève",
             PanelNumbers::Colloscope => "Colloscope",
             PanelNumbers::Export => "Exporter",

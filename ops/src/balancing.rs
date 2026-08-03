@@ -201,7 +201,6 @@ mod tests {
     use collomatique_state::AppState;
     use collomatique_state::traits::Manager;
     use collomatique_state_colloscopes::balancing::BalancingOptions;
-    use collomatique_state_colloscopes::soft_param::SoftParam;
     use collomatique_state_colloscopes::{
         NewId, NonEmptyRangeInclusive, Op, Subject, SubjectInterrogationParameters, SubjectOp,
         SubjectParameters, SubjectPeriodicity,
@@ -277,14 +276,8 @@ mod tests {
     /// Options distinguishable from the default ones, and from each other.
     fn options(avoid_twice_in_a_row: bool) -> BalancingOptions {
         BalancingOptions {
-            teacher_rotation: Some(SoftParam {
-                soft: false,
-                value: (),
-            }),
-            slot_rotation: Some(SoftParam {
-                soft: true,
-                value: (),
-            }),
+            teacher_rotation: true,
+            slot_rotation: false,
             avoid_twice_in_a_row,
             year_teacher_rotation: true,
             period_teacher_rotation: false,

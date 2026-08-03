@@ -10,8 +10,7 @@ use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::ids::SlotId;
 
 use super::helpers::{
-    count_student_teacher_expr, effective_balancing_option, slot_weeks_in_range,
-    subject_active_weeks,
+    count_student_teacher_expr, effective_balancing_flag, slot_weeks_in_range, subject_active_weeks,
 };
 use super::rotation::generate_windows;
 
@@ -36,11 +35,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         let Some(params) = subject_interrogation_params(env, *subject_id) else {
             continue;
         };
-        let Some(sp) = effective_balancing_option(env, *subject_id, |opts| &opts.slot_rotation)
-        else {
-            continue;
-        };
-        let is_soft = sp.soft;
+        let is_soft = !effective_balancing_flag(env, *subject_id, |opts| opts.slot_rotation);
 
         let slot_week_pairs =
             slot_week_pairs_for_subject(env, *subject_id, &subject.excluded_periods);
@@ -53,6 +48,11 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         let Some(subject_slots) = env.slots.slots_vec_for_subject(*subject_id) else {
             continue;
         };
+        if subject_slots.len() < 2 {
+            // A single slot makes slot rotation meaningless, for the same reason
+            // a single teacher makes teacher rotation meaningless.
+            continue;
+        }
 
         if is_soft {
             // Soft path: cumulative availability-proportional balance, per

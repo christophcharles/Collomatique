@@ -614,9 +614,10 @@ fn colloscope_cell_trim_is_strictly_below() {
 
 #[test]
 fn config_values_are_atoms() {
-    // A `None` field in an override record means "disabled" — an active
+    // A `None` field in a limits override record means "disabled" — an active
     // choice, not absent content. So there is no bottom here: the default is
-    // incomparable to any modification, not below it.
+    // incomparable to any modification, not below it. The same holds for the
+    // boolean records, whose fields are all active choices too.
     let limits = Limits::default();
     let mut other_limits = Limits::default();
     other_limits.interrogations_per_week_max = Some(SoftParam {
@@ -628,7 +629,7 @@ fn config_values_are_atoms() {
 
     let balancing = BalancingOptions::default();
     let mut other_balancing = BalancingOptions::default();
-    other_balancing.teacher_rotation = None;
+    other_balancing.teacher_rotation = true;
     assert_eq!(
         balancing.content_cmp(&balancing.clone()),
         Some(Ordering::Equal)

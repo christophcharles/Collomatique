@@ -10,7 +10,7 @@ use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::subjects::SubjectPeriodicity;
 
 use super::helpers::{
-    count_student_teacher_expr, effective_balancing_option, rolling_windows,
+    count_student_teacher_expr, effective_balancing_flag, rolling_windows,
     slot_week_pairs_for_teacher, slot_weeks_in_range, subject_active_weeks, teachers_for_subject,
 };
 
@@ -80,11 +80,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         let Some(params) = subject_interrogation_params(env, *subject_id) else {
             continue;
         };
-        let Some(sp) = effective_balancing_option(env, *subject_id, |opts| &opts.teacher_rotation)
-        else {
-            continue;
-        };
-        let is_soft = sp.soft;
+        let is_soft = !effective_balancing_flag(env, *subject_id, |opts| opts.teacher_rotation);
 
         let slot_week_pairs =
             slot_week_pairs_for_subject(env, *subject_id, &subject.excluded_periods);
@@ -95,6 +91,12 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
 
         let enrolled = enrolled_students_for_subject(env, *subject_id);
         let teachers = teachers_for_subject(env, *subject_id);
+        if teachers.len() < 2 {
+            // A single teacher makes rotation meaningless: the soft equalities
+            // are identities (`Aₜ == A` and `Uₜ == U`) and the hard windows only
+            // restate the subject's periodicity bound.
+            continue;
+        }
 
         if is_soft {
             // Soft path: cumulative availability-proportional balance. For each
