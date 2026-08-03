@@ -19,6 +19,9 @@ pub struct IlpSolveRequest {
     pub problem_desc: collomatique_ilp::ProblemDesc,
     pub warm_start: Option<Vec<f64>>,
     pub time_limit: collomatique_time::TimeLimit,
+    /// Time limit counted from the first feasible incumbent, independent of
+    /// [IlpSolveRequest::time_limit]: the solve stops at whichever comes first.
+    pub incumbent_time_limit: collomatique_time::TimeLimit,
     pub disable_logging: bool,
 }
 
@@ -99,6 +102,6 @@ pub struct SolverResultData {
 pub enum SolverStatus {
     Optimal,
     Infeasible,
-    Stopped,
+    Stopped(collomatique_ilp::solvers::StopReason),
     Error,
 }

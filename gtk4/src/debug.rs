@@ -335,6 +335,7 @@ fn subprocess_solve(model: &collomatique_constraints_colloscopes::ColloscopeMode
         problem_desc: desc,
         warm_start: None,
         time_limit: collomatique_time::TimeLimit::none(),
+        incumbent_time_limit: collomatique_time::TimeLimit::none(),
         disable_logging: false,
     };
 

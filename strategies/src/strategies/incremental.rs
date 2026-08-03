@@ -11,7 +11,7 @@ use collomatique_ilp_modeler::{
 };
 
 use crate::{
-    NoObjectiveSolveProgress, SolveProblemOpts, SolveStatus, Strategy, StrategyContext,
+    NoObjectiveSolveProgress, SolveProblemOpts, SolveStatus, StopReason, Strategy, StrategyContext,
     StrategyError, StrategyOutcome, VarOrderSerializable,
 };
 
@@ -331,7 +331,7 @@ impl Strategy for IncrementalStrategy {
                 total,
                 var_count: e_k.len(),
             }) {
-                return Ok(empty_outcome(SolveStatus::Stopped));
+                return Ok(empty_outcome(SolveStatus::Stopped(StopReason::Callback)));
             }
 
             // 1. Filter the model down to this epoch's sub-problem. Every predicate is keyed
@@ -381,6 +381,7 @@ impl Strategy for IncrementalStrategy {
                     SolveProblemOpts {
                         warm_start: None,
                         time_limit: self.epoch_time_limit,
+                        incumbent_time_limit: collomatique_time::TimeLimit::none(),
                         disable_logging: self.disable_logging,
                     },
                     &move |p| {
@@ -407,11 +408,18 @@ impl Strategy for IncrementalStrategy {
                 )
                 .await?;
 
+            let stopped_reason = match &outcome.status {
+                SolveStatus::Stopped(reason) => Some(*reason),
+                _ => None,
+            };
             match outcome.status {
-                SolveStatus::Optimal | SolveStatus::Stopped => {
+                SolveStatus::Optimal | SolveStatus::Stopped(_) => {
                     let Some(solution) = outcome.solution else {
-                        // Stopped without an incumbent: propagate as stopped.
-                        return Ok(empty_outcome(SolveStatus::Stopped));
+                        // Stopped without an incumbent: propagate as stopped, keeping the
+                        // solver's reason when it gave one.
+                        return Ok(empty_outcome(SolveStatus::Stopped(
+                            stopped_reason.unwrap_or(StopReason::Callback),
+                        )));
                     };
                     // Overwrite `prev_values` wholesale with this solve's entire base
                     // assignment over S_k (flexed previous values included).
@@ -461,6 +469,7 @@ impl Strategy for IncrementalStrategy {
                 SolveProblemOpts {
                     warm_start: None,
                     time_limit: self.reconstruction_time_limit,
+                    incumbent_time_limit: collomatique_time::TimeLimit::none(),
                     disable_logging: self.disable_logging,
                 },
                 &move |p| {
@@ -474,7 +483,7 @@ impl Strategy for IncrementalStrategy {
             .await?;
 
         let recon_solution = match recon_outcome.status {
-            SolveStatus::Optimal | SolveStatus::Stopped => {
+            SolveStatus::Optimal | SolveStatus::Stopped(_) => {
                 recon_outcome.solution.ok_or_else(|| {
                     StrategyError::SolveError("reconstruction produced no solution".into())
                 })?

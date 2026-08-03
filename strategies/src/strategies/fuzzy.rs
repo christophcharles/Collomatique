@@ -15,7 +15,8 @@ use crate::strategies::find_closest::{
     FindClosestPayload, FindClosestProgressData, FindClosestStrategy,
 };
 use crate::{
-    SolveStatus, Strategy, StrategyContext, StrategyError, StrategyOutcome, VarOrderSerializable,
+    SolveStatus, StopReason, Strategy, StrategyContext, StrategyError, StrategyOutcome,
+    VarOrderSerializable,
 };
 
 /// Per-run payload for [`FuzzyStrategy`]: the `target` configuration to perturb.
@@ -212,7 +213,7 @@ impl Strategy for FuzzyStrategy {
             l1_distance,
         }) {
             return Ok(StrategyOutcome {
-                status: SolveStatus::Stopped,
+                status: SolveStatus::Stopped(StopReason::Callback),
                 objective: None,
                 best_bound: None,
                 solution: None,

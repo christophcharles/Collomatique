@@ -64,6 +64,7 @@ impl Strategy for DefaultStrategy {
             SolveProblemOpts {
                 warm_start,
                 time_limit: self.time_limit,
+                incumbent_time_limit: collomatique_time::TimeLimit::none(),
                 disable_logging: self.disable_logging,
             },
             on_progress,

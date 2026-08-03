@@ -20,8 +20,8 @@ use crate::SolveProgress;
 use crate::{
     DefaultStrategy, FindClosestStrategy, FuzzyPayload, FuzzyStrategy, IncrementalPayload,
     IncrementalPayloadData, IncrementalStrategy, NoObjectiveStarterProgress, NoObjectiveStrategy,
-    SolveStatus, Strategy, StrategyContext, StrategyError, StrategyKind, StrategyOutcome,
-    StrategyPayload, StrategyProgress, StrategyProgressData, VarOrderSerializable,
+    SolveStatus, StopReason, Strategy, StrategyContext, StrategyError, StrategyKind,
+    StrategyOutcome, StrategyPayload, StrategyProgress, StrategyProgressData, VarOrderSerializable,
 };
 
 #[derive(Debug, Clone)]
@@ -663,7 +663,9 @@ fn conductor_outcome<V: UsableData + Send>(status: &ConductorStatus<V>) -> Strat
         status: if status.best_solution.is_some() {
             SolveStatus::Optimal
         } else {
-            SolveStatus::Stopped
+            // The conductor runs until its own caller (or its budget) stops it, so a
+            // solution-less run is always a callback stop from the workers' point of view.
+            SolveStatus::Stopped(StopReason::Callback)
         },
         objective: status.best_solution.as_ref().map(|s| s.objective),
         best_bound: status.best_bound,
@@ -1654,7 +1656,7 @@ mod tests {
         for kind in &kinds {
             for status in [
                 SolveStatus::Optimal,
-                SolveStatus::Stopped,
+                SolveStatus::Stopped(StopReason::Callback),
                 SolveStatus::Infeasible,
             ] {
                 let st = empty_status();
@@ -2039,7 +2041,7 @@ mod tests {
         assert!(outcome.solution.is_some());
 
         let outcome = conductor_outcome(&status_with(None, Some(2.0)));
-        assert_eq!(outcome.status, SolveStatus::Stopped);
+        assert_eq!(outcome.status, SolveStatus::Stopped(StopReason::Callback));
         assert_eq!(outcome.objective, None);
         assert_eq!(outcome.best_bound, Some(2.0));
         assert!(outcome.solution.is_none());

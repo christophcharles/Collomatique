@@ -60,6 +60,6 @@ pub struct StrategyResultData {
 pub enum StrategyStatus {
     Optimal,
     Infeasible,
-    Stopped,
+    Stopped(collomatique_ilp::solvers::StopReason),
     Error,
 }

@@ -14,6 +14,9 @@ pub struct IlpSolverConfig {
     pub problem_desc: collomatique_ilp::ProblemDesc,
     pub warm_start: Option<Vec<f64>>,
     pub time_limit: collomatique_time::TimeLimit,
+    /// Time limit counted from the first feasible incumbent, independent of
+    /// [IlpSolverConfig::time_limit]: the solve stops at whichever comes first.
+    pub incumbent_time_limit: collomatique_time::TimeLimit,
     pub disable_logging: bool,
 }
 
@@ -69,7 +72,7 @@ pub struct IlpResult {
 pub enum IlpStatus {
     Optimal,
     Infeasible,
-    Stopped,
+    Stopped(collomatique_ilp::solvers::StopReason),
     Error,
 }
 
@@ -105,6 +108,7 @@ impl SolverSubprocess {
             problem_desc: config.problem_desc,
             warm_start: config.warm_start,
             time_limit: config.time_limit,
+            incumbent_time_limit: config.incumbent_time_limit,
             disable_logging: config.disable_logging,
         };
         let serialized = SerializedIlpProblem::from(request);
@@ -150,7 +154,9 @@ impl SolverSubprocess {
                         status: match data.status {
                             collomatique_rpc::SolverStatus::Optimal => IlpStatus::Optimal,
                             collomatique_rpc::SolverStatus::Infeasible => IlpStatus::Infeasible,
-                            collomatique_rpc::SolverStatus::Stopped => IlpStatus::Stopped,
+                            collomatique_rpc::SolverStatus::Stopped(reason) => {
+                                IlpStatus::Stopped(reason)
+                            }
                             collomatique_rpc::SolverStatus::Error => IlpStatus::Error,
                         },
                         obj_value: data.obj_value.map(|v| v.into_inner()),

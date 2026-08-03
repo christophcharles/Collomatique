@@ -31,6 +31,10 @@ use serde::{Deserialize, Serialize};
 
 use collomatique_ilp::mat_repr::ProblemRepr;
 use collomatique_ilp::{ConfigData, Problem, ProblemDesc, UsableData};
+
+/// Re-exported so consumers can name the payload of [SolveStatus::Stopped]
+/// without depending on `collomatique-ilp` directly.
+pub use collomatique_ilp::solvers::StopReason;
 use collomatique_ilp_modeler::model_desc::ModelDesc;
 use collomatique_ilp_modeler::{InternalVar, Model};
 
@@ -38,19 +42,25 @@ use collomatique_ilp_modeler::{InternalVar, Model};
 pub enum SolveStatus {
     Optimal,
     Infeasible,
-    Stopped,
+    Stopped(StopReason),
     Error,
 }
 
 pub struct SolveConfig {
     pub warm_start: Option<Vec<f64>>,
     pub time_limit: collomatique_time::TimeLimit,
+    /// Time limit counted from the first feasible incumbent, independent of
+    /// [SolveConfig::time_limit]: the solve stops at whichever comes first.
+    pub incumbent_time_limit: collomatique_time::TimeLimit,
     pub disable_logging: bool,
 }
 
 pub struct SolveProblemOpts<V: UsableData> {
     pub warm_start: Option<ConfigData<V>>,
     pub time_limit: collomatique_time::TimeLimit,
+    /// Time limit counted from the first feasible incumbent, independent of
+    /// [SolveProblemOpts::time_limit]: the solve stops at whichever comes first.
+    pub incumbent_time_limit: collomatique_time::TimeLimit,
     pub disable_logging: bool,
 }
 
@@ -335,6 +345,7 @@ impl StrategyContext {
         let solve_config = SolveConfig {
             warm_start,
             time_limit: opts.time_limit,
+            incumbent_time_limit: opts.incumbent_time_limit,
             disable_logging: opts.disable_logging,
         };
 
@@ -370,6 +381,7 @@ impl StrategyContext {
         let solve_config = SolveConfig {
             warm_start,
             time_limit: opts.time_limit,
+            incumbent_time_limit: opts.incumbent_time_limit,
             disable_logging: opts.disable_logging,
         };
 
@@ -1618,6 +1630,7 @@ mod tests {
                 SolveProblemOpts {
                     warm_start: None,
                     time_limit: collomatique_time::TimeLimit::none(),
+                    incumbent_time_limit: collomatique_time::TimeLimit::none(),
                     disable_logging: false,
                 },
                 &|p: SolveProgress<InternalVar<usize, ()>>| {
@@ -2060,7 +2073,7 @@ mod tests {
                     // repeated fuzzy relaunches into the freed slot.
                     tokio::task::yield_now().await;
                     Ok(RawSolveOutcome {
-                        status: SolveStatus::Stopped,
+                        status: SolveStatus::Stopped(StopReason::Callback),
                         objective: None,
                         best_bound: None,
                         solution: None,

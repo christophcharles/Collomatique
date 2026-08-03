@@ -11,7 +11,7 @@ use collomatique_ilp_modeler::{
 };
 
 use crate::{
-    NoObjectiveSolveProgress, SolveProblemOpts, SolveStatus, Strategy, StrategyContext,
+    NoObjectiveSolveProgress, SolveProblemOpts, SolveStatus, StopReason, Strategy, StrategyContext,
     StrategyError, StrategyOutcome, VarOrderSerializable,
 };
 
@@ -246,7 +246,7 @@ impl Strategy for FindClosestStrategy {
         // The model is ready — this can take a while, so signal it.
         if !on_progress(FindClosestProgressData::ModelReady) {
             return Ok(StrategyOutcome {
-                status: SolveStatus::Stopped,
+                status: SolveStatus::Stopped(StopReason::Callback),
                 objective: None,
                 best_bound: None,
                 solution: None,
@@ -262,6 +262,7 @@ impl Strategy for FindClosestStrategy {
                 SolveProblemOpts {
                     warm_start: None,
                     time_limit: self.closeness_time_limit,
+                    incumbent_time_limit: collomatique_time::TimeLimit::none(),
                     disable_logging: self.disable_logging,
                 },
                 &|p| {
@@ -298,7 +299,7 @@ impl Strategy for FindClosestStrategy {
                     "closeness solve returned error".into(),
                 ));
             }
-            SolveStatus::Stopped => {
+            SolveStatus::Stopped(reason) => {
                 // A stop is either external (cancel / time limit) or our own tolerance
                 // cutoff. Carry on only if the outcome actually holds a within-tolerance
                 // closest point; otherwise bail as before.
@@ -309,7 +310,7 @@ impl Strategy for FindClosestStrategy {
                 };
                 if !(good_enough && closeness_outcome.solution.is_some()) {
                     return Ok(StrategyOutcome {
-                        status: SolveStatus::Stopped,
+                        status: SolveStatus::Stopped(reason),
                         objective: None,
                         best_bound: None,
                         solution: None,
@@ -327,7 +328,7 @@ impl Strategy for FindClosestStrategy {
         let should_continue = on_progress(FindClosestProgressData::ClosestFound);
         if !should_continue {
             return Ok(StrategyOutcome {
-                status: SolveStatus::Stopped,
+                status: SolveStatus::Stopped(StopReason::Callback),
                 objective: None,
                 best_bound: None,
                 solution: None,
@@ -356,6 +357,7 @@ impl Strategy for FindClosestStrategy {
                 SolveProblemOpts {
                     warm_start: None,
                     time_limit: self.reconstruction_time_limit,
+                    incumbent_time_limit: collomatique_time::TimeLimit::none(),
                     disable_logging: self.disable_logging,
                 },
                 &move |p| {
@@ -368,7 +370,7 @@ impl Strategy for FindClosestStrategy {
             .await?;
 
         let recon_solution = match recon_outcome.status {
-            SolveStatus::Optimal | SolveStatus::Stopped => {
+            SolveStatus::Optimal | SolveStatus::Stopped(_) => {
                 recon_outcome.solution.ok_or_else(|| {
                     StrategyError::SolveError("reconstruction produced no solution".into())
                 })?
