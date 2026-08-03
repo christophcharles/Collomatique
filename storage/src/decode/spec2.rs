@@ -11,9 +11,14 @@
 //!    [InnerData](collomatique_state_colloscopes::InnerData) from the
 //!    blocks, completing everything the file deliberately omits (absent
 //!    blocks, derived key sets).
-//! 3. [Data::from_inner_data]: the invariant layer — the single trust
-//!    boundary. The decoder inserts referentially-suspect rows anyway
-//!    whenever this layer rejects them with a precise error.
+//! 3. [Data::from_inner_data]: the invariant layer — the last line of
+//!    defence, which makes the result safe whatever layer 2 let through.
+//!    Layer 2 should still diagnose every constraint it can name (the
+//!    "honest decode" checks below); where it does not yet, the user
+//!    gets a poor message and that is a bug to close — see
+//!    `docs/todos/fixme_spec2_storage.md`. The target is a layer 2 that
+//!    lets nothing broken through, so that a rejection here means this
+//!    crate built an `InnerData` it should not have.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -741,7 +746,9 @@ fn reconstruct_group_lists(
 
     // The associations table is sparse: one row per associated
     // `(period, subject)` (spec §4.10). Rows on an unknown period are kept
-    // here and rejected by layer 3.
+    // here and left to layer 3, which reports them in model vocabulary
+    // instead of naming the block and row — one of the diagnostic gaps
+    // listed in `docs/todos/fixme_spec2_storage.md`.
     let subjects_associations = associations
         .into_inner()
         .into_iter()

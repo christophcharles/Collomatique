@@ -5,11 +5,24 @@
 //! pre-alpha dump format, is permanently retired and rejected before
 //! decoding — see the versioning notes in `docs/file_format.md`.)
 //!
-//! Decoding is never trusted for semantic integrity: it funnels through
-//! [Data::from_inner_data], the single trust boundary that revalidates
-//! any [InnerData](collomatique_state_colloscopes::InnerData) regardless
-//! of provenance. A decoder that happens to catch a problem earlier is a
-//! convenience, not a guarantee.
+//! Decoding funnels through [Data::from_inner_data], which revalidates
+//! any [InnerData](collomatique_state_colloscopes::InnerData) whatever
+//! its provenance. That gate is the **last line of defence**: it makes a
+//! decoded document safe no matter what the decoder missed, and it can
+//! be trusted for that, being the same check every in-application edit
+//! goes through.
+//!
+//! It is not the *reporter*, though. It speaks the vocabulary of the
+//! in-memory model, not of the file, and it answers about the document
+//! as a whole rather than about a row — so a user who is told an
+//! invariant broke still cannot tell which entry to go and fix. Wherever
+//! the decoder can name the offending block, row and field, it must, and
+//! return a precise [DecodeError]. Several constraints of the spec still
+//! reach the gate instead; that is a known bug, not a design — see
+//! `docs/todos/fixme_spec2_storage.md`, which also records where this is
+//! headed: once the decoder diagnoses every constraint, a break at the
+//! gate stops being a bad file and becomes a bug in this crate, and
+//! [DecodeError::BrokenInvariants] gives way to a panic.
 //!
 //! Diagnostics ([DecodeError]) distinguish an *unrecognised* block
 //! (handled by the forward-compatibility rules — a [Caveat] or
