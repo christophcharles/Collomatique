@@ -20,8 +20,8 @@ use crate::SolveProgress;
 use crate::{
     DefaultStrategy, FindClosestStrategy, FuzzyPayload, FuzzyStrategy, IncrementalPayload,
     IncrementalPayloadData, IncrementalStrategy, NoObjectiveStarterProgress, NoObjectiveStrategy,
-    SolveStatus, Strategy, StrategyContext, StrategyError, StrategyKind, StrategyOutcome,
-    StrategyPayload, StrategyProgress, StrategyProgressData, VarOrderSerializable,
+    SolveStatus, StopReason, Strategy, StrategyContext, StrategyError, StrategyKind,
+    StrategyOutcome, StrategyPayload, StrategyProgress, StrategyProgressData, VarOrderSerializable,
 };
 
 #[derive(Debug, Clone)]
@@ -303,6 +303,12 @@ pub struct FuzzyConfig {
     /// [`TimeLimit::none()`](collomatique_time::TimeLimit::none) (the default) leaves it
     /// unbounded; the reconstruction solve stays unbounded regardless.
     pub time_limit: collomatique_time::TimeLimit,
+    /// After-incumbent closeness-solve time limit handed to every `FindClosestStrategy` the
+    /// conductor builds (see
+    /// [`FindClosestStrategy::closeness_incumbent_time_limit`](crate::FindClosestStrategy)).
+    /// Independent of [`FuzzyConfig::time_limit`]; the closeness solve stops at whichever
+    /// deadline comes first.
+    pub incumbent_time_limit: collomatique_time::TimeLimit,
 }
 
 impl Default for FuzzyConfig {
@@ -311,6 +317,7 @@ impl Default for FuzzyConfig {
             fuzzy_sigma: 0.2, // gives ~1.2% of variables flipped if they're all binary
             find_closest_tolerance: 10.0,
             time_limit: collomatique_time::TimeLimit::none(),
+            incumbent_time_limit: collomatique_time::TimeLimit::none(),
         }
     }
 }
@@ -330,15 +337,26 @@ pub struct IncrementalConfig {
     /// [`TimeLimit::none()`](collomatique_time::TimeLimit::none) leaves each epoch unbounded.
     /// Does not affect the final reconstruction solve.
     pub epoch_time_limit: collomatique_time::TimeLimit,
+    /// Per-epoch after-incumbent solve time limit handed to the queued `IncrementalStrategy`
+    /// (see [`IncrementalStrategy::epoch_incumbent_time_limit`](crate::IncrementalStrategy)).
+    /// Independent of [`IncrementalConfig::epoch_time_limit`]; each epoch stops at whichever
+    /// deadline comes first. Does not affect the final reconstruction solve. Defaults to five
+    /// minutes, unlike [`IncrementalStrategy`](crate::IncrementalStrategy)'s own unbounded default.
+    pub epoch_incumbent_time_limit: collomatique_time::TimeLimit,
 }
 
 impl Default for IncrementalConfig {
     fn default() -> Self {
-        // Match IncrementalStrategy's own defaults.
+        // Match IncrementalStrategy's own defaults, except for the after-incumbent limit: the
+        // conductor is the opinionated user-facing layer, and an epoch that already holds a
+        // feasible solution rarely earns its keep by grinding on. The bare strategy stays neutral.
         Self {
             l1_weight: 1000.0,
             distance_tolerance: 5.0,
             epoch_time_limit: collomatique_time::TimeLimit::none(),
+            epoch_incumbent_time_limit: collomatique_time::TimeLimit::minutes(
+                NonZeroU32::new(5).expect("5 is non-zero"),
+            ),
         }
     }
 }
@@ -364,6 +382,10 @@ pub struct DefaultConfig {
     /// [`DefaultStrategy::time_limit`](crate::DefaultStrategy)).
     /// [`TimeLimit::none()`](collomatique_time::TimeLimit::none) (the default) leaves it unbounded.
     pub time_limit: collomatique_time::TimeLimit,
+    /// After-incumbent solve time limit handed to the queued `DefaultStrategy` (see
+    /// [`DefaultStrategy::incumbent_time_limit`](crate::DefaultStrategy)). Independent of
+    /// [`DefaultConfig::time_limit`]; the solve stops at whichever deadline comes first.
+    pub incumbent_time_limit: collomatique_time::TimeLimit,
 }
 
 /// A misconfiguration the conductor can detect before running. Surfaced via
@@ -553,6 +575,7 @@ impl ConductorStrategy {
             l1_weight: cfg.l1_weight,
             distance_tolerance: cfg.distance_tolerance,
             epoch_time_limit: cfg.epoch_time_limit,
+            epoch_incumbent_time_limit: cfg.epoch_incumbent_time_limit,
             ..IncrementalStrategy::default()
         }
     }
@@ -561,6 +584,7 @@ impl ConductorStrategy {
     fn default_substrategy(&self, cfg: &DefaultConfig) -> DefaultStrategy {
         DefaultStrategy {
             time_limit: cfg.time_limit,
+            incumbent_time_limit: cfg.incumbent_time_limit,
             disable_logging: false,
         }
     }
@@ -573,6 +597,7 @@ impl ConductorStrategy {
             seed: None,
             find_closest: FindClosestStrategy {
                 closeness_time_limit: cfg.time_limit,
+                closeness_incumbent_time_limit: cfg.incumbent_time_limit,
                 reconstruction_time_limit: collomatique_time::TimeLimit::none(),
                 disable_logging: false,
                 distance_tolerance: cfg.find_closest_tolerance,
@@ -663,7 +688,9 @@ fn conductor_outcome<V: UsableData + Send>(status: &ConductorStatus<V>) -> Strat
         status: if status.best_solution.is_some() {
             SolveStatus::Optimal
         } else {
-            SolveStatus::Stopped
+            // The conductor runs until its own caller (or its budget) stops it, so a
+            // solution-less run is always a callback stop from the workers' point of view.
+            SolveStatus::Stopped(StopReason::Callback)
         },
         objective: status.best_solution.as_ref().map(|s| s.objective),
         best_bound: status.best_bound,
@@ -1654,7 +1681,7 @@ mod tests {
         for kind in &kinds {
             for status in [
                 SolveStatus::Optimal,
-                SolveStatus::Stopped,
+                SolveStatus::Stopped(StopReason::Callback),
                 SolveStatus::Infeasible,
             ] {
                 let st = empty_status();
@@ -1782,6 +1809,27 @@ mod tests {
             incremental_config: None,
             fuzzy_config: f.then(FuzzyConfig::default),
         }
+    }
+
+    #[test]
+    fn conductor_caps_each_epoch_five_minutes_past_its_first_solution() {
+        // The conductor is the opinionated layer: its default incremental config carries a
+        // five-minute after-incumbent limit, and hands it to the strategy it builds.
+        let five_minutes =
+            collomatique_time::TimeLimit::minutes(NonZeroU32::new(5).expect("5 is non-zero"));
+        let cfg = IncrementalConfig::default();
+        assert_eq!(cfg.epoch_incumbent_time_limit, five_minutes);
+        assert_eq!(
+            conductor(1, true, false, false)
+                .incremental_substrategy(&cfg)
+                .epoch_incumbent_time_limit,
+            five_minutes,
+        );
+        // The bare strategy stays neutral — no limit unless someone asks for one.
+        assert_eq!(
+            IncrementalStrategy::default().epoch_incumbent_time_limit,
+            collomatique_time::TimeLimit::none(),
+        );
     }
 
     #[test]
@@ -2039,7 +2087,7 @@ mod tests {
         assert!(outcome.solution.is_some());
 
         let outcome = conductor_outcome(&status_with(None, Some(2.0)));
-        assert_eq!(outcome.status, SolveStatus::Stopped);
+        assert_eq!(outcome.status, SolveStatus::Stopped(StopReason::Callback));
         assert_eq!(outcome.objective, None);
         assert_eq!(outcome.best_bound, Some(2.0));
         assert!(outcome.solution.is_none());

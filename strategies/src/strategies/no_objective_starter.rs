@@ -10,7 +10,7 @@ use collomatique_ilp_modeler::{InternalVar, Model};
 use crate::strategies::default::{DefaultPayload, DefaultStrategy};
 use crate::strategies::no_objective::{NoObjectivePayload, NoObjectiveStrategy};
 use crate::{
-    NoObjectiveProgressData, SolveProgress, SolveProgressData, SolveStatus, Strategy,
+    NoObjectiveProgressData, SolveProgress, SolveProgressData, SolveStatus, StopReason, Strategy,
     StrategyContext, StrategyError, StrategyOutcome, VarOrderSerializable,
 };
 
@@ -86,9 +86,9 @@ impl Strategy for NoObjectiveStarterStrategy {
                     "no-objective solve returned error".into(),
                 ));
             }
-            SolveStatus::Stopped => {
+            SolveStatus::Stopped(reason) => {
                 return Ok(StrategyOutcome {
-                    status: SolveStatus::Stopped,
+                    status: SolveStatus::Stopped(reason),
                     objective: no_obj_outcome.objective,
                     best_bound: no_obj_outcome.best_bound,
                     solution: no_obj_outcome.solution,
@@ -110,7 +110,7 @@ impl Strategy for NoObjectiveStarterStrategy {
         });
         if !should_continue {
             return Ok(StrategyOutcome {
-                status: SolveStatus::Stopped,
+                status: SolveStatus::Stopped(StopReason::Callback),
                 objective: no_obj_outcome.objective,
                 best_bound: no_obj_outcome.best_bound,
                 solution: Some(hint),

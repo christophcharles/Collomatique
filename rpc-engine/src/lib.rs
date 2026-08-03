@@ -85,12 +85,11 @@ fn try_solve() -> Result<(), anyhow::Error> {
 fn solve_ilp(serialized: SerializedIlpProblem) -> Result<(), anyhow::Error> {
     use collomatique_ilp::solvers::collo_cbc::ColloCbcSolver;
     use collomatique_ilp::solvers::{
-        CallbackSolverModel, ProgressBounds, ProgressIncumbentData, ProgressIncumbentInfo,
-        ProgressStats, Solver, WarmSolver,
+        IncumbentTimeLimitSolverModel, ProgressBounds, ProgressIncumbentData,
+        ProgressIncumbentInfo, ProgressStats, Solver, WarmSolver,
     };
     use collomatique_ilp::{DefaultRepr, ProblemBuilder};
     use ordered_float::OrderedFloat;
-    use std::time::Instant;
 
     let request = collomatique_rpc::IlpSolveRequest::from(serialized);
 
@@ -111,57 +110,48 @@ fn solve_ilp(serialized: SerializedIlpProblem) -> Result<(), anyhow::Error> {
         solver.build_model(&problem)
     };
 
-    let start = Instant::now();
-    let time_limit = request.time_limit.duration();
-
     let mut last_best_bound = 0.0f64;
     let mut last_node_count = 0u64;
 
     eprintln!("Solving...");
-    let result = model.solve_with_callback(|progress| {
-        last_best_bound = progress.best_bound();
-        last_node_count = progress.nodes();
+    // Both time limits are enforced by the solver itself; the callback only reports
+    // progress and relays the parent's stop request.
+    let result = model.solve_with_time_limits(
+        request.time_limit,
+        request.incumbent_time_limit,
+        |progress| {
+            last_best_bound = progress.best_bound();
+            last_node_count = progress.nodes();
 
-        let progress_data = SolverProgressData {
-            best_obj: progress.best_objective().map(OrderedFloat),
-            best_bound: OrderedFloat(progress.best_bound()),
-            node_count: progress.nodes(),
-            solutions_found: progress.solutions(),
-            incumbent_info: progress.incumbent_info().map(|info| SolverIncumbentInfo {
-                objective: OrderedFloat(info.objective),
-                feasible: info.feasible,
-            }),
-            incumbent_solution: progress.incumbent_data().map(|cfg| {
-                var_indices
-                    .iter()
-                    .map(|&i| OrderedFloat(cfg.get(i).unwrap_or(0.0)))
-                    .collect()
-            }),
-        };
+            let progress_data = SolverProgressData {
+                best_obj: progress.best_objective().map(OrderedFloat),
+                best_bound: OrderedFloat(progress.best_bound()),
+                node_count: progress.nodes(),
+                solutions_found: progress.solutions(),
+                incumbent_info: progress.incumbent_info().map(|info| SolverIncumbentInfo {
+                    objective: OrderedFloat(info.objective),
+                    feasible: info.feasible,
+                }),
+                incumbent_solution: progress.incumbent_data().map(|cfg| {
+                    var_indices
+                        .iter()
+                        .map(|&i| OrderedFloat(cfg.get(i).unwrap_or(0.0)))
+                        .collect()
+                }),
+            };
 
-        let response = EncodedMsg::send_rpc(CmdMsg::Solver(SolverMsg::Progress(progress_data)));
-        let should_continue = match response {
-            Ok(ResultMsg::SolverControl(cont)) => cont,
-            _ => false,
-        };
+            let response = EncodedMsg::send_rpc(CmdMsg::Solver(SolverMsg::Progress(progress_data)));
+            match response {
+                Ok(ResultMsg::SolverControl(cont)) => cont,
+                _ => false,
+            }
+        },
+    );
 
-        let time_ok = time_limit
-            .map(|limit| start.elapsed() < limit)
-            .unwrap_or(true);
-
-        should_continue && time_ok
-    });
-
-    let status = if result.config.is_some() {
-        if result.stopped_by_callback {
-            SolverStatus::Stopped
-        } else {
-            SolverStatus::Optimal
-        }
-    } else if result.stopped_by_callback {
-        SolverStatus::Stopped
-    } else {
-        SolverStatus::Infeasible
+    let status = match result.stopped {
+        Some(reason) => SolverStatus::Stopped(reason),
+        None if result.config.is_some() => SolverStatus::Optimal,
+        None => SolverStatus::Infeasible,
     };
 
     let obj_value = result.config.as_ref().map(|c| OrderedFloat(c.eval()));
@@ -262,7 +252,7 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
     let status = match outcome.status {
         collomatique_strategies::SolveStatus::Optimal => StrategyStatus::Optimal,
         collomatique_strategies::SolveStatus::Infeasible => StrategyStatus::Infeasible,
-        collomatique_strategies::SolveStatus::Stopped => StrategyStatus::Stopped,
+        collomatique_strategies::SolveStatus::Stopped(reason) => StrategyStatus::Stopped(reason),
         collomatique_strategies::SolveStatus::Error => StrategyStatus::Error,
     };
 

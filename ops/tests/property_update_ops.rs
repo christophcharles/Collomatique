@@ -190,6 +190,7 @@ struct Pools {
     student_ids: Vec<StudentId>,
     subject_ids: Vec<SubjectId>,
     interrogation_subject_ids: Vec<SubjectId>,
+    non_interrogation_subject_ids: Vec<SubjectId>,
     teacher_ids: Vec<TeacherId>,
     week_pattern_ids: Vec<WeekPatternId>,
     slot_ids: Vec<SlotId>,
@@ -217,6 +218,13 @@ impl Pools {
                 .ordered_subject_list
                 .iter()
                 .filter(|(_, s)| s.parameters.interrogation_parameters.is_some())
+                .map(|(id, _)| id)
+                .collect(),
+            non_interrogation_subject_ids: params
+                .subjects
+                .ordered_subject_list
+                .iter()
+                .filter(|(_, s)| s.parameters.interrogation_parameters.is_none())
                 .map(|(id, _)| id)
                 .collect(),
             teacher_ids: params.teachers.teacher_map.keys().collect(),
@@ -756,11 +764,28 @@ fn gen_incompatibilities(
 
 fn gen_pairings(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> PairingsUpdateOp {
     // Both rule constructors reject a rule naming the same entity twice, so
-    // every Add/Update draw needs two distinct subjects to build from.
-    let can_build = pools.subject_ids.len() >= 2;
+    // every Add/Update draw needs two distinct subjects to build from — and a
+    // rule may only name subjects that run interrogations, so those are the
+    // ones the valid draws come from.
+    let can_build = pools.interrogation_subject_ids.len() >= 2;
 
     if invalid {
-        return if can_build && rng.random_bool(0.6) {
+        return if !pools.non_interrogation_subject_ids.is_empty()
+            && !pools.interrogation_subject_ids.is_empty()
+            && rng.random_bool(0.3)
+        {
+            // Every id resolves, so nothing dangles: this is the payload the
+            // family answers with `SubjectWithoutInterrogations`, and before
+            // that error existed it reached the `panic!` in `apply_to_session`.
+            let off = pick(rng, &pools.non_interrogation_subject_ids);
+            let on = pick(rng, &pools.interrogation_subject_ids);
+            PairingsUpdateOp::AddNewPairingRule(synth::pairing_rule(
+                rng,
+                off,
+                on,
+                &pools.period_ids,
+            ))
+        } else if !pools.subject_ids.is_empty() && rng.random_bool(0.6) {
             let real = pick(rng, &pools.subject_ids);
             let ghost = unsafe { SubjectId::new(dangling(rng)) };
             PairingsUpdateOp::AddNewPairingRule(synth::pairing_rule(
@@ -793,7 +818,7 @@ fn gen_pairings(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> PairingsU
 
     match weighted(rng, &[add_w, update_w, remove_w]) {
         0 => {
-            let (antecedent, consequent) = distinct_pair(rng, &pools.subject_ids);
+            let (antecedent, consequent) = distinct_pair(rng, &pools.interrogation_subject_ids);
             PairingsUpdateOp::AddNewPairingRule(synth::pairing_rule(
                 rng,
                 antecedent,
@@ -802,7 +827,7 @@ fn gen_pairings(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> PairingsU
             ))
         }
         1 => {
-            let (antecedent, consequent) = distinct_pair(rng, &pools.subject_ids);
+            let (antecedent, consequent) = distinct_pair(rng, &pools.interrogation_subject_ids);
             PairingsUpdateOp::UpdatePairingRule(
                 pick(rng, &pools.pairing_rule_ids),
                 synth::pairing_rule(rng, antecedent, consequent, &pools.period_ids),

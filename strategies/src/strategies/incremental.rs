@@ -11,7 +11,7 @@ use collomatique_ilp_modeler::{
 };
 
 use crate::{
-    NoObjectiveSolveProgress, SolveProblemOpts, SolveStatus, Strategy, StrategyContext,
+    NoObjectiveSolveProgress, SolveProblemOpts, SolveStatus, StopReason, Strategy, StrategyContext,
     StrategyError, StrategyOutcome, VarOrderSerializable,
 };
 
@@ -99,6 +99,12 @@ pub struct IncrementalStrategy {
     pub distance_tolerance: f64,
     /// Time limit for each epoch's solve.
     pub epoch_time_limit: collomatique_time::TimeLimit,
+    /// Time limit on each epoch's solve, counted from that epoch's first feasible incumbent
+    /// and independent of [`IncrementalStrategy::epoch_time_limit`]: the epoch stops at
+    /// whichever deadline comes first. Each epoch is its own solve, so the clock restarts
+    /// every epoch. [`TimeLimit::none()`](collomatique_time::TimeLimit::none) (the default)
+    /// disables it. The final reconstruction solve is unaffected.
+    pub epoch_incumbent_time_limit: collomatique_time::TimeLimit,
     /// Time limit for the final reconstruction solve.
     pub reconstruction_time_limit: collomatique_time::TimeLimit,
     pub disable_logging: bool,
@@ -110,6 +116,7 @@ impl Default for IncrementalStrategy {
             l1_weight: 1000.0,
             distance_tolerance: 5.0,
             epoch_time_limit: collomatique_time::TimeLimit::none(),
+            epoch_incumbent_time_limit: collomatique_time::TimeLimit::none(),
             reconstruction_time_limit: collomatique_time::TimeLimit::none(),
             disable_logging: false,
         }
@@ -331,7 +338,7 @@ impl Strategy for IncrementalStrategy {
                 total,
                 var_count: e_k.len(),
             }) {
-                return Ok(empty_outcome(SolveStatus::Stopped));
+                return Ok(empty_outcome(SolveStatus::Stopped(StopReason::Callback)));
             }
 
             // 1. Filter the model down to this epoch's sub-problem. Every predicate is keyed
@@ -381,6 +388,7 @@ impl Strategy for IncrementalStrategy {
                     SolveProblemOpts {
                         warm_start: None,
                         time_limit: self.epoch_time_limit,
+                        incumbent_time_limit: self.epoch_incumbent_time_limit,
                         disable_logging: self.disable_logging,
                     },
                     &move |p| {
@@ -407,11 +415,18 @@ impl Strategy for IncrementalStrategy {
                 )
                 .await?;
 
+            let stopped_reason = match &outcome.status {
+                SolveStatus::Stopped(reason) => Some(*reason),
+                _ => None,
+            };
             match outcome.status {
-                SolveStatus::Optimal | SolveStatus::Stopped => {
+                SolveStatus::Optimal | SolveStatus::Stopped(_) => {
                     let Some(solution) = outcome.solution else {
-                        // Stopped without an incumbent: propagate as stopped.
-                        return Ok(empty_outcome(SolveStatus::Stopped));
+                        // Stopped without an incumbent: propagate as stopped, keeping the
+                        // solver's reason when it gave one.
+                        return Ok(empty_outcome(SolveStatus::Stopped(
+                            stopped_reason.unwrap_or(StopReason::Callback),
+                        )));
                     };
                     // Overwrite `prev_values` wholesale with this solve's entire base
                     // assignment over S_k (flexed previous values included).
@@ -461,6 +476,7 @@ impl Strategy for IncrementalStrategy {
                 SolveProblemOpts {
                     warm_start: None,
                     time_limit: self.reconstruction_time_limit,
+                    incumbent_time_limit: collomatique_time::TimeLimit::none(),
                     disable_logging: self.disable_logging,
                 },
                 &move |p| {
@@ -474,7 +490,7 @@ impl Strategy for IncrementalStrategy {
             .await?;
 
         let recon_solution = match recon_outcome.status {
-            SolveStatus::Optimal | SolveStatus::Stopped => {
+            SolveStatus::Optimal | SolveStatus::Stopped(_) => {
                 recon_outcome.solution.ok_or_else(|| {
                     StrategyError::SolveError("reconstruction produced no solution".into())
                 })?
@@ -682,6 +698,7 @@ mod tests {
             // Solve each epoch to proven optimality so assertions are stable.
             distance_tolerance: 0.0,
             epoch_time_limit: collomatique_time::TimeLimit::none(),
+            epoch_incumbent_time_limit: collomatique_time::TimeLimit::none(),
             reconstruction_time_limit: collomatique_time::TimeLimit::none(),
             disable_logging: true,
         }

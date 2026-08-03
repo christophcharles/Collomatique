@@ -552,7 +552,9 @@ struct PeriodDocument {
     /// Runs interrogations and runs on the period: it owns the slots, the
     /// assignments row and the association.
     subject: SubjectId,
-    /// Excludes the period — the `SubjectExcludedPeriods` site.
+    /// Excludes the period — the `SubjectExcludedPeriods` site. It runs
+    /// interrogations, because the pairing rule below names it and a rule may
+    /// only name subjects that run some.
     excluded_subject: SubjectId,
     slots: Vec<SlotId>,
     pairing: PairingRuleId,
@@ -614,7 +616,7 @@ fn build_period_document(app: &mut AppState<Data, String>, depth: bool) -> Perio
         app,
         Op::Subject(SubjectOp::AddAfter(
             Some(subject),
-            plain_subject("Sport", BTreeSet::from([period]))
+            interrogation_subject("Sport", BTreeSet::from([period]))
         )),
         NewId::SubjectId,
         "adding the excluding subject"
@@ -771,7 +773,7 @@ fn seven_flat_period_fixes(doc: &PeriodDocument, week: WeekId) -> Vec<Fix> {
         Fix::RemoveSubjectPeriodExclusion {
             subject: doc.excluded_subject,
             period: doc.period,
-            rebuilt: plain_subject("Sport", BTreeSet::new()),
+            rebuilt: interrogation_subject("Sport", BTreeSet::new()),
         },
         Fix::RemoveStudentPeriodExclusion {
             student: doc.excluded_student,
@@ -2339,6 +2341,76 @@ fn fixture_6_a_no_op_target_lands_alone_and_does_not_panic() {
     );
 }
 
+/// Fixture `7` — the cascade mirror of `rejection_6`: under `apply_cascade` the
+/// subject update *lands*, and the pairing rule that named it goes.
+///
+/// The pair is the point. In `rejection_6` the plain gate refuses the very same
+/// op, because the document it would produce holds a rule naming a subject
+/// without interrogations. Here the cascade is allowed to repair, and the
+/// difference is *whose* material is at fault: the rule pre-exists the target,
+/// so it survives the rollback the engine performs before consulting the map,
+/// the arm finds it, and answers `Fix::DeletePairingRule`. (Contrast
+/// `rejection_5`, where the offending rule *is* the payload: rolled back, it is
+/// no longer there to remove, so the arm answers `None` and the op is
+/// convicted.)
+///
+/// One fix lands and only one, so this fixture pins sequence as well as
+/// content for free — there was no choice for the engine to make.
+#[test]
+fn fixture_7_turning_interrogations_off_takes_the_pairing_rules_with_it() {
+    let mut app = AppState::<Data, String>::new(Data::new());
+
+    let maths: SubjectId = apply_new!(
+        app,
+        Op::Subject(SubjectOp::AddAfter(
+            None,
+            interrogation_subject("Maths", BTreeSet::new())
+        )),
+        NewId::SubjectId,
+        "adding the subject to turn off"
+    );
+    let physique: SubjectId = apply_new!(
+        app,
+        Op::Subject(SubjectOp::AddAfter(
+            Some(maths),
+            interrogation_subject("Physique", BTreeSet::new())
+        )),
+        NewId::SubjectId,
+        "adding the consequent subject"
+    );
+    let rule: PairingRuleId = apply_new!(
+        app,
+        Op::Pairing(PairingOp::Add(pairing_rule(
+            maths,
+            physique,
+            BTreeSet::new()
+        ))),
+        NewId::PairingRuleId,
+        "adding the rule Maths => Physique"
+    );
+
+    let subject_off = plain_subject("Maths", BTreeSet::new());
+    let mut data = app.get_data().clone();
+    let (target, _new_info) =
+        data.annotate(Op::Subject(SubjectOp::Update(maths, subject_off.clone())));
+
+    let receipt = apply_cascade(&mut data, target).expect("the cascade repairs the rule away");
+
+    assert_same_fixes(&landed_fixes(&receipt), &[Fix::DeletePairingRule { rule }]);
+
+    assert_clean(&data);
+    let inner = data.get_inner_data();
+    assert_eq!(
+        inner.params.subjects.find_subject(maths),
+        Some(&subject_off),
+        "the target landed: the subject runs no interrogations any more"
+    );
+    assert!(
+        inner.params.pairings.pairing_rule_map.get(&rule).is_none(),
+        "the rule naming the subject is gone"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Commit 7.6 (plan §9ter) — the rejection fixtures.
 // ---------------------------------------------------------------------------
@@ -2884,6 +2956,145 @@ fn rejection_4_an_unknown_student_convicts_the_assignment() {
     );
 }
 
+/// Rejection `5` — a *new* pairing rule naming a subject that runs no
+/// interrogations is the target's own payload at fault: the rule goes back with
+/// the rolled-back op, the map's arm finds no rule to remove, and the op is
+/// convicted.
+///
+/// A pairing rule is an implication between two subjects' interrogations
+/// ("a student with a Quidditch interrogation this week must also have a
+/// Physique one"). If one of the two subjects runs no interrogations at all,
+/// the rule is either vacuous or impossible — never meaningful — so the
+/// document must not hold it.
+///
+/// The conviction is pinned to the exact invariant, on the fresh rule id the
+/// annotation issued: the antecedent is the interrogation-less part, so the
+/// antecedent variant is the one — and it is the whole broken set, since the
+/// document holds nothing else the added rule could disturb.
+#[test]
+fn rejection_5_a_new_rule_naming_a_subject_without_interrogations_is_convicted() {
+    let mut app = AppState::<Data, String>::new(Data::new());
+
+    let physique: SubjectId = apply_new!(
+        app,
+        Op::Subject(SubjectOp::AddAfter(
+            None,
+            interrogation_subject("Physique", BTreeSet::new())
+        )),
+        NewId::SubjectId,
+        "adding the interrogated subject"
+    );
+    let quidditch: SubjectId = apply_new!(
+        app,
+        Op::Subject(SubjectOp::AddAfter(
+            Some(physique),
+            plain_subject("Quidditch", BTreeSet::new())
+        )),
+        NewId::SubjectId,
+        "adding the subject without interrogations"
+    );
+
+    let mut data = app.get_data().clone();
+    let before = data.get_inner_data().clone();
+
+    let (target, new_info) = data.annotate(Op::Pairing(PairingOp::Add(pairing_rule(
+        quidditch,
+        physique,
+        BTreeSet::new(),
+    ))));
+    let Some(NewId::PairingRuleId(rule)) = new_info else {
+        panic!("annotating a PairingOp::Add issues a rule id");
+    };
+
+    let err = apply_cascade(&mut data, target)
+        .expect_err("a rule naming a subject without interrogations must be refused");
+
+    assert_convicted_of(
+        err,
+        BTreeSet::from([FixableInvariant::Convergence(
+            Convergence::PairingRuleAntecedentForSubjectWithoutInterrogations(rule, quidditch),
+        )]),
+        "the target is convicted of exactly the convergence its own payload causes",
+    );
+
+    assert_eq!(
+        data.get_inner_data(),
+        &before,
+        "a convicted target leaves the document bit-identical"
+    );
+}
+
+/// Rejection `6` — the plain-gate half of the pair: without the cascade,
+/// turning a subject's interrogations off while a pairing rule names it must
+/// come back as `BrokenInvariants`, leaving the document untouched.
+/// `fixture_7` is the cascade mirror, which repairs instead of refusing.
+///
+/// The document is minimal on purpose — no slot, teacher, association or
+/// balancing entry — so that the pairing rule is the **only** thing the update
+/// can break, and the assertion below can name the broken set exactly. `Maths`
+/// is the rule's antecedent, so the antecedent variant is the one that fires.
+#[test]
+fn rejection_6_turning_interrogations_off_under_a_pairing_rule_is_convicted_by_the_plain_gate() {
+    let mut app = AppState::<Data, String>::new(Data::new());
+
+    let maths: SubjectId = apply_new!(
+        app,
+        Op::Subject(SubjectOp::AddAfter(
+            None,
+            interrogation_subject("Maths", BTreeSet::new())
+        )),
+        NewId::SubjectId,
+        "adding the subject to turn off"
+    );
+    let physique: SubjectId = apply_new!(
+        app,
+        Op::Subject(SubjectOp::AddAfter(
+            Some(maths),
+            interrogation_subject("Physique", BTreeSet::new())
+        )),
+        NewId::SubjectId,
+        "adding the consequent subject"
+    );
+    let rule: PairingRuleId = apply_new!(
+        app,
+        Op::Pairing(PairingOp::Add(pairing_rule(
+            maths,
+            physique,
+            BTreeSet::new()
+        ))),
+        NewId::PairingRuleId,
+        "adding the rule Maths => Physique"
+    );
+
+    let before = app.get_data().get_inner_data().clone();
+
+    let err = app
+        .apply(
+            Op::Subject(SubjectOp::Update(
+                maths,
+                plain_subject("Maths", BTreeSet::new()),
+            )),
+            "turning the interrogations off".into(),
+        )
+        .expect_err(
+            "the plain gate must refuse: the rule would name a subject without interrogations",
+        );
+
+    assert_convicted_of(
+        err,
+        BTreeSet::from([FixableInvariant::Convergence(
+            Convergence::PairingRuleAntecedentForSubjectWithoutInterrogations(rule, maths),
+        )]),
+        "the only broken edge in this minimal document is the pairing rule",
+    );
+
+    assert_eq!(
+        app.get_data().get_inner_data(),
+        &before,
+        "a refused op leaves the document bit-identical"
+    );
+}
+
 /// The incompatibility the identity-pin document carries, as a value, so that
 /// the fixture and its assertion cannot drift apart.
 fn identity_pin_incompat(subject_id: SubjectId) -> Incompatibility {
@@ -2975,7 +3186,7 @@ fn build_identity_pin_document(app: &mut AppState<Data, String>) -> IdentityPinD
         app,
         Op::Subject(SubjectOp::AddAfter(
             Some(subject),
-            plain_subject("Sport", BTreeSet::new())
+            interrogation_subject("Sport", BTreeSet::new())
         )),
         NewId::SubjectId,
         "adding the pairing rule's second subject"
@@ -3146,9 +3357,12 @@ fn identity_pin_2_an_incompat_pointed_at_a_dead_subject_survives() {
 /// door, and it accepts this payload because its single failure is the two
 /// parts *sharing* a subject, which a dead id on one side cannot cause.
 ///
-/// One break: no `Convergence` variant mentions a `PairingRule`. (The one that
-/// sounds close, `PairedSlotsNotInSameSubject`, is about *slot* pairings, a
-/// different table.)
+/// One break, and it takes both halves of the checker to see why. The
+/// antecedent's convergence predicate sits behind the subject lookup, so a
+/// *dead* antecedent makes it skip rather than fire; and the consequent's is
+/// live and runs interrogations, so its own predicate stays quiet. The dangle
+/// arrives alone. (`PairedSlotsNotInSameSubject`, which sounds close, is about
+/// *slot* pairings, a different table.)
 #[test]
 fn identity_pin_3_a_pairing_antecedent_pointed_at_a_dead_subject_survives() {
     let mut app = AppState::<Data, String>::new(Data::new());

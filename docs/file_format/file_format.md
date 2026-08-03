@@ -121,11 +121,22 @@ above makes the reservation invisible in practice.
 | week start | string `"YYYY-MM-DD"` | an ISO date that must be a Monday; anything else is invalid |
 | time of day | string `"HH:MM"` | 24-hour, zero-padded, minute precision; `"9:00"` or `"09:00:00"` are invalid |
 | weekday | string | lowercase English: `"monday"` … `"sunday"` |
-| duration | number | integer minutes, ≥ 1 |
+| duration | number | integer minutes, 1 to 2³² − 1 |
 | integer range | record `{"min": n, "max": n}` | `min <= max` |
 | color | record `{"red": n, "green": n, "blue": n}` | each 0–255 |
 | non-empty string | string | the empty string is invalid where "non-empty" is stated |
 | string | string | may be empty unless stated otherwise |
+
+### Integer widths
+
+Every integer field has a fixed width, and a value outside it makes the file
+invalid. Ids have their own ceiling of 2⁶³ − 1 (above). Apart from ids, every
+unsigned integer field must fit in 32 bits: 0 to 2³² − 1, or 1 to 2³² − 1 where
+a minimum of 1 is stated. The single signed integer field — a slot's `cost`
+(§4.7) — must fit in a signed 32-bit integer: −2³¹ to 2³¹ − 1. This covers,
+among others, durations, week indices, group numbers, limit values, periodicity
+parameters, and the version numbers of the envelope (`produced_with_version`
+components and `minimum_spec_version`).
 
 ### Records and keyed collections
 
@@ -446,7 +457,7 @@ Slot fields:
 | `start` | record `{"day", "time"}` | Weekday + start time. The duration comes from the subject's `duration_minutes`. |
 | `extra_info` | string | Free info for exports (room number…). May be empty. |
 | `week_pattern_id` | id or `null` | `null` = the slot exists every week. |
-| `cost` | integer | Solver preference: positive avoids the slot, negative favours it, 0 neutral. |
+| `cost` | signed 32-bit integer | Solver preference: positive avoids the slot, negative favours it, 0 neutral. |
 
 Constraints: `subject_id` is an existing subject with interrogations; `teacher_id`
 exists and that teacher's `subjects` contains this subject; `week_pattern_id` (when
@@ -587,9 +598,11 @@ week." Payload: keyed collection (by `id`).
 | `excluded_periods` | array of period ids | Periods where the rule does not apply. |
 | `soft` | bool | `true` = best-effort (optimised), `false` = hard constraint. |
 
-Constraints: both subjects exist; antecedent and consequent subjects differ;
-excluded periods exist. (Rules apply only to students enrolled in both subjects —
-a solver semantic, not a file constraint.)
+Constraints: both subjects exist **and** have interrogations
+(`interrogation_parameters` is not `null`); antecedent and consequent subjects
+differ; excluded periods exist. A rule naming a subject without interrogations
+is vacuous or impossible, never meaningful. (Rules apply only to students
+enrolled in both subjects — a solver semantic, not a file constraint.)
 
 ### 4.12 `SlotPairings`
 

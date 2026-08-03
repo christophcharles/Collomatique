@@ -7,8 +7,103 @@ use relm4::{ComponentController, gtk};
 
 use collomatique_ops::SlotPairingsUpdateOp;
 
+use crate::tools::messages::MessageSeverity;
+
 pub mod slot_pairing_params;
 pub mod slot_pairings_display;
+
+/// One remark about a slot pairing rule.
+///
+/// Both the edition dialog — which shows them as full text rows — and the list
+/// of recorded rules read the same variants, so a rule reads the same way
+/// wherever it is displayed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuleMessage {
+    /// Both parts name the same slot: the rule cannot be recorded.
+    SameSlot,
+    /// « créneau utilisé ⇒ créneau non utilisé » — the shape that may need a
+    /// reified extra.
+    HeavyShape,
+    /// Nudge towards the symmetric « créneau non utilisé ⇒ créneau utilisé »
+    /// shape.
+    FavoredShape,
+}
+
+impl RuleMessage {
+    pub fn severity(self) -> MessageSeverity {
+        match self {
+            RuleMessage::SameSlot => MessageSeverity::Error,
+            RuleMessage::HeavyShape => MessageSeverity::Warning,
+            RuleMessage::FavoredShape => MessageSeverity::Info,
+        }
+    }
+
+    pub fn text(self) -> &'static str {
+        match self {
+            RuleMessage::SameSlot => {
+                "L'antécédent et le conséquent doivent porter sur deux créneaux différents."
+            }
+            // « utilisé ⇒ non utilisé » is the one shape whose constraint needs
+            // the antecedent *negated*, which only works directly when an
+            // interrogation holds at most one group; otherwise
+            // `constraints-colloscopes` has to reify an intermediate binary
+            // variable and linearize it (see
+            // `pairings::slot::emit_pairing_constraint`).
+            //
+            // The warning is shown whenever this shape is used, not only when
+            // the precondition currently holds: the subject's group count can be
+            // changed long after the rule is validated, and the user would then
+            // never see the message. Naming the precondition in the text lets
+            // them either pick another shape now, or keep this one and know what
+            // to avoid later.
+            RuleMessage::HeavyShape => {
+                "La forme « créneau utilisé ⇒ créneau non utilisé » est coûteuse pour le solveur \
+                 si une interrogation peut accueillir plusieurs groupes : elle nécessite alors des \
+                 variables intermédiaires supplémentaires."
+            }
+            // « non utilisé ⇒ utilisé » compiles to `antécédent + conséquent ≥ 1`,
+            // which is symmetric: the same single constraint also enforces the
+            // converse. The wording stays conditional because this is *not* a
+            // logical rewriting of the other shapes — it only helps when it
+            // happens to express the user's need.
+            RuleMessage::FavoredShape => {
+                "Si votre besoin peut s'exprimer sous la forme « créneau non utilisé ⇒ créneau \
+                 utilisé », préférez-la : c'est la plus efficace pour le solveur et elle impose \
+                 aussi automatiquement la règle réciproque."
+            }
+        }
+    }
+}
+
+/// The `should_have` flags of a recorded rule, in the order (antécédent,
+/// conséquent) — the same pair the dialog reads off its two condition combos.
+pub fn rule_shape(
+    rule: &collomatique_state_colloscopes::slot_pairings::SlotPairingRule,
+) -> (bool, bool) {
+    (rule.antecedent().should_have, rule.consequent().should_have)
+}
+
+/// The remarks a rule deserves, most severe first.
+///
+/// `shape` is the pair of `should_have` flags, in the order (antécédent,
+/// conséquent). `slots_are_same` is only ever true in the edition dialog: a rule
+/// that made it into the document always names two distinct slots.
+pub fn rule_messages(shape: (bool, bool), slots_are_same: bool) -> Vec<RuleMessage> {
+    let mut messages = Vec::new();
+    if slots_are_same {
+        messages.push(RuleMessage::SameSlot);
+    }
+    match shape {
+        // The warning already names this shape, and it is symmetric anyway
+        // (« A utilisé ⇒ B non utilisé » is « B utilisé ⇒ A non utilisé »), so
+        // the nudge would add nothing.
+        (true, false) => messages.push(RuleMessage::HeavyShape),
+        // Already the cheapest shape: nothing to nudge towards.
+        (false, true) => {}
+        _ => messages.push(RuleMessage::FavoredShape),
+    }
+    messages
+}
 
 #[derive(Debug)]
 pub enum SlotPairingsInput {

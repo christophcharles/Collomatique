@@ -249,34 +249,10 @@ fn collo_cbc_callback_not_stopped() {
 
 #[test]
 fn collo_cbc_callback_incumbent_data_is_feasible() {
+    use crate::ConfigData;
     use crate::solvers::{CallbackSolverModel, ProgressIncumbentData, Solver};
-    use crate::{ConfigData, LinExpr, Objective, ObjectiveSense, ProblemBuilder, Variable};
 
-    // Small knapsack: maximize value subject to a weight cap, so CBC has to
-    // report at least one integer incumbent during the solve.
-    let a = LinExpr::<String>::var("a");
-    let b = LinExpr::<String>::var("b");
-    let c = LinExpr::<String>::var("c");
-    let d = LinExpr::<String>::var("d");
-    let e = LinExpr::<String>::var("e");
-
-    let weight = 2.0 * &a + 3.0 * &b + 4.0 * &c + 5.0 * &d + 6.0 * &e;
-    let value = 3.0 * &a + 4.0 * &b + 5.0 * &c + 6.0 * &d + 7.0 * &e;
-    let cap = LinExpr::<String>::constant(10.0);
-
-    let problem = ProblemBuilder::<String, String>::new()
-        .set_variables([
-            ("a", Variable::binary()),
-            ("b", Variable::binary()),
-            ("c", Variable::binary()),
-            ("d", Variable::binary()),
-            ("e", Variable::binary()),
-        ])
-        .add_constraint(weight.leq(&cap), "capacity")
-        .set_objective(Objective::new(value, ObjectiveSense::Maximize))
-        .build()
-        .unwrap();
-
+    let problem = knapsack_problem();
     let solver = super::ColloCbcSolver::new();
 
     let mut last_incumbent: Option<ConfigData<String>> = None;
@@ -300,4 +276,123 @@ fn collo_cbc_callback_incumbent_data_is_feasible() {
         .build_config(incumbent)
         .expect("incumbent should build into the problem");
     assert!(config.is_feasible(), "reported incumbent must be feasible");
+}
+
+/// Small knapsack: maximize value subject to a weight cap, so CBC actually
+/// runs a search (and reports incumbents) instead of settling at presolve.
+fn knapsack_problem() -> crate::Problem<String, String> {
+    use crate::{LinExpr, Objective, ObjectiveSense, ProblemBuilder, Variable};
+
+    let a = LinExpr::<String>::var("a");
+    let b = LinExpr::<String>::var("b");
+    let c = LinExpr::<String>::var("c");
+    let d = LinExpr::<String>::var("d");
+    let e = LinExpr::<String>::var("e");
+
+    let weight = 2.0 * &a + 3.0 * &b + 4.0 * &c + 5.0 * &d + 6.0 * &e;
+    let value = 3.0 * &a + 4.0 * &b + 5.0 * &c + 6.0 * &d + 7.0 * &e;
+    let cap = LinExpr::<String>::constant(10.0);
+
+    ProblemBuilder::<String, String>::new()
+        .set_variables([
+            ("a", Variable::binary()),
+            ("b", Variable::binary()),
+            ("c", Variable::binary()),
+            ("d", Variable::binary()),
+            ("e", Variable::binary()),
+        ])
+        .add_constraint(weight.leq(&cap), "capacity")
+        .set_objective(Objective::new(value, ObjectiveSense::Maximize))
+        .build()
+        .unwrap()
+}
+
+#[test]
+fn collo_cbc_time_limits_none() {
+    use crate::solvers::{IncumbentTimeLimitSolverModel, Solver};
+    use collomatique_time::TimeLimit;
+
+    let problem = knapsack_problem();
+    let solver = super::ColloCbcSolver::new();
+
+    let result = solver.build_model(&problem).solve_with_time_limits(
+        TimeLimit::none(),
+        TimeLimit::none(),
+        |_| true,
+    );
+
+    assert_eq!(result.stopped, None);
+    assert!(result.config.is_some());
+}
+
+#[test]
+fn collo_cbc_time_limits_not_reached() {
+    use crate::solvers::{IncumbentTimeLimitSolverModel, Solver};
+    use collomatique_time::TimeLimit;
+    use std::num::NonZeroU32;
+
+    let problem = knapsack_problem();
+    let solver = super::ColloCbcSolver::new();
+
+    // Both limits are far beyond what this tiny problem needs, so neither of
+    // them may cut the solve short.
+    let large = TimeLimit::seconds(NonZeroU32::new(1000).unwrap());
+    let result = solver
+        .build_model(&problem)
+        .solve_with_time_limits(large, large, |_| true);
+
+    assert_eq!(result.stopped, None);
+    assert!(result.config.is_some());
+}
+
+#[test]
+fn solve_deadlines_global_only() {
+    use crate::solvers::StopReason;
+    use std::time::Duration;
+
+    let mut deadlines = super::SolveDeadlines::new(Some(Duration::ZERO), None);
+
+    // The global deadline does not wait for an incumbent.
+    assert_eq!(deadlines.check(false), Some(StopReason::TimeLimit));
+}
+
+#[test]
+fn solve_deadlines_incumbent_only() {
+    use crate::solvers::StopReason;
+    use std::time::Duration;
+
+    let mut deadlines = super::SolveDeadlines::new(None, Some(Duration::ZERO));
+
+    // Nothing happens before the first incumbent, however long we wait.
+    assert_eq!(deadlines.check(false), None);
+    assert_eq!(deadlines.check(false), None);
+
+    // The deadline is armed by the first incumbent — and here it has already
+    // passed by the time it is armed.
+    assert_eq!(deadlines.check(true), Some(StopReason::IncumbentTimeLimit));
+}
+
+#[test]
+fn solve_deadlines_global_wins() {
+    use crate::solvers::StopReason;
+    use std::time::Duration;
+
+    // The incumbent limit is set, but it is the global one that has run out.
+    let mut deadlines =
+        super::SolveDeadlines::new(Some(Duration::ZERO), Some(Duration::from_secs(1000)));
+    assert_eq!(deadlines.check(true), Some(StopReason::TimeLimit));
+
+    // Both have run out: the global one is what ends the solve, since it ends it
+    // whatever the incumbent limit says.
+    let mut deadlines = super::SolveDeadlines::new(Some(Duration::ZERO), Some(Duration::ZERO));
+    assert_eq!(deadlines.check(true), Some(StopReason::TimeLimit));
+}
+
+#[test]
+fn solve_deadlines_no_limits() {
+    let mut deadlines = super::SolveDeadlines::new(None, None);
+
+    assert_eq!(deadlines.check(false), None);
+    assert_eq!(deadlines.check(true), None);
+    assert_eq!(deadlines.check(true), None);
 }

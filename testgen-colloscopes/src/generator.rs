@@ -267,7 +267,12 @@ pub fn gen_op(
         }
         "slot" => !addable_slot_subjects(inner, &pools).is_empty() || !pools.slot_ids.is_empty(),
         "incompat" => !pools.subject_ids.is_empty() || !pools.incompat_ids.is_empty(),
-        "pairing" => pools.subject_ids.len() >= 2 || !pools.pairing_rule_ids.is_empty(),
+        // A rule may only name subjects that run interrogations, so building
+        // one takes two of *those*; with none to build from, the family is
+        // still eligible as long as there is a rule to update or remove.
+        "pairing" => {
+            pools.interrogation_subject_ids.len() >= 2 || !pools.pairing_rule_ids.is_empty()
+        }
         "slot_pairing" => can_pair_slots || !pools.slot_pairing_rule_ids.is_empty(),
         "colloscope" => {
             !pools.colloscope_group_list_ids.is_empty() || !pools.colloscope_targets.is_empty()
@@ -871,7 +876,18 @@ fn gen_settings(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
 
 fn gen_pairing(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
     if invalid {
-        let op = if !pools.subject_ids.is_empty() && rng.random_bool(0.6) {
+        let op = if !pools.non_interrogation_subject_ids.is_empty()
+            && !pools.interrogation_subject_ids.is_empty()
+            && rng.random_bool(0.3)
+        {
+            // A live but interrogation-less subject in the antecedent: every id
+            // resolves, so nothing dangles, and the gate rejects the op with
+            // `Convergence::PairingRuleAntecedentForSubjectWithoutInterrogations`
+            // instead.
+            let off = pick(rng, &pools.non_interrogation_subject_ids);
+            let on = pick(rng, &pools.interrogation_subject_ids);
+            PairingOp::Add(synth::pairing_rule(rng, off, on, &pools.period_ids))
+        } else if !pools.subject_ids.is_empty() && rng.random_bool(0.6) {
             // Dangling subject in the consequent: `PairingRule::new` accepts the
             // value (the two ids are distinct), the gate rejects the op with
             // `Error::BrokenInvariants` (a dangling subject FK), and the force path
@@ -885,7 +901,9 @@ fn gen_pairing(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
         };
         return Op::Pairing(op);
     }
-    let can_add = pools.subject_ids.len() >= 2;
+    // A rule may only name subjects that run interrogations, so the valid arms
+    // draw from that pool alone.
+    let can_add = pools.interrogation_subject_ids.len() >= 2;
     let n = pools.pairing_rule_ids.len();
     let add_w = if can_add {
         if n < 3 { 5 } else { 2 }
@@ -895,12 +913,15 @@ fn gen_pairing(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> Op {
     let update_w = if n > 0 && can_add { 3 } else { 0 };
     let remove_w = if n > 0 { 2 } else { 0 };
     let distinct_pair = |rng: &mut ChaCha8Rng| {
-        let first = rng.random_range(0..pools.subject_ids.len());
-        let mut second = rng.random_range(0..pools.subject_ids.len() - 1);
+        let first = rng.random_range(0..pools.interrogation_subject_ids.len());
+        let mut second = rng.random_range(0..pools.interrogation_subject_ids.len() - 1);
         if second >= first {
             second += 1;
         }
-        (pools.subject_ids[first], pools.subject_ids[second])
+        (
+            pools.interrogation_subject_ids[first],
+            pools.interrogation_subject_ids[second],
+        )
     };
     let op = match weighted(rng, &[add_w, update_w, remove_w]) {
         0 => {

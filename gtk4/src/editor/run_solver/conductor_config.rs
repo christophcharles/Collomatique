@@ -24,18 +24,24 @@ pub struct Dialog {
     enable_default: bool,
     default_time_limit_enabled: bool,
     default_time_limit_secs: u32,
+    default_incumbent_time_limit_enabled: bool,
+    default_incumbent_time_limit_secs: u32,
 
     enable_incremental: bool,
     incremental_l1_weight: f64,
     incremental_tolerance: f64,
     incremental_time_limit_enabled: bool,
     incremental_time_limit_secs: u32,
+    incremental_incumbent_time_limit_enabled: bool,
+    incremental_incumbent_time_limit_secs: u32,
 
     enable_fuzzy: bool,
     fuzzy_sigma: f64,
     find_closest_tolerance: f64,
     fuzzy_time_limit_enabled: bool,
     fuzzy_time_limit_secs: u32,
+    fuzzy_incumbent_time_limit_enabled: bool,
+    fuzzy_incumbent_time_limit_secs: u32,
 
     /// The `ConductorStrategy` these widget states would produce, rebuilt after every update.
     strategy: ConductorStrategy,
@@ -58,14 +64,20 @@ pub enum DialogInput {
     UpdateIncrementalL1Weight(f64),
     UpdateIncrementalTimeLimitEnabled(bool),
     UpdateIncrementalTimeLimit(u32),
+    UpdateIncrementalIncumbentTimeLimitEnabled(bool),
+    UpdateIncrementalIncumbentTimeLimit(u32),
     UpdateDefault(bool),
     UpdateDefaultTimeLimitEnabled(bool),
     UpdateDefaultTimeLimit(u32),
+    UpdateDefaultIncumbentTimeLimitEnabled(bool),
+    UpdateDefaultIncumbentTimeLimit(u32),
     UpdateFuzzyEnabled(bool),
     UpdateFuzzySigma(f64),
     UpdateTolerance(f64),
     UpdateFuzzyTimeLimitEnabled(bool),
     UpdateFuzzyTimeLimit(u32),
+    UpdateFuzzyIncumbentTimeLimitEnabled(bool),
+    UpdateFuzzyIncumbentTimeLimit(u32),
 }
 
 #[derive(Debug)]
@@ -291,6 +303,40 @@ impl SimpleComponent for Dialog {
                                         sender.input(DialogInput::UpdateDefaultTimeLimit(value));
                                     },
                                 },
+                                adw::SwitchRow {
+                                    set_hexpand: true,
+                                    set_use_markup: false,
+                                    set_title: "Limite de temps après la première solution",
+                                    #[track(self.should_redraw)]
+                                    set_active: model.default_incumbent_time_limit_enabled,
+                                    connect_active_notify[sender] => move |widget| {
+                                        let value = widget.is_active();
+                                        sender.input(DialogInput::UpdateDefaultIncumbentTimeLimitEnabled(value));
+                                    },
+                                },
+                                adw::SpinRow {
+                                    set_hexpand: true,
+                                    set_title: "Durée (s)",
+                                    #[wrap(Some)]
+                                    set_adjustment = &gtk::Adjustment {
+                                        set_lower: 1.,
+                                        set_upper: u32::MAX as f64,
+                                        set_step_increment: 10.,
+                                        set_page_increment: 60.,
+                                    },
+                                    set_digits: 0,
+                                    set_wrap: false,
+                                    set_snap_to_ticks: true,
+                                    set_numeric: true,
+                                    #[watch]
+                                    set_visible: model.default_incumbent_time_limit_enabled,
+                                    #[track(self.should_redraw)]
+                                    set_value: model.default_incumbent_time_limit_secs as f64,
+                                    connect_value_notify[sender] => move |widget| {
+                                        let value = widget.value() as u32;
+                                        sender.input(DialogInput::UpdateDefaultIncumbentTimeLimit(value));
+                                    },
+                                },
                             },
                             adw::PreferencesGroup {
                                 set_title: "Résolution incrémentale",
@@ -370,6 +416,40 @@ impl SimpleComponent for Dialog {
                                     connect_value_notify[sender] => move |widget| {
                                         let value = widget.value() as u32;
                                         sender.input(DialogInput::UpdateIncrementalTimeLimit(value));
+                                    },
+                                },
+                                adw::SwitchRow {
+                                    set_hexpand: true,
+                                    set_use_markup: false,
+                                    set_title: "Limite de temps après la première solution (par époque)",
+                                    #[track(self.should_redraw)]
+                                    set_active: model.incremental_incumbent_time_limit_enabled,
+                                    connect_active_notify[sender] => move |widget| {
+                                        let value = widget.is_active();
+                                        sender.input(DialogInput::UpdateIncrementalIncumbentTimeLimitEnabled(value));
+                                    },
+                                },
+                                adw::SpinRow {
+                                    set_hexpand: true,
+                                    set_title: "Durée (s)",
+                                    #[wrap(Some)]
+                                    set_adjustment = &gtk::Adjustment {
+                                        set_lower: 1.,
+                                        set_upper: u32::MAX as f64,
+                                        set_step_increment: 10.,
+                                        set_page_increment: 60.,
+                                    },
+                                    set_digits: 0,
+                                    set_wrap: false,
+                                    set_snap_to_ticks: true,
+                                    set_numeric: true,
+                                    #[watch]
+                                    set_visible: model.incremental_incumbent_time_limit_enabled,
+                                    #[track(self.should_redraw)]
+                                    set_value: model.incremental_incumbent_time_limit_secs as f64,
+                                    connect_value_notify[sender] => move |widget| {
+                                        let value = widget.value() as u32;
+                                        sender.input(DialogInput::UpdateIncrementalIncumbentTimeLimit(value));
                                     },
                                 },
                             },
@@ -453,6 +533,40 @@ impl SimpleComponent for Dialog {
                                         sender.input(DialogInput::UpdateFuzzyTimeLimit(value));
                                     },
                                 },
+                                adw::SwitchRow {
+                                    set_hexpand: true,
+                                    set_use_markup: false,
+                                    set_title: "Limite de temps après la première solution",
+                                    #[track(self.should_redraw)]
+                                    set_active: model.fuzzy_incumbent_time_limit_enabled,
+                                    connect_active_notify[sender] => move |widget| {
+                                        let value = widget.is_active();
+                                        sender.input(DialogInput::UpdateFuzzyIncumbentTimeLimitEnabled(value));
+                                    },
+                                },
+                                adw::SpinRow {
+                                    set_hexpand: true,
+                                    set_title: "Durée (s)",
+                                    #[wrap(Some)]
+                                    set_adjustment = &gtk::Adjustment {
+                                        set_lower: 1.,
+                                        set_upper: u32::MAX as f64,
+                                        set_step_increment: 10.,
+                                        set_page_increment: 60.,
+                                    },
+                                    set_digits: 0,
+                                    set_wrap: false,
+                                    set_snap_to_ticks: true,
+                                    set_numeric: true,
+                                    #[watch]
+                                    set_visible: model.fuzzy_incumbent_time_limit_enabled,
+                                    #[track(self.should_redraw)]
+                                    set_value: model.fuzzy_incumbent_time_limit_secs as f64,
+                                    connect_value_notify[sender] => move |widget| {
+                                        let value = widget.value() as u32;
+                                        sender.input(DialogInput::UpdateFuzzyIncumbentTimeLimit(value));
+                                    },
+                                },
                             },
                         },
                     },
@@ -510,6 +624,11 @@ impl SimpleComponent for Dialog {
                 .as_ref()
                 .is_some_and(|cfg| cfg.time_limit.is_some()),
             default_time_limit_secs: Self::DEFAULT_TIME_LIMIT_SECS,
+            default_incumbent_time_limit_enabled: strategy
+                .default_config
+                .as_ref()
+                .is_some_and(|cfg| cfg.incumbent_time_limit.is_some()),
+            default_incumbent_time_limit_secs: Self::DEFAULT_INCUMBENT_TIME_LIMIT_SECS,
             enable_incremental: strategy.incremental_config.is_some(),
             incremental_l1_weight: incremental_defaults.l1_weight,
             incremental_tolerance: incremental_defaults.distance_tolerance,
@@ -518,6 +637,11 @@ impl SimpleComponent for Dialog {
                 .as_ref()
                 .is_some_and(|cfg| cfg.epoch_time_limit.is_some()),
             incremental_time_limit_secs: Self::DEFAULT_TIME_LIMIT_SECS,
+            incremental_incumbent_time_limit_enabled: strategy
+                .incremental_config
+                .as_ref()
+                .is_some_and(|cfg| cfg.epoch_incumbent_time_limit.is_some()),
+            incremental_incumbent_time_limit_secs: Self::DEFAULT_INCUMBENT_TIME_LIMIT_SECS,
             enable_fuzzy: strategy.fuzzy_config.is_some(),
             fuzzy_sigma: fuzzy_defaults.fuzzy_sigma,
             find_closest_tolerance: fuzzy_defaults.find_closest_tolerance,
@@ -526,6 +650,11 @@ impl SimpleComponent for Dialog {
                 .as_ref()
                 .is_some_and(|cfg| cfg.time_limit.is_some()),
             fuzzy_time_limit_secs: Self::DEFAULT_TIME_LIMIT_SECS,
+            fuzzy_incumbent_time_limit_enabled: strategy
+                .fuzzy_config
+                .as_ref()
+                .is_some_and(|cfg| cfg.incumbent_time_limit.is_some()),
+            fuzzy_incumbent_time_limit_secs: Self::DEFAULT_INCUMBENT_TIME_LIMIT_SECS,
             strategy,
             warnings: FactoryVecDeque::builder()
                 .launch(gtk::ListBox::default())
@@ -611,6 +740,18 @@ impl SimpleComponent for Dialog {
                 }
                 self.incremental_time_limit_secs = value;
             }
+            DialogInput::UpdateIncrementalIncumbentTimeLimitEnabled(value) => {
+                if self.incremental_incumbent_time_limit_enabled == value {
+                    return;
+                }
+                self.incremental_incumbent_time_limit_enabled = value;
+            }
+            DialogInput::UpdateIncrementalIncumbentTimeLimit(value) => {
+                if self.incremental_incumbent_time_limit_secs == value {
+                    return;
+                }
+                self.incremental_incumbent_time_limit_secs = value;
+            }
             DialogInput::UpdateDefault(value) => {
                 if self.enable_default == value {
                     return;
@@ -628,6 +769,18 @@ impl SimpleComponent for Dialog {
                     return;
                 }
                 self.default_time_limit_secs = value;
+            }
+            DialogInput::UpdateDefaultIncumbentTimeLimitEnabled(value) => {
+                if self.default_incumbent_time_limit_enabled == value {
+                    return;
+                }
+                self.default_incumbent_time_limit_enabled = value;
+            }
+            DialogInput::UpdateDefaultIncumbentTimeLimit(value) => {
+                if self.default_incumbent_time_limit_secs == value {
+                    return;
+                }
+                self.default_incumbent_time_limit_secs = value;
             }
             DialogInput::UpdateFuzzyEnabled(value) => {
                 if self.enable_fuzzy == value {
@@ -659,6 +812,18 @@ impl SimpleComponent for Dialog {
                 }
                 self.fuzzy_time_limit_secs = value;
             }
+            DialogInput::UpdateFuzzyIncumbentTimeLimitEnabled(value) => {
+                if self.fuzzy_incumbent_time_limit_enabled == value {
+                    return;
+                }
+                self.fuzzy_incumbent_time_limit_enabled = value;
+            }
+            DialogInput::UpdateFuzzyIncumbentTimeLimit(value) => {
+                if self.fuzzy_incumbent_time_limit_secs == value {
+                    return;
+                }
+                self.fuzzy_incumbent_time_limit_secs = value;
+            }
         }
         self.strategy = self.build_strategy();
         self.update_warnings();
@@ -675,6 +840,9 @@ impl SimpleComponent for Dialog {
 impl Dialog {
     /// Seconds seeded into a time-limit spin the first time its switch is turned on (10 minutes).
     const DEFAULT_TIME_LIMIT_SECS: u32 = 600;
+    /// Seconds seeded into an after-incumbent time-limit spin the first time its switch is turned
+    /// on (5 minutes).
+    const DEFAULT_INCUMBENT_TIME_LIMIT_SECS: u32 = 300;
 
     fn update_state_from_strategy(&mut self, strategy: ConductorStrategy) {
         self.worker_count = strategy.worker_count.get();
@@ -698,6 +866,13 @@ impl Dialog {
                     self.default_time_limit_enabled,
                     self.default_time_limit_secs,
                 ) = read_time_limit(cfg.time_limit, self.default_time_limit_secs);
+                (
+                    self.default_incumbent_time_limit_enabled,
+                    self.default_incumbent_time_limit_secs,
+                ) = read_time_limit(
+                    cfg.incumbent_time_limit,
+                    self.default_incumbent_time_limit_secs,
+                );
             }
             // Keep the last time limit so re-enabling default shows the previous value.
             None => {
@@ -713,6 +888,13 @@ impl Dialog {
                     self.incremental_time_limit_enabled,
                     self.incremental_time_limit_secs,
                 ) = read_time_limit(cfg.epoch_time_limit, self.incremental_time_limit_secs);
+                (
+                    self.incremental_incumbent_time_limit_enabled,
+                    self.incremental_incumbent_time_limit_secs,
+                ) = read_time_limit(
+                    cfg.epoch_incumbent_time_limit,
+                    self.incremental_incumbent_time_limit_secs,
+                );
             }
             // Keep the last weight/tolerance/limit so re-enabling incremental shows the previous values.
             None => {
@@ -726,6 +908,13 @@ impl Dialog {
                 self.find_closest_tolerance = cfg.find_closest_tolerance;
                 (self.fuzzy_time_limit_enabled, self.fuzzy_time_limit_secs) =
                     read_time_limit(cfg.time_limit, self.fuzzy_time_limit_secs);
+                (
+                    self.fuzzy_incumbent_time_limit_enabled,
+                    self.fuzzy_incumbent_time_limit_secs,
+                ) = read_time_limit(
+                    cfg.incumbent_time_limit,
+                    self.fuzzy_incumbent_time_limit_secs,
+                );
             }
             // Keep the last sigma/tolerance/limit so re-enabling fuzzy shows the previous values.
             None => {
@@ -742,6 +931,10 @@ impl Dialog {
                     self.default_time_limit_enabled,
                     self.default_time_limit_secs,
                 ),
+                incumbent_time_limit: make_time_limit(
+                    self.default_incumbent_time_limit_enabled,
+                    self.default_incumbent_time_limit_secs,
+                ),
             }),
             warm_start_config: self.enable_warm_start.then(|| WarmStartConfig {
                 time_limit: make_time_limit(
@@ -756,6 +949,10 @@ impl Dialog {
                     self.incremental_time_limit_enabled,
                     self.incremental_time_limit_secs,
                 ),
+                epoch_incumbent_time_limit: make_time_limit(
+                    self.incremental_incumbent_time_limit_enabled,
+                    self.incremental_incumbent_time_limit_secs,
+                ),
             }),
             fuzzy_config: self.enable_fuzzy.then(|| FuzzyConfig {
                 fuzzy_sigma: self.fuzzy_sigma,
@@ -763,6 +960,10 @@ impl Dialog {
                 time_limit: make_time_limit(
                     self.fuzzy_time_limit_enabled,
                     self.fuzzy_time_limit_secs,
+                ),
+                incumbent_time_limit: make_time_limit(
+                    self.fuzzy_incumbent_time_limit_enabled,
+                    self.fuzzy_incumbent_time_limit_secs,
                 ),
             }),
         }

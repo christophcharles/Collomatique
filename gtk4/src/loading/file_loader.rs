@@ -194,6 +194,14 @@ impl FileLoader {
                 "Fichier mal formé et est probablement corrompu.\n(Les créneaux ont une ligne pour la matière {}, qui n'a pas d'interrogations)",
                 subject_id
             ),
+            DecodeError::UnknownSubjectInPairingRule { rule_id, subject_id } => format!(
+                "Fichier mal formé et est probablement corrompu.\n(La règle d'appariement {} référence une matière inconnue, id {})",
+                rule_id, subject_id
+            ),
+            DecodeError::PairingRuleForSubjectWithoutInterrogations { rule_id, subject_id } => format!(
+                "Fichier mal formé et est probablement corrompu.\n(La règle d'appariement {} nomme la matière {}, qui n'a pas d'interrogations)",
+                rule_id, subject_id
+            ),
             DecodeError::WrongWeekCountInWeekPattern { week_pattern_id, expected, found } => format!(
                 "Fichier mal formé et est probablement corrompu.\n(Le motif de semaines {} décrit {} semaines alors que le calendrier en compte {})",
                 week_pattern_id, found, expected

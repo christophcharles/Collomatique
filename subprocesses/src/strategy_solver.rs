@@ -27,7 +27,7 @@ impl StrategyResult {
         let status = match self.status {
             StrategyStatus::Optimal => SolveStatus::Optimal,
             StrategyStatus::Infeasible => SolveStatus::Infeasible,
-            StrategyStatus::Stopped => SolveStatus::Stopped,
+            StrategyStatus::Stopped(reason) => SolveStatus::Stopped(reason),
             StrategyStatus::Error => SolveStatus::Error,
         };
         RawSolveOutcome {
@@ -43,7 +43,7 @@ impl StrategyResult {
 pub enum StrategyStatus {
     Optimal,
     Infeasible,
-    Stopped,
+    Stopped(collomatique_ilp::solvers::StopReason),
     Error,
 }
 
@@ -171,7 +171,9 @@ impl StrategySubprocess {
                             collomatique_rpc::StrategyStatus::Infeasible => {
                                 StrategyStatus::Infeasible
                             }
-                            collomatique_rpc::StrategyStatus::Stopped => StrategyStatus::Stopped,
+                            collomatique_rpc::StrategyStatus::Stopped(reason) => {
+                                StrategyStatus::Stopped(reason)
+                            }
                             collomatique_rpc::StrategyStatus::Error => StrategyStatus::Error,
                         },
                         objective: data.objective.map(|v| v.into_inner()),

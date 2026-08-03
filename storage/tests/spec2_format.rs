@@ -753,6 +753,106 @@ fn neutral_assignments_row_on_excluded_subject_is_rejected() {
     );
 }
 
+/// Subjects for the §4.11 pairing constraints: 2 has interrogations, 3 and 4
+/// do not. Each test below stops at Subjects + Pairings on purpose: its error
+/// is raised in `reconstruct`, so the document never has to be complete enough
+/// to satisfy the invariant gate.
+const PAIRING_SUBJECTS: &str = r#"{ "Subjects": [
+    {
+        "id": 2,
+        "name": "Mathématiques",
+        "interrogation_parameters": {
+            "students_per_group": { "min": 1, "max": 2 },
+            "groups_per_interrogation": { "min": 1, "max": 1 },
+            "duration_minutes": 60,
+            "take_duration_into_account": true,
+            "periodicity": { "ExactlyPeriodic": { "periodicity_in_weeks": 2 } }
+        },
+        "excluded_periods": []
+    },
+    { "id": 3, "name": "Quidditch", "interrogation_parameters": null, "excluded_periods": [] },
+    { "id": 4, "name": "Déjeuner", "interrogation_parameters": null, "excluded_periods": [] }
+] }"#;
+
+fn pairing_document(rule: &str) -> String {
+    document(&[
+        entry(PAIRING_SUBJECTS),
+        entry(&format!(r#"{{ "Pairings": [ {rule} ] }}"#)),
+    ])
+}
+
+fn pairing_rule(antecedent: u64, consequent: u64) -> String {
+    format!(
+        r#"{{ "id": 12,
+              "antecedent": {{ "subject_id": {antecedent}, "should_have": true }},
+              "consequent": {{ "subject_id": {consequent}, "should_have": true }},
+              "excluded_periods": [], "soft": false }}"#
+    )
+}
+
+/// §4.11 requires both subjects to have interrogations. Subject 3 exists but
+/// runs none, so the rule is vacuous and the decoder refuses the file by name,
+/// instead of letting the invariant gate report it in model vocabulary.
+#[test]
+fn pairing_rule_on_a_subject_without_interrogations_is_rejected() {
+    assert_eq!(
+        expect_decode_error(&pairing_document(&pairing_rule(3, 2))),
+        DecodeError::PairingRuleForSubjectWithoutInterrogations {
+            rule_id: 12,
+            subject_id: 3
+        }
+    );
+}
+
+/// The consequent is checked too, and the subject reported is the offending
+/// one, not simply the first part.
+#[test]
+fn pairing_rule_with_an_uninterrogated_consequent_is_rejected() {
+    assert_eq!(
+        expect_decode_error(&pairing_document(&pairing_rule(2, 3))),
+        DecodeError::PairingRuleForSubjectWithoutInterrogations {
+            rule_id: 12,
+            subject_id: 3
+        }
+    );
+}
+
+/// §4.11 also requires both subjects to exist. Subject 99 does not.
+#[test]
+fn pairing_rule_on_an_unknown_subject_is_rejected() {
+    assert_eq!(
+        expect_decode_error(&pairing_document(&pairing_rule(99, 2))),
+        DecodeError::UnknownSubjectInPairingRule {
+            rule_id: 12,
+            subject_id: 99
+        }
+    );
+}
+
+/// Both parts offend: the antecedent is reported, matching the scan order the
+/// `ops` pairing errors already publish, so the two layers blame the same part
+/// of the same rule.
+#[test]
+fn pairing_rule_with_both_parts_uninterrogated_reports_the_antecedent() {
+    assert_eq!(
+        expect_decode_error(&pairing_document(&pairing_rule(3, 4))),
+        DecodeError::PairingRuleForSubjectWithoutInterrogations {
+            rule_id: 12,
+            subject_id: 3
+        }
+    );
+}
+
+/// The internal seal still runs first: a rule naming one subject twice is
+/// incoherent on its own terms, whatever that subject is.
+#[test]
+fn a_rule_naming_one_uninterrogated_subject_twice_is_still_inconsistent() {
+    assert_eq!(
+        expect_decode_error(&pairing_document(&pairing_rule(3, 3))),
+        DecodeError::InconsistentPairingRule(12)
+    );
+}
+
 /// A document with a single period of seven weeks and one week pattern
 /// whose bitmask has `week_count` entries
 ///
@@ -971,5 +1071,132 @@ fn duplicate_subject_id_names_its_block() {
             block: "Subjects",
             id: 2
         }
+    );
+}
+
+// Integer widths (§3 of the spec). Apart from ids, every integer field
+// of the format is 32 bits wide: unsigned 0..=2^32 - 1 (or 1..=2^32 - 1
+// where a minimum of 1 is stated), and the one signed field — a slot's
+// `cost` — is -2^31..=2^31 - 1. The format structs carry those widths,
+// so an out-of-width value is a plain serde failure and comes out as
+// `IllformedBlock` naming its block, like an inverted range does. The
+// four tests below pin one value per width family.
+
+/// The scheduling setup of [scheduling_entries], with the slot's `cost`
+/// written verbatim (so a test can put an out-of-width literal there)
+fn document_with_slot_cost(cost: &str) -> String {
+    let mut entries = scheduling_entries(true, false);
+    entries.pop().expect("The Slots entry is pushed last");
+    entries.push(entry(&format!(
+        r#"{{ "Slots": [
+            {{ "subject_id": 2, "slots": [
+                {{ "id": 7, "teacher_id": 3, "start": {{ "day": "monday", "time": "14:00" }}, "extra_info": "", "week_pattern_id": null, "cost": {cost} }}
+            ] }}
+        ] }}"#
+    )));
+    document(&entries)
+}
+
+#[test]
+fn slot_cost_out_of_signed_32_bits_is_rejected() {
+    // Both boundaries of the signed 32-bit range decode...
+    for cost in ["-2147483648", "2147483647"] {
+        let content = document_with_slot_cost(cost);
+        let (_data, caveats) = deserialize_data(&content)
+            .unwrap_or_else(|error| panic!("Cost {cost} should decode, got {error:?}"));
+        assert!(caveats.is_empty());
+    }
+
+    // ... and one step past the top does not.
+    let content = document_with_slot_cost("2147483648");
+    let error = expect_decode_error(&content);
+    let DecodeError::IllformedBlock { block, detail } = error else {
+        panic!("The error should be IllformedBlock, got {error:?}");
+    };
+    assert_eq!(block, "Slots");
+    assert!(
+        detail.contains("2147483648"),
+        "The serde diagnostics should surface the out-of-width cost, got {detail:?}"
+    );
+}
+
+#[test]
+fn duration_out_of_32_bits_is_rejected() {
+    // The `0` end of the duration range is pinned by the `scalars` unit
+    // test `duration_is_a_positive_number_of_minutes`; this is the top end.
+    let content = document(&[entry(
+        r#"{ "Subjects": [
+                {
+                    "id": 2,
+                    "name": "Mathématiques",
+                    "interrogation_parameters": {
+                        "students_per_group": { "min": 1, "max": 2 },
+                        "groups_per_interrogation": { "min": 1, "max": 1 },
+                        "duration_minutes": 4294967296,
+                        "take_duration_into_account": true,
+                        "periodicity": { "ExactlyPeriodic": { "periodicity_in_weeks": 2 } }
+                    },
+                    "excluded_periods": []
+                }
+            ] }"#,
+    )]);
+
+    let error = expect_decode_error(&content);
+    let DecodeError::IllformedBlock { block, detail } = error else {
+        panic!("The error should be IllformedBlock, got {error:?}");
+    };
+    assert_eq!(block, "Subjects");
+    assert!(
+        detail.contains("4294967296"),
+        "The serde diagnostics should surface the out-of-width duration, got {detail:?}"
+    );
+}
+
+#[test]
+fn settings_limit_value_out_of_32_bits_is_rejected() {
+    let content = document(&[entry(
+        r#"{ "Settings": {
+            "global": {
+                "interrogations_per_week_min": null,
+                "interrogations_per_week_max": { "soft": true, "value": 4294967296 },
+                "max_interrogations_per_day": null
+            },
+            "students": []
+        } }"#,
+    )]);
+
+    let error = expect_decode_error(&content);
+    let DecodeError::IllformedBlock { block, detail } = error else {
+        panic!("The error should be IllformedBlock, got {error:?}");
+    };
+    assert_eq!(block, "Settings");
+    assert!(
+        detail.contains("4294967296"),
+        "The serde diagnostics should surface the out-of-width limit, got {detail:?}"
+    );
+}
+
+#[test]
+fn colloscope_week_out_of_32_bits_is_rejected() {
+    // Distinct from `colloscope_row_on_out_of_range_week_is_rejected`,
+    // which uses an in-width week past the end of the schedule and is
+    // caught later, by the placement check.
+    let content = scheduling_document(
+        true,
+        false,
+        r#"{ "Colloscope": {
+            "interrogations": [ { "slot_id": 7, "week": 4294967296, "assigned_groups": [] } ],
+            "group_lists": []
+        } }"#,
+    );
+
+    let error = expect_decode_error(&content);
+    let DecodeError::IllformedBlock { block, detail } = error else {
+        panic!("The error should be IllformedBlock, got {error:?}");
+    };
+    assert_eq!(block, "Colloscope");
+    assert!(
+        detail.contains("4294967296"),
+        "The serde diagnostics should surface the out-of-width week, got {detail:?}"
     );
 }

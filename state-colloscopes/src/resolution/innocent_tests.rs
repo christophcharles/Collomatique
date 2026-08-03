@@ -2826,6 +2826,101 @@ fn balancing_for_subject_without_interrogations_arm_spares_a_missing_override() 
     );
 }
 
+/// `Convergence::PairingRuleAntecedentForSubjectWithoutInterrogations`,
+/// **antecedent arm**.
+///
+/// The fix is `Pairing::Remove(rule)`, which names only the rule, so the arm's
+/// single comparison is a pure identity test on its own part — and the
+/// consequent arm below is the mirror, on its own.
+///
+/// The corruption points the antecedent at `excluded_subject`, the fixture's
+/// one live subject that runs no interrogations. It has to be a **live**
+/// subject: the checker's predicate is gated on the subject resolving, so a
+/// dead one would make it skip and report a dangle instead. And the corruption
+/// has to come from the rule's side rather than the subject's — switching one
+/// of the rule's own subjects off would leave the *live* rule offending, and
+/// the valid document would be guilty.
+///
+/// The consequent is left alone, so the only thing that can answer `None` here
+/// is the antecedent comparison: in the valid document the rule's antecedent is
+/// `subject`, not the named one.
+///
+/// **Exactly one break**: the consequent runs interrogations, both subjects are
+/// live, and the rule's excluded period is untouched.
+#[test]
+fn pairing_rule_antecedent_without_interrogations_arm_spares_a_rule_with_another_antecedent() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    let (mut antecedent, consequent, excluded_periods, soft) = corrupt
+        .params
+        .pairings
+        .pairing_rule_map
+        .get(&doc.pairing)
+        .expect("the fixture's pairing rule is there")
+        .clone()
+        .into_parts();
+    antecedent.subject_id = doc.excluded_subject;
+    corrupt.params.pairings.pairing_rule_map.insert(
+        doc.pairing,
+        PairingRule::new(antecedent, consequent, excluded_periods, soft)
+            .expect("the excluded subject is not the consequent's, so the parts stay distinct"),
+    );
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::Convergence(
+            Convergence::PairingRuleAntecedentForSubjectWithoutInterrogations(
+                doc.pairing,
+                doc.excluded_subject,
+            ),
+        ),
+        "the live rule's antecedent is not the named subject, so the arm has no rule to remove",
+    );
+}
+
+/// `Convergence::PairingRuleConsequentForSubjectWithoutInterrogations`,
+/// **consequent arm**, and the mirror of the test above: the antecedent is left
+/// alone, so `None` can come only from the consequent comparison.
+///
+/// This pair is what the two variants buy. A single variant covering both parts
+/// would need an arm testing *either* part, and such an arm deletes a rule
+/// whose named subject sits in the part the break did not concern — the same
+/// argument `fix_subject_ref` makes for the two dangling-FK sites.
+#[test]
+fn pairing_rule_consequent_without_interrogations_arm_spares_a_rule_with_another_consequent() {
+    let (valid, doc) = build_valid_document();
+
+    let mut corrupt = valid.get_inner_data().clone();
+    let (antecedent, mut consequent, excluded_periods, soft) = corrupt
+        .params
+        .pairings
+        .pairing_rule_map
+        .get(&doc.pairing)
+        .expect("the fixture's pairing rule is there")
+        .clone()
+        .into_parts();
+    consequent.subject_id = doc.excluded_subject;
+    corrupt.params.pairings.pairing_rule_map.insert(
+        doc.pairing,
+        PairingRule::new(antecedent, consequent, excluded_periods, soft)
+            .expect("the excluded subject is not the antecedent's, so the parts stay distinct"),
+    );
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::Convergence(
+            Convergence::PairingRuleConsequentForSubjectWithoutInterrogations(
+                doc.pairing,
+                doc.excluded_subject,
+            ),
+        ),
+        "the live rule's consequent is not the named subject, so the arm has no rule to remove",
+    );
+}
+
 /// `Convergence::PairedSlotsNotInSameSubject` — §8.2 row 10, **antecedent half**.
 ///
 /// The fix is `SlotPairing::Remove(rule)`, which names only the rule, so both of

@@ -24,7 +24,7 @@ fn convert_result(result: crate::ilp_solver::IlpResult) -> RawSolveOutcome {
     let status = match result.status {
         IlpStatus::Optimal => SolveStatus::Optimal,
         IlpStatus::Infeasible => SolveStatus::Infeasible,
-        IlpStatus::Stopped => SolveStatus::Stopped,
+        IlpStatus::Stopped(reason) => SolveStatus::Stopped(reason),
         IlpStatus::Error => SolveStatus::Error,
     };
 
@@ -49,6 +49,7 @@ impl SolveBackend for SubprocessSolveBackend {
             problem_desc: desc.clone(),
             warm_start: opts.warm_start,
             time_limit: opts.time_limit,
+            incumbent_time_limit: opts.incumbent_time_limit,
             disable_logging: opts.disable_logging,
         };
 

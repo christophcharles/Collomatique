@@ -11,9 +11,14 @@
 //!    [InnerData](collomatique_state_colloscopes::InnerData) from the
 //!    blocks, completing everything the file deliberately omits (absent
 //!    blocks, derived key sets).
-//! 3. [Data::from_inner_data]: the invariant layer — the single trust
-//!    boundary. The decoder inserts referentially-suspect rows anyway
-//!    whenever this layer rejects them with a precise error.
+//! 3. [Data::from_inner_data]: the invariant layer — the last line of
+//!    defence, which makes the result safe whatever layer 2 let through.
+//!    Layer 2 should still diagnose every constraint it can name (the
+//!    "honest decode" checks below); where it does not yet, the user
+//!    gets a poor message and that is a bug to close — see
+//!    `docs/todos/fixme_spec2_storage.md`. The target is a layer 2 that
+//!    lets nothing broken through, so that a rejection here means this
+//!    crate built an `InnerData` it should not have.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -302,7 +307,7 @@ fn reconstruct(blocks: Blocks) -> Result<InnerData, DecodeError> {
         blocks.group_list_associations.unwrap_or_default(),
     )?;
     let settings = reconstruct_settings(blocks.settings.unwrap_or_default());
-    let pairings = reconstruct_pairings(blocks.pairings.unwrap_or_default())?;
+    let pairings = reconstruct_pairings(blocks.pairings.unwrap_or_default(), &subjects)?;
     let slot_pairings = reconstruct_slot_pairings(blocks.slot_pairings.unwrap_or_default())?;
     let balancing = reconstruct_balancing(blocks.balancing.unwrap_or_default());
 
@@ -741,7 +746,9 @@ fn reconstruct_group_lists(
 
     // The associations table is sparse: one row per associated
     // `(period, subject)` (spec §4.10). Rows on an unknown period are kept
-    // here and rejected by layer 3.
+    // here and left to layer 3, which reports them in model vocabulary
+    // instead of naming the block and row — one of the diagnostic gaps
+    // listed in `docs/todos/fixme_spec2_storage.md`.
     let subjects_associations = associations
         .into_inner()
         .into_iter()
@@ -784,12 +791,14 @@ fn reconstruct_settings(block: format::settings::Settings) -> mem::settings::Set
 
 fn reconstruct_pairings(
     block: format::pairings::Pairings,
+    subjects: &mem::subjects::Subjects,
 ) -> Result<mem::pairings::Pairings, DecodeError> {
     let pairing_rule_map = block
         .into_inner()
         .into_iter()
         .map(|rule| {
             let raw_id = rule.id;
+            let raw_subjects = [rule.antecedent.subject_id, rule.consequent.subject_id];
             let part = |part: format::pairings::PairingPart| mem::pairings::RulePart {
                 subject_id: id(part.subject_id),
                 should_have: part.should_have,
@@ -803,6 +812,24 @@ fn reconstruct_pairings(
                 rule.soft,
             )
             .map_err(|_| DecodeError::InconsistentPairingRule(raw_id))?;
+            // Same honesty for §4.11's two subject constraints. Antecedent
+            // first, then consequent, matching the scan order the `ops`
+            // pairing errors publish, so both layers blame the same part of a
+            // rule that is wrong on both sides.
+            for raw_subject in raw_subjects {
+                let Some(subject) = subjects.find_subject(id::<SubjectId>(raw_subject)) else {
+                    return Err(DecodeError::UnknownSubjectInPairingRule {
+                        rule_id: raw_id,
+                        subject_id: raw_subject,
+                    });
+                };
+                if subject.parameters.interrogation_parameters.is_none() {
+                    return Err(DecodeError::PairingRuleForSubjectWithoutInterrogations {
+                        rule_id: raw_id,
+                        subject_id: raw_subject,
+                    });
+                }
+            }
             Ok((id::<PairingRuleId>(raw_id), value))
         })
         .collect::<Result<_, DecodeError>>()?;

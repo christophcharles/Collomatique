@@ -9,8 +9,8 @@ use collomatique_ilp::{ConfigData, UsableData};
 use collomatique_ilp_modeler::{InternalVar, Model};
 
 use crate::{
-    SolveProblemOpts, SolveProgress, SolveStatus, Strategy, StrategyContext, StrategyError,
-    StrategyOutcome, VarOrderSerializable,
+    SolveProblemOpts, SolveProgress, SolveStatus, StopReason, Strategy, StrategyContext,
+    StrategyError, StrategyOutcome, VarOrderSerializable,
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -68,6 +68,7 @@ impl Strategy for NoObjectiveStrategy {
                 SolveProblemOpts {
                     warm_start,
                     time_limit: self.checker_time_limit,
+                    incumbent_time_limit: collomatique_time::TimeLimit::none(),
                     disable_logging: self.disable_logging,
                 },
                 &|p| on_progress(NoObjectiveProgressData::CheckerSolve((&p).into())),
@@ -89,9 +90,9 @@ impl Strategy for NoObjectiveStrategy {
                     "checker solve returned error".into(),
                 ));
             }
-            SolveStatus::Stopped => {
+            SolveStatus::Stopped(reason) => {
                 return Ok(StrategyOutcome {
-                    status: SolveStatus::Stopped,
+                    status: SolveStatus::Stopped(reason),
                     objective: None,
                     best_bound: None,
                     solution: None,
@@ -107,7 +108,7 @@ impl Strategy for NoObjectiveStrategy {
         let should_continue = on_progress(NoObjectiveProgressData::SolutionFound);
         if !should_continue {
             return Ok(StrategyOutcome {
-                status: SolveStatus::Stopped,
+                status: SolveStatus::Stopped(StopReason::Callback),
                 objective: checker_outcome.objective,
                 best_bound: checker_outcome.best_bound,
                 solution: None,
@@ -134,6 +135,7 @@ impl Strategy for NoObjectiveStrategy {
                 SolveProblemOpts {
                     warm_start: None,
                     time_limit: self.reconstruction_time_limit,
+                    incumbent_time_limit: collomatique_time::TimeLimit::none(),
                     disable_logging: self.disable_logging,
                 },
                 &move |p| {
@@ -146,7 +148,7 @@ impl Strategy for NoObjectiveStrategy {
             .await?;
 
         let recon_solution = match recon_outcome.status {
-            SolveStatus::Optimal | SolveStatus::Stopped => {
+            SolveStatus::Optimal | SolveStatus::Stopped(_) => {
                 recon_outcome.solution.ok_or_else(|| {
                     StrategyError::SolveError("reconstruction produced no solution".into())
                 })?

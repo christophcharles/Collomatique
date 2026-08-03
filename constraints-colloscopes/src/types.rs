@@ -90,6 +90,13 @@ pub enum ExtraVarName {
         slot: SlotId,
         week: GlobalWeek,
     },
+    AvoidTwiceInARowPenalty {
+        subject: SubjectId,
+        student: StudentId,
+        teacher: TeacherId,
+        first_week: GlobalWeek,
+        last_week: GlobalWeek,
+    },
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -282,6 +289,26 @@ pub enum PreferenceConstraint {
         last_week: GlobalWeek,
     },
     BalancingAvoidTwiceInARowRecursive {
+        student: StudentId,
+        subject: SubjectId,
+        teacher: TeacherId,
+        week: GlobalWeek,
+    },
+    /// Soft counterpart of [`PreferenceConstraint::BalancingAvoidTwiceInARow`]:
+    /// the permanent objective (weight `BASE` per violation) discouraging the
+    /// same teacher twice in a row. One `count <= 1` per (window, student,
+    /// teacher), objectified.
+    BalancingAvoidTwiceInARowSoft {
+        student: StudentId,
+        subject: SubjectId,
+        teacher: TeacherId,
+        first_week: GlobalWeek,
+        last_week: GlobalWeek,
+    },
+    /// Soft counterpart of
+    /// [`PreferenceConstraint::BalancingAvoidTwiceInARowRecursive`] for the
+    /// non-periodic periodicities, using the same `IsLastTeacherSeen` chain.
+    BalancingAvoidTwiceInARowRecursiveSoft {
         student: StudentId,
         subject: SubjectId,
         teacher: TeacherId,

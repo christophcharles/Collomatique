@@ -140,8 +140,9 @@ impl SubjectsUpdateOp {
                     // Everything new parameters can contradict is material that
                     // was already there, so the cascade repairs all of it: the
                     // teachers declared on a subject that no longer holds colles
-                    // lose it, its slots go, its group-list associations and its
-                    // balancing options are dropped. That includes the case the
+                    // lose it, its slots go, its group-list associations, its
+                    // balancing options and the pairing rules naming it are
+                    // dropped. That includes the case the
                     // old body could not survive — a longer interrogation that
                     // would push a late slot past midnight kills the slot now
                     // (`Fix::DeleteOverflowingSlot`) instead of the process.
@@ -713,12 +714,29 @@ mod tests {
     /// is left of the four — the associations, then the balancing override —
     /// answers in canonical order.
     ///
+    /// A pairing rule naming the subject goes the same way, and lands **last**:
+    /// its two convergences are declared after the balancing one, so the
+    /// canonical pick reaches them once everything else is repaired. The
+    /// fixture holds no rule of its own, so this one is seeded in plain sight
+    /// before the target is applied.
+    ///
     /// The enrolments deliberately survive: being registered in a subject says
     /// nothing about having colles in it, and no convergence relates the two.
     #[test]
     fn disabling_interrogations_dismantles_everything_that_needed_them() {
-        let base = hogwarts();
+        let mut base = hogwarts();
         let potions = subject_by_name(base.get_data(), "Potions");
+        let metamorphose = subject_by_name(base.get_data(), "Métamorphose");
+        let NewId::PairingRuleId(pairing) = base
+            .apply(
+                Op::Pairing(PairingOp::Add(rule(potions, metamorphose))),
+                (OpCategory::Pairings, "Amorce".into()),
+            )
+            .expect("both subjects are live and run interrogations")
+            .expect("adding a pairing rule issues an id")
+        else {
+            panic!("PairingOp::Add should issue a pairing rule id");
+        };
         let teachers = teachers_of_subject(base.get_data(), potions);
         let slots = slots_of_subject(base.get_data(), potions);
         let associations = associations_of_subject(base.get_data(), potions);
@@ -755,6 +773,7 @@ mod tests {
             subject: potions,
         }));
         expected_fixes.push(Fix::ClearSubjectBalancing { subject: potions });
+        expected_fixes.push(Fix::DeletePairingRule { rule: pairing });
         assert_eq!(fixes(&warnings), expected_fixes);
 
         let mut expected_ops: Vec<_> = slots
@@ -771,6 +790,7 @@ mod tests {
                 .map(|period| Op::GroupList(GroupListOp::AssignToSubject(*period, potions, None))),
         );
         expected_ops.push(Op::Balancing(BalancingOp::SetSubject(potions, None)));
+        expected_ops.push(Op::Pairing(PairingOp::Remove(pairing)));
         expected_ops.push(Op::Subject(SubjectOp::Update(
             potions,
             Subject {
