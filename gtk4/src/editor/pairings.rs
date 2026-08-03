@@ -7,8 +7,94 @@ use relm4::{ComponentController, adw, gtk};
 
 use collomatique_ops::PairingsUpdateOp;
 
+use crate::tools::message_row::MessageSeverity;
+
 mod pairing_params;
 mod pairings_display;
+
+/// One remark about a pairing rule.
+///
+/// Both the edition dialog — which shows them as full text rows — and the list
+/// of recorded rules read the same variants, so a rule reads the same way
+/// wherever it is displayed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuleMessage {
+    /// Both parts name the same subject: the rule cannot be recorded.
+    SameSubject,
+    /// « avoir ⇒ ne pas avoir » — the shape that may need a reified extra.
+    HeavyShape,
+    /// Nudge towards the symmetric « ne pas avoir ⇒ avoir » shape.
+    FavoredShape,
+}
+
+impl RuleMessage {
+    pub fn severity(self) -> MessageSeverity {
+        match self {
+            RuleMessage::SameSubject => MessageSeverity::Error,
+            RuleMessage::HeavyShape => MessageSeverity::Warning,
+            RuleMessage::FavoredShape => MessageSeverity::Info,
+        }
+    }
+
+    pub fn text(self) -> &'static str {
+        match self {
+            RuleMessage::SameSubject => {
+                "L'antécédent et le conséquent doivent porter sur deux matières différentes."
+            }
+            // « avoir ⇒ ne pas avoir » is the one shape whose constraint needs
+            // the antecedent *negated*, which only works directly when a student
+            // can have at most one interrogation of that subject per week;
+            // otherwise `constraints-colloscopes` has to reify an intermediate
+            // binary variable and linearize it (see
+            // `pairings::subject::emit_pairing_constraint`).
+            //
+            // The warning is shown whenever this shape is used, not only when
+            // the precondition currently holds: the antecedent subject's
+            // periodicity can be changed long after the rule is validated, and
+            // the user would then never see the message. Naming the precondition
+            // in the text lets them either pick another shape now, or keep this
+            // one and know what to avoid later.
+            RuleMessage::HeavyShape => {
+                "La forme « avoir ⇒ ne pas avoir » est coûteuse pour le solveur si la matière de \
+                 l'antécédent peut avoir plusieurs interrogations la même semaine (séparation \
+                 minimale de zéro semaine) : elle nécessite alors des variables intermédiaires \
+                 supplémentaires."
+            }
+            // « ne pas avoir ⇒ avoir » compiles to `antécédent + conséquent ≥ 1`,
+            // which is symmetric: the same single constraint also enforces the
+            // converse. The wording stays conditional because this is *not* a
+            // logical rewriting of the other shapes — it only helps when it
+            // happens to express the user's need.
+            RuleMessage::FavoredShape => {
+                "Si votre besoin peut s'exprimer sous la forme « ne pas avoir ⇒ avoir », \
+                 préférez-la : c'est la plus efficace pour le solveur et elle impose aussi \
+                 automatiquement la règle réciproque."
+            }
+        }
+    }
+}
+
+/// The remarks a rule deserves, most severe first.
+///
+/// `shape` is the pair of `should_have` flags, in the order (antécédent,
+/// conséquent). `subjects_are_same` is only ever true in the edition dialog: a
+/// rule that made it into the document always names two distinct subjects.
+pub fn rule_messages(shape: (bool, bool), subjects_are_same: bool) -> Vec<RuleMessage> {
+    let mut messages = Vec::new();
+    if subjects_are_same {
+        messages.push(RuleMessage::SameSubject);
+    }
+    match shape {
+        (true, false) => {
+            messages.push(RuleMessage::HeavyShape);
+            messages.push(RuleMessage::FavoredShape);
+        }
+        // Already the cheapest shape: nothing to nudge towards.
+        (false, true) => {}
+        _ => messages.push(RuleMessage::FavoredShape),
+    }
+    messages
+}
 
 #[derive(Debug)]
 pub enum PairingsInput {

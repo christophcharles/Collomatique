@@ -10,7 +10,7 @@ use relm4::{adw, gtk};
 
 use adw::prelude::ActionRowExt;
 
-use crate::tools::message_row::{MessageRow, MessageSeverity};
+use crate::tools::message_row::MessageRow;
 
 pub struct Dialog {
     hidden: bool,
@@ -55,29 +55,6 @@ pub enum DialogInput {
 pub enum DialogOutput {
     Accepted(collomatique_state_colloscopes::slot_pairings::SlotPairingRule),
 }
-
-/// « utilisé ⇒ non utilisé » is the one shape whose constraint needs the
-/// antecedent *negated*, which only works directly when an interrogation holds
-/// at most one group; otherwise `constraints-colloscopes` has to reify an
-/// intermediate binary variable and linearize it (see
-/// `pairings::slot::emit_pairing_constraint`).
-///
-/// The warning is shown whenever this shape is selected, not only when the
-/// precondition currently holds: the subject's group count can be changed long
-/// after the rule is validated, and the user would then never see the message.
-/// Naming the precondition in the text lets them either pick another shape now,
-/// or keep this one and know what to avoid later.
-const HEAVY_SHAPE_WARNING: &str = "La forme « créneau utilisé ⇒ créneau non utilisé » est \
-    coûteuse pour le solveur si une interrogation peut accueillir plusieurs groupes : elle \
-    nécessite alors des variables intermédiaires supplémentaires.";
-
-/// « non utilisé ⇒ utilisé » compiles to `antécédent + conséquent ≥ 1`, which is
-/// symmetric: the same single constraint also enforces the converse. The
-/// wording stays conditional because this is *not* a logical rewriting of the
-/// other shapes — it only helps when it happens to express the user's need.
-const FAVORED_SHAPE_HINT: &str = "Si votre besoin peut s'exprimer sous la forme « créneau non \
-    utilisé ⇒ créneau utilisé », préférez-la : c'est la plus efficace pour le solveur et elle \
-    impose aussi automatiquement la règle réciproque.";
 
 impl Dialog {
     fn generate_slots_model(&self) -> gtk::StringList {
@@ -182,7 +159,7 @@ impl Dialog {
     /// tooltip: [None] both hides the error row and clears the tooltip.
     fn error_message(&self) -> Option<&'static str> {
         self.slots_are_same()
-            .then_some("L'antécédent et le conséquent doivent porter sur deux créneaux différents.")
+            .then(|| super::RuleMessage::SameSlot.text())
     }
 
     /// The two `should_have` flags of the rule being edited, in the order
@@ -198,25 +175,14 @@ impl Dialog {
     /// Refills the message area at the bottom of the dialog. Called after
     /// every input, so the rows always describe the current selection.
     fn update_messages(&mut self) {
-        let mut messages = Vec::new();
-        if let Some(error) = self.error_message() {
-            messages.push((MessageSeverity::Error, error.to_string()));
-        }
-        match self.selected_shape() {
-            (true, false) => {
-                messages.push((MessageSeverity::Warning, HEAVY_SHAPE_WARNING.to_string()));
-                messages.push((MessageSeverity::Info, FAVORED_SHAPE_HINT.to_string()));
-            }
-            // Already the cheapest shape: nothing to nudge towards.
-            (false, true) => {}
-            _ => messages.push((MessageSeverity::Info, FAVORED_SHAPE_HINT.to_string())),
-        }
+        // Materialized before touching `self.messages`: the factory guard holds
+        // `&mut self.messages`, so no `&self` method may run while it is alive.
+        let messages: Vec<_> = super::rule_messages(self.selected_shape(), self.slots_are_same())
+            .into_iter()
+            .map(|message| (message.severity(), message.text().to_string()))
+            .collect();
 
-        let mut guard = self.messages.guard();
-        guard.clear();
-        for message in messages {
-            guard.push_back(message);
-        }
+        crate::tools::factories::refill_vec_deque(&mut self.messages, messages);
     }
 }
 
