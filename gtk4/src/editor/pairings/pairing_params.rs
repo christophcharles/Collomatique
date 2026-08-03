@@ -10,7 +10,7 @@ use relm4::{adw, gtk};
 
 use adw::prelude::ActionRowExt;
 
-use crate::tools::message_row::MessageRow;
+use crate::tools::messages::MessageRow;
 
 pub struct Dialog {
     hidden: bool,

@@ -7,7 +7,7 @@ use relm4::{ComponentController, gtk};
 
 use collomatique_ops::SlotPairingsUpdateOp;
 
-use crate::tools::message_row::MessageSeverity;
+use crate::tools::messages::MessageSeverity;
 
 pub mod slot_pairing_params;
 pub mod slot_pairings_display;
@@ -73,6 +73,14 @@ impl RuleMessage {
             }
         }
     }
+}
+
+/// The `should_have` flags of a recorded rule, in the order (antécédent,
+/// conséquent) — the same pair the dialog reads off its two condition combos.
+pub fn rule_shape(
+    rule: &collomatique_state_colloscopes::slot_pairings::SlotPairingRule,
+) -> (bool, bool) {
+    (rule.antecedent().should_have, rule.consequent().should_have)
 }
 
 /// The remarks a rule deserves, most severe first.
