@@ -1187,6 +1187,47 @@ mod tests {
             .clone()
     }
 
+    fn pairing_rule_of(data: &Data, rule: PairingRuleId) -> PairingRule {
+        data.get_inner_data()
+            .params
+            .pairings
+            .pairing_rule_map
+            .get(&rule)
+            .expect("the fixture's pairing rule should be live")
+            .clone()
+    }
+
+    fn slot_pairing_rule_of(data: &Data, rule: SlotPairingRuleId) -> SlotPairingRule {
+        data.get_inner_data()
+            .params
+            .slot_pairings
+            .slot_pairing_rule_map
+            .get(&rule)
+            .expect("the fixture's slot pairing rule should be live")
+            .clone()
+    }
+
+    fn pairing_rule_excluding(
+        data: &Data,
+        rule: PairingRuleId,
+        periods: BTreeSet<PeriodId>,
+    ) -> PairingRule {
+        let (antecedent, consequent, _excluded, soft) = pairing_rule_of(data, rule).into_parts();
+        PairingRule::new(antecedent, consequent, periods, soft)
+            .expect("the parts are the fixture's own, so they name two subjects")
+    }
+
+    fn slot_pairing_rule_excluding(
+        data: &Data,
+        rule: SlotPairingRuleId,
+        periods: BTreeSet<PeriodId>,
+    ) -> SlotPairingRule {
+        let (antecedent, consequent, _excluded, soft) =
+            slot_pairing_rule_of(data, rule).into_parts();
+        SlotPairingRule::new(antecedent, consequent, periods, soft)
+            .expect("the parts are the fixture's own, so they name two slots")
+    }
+
     fn period_at(data: &Data, index: usize) -> PeriodId {
         data.get_inner_data()
             .params
@@ -1780,12 +1821,13 @@ mod tests {
         assert_eq!(state.get_data(), expected_document(&base, ops).get_data());
     }
 
-    /// The two loops the fixture above cannot reach: hogwarts excludes nobody
-    /// from anything, so the cut's subject and student exclusion copies never
-    /// run on the plain base. Here Quidditch stops running on the period and
-    /// Harry stops being there, and both exclusions must reach the tail period
-    /// — not out of tidiness, but because the moved weeks are read against
-    /// them.
+    /// The exclusion copies the fixture above cannot reach: hogwarts excludes
+    /// nobody from anything, so on the plain base they never run. Here
+    /// Quidditch stops running on the period, Harry stops being there, and a
+    /// pairing rule and a slot pairing rule stop applying there. All four
+    /// exclusions must reach the tail period — not out of tidiness, but because
+    /// the moved weeks are read against them, and because a rule the user
+    /// switched off must not switch itself back on over half the period.
     #[test]
     fn cutting_a_period_gives_the_tail_period_the_same_exclusions() {
         let mut base = hogwarts();
@@ -1834,6 +1876,42 @@ mod tests {
             Op::Student(StudentOp::Update(harry, absent_student.clone())),
         );
 
+        // The base holds no subject pairing rule at all, so the fixture writes
+        // one — « avoir Potions ⇒ avoir Métamorphose » — already excluded from
+        // the period. Its two slot pairing rules exclude nothing yet, so one of
+        // them is updated instead.
+        let part = |subject| RulePart {
+            subject_id: subject,
+            should_have: true,
+        };
+        let rule = PairingRule::new(
+            part(subject_by_name(base.get_data(), "Potions")),
+            part(subject_by_name(base.get_data(), "Métamorphose")),
+            BTreeSet::from([period]),
+            false,
+        )
+        .expect("the two parts name two different subjects");
+        let rule = match prepare_new(&mut base, Op::Pairing(PairingOp::Add(rule))) {
+            NewId::PairingRuleId(id) => id,
+            other => panic!("Unexpected id after adding a pairing rule: {other:?}"),
+        };
+
+        let slot_rule = base
+            .get_data()
+            .get_inner_data()
+            .params
+            .slot_pairings
+            .slot_pairing_rule_map
+            .keys()
+            .next()
+            .expect("the base should hold a slot pairing rule");
+        let absent_slot_rule =
+            slot_pairing_rule_excluding(base.get_data(), slot_rule, BTreeSet::from([period]));
+        prepare(
+            &mut base,
+            Op::SlotPairing(SlotPairingOp::Update(slot_rule, absent_slot_rule)),
+        );
+
         let old_week_count = week_count(base.get_data(), period);
         let kept = 7;
 
@@ -1854,12 +1932,36 @@ mod tests {
                 .contains(&new_id),
             "the tail period should inherit the student's exclusion"
         );
+        assert!(
+            pairing_rule_of(state.get_data(), rule)
+                .excluded_periods()
+                .contains(&new_id),
+            "the tail period should inherit the pairing rule's exclusion"
+        );
+        assert!(
+            slot_pairing_rule_of(state.get_data(), slot_rule)
+                .excluded_periods()
+                .contains(&new_id),
+            "the tail period should inherit the slot pairing rule's exclusion"
+        );
 
         let mut ops = vec![Op::Period(PeriodOp::AddAfter(period))];
         absent_subject.excluded_periods.insert(new_id);
         ops.push(Op::Subject(SubjectOp::Update(quidditch, absent_subject)));
         absent_student.excluded_periods.insert(new_id);
         ops.push(Op::Student(StudentOp::Update(harry, absent_student)));
+        ops.push(Op::Pairing(PairingOp::Update(
+            rule,
+            pairing_rule_excluding(base.get_data(), rule, BTreeSet::from([period, new_id])),
+        )));
+        ops.push(Op::SlotPairing(SlotPairingOp::Update(
+            slot_rule,
+            slot_pairing_rule_excluding(
+                base.get_data(),
+                slot_rule,
+                BTreeSet::from([period, new_id]),
+            ),
+        )));
         for subject in subjects_in_id_order(base.get_data()) {
             let Some(students) = base
                 .get_data()
@@ -2131,48 +2233,6 @@ mod tests {
                     Op::Assignment(AssignmentOp::SetRow(period, subject, students)),
                 );
             }
-        }
-
-        fn pairing_rule_of(data: &Data, rule: PairingRuleId) -> PairingRule {
-            data.get_inner_data()
-                .params
-                .pairings
-                .pairing_rule_map
-                .get(&rule)
-                .expect("the fixture's pairing rule should be live")
-                .clone()
-        }
-
-        fn slot_pairing_rule_of(data: &Data, rule: SlotPairingRuleId) -> SlotPairingRule {
-            data.get_inner_data()
-                .params
-                .slot_pairings
-                .slot_pairing_rule_map
-                .get(&rule)
-                .expect("the fixture's slot pairing rule should be live")
-                .clone()
-        }
-
-        fn pairing_rule_excluding(
-            data: &Data,
-            rule: PairingRuleId,
-            periods: BTreeSet<PeriodId>,
-        ) -> PairingRule {
-            let (antecedent, consequent, _excluded, soft) =
-                pairing_rule_of(data, rule).into_parts();
-            PairingRule::new(antecedent, consequent, periods, soft)
-                .expect("the parts are the fixture's own, so they name two subjects")
-        }
-
-        fn slot_pairing_rule_excluding(
-            data: &Data,
-            rule: SlotPairingRuleId,
-            periods: BTreeSet<PeriodId>,
-        ) -> SlotPairingRule {
-            let (antecedent, consequent, _excluded, soft) =
-                slot_pairing_rule_of(data, rule).into_parts();
-            SlotPairingRule::new(antecedent, consequent, periods, soft)
-                .expect("the parts are the fixture's own, so they name two slots")
         }
 
         let mut base = hogwarts();
