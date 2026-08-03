@@ -742,6 +742,8 @@ impl Dialog {
                     self.default_time_limit_enabled,
                     self.default_time_limit_secs,
                 ),
+                // Placeholder: the dialog gets its own knob for this in a follow-up.
+                incumbent_time_limit: collomatique_time::TimeLimit::none(),
             }),
             warm_start_config: self.enable_warm_start.then(|| WarmStartConfig {
                 time_limit: make_time_limit(
@@ -756,6 +758,8 @@ impl Dialog {
                     self.incremental_time_limit_enabled,
                     self.incremental_time_limit_secs,
                 ),
+                // Placeholder: the dialog gets its own knob for this in a follow-up.
+                epoch_incumbent_time_limit: collomatique_time::TimeLimit::none(),
             }),
             fuzzy_config: self.enable_fuzzy.then(|| FuzzyConfig {
                 fuzzy_sigma: self.fuzzy_sigma,
@@ -764,6 +768,8 @@ impl Dialog {
                     self.fuzzy_time_limit_enabled,
                     self.fuzzy_time_limit_secs,
                 ),
+                // Placeholder: the dialog gets its own knob for this in a follow-up.
+                incumbent_time_limit: collomatique_time::TimeLimit::none(),
             }),
         }
     }

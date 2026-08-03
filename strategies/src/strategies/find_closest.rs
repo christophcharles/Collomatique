@@ -71,6 +71,14 @@ enum ClosestExtra<E> {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FindClosestStrategy {
     pub closeness_time_limit: collomatique_time::TimeLimit,
+    /// Time limit on the closeness solve, counted from its first feasible incumbent and
+    /// independent of [`FindClosestStrategy::closeness_time_limit`]: the closeness solve
+    /// stops at whichever deadline comes first. When this deadline is what stopped it, the
+    /// incumbent is kept and reconstruction proceeds (that is the point of the limit), even
+    /// if the incumbent is outside [`FindClosestStrategy::distance_tolerance`].
+    /// [`TimeLimit::none()`](collomatique_time::TimeLimit::none) disables it. The
+    /// reconstruction solve is unaffected.
+    pub closeness_incumbent_time_limit: collomatique_time::TimeLimit,
     pub reconstruction_time_limit: collomatique_time::TimeLimit,
     pub disable_logging: bool,
     /// Absolute tolerance on the L1 closeness distance (Phase 2): accept the first feasible
@@ -262,7 +270,7 @@ impl Strategy for FindClosestStrategy {
                 SolveProblemOpts {
                     warm_start: None,
                     time_limit: self.closeness_time_limit,
-                    incumbent_time_limit: collomatique_time::TimeLimit::none(),
+                    incumbent_time_limit: self.closeness_incumbent_time_limit,
                     disable_logging: self.disable_logging,
                 },
                 &|p| {
@@ -300,15 +308,22 @@ impl Strategy for FindClosestStrategy {
                 ));
             }
             SolveStatus::Stopped(reason) => {
-                // A stop is either external (cancel / time limit) or our own tolerance
-                // cutoff. Carry on only if the outcome actually holds a within-tolerance
-                // closest point; otherwise bail as before.
+                // A stop is either external (cancel / time limit), our own after-incumbent
+                // limit, or our own tolerance cutoff. Carry on when the outcome holds a
+                // within-tolerance closest point; otherwise bail.
                 let good_enough = match (closeness_outcome.objective, closeness_outcome.best_bound)
                 {
                     (Some(obj), Some(bound)) => within_distance_tolerance(obj, bound, tolerance),
                     _ => false,
                 };
-                if !(good_enough && closeness_outcome.solution.is_some()) {
+                // Our own after-incumbent timeout fired: the whole point of that limit is to
+                // *use* the incumbent we waited for, so carry on to reconstruction even when
+                // it is outside the tolerance. A global time limit or a cancel still bails.
+                let incumbent_timeout_with_solution = reason == StopReason::IncumbentTimeLimit
+                    && closeness_outcome.solution.is_some();
+                if !(good_enough && closeness_outcome.solution.is_some())
+                    && !incumbent_timeout_with_solution
+                {
                     return Ok(StrategyOutcome {
                         status: SolveStatus::Stopped(reason),
                         objective: None,
@@ -514,9 +529,58 @@ mod tests {
         }
     }
 
+    /// Hands back one canned outcome for the first solve (the closeness solve), then
+    /// delegates to [`RealBackend`] so the reconstruction still gets a correct answer.
+    /// Also records the after-incumbent limit the closeness solve was asked for.
+    struct CannedClosenessBackend {
+        closeness: Mutex<Option<RawSolveOutcome>>,
+        seen_incumbent_limit: Mutex<Option<collomatique_time::TimeLimit>>,
+    }
+
+    impl CannedClosenessBackend {
+        fn new(closeness: RawSolveOutcome) -> Self {
+            CannedClosenessBackend {
+                closeness: Mutex::new(Some(closeness)),
+                seen_incumbent_limit: Mutex::new(None),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl SolveBackend for CannedClosenessBackend {
+        async fn solve_with_progress(
+            &self,
+            desc: &ProblemDesc,
+            opts: SolveConfig,
+            on_progress: &(dyn Fn(SolveProgressData) -> bool + Send + Sync),
+            on_echo: &(dyn Fn(String) + Send + Sync),
+        ) -> Result<RawSolveOutcome, StrategyError> {
+            if let Some(canned) = self.closeness.lock().unwrap().take() {
+                *self.seen_incumbent_limit.lock().unwrap() = Some(opts.incumbent_time_limit);
+                return Ok(canned);
+            }
+            RealBackend
+                .solve_with_progress(desc, opts, on_progress, on_echo)
+                .await
+        }
+
+        async fn run_strategy_subprocess(
+            &self,
+            _model_desc: &ModelDesc,
+            _strategy: &StrategyKind,
+            _warm_start: Option<Vec<f64>>,
+            _payload: StrategyPayloadData,
+            _on_progress: &(dyn Fn(StrategyProgressData) -> bool + Send + Sync),
+            _on_echo: &(dyn Fn(String) + Send + Sync),
+        ) -> Result<RawSolveOutcome, StrategyError> {
+            unimplemented!("find_closest tests never spawn subprocesses")
+        }
+    }
+
     fn strategy() -> FindClosestStrategy {
         FindClosestStrategy {
             closeness_time_limit: collomatique_time::TimeLimit::none(),
+            closeness_incumbent_time_limit: collomatique_time::TimeLimit::none(),
             reconstruction_time_limit: collomatique_time::TimeLimit::none(),
             disable_logging: true,
             // Solve to the exact closest point so distance-based assertions are stable.
@@ -621,5 +685,87 @@ mod tests {
         assert_eq!(outcome.status, SolveStatus::Optimal);
         let sol = outcome.solution.unwrap();
         assert_eq!(sol.get(InternalVar::Base(0usize)).unwrap(), 3.0);
+    }
+
+    /// Run the two-binary model (a + b <= 1, target (1, 1)) against a closeness solve that
+    /// stopped for `reason` while holding a feasible but *out-of-tolerance* incumbent
+    /// (a = b = 0, L1 distance 2 against a bound of 1). Returns the strategy's outcome and
+    /// the after-incumbent limit the closeness solve was handed.
+    async fn run_stopped_closeness(
+        reason: StopReason,
+    ) -> (
+        StrategyOutcome<InternalVar<usize, ()>>,
+        collomatique_time::TimeLimit,
+    ) {
+        let vars: HashMap<usize, Variable> =
+            [(0, Variable::binary()), (1, Variable::binary())].into();
+        let mut modeler: Modeler<usize, (), (), (), ()> = Modeler::new(vars);
+        modeler.add_constraint(
+            (LinExpr::var(Var::Base(0)) + LinExpr::var(Var::Base(1))).leq(&LinExpr::constant(1.0)),
+            (),
+        );
+        let model = modeler.build(&()).unwrap();
+
+        let target = ConfigData::from(HashMap::from([
+            (InternalVar::Base(0usize), 1.0),
+            (InternalVar::Base(1usize), 1.0),
+        ]));
+
+        // Both base variables at 0: feasible, but its objective sits a full unit above the
+        // bound, so the zero tolerance of `strategy()` rejects it as "good enough". Setting
+        // both to the same value also keeps the canned vector free of var_order assumptions.
+        let backend = Arc::new(CannedClosenessBackend::new(RawSolveOutcome {
+            status: SolveStatus::Stopped(reason),
+            objective: Some(2.0),
+            best_bound: Some(1.0),
+            solution: Some(vec![0.0, 0.0]),
+        }));
+
+        let limit = collomatique_time::TimeLimit::seconds(std::num::NonZeroU32::new(7).unwrap());
+        let strategy = FindClosestStrategy {
+            closeness_incumbent_time_limit: limit,
+            ..strategy()
+        };
+
+        let ctx = StrategyContext::new(backend.clone());
+        let outcome = strategy
+            .run_with_callback(&ctx, &model, None, FindClosestPayload { target }, &|_| true)
+            .await
+            .unwrap();
+
+        let seen = backend.seen_incumbent_limit.lock().unwrap().unwrap();
+        (outcome, seen)
+    }
+
+    /// The after-incumbent limit exists precisely to *use* the incumbent it waited for, so a
+    /// closeness solve stopped by it carries on to reconstruction even out of tolerance.
+    #[tokio::test]
+    async fn incumbent_time_limit_stop_carries_on_to_reconstruction() {
+        let (outcome, seen) = run_stopped_closeness(StopReason::IncumbentTimeLimit).await;
+
+        assert_eq!(
+            seen,
+            collomatique_time::TimeLimit::seconds(std::num::NonZeroU32::new(7).unwrap()),
+            "the strategy's closeness_incumbent_time_limit reaches the closeness solve"
+        );
+        assert_eq!(outcome.status, SolveStatus::Optimal);
+        let sol = outcome
+            .solution
+            .expect("reconstruction produced a solution");
+        assert_eq!(sol.get(InternalVar::Base(0usize)).unwrap(), 0.0);
+        assert_eq!(sol.get(InternalVar::Base(1usize)).unwrap(), 0.0);
+    }
+
+    /// The global time limit (like a cancel) still forfeits an out-of-tolerance incumbent.
+    #[tokio::test]
+    async fn global_time_limit_stop_still_bails() {
+        let (outcome, _) = run_stopped_closeness(StopReason::TimeLimit).await;
+
+        assert_eq!(
+            outcome.status,
+            SolveStatus::Stopped(StopReason::TimeLimit),
+            "the stop reason is preserved when bailing"
+        );
+        assert!(outcome.solution.is_none());
     }
 }

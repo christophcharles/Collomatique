@@ -303,6 +303,12 @@ pub struct FuzzyConfig {
     /// [`TimeLimit::none()`](collomatique_time::TimeLimit::none) (the default) leaves it
     /// unbounded; the reconstruction solve stays unbounded regardless.
     pub time_limit: collomatique_time::TimeLimit,
+    /// After-incumbent closeness-solve time limit handed to every `FindClosestStrategy` the
+    /// conductor builds (see
+    /// [`FindClosestStrategy::closeness_incumbent_time_limit`](crate::FindClosestStrategy)).
+    /// Independent of [`FuzzyConfig::time_limit`]; the closeness solve stops at whichever
+    /// deadline comes first.
+    pub incumbent_time_limit: collomatique_time::TimeLimit,
 }
 
 impl Default for FuzzyConfig {
@@ -311,6 +317,7 @@ impl Default for FuzzyConfig {
             fuzzy_sigma: 0.2, // gives ~1.2% of variables flipped if they're all binary
             find_closest_tolerance: 10.0,
             time_limit: collomatique_time::TimeLimit::none(),
+            incumbent_time_limit: collomatique_time::TimeLimit::none(),
         }
     }
 }
@@ -330,6 +337,11 @@ pub struct IncrementalConfig {
     /// [`TimeLimit::none()`](collomatique_time::TimeLimit::none) leaves each epoch unbounded.
     /// Does not affect the final reconstruction solve.
     pub epoch_time_limit: collomatique_time::TimeLimit,
+    /// Per-epoch after-incumbent solve time limit handed to the queued `IncrementalStrategy`
+    /// (see [`IncrementalStrategy::epoch_incumbent_time_limit`](crate::IncrementalStrategy)).
+    /// Independent of [`IncrementalConfig::epoch_time_limit`]; each epoch stops at whichever
+    /// deadline comes first. Does not affect the final reconstruction solve.
+    pub epoch_incumbent_time_limit: collomatique_time::TimeLimit,
 }
 
 impl Default for IncrementalConfig {
@@ -339,6 +351,7 @@ impl Default for IncrementalConfig {
             l1_weight: 1000.0,
             distance_tolerance: 5.0,
             epoch_time_limit: collomatique_time::TimeLimit::none(),
+            epoch_incumbent_time_limit: collomatique_time::TimeLimit::none(),
         }
     }
 }
@@ -364,6 +377,10 @@ pub struct DefaultConfig {
     /// [`DefaultStrategy::time_limit`](crate::DefaultStrategy)).
     /// [`TimeLimit::none()`](collomatique_time::TimeLimit::none) (the default) leaves it unbounded.
     pub time_limit: collomatique_time::TimeLimit,
+    /// After-incumbent solve time limit handed to the queued `DefaultStrategy` (see
+    /// [`DefaultStrategy::incumbent_time_limit`](crate::DefaultStrategy)). Independent of
+    /// [`DefaultConfig::time_limit`]; the solve stops at whichever deadline comes first.
+    pub incumbent_time_limit: collomatique_time::TimeLimit,
 }
 
 /// A misconfiguration the conductor can detect before running. Surfaced via
@@ -553,6 +570,7 @@ impl ConductorStrategy {
             l1_weight: cfg.l1_weight,
             distance_tolerance: cfg.distance_tolerance,
             epoch_time_limit: cfg.epoch_time_limit,
+            epoch_incumbent_time_limit: cfg.epoch_incumbent_time_limit,
             ..IncrementalStrategy::default()
         }
     }
@@ -561,6 +579,7 @@ impl ConductorStrategy {
     fn default_substrategy(&self, cfg: &DefaultConfig) -> DefaultStrategy {
         DefaultStrategy {
             time_limit: cfg.time_limit,
+            incumbent_time_limit: cfg.incumbent_time_limit,
             disable_logging: false,
         }
     }
@@ -573,6 +592,7 @@ impl ConductorStrategy {
             seed: None,
             find_closest: FindClosestStrategy {
                 closeness_time_limit: cfg.time_limit,
+                closeness_incumbent_time_limit: cfg.incumbent_time_limit,
                 reconstruction_time_limit: collomatique_time::TimeLimit::none(),
                 disable_logging: false,
                 distance_tolerance: cfg.find_closest_tolerance,

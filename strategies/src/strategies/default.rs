@@ -14,6 +14,10 @@ use crate::{
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct DefaultStrategy {
     pub time_limit: collomatique_time::TimeLimit,
+    /// Time limit counted from the solve's first feasible incumbent, independent of
+    /// [`DefaultStrategy::time_limit`]: the solve stops at whichever deadline comes first.
+    /// [`TimeLimit::none()`](collomatique_time::TimeLimit::none) (the default) disables it.
+    pub incumbent_time_limit: collomatique_time::TimeLimit,
     pub disable_logging: bool,
 }
 
@@ -64,7 +68,7 @@ impl Strategy for DefaultStrategy {
             SolveProblemOpts {
                 warm_start,
                 time_limit: self.time_limit,
-                incumbent_time_limit: collomatique_time::TimeLimit::none(),
+                incumbent_time_limit: self.incumbent_time_limit,
                 disable_logging: self.disable_logging,
             },
             on_progress,

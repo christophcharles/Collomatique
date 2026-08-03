@@ -1442,6 +1442,9 @@ mod tests {
             epoch_time_limit: collomatique_time::TimeLimit::seconds(
                 std::num::NonZeroU32::new(30).unwrap(),
             ),
+            epoch_incumbent_time_limit: collomatique_time::TimeLimit::seconds(
+                std::num::NonZeroU32::new(10).unwrap(),
+            ),
             reconstruction_time_limit: collomatique_time::TimeLimit::none(),
             disable_logging: false,
         });
@@ -1894,6 +1897,7 @@ mod tests {
             },
             default: DefaultStrategy {
                 time_limit: collomatique_time::TimeLimit::none(),
+                incumbent_time_limit: collomatique_time::TimeLimit::none(),
                 disable_logging: false,
             },
         };
