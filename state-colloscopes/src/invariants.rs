@@ -83,8 +83,8 @@ use std::collections::BTreeSet;
 use thiserror::Error;
 
 use crate::ids::{
-    GroupListId, PeriodId, SlotId, SlotPairingRuleId, StudentId, SubjectId, TeacherId, WeekId,
-    WeekPatternId,
+    GroupListId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId, SubjectId,
+    TeacherId, WeekId, WeekPatternId,
 };
 use crate::refs::Reference;
 
@@ -215,6 +215,22 @@ pub enum Convergence {
     /// A balancing entry for a subject whose interrogations are disabled
     #[error("balancing entry for subject {0:?} which has interrogations disabled")]
     BalancingForSubjectWithoutInterrogations(SubjectId),
+    // A pairing rule is an implication between the two subjects'
+    // interrogations, so a part naming a subject that runs none makes the rule
+    // vacuous or impossible. The condition is a property of *each part on its
+    // own*, so it gets one variant per part — like the two dangling-FK sites
+    // the parts already own, and unlike `PairedSlotsNotInSameSubject` below,
+    // whose predicate is a relation over the two parts jointly.
+    /// A pairing rule whose antecedent's subject has interrogations disabled
+    #[error(
+        "pairing rule {0:?}'s antecedent names subject {1:?} which has interrogations disabled"
+    )]
+    PairingRuleAntecedentForSubjectWithoutInterrogations(PairingRuleId, SubjectId),
+    /// A pairing rule whose consequent's subject has interrogations disabled
+    #[error(
+        "pairing rule {0:?}'s consequent names subject {1:?} which has interrogations disabled"
+    )]
+    PairingRuleConsequentForSubjectWithoutInterrogations(PairingRuleId, SubjectId),
     /// A slot pairing rule whose two slots are on different subjects
     #[error("slot pairing rule {0:?} pairs slots {1:?} and {2:?} of different subjects")]
     PairedSlotsNotInSameSubject(SlotPairingRuleId, SlotId, SlotId),
@@ -564,6 +580,34 @@ impl crate::InnerData {
                 out.insert(Convergence::BalancingForSubjectWithoutInterrogations(
                     subject_id,
                 ));
+            }
+        }
+
+        // ---- Pairing rules: both named subjects must run interrogations.
+        // A rule on a subject without interrogations is vacuous or impossible,
+        // never meaningful. One predicate per part, like the two dangling-FK
+        // sites the parts already own — each gated on its own lookup, so a
+        // dangling antecedent does not hide a live-but-off consequent.
+        for (rule_id, rule) in params.pairings.pairing_rule_map.iter() {
+            if let Some(subject) = params.subjects.find_subject(rule.antecedent().subject_id)
+                && subject.parameters.interrogation_parameters.is_none()
+            {
+                out.insert(
+                    Convergence::PairingRuleAntecedentForSubjectWithoutInterrogations(
+                        rule_id,
+                        rule.antecedent().subject_id,
+                    ),
+                );
+            }
+            if let Some(subject) = params.subjects.find_subject(rule.consequent().subject_id)
+                && subject.parameters.interrogation_parameters.is_none()
+            {
+                out.insert(
+                    Convergence::PairingRuleConsequentForSubjectWithoutInterrogations(
+                        rule_id,
+                        rule.consequent().subject_id,
+                    ),
+                );
             }
         }
 
@@ -1122,6 +1166,7 @@ pub(crate) mod tests {
         let teacher = unsafe { TeacherId::new(6) };
         let student = unsafe { StudentId::new(7) };
         let slot_pairing_rule = unsafe { SlotPairingRuleId::new(8) };
+        let pairing_rule = unsafe { PairingRuleId::new(9) };
         let group = 9u32;
         let start = SlotStart {
             weekday: chrono::Weekday::Mon.into(),
@@ -1150,6 +1195,14 @@ pub(crate) mod tests {
             Convergence::AssociationForSubjectWithoutInterrogations(period, subject),
             Convergence::AssociationForSubjectNotRunningOnPeriod(period, subject),
             Convergence::BalancingForSubjectWithoutInterrogations(subject),
+            Convergence::PairingRuleAntecedentForSubjectWithoutInterrogations(
+                pairing_rule,
+                subject,
+            ),
+            Convergence::PairingRuleConsequentForSubjectWithoutInterrogations(
+                pairing_rule,
+                subject,
+            ),
             Convergence::PairedSlotsNotInSameSubject(slot_pairing_rule, slot, slot),
             Convergence::ColloscopeGroupListPrefilled(group_list),
             Convergence::ColloscopeStudentExcluded(group_list, student),
@@ -2037,6 +2090,89 @@ pub(crate) mod tests {
             broken_invariants(&data),
             Ok(BTreeSet::from([FixableInvariant::Convergence(
                 Convergence::BalancingForSubjectWithoutInterrogations(subject)
+            )]))
+        );
+    }
+
+    /// The two rules named live subjects, so nothing dangles; only the
+    /// antecedent's runs no interrogations, so only the antecedent's predicate
+    /// fires. The mirror below swaps the two parts.
+    #[test]
+    fn pairing_rule_antecedent_for_subject_without_interrogations() {
+        let mut data = InnerData::default();
+        let maths = unsafe { SubjectId::new(1) };
+        let physique = unsafe { SubjectId::new(2) };
+        let rule = unsafe { PairingRuleId::new(3) };
+        data.params
+            .subjects
+            .ordered_subject_list
+            .insert_at(0, maths, subject_without_interrogations())
+            .unwrap();
+        data.params
+            .subjects
+            .ordered_subject_list
+            .insert_at(1, physique, Subject::default())
+            .unwrap();
+        data.params.pairings.pairing_rule_map.insert(
+            rule,
+            PairingRule::new(
+                RulePart {
+                    subject_id: maths,
+                    should_have: true,
+                },
+                RulePart {
+                    subject_id: physique,
+                    should_have: true,
+                },
+                BTreeSet::new(),
+                false,
+            )
+            .expect("distinct subjects"),
+        );
+        assert_eq!(
+            broken_invariants(&data),
+            Ok(BTreeSet::from([FixableInvariant::Convergence(
+                Convergence::PairingRuleAntecedentForSubjectWithoutInterrogations(rule, maths)
+            )]))
+        );
+    }
+
+    #[test]
+    fn pairing_rule_consequent_for_subject_without_interrogations() {
+        let mut data = InnerData::default();
+        let maths = unsafe { SubjectId::new(1) };
+        let physique = unsafe { SubjectId::new(2) };
+        let rule = unsafe { PairingRuleId::new(3) };
+        data.params
+            .subjects
+            .ordered_subject_list
+            .insert_at(0, maths, subject_without_interrogations())
+            .unwrap();
+        data.params
+            .subjects
+            .ordered_subject_list
+            .insert_at(1, physique, Subject::default())
+            .unwrap();
+        data.params.pairings.pairing_rule_map.insert(
+            rule,
+            PairingRule::new(
+                RulePart {
+                    subject_id: physique,
+                    should_have: true,
+                },
+                RulePart {
+                    subject_id: maths,
+                    should_have: true,
+                },
+                BTreeSet::new(),
+                false,
+            )
+            .expect("distinct subjects"),
+        );
+        assert_eq!(
+            broken_invariants(&data),
+            Ok(BTreeSet::from([FixableInvariant::Convergence(
+                Convergence::PairingRuleConsequentForSubjectWithoutInterrogations(rule, maths)
             )]))
         );
     }

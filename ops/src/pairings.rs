@@ -24,6 +24,8 @@ pub enum PairingsUpdateError {
 pub enum AddNewPairingRuleError {
     #[error("invalid subject id ({0:?})")]
     InvalidSubjectId(collomatique_state_colloscopes::SubjectId),
+    #[error("subject ({0:?}) has interrogations disabled")]
+    SubjectWithoutInterrogations(collomatique_state_colloscopes::SubjectId),
     #[error("invalid period id ({0:?})")]
     InvalidPeriodId(collomatique_state_colloscopes::PeriodId),
 }
@@ -40,6 +42,8 @@ pub enum UpdatePairingRuleError {
     InvalidPairingRuleId(collomatique_state_colloscopes::PairingRuleId),
     #[error("invalid subject id ({0:?})")]
     InvalidSubjectId(collomatique_state_colloscopes::SubjectId),
+    #[error("subject ({0:?}) has interrogations disabled")]
+    SubjectWithoutInterrogations(collomatique_state_colloscopes::SubjectId),
     #[error("invalid period id ({0:?})")]
     InvalidPeriodId(collomatique_state_colloscopes::PeriodId),
 }
@@ -62,7 +66,8 @@ impl PairingsUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            Error, FixableInvariant, PeriodRefSite, Reference, SubjectRefSite,
+                            Convergence, Error, FixableInvariant, PeriodRefSite, Reference,
+                            SubjectRefSite,
                         };
                         match &e {
                             // Whatever the cascade could repair is repaired by
@@ -99,6 +104,32 @@ impl PairingsUpdateOp {
                                     }
                                 }
                                 for inv in set {
+                                    if let FixableInvariant::Convergence(
+                                        Convergence::PairingRuleAntecedentForSubjectWithoutInterrogations(
+                                            _,
+                                            subject,
+                                        ),
+                                    ) = inv
+                                    {
+                                        return AddNewPairingRuleError::SubjectWithoutInterrogations(
+                                            *subject,
+                                        );
+                                    }
+                                }
+                                for inv in set {
+                                    if let FixableInvariant::Convergence(
+                                        Convergence::PairingRuleConsequentForSubjectWithoutInterrogations(
+                                            _,
+                                            subject,
+                                        ),
+                                    ) = inv
+                                    {
+                                        return AddNewPairingRuleError::SubjectWithoutInterrogations(
+                                            *subject,
+                                        );
+                                    }
+                                }
+                                for inv in set {
                                     if let FixableInvariant::DanglingFk(Reference::Period {
                                         target,
                                         site: PeriodRefSite::PairingRuleExcludedPeriods(_),
@@ -107,12 +138,12 @@ impl PairingsUpdateOp {
                                         return AddNewPairingRuleError::InvalidPeriodId(*target);
                                     }
                                 }
-                                // Nothing else can break: the two subjects a
-                                // rule names need no interrogations of their own
-                                // (there is no convergence on that edge, unlike
-                                // for teachers, slots or balancing options), and
-                                // the rule cannot name one subject twice — that
-                                // is `PairingRule::new`'s seal, rejected long
+                                // Nothing else can break: besides the three
+                                // dangles, the only predicates over a rule's
+                                // content are the two interrogation
+                                // convergences scanned above, and the rule
+                                // cannot name one subject twice — that is
+                                // `PairingRule::new`'s seal, rejected long
                                 // before the state layer is reached.
                                 panic!(
                                     "Unexpected invariant breaks during AddNewPairingRule: {set:?}"
@@ -176,7 +207,7 @@ impl PairingsUpdateOp {
                     )
                     .map_err(|e| {
                         use collomatique_state_colloscopes::{
-                            Error, FixableInvariant, InvalidOp, PairingPrecheckError,
+                            Convergence, Error, FixableInvariant, InvalidOp, PairingPrecheckError,
                             PeriodRefSite, PrecheckError, Reference, SubjectRefSite,
                         };
                         match &e {
@@ -190,15 +221,17 @@ impl PairingsUpdateOp {
                                     ),
                                 }
                             }
-                            // Same three scans as the Add, and for the same
+                            // Same five scans as the Add, and for the same
                             // reason: the payload is the only thing that can
-                            // dangle here. The rule itself survives the
-                            // rollback, but with its *old* value, which the map
-                            // finds innocent of every break the new one caused —
-                            // so again nothing is repaired and the target is
-                            // convicted. Old validator order kept: antecedent
-                            // subject, then consequent subject, then excluded
-                            // period.
+                            // dangle or turn a rule vacuous here. The rule
+                            // itself survives the rollback, but with its *old*
+                            // value, which the map finds innocent of every break
+                            // the new one caused — so again nothing is repaired
+                            // and the target is convicted. Old validator order
+                            // kept: antecedent subject, then consequent subject,
+                            // then excluded period, with each part's
+                            // interrogation convergence scanned after both
+                            // dangles.
                             Error::BrokenInvariants(set) => {
                                 for inv in set {
                                     if let FixableInvariant::DanglingFk(Reference::Subject {
@@ -216,6 +249,32 @@ impl PairingsUpdateOp {
                                     }) = inv
                                     {
                                         return UpdatePairingRuleError::InvalidSubjectId(*target);
+                                    }
+                                }
+                                for inv in set {
+                                    if let FixableInvariant::Convergence(
+                                        Convergence::PairingRuleAntecedentForSubjectWithoutInterrogations(
+                                            _,
+                                            subject,
+                                        ),
+                                    ) = inv
+                                    {
+                                        return UpdatePairingRuleError::SubjectWithoutInterrogations(
+                                            *subject,
+                                        );
+                                    }
+                                }
+                                for inv in set {
+                                    if let FixableInvariant::Convergence(
+                                        Convergence::PairingRuleConsequentForSubjectWithoutInterrogations(
+                                            _,
+                                            subject,
+                                        ),
+                                    ) = inv
+                                    {
+                                        return UpdatePairingRuleError::SubjectWithoutInterrogations(
+                                            *subject,
+                                        );
                                     }
                                 }
                                 for inv in set {
@@ -266,9 +325,12 @@ mod tests {
     //!
     //! What is worth pinning is the error surface: three edges can dangle
     //! (antecedent subject, consequent subject, excluded period) against the
-    //! incompats' two, and the two subject edges answer with the *same* error
-    //! variant, so only the scan order tells them apart — which makes the
-    //! ordering fixture below the one that carries the family's public API.
+    //! incompats' two, and on top of those each part must name a subject that
+    //! runs interrogations — two more breaks, scanned between the subject
+    //! dangles and the period one. Four of those five answer with the *same*
+    //! two error variants, so only the scan order tells them apart — which
+    //! makes the ordering fixture below the one that carries the family's
+    //! public API.
     //!
     //! The frozen hogwarts base holds no pairing rule at all, so the fixtures
     //! that need a live one seed it themselves with the elementary op, on top
@@ -416,15 +478,16 @@ mod tests {
         assert_eq!(rule_of(state.get_data(), new_id), new_rule);
     }
 
-    /// The edge the family is deliberately loose about: a pairing rule may name
-    /// a subject that runs **no interrogations**. The antecedent then never
-    /// holds and the rule is vacuous, which is harmless — and there is no
-    /// convergence on that edge (unlike a teacher's subject list, a slot's
-    /// subject or a balancing override, each of which the checker forbids on a
-    /// subject without interrogations). So this must simply land.
+    /// The edge the family used to be deliberately loose about, closed by the
+    /// `PairingRule{Antecedent,Consequent}ForSubjectWithoutInterrogations`
+    /// convergences: a rule on a subject that runs no interrogations is vacuous
+    /// or impossible, so it is now refused. And since the rolled-back rule
+    /// (none at all on the Add, the old value on the Update) does not name that
+    /// subject, the map repairs nothing and the op is convicted, surfacing as
+    /// this family's error.
     #[test]
-    fn a_rule_may_name_a_subject_without_interrogations() {
-        let base = hogwarts();
+    fn a_rule_naming_a_subject_without_interrogations_is_rejected_on_add_and_on_update() {
+        let (base, rule_id) = base_with_a_rule();
         let quidditch = subject_by_name(base.get_data(), "Entrainement de Quidditch");
         let potions = subject_by_name(base.get_data(), "Potions");
         assert!(
@@ -443,15 +506,25 @@ mod tests {
         let vacuous = rule(quidditch, potions, vec![]);
 
         let mut session = CascadeSession::new(base.clone());
-        let op = PairingsUpdateOp::AddNewPairingRule(vacuous.clone());
-        let new_id = op
-            .apply_to_session(&mut session)
-            .expect("a pairing rule's subjects need no interrogations of their own");
-        let (state, warnings) = session.commit(op.get_desc());
 
-        let new_id = new_id.expect("adding a pairing rule returns the id it issued");
-        assert!(warnings.is_empty(), "nothing to repair: {warnings:?}");
-        assert_eq!(rule_of(state.get_data(), new_id), vacuous);
+        assert_eq!(
+            PairingsUpdateOp::AddNewPairingRule(vacuous.clone())
+                .apply_to_session(&mut session)
+                .unwrap_err(),
+            PairingsUpdateError::AddNewPairingRule(
+                AddNewPairingRuleError::SubjectWithoutInterrogations(quidditch)
+            ),
+        );
+        assert_eq!(
+            PairingsUpdateOp::UpdatePairingRule(rule_id, vacuous)
+                .apply_to_session(&mut session)
+                .unwrap_err(),
+            PairingsUpdateError::UpdatePairingRule(
+                UpdatePairingRuleError::SubjectWithoutInterrogations(quidditch)
+            ),
+        );
+
+        assert_eq!(session.get_data(), base.get_data());
     }
 
     /// Rewriting a rule replaces its whole value; what it used to name is
@@ -652,10 +725,12 @@ mod tests {
 
     /// Which break wins when a payload carries several is public API (D5): the
     /// old validator checked the antecedent subject, then the consequent
-    /// subject, then the excluded periods, and the three scans are copied in
-    /// that order. The set the engine hands over holds every dangle at once, so
-    /// only the scan order decides — and both steps of the order are pinned,
-    /// the second one by a payload whose antecedent is live.
+    /// subject, then the excluded periods, and the scans are copied in that
+    /// order, with the two interrogation convergences slotted between the
+    /// subject dangles and the period one — the same place
+    /// `PairedSlotsNotInSameSubject` sits among the slot-pairing scans. The set
+    /// the engine hands over holds every break at once, so only the scan order
+    /// decides, and every step of it is pinned below.
     #[test]
     fn a_payload_naming_several_ghosts_reports_them_in_the_old_order() {
         let (base, rule_id) = base_with_a_rule();
@@ -688,6 +763,45 @@ mod tests {
             PairingsUpdateError::UpdatePairingRule(UpdatePairingRuleError::InvalidSubjectId(
                 dead_consequent
             )),
+        );
+
+        // A dead consequent beats a live-but-uninterrogated antecedent: both
+        // dangle scans run before either convergence scan.
+        let quidditch = subject_by_name(base.get_data(), "Entrainement de Quidditch");
+        let dangle_beats_convergence = rule(quidditch, dead_consequent, vec![]);
+        assert_eq!(
+            PairingsUpdateOp::UpdatePairingRule(rule_id, dangle_beats_convergence)
+                .apply_to_session(&mut session)
+                .unwrap_err(),
+            PairingsUpdateError::UpdatePairingRule(UpdatePairingRuleError::InvalidSubjectId(
+                dead_consequent
+            )),
+        );
+
+        // Both parts live but uninterrogated: the antecedent's scan runs first,
+        // so its subject is the one reported.
+        let dejeuner = subject_by_name(base.get_data(), "Déjeuner à la Grande Salle");
+        let both_uninterrogated = rule(quidditch, dejeuner, vec![]);
+        assert_eq!(
+            PairingsUpdateOp::UpdatePairingRule(rule_id, both_uninterrogated)
+                .apply_to_session(&mut session)
+                .unwrap_err(),
+            PairingsUpdateError::UpdatePairingRule(
+                UpdatePairingRuleError::SubjectWithoutInterrogations(quidditch)
+            ),
+        );
+
+        // …and an uninterrogated consequent still beats the dead excluded
+        // period, which is the other boundary the two new scans introduce.
+        let metamorphose = subject_by_name(base.get_data(), "Métamorphose");
+        let convergence_beats_period = rule(metamorphose, dejeuner, vec![dangling_period()]);
+        assert_eq!(
+            PairingsUpdateOp::UpdatePairingRule(rule_id, convergence_beats_period)
+                .apply_to_session(&mut session)
+                .unwrap_err(),
+            PairingsUpdateError::UpdatePairingRule(
+                UpdatePairingRuleError::SubjectWithoutInterrogations(dejeuner)
+            ),
         );
 
         assert_eq!(session.get_data(), base.get_data());

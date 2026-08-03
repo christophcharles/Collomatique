@@ -421,7 +421,7 @@ fn an_incompatibility_of_a_dying_subject_answers_delete_incompat() {
 }
 
 #[test]
-fn either_half_of_a_pairing_rule_dying_answers_delete_pairing_rule() {
+fn either_half_of_a_pairing_rule_dying_or_losing_interrogations_answers_delete_pairing_rule() {
     let (data, doc) = build_valid_document();
 
     assert_shared_fix(
@@ -435,6 +435,18 @@ fn either_half_of_a_pairing_rule_dying_answers_delete_pairing_rule() {
                 target: doc.other_subject,
                 site: SubjectRefSite::PairingRuleConsequent(doc.pairing),
             }),
+            convergence(
+                Convergence::PairingRuleAntecedentForSubjectWithoutInterrogations(
+                    doc.pairing,
+                    doc.subject,
+                ),
+            ),
+            convergence(
+                Convergence::PairingRuleConsequentForSubjectWithoutInterrogations(
+                    doc.pairing,
+                    doc.other_subject,
+                ),
+            ),
         ],
         Fix::DeletePairingRule { rule: doc.pairing },
         AnnotatedPairingOp::Remove(doc.pairing).into(),

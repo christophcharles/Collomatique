@@ -552,7 +552,9 @@ struct PeriodDocument {
     /// Runs interrogations and runs on the period: it owns the slots, the
     /// assignments row and the association.
     subject: SubjectId,
-    /// Excludes the period — the `SubjectExcludedPeriods` site.
+    /// Excludes the period — the `SubjectExcludedPeriods` site. It runs
+    /// interrogations, because the pairing rule below names it and a rule may
+    /// only name subjects that run some.
     excluded_subject: SubjectId,
     slots: Vec<SlotId>,
     pairing: PairingRuleId,
@@ -614,7 +616,7 @@ fn build_period_document(app: &mut AppState<Data, String>, depth: bool) -> Perio
         app,
         Op::Subject(SubjectOp::AddAfter(
             Some(subject),
-            plain_subject("Sport", BTreeSet::from([period]))
+            interrogation_subject("Sport", BTreeSet::from([period]))
         )),
         NewId::SubjectId,
         "adding the excluding subject"
@@ -771,7 +773,7 @@ fn seven_flat_period_fixes(doc: &PeriodDocument, week: WeekId) -> Vec<Fix> {
         Fix::RemoveSubjectPeriodExclusion {
             subject: doc.excluded_subject,
             period: doc.period,
-            rebuilt: plain_subject("Sport", BTreeSet::new()),
+            rebuilt: interrogation_subject("Sport", BTreeSet::new()),
         },
         Fix::RemoveStudentPeriodExclusion {
             student: doc.excluded_student,
@@ -3163,7 +3165,7 @@ fn build_identity_pin_document(app: &mut AppState<Data, String>) -> IdentityPinD
         app,
         Op::Subject(SubjectOp::AddAfter(
             Some(subject),
-            plain_subject("Sport", BTreeSet::new())
+            interrogation_subject("Sport", BTreeSet::new())
         )),
         NewId::SubjectId,
         "adding the pairing rule's second subject"
@@ -3334,9 +3336,12 @@ fn identity_pin_2_an_incompat_pointed_at_a_dead_subject_survives() {
 /// door, and it accepts this payload because its single failure is the two
 /// parts *sharing* a subject, which a dead id on one side cannot cause.
 ///
-/// One break: no `Convergence` variant mentions a `PairingRule`. (The one that
-/// sounds close, `PairedSlotsNotInSameSubject`, is about *slot* pairings, a
-/// different table.)
+/// One break, and it takes both halves of the checker to see why. The
+/// antecedent's convergence predicate sits behind the subject lookup, so a
+/// *dead* antecedent makes it skip rather than fire; and the consequent's is
+/// live and runs interrogations, so its own predicate stays quiet. The dangle
+/// arrives alone. (`PairedSlotsNotInSameSubject`, which sounds close, is about
+/// *slot* pairings, a different table.)
 #[test]
 fn identity_pin_3_a_pairing_antecedent_pointed_at_a_dead_subject_survives() {
     let mut app = AppState::<Data, String>::new(Data::new());

@@ -924,6 +924,29 @@ impl Data {
                 }
                 Some(Fix::ClearSubjectBalancing { subject: *subject })
             }
+            // The two parts get separate arms for the same reason their two
+            // dangling-FK sites do (see `fix_subject_ref` above): each arm's
+            // identity test names its own part, so a rule whose live value —
+            // the payload having been rolled back — names the subject in the
+            // *other* part, or not at all, is spared. A `RulePart`'s subject is
+            // a bare mandatory field, so the reference cannot leave alone: the
+            // rule goes. The interrogations flag itself is never re-read here
+            // (presence, never predicate): it is the invariant's condition, and
+            // the rolled-back state cannot answer it.
+            Convergence::PairingRuleAntecedentForSubjectWithoutInterrogations(rule_id, subject) => {
+                let rule = params.pairings.pairing_rule_map.get(rule_id)?;
+                if rule.antecedent().subject_id != *subject {
+                    return None;
+                }
+                Some(Fix::DeletePairingRule { rule: *rule_id })
+            }
+            Convergence::PairingRuleConsequentForSubjectWithoutInterrogations(rule_id, subject) => {
+                let rule = params.pairings.pairing_rule_map.get(rule_id)?;
+                if rule.consequent().subject_id != *subject {
+                    return None;
+                }
+                Some(Fix::DeletePairingRule { rule: *rule_id })
+            }
             Convergence::PairedSlotsNotInSameSubject(rule_id, antecedent_slot, consequent_slot) => {
                 // Which of the two slots is "wrong" is undecidable, and a rule
                 // is sealed with two mandatory parts, so a part cannot leave
