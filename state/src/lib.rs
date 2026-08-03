@@ -29,7 +29,7 @@ pub mod traits;
 #[cfg(feature = "derive")]
 pub use collomatique_state_derive::{ContentIdentity, ContentOrd, EntityId, Join, References};
 
-pub use cascade::{CascadeReceipt, FixOp, Fixable, apply_cascade};
+pub use cascade::{CascadeReceipt, FixOp, Fixable, LandedFix, apply_cascade};
 pub use ids::Id;
 pub use join::{Join, Joinable, Lookup};
 pub use partial_order::{ContentIdentity, ContentOrd};

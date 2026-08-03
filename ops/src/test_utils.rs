@@ -28,6 +28,22 @@ pub(crate) fn hogwarts() -> AppState<Data, Desc> {
 
 /// The repairs a session logged, read back as the [Fix] values a fixture
 /// writes down.
+///
+/// On the way, the parent links are held to their shape: a repair's parent is
+/// always a *later* entry of the same list (children land before the repair
+/// that needed them). Every composite fixture goes through here, so a
+/// composite whose per-op parent indices were not shifted into the
+/// composite-wide list would trip this rather than reach the dialog.
 pub(crate) fn fixes(warnings: &[CascadeWarning]) -> Vec<Fix> {
+    for (i, warning) in warnings.iter().enumerate() {
+        if let Some(parent) = warning.parent() {
+            assert!(
+                i < parent && parent < warnings.len(),
+                "a repair's parent must be a later entry of the same warning list \
+                 (warning {i} claims parent {parent}, out of {})",
+                warnings.len(),
+            );
+        }
+    }
     warnings.iter().map(|w| w.fix().clone()).collect()
 }

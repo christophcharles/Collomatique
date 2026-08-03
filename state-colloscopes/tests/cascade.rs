@@ -268,7 +268,7 @@ fn landed_fixes(receipt: &CascadeReceipt<Data>) -> Vec<Fix> {
     receipt
         .fixes()
         .iter()
-        .map(|(_op, fix)| fix.clone())
+        .map(|landed| landed.fix().clone())
         .collect()
 }
 

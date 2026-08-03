@@ -1,15 +1,26 @@
 use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
 use relm4::gtk;
+use relm4::typed_view::list::{RelmListItem, TypedListView};
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
+
+/// One line of the warning list: the rendered sentence and its nesting depth.
+///
+/// Depth 0 is a repair one of the user's own ops needed; a deeper line is a
+/// sub-repair of the nearest line above it at the previous depth.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WarningLine {
+    pub text: String,
+    pub depth: usize,
+}
 
 pub struct Dialog {
     hidden: bool,
-    warnings: Vec<String>,
+    warnings: TypedListView<WarningLine, gtk::NoSelection>,
 }
 
 #[derive(Debug)]
 pub enum DialogInput {
-    Show(Vec<String>),
+    Show(Vec<WarningLine>),
     Continue,
     Cancel,
 }
@@ -18,21 +29,6 @@ pub enum DialogInput {
 pub enum DialogOutput {
     Continue,
     Cancel,
-}
-
-impl Dialog {
-    fn generate_secondary_text(&self) -> String {
-        let mut output = String::from(
-            "L'opération est potentiellement destructive et aura les conséquences suivantes :",
-        );
-
-        for warning in &self.warnings {
-            output += "\n - ";
-            output += warning;
-        }
-
-        output
-    }
 }
 
 #[relm4::component(pub)]
@@ -79,10 +75,21 @@ impl SimpleComponent for Dialog {
                 },
 
                 gtk::Label {
-                    #[watch]
-                    set_label: &model.generate_secondary_text(),
+                    set_label: "L'opération est potentiellement destructive et aura les conséquences suivantes :",
                     set_wrap: true,
-                    set_halign: gtk::Align::Center,
+                    set_halign: gtk::Align::Start,
+                },
+
+                gtk::ScrolledWindow {
+                    set_hscrollbar_policy: gtk::PolicyType::Never,
+                    set_propagate_natural_height: true,
+                    set_max_content_height: 400,
+                    set_size_request: (550, -1),
+
+                    #[local_ref]
+                    warnings_listview -> gtk::ListView {
+                        add_css_class: "boxed-list",
+                    },
                 },
 
                 gtk::Box {
@@ -116,10 +123,15 @@ impl SimpleComponent for Dialog {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let warnings: TypedListView<WarningLine, gtk::NoSelection> = TypedListView::new();
+
         let model = Dialog {
             hidden: true,
-            warnings: vec![],
+            warnings,
         };
+
+        let warnings_listview = &model.warnings.view;
+
         let widgets = view_output!();
 
         ComponentParts { model, widgets }
@@ -129,7 +141,8 @@ impl SimpleComponent for Dialog {
         match msg {
             DialogInput::Show(warnings) => {
                 self.hidden = false;
-                self.warnings = warnings;
+                self.warnings.clear();
+                self.warnings.extend_from_iter(warnings);
             }
             DialogInput::Continue => {
                 self.hidden = true;
@@ -140,5 +153,58 @@ impl SimpleComponent for Dialog {
                 sender.output(DialogOutput::Cancel).unwrap()
             }
         }
+    }
+}
+
+/// The per-row widgets `bind` writes into. Public only because it is the
+/// associated `Widgets` type of a public `WarningLine`; nothing reads it from
+/// outside.
+pub struct WarningLineWidgets {
+    label: gtk::Label,
+}
+
+impl RelmListItem for WarningLine {
+    type Root = gtk::Box;
+    type Widgets = WarningLineWidgets;
+
+    fn setup(_list_item: &gtk::ListItem) -> (Self::Root, Self::Widgets) {
+        let root = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .margin_end(5)
+            .margin_top(5)
+            .margin_bottom(5)
+            .build();
+
+        // The bullet lives in its own label rather than at the head of the
+        // text: the two labels then sit side by side, so a sentence that wraps
+        // keeps its whole body aligned past the bullet instead of running back
+        // under it. `valign: Start` keeps the bullet on the first line of such
+        // a sentence, and the fixed width makes every row's text start at the
+        // same place.
+        let bullet = gtk::Label::builder()
+            .label("•")
+            .width_request(14)
+            .xalign(0.0)
+            .valign(gtk::Align::Start)
+            .build();
+        let label = gtk::Label::builder()
+            .halign(gtk::Align::Start)
+            .xalign(0.0)
+            .wrap(true)
+            .build();
+
+        root.append(&bullet);
+        root.append(&label);
+
+        (root, WarningLineWidgets { label })
+    }
+
+    fn bind(&mut self, widgets: &mut Self::Widgets, root: &mut Self::Root) {
+        // Rows are recycled, so the depth margin must be (re)set on every
+        // bind, not only when non-zero. The wrapped continuation of a long
+        // sentence keeps this margin too — the old flat-text rendering
+        // could not do that.
+        root.set_margin_start(5 + 24 * self.depth as i32);
+        widgets.label.set_label(&self.text);
     }
 }

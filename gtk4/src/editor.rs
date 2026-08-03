@@ -1067,7 +1067,6 @@ impl Component for EditorPanel {
                             // self.data still holds the pre-state the interface is
                             // showing, which is exactly the state a warning must be
                             // rendered against.
-                            let mut seen = std::collections::BTreeSet::new();
                             let texts: Vec<String> = result
                                 .warnings
                                 .iter()
@@ -1075,13 +1074,27 @@ impl Component for EditorPanel {
                                     w.text(self.data.get_data())
                                         .expect("warning must render against the pre-state")
                                 })
-                                .filter(|t| seen.insert(t.clone()))
                                 .collect();
+
+                            // Rebuild the repair tree from the parent links. The
+                            // warnings come in application order (a repair lands
+                            // before the one that needed it), so filling the lists
+                            // by ascending index leaves every sibling group in
+                            // application order too.
+                            let mut roots = Vec::new();
+                            let mut children = vec![Vec::new(); result.warnings.len()];
+                            for (i, warning) in result.warnings.iter().enumerate() {
+                                match warning.parent() {
+                                    Some(parent) => children[parent].push(i),
+                                    None => roots.push(i),
+                                }
+                            }
+                            let lines = warning_lines(&roots, &children, &texts, 0);
 
                             self.state_to_commit = Some(result.new_state);
                             self.warning_op_dialog
                                 .sender()
-                                .send(warning_op::DialogInput::Show(texts))
+                                .send(warning_op::DialogInput::Show(lines))
                                 .unwrap();
                         }
                     }
@@ -1344,6 +1357,48 @@ impl EditorPanel {
             }
         }
     }
+}
+
+/// Flattens the repair tree for the warning dialog: each repair first, then the
+/// repairs it needed one level deeper, siblings in application order.
+///
+/// Cause before consequence is the order a reader can follow — « le créneau
+/// sera supprimé », then the interrogations that went with it — where the
+/// engine's own order is the reverse, deepest first.
+///
+/// A sibling whose *whole rendered subtree* repeats an earlier sibling's is
+/// dropped. The duplicates this removes come from a composite whose successive
+/// ops trigger byte-identical repairs, and those land as root siblings with
+/// identical subtrees. Deduplicating by line instead would break the tree: a
+/// dropped parent leaves its children indented under nothing, and a child
+/// dropped because the same sentence appeared under another parent hides a real
+/// consequence of this one.
+fn warning_lines(
+    siblings: &[usize],
+    children: &[Vec<usize>],
+    texts: &[String],
+    depth: usize,
+) -> Vec<warning_op::WarningLine> {
+    let mut seen = BTreeSet::new();
+    let mut lines = Vec::new();
+
+    for &idx in siblings {
+        let mut subtree = vec![warning_op::WarningLine {
+            text: texts[idx].clone(),
+            depth,
+        }];
+        subtree.extend(warning_lines(&children[idx], children, texts, depth + 1));
+
+        let key: Vec<(usize, String)> = subtree
+            .iter()
+            .map(|line| (line.depth, line.text.clone()))
+            .collect();
+        if seen.insert(key) {
+            lines.extend(subtree);
+        }
+    }
+
+    lines
 }
 
 /// Names a run of consecutive weeks — a period, or a block inside a subject.

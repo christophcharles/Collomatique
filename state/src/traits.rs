@@ -181,7 +181,10 @@ pub trait Manager: private::ManagerInternal {
     /// Returns the annotation's [InMemoryData::NewInfo] and the fixes the
     /// cascade applied, as their [crate::cascade::FixOp] meanings: what the
     /// repairs *did*, never which invariant caused them (that never leaves the
-    /// engine). The order is the engine's application order.
+    /// engine). The order is the engine's application order. Each fix comes
+    /// with the index, in that same list, of the fix whose failure required it
+    /// — `None` when the target itself did; since a fix lands before the one
+    /// that needed it, the index always points to a later entry.
     ///
     /// On `Err`, data and history are unchanged — the engine restores its entry
     /// snapshot bit-identically on every failure, and nothing is stored in
@@ -198,7 +201,10 @@ pub trait Manager: private::ManagerInternal {
     ) -> Result<
         (
             <<Self as private::ManagerInternal>::Data as InMemoryData>::NewInfo,
-            Vec<<<Self as private::ManagerInternal>::Data as crate::cascade::Fixable>::Fix>,
+            Vec<(
+                <<Self as private::ManagerInternal>::Data as crate::cascade::Fixable>::Fix,
+                Option<usize>,
+            )>,
         ),
         ApplyError<
             <<Self as private::ManagerInternal>::Data as InMemoryData>::InvalidOp,
@@ -215,7 +221,7 @@ pub trait Manager: private::ManagerInternal {
         let fixes = receipt
             .fixes()
             .iter()
-            .map(|(_rev_op, fix)| fix.clone())
+            .map(|landed| (landed.fix().clone(), landed.parent()))
             .collect();
 
         self.get_modification_history_mut()
@@ -611,9 +617,14 @@ mod tests {
         // pins is the plumbing (the value handed back is the annotation's),
         // not an interesting id.
         assert_eq!(new_info, ());
+        // Both quote removals are repairs the target itself needed, so neither
+        // has a parent fix.
         assert_eq!(
             fixes,
-            vec![QuoteFix::RemoveQuote(10), QuoteFix::RemoveQuote(20)],
+            vec![
+                (QuoteFix::RemoveQuote(10), None),
+                (QuoteFix::RemoveQuote(20), None),
+            ],
         );
         assert!(state.get_data().students.is_empty());
         assert!(state.get_data().quotes.is_empty());
