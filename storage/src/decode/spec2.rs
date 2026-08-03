@@ -302,7 +302,7 @@ fn reconstruct(blocks: Blocks) -> Result<InnerData, DecodeError> {
         blocks.group_list_associations.unwrap_or_default(),
     )?;
     let settings = reconstruct_settings(blocks.settings.unwrap_or_default());
-    let pairings = reconstruct_pairings(blocks.pairings.unwrap_or_default())?;
+    let pairings = reconstruct_pairings(blocks.pairings.unwrap_or_default(), &subjects)?;
     let slot_pairings = reconstruct_slot_pairings(blocks.slot_pairings.unwrap_or_default())?;
     let balancing = reconstruct_balancing(blocks.balancing.unwrap_or_default());
 
@@ -784,12 +784,14 @@ fn reconstruct_settings(block: format::settings::Settings) -> mem::settings::Set
 
 fn reconstruct_pairings(
     block: format::pairings::Pairings,
+    subjects: &mem::subjects::Subjects,
 ) -> Result<mem::pairings::Pairings, DecodeError> {
     let pairing_rule_map = block
         .into_inner()
         .into_iter()
         .map(|rule| {
             let raw_id = rule.id;
+            let raw_subjects = [rule.antecedent.subject_id, rule.consequent.subject_id];
             let part = |part: format::pairings::PairingPart| mem::pairings::RulePart {
                 subject_id: id(part.subject_id),
                 should_have: part.should_have,
@@ -803,6 +805,24 @@ fn reconstruct_pairings(
                 rule.soft,
             )
             .map_err(|_| DecodeError::InconsistentPairingRule(raw_id))?;
+            // Same honesty for §4.11's two subject constraints. Antecedent
+            // first, then consequent, matching the scan order the `ops`
+            // pairing errors publish, so both layers blame the same part of a
+            // rule that is wrong on both sides.
+            for raw_subject in raw_subjects {
+                let Some(subject) = subjects.find_subject(id::<SubjectId>(raw_subject)) else {
+                    return Err(DecodeError::UnknownSubjectInPairingRule {
+                        rule_id: raw_id,
+                        subject_id: raw_subject,
+                    });
+                };
+                if subject.parameters.interrogation_parameters.is_none() {
+                    return Err(DecodeError::PairingRuleForSubjectWithoutInterrogations {
+                        rule_id: raw_id,
+                        subject_id: raw_subject,
+                    });
+                }
+            }
             Ok((id::<PairingRuleId>(raw_id), value))
         })
         .collect::<Result<_, DecodeError>>()?;
