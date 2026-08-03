@@ -2354,9 +2354,8 @@ fn fixture_6_a_no_op_target_lands_alone_and_does_not_panic() {
 /// no longer there to remove, so the arm answers `None` and the op is
 /// convicted.)
 ///
-/// Committed **red**: today no invariant fires, so the update lands with no fix
-/// at all and the rule stays. Commit 3 turns it green and commit 4 pins the
-/// landed fix.
+/// One fix lands and only one, so this fixture pins sequence as well as
+/// content for free — there was no choice for the engine to make.
 #[test]
 fn fixture_7_turning_interrogations_off_takes_the_pairing_rules_with_it() {
     let mut app = AppState::<Data, String>::new(Data::new());
@@ -2396,7 +2395,8 @@ fn fixture_7_turning_interrogations_off_takes_the_pairing_rules_with_it() {
         data.annotate(Op::Subject(SubjectOp::Update(maths, subject_off.clone())));
 
     let receipt = apply_cascade(&mut data, target).expect("the cascade repairs the rule away");
-    let _ = receipt; // commit 4 asserts the landed fixes
+
+    assert_same_fixes(&landed_fixes(&receipt), &[Fix::DeletePairingRule { rule }]);
 
     assert_clean(&data);
     let inner = data.get_inner_data();
@@ -2967,9 +2967,10 @@ fn rejection_4_an_unknown_student_convicts_the_assignment() {
 /// the rule is either vacuous or impossible — never meaningful — so the
 /// document must not hold it.
 ///
-/// Committed **red**: no invariant forbids this yet, so today the rule simply
-/// lands and `apply_cascade` answers `Ok`. Commit 3 turns it green and commit 4
-/// pins the exact conviction.
+/// The conviction is pinned to the exact invariant, on the fresh rule id the
+/// annotation issued: the antecedent is the interrogation-less part, so the
+/// antecedent variant is the one — and it is the whole broken set, since the
+/// document holds nothing else the added rule could disturb.
 #[test]
 fn rejection_5_a_new_rule_naming_a_subject_without_interrogations_is_convicted() {
     let mut app = AppState::<Data, String>::new(Data::new());
@@ -2996,14 +2997,25 @@ fn rejection_5_a_new_rule_naming_a_subject_without_interrogations_is_convicted()
     let mut data = app.get_data().clone();
     let before = data.get_inner_data().clone();
 
-    let (target, _new_info) = data.annotate(Op::Pairing(PairingOp::Add(pairing_rule(
+    let (target, new_info) = data.annotate(Op::Pairing(PairingOp::Add(pairing_rule(
         quidditch,
         physique,
         BTreeSet::new(),
     ))));
+    let Some(NewId::PairingRuleId(rule)) = new_info else {
+        panic!("annotating a PairingOp::Add issues a rule id");
+    };
 
-    apply_cascade(&mut data, target)
+    let err = apply_cascade(&mut data, target)
         .expect_err("a rule naming a subject without interrogations must be refused");
+
+    assert_convicted_of(
+        err,
+        BTreeSet::from([FixableInvariant::Convergence(
+            Convergence::PairingRuleAntecedentForSubjectWithoutInterrogations(rule, quidditch),
+        )]),
+        "the target is convicted of exactly the convergence its own payload causes",
+    );
 
     assert_eq!(
         data.get_inner_data(),
@@ -3019,10 +3031,8 @@ fn rejection_5_a_new_rule_naming_a_subject_without_interrogations_is_convicted()
 ///
 /// The document is minimal on purpose — no slot, teacher, association or
 /// balancing entry — so that the pairing rule is the **only** thing the update
-/// can break; commit 4 asserts that set exactly.
-///
-/// Committed **red**: today the update just lands. Commit 3 turns it green and
-/// commit 4 pins the exact broken set.
+/// can break, and the assertion below can name the broken set exactly. `Maths`
+/// is the rule's antecedent, so the antecedent variant is the one that fires.
 #[test]
 fn rejection_6_turning_interrogations_off_under_a_pairing_rule_is_convicted_by_the_plain_gate() {
     let mut app = AppState::<Data, String>::new(Data::new());
@@ -3045,7 +3055,7 @@ fn rejection_6_turning_interrogations_off_under_a_pairing_rule_is_convicted_by_t
         NewId::SubjectId,
         "adding the consequent subject"
     );
-    let _rule: PairingRuleId = apply_new!(
+    let rule: PairingRuleId = apply_new!(
         app,
         Op::Pairing(PairingOp::Add(pairing_rule(
             maths,
@@ -3058,14 +3068,25 @@ fn rejection_6_turning_interrogations_off_under_a_pairing_rule_is_convicted_by_t
 
     let before = app.get_data().get_inner_data().clone();
 
-    app.apply(
-        Op::Subject(SubjectOp::Update(
-            maths,
-            plain_subject("Maths", BTreeSet::new()),
-        )),
-        "turning the interrogations off".into(),
-    )
-    .expect_err("the plain gate must refuse: the rule would name a subject without interrogations");
+    let err = app
+        .apply(
+            Op::Subject(SubjectOp::Update(
+                maths,
+                plain_subject("Maths", BTreeSet::new()),
+            )),
+            "turning the interrogations off".into(),
+        )
+        .expect_err(
+            "the plain gate must refuse: the rule would name a subject without interrogations",
+        );
+
+    assert_convicted_of(
+        err,
+        BTreeSet::from([FixableInvariant::Convergence(
+            Convergence::PairingRuleAntecedentForSubjectWithoutInterrogations(rule, maths),
+        )]),
+        "the only broken edge in this minimal document is the pairing rule",
+    );
 
     assert_eq!(
         app.get_data().get_inner_data(),
