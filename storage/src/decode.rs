@@ -90,6 +90,10 @@ pub enum DecodeError {
     UnknownSubjectInSlots(u64),
     #[error("The slots have a row for subject id {0} which has no interrogations")]
     SlotsForSubjectWithoutInterrogations(u64),
+    #[error("Pairing rule id {rule_id} names subject id {subject_id}, which does not exist")]
+    UnknownSubjectInPairingRule { rule_id: u64, subject_id: u64 },
+    #[error("Pairing rule id {rule_id} names subject id {subject_id}, which has no interrogations")]
+    PairingRuleForSubjectWithoutInterrogations { rule_id: u64, subject_id: u64 },
     #[error(
         "Week pattern id {week_pattern_id} has {found} week entries but the schedule has {expected} weeks"
     )]
