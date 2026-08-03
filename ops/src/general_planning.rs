@@ -482,6 +482,83 @@ impl GeneralPlanningUpdateOp {
                     }
                 }
 
+                let pairing_rules: Vec<_> = session
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .pairings
+                    .pairing_rule_map
+                    .iter()
+                    .filter(|(_id, rule)| rule.excluded_periods().contains(period_id))
+                    .map(|(id, rule)| (id, rule.clone()))
+                    .collect();
+                for (rule_id, rule) in pairing_rules {
+                    // Sealed value: `into_parts` is the door for a caller that
+                    // rebuilds, and `PairingRule::new`'s only failure is the two
+                    // parts naming one subject — which adding a period cannot
+                    // cause.
+                    let (antecedent, consequent, mut excluded_periods, soft) = rule.into_parts();
+                    excluded_periods.insert(new_id);
+                    let rebuilt = collomatique_state_colloscopes::pairings::PairingRule::new(
+                        antecedent,
+                        consequent,
+                        excluded_periods,
+                        soft,
+                    )
+                    .expect("adding an excluded period cannot make the parts share a subject");
+                    let result = session
+                        .apply(
+                            collomatique_state_colloscopes::Op::Pairing(
+                                collomatique_state_colloscopes::PairingOp::Update(rule_id, rebuilt),
+                            ),
+                            self.get_desc(),
+                        )
+                        // A pairing rule's excluded periods are named by no
+                        // convergence predicate at all — only by the reference
+                        // sweep, and the period was created a few lines above.
+                        .expect("a pairing rule's excluded periods contradict nothing");
+                    if result.is_some() {
+                        panic!("Unexpected result! {:?}", result);
+                    }
+                }
+
+                let slot_pairing_rules: Vec<_> = session
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .slot_pairings
+                    .slot_pairing_rule_map
+                    .iter()
+                    .filter(|(_id, rule)| rule.excluded_periods().contains(period_id))
+                    .map(|(id, rule)| (id, rule.clone()))
+                    .collect();
+                for (rule_id, rule) in slot_pairing_rules {
+                    let (antecedent, consequent, mut excluded_periods, soft) = rule.into_parts();
+                    excluded_periods.insert(new_id);
+                    let rebuilt =
+                        collomatique_state_colloscopes::slot_pairings::SlotPairingRule::new(
+                            antecedent,
+                            consequent,
+                            excluded_periods,
+                            soft,
+                        )
+                        .expect("adding an excluded period cannot make the parts share a slot");
+                    let result = session
+                        .apply(
+                            collomatique_state_colloscopes::Op::SlotPairing(
+                                collomatique_state_colloscopes::SlotPairingOp::Update(
+                                    rule_id, rebuilt,
+                                ),
+                            ),
+                            self.get_desc(),
+                        )
+                        // Same argument.
+                        .expect("a slot pairing rule's excluded periods contradict nothing");
+                    if result.is_some() {
+                        panic!("Unexpected result! {:?}", result);
+                    }
+                }
+
                 let period_assignments: Vec<(_, std::collections::BTreeSet<_>)> = session
                     .get_data()
                     .get_inner_data()
