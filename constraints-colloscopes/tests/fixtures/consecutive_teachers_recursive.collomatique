@@ -1,0 +1,244 @@
+{
+  "header": {
+    "file_type": "Collomatique",
+    "produced_with_version": {
+      "major": 0,
+      "minor": 1,
+      "patch": 0
+    },
+    "file_content": "Colloscope"
+  },
+  "entries": [
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "GeneralPlanning": {
+          "first_week": null,
+          "periods": [
+            {
+              "id": 0,
+              "weeks": [
+                {
+                  "interrogations": true,
+                  "annotation": null
+                },
+                {
+                  "interrogations": true,
+                  "annotation": null
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "Subjects": [
+          {
+            "id": 1,
+            "name": "A",
+            "interrogation_parameters": {
+              "students_per_group": {
+                "min": 1,
+                "max": 3
+              },
+              "groups_per_interrogation": {
+                "min": 1,
+                "max": 1
+              },
+              "duration_minutes": 60,
+              "take_duration_into_account": false,
+              "periodicity": {
+                "AmountInYear": {
+                  "interrogation_count_in_year": {
+                    "min": 1,
+                    "max": 1
+                  },
+                  "minimum_week_separation": 1
+                }
+              }
+            },
+            "excluded_periods": []
+          },
+          {
+            "id": 2,
+            "name": "B",
+            "interrogation_parameters": {
+              "students_per_group": {
+                "min": 1,
+                "max": 3
+              },
+              "groups_per_interrogation": {
+                "min": 1,
+                "max": 1
+              },
+              "duration_minutes": 60,
+              "take_duration_into_account": false,
+              "periodicity": {
+                "AmountInYear": {
+                  "interrogation_count_in_year": {
+                    "min": 1,
+                    "max": 1
+                  },
+                  "minimum_week_separation": 1
+                }
+              }
+            },
+            "excluded_periods": []
+          }
+        ]
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "Teachers": [
+          {
+            "id": 3,
+            "surname": "",
+            "firstname": "",
+            "tel": null,
+            "email": null,
+            "subjects": [
+              1,
+              2
+            ]
+          },
+          {
+            "id": 7,
+            "surname": "",
+            "firstname": "",
+            "tel": null,
+            "email": null,
+            "subjects": [
+              1
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "Students": [
+          {
+            "id": 6,
+            "surname": "",
+            "firstname": "",
+            "tel": null,
+            "email": null,
+            "excluded_periods": []
+          }
+        ]
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "Assignments": [
+          {
+            "period_id": 0,
+            "subject_id": 1,
+            "students": [
+              6
+            ]
+          },
+          {
+            "period_id": 0,
+            "subject_id": 2,
+            "students": [
+              6
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "Slots": [
+          {
+            "subject_id": 1,
+            "slots": [
+              {
+                "id": 4,
+                "teacher_id": 3,
+                "start": {
+                  "day": "monday",
+                  "time": "08:00"
+                },
+                "extra_info": "",
+                "week_pattern_id": null,
+                "cost": 0
+              },
+              {
+                "id": 8,
+                "teacher_id": 7,
+                "start": {
+                  "day": "monday",
+                  "time": "10:00"
+                },
+                "extra_info": "",
+                "week_pattern_id": null,
+                "cost": 0
+              }
+            ]
+          },
+          {
+            "subject_id": 2,
+            "slots": [
+              {
+                "id": 5,
+                "teacher_id": 3,
+                "start": {
+                  "day": "monday",
+                  "time": "09:00"
+                },
+                "extra_info": "",
+                "week_pattern_id": null,
+                "cost": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "Balancing": {
+          "global": {
+            "teacher_rotation": {
+              "soft": false
+            },
+            "slot_rotation": null,
+            "avoid_twice_in_a_row": false,
+            "year_teacher_rotation": false,
+            "period_teacher_rotation": false
+          },
+          "subjects": [
+            {
+              "subject_id": 1,
+              "options": {
+                "teacher_rotation": null,
+                "slot_rotation": null,
+                "avoid_twice_in_a_row": false,
+                "year_teacher_rotation": false,
+                "period_teacher_rotation": false
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

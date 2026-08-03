@@ -1,7 +1,9 @@
 use crate::extras::{
     MyBundle, V, extra_var, is_at_most_once_per_week, subject_interrogation_params,
 };
-use crate::helpers::{enrolled_students_for_subject, slot_week_pairs_for_subject};
+use crate::helpers::{
+    enrolled_students_for_subject, merge_objectified_weighted, slot_week_pairs_for_subject,
+};
 use crate::ids::GlobalWeek;
 use crate::types::{ExtraVarName, InfeasibleConstraint, PreferenceConstraint};
 use crate::vars::VarEnv;
@@ -22,11 +24,30 @@ fn seen_this_week_expr(
     count_student_teacher_expr(teacher_slot_week_pairs, student, week, week)
 }
 
-fn build_window_constraints(
+/// How [`build_window_constraints`] emits each `count <= 1` row: as a hard
+/// constraint, or objectified into the permanent soft objective with the given
+/// per-window weight.
+#[derive(Clone, Copy)]
+pub(super) enum WindowMode {
+    Hard,
+    Soft { weight: f64 },
+}
+
+/// Same distinction for the avoid rows of the `IsLastTeacherSeen` chain in
+/// [`build_recursive_constraints`]. The chain reification itself always stays
+/// hard — it *defines* the variables.
+#[derive(Clone, Copy)]
+pub(super) enum RecursiveMode {
+    Hard,
+    Soft,
+}
+
+pub(super) fn build_window_constraints(
     env: &VarEnv,
     subject_id: SubjectId,
     slot_week_pairs: &[(crate::ids::SlotId, GlobalWeek)],
     windows: &[(GlobalWeek, GlobalWeek)],
+    mode: WindowMode,
     bundle: &mut MyBundle,
 ) {
     let enrolled = enrolled_students_for_subject(env, subject_id);
@@ -40,24 +61,51 @@ fn build_window_constraints(
                 let count =
                     count_student_teacher_expr(&teacher_pairs, student, first_week, last_week);
                 let constraint = count.leq(&IntLinExpr::constant(1));
-                let desc = PreferenceConstraint::BalancingAvoidTwiceInARow {
-                    student,
-                    subject: subject_id,
-                    teacher,
-                    first_week,
-                    last_week,
+                match mode {
+                    WindowMode::Hard => {
+                        let desc = PreferenceConstraint::BalancingAvoidTwiceInARow {
+                            student,
+                            subject: subject_id,
+                            teacher,
+                            first_week,
+                            last_week,
+                        }
+                        .into();
+                        *bundle = std::mem::take(bundle).with_constraint(constraint, desc);
+                    }
+                    WindowMode::Soft { weight } => {
+                        let desc = PreferenceConstraint::BalancingAvoidTwiceInARowSoft {
+                            student,
+                            subject: subject_id,
+                            teacher,
+                            first_week,
+                            last_week,
+                        }
+                        .into();
+                        *bundle = merge_objectified_weighted(
+                            std::mem::take(bundle),
+                            MyBundle::new().with_constraint(constraint, desc),
+                            ExtraVarName::AvoidTwiceInARowPenalty {
+                                subject: subject_id,
+                                student,
+                                teacher,
+                                first_week,
+                                last_week,
+                            },
+                            move |_desc| weight,
+                        );
+                    }
                 }
-                .into();
-                *bundle = std::mem::take(bundle).with_constraint(constraint, desc);
             }
         }
     }
 }
 
-fn build_recursive_constraints(
+pub(super) fn build_recursive_constraints(
     env: &VarEnv,
     subject_id: SubjectId,
     slot_week_pairs: &[(crate::ids::SlotId, GlobalWeek)],
+    mode: RecursiveMode,
     bundle: &mut MyBundle,
 ) {
     let active_weeks = subject_active_weeks(slot_week_pairs);
@@ -136,14 +184,41 @@ fn build_recursive_constraints(
                                 week: prev_week,
                             }))),
                     );
-                    let desc = PreferenceConstraint::BalancingAvoidTwiceInARowRecursive {
-                        student,
-                        subject,
-                        teacher,
-                        week,
+                    match mode {
+                        RecursiveMode::Hard => {
+                            let desc = PreferenceConstraint::BalancingAvoidTwiceInARowRecursive {
+                                student,
+                                subject,
+                                teacher,
+                                week,
+                            }
+                            .into();
+                            *bundle =
+                                std::mem::take(bundle).with_constraint(avoid_constraint, desc);
+                        }
+                        RecursiveMode::Soft => {
+                            let desc =
+                                PreferenceConstraint::BalancingAvoidTwiceInARowRecursiveSoft {
+                                    student,
+                                    subject,
+                                    teacher,
+                                    week,
+                                }
+                                .into();
+                            *bundle = merge_objectified_weighted(
+                                std::mem::take(bundle),
+                                MyBundle::new().with_constraint(avoid_constraint, desc),
+                                ExtraVarName::AvoidTwiceInARowPenalty {
+                                    subject,
+                                    student,
+                                    teacher,
+                                    first_week: prev_week,
+                                    last_week: week,
+                                },
+                                |_desc| crate::weights::BASE,
+                            );
+                        }
                     }
-                    .into();
-                    *bundle = std::mem::take(bundle).with_constraint(avoid_constraint, desc);
                 }
             }
         }
@@ -174,7 +249,14 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                 let p = periodicity_in_weeks.get() as usize;
                 let active_weeks = subject_active_weeks(&slot_week_pairs);
                 let windows = rolling_windows(&active_weeks, 2 * p, 1);
-                build_window_constraints(env, *subject_id, &slot_week_pairs, &windows, &mut bundle);
+                build_window_constraints(
+                    env,
+                    *subject_id,
+                    &slot_week_pairs,
+                    &windows,
+                    WindowMode::Hard,
+                    &mut bundle,
+                );
             }
             SubjectPeriodicity::OnceForEveryBlockOfWeeks {
                 weeks_per_block, ..
@@ -182,7 +264,14 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                 let b = weeks_per_block.get() as usize;
                 let active_weeks = subject_active_weeks(&slot_week_pairs);
                 let windows = rolling_windows(&active_weeks, 2 * b, b);
-                build_window_constraints(env, *subject_id, &slot_week_pairs, &windows, &mut bundle);
+                build_window_constraints(
+                    env,
+                    *subject_id,
+                    &slot_week_pairs,
+                    &windows,
+                    WindowMode::Hard,
+                    &mut bundle,
+                );
             }
             SubjectPeriodicity::AmountInYear { .. }
             | SubjectPeriodicity::AmountForEveryArbitraryBlock { .. } => {
@@ -198,7 +287,13 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                     );
                     continue;
                 }
-                build_recursive_constraints(env, *subject_id, &slot_week_pairs, &mut bundle);
+                build_recursive_constraints(
+                    env,
+                    *subject_id,
+                    &slot_week_pairs,
+                    RecursiveMode::Hard,
+                    &mut bundle,
+                );
             }
         }
 

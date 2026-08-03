@@ -506,6 +506,41 @@ impl PreferenceConstraint {
                     week.0 + 1,
                 )
             }
+            PreferenceConstraint::BalancingAvoidTwiceInARowSoft {
+                student,
+                subject,
+                teacher,
+                first_week,
+                last_week,
+            } => {
+                let s_name = student_name(env, *student);
+                let subj_name = subject_name(env, *subject);
+                let t_name = teacher_name(env, *teacher);
+                format!(
+                    "{} ne devrait pas être collé(e) deux fois de suite par {} en {} ({})",
+                    s_name,
+                    t_name,
+                    subj_name,
+                    week_range_text(*first_week, *last_week),
+                )
+            }
+            PreferenceConstraint::BalancingAvoidTwiceInARowRecursiveSoft {
+                student,
+                subject,
+                teacher,
+                week,
+            } => {
+                let s_name = student_name(env, *student);
+                let subj_name = subject_name(env, *subject);
+                let t_name = teacher_name(env, *teacher);
+                format!(
+                    "{} ne devrait pas être collé(e) deux fois de suite par {} en {} (semaine {})",
+                    s_name,
+                    t_name,
+                    subj_name,
+                    week.0 + 1,
+                )
+            }
             PreferenceConstraint::BalancingYearRotation {
                 student,
                 subject,
