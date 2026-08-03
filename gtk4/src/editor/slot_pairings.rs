@@ -94,10 +94,10 @@ pub fn rule_messages(shape: (bool, bool), slots_are_same: bool) -> Vec<RuleMessa
         messages.push(RuleMessage::SameSlot);
     }
     match shape {
-        (true, false) => {
-            messages.push(RuleMessage::HeavyShape);
-            messages.push(RuleMessage::FavoredShape);
-        }
+        // The warning already names this shape, and it is symmetric anyway
+        // (« A utilisé ⇒ B non utilisé » is « B utilisé ⇒ A non utilisé »), so
+        // the nudge would add nothing.
+        (true, false) => messages.push(RuleMessage::HeavyShape),
         // Already the cheapest shape: nothing to nudge towards.
         (false, true) => {}
         _ => messages.push(RuleMessage::FavoredShape),

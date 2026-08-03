@@ -91,10 +91,9 @@ pub fn rule_messages(shape: (bool, bool), subjects_are_same: bool) -> Vec<RuleMe
         messages.push(RuleMessage::SameSubject);
     }
     match shape {
-        (true, false) => {
-            messages.push(RuleMessage::HeavyShape);
-            messages.push(RuleMessage::FavoredShape);
-        }
+        // The warning already names this shape, and it is symmetric anyway
+        // (« A ⇒ ne pas B » is « B ⇒ ne pas A »), so the nudge would add nothing.
+        (true, false) => messages.push(RuleMessage::HeavyShape),
         // Already the cheapest shape: nothing to nudge towards.
         (false, true) => {}
         _ => messages.push(RuleMessage::FavoredShape),
