@@ -26,16 +26,13 @@ fn build_window_constraints(
     env: &VarEnv,
     subject_id: SubjectId,
     slot_week_pairs: &[(crate::ids::SlotId, GlobalWeek)],
-    window_size: usize,
-    step_size: usize,
+    windows: &[(GlobalWeek, GlobalWeek)],
     bundle: &mut MyBundle,
 ) {
-    let active_weeks = subject_active_weeks(slot_week_pairs);
-    let windows = rolling_windows(&active_weeks, window_size, step_size);
     let enrolled = enrolled_students_for_subject(env, subject_id);
     let teachers = teachers_for_subject(env, subject_id);
 
-    for (first_week, last_week) in windows {
+    for &(first_week, last_week) in windows {
         for &student in &enrolled {
             for &teacher in &teachers {
                 let teacher_pairs =
@@ -175,13 +172,17 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                 periodicity_in_weeks,
             } => {
                 let p = periodicity_in_weeks.get() as usize;
-                build_window_constraints(env, *subject_id, &slot_week_pairs, 2 * p, 1, &mut bundle);
+                let active_weeks = subject_active_weeks(&slot_week_pairs);
+                let windows = rolling_windows(&active_weeks, 2 * p, 1);
+                build_window_constraints(env, *subject_id, &slot_week_pairs, &windows, &mut bundle);
             }
             SubjectPeriodicity::OnceForEveryBlockOfWeeks {
                 weeks_per_block, ..
             } => {
                 let b = weeks_per_block.get() as usize;
-                build_window_constraints(env, *subject_id, &slot_week_pairs, 2 * b, b, &mut bundle);
+                let active_weeks = subject_active_weeks(&slot_week_pairs);
+                let windows = rolling_windows(&active_weeks, 2 * b, b);
+                build_window_constraints(env, *subject_id, &slot_week_pairs, &windows, &mut bundle);
             }
             SubjectPeriodicity::AmountInYear { .. }
             | SubjectPeriodicity::AmountForEveryArbitraryBlock { .. } => {
