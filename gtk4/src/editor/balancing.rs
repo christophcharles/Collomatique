@@ -70,7 +70,7 @@ impl Component for Balancing {
                         gtk::Button {
                             set_icon_name: "edit-symbolic",
                             add_css_class: "flat",
-                            set_tooltip_text: Some("Modifier les paramètres globaux d'équilibrage"),
+                            set_tooltip_text: Some("Modifier les paramètres globaux d'équilibrage strict"),
                             connect_clicked => BalancingInput::EditGlobalOptions,
                         },
                         gtk::Separator {
@@ -249,30 +249,25 @@ impl Balancing {
     }
 }
 
-fn soft_constraint_symbol(soft: bool) -> &'static str {
-    if soft { "(souple)" } else { "(stricte)" }
-}
-
 fn options_to_string(options: &BalancingOptions) -> String {
-    let mut parts = vec![
-        format!(
-            "rotation des colleurs {}",
-            soft_constraint_symbol(!options.teacher_rotation)
-        ),
-        format!(
-            "rotation des créneaux {}",
-            soft_constraint_symbol(!options.slot_rotation)
-        ),
-    ];
+    let mut parts = vec![];
+
+    if options.teacher_rotation {
+        parts.push("rotation des colleurs");
+    }
+    if options.slot_rotation {
+        parts.push("rotation des créneaux");
+    }
     if options.avoid_twice_in_a_row {
-        parts.push("éviter 2× de suite le même colleur".to_string());
+        parts.push("éviter 2× de suite le même colleur");
     }
     if options.year_teacher_rotation {
-        parts.push("rotation annuelle des colleurs".to_string());
+        parts.push("rotation annuelle des colleurs");
     }
     if options.period_teacher_rotation {
-        parts.push("rotation des colleurs par période".to_string());
+        parts.push("rotation des colleurs par période");
     }
+
     parts.join("    ―    ")
 }
 
@@ -304,7 +299,7 @@ pub enum SubjectEntryOutput {
 impl SubjectEntry {
     fn generate_edit_tooltip_text(&self) -> String {
         format!(
-            "Modifier les paramètres d'équilibrage de {}",
+            "Modifier les paramètres d'équilibrage strict de {}",
             self.data.subject_name,
         )
     }
