@@ -587,9 +587,11 @@ week." Payload: keyed collection (by `id`).
 | `excluded_periods` | array of period ids | Periods where the rule does not apply. |
 | `soft` | bool | `true` = best-effort (optimised), `false` = hard constraint. |
 
-Constraints: both subjects exist; antecedent and consequent subjects differ;
-excluded periods exist. (Rules apply only to students enrolled in both subjects —
-a solver semantic, not a file constraint.)
+Constraints: both subjects exist **and** have interrogations
+(`interrogation_parameters` is not `null`); antecedent and consequent subjects
+differ; excluded periods exist. A rule naming a subject without interrogations
+is vacuous or impossible, never meaningful. (Rules apply only to students
+enrolled in both subjects — a solver semantic, not a file constraint.)
 
 ### 4.12 `SlotPairings`
 
