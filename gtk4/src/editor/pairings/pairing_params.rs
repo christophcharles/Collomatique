@@ -77,11 +77,20 @@ impl Dialog {
         self.ordered_subjects[selected as usize].0
     }
 
+    /// Both « Matière » combos and both id↔index mappings read this list, so
+    /// the filter here covers the whole dialog.
+    ///
+    /// Only subjects that run interrogations are offered: a pairing rule is an
+    /// implication between two subjects' interrogations, so naming a subject
+    /// that has none makes the rule vacuous or impossible. The state layer
+    /// refuses such a document outright, so a rule being edited always finds
+    /// both of its subjects in this list.
     fn build_ordered_subjects(&mut self) {
         let mut subjects: Vec<_> = self
             .subjects
             .ordered_subject_list
             .iter()
+            .filter(|(_, subject)| subject.parameters.interrogation_parameters.is_some())
             .map(|(subject_id, subject)| (subject_id, subject.parameters.name.clone()))
             .collect();
         subjects.sort_by_key(|(id, name)| (name.clone(), *id));

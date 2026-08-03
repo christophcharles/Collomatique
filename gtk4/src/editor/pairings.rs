@@ -77,7 +77,7 @@ impl Component for Pairings {
                     set_hexpand: true,
                     set_margin_top: 10,
                     #[watch]
-                    set_visible: model.subjects.ordered_subject_list.len() >= 2,
+                    set_visible: model.pairable_subjects().count() >= 2,
                     adw::ButtonContent {
                         set_icon_name: "list-add-symbolic",
                         set_label: "Ajouter une règle d'appariement",
@@ -183,19 +183,10 @@ impl Component for Pairings {
             }
             PairingsInput::AddPairing => {
                 self.pairing_params_selection_reason = PairingParamsSelectionReason::New;
-                let first_subject = self
-                    .subjects
-                    .ordered_subject_list
-                    .get_at(0)
-                    .map(|(id, _)| id);
-                let second_subject = self
-                    .subjects
-                    .ordered_subject_list
-                    .get_at(1)
-                    .map(|(id, _)| id);
-                let (ant_id, con_id) = match (first_subject, second_subject) {
+                let mut candidates = self.pairable_subjects();
+                let (ant_id, con_id) = match (candidates.next(), candidates.next()) {
                     (Some(a), Some(b)) => (a, b),
-                    _ => return, // Need at least 2 subjects
+                    _ => return, // Need at least 2 subjects with interrogations
                 };
                 let default_rule = collomatique_state_colloscopes::pairings::PairingRule::new(
                     collomatique_state_colloscopes::pairings::RulePart {
@@ -209,7 +200,7 @@ impl Component for Pairings {
                     BTreeSet::new(),
                     false,
                 )
-                .expect("ant_id and con_id are the first two distinct subjects");
+                .expect("ant_id and con_id are the first two distinct pairable subjects");
                 self.pairing_params_dialog
                     .sender()
                     .send(pairing_params::DialogInput::Show(
@@ -234,5 +225,24 @@ impl Component for Pairings {
                 }
             }
         }
+    }
+}
+
+impl Pairings {
+    /// The subjects a pairing rule may name, in document order.
+    ///
+    /// A rule is an implication between two subjects' interrogations, so a
+    /// subject running none can only make it vacuous or impossible; the state
+    /// layer refuses such a rule outright. Both the « Ajouter » button's
+    /// visibility and the default rule that button opens read this, so the
+    /// button is only offered when it can produce a rule the backend accepts.
+    fn pairable_subjects(
+        &self,
+    ) -> impl Iterator<Item = collomatique_state_colloscopes::SubjectId> + '_ {
+        self.subjects
+            .ordered_subject_list
+            .iter()
+            .filter(|(_, subject)| subject.parameters.interrogation_parameters.is_some())
+            .map(|(id, _)| id)
     }
 }
