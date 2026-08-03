@@ -91,6 +91,12 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
 
         let enrolled = enrolled_students_for_subject(env, *subject_id);
         let teachers = teachers_for_subject(env, *subject_id);
+        if teachers.len() < 2 {
+            // A single teacher makes rotation meaningless: the soft equalities
+            // are identities (`Aₜ == A` and `Uₜ == U`) and the hard windows only
+            // restate the subject's periodicity bound.
+            continue;
+        }
 
         if is_soft {
             // Soft path: cumulative availability-proportional balance. For each

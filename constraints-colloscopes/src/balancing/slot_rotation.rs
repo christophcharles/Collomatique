@@ -48,6 +48,11 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         let Some(subject_slots) = env.slots.slots_vec_for_subject(*subject_id) else {
             continue;
         };
+        if subject_slots.len() < 2 {
+            // A single slot makes slot rotation meaningless, for the same reason
+            // a single teacher makes teacher rotation meaningless.
+            continue;
+        }
 
         if is_soft {
             // Soft path: cumulative availability-proportional balance, per
