@@ -3,11 +3,15 @@
 //! A per-student `Settings::students` override (like a per-subject
 //! `Balancing::subjects` override) is meant to be **whole-entry**: if a student
 //! has an override entry, it wins verbatim — `None` included — so a student can
-//! *disable* a globally-enabled limit. The plain-`bool` balancing path already
-//! does this (`effective_balancing_flag`). But the `Option<SoftParam<_>>` limits
-//! helpers do per-field `get(id).and_then(extract).or(global)`, and because
-//! `and_then` *flattens*, an override entry whose field is `None` silently falls
-//! through to the global value — so the student **cannot** disable it.
+//! *disable* a globally-enabled limit.
+//!
+//! The limits helpers used to get this wrong. They fell back per field, with
+//! `get(id).and_then(extract).or(global)`, and `and_then` *flattens*: "this
+//! student has no override entry" and "the entry's field is `None`" collapse
+//! into the same `None`, so `.or(global)` re-applied the global limit in both
+//! cases and the student could never disable anything. The three helpers now go
+//! through the whole-entry `Settings::limits_for` accessor instead, which is
+//! what this test guards against regressing.
 //!
 //! The limits fixture is a minimal self-contained document: one period with one
 //! interrogation week, one duration-counting interrogated subject with a
@@ -17,12 +21,10 @@
 //! That overridden student must have **no** `MaxInterrogationsPerWeek`
 //! constraint while the other (non-overridden) student keeps theirs.
 //!
-//! FAILS today: the per-field `and_then(..).or(global)` fallback re-applies the
-//! global weekly max to the overridden student, so the constraint is still
-//! emitted.
-//!
-//! The balancing half pins the same whole-entry rule on the rotation side.
-//! `teacher_rotation` is a plain `bool` there: the rotation is always active and
+//! The balancing half pins the same whole-entry rule on the rotation side. It
+//! never had the flattening bug and cannot get it: only a field that is itself
+//! an `Option` can be flattened, and every balancing field is a plain `bool`.
+//! `teacher_rotation` is one of them: the rotation is always active and
 //! the flag only says whether it is enforced strictly (`true`) or kept as an
 //! optimisation goal (`false`). So an override cannot disable it — what it can
 //! do is *soften* it. Its fixture has two interrogated subjects, each taught by
