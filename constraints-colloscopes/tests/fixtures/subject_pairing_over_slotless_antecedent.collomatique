@@ -2182,10 +2182,8 @@
       "content": {
         "Balancing": {
           "global": {
-            "teacher_rotation": {
-              "soft": true
-            },
-            "slot_rotation": null,
+            "teacher_rotation": false,
+            "slot_rotation": false,
             "avoid_twice_in_a_row": false,
             "year_teacher_rotation": false,
             "period_teacher_rotation": false
@@ -2194,10 +2192,8 @@
             {
               "subject_id": 1,
               "options": {
-                "teacher_rotation": null,
-                "slot_rotation": {
-                  "soft": true
-                },
+                "teacher_rotation": false,
+                "slot_rotation": false,
                 "avoid_twice_in_a_row": false,
                 "year_teacher_rotation": false,
                 "period_teacher_rotation": false
@@ -2206,10 +2202,8 @@
             {
               "subject_id": 2,
               "options": {
-                "teacher_rotation": null,
-                "slot_rotation": {
-                  "soft": true
-                },
+                "teacher_rotation": false,
+                "slot_rotation": false,
                 "avoid_twice_in_a_row": false,
                 "year_teacher_rotation": false,
                 "period_teacher_rotation": false
@@ -2218,10 +2212,8 @@
             {
               "subject_id": 3,
               "options": {
-                "teacher_rotation": {
-                  "soft": true
-                },
-                "slot_rotation": null,
+                "teacher_rotation": false,
+                "slot_rotation": false,
                 "avoid_twice_in_a_row": true,
                 "year_teacher_rotation": true,
                 "period_teacher_rotation": false
@@ -2230,10 +2222,8 @@
             {
               "subject_id": 127,
               "options": {
-                "teacher_rotation": null,
-                "slot_rotation": {
-                  "soft": false
-                },
+                "teacher_rotation": false,
+                "slot_rotation": true,
                 "avoid_twice_in_a_row": false,
                 "year_teacher_rotation": false,
                 "period_teacher_rotation": false

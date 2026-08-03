@@ -6,7 +6,6 @@
 use crate::Table;
 use crate::ids::SubjectId;
 use crate::ops::AnnotatedBalancingOp;
-use crate::soft_param::SoftParam;
 use collomatique_state::ContentOrd;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -36,8 +35,8 @@ impl Balancing {
     ///
     /// A per-subject override entry wins **verbatim** (whole-entry): if the
     /// subject has an entry in [`Balancing::subjects`], that entry is returned as
-    /// is — a `None` field disables the corresponding global option. Otherwise the
-    /// [`Balancing::global`] options apply.
+    /// is — an override can for example harden a rotation that is globally soft,
+    /// or vice versa. Otherwise the [`Balancing::global`] options apply.
     pub fn options_for(&self, subject: SubjectId) -> &BalancingOptions {
         self.subjects.get(&subject).unwrap_or(&self.global)
     }
@@ -46,10 +45,12 @@ impl Balancing {
 /// Options for balancing interrogations
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BalancingOptions {
-    /// Whether to rotate teachers across groups
-    pub teacher_rotation: Option<SoftParam<()>>,
-    /// Whether to rotate time slots across groups
-    pub slot_rotation: Option<SoftParam<()>>,
+    /// Teacher rotation across groups is always active; `true` enforces it as
+    /// a strict constraint, `false` keeps it a soft optimisation goal.
+    pub teacher_rotation: bool,
+    /// Slot rotation across groups is always active; `true` enforces it as a
+    /// strict constraint, `false` keeps it a soft optimisation goal.
+    pub slot_rotation: bool,
     /// Whether to avoid having the same teacher twice in a row for a group
     pub avoid_twice_in_a_row: bool,
     /// Whether to enforce fair teacher distribution over the entire year
@@ -59,19 +60,16 @@ pub struct BalancingOptions {
 }
 
 // A whole-entry override record, exactly like [crate::settings::Limits]: a
-// `None` field means "disabled" — an active choice, not absent content — so
-// the document order treats the whole record as one atom (plan step 6.5,
-// decision 13).
+// bundle of independent boolean choices with no natural partial order between
+// two records — so the document order treats the whole record as one atom
+// (plan step 6.5, decision 13).
 collomatique_state::impl_content_ord_atom!(BalancingOptions);
 
 impl Default for BalancingOptions {
     fn default() -> Self {
         Self {
-            teacher_rotation: Some(SoftParam {
-                soft: true,
-                value: (),
-            }),
-            slot_rotation: None,
+            teacher_rotation: false,
+            slot_rotation: false,
             avoid_twice_in_a_row: true,
             year_teacher_rotation: false,
             period_teacher_rotation: false,
@@ -149,24 +147,24 @@ mod tests {
 
         let subject = unsafe { SubjectId::new(1) };
         assert_eq!(balancing.options_for(subject), &balancing.global);
-        assert!(balancing.options_for(subject).teacher_rotation.is_some());
+        assert!(!balancing.options_for(subject).teacher_rotation);
     }
 
     #[test]
     fn options_for_returns_override_entry_verbatim() {
         let mut balancing = Balancing::default();
-        assert!(balancing.global.teacher_rotation.is_some());
+        assert!(!balancing.global.teacher_rotation);
 
-        // A whole-entry override with `teacher_rotation: None` must win verbatim —
-        // it disables the global option rather than inheriting it.
+        // A whole-entry override must win verbatim — here it hardens the teacher
+        // rotation that is soft in the global options.
         let subject = unsafe { SubjectId::new(1) };
         let override_options = BalancingOptions {
-            teacher_rotation: None,
+            teacher_rotation: true,
             ..Default::default()
         };
         balancing.subjects.insert(subject, override_options.clone());
 
         assert_eq!(balancing.options_for(subject), &override_options);
-        assert!(balancing.options_for(subject).teacher_rotation.is_none());
+        assert!(balancing.options_for(subject).teacher_rotation);
     }
 }

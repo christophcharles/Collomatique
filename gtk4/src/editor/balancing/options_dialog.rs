@@ -4,17 +4,14 @@ use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
 use relm4::{adw, gtk};
 
 use collomatique_state_colloscopes::balancing::BalancingOptions;
-use collomatique_state_colloscopes::soft_param::SoftParam;
 
 pub struct Dialog {
     hidden: bool,
     should_redraw: bool,
     subject_name: Option<String>,
 
-    has_teacher_rotation: bool,
     soft_teacher_rotation: bool,
 
-    has_slot_rotation: bool,
     soft_slot_rotation: bool,
 
     has_avoid_twice_in_a_row: bool,
@@ -30,10 +27,8 @@ pub enum DialogInput {
     Cancel,
     Accept,
 
-    UpdateHasTeacherRotation(bool),
     UpdateSoftTeacherRotation(bool),
 
-    UpdateHasSlotRotation(bool),
     UpdateSoftSlotRotation(bool),
 
     UpdateHasAvoidTwiceInARow(bool),
@@ -111,20 +106,7 @@ impl SimpleComponent for Dialog {
                                 adw::SwitchRow {
                                     set_hexpand: true,
                                     set_use_markup: false,
-                                    set_title: "Activer la rotation des colleurs",
-                                    #[track(self.should_redraw)]
-                                    set_active: model.has_teacher_rotation,
-                                    connect_active_notify[sender] => move |widget| {
-                                        let value = widget.is_active();
-                                        sender.input(DialogInput::UpdateHasTeacherRotation(value));
-                                    },
-                                },
-                                adw::SwitchRow {
-                                    set_hexpand: true,
-                                    set_use_markup: false,
                                     set_title: "Contrainte douce",
-                                    #[watch]
-                                    set_visible: model.has_teacher_rotation,
                                     #[track(self.should_redraw)]
                                     set_active: model.soft_teacher_rotation,
                                     connect_active_notify[sender] => move |widget| {
@@ -140,20 +122,7 @@ impl SimpleComponent for Dialog {
                                 adw::SwitchRow {
                                     set_hexpand: true,
                                     set_use_markup: false,
-                                    set_title: "Activer la rotation des créneaux",
-                                    #[track(self.should_redraw)]
-                                    set_active: model.has_slot_rotation,
-                                    connect_active_notify[sender] => move |widget| {
-                                        let value = widget.is_active();
-                                        sender.input(DialogInput::UpdateHasSlotRotation(value));
-                                    },
-                                },
-                                adw::SwitchRow {
-                                    set_hexpand: true,
-                                    set_use_markup: false,
                                     set_title: "Contrainte douce",
-                                    #[watch]
-                                    set_visible: model.has_slot_rotation,
                                     #[track(self.should_redraw)]
                                     set_active: model.soft_slot_rotation,
                                     connect_active_notify[sender] => move |widget| {
@@ -232,9 +201,7 @@ impl SimpleComponent for Dialog {
             hidden: true,
             should_redraw: false,
             subject_name: None,
-            has_teacher_rotation: false,
             soft_teacher_rotation: false,
-            has_slot_rotation: false,
             soft_slot_rotation: false,
             has_avoid_twice_in_a_row: false,
             has_year_teacher_rotation: false,
@@ -264,23 +231,11 @@ impl SimpleComponent for Dialog {
                     .output(DialogOutput::Accepted(self.build_options()))
                     .unwrap();
             }
-            DialogInput::UpdateHasTeacherRotation(value) => {
-                if self.has_teacher_rotation == value {
-                    return;
-                }
-                self.has_teacher_rotation = value;
-            }
             DialogInput::UpdateSoftTeacherRotation(value) => {
                 if self.soft_teacher_rotation == value {
                     return;
                 }
                 self.soft_teacher_rotation = value;
-            }
-            DialogInput::UpdateHasSlotRotation(value) => {
-                if self.has_slot_rotation == value {
-                    return;
-                }
-                self.has_slot_rotation = value;
             }
             DialogInput::UpdateSoftSlotRotation(value) => {
                 if self.soft_slot_rotation == value {
@@ -319,21 +274,8 @@ impl SimpleComponent for Dialog {
 
 impl Dialog {
     fn update_state_from_options(&mut self, options: BalancingOptions) {
-        if let Some(tr) = options.teacher_rotation {
-            self.has_teacher_rotation = true;
-            self.soft_teacher_rotation = tr.soft;
-        } else {
-            self.has_teacher_rotation = false;
-            self.soft_teacher_rotation = false;
-        }
-
-        if let Some(sr) = options.slot_rotation {
-            self.has_slot_rotation = true;
-            self.soft_slot_rotation = sr.soft;
-        } else {
-            self.has_slot_rotation = false;
-            self.soft_slot_rotation = false;
-        }
+        self.soft_teacher_rotation = !options.teacher_rotation;
+        self.soft_slot_rotation = !options.slot_rotation;
 
         self.has_avoid_twice_in_a_row = options.avoid_twice_in_a_row;
         self.has_year_teacher_rotation = options.year_teacher_rotation;
@@ -342,22 +284,11 @@ impl Dialog {
 
     fn build_options(&self) -> BalancingOptions {
         BalancingOptions {
-            teacher_rotation: Self::soft_unit_value(
-                self.has_teacher_rotation,
-                self.soft_teacher_rotation,
-            ),
-            slot_rotation: Self::soft_unit_value(self.has_slot_rotation, self.soft_slot_rotation),
+            teacher_rotation: !self.soft_teacher_rotation,
+            slot_rotation: !self.soft_slot_rotation,
             avoid_twice_in_a_row: self.has_avoid_twice_in_a_row,
             year_teacher_rotation: self.has_year_teacher_rotation,
             period_teacher_rotation: self.has_period_teacher_rotation,
-        }
-    }
-
-    fn soft_unit_value(has: bool, soft: bool) -> Option<SoftParam<()>> {
-        if has {
-            Some(SoftParam { soft, value: () })
-        } else {
-            None
         }
     }
 }

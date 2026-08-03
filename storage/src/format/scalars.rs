@@ -284,17 +284,6 @@ pub struct SoftParam<T> {
     pub value: T,
 }
 
-/// A valueless soft parameter: `{"soft": bool}`
-///
-/// The spec drops the `value` field when a soft parameter carries no
-/// value; this being a separate type, no custom serde is needed and
-/// `deny_unknown_fields` rejects a stray `value`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct SoftFlag {
-    pub soft: bool,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -464,13 +453,5 @@ mod tests {
         );
 
         assert!(serde_json::from_value::<SoftParam<u32>>(json!({ "soft": true })).is_err());
-    }
-
-    #[test]
-    fn soft_flag_rejects_a_stray_value() {
-        let flag: SoftFlag = serde_json::from_value(json!({ "soft": false })).unwrap();
-        assert_eq!(flag, SoftFlag { soft: false });
-
-        assert!(serde_json::from_value::<SoftFlag>(json!({ "soft": true, "value": 3 })).is_err());
     }
 }

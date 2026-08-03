@@ -254,19 +254,16 @@ fn soft_constraint_symbol(soft: bool) -> &'static str {
 }
 
 fn options_to_string(options: &BalancingOptions) -> String {
-    let mut parts = vec![];
-    if let Some(tr) = &options.teacher_rotation {
-        parts.push(format!(
+    let mut parts = vec![
+        format!(
             "rotation des colleurs {}",
-            soft_constraint_symbol(tr.soft)
-        ));
-    }
-    if let Some(sr) = &options.slot_rotation {
-        parts.push(format!(
+            soft_constraint_symbol(!options.teacher_rotation)
+        ),
+        format!(
             "rotation des créneaux {}",
-            soft_constraint_symbol(sr.soft)
-        ));
-    }
+            soft_constraint_symbol(!options.slot_rotation)
+        ),
+    ];
     if options.avoid_twice_in_a_row {
         parts.push("éviter 2× de suite le même colleur".to_string());
     }
@@ -276,11 +273,7 @@ fn options_to_string(options: &BalancingOptions) -> String {
     if options.period_teacher_rotation {
         parts.push("rotation des colleurs par période".to_string());
     }
-    if parts.is_empty() {
-        "aucune contrainte".into()
-    } else {
-        parts.join("    ―    ")
-    }
+    parts.join("    ―    ")
 }
 
 #[derive(Debug)]

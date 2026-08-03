@@ -217,10 +217,8 @@
       "content": {
         "Balancing": {
           "global": {
-            "teacher_rotation": {
-              "soft": false
-            },
-            "slot_rotation": null,
+            "teacher_rotation": true,
+            "slot_rotation": false,
             "avoid_twice_in_a_row": false,
             "year_teacher_rotation": false,
             "period_teacher_rotation": false
@@ -229,8 +227,8 @@
             {
               "subject_id": 1,
               "options": {
-                "teacher_rotation": null,
-                "slot_rotation": null,
+                "teacher_rotation": false,
+                "slot_rotation": false,
                 "avoid_twice_in_a_row": false,
                 "year_teacher_rotation": false,
                 "period_teacher_rotation": false

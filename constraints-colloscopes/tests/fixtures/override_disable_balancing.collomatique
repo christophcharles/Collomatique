@@ -108,6 +108,17 @@
               1,
               2
             ]
+          },
+          {
+            "id": 7,
+            "surname": "",
+            "firstname": "",
+            "tel": null,
+            "email": null,
+            "subjects": [
+              1,
+              2
+            ]
           }
         ]
       }
@@ -168,6 +179,17 @@
                 "extra_info": "",
                 "week_pattern_id": null,
                 "cost": 0
+              },
+              {
+                "id": 8,
+                "teacher_id": 7,
+                "start": {
+                  "day": "tuesday",
+                  "time": "08:00"
+                },
+                "extra_info": "",
+                "week_pattern_id": null,
+                "cost": 0
               }
             ]
           },
@@ -179,6 +201,17 @@
                 "teacher_id": 3,
                 "start": {
                   "day": "monday",
+                  "time": "09:00"
+                },
+                "extra_info": "",
+                "week_pattern_id": null,
+                "cost": 0
+              },
+              {
+                "id": 9,
+                "teacher_id": 7,
+                "start": {
+                  "day": "tuesday",
                   "time": "09:00"
                 },
                 "extra_info": "",
@@ -196,10 +229,8 @@
       "content": {
         "Balancing": {
           "global": {
-            "teacher_rotation": {
-              "soft": false
-            },
-            "slot_rotation": null,
+            "teacher_rotation": true,
+            "slot_rotation": false,
             "avoid_twice_in_a_row": false,
             "year_teacher_rotation": false,
             "period_teacher_rotation": false
@@ -208,8 +239,8 @@
             {
               "subject_id": 1,
               "options": {
-                "teacher_rotation": null,
-                "slot_rotation": null,
+                "teacher_rotation": false,
+                "slot_rotation": false,
                 "avoid_twice_in_a_row": false,
                 "year_teacher_rotation": false,
                 "period_teacher_rotation": false
