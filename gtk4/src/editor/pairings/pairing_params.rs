@@ -10,6 +10,8 @@ use relm4::{adw, gtk};
 
 use adw::prelude::ActionRowExt;
 
+use crate::tools::message_row::{MessageRow, MessageSeverity};
+
 pub struct Dialog {
     hidden: bool,
     should_redraw: bool,
@@ -25,6 +27,7 @@ pub struct Dialog {
 
     period_data: Vec<PeriodData>,
     period_entries: FactoryVecDeque<PeriodEntry>,
+    messages: FactoryVecDeque<MessageRow>,
 }
 
 #[derive(Debug)]
@@ -163,6 +166,29 @@ impl Dialog {
         }
         self.antecedent_subject_selected == self.consequent_subject_selected
     }
+
+    /// Why « Valider » is greyed out, if it is. Doubles as the button's
+    /// tooltip: [None] both hides the error row and clears the tooltip.
+    fn error_message(&self) -> Option<&'static str> {
+        self.subjects_are_same().then_some(
+            "L'antécédent et le conséquent doivent porter sur deux matières différentes.",
+        )
+    }
+
+    /// Refills the message area at the bottom of the dialog. Called after
+    /// every input, so the rows always describe the current selection.
+    fn update_messages(&mut self) {
+        let mut messages = Vec::new();
+        if let Some(error) = self.error_message() {
+            messages.push((MessageSeverity::Error, error.to_string()));
+        }
+
+        let mut guard = self.messages.guard();
+        guard.clear();
+        for message in messages {
+            guard.push_back(message);
+        }
+    }
 }
 
 #[relm4::component(pub)]
@@ -195,95 +221,123 @@ impl SimpleComponent for Dialog {
                         add_css_class: "suggested-action",
                         #[watch]
                         set_sensitive: !model.subjects_are_same(),
+                        #[watch]
+                        set_tooltip_text: model.error_message(),
                         connect_clicked => DialogInput::Accept,
                     },
                 },
-                #[name(scrolled_window)]
                 #[wrap(Some)]
-                set_content = &gtk::ScrolledWindow {
+                set_content = &gtk::Box {
                     set_hexpand: true,
-                    set_policy: (gtk::PolicyType::Never, gtk::PolicyType::Automatic),
-                    gtk::Box {
+                    set_vexpand: true,
+                    set_orientation: gtk::Orientation::Vertical,
+                    #[name(scrolled_window)]
+                    gtk::ScrolledWindow {
                         set_hexpand: true,
-                        set_margin_all: 5,
-                        set_spacing: 10,
+                        set_vexpand: true,
+                        set_policy: (gtk::PolicyType::Never, gtk::PolicyType::Automatic),
+                        gtk::Box {
+                            set_hexpand: true,
+                            set_margin_all: 5,
+                            set_spacing: 10,
+                            set_orientation: gtk::Orientation::Vertical,
+                            adw::PreferencesGroup {
+                                set_title: "Antécédent",
+                                set_margin_all: 5,
+                                set_hexpand: true,
+                                adw::ComboRow {
+                                    set_title: "Condition",
+                                    #[track(model.should_redraw)]
+                                    set_model: Some(&Dialog::generate_conditions_model()),
+                                    #[track(model.should_redraw)]
+                                    set_selected: model.antecedent_condition_selected,
+                                    connect_selected_notify[sender] => move |widget| {
+                                        let selected = widget.selected();
+                                        sender.input(DialogInput::UpdateAntecedentCondition(selected));
+                                    },
+                                },
+                                adw::ComboRow {
+                                    set_title: "Matière",
+                                    #[track(model.should_redraw)]
+                                    set_model: Some(&model.generate_subjects_model()),
+                                    #[track(model.should_redraw)]
+                                    set_selected: model.antecedent_subject_selected,
+                                    connect_selected_notify[sender] => move |widget| {
+                                        let selected = widget.selected();
+                                        sender.input(DialogInput::UpdateAntecedentSubject(selected));
+                                    },
+                                },
+                            },
+                            adw::PreferencesGroup {
+                                set_title: "Conséquent",
+                                set_margin_all: 5,
+                                set_hexpand: true,
+                                adw::ComboRow {
+                                    set_title: "Condition",
+                                    #[track(model.should_redraw)]
+                                    set_model: Some(&Dialog::generate_conditions_model()),
+                                    #[track(model.should_redraw)]
+                                    set_selected: model.consequent_condition_selected,
+                                    connect_selected_notify[sender] => move |widget| {
+                                        let selected = widget.selected();
+                                        sender.input(DialogInput::UpdateConsequentCondition(selected));
+                                    },
+                                },
+                                adw::ComboRow {
+                                    set_title: "Matière",
+                                    #[track(model.should_redraw)]
+                                    set_model: Some(&model.generate_subjects_model()),
+                                    #[track(model.should_redraw)]
+                                    set_selected: model.consequent_subject_selected,
+                                    connect_selected_notify[sender] => move |widget| {
+                                        let selected = widget.selected();
+                                        sender.input(DialogInput::UpdateConsequentSubject(selected));
+                                    },
+                                },
+                            },
+                            adw::PreferencesGroup {
+                                set_title: "Options",
+                                set_margin_all: 5,
+                                set_hexpand: true,
+                                adw::SwitchRow {
+                                    set_title: "Contrainte souple",
+                                    set_subtitle: "Si activé, la contrainte sera satisfaite au mieux mais pourra être violée",
+                                    #[track(model.should_redraw)]
+                                    set_active: model.soft,
+                                    connect_active_notify[sender] => move |widget| {
+                                        let active = widget.is_active();
+                                        sender.input(DialogInput::UpdateSoft(active));
+                                    },
+                                },
+                            },
+                            #[local_ref]
+                            period_list -> adw::PreferencesGroup {
+                                set_title: "Périodes concernées",
+                                set_margin_all: 5,
+                                set_hexpand: true,
+                                #[watch]
+                                set_visible: !model.period_data.is_empty(),
+                            },
+                        },
+                    },
+                    gtk::Box {
                         set_orientation: gtk::Orientation::Vertical,
-                        adw::PreferencesGroup {
-                            set_title: "Antécédent",
-                            set_margin_all: 5,
-                            set_hexpand: true,
-                            adw::ComboRow {
-                                set_title: "Condition",
-                                #[track(model.should_redraw)]
-                                set_model: Some(&Dialog::generate_conditions_model()),
-                                #[track(model.should_redraw)]
-                                set_selected: model.antecedent_condition_selected,
-                                connect_selected_notify[sender] => move |widget| {
-                                    let selected = widget.selected();
-                                    sender.input(DialogInput::UpdateAntecedentCondition(selected));
-                                },
+                        set_hexpand: true,
+                        set_spacing: 5,
+                        set_margin_all: 5,
+                        #[watch]
+                        set_visible: !model.messages.is_empty(),
+                        gtk::ScrolledWindow {
+                            set_propagate_natural_height: true,
+                            set_vexpand: false,
+                            set_hscrollbar_policy: gtk::PolicyType::Never,
+                            set_vscrollbar_policy: gtk::PolicyType::Automatic,
+                            #[local_ref]
+                            messages_listbox -> gtk::ListBox {
+                                set_hexpand: true,
+                                add_css_class: "boxed-list",
+                                set_selection_mode: gtk::SelectionMode::None,
                             },
-                            adw::ComboRow {
-                                set_title: "Matière",
-                                #[track(model.should_redraw)]
-                                set_model: Some(&model.generate_subjects_model()),
-                                #[track(model.should_redraw)]
-                                set_selected: model.antecedent_subject_selected,
-                                connect_selected_notify[sender] => move |widget| {
-                                    let selected = widget.selected();
-                                    sender.input(DialogInput::UpdateAntecedentSubject(selected));
-                                },
-                            },
-                        },
-                        adw::PreferencesGroup {
-                            set_title: "Conséquent",
-                            set_margin_all: 5,
-                            set_hexpand: true,
-                            adw::ComboRow {
-                                set_title: "Condition",
-                                #[track(model.should_redraw)]
-                                set_model: Some(&Dialog::generate_conditions_model()),
-                                #[track(model.should_redraw)]
-                                set_selected: model.consequent_condition_selected,
-                                connect_selected_notify[sender] => move |widget| {
-                                    let selected = widget.selected();
-                                    sender.input(DialogInput::UpdateConsequentCondition(selected));
-                                },
-                            },
-                            adw::ComboRow {
-                                set_title: "Matière",
-                                #[track(model.should_redraw)]
-                                set_model: Some(&model.generate_subjects_model()),
-                                #[track(model.should_redraw)]
-                                set_selected: model.consequent_subject_selected,
-                                connect_selected_notify[sender] => move |widget| {
-                                    let selected = widget.selected();
-                                    sender.input(DialogInput::UpdateConsequentSubject(selected));
-                                },
-                            },
-                        },
-                        adw::PreferencesGroup {
-                            set_title: "Options",
-                            set_margin_all: 5,
-                            set_hexpand: true,
-                            adw::SwitchRow {
-                                set_title: "Contrainte souple",
-                                set_subtitle: "Si activé, la contrainte sera satisfaite au mieux mais pourra être violée",
-                                #[track(model.should_redraw)]
-                                set_active: model.soft,
-                                connect_active_notify[sender] => move |widget| {
-                                    let active = widget.is_active();
-                                    sender.input(DialogInput::UpdateSoft(active));
-                                },
-                            },
-                        },
-                        #[local_ref]
-                        period_list -> adw::PreferencesGroup {
-                            set_title: "Périodes concernées",
-                            set_margin_all: 5,
-                            set_hexpand: true,
-                            #[watch]
-                            set_visible: !model.period_data.is_empty(),
                         },
                     },
                 },
@@ -317,9 +371,13 @@ impl SimpleComponent for Dialog {
             soft: false,
             period_data: Vec::new(),
             period_entries,
+            messages: FactoryVecDeque::builder()
+                .launch(gtk::ListBox::default())
+                .detach(),
         };
 
         let period_list = model.period_entries.widget();
+        let messages_listbox = model.messages.widget();
         let widgets = view_output!();
 
         ComponentParts { model, widgets }
@@ -367,6 +425,7 @@ impl SimpleComponent for Dialog {
                 }
             }
         }
+        self.update_messages();
     }
 
     fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
