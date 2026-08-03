@@ -160,6 +160,65 @@ pub trait CallbackSolverModel<'a, V: UsableData, C: UsableData, P: ProblemRepr<V
         F: FnMut(&Self::Progress) -> bool;
 }
 
+/// Why a solve was cut short.
+///
+/// Shared by every layer that reports a stopped solve: the per-layer status
+/// enums carry it as the payload of their `Stopped` variant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum StopReason {
+    /// The progress callback (or, downstream, the control channel) asked to stop.
+    Callback,
+    /// The time limit counted from the start of the solve ran out.
+    TimeLimit,
+    /// The time limit counted from the first feasible incumbent ran out.
+    IncumbentTimeLimit,
+}
+
+/// Result of [IncumbentTimeLimitSolverModel::solve_with_time_limits].
+pub struct TimeLimitsSolution<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> {
+    /// The best feasible solution found, if any.
+    pub config: Option<FeasibleConfig<'a, V, C, P>>,
+
+    /// `None` if the solve ran to completion (optimal or infeasible),
+    /// otherwise why it was cut short.
+    pub stopped: Option<StopReason>,
+}
+
+/// A model that supports a time limit counted from the *first incumbent*,
+/// alongside the usual limit counted from the start of the solve.
+///
+/// The two limits are independent and compose: the solve stops at
+/// `min(start + time_limit, first_incumbent + incumbent_time_limit)`.
+/// Either limit can be [TimeLimit::none](collomatique_time::TimeLimit::none),
+/// which disables that side. With both none, this behaves exactly like
+/// [CallbackSolverModel::solve_with_callback].
+pub trait IncumbentTimeLimitSolverModel<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>>:
+    CallbackSolverModel<'a, V, C, P>
+{
+    /// Solve the model, bounded by both time limits and by `callback`.
+    ///
+    /// The callback behaves as in [CallbackSolverModel::solve_with_callback]:
+    /// it receives a solver-specific [Progress](CallbackSolverModel::Progress)
+    /// reference and returns `true` to continue, `false` to stop.
+    ///
+    /// Both deadlines are cooperative: they are checked when the solver fires
+    /// a progress event, exactly like the callback itself. If the backend goes
+    /// silent, the stop happens at the next event.
+    ///
+    /// [TimeLimitsSolution::stopped] tells whether — and why — the solve was
+    /// cut short. A stop asked for by `callback` is reported as
+    /// [StopReason::Callback], even if a deadline passed at the same event.
+    fn solve_with_time_limits<F>(
+        self,
+        time_limit: collomatique_time::TimeLimit,
+        incumbent_time_limit: collomatique_time::TimeLimit,
+        callback: F,
+    ) -> TimeLimitsSolution<'a, V, C, P>
+    where
+        F: FnMut(&Self::Progress) -> bool;
+}
+
 pub trait ProgressBounds {
     fn best_bound(&self) -> f64;
     /// The objective of the current incumbent, or `None` if no incumbent has
