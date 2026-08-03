@@ -2339,6 +2339,76 @@ fn fixture_6_a_no_op_target_lands_alone_and_does_not_panic() {
     );
 }
 
+/// Fixture `7` — the cascade mirror of `rejection_6`: under `apply_cascade` the
+/// subject update *lands*, and the pairing rule that named it goes.
+///
+/// The pair is the point. In `rejection_6` the plain gate refuses the very same
+/// op, because the document it would produce holds a rule naming a subject
+/// without interrogations. Here the cascade is allowed to repair, and the
+/// difference is *whose* material is at fault: the rule pre-exists the target,
+/// so it survives the rollback the engine performs before consulting the map,
+/// the arm finds it, and answers `Fix::DeletePairingRule`. (Contrast
+/// `rejection_5`, where the offending rule *is* the payload: rolled back, it is
+/// no longer there to remove, so the arm answers `None` and the op is
+/// convicted.)
+///
+/// Committed **red**: today no invariant fires, so the update lands with no fix
+/// at all and the rule stays. Commit 3 turns it green and commit 4 pins the
+/// landed fix.
+#[test]
+fn fixture_7_turning_interrogations_off_takes_the_pairing_rules_with_it() {
+    let mut app = AppState::<Data, String>::new(Data::new());
+
+    let maths: SubjectId = apply_new!(
+        app,
+        Op::Subject(SubjectOp::AddAfter(
+            None,
+            interrogation_subject("Maths", BTreeSet::new())
+        )),
+        NewId::SubjectId,
+        "adding the subject to turn off"
+    );
+    let physique: SubjectId = apply_new!(
+        app,
+        Op::Subject(SubjectOp::AddAfter(
+            Some(maths),
+            interrogation_subject("Physique", BTreeSet::new())
+        )),
+        NewId::SubjectId,
+        "adding the consequent subject"
+    );
+    let rule: PairingRuleId = apply_new!(
+        app,
+        Op::Pairing(PairingOp::Add(pairing_rule(
+            maths,
+            physique,
+            BTreeSet::new()
+        ))),
+        NewId::PairingRuleId,
+        "adding the rule Maths => Physique"
+    );
+
+    let subject_off = plain_subject("Maths", BTreeSet::new());
+    let mut data = app.get_data().clone();
+    let (target, _new_info) =
+        data.annotate(Op::Subject(SubjectOp::Update(maths, subject_off.clone())));
+
+    let receipt = apply_cascade(&mut data, target).expect("the cascade repairs the rule away");
+    let _ = receipt; // commit 4 asserts the landed fixes
+
+    assert_clean(&data);
+    let inner = data.get_inner_data();
+    assert_eq!(
+        inner.params.subjects.find_subject(maths),
+        Some(&subject_off),
+        "the target landed: the subject runs no interrogations any more"
+    );
+    assert!(
+        inner.params.pairings.pairing_rule_map.get(&rule).is_none(),
+        "the rule naming the subject is gone"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Commit 7.6 (plan §9ter) — the rejection fixtures.
 // ---------------------------------------------------------------------------
