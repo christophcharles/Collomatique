@@ -6,7 +6,7 @@ use super::keyed::{KeyedRow, KeyedVec};
 
 /// Global and per-subject balancing options for the solver
 ///
-/// Default: both rotations soft, avoid-twice-in-a-row strict, nothing else.
+/// Default: everything soft — no strict constraint at all.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct Balancing {
@@ -31,13 +31,16 @@ pub struct Options {
     pub period_teacher_rotation: bool,
 }
 
-// The spec's frozen default (§4.14), NOT the all-false record
+// The spec's default (§4.14). It must stay equal to
+// `mem::balancing::BalancingOptions::default()`: the encoder omits the block
+// when it matches, and the decoder fills it back in, so the two together pin
+// "a file with no Balancing block == a default document".
 impl Default for Options {
     fn default() -> Self {
         Options {
             teacher_rotation: false,
             slot_rotation: false,
-            avoid_twice_in_a_row: true,
+            avoid_twice_in_a_row: false,
             year_teacher_rotation: false,
             period_teacher_rotation: false,
         }
@@ -72,7 +75,7 @@ mod tests {
                 "global": {
                     "teacher_rotation": false,
                     "slot_rotation": false,
-                    "avoid_twice_in_a_row": true,
+                    "avoid_twice_in_a_row": false,
                     "year_teacher_rotation": false,
                     "period_teacher_rotation": false
                 },

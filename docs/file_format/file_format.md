@@ -681,14 +681,14 @@ Constraints: every `student_id` exists.
 
 Global and per-subject balancing options for the solver. Payload: record.
 
-**Default:** both rotations soft, avoid-twice-in-a-row, nothing else —
+**Default:** everything soft — no strict constraint at all —
 
 ```json
 {
   "global": {
     "teacher_rotation": false,
     "slot_rotation": false,
-    "avoid_twice_in_a_row": true,
+    "avoid_twice_in_a_row": false,
     "year_teacher_rotation": false,
     "period_teacher_rotation": false
   },
@@ -702,7 +702,7 @@ A balancing-options record has exactly these five fields:
 |---|---|---|
 | `teacher_rotation` | bool | Teacher rotation across groups is always active; `true` enforces it strictly, `false` makes it an optimisation goal. |
 | `slot_rotation` | bool | Slot rotation across groups is always active; `true` enforces it strictly, `false` makes it an optimisation goal. |
-| `avoid_twice_in_a_row` | bool | Avoid the same teacher twice in a row for a group. |
+| `avoid_twice_in_a_row` | bool | Avoiding the same teacher twice in a row is always sought; `true` enforces it strictly, `false` leaves it an optimisation goal. |
 | `year_teacher_rotation` | bool | Fair teacher distribution over the whole year. |
 | `period_teacher_rotation` | bool | Fair teacher distribution within each period. |
 

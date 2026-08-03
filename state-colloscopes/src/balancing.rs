@@ -70,7 +70,7 @@ impl Default for BalancingOptions {
         Self {
             teacher_rotation: false,
             slot_rotation: false,
-            avoid_twice_in_a_row: true,
+            avoid_twice_in_a_row: false,
             year_teacher_rotation: false,
             period_teacher_rotation: false,
         }
