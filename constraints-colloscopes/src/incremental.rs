@@ -7,14 +7,15 @@ use std::collections::HashMap;
 /// matching its week (week + 1), so the schedule fills in week by week on top of the fixed group
 /// assignment. Base variables absent from the map fall into the strategy's final epoch.
 ///
-/// Generic over the extra-variable and constraint-description spaces so it applies equally to a
-/// [`ColloscopeModel`] and a [`ConfiguredColloscopeModel`]: it only ever inspects base variables.
+/// The *model argument* is generic over the extra-variable and constraint-description spaces so
+/// it applies equally to a [`ColloscopeModel`] and a [`ConfiguredColloscopeModel`]: it only ever
+/// inspects base variables, and the result is keyed by [`Var`] alone.
 ///
 /// [`ColloscopeModel`]: crate::ColloscopeModel
 /// [`ConfiguredColloscopeModel`]: crate::ConfiguredColloscopeModel
 pub fn build_incremental_epochs<E: UsableData, C: UsableData>(
     model: &Model<Var, E, C>,
-) -> HashMap<InternalVar<Var, E>, u32> {
+) -> HashMap<Var, u32> {
     let mut epochs = HashMap::new();
     for v in model.problem().get_variables().keys() {
         if let InternalVar::Base(base) = v {
@@ -22,7 +23,7 @@ pub fn build_incremental_epochs<E: UsableData, C: UsableData>(
                 Var::StudentGroup { .. } => 0u32,
                 Var::GroupInInterrogation { week, .. } => week.0 as u32,
             };
-            epochs.insert(v.clone(), epoch);
+            epochs.insert(base.clone(), epoch);
         }
     }
     epochs

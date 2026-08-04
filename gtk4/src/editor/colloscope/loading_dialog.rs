@@ -4,15 +4,10 @@ use relm4::{
     adw, gtk,
 };
 
-use collomatique_constraints_colloscopes::{
-    ConfiguredColloscopeModel, ConfiguredExtra, InternalVar, SolveConfig, Var,
-};
+use collomatique_constraints_colloscopes::{ConfiguredColloscopeModel, SolveConfig, Var};
 use collomatique_state_colloscopes::colloscope_params::Parameters;
 use collomatique_state_colloscopes::colloscopes::Colloscope;
 use collomatique_strategies::{ConductorPayload, IncrementalPayload};
-
-/// Flattened variable of a [`ConfiguredColloscopeModel`], as carried by the conductor payload.
-type ConfiguredInternalVar = InternalVar<Var, ConfiguredExtra>;
 
 use crate::widgets::debug_view::{DebugView, DebugViewInput};
 
@@ -36,19 +31,14 @@ pub enum DialogInput {
 
 #[derive(Debug)]
 pub enum DialogOutput {
-    ModelReady(
-        ConfiguredColloscopeModel,
-        ConductorPayload<ConfiguredInternalVar>,
-    ),
+    ModelReady(ConfiguredColloscopeModel, ConductorPayload<Var>),
 }
 
 /// Build the incremental epoch payload from the freshly-built model: every `StudentGroup` base
 /// variable is solved first (epoch 0), then each `GroupInInterrogation` variable is solved in the
 /// epoch matching its week (week + 1), so the schedule fills in week by week on top of the fixed
 /// group assignment. Base variables absent from the map fall into the strategy's final epoch.
-fn build_incremental_payload(
-    model: &ConfiguredColloscopeModel,
-) -> ConductorPayload<ConfiguredInternalVar> {
+fn build_incremental_payload(model: &ConfiguredColloscopeModel) -> ConductorPayload<Var> {
     let epochs = collomatique_constraints_colloscopes::build_incremental_epochs(model);
     ConductorPayload {
         incremental: IncrementalPayload { epochs },

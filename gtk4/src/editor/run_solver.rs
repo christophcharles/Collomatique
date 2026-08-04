@@ -58,11 +58,7 @@ pub struct Dialog<B: UsableData, E: UsableData, C: UsableData> {
 
 #[derive(Debug)]
 pub enum DialogInput<B: UsableData, E: UsableData, C: UsableData> {
-    Run(
-        ConductorStrategy,
-        Model<B, E, C>,
-        ConductorPayload<InternalVar<B, E>>,
-    ),
+    Run(ConductorStrategy, Model<B, E, C>, ConductorPayload<B>),
     CancelRequest,
     AcceptRequest,
     Accept,

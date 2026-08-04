@@ -64,7 +64,7 @@ pub enum ColloscopeInput {
     ConductorConfigCancelled,
     ModelBuilt(
         collomatique_constraints_colloscopes::ConfiguredColloscopeModel,
-        collomatique_strategies::ConductorPayload<ConfiguredInternalVar>,
+        collomatique_strategies::ConductorPayload<collomatique_constraints_colloscopes::Var>,
     ),
     SolveResult(collomatique_ilp::ConfigData<ConfiguredInternalVar>),
     EraseColloscopeClicked,
