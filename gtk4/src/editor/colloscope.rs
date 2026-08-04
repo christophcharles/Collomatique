@@ -87,7 +87,7 @@ pub enum ColloscopeCommandOutput {
 pub enum ColloscopeOutput {
     UpdateOp(ColloscopeUpdateOp),
     NewColloscope(collomatique_state_colloscopes::colloscopes::Colloscope),
-    UpdateIlpProblem(Option<super::export_panel::IlpInnerProblem>),
+    UpdateIlpProblem(Option<collomatique_constraints_colloscopes::IlpInnerProblem>),
 }
 
 /// The ILP problem together with the parameters needed to rebuild a colloscope

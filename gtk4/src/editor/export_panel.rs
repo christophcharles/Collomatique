@@ -16,13 +16,15 @@ use collomatique_state_colloscopes::export_config;
 
 use crate::tools;
 
-pub use collomatique_constraints_colloscopes::IlpInnerProblem;
-
 pub struct ExportPanel {
     export_config: export_config::ExportConfig,
     file_name: Option<PathBuf>,
     annotations: BTreeSet<String>,
-    ilp_problem: Option<IlpInnerProblem>,
+    /// Whether the editor currently holds an ILP problem to export.
+    ///
+    /// The problem itself lives in the editor — this panel only needs to know
+    /// whether the button has anything to act on.
+    ilp_available: bool,
     colloscope_config_dialog: Controller<colloscope_config_dialog::Dialog>,
     global_config_dialog: Controller<global_config_dialog::Dialog>,
     all_groups_config_dialog: Controller<per_student_groups_config_dialog::Dialog>,
@@ -41,7 +43,7 @@ pub enum ExportPanelInput {
     ExportClicked,
     ExportMpsClicked,
 
-    UpdateIlpProblem(Option<IlpInnerProblem>),
+    UpdateIlpAvailable(bool),
 
     UpdateColloscopeEnabled(bool),
     UpdateAllGroupsEnabled(bool),
@@ -75,15 +77,13 @@ pub enum ExportPanelInput {
 pub enum ExportPanelOutput {
     UpdateExportConfig(collomatique_ops::ExportConfigUpdateOp),
     ExportColloscopeAs(PathBuf, collomatique_xlsx::Config),
-    ExportMpsAs(PathBuf, IlpInnerProblem),
+    ExportMpsClicked,
 }
 
 #[derive(Debug)]
 pub enum ExportPanelCommandOutput {
     FileChosen(PathBuf),
     FileNotChosen,
-    MpsFileChosen(PathBuf),
-    MpsFileNotChosen,
 }
 
 #[relm4::component(pub)]
@@ -540,7 +540,7 @@ impl Component for ExportPanel {
                         set_margin_start: 10,
                         set_margin_end: 10,
                         #[watch]
-                        set_sensitive: model.ilp_problem.is_some(),
+                        set_sensitive: model.ilp_available,
                         adw::ButtonContent {
                             set_icon_name: "document-export-symbolic",
                             set_label: "Exporter le problème ILP (MPS)",
@@ -615,7 +615,7 @@ impl Component for ExportPanel {
             export_config: export_config::ExportConfig::default(),
             file_name: None,
             annotations: BTreeSet::new(),
-            ilp_problem: None,
+            ilp_available: false,
             colloscope_config_dialog,
             global_config_dialog,
             all_groups_config_dialog,
@@ -669,26 +669,13 @@ impl Component for ExportPanel {
                     }
                 });
             }
-            ExportPanelInput::UpdateIlpProblem(problem) => {
-                self.ilp_problem = problem;
+            ExportPanelInput::UpdateIlpAvailable(available) => {
+                self.ilp_available = available;
             }
+            // The file chooser and the problem itself both live in the editor:
+            // this panel only reports the click.
             ExportPanelInput::ExportMpsClicked => {
-                let default = match &self.file_name {
-                    Some(path) => {
-                        let mut mps_path = path.clone();
-                        mps_path.set_extension("mps");
-                        tools::open_save::DefaultSaveFile::ExistingFile(mps_path)
-                    }
-                    None => tools::open_save::DefaultSaveFile::SuggestedName(
-                        format!("{}.mps", super::DEFAULT_FILE_STEM).into(),
-                    ),
-                };
-                sender.oneshot_command(async move {
-                    match tools::open_save::save_mps_dialog(default).await {
-                        Some(path) => ExportPanelCommandOutput::MpsFileChosen(path),
-                        None => ExportPanelCommandOutput::MpsFileNotChosen,
-                    }
-                });
+                sender.output(ExportPanelOutput::ExportMpsClicked).unwrap();
             }
             ExportPanelInput::UpdateColloscopeEnabled(enabled) => {
                 if self.export_config.colloscope_enabled == enabled {
@@ -897,20 +884,12 @@ impl Component for ExportPanel {
         _root: &Self::Root,
     ) {
         match message {
-            ExportPanelCommandOutput::FileNotChosen
-            | ExportPanelCommandOutput::MpsFileNotChosen => {}
+            ExportPanelCommandOutput::FileNotChosen => {}
             ExportPanelCommandOutput::FileChosen(path) => {
                 let xlsx_config = super::export::to_xlsx_config(&self.export_config);
                 sender
                     .output(ExportPanelOutput::ExportColloscopeAs(path, xlsx_config))
                     .unwrap();
-            }
-            ExportPanelCommandOutput::MpsFileChosen(path) => {
-                if let Some(problem) = self.ilp_problem.clone() {
-                    sender
-                        .output(ExportPanelOutput::ExportMpsAs(path, problem))
-                        .unwrap();
-                }
             }
         }
     }

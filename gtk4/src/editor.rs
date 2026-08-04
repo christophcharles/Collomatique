@@ -51,6 +51,7 @@ impl FileName {
 
 mod error_dialog;
 
+mod advanced_tools;
 mod assignments;
 mod balancing;
 mod check_script;
@@ -101,8 +102,9 @@ pub enum EditorInput {
     NewStateFromSecondInstance(AppState<Data, Desc>),
     UpdateFullColloscope(collomatique_state_colloscopes::colloscopes::Colloscope),
     ExportColloscopeAs(PathBuf, collomatique_xlsx::Config),
-    ExportMpsAs(PathBuf, export_panel::IlpInnerProblem),
-    UpdateIlpProblem(Option<export_panel::IlpInnerProblem>),
+    ExportMpsClicked,
+    ExportMpsAs(PathBuf),
+    UpdateIlpProblem(Option<collomatique_constraints_colloscopes::IlpInnerProblem>),
 }
 
 #[derive(Debug)]
@@ -127,6 +129,8 @@ pub enum EditorCommandOutput {
     ScriptLoadingFailed(PathBuf, String),
     ExportXlsxSuccessful(PathBuf),
     ExportXlsxFailed(PathBuf, String),
+    MpsFileChosen(PathBuf),
+    MpsFileNotChosen,
     ExportMpsSuccessful(PathBuf),
     ExportMpsFailed(PathBuf, String),
 }
@@ -159,6 +163,7 @@ enum PanelNumbers {
     Balancing = 12,
     Colloscope = 13,
     Export = 14,
+    AdvancedTools = 15,
 }
 
 impl PanelNumbers {
@@ -179,6 +184,7 @@ impl PanelNumbers {
             PanelNumbers::Balancing,
             PanelNumbers::Colloscope,
             PanelNumbers::Export,
+            PanelNumbers::AdvancedTools,
         ]
         .into_iter()
     }
@@ -200,6 +206,7 @@ impl PanelNumbers {
             PanelNumbers::ExtraSettings => "extra_settings",
             PanelNumbers::Colloscope => "colloscope",
             PanelNumbers::Export => "export",
+            PanelNumbers::AdvancedTools => "advanced_tools",
         }
     }
 
@@ -220,6 +227,7 @@ impl PanelNumbers {
             PanelNumbers::ExtraSettings => "Paramètres par élève",
             PanelNumbers::Colloscope => "Colloscope",
             PanelNumbers::Export => "Exporter",
+            PanelNumbers::AdvancedTools => "Outils avancés",
         }
     }
 }
@@ -240,6 +248,12 @@ pub struct EditorPanel {
     /// that cannot go through as-is waits here while the user answers.
     save_pending_compaction: Option<(PathBuf, collomatique_state_colloscopes::InnerData)>,
 
+    /// The current ILP problem, pushed here by the colloscope panel.
+    ///
+    /// It lives in the editor — and not in a panel — because two buttons
+    /// export it now. The panels only ever receive its size.
+    ilp_problem: Option<collomatique_constraints_colloscopes::IlpInnerProblem>,
+
     show_particular_panel: Option<PanelNumbers>,
 
     error_dialog: Controller<error_dialog::Dialog>,
@@ -259,6 +273,7 @@ pub struct EditorPanel {
     balancing: Controller<balancing::Balancing>,
     colloscope: Controller<colloscope::Colloscope>,
     export_panel: Controller<export_panel::ExportPanel>,
+    advanced_tools: Controller<advanced_tools::AdvancedTools>,
     check_script_dialog: Controller<check_script::Dialog>,
     run_python_script_dialog: Controller<run_python_script::Dialog>,
     warning_op_dialog: Controller<warning_op::Dialog>,
@@ -589,6 +604,12 @@ impl EditorPanel {
                 annotations,
             ))
             .unwrap();
+        self.advanced_tools
+            .sender()
+            .send(advanced_tools::AdvancedToolsInput::Update(
+                advanced_tools::Stats::from_inner_data(self.data.get_data().get_inner_data()),
+            ))
+            .unwrap();
     }
 
     fn op_cat_to_panel_number(op: &collomatique_ops::OpCategory) -> Option<PanelNumbers> {
@@ -889,13 +910,25 @@ impl Component for EditorPanel {
                     export_panel::ExportPanelOutput::ExportColloscopeAs(path, config) => {
                         EditorInput::ExportColloscopeAs(path, config)
                     }
-                    export_panel::ExportPanelOutput::ExportMpsAs(path, problem) => {
-                        EditorInput::ExportMpsAs(path, problem)
+                    export_panel::ExportPanelOutput::ExportMpsClicked => {
+                        EditorInput::ExportMpsClicked
                     }
                     export_panel::ExportPanelOutput::UpdateExportConfig(update_op) => {
                         EditorInput::UpdateOp(collomatique_ops::UpdateOp::ExportConfig(update_op))
                     }
                 });
+
+        let advanced_tools = advanced_tools::AdvancedTools::builder().launch(()).forward(
+            sender.input_sender(),
+            |msg| match msg {
+                advanced_tools::AdvancedToolsOutput::RunPythonScriptClicked => {
+                    EditorInput::RunScriptClicked
+                }
+                advanced_tools::AdvancedToolsOutput::ExportMpsClicked => {
+                    EditorInput::ExportMpsClicked
+                }
+            },
+        );
 
         let check_script_dialog = check_script::Dialog::builder()
             .transient_for(&root)
@@ -950,6 +983,7 @@ impl Component for EditorPanel {
             show_particular_panel: None,
             state_to_commit: None,
             save_pending_compaction: None,
+            ilp_problem: None,
             error_dialog,
             general_planning,
             subjects,
@@ -966,6 +1000,7 @@ impl Component for EditorPanel {
             balancing,
             colloscope,
             export_panel,
+            advanced_tools,
             check_script_dialog,
             run_python_script_dialog,
             warning_op_dialog,
@@ -990,6 +1025,7 @@ impl Component for EditorPanel {
                 PanelNumbers::ExtraSettings => model.settings.widget().clone().upcast(),
                 PanelNumbers::Colloscope => model.colloscope.widget().clone().upcast(),
                 PanelNumbers::Export => model.export_panel.widget().clone().upcast(),
+                PanelNumbers::AdvancedTools => model.advanced_tools.widget().clone().upcast(),
             };
             widgets
                 .main_stack
@@ -1252,7 +1288,33 @@ impl Component for EditorPanel {
                     }
                 });
             }
-            EditorInput::ExportMpsAs(path, problem) => {
+            // The file chooser lives here rather than in a panel: both the
+            // export panel and the advanced-tools panel offer this export, and
+            // the editor is the one holding the problem to export.
+            EditorInput::ExportMpsClicked => {
+                let default = match self.file_name.path() {
+                    Some(path) => {
+                        let mut mps_path = path.clone();
+                        mps_path.set_extension("mps");
+                        tools::open_save::DefaultSaveFile::ExistingFile(mps_path)
+                    }
+                    None => tools::open_save::DefaultSaveFile::SuggestedName(
+                        format!("{DEFAULT_FILE_STEM}.mps").into(),
+                    ),
+                };
+                sender.oneshot_command(async move {
+                    match tools::open_save::save_mps_dialog(default).await {
+                        Some(path) => EditorCommandOutput::MpsFileChosen(path),
+                        None => EditorCommandOutput::MpsFileNotChosen,
+                    }
+                });
+            }
+            EditorInput::ExportMpsAs(path) => {
+                // Both buttons are insensitive without a problem, but the click
+                // and the arrival of a `None` can cross: give up silently.
+                let Some(problem) = self.ilp_problem.clone() else {
+                    return;
+                };
                 self.toast_info = Some(ToastInfo::Toast {
                     text: format!("Export MPS en cours de {}...", path.to_string_lossy()),
                     timeout: None,
@@ -1265,8 +1327,16 @@ impl Component for EditorPanel {
                 });
             }
             EditorInput::UpdateIlpProblem(problem) => {
+                let info = problem
+                    .as_ref()
+                    .map(advanced_tools::IlpProblemInfo::from_problem);
+                self.ilp_problem = problem;
                 self.export_panel
-                    .emit(ExportPanelInput::UpdateIlpProblem(problem));
+                    .emit(ExportPanelInput::UpdateIlpAvailable(info.is_some()));
+                self.advanced_tools
+                    .emit(advanced_tools::AdvancedToolsInput::UpdateIlpProblemInfo(
+                        info,
+                    ));
             }
         }
     }
@@ -1334,6 +1404,10 @@ impl Component for EditorPanel {
                 sender
                     .output(EditorOutput::ExportError(path, error))
                     .unwrap();
+            }
+            EditorCommandOutput::MpsFileNotChosen => {}
+            EditorCommandOutput::MpsFileChosen(path) => {
+                sender.input(EditorInput::ExportMpsAs(path));
             }
             EditorCommandOutput::ExportMpsSuccessful(path) => {
                 self.toast_info = Some(ToastInfo::Toast {
