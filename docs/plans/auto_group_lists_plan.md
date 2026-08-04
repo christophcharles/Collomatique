@@ -1,9 +1,10 @@
 # Automatic group-list prefilling — high-level plan
 
-Status: roadmap (2026-08-04). This is not an implementation plan. It splits the
-work into pieces that can be done one at a time. Each piece gets its own
-detailed implementation plan (full prose, old+new code snippets) when we start
-it. Branch context: `group_lists_auto_prefill`.
+Status: roadmap (2026-08-04, revised after review). This is not an
+implementation plan. It splits the work into pieces that can be done one at a
+time. Each piece gets its own detailed implementation plan (full prose,
+old+new code snippets) when we start it. Branch context:
+`group_lists_auto_prefill`.
 
 ## 1. Goal
 
@@ -77,25 +78,37 @@ Extras (reified, as in `constraints-colloscopes/src/extras.rs`):
 - `StudentInGroup { list, student, group }` — boolean ⟺
   `StudentGroup == group`. Same reification as
   `constraints-colloscopes/src/extras.rs:261-289`.
-- `GroupHasStudents { list, group }` — boolean, ⟺ some `StudentInGroup` in
+- `GroupHasStudents { list, group }` — boolean ⟺ some `StudentInGroup` in
   that group is 1. Used by the min-size constraint, the ascending-order
   constraint, and the objective.
-- `SharedPair { a: StudentId, b: StudentId }` (with `a < b`) — 1 if the pair
-  shares **any** group in **any** list. Defined only for pairs that co-occur
-  in at least one *new* spec. Since the objective only pushes it down, a
-  one-sided implication suffices:
-  `SharedPair >= StudentInGroup(a, l, g) + StudentInGroup(b, l, g) - 1`
-  for every list `l` containing both and every group `g`. Whether the
-  ilp-modeler reification machinery expresses this one-sided form or we use a
-  full equivalence is a piece-plan detail.
+- `PairInGroup { a, b, list, group }` (with `a < b`) — boolean ⟺ both
+  students sit in that group of that list (the AND of the two
+  `StudentInGroup`s).
+- `SharedPair { a: StudentId, b: StudentId }` (with `a < b`) — boolean ⟺ the
+  pair shares **any** group in **any** list: reified as
+  `Σ PairInGroup(a, b, l, g) >= 1` over every list `l` containing both.
+  Defined only for pairs that co-occur in at least one *new* spec.
 
-Kept lists (see §2.5) do not add variables. A pair that already shares a group
-in a kept list gets its `SharedPair` **fixed to 1** (via the `check_fix`
-mechanism, like `Var::fix_student_group` in
-`constraints-colloscopes/src/vars.rs:125-154`). Grouping such a pair in a new
-list then costs nothing — which is exactly the stability heuristic: the
-cheapest solution reuses last period's groupings where the student sets allow
-it.
+All reifications are **full equivalences**, never one-sided implications that
+rely on objective pressure for the missing direction: several solve strategies
+strip the objective, and the variables' values must stay correct there.
+
+Kept lists (see §2.5) add no variables. Conceptually, the OR behind
+`SharedPair` ranges over the kept lists too — but there the "both in that
+group" terms are compile-time **constants**, exactly like the constants the
+colloscope crate substitutes for prefilled lists in its reifications
+(`constraints-colloscopes/src/extras.rs:291-342`). For a pair already grouped
+in a kept list, one constant term is 1: the upper-bound side of the
+equivalence becomes trivially true, and the lower-bound side degenerates to
+`SharedPair = 1`. Implementation-wise the variable is **fixed to 1** (via the
+`check_fix` mechanism, like `Var::fix_student_group` in
+`constraints-colloscopes/src/vars.rs:125-154`) and its reification
+constraints are **omitted entirely**: with the constant term in, every one of
+them is degenerate (trivially true), so omitting them is exactly equivalent
+to writing them — and sends that many fewer constraints to the solver.
+Grouping such a pair in a new list
+then costs nothing — which is exactly the stability heuristic: the cheapest
+solution reuses last period's groupings where the student sets allow it.
 
 ### 2.3 Constraints
 
@@ -119,10 +132,11 @@ Not carried over, and why:
   construction exactly each covered subject's registered set, and its range is
   the subject range, so the per-subject constraint is vacuous.
 
-The crate defines its own `ConstraintDesc` with the same severity-tier shape
-as `constraints-colloscopes/src/types.rs:368-445` (all constraints are hard;
-tiers are blame/relaxation metadata). The exact tier assignment per constraint
-is a piece-plan detail.
+The crate defines its own `ConstraintDesc` as a plain descriptive enum, one
+variant per constraint family, with **no severity tiers**: the tier machinery
+of `constraints-colloscopes/src/types.rs:368-445` feeds the colloscope warning
+display in gtk4, which has no counterpart here — we just solve, and every
+constraint matters equally.
 
 ### 2.4 Objective
 
@@ -133,7 +147,7 @@ The weights are plain hardcoded constants, and they start out **equal**
 two terms do pull in opposite directions (fewer groups means fuller groups,
 which creates more pairs inside each list), so some tuning is expected —
 but that is a tuning question, not a design question. Exposing the weights in
-an advanced dialog is a possible later piece (§5, piece 10).
+an advanced dialog is part of the polish phase (§5, piece 11).
 
 ### 2.5 Kept lists
 
@@ -146,23 +160,70 @@ pinning only, as described in §2.2.
 
 ### 2.6 Epochs
 
-The intended ordering (exact algorithm still **to be designed**, see §7):
-order the lists by **inclusion of their student sets**, small lists first.
-The first epochs should hold mutually disjoint lists that can be solved
-essentially independently; later epochs hold the larger lists that contain
-them, which then align their groups with the already-built small ones through
-the pair objective.
+The incremental strategy should build the small lists first, ordered by
+**inclusion of their student sets**: the first epochs hold lists that can be
+solved essentially independently; later epochs hold the larger lists that
+contain them, and those align their groups with the already-built small ones
+through the pair objective.
 
-A candidate formalization: build the strict-inclusion DAG over the specs'
-student sets and set `epoch(spec) = height of the longest strict-inclusion
-chain below it`. Inclusion-minimal specs (whether small or large) land in
-epoch 0; a spec strictly containing an epoch-k spec lands at ≥ k+1.
-Overlapping-but-incomparable sets share an epoch and are solved together.
-Size ranges play no role in the ordering — only student sets do.
+The algorithm (agreed). A spec's epoch is the height of the longest
+strict-inclusion chain below it:
 
-Whatever the final scheme, everything-in-epoch-0 (a plain, non-staggered
-solve) is the trivial placeholder and fallback; the problem is small enough
-for that to be viable from day one.
+```text
+epoch(S) = 0                                        if no spec's set is
+                                                    strictly included in S's,
+epoch(S) = 1 + max { epoch(T) | T.students ⊊ S.students }   otherwise.
+```
+
+Concretely, no recursion is needed. A strict subset always has strictly
+fewer students, so processing the specs by ascending student count guarantees
+that every strict subset of a spec is already computed when the spec's turn
+comes:
+
+```text
+sort the specs by students.len(), ascending
+for each spec S in that order:
+    epoch[S] = 0
+    for each already-processed spec T with T.students ⊊ S.students:
+        epoch[S] = max(epoch[S], epoch[T] + 1)
+```
+
+That is k(k−1)/2 subset tests (`BTreeSet::is_subset`, plus a size comparison
+for strictness), with k = the spec count — bounded by the number of selected
+`(period, subject)` pairs, so cost is a non-issue. Two specs with equal
+student sets (different size ranges) never strictly include each other, so
+they simply never relate. Every `StudentGroup` variable of a spec gets its
+spec's epoch.
+
+Properties, on an example — German LV2 `{a…f}` and Spanish LV2 `{g…m}`
+(disjoint), a sciences subject `{a…t}` containing both, the whole class
+`{a…z}`:
+
+- The two LV2 lists contain no other spec → epoch 0. Being disjoint, they
+  share no student, so no `SharedPair` spans them: the epoch-0 subproblem
+  decomposes into independent blocks — the "solved basically independently"
+  intent.
+- The sciences list strictly contains both → epoch 1; the whole class →
+  epoch 2. Each aligns to the groupings built before it.
+- Two *overlapping but incomparable* sets get the same height and are solved
+  jointly — correct, since pair variables couple them and neither is
+  "smaller".
+- "Small first" really means "inclusion-minimal first": a large list that
+  contains no other spec also lands in epoch 0, because nothing smaller
+  exists for it to wait for.
+- Equal student sets with different size ranges: neither strictly includes
+  the other → same epoch. Size ranges play no role in the ordering.
+
+The epoch map covers **base variables only** — verified against the
+incremental strategy's contract (`strategies/src/strategies/incremental.rs:18-32`):
+entries naming non-base variables are silently ignored (piece 0 makes them
+*unrepresentable* instead — see §5), base variables absent from the map are
+solved in the final epoch (max + 1), and an empty map means a single priming
+solve. Extras are handled by the strategy's own surrogate machinery, so
+listing every `StudentGroup` variable is both necessary and sufficient.
+
+Until piece 10, the skeleton ships an **empty epoch map**, which by the above
+contract is a plain single solve — no placeholder code needed.
 
 ### 2.7 No `SolveConfig` equivalent
 
@@ -227,13 +288,10 @@ empties a suffix, but the conversion compacts and remaps defensively rather
 than assuming it). Built through `GroupList::new` so the sealed invariants
 hold.
 
-## 4. Applying the result: composite op vs `GlobalUpdate` — **open decision**
+## 4. Applying the result: a new composite op (settled)
 
-Two candidate paths exist; the choice is not settled yet (see §7).
-
-**Option A — a new composite op.** The change is additive and structured —
-create k lists, associate them — which matches the shape of the `ops/`
-composite layer:
+The change is additive and structured — create k lists, associate them —
+which matches the shape of the `ops/` composite layer. So: a new variant
 
 ```rust
 GroupListsUpdateOp::AddGeneratedGroupLists(
@@ -244,20 +302,16 @@ GroupListsUpdateOp::AddGeneratedGroupLists(
 following the `DuplicatePreviousPeriod` precedent
 (`ops/src/group_lists.rs:301-396`): one `CascadeSession`, a loop of
 `AddNewGroupList` + `AssignToSubject` elementary ops, `commit` collapses it
-all into **one undo slot**. Arguments for it: it flows through the normal
+all into **one undo slot**. It flows through the normal
 `EditorInput::UpdateOp` → `dry_apply` → warning dialog path
 (`gtk4/src/editor.rs:1183-1232`) — the group-lists page already speaks
 `GroupListsUpdateOp`, so no new editor plumbing; fresh `GroupListId`s are
 issued by the session, not hand-managed; cascade warnings surface instead of
-being bypassed.
+being bypassed. (The rejected alternative was `Op::GlobalUpdate`, the
+colloscope-solver precedent at `gtk4/src/editor.rs:1278-1298` — also one undo
+slot, but it bypasses the warning machinery and needs hand-managed ids.)
 
-**Option B — `Op::GlobalUpdate`.** The precedent of the colloscope solver
-(`gtk4/src/editor.rs:1278-1298`): clone `InnerData`, insert the new lists and
-associations, apply wholesale. One undo slot too, fully validated by the
-invariant gate, but it bypasses the cascade/warning machinery and the fresh
-ids must be issued by hand.
-
-Whichever option wins, the surrounding semantics are the same. Associations for the rebuilt `(period, subject)` pairs **overwrite** any
+Associations for the rebuilt `(period, subject)` pairs **overwrite** any
 existing entry (that is `AssignToSubject`'s semantics). A previously
 associated list may end up orphaned (associated nowhere); it is kept, not
 auto-deleted — deleting is the user's call. (An orphaned list is legal state;
@@ -269,52 +323,62 @@ so the plan computed at config time is still valid at apply time.
 
 ## 5. The pieces
 
-Backend first, UI second. Each piece compiles, passes tests, and is
-committable on its own.
+Ordered as a **walking skeleton**: get the full pipeline running end to end
+with a trivial model first, then grow the real model inside it. The UI pieces
+are mechanical; doing them against the trivial model derisks the integration
+work (generic `run_solver` instantiation, payload wiring, op application)
+before the interesting constraint work starts. Once the skeleton stands,
+every model piece has a live testbed: run the tool, look at the lists.
 
-**Piece 1 — crate skeleton and core model.** New crate `constraints-groups/`
-(`collomatique-constraints-groups`), mirroring the layout of
-`constraints-colloscopes/`: an env type wrapping the spec list, `Var` with
-`DescribeVar` derive, the `StudentInGroup` / `GroupHasStudents` extras, the
-three shape constraints (§2.3), `build_model` / `build_model_with_log`
-(same log-callback signature as `constraints-colloscopes/src/builder.rs:14-62`),
-and a placeholder `build_incremental_epochs` putting everything in epoch 0.
-Objective: the group-count term only. Unit tests on tiny hand-built spec
-lists.
+### Phase 0 — groundwork
 
-**Piece 2 — pair variables.** `SharedPair` extras, their reification, the
-pair term of the objective, and pinned-pair fixing. Unit tests: a two-list
-instance where the optimum provably reuses groupings; a pinning test showing
-kept pairs make reuse free.
+**Piece 0 — type-tighten the incremental epoch payload.** Today
+`IncrementalPayload<V>` is keyed by the *problem* variable type
+(`V = InternalVar<B, E>` in real use), and entries naming extras or helpers
+are silently ignored — the strategy immediately projects the map down to
+`HashMap<B, u32>` anyway (`strategies/src/strategies/incremental.rs:299-305`).
+Fix: key the payload by the base type, making non-base entries
+unrepresentable. The `Strategy` trait's payload is a GAT `type Payload<V>`
+instantiated at `InternalVar<B, E>` (`strategies/src/lib.rs:400-416`); it
+becomes two-parameter (`type Payload<B, E>` — e.g.
+`FindClosestPayload<InternalVar<B, E>>` for strategies that genuinely carry
+full configs, `IncrementalPayload<B>` for incremental) or an equivalent
+base-projection trait; settled in the piece plan. The IPC format is
+untouched: `IncrementalPayloadData` stays a `Vec<Option<u32>>` aligned to
+`var_order`, and aligning a base-keyed map against an `InternalVar` order is
+still well-defined (`Base(b)` → lookup, anything else → `None`). Ripples:
+the `StrategyPayload` union and its serialization impls
+(`strategies/src/lib.rs:595-723`), `ConductorPayload` (which embeds the
+incremental payload, `strategies/src/strategies/conductor.rs:454-456`), the
+`Strategy` impls' associated-type lines, `build_incremental_epochs` in
+constraints-colloscopes (which *simplifies*: it is generic over the extra
+space today only because of this keying, and becomes a plain
+`HashMap<Var, u32>`), and gtk4's `build_incremental_payload`
+(`loading_dialog.rs:49-56`). Residual, not typable away: an entry naming a
+base variable absent from the model (a stale name) stays representable and
+keeps the documented "ignored" behavior.
 
-**Piece 3 — generation plan and output conversion.** `GenerationRequest`,
-`build_generation_plan` (dedup, skipped reporting, pinned-pair extraction from
-kept prefilled lists), and `build_group_lists` (compaction, `GroupList::new`).
-Unit tests on hand-built `Parameters`, including the dedup and skip cases.
+### Phase A — the skeleton
 
-**Piece 4 — inclusion-based epochs.** Replace the placeholder
-`build_incremental_epochs` with the student-set-inclusion ordering of §2.6.
-This piece starts with its own short design pass to settle the exact
-algorithm (candidate: longest strict-inclusion chain height). Unit tests on
-hand-built spec families: disjoint sets, nested chains, overlapping
-incomparable sets.
+**Piece 1 — minimal crate + full translation layer.** New crate
+`constraints-groups/` (`collomatique-constraints-groups`), truly minimal on
+the model side: the env and spec types, `Var::StudentGroup` with its
+`DescribeVar` derive — and **no constraints, no extras, no objective**.
+`build_model` / `build_model_with_log` (same log-callback signature as
+`constraints-colloscopes/src/builder.rs:14-62`) return the bare model. The
+translation layer, however, is built in full: `GenerationRequest`,
+`build_generation_plan` (dedup, skipped reporting, pinned-pair extraction),
+`build_group_lists` (compaction, `GroupList::new`) — see §3. Solving this
+model produces arbitrary, probably absurd, but structurally valid group
+lists. The epoch map is empty — a documented single priming solve (§2.6).
+The fuzz-build net comes with this piece already — a `property_build.rs` /
+`examples_build.rs` analog of
+`constraints-colloscopes/tests/property_build.rs` over random
+`GenerationRequest`s, cheap against the trivial model, guarding every later
+piece. To verify here: that the solver machinery accepts a model with no
+constraints and an empty objective.
 
-**Piece 5 — fuzz-build net.** Mirror
-`constraints-colloscopes/tests/property_build.rs` using
-`collomatique-testgen-colloscopes`: random valid documents, random
-`GenerationRequest`s (random subsets of interrogation-bearing
-`(period, subject)` pairs and of prefilled lists), assert
-`build_generation_plan` + `build_model` never panic; plus an
-`examples_build.rs` analog running a rebuild-everything request over
-`examples/*.collomatique`.
-
-**Piece 6 — the apply path.** Contingent on the §4 decision. If option A:
-`GroupListsUpdateOp::AddGeneratedGroupLists` with its precise error enum,
-following the existing per-variant test style in `ops/src/group_lists.rs`.
-If option B: the `GlobalUpdate` assembly instead (a much smaller piece, mostly
-folded into piece 9).
-
-**Piece 7 — config dialog.** `gtk4/src/editor/group_lists/generate_dialog.rs`,
+**Piece 2 — config dialog.** `gtk4/src/editor/group_lists/generate_dialog.rs`,
 modeled on `gtk4/src/editor/colloscope/config_dialog.rs` (same
 window/headerbar/paned/factory skeleton, `update_vec_deque` refresh idiom).
 Left pane: one `adw::PreferencesGroup` per period, one `adw::SwitchRow` per
@@ -326,7 +390,7 @@ on for pairs with **no current association**, off otherwise; kept-list
 switches all on. This makes the two obvious cases right by default: an empty
 document, and a second period with no associations yet.
 
-**Piece 8 — naming/build dialog.** New dialog replacing `loading_dialog.rs`
+**Piece 3 — naming/build dialog.** New dialog replacing `loading_dialog.rs`
 in the chain: one row per spec with an editable name (`adw::EntryRow`) and a
 subtitle listing the covered subjects and periods; "Valider" disabled until
 the model build finishes; a header toggle button that shows an `adw::Spinner`
@@ -339,36 +403,84 @@ subjects/periods (French strings belong in gtk4); the naming scheme is a
 piece-plan detail. Build failure shows the error like `loading_dialog.rs`
 does.
 
-**Piece 9 — solver run and wiring.** Instantiate the generic
+**Piece 4 — launching the resolution.** Instantiate the generic
 `run_solver::Dialog<constraints_groups::Var, ExtraVarName, ConstraintDesc>`
-(`gtk4/src/editor/run_solver.rs:28`) with its own title. Chain: button →
-generate_dialog → naming/build dialog → `DialogInput::Run(strategy, model,
-payload)` → on `NewConfig`, `filter_transmute` to base vars,
-`build_group_lists`, then apply through whichever path §4 settles on. Enable
-the button at `group_lists.rs:84-93`. Persist the last-used strategy across
-invocations (like the colloscope page persists its config/strategy at
-`colloscope.rs:166-171`).
+(`gtk4/src/editor/run_solver.rs:28`) with its own title, and feed it
+`DialogInput::Run(strategy, model, payload)` from the naming/build dialog's
+output. The `NewConfig` result is received but not yet applied.
 
-**Piece 10 (optional, later) —** advanced parameters (objective weights),
-Python wiring (the todo mentions it), and any epoch-strategy tuning. Out of
-scope for the initial roadmap; not planned further here.
+**Piece 5 — the update op.** `GroupListsUpdateOp::AddGeneratedGroupLists`
+(§4), with its precise error enum, following the existing per-variant test
+style in `ops/src/group_lists.rs`.
+
+**Piece 6 — final plumbing.** Enable the button at `group_lists.rs:84-93`;
+chain button → config dialog → naming/build dialog → solver dialog; on
+`NewConfig`, `filter_transmute` to base vars, `build_group_lists`, emit the
+composite op through the page's normal output. Persist the last-used strategy
+across invocations (like the colloscope page at `colloscope.rs:166-171`).
+End state of phase A: the full pipeline works and produces absurd lists. To
+check along the way: whether prefilled lists with out-of-range group sizes
+trip any checker warning on apply (harmless if so, but the skeleton demos
+will show it).
+
+### Phase B — the real model
+
+**Piece 7 — extra variables.** `StudentInGroup`, `GroupHasStudents`,
+`PairInGroup`, `SharedPair`, with their full-equivalence reifications and the
+pinned-pair fixing (§2.2). Note: the build-time DFS only expands extras that
+are referenced from constraints or objectives, so this piece leaves the built
+model unchanged; tests exercise the declarations directly (e.g. through
+throwaway constraints in test code).
+
+**Piece 8 — shape constraints, one class at a time.** Max size, conditional
+min size, ascending fill order (§2.3), each as its own commit with its unit
+tests. The fuzz net from piece 1 now has real builders to guard.
+
+**Piece 9 — the objective.** Both terms, equal weights (§2.4). Unit tests: a
+two-list instance where the optimum provably reuses groupings; a pinning test
+showing kept pairs make reuse free. From here the tool produces sensible
+lists.
+
+**Piece 10 — epochs.** The inclusion-based ordering of §2.6, replacing the
+absent map of piece 1. Unit tests on hand-built spec families: disjoint sets,
+nested chains, overlapping incomparable sets, equal sets.
+
+### Phase C — polish
+
+**Piece 11 —** advanced parameters (objective weights), Python wiring (the
+todo mentions it), epoch-strategy tuning, and whatever the first real uses
+ask for. Out of scope for the initial roadmap; not planned further here.
 
 ## 6. Points settled
 
 - No −1 in the `StudentGroup` domain; no `students_have_groups` analog.
 - Group slots per spec: `floor(n / min_size)`.
 - Kept lists restricted to prefilled ones; their only effect is pair pinning.
+- All reifications are full equivalences — never rely on objective pressure
+  (strategies may strip the objective). Kept lists enter the `SharedPair`
+  equivalence as constant terms; a pair already grouped in one is fixed to 1
+  and its degenerate reification constraints are omitted, not emitted.
+- Piece 0 (before everything else): key the incremental epoch payload by the
+  base variable type, so non-base entries become unrepresentable.
+- `ConstraintDesc`: plain flat enum, no severity tiers (the tier machinery
+  serves the gtk4 colloscope warning display, absent here).
 - Objective weights: hardcoded constants, equal to start with; tune later.
+- Apply path: the composite `GroupListsUpdateOp::AddGeneratedGroupLists`
+  (option A), not `GlobalUpdate`.
+- Piece order: walking skeleton first (trivial model + full pipeline), then
+  the real model, then polish.
 - Overwritten associations may orphan old lists; they are kept.
 - Subjects listed in the config dialog: only those with interrogations.
 - Config dialog defaults: rebuild on where no association exists, kept lists
   all on.
 - Generated lists are `Prefilled`, unnamed groups, spec range as list range.
+- Epoch algorithm: longest strict-inclusion chain height, computed by
+  ascending student count (§2.6). The epoch map lists base variables only;
+  an empty map (phase A) is a documented single priming solve.
 
-## 7. Points still open
+## 7. Points still open / to verify
 
-- **Apply path** (§4): composite `GroupListsUpdateOp` variant vs
-  `Op::GlobalUpdate`. Decides the shape of piece 6.
-- **Exact epoch algorithm** (§2.6): inclusion-based, small lists first;
-  the precise ordering is designed at the start of piece 4. The candidate on
-  the table is longest strict-inclusion chain height.
+- **Piece-1 verification**: solver machinery on a constraint-free,
+  objective-free model.
+- **Phase-A check**: whether absurd (out-of-range-size) prefilled lists trip
+  checker warnings on apply.
