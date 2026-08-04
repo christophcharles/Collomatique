@@ -79,35 +79,6 @@ fn reject_retired_or_invalid_spec_versions(
     Ok(())
 }
 
-/// Options for [deserialize_data_with_options]
-///
-/// The default value is the plain behaviour of [deserialize_data]: read
-/// the document exactly as the file writes it.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct DeserializeOptions {
-    /// When true, all ids are regenerated right after parsing: every id
-    /// of the document is renumbered densely from 0, in ascending order
-    /// of the old values, before any id-space check runs
-    ///
-    /// This rescues a file whose ids sit above the format's ceiling of
-    /// 2^63 - 1 (spec §3) — which older versions of the application could
-    /// write, since nothing stopped them. The document that comes out
-    /// differs from the file by its ids alone.
-    ///
-    /// It rescues nothing else. The renumbering is injective, so an id
-    /// that two entities shared is still shared afterwards
-    /// ([DecodeError::DuplicatedIdInBlock] or
-    /// [DecodeError::DuplicatedIdAcrossBlocks]), and a reference to an id
-    /// no entity defines still points nowhere
-    /// ([DecodeError::DanglingReference]) — such a file is ambiguous or
-    /// incomplete, not merely misnumbered. Note that those errors then
-    /// name the renumbered id, not the one written in the file.
-    ///
-    /// It is off by default because renumbering breaks any id an outside
-    /// party remembers.
-    pub regenerate_ids: bool,
-}
-
 /// Deserialize the content of a colloscope file
 ///
 /// This function takes the content of a colloscope file
@@ -121,17 +92,6 @@ pub struct DeserializeOptions {
 /// of Collomatique. The type [Caveat] list possible issues in this situation.
 pub fn deserialize_data(
     file_content: &str,
-) -> Result<(Data, BTreeSet<Caveat>), DeserializationError> {
-    deserialize_data_with_options(file_content, &DeserializeOptions::default())
-}
-
-/// Deserialize the content of a colloscope file, with options
-///
-/// This is [deserialize_data] with the extra behaviours of
-/// [DeserializeOptions] available; see that type for what they do.
-pub fn deserialize_data_with_options(
-    file_content: &str,
-    options: &DeserializeOptions,
 ) -> Result<(Data, BTreeSet<Caveat>), DeserializationError> {
     let raw_data = serde_json::from_str::<json::RawJsonData>(file_content)?;
 
@@ -149,7 +109,6 @@ pub fn deserialize_data_with_options(
         &raw_data.entries,
         &raw_data.header.produced_with_version,
         &mut caveats,
-        options,
     )?;
     Ok((data, caveats))
 }
@@ -171,28 +130,6 @@ pub enum EncodeError {
     IdAboveCeiling { id: u64 },
 }
 
-/// Options for [serialize_data_with_options]
-///
-/// The default value is the plain behaviour of [serialize_data]: write
-/// the document exactly as it is in memory.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct SerializeOptions {
-    /// When true, all ids are regenerated before writing: every id of the
-    /// document is renumbered densely from 0, in ascending order of the
-    /// old values, so their relative order — and therefore the canonical
-    /// form's sort orders — is preserved
-    ///
-    /// The in-memory [Data] is not modified; only the written file uses
-    /// the new ids, so reloading the file yields a document that differs
-    /// from the one in memory by its ids alone.
-    ///
-    /// This is the way out of [EncodeError::IdAboveCeiling]: a document
-    /// that grew an id above the format's ceiling holds far fewer than
-    /// 2^63 entities, so dense ids always fit. It is off by default
-    /// because renumbering breaks any id an outside party remembers.
-    pub regenerate_ids: bool,
-}
-
 /// Serialize the content of a colloscope file
 ///
 /// This function takes an in-memory [Data] representation
@@ -202,20 +139,12 @@ pub struct SerializeOptions {
 ///
 /// This fails only when the document cannot be represented in the file
 /// format at all — see [EncodeError], which has a single cause: an id
-/// above the format's ceiling.
+/// above the format's ceiling. The way out is
+/// [collomatique_state_colloscopes::InnerData::compact_ids], which
+/// renumbers the document densely: this crate writes documents as they
+/// are and never renumbers them itself.
 pub fn serialize_data(data: &Data) -> Result<String, EncodeError> {
-    serialize_data_with_options(data, &SerializeOptions::default())
-}
-
-/// Serialize the content of a colloscope file, with options
-///
-/// This is [serialize_data] with the extra behaviours of
-/// [SerializeOptions] available; see that type for what they do.
-pub fn serialize_data_with_options(
-    data: &Data,
-    options: &SerializeOptions,
-) -> Result<String, EncodeError> {
-    let document = encode::spec2::encode(data, options)?;
+    let document = encode::spec2::encode(data)?;
     Ok(serde_json::to_string_pretty(&document).expect("Serializing to JSON should not fail"))
 }
 

@@ -6,9 +6,9 @@
 //! omitted, blocks appear in canonical order, and unordered collections
 //! are sorted.
 
+use crate::EncodeError;
 use crate::format;
 use crate::json::{Spec2Document, Spec2Entry};
-use crate::{EncodeError, SerializeOptions};
 
 use collomatique_state_colloscopes as mem;
 use collomatique_state_colloscopes::Data;
@@ -16,7 +16,7 @@ use mem::ids::Id;
 
 use std::collections::BTreeSet;
 
-pub fn encode(data: &Data, options: &SerializeOptions) -> Result<Spec2Document, EncodeError> {
+pub fn encode(data: &Data) -> Result<Spec2Document, EncodeError> {
     let inner = data.get_inner_data();
     let params = &inner.params;
 
@@ -24,7 +24,7 @@ pub fn encode(data: &Data, options: &SerializeOptions) -> Result<Spec2Document, 
     // the id ceiling is a rule about the document as a whole, so it is
     // checked on the format values (where all the ids that will actually
     // be written live) rather than on the in-memory data.
-    let mut blocks = format::Blocks {
+    let blocks = format::Blocks {
         general_planning: Some(build_general_planning(params)),
         subjects: Some(build_subjects(params)),
         teachers: Some(build_teachers(params)),
@@ -43,15 +43,7 @@ pub fn encode(data: &Data, options: &SerializeOptions) -> Result<Spec2Document, 
         export_config: Some(build_export_config(&inner.export_config)),
     };
 
-    // Renumbering happens on the built document, before the ceiling
-    // check: the ids that matter here are the ones about to be written,
-    // and the whole point of the pass is to make a document that fails
-    // the check pass it.
-    if options.regenerate_ids {
-        format::id_visit::remap_ids(&mut blocks);
-    }
-
-    check_ids(&mut blocks)?;
+    check_ids(&blocks)?;
 
     let mut entries = Vec::new();
     use format::Block;
@@ -97,11 +89,11 @@ pub fn encode(data: &Data, options: &SerializeOptions) -> Result<Spec2Document, 
 /// operation on a document whose largest id was already the ceiling —
 /// produces one. It is the file format, not the model, that caps ids
 /// (spec §3), so this is where the document stops being writable.
-fn check_ids(blocks: &mut format::Blocks) -> Result<(), EncodeError> {
+fn check_ids(blocks: &format::Blocks) -> Result<(), EncodeError> {
     let mut error = None;
     format::id_visit::visit_ids(blocks, &mut |id| {
-        if error.is_none() && *id > (u64::MAX >> 1) {
-            error = Some(EncodeError::IdAboveCeiling { id: *id });
+        if error.is_none() && id > (u64::MAX >> 1) {
+            error = Some(EncodeError::IdAboveCeiling { id });
         }
     });
     match error {

@@ -7,7 +7,7 @@
 //! would accept.
 
 use collomatique_state::{AppState, traits::Manager};
-use collomatique_state_colloscopes::{NewId, Op, StudentOp, students::Student};
+use collomatique_state_colloscopes::{Data, NewId, Op, StudentOp, students::Student};
 use collomatique_storage::*;
 
 fn document(entries: &[String]) -> String {
@@ -80,4 +80,35 @@ fn one_edit_past_the_ceiling_makes_the_document_unwritable() {
         serialize_data(state.get_data()),
         Err(EncodeError::IdAboveCeiling { id: 1 << 63 })
     );
+}
+
+#[test]
+fn a_document_past_the_ceiling_is_rescued_by_compacting() {
+    // The same unwritable document as above, and the way out of it. The
+    // writer never renumbers on its own; compacting is a decision about
+    // the document, taken by whoever owns it, and it always suffices:
+    // renumbered densely, these two entities need the ids 0 and 1.
+    let content = document_at_the_ceiling();
+    let (data, _caveats) = deserialize_data(&content).expect("A boundary document should decode");
+
+    let mut state = AppState::<_, String>::new(data);
+    let result = state.apply(
+        Op::Student(StudentOp::Add(Student::default())),
+        "Add one student past the ceiling".to_string(),
+    );
+    assert!(matches!(result, Ok(Some(NewId::StudentId(_)))));
+    assert_eq!(
+        serialize_data(state.get_data()),
+        Err(EncodeError::IdAboveCeiling { id: 1 << 63 })
+    );
+
+    let compacted = state.get_data().get_inner_data().clone().compact_ids();
+    let compacted = Data::from_inner_data(compacted).expect("Compaction preserves the invariants");
+    let rescued = serialize_data(&compacted).expect("Compacted ids fit the format");
+
+    // The rescued file is an ordinary document: it reloads cleanly and
+    // reserializes identically, with no special handling anywhere.
+    let (reloaded, caveats) = deserialize_data(&rescued).expect("The rescued file should decode");
+    assert!(caveats.is_empty());
+    assert_eq!(serialize_data(&reloaded).expect("Writable again"), rescued);
 }

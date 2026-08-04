@@ -1040,10 +1040,10 @@ impl Component for EditorPanel {
                         }
                         // The document cannot be written in the file format at
                         // all (an id above the format's ceiling). There is no
-                        // rescue path in the interface yet — the id
-                        // regeneration that would fix it is not wired to
-                        // anything — so this is deliberately loud rather than
-                        // a toast the user could not act on.
+                        // rescue path in the interface yet — compacting the
+                        // ids, which would fix it, is not wired to anything —
+                        // so this is deliberately loud rather than a toast the
+                        // user could not act on.
                         Err(e @ collomatique_storage::SaveError::Encode(_)) => {
                             panic!("Cannot write the document: {e}")
                         }
