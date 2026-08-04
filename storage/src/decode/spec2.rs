@@ -198,8 +198,8 @@ fn soft_param<T>(param: format::scalars::SoftParam<T>) -> mem::soft_param::SoftP
 /// rules.
 ///
 /// Week ids are never serialized (the file stores weeks positionally), so
-/// decode synthesizes them; they must be assigned above every id the file
-/// *does* define. In a valid file every reference id is also a defining id, so
+/// decode synthesizes them; they must avoid every id the file *does*
+/// define. In a valid file every reference id is also a defining id, so
 /// the defining ids of each block bound the whole id space; a reference id
 /// outside that set is dangling and rejected as such regardless.
 fn for_each_defining_id(blocks: &Blocks, f: &mut impl FnMut(&'static str, u64)) {
@@ -257,6 +257,38 @@ fn for_each_defining_id(blocks: &Blocks, f: &mut impl FnMut(&'static str, u64)) 
     }
 }
 
+/// Allocates the synthesized week ids: the smallest values the file does
+/// not define, issued in ascending order
+///
+/// Weeks are positional in the file (§4.1) and carry no id, so the decoder
+/// must invent ids that collide with nothing and stay at or below the
+/// 2^63 - 1 ceiling — the in-memory id issuer refuses to resume above it,
+/// and minting week ids above the maximum defining id trips exactly that
+/// refusal when a file legally uses ids near the ceiling. Filling holes
+/// from the bottom gives both properties for free: the k-th issued id is
+/// at most `defined.len() + k`, and every defining id and every week costs
+/// bytes in the file, so a document big enough to push that sum anywhere
+/// near 2^63 cannot exist.
+struct WeekIdAllocator {
+    /// The defining ids of the document, all distinct and at most
+    /// 2^63 - 1 (checked by the sweep in [reconstruct])
+    defined: BTreeMap<u64, &'static str>,
+    /// The next value to try; it strictly increases, so the issued ids
+    /// are also distinct among themselves
+    candidate: u64,
+}
+
+impl WeekIdAllocator {
+    fn get_new_id(&mut self) -> u64 {
+        while self.defined.contains_key(&self.candidate) {
+            self.candidate += 1;
+        }
+        let id = self.candidate;
+        self.candidate += 1;
+        id
+    }
+}
+
 fn reconstruct(blocks: Blocks) -> Result<InnerData, DecodeError> {
     // The two id-space rules of spec §3 in one walk over the defining ids:
     // every id is at most 2^63 - 1, and an id value is defined at most once
@@ -289,19 +321,17 @@ fn reconstruct(blocks: Blocks) -> Result<InnerData, DecodeError> {
     if let Some(error) = first_error {
         return Err(error);
     }
-    // Week ids are synthesized above every id the file defines (S11). All
-    // defining ids are at most 2^63 - 1 here, so the synthesized ids stay
-    // well inside u64; `saturating_add` is kept as a cost-free safety.
-    let mut next_week_id = seen
-        .keys()
-        .next_back()
-        .copied()
-        .unwrap_or(0)
-        .saturating_add(1);
-    let (periods, weeks) = reconstruct_periods(
-        blocks.general_planning.unwrap_or_default(),
-        &mut next_week_id,
-    )?;
+    // Week ids are synthesized in the holes of the id space (S11): the
+    // smallest values the file does not define, in ascending walk order.
+    // All defining ids are at most 2^63 - 1 here, and the holes are filled
+    // from the bottom, so the synthesized ids stay below the ceiling even
+    // when the file's own ids sit right at it.
+    let mut week_ids = WeekIdAllocator {
+        defined: seen,
+        candidate: 0,
+    };
+    let (periods, weeks) =
+        reconstruct_periods(blocks.general_planning.unwrap_or_default(), &mut week_ids)?;
     let subjects = reconstruct_subjects(blocks.subjects.unwrap_or_default(), &periods)?;
     let teachers = reconstruct_teachers(blocks.teachers.unwrap_or_default(), &subjects)?;
     let students = reconstruct_students(blocks.students.unwrap_or_default(), &periods)?;
@@ -366,7 +396,7 @@ fn reconstruct(blocks: Blocks) -> Result<InnerData, DecodeError> {
 
 fn reconstruct_periods(
     block: format::general_planning::GeneralPlanning,
-    next_week_id: &mut u64,
+    week_ids: &mut WeekIdAllocator,
 ) -> Result<(mem::periods::Periods, mem::weeks::Weeks), DecodeError> {
     let first_week = block.first_week.map(|date| {
         collomatique_time::WeekStart::new(date.date()).expect("Format week start date is a Monday")
@@ -382,8 +412,7 @@ fn reconstruct_periods(
                     .into_iter()
                     .map(|week| {
                         // Synthesize the week's id in walk order (S11).
-                        let week_id = id::<WeekId>(*next_week_id);
-                        *next_week_id = next_week_id.saturating_add(1);
+                        let week_id = id::<WeekId>(week_ids.get_new_id());
                         (
                             week_id,
                             mem::weeks::WeekDesc {
@@ -407,8 +436,8 @@ fn reconstruct_periods(
             id: e.0.inner(),
         }
     })?;
-    // Defensive: the week ids were synthesized just above by a monotonically
-    // increasing counter, so no file can make them collide. The reported id
+    // Defensive: the week ids were synthesized just above by the strictly
+    // increasing allocator, so no file can make them collide. The reported id
     // is that synthesized value, not one the file carried.
     let weeks = mem::weeks::Weeks::from_period_rows(rows).map_err(|e| {
         DecodeError::DuplicatedIdInBlock {

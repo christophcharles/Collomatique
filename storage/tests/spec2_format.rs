@@ -1004,17 +1004,14 @@ fn an_id_at_the_ceiling_next_to_a_week_is_accepted() {
     // The file is just as legal: it defines one id, 2^63 - 1, and weeks
     // carry no id at all (they are positional — §4.1).
     //
-    // It does not decode today, and the failure is the worst kind: the
-    // decoder synthesizes week ids *above* every id the file defines, so
-    // the first week here gets 2^63, one past the ceiling. Nothing in
-    // the decoder objects — the id it built is not one the file wrote —
-    // but the in-memory id issuer refuses to resume from it, so the
-    // document trips the invariant gate and the "decoder bug" panic
-    // fires on a file that is not broken at all.
-    //
-    // This test is committed red on purpose: it records the gap, and it
-    // is the thing that must go green once week ids stop being minted
-    // above the ceiling.
+    // This pins the hole-filling rule for synthesized week ids. When the
+    // decoder minted them *above* every id the file defines, the week here
+    // got 2^63, one past the ceiling: nothing in the decoder objected —
+    // the id it built is not one the file wrote — but the in-memory id
+    // issuer refused to resume from it, and the "decoder bug" panic fired
+    // on a file that is not broken at all. Week ids now fill the holes of
+    // the id space from the bottom, so the week gets id 0 and the document
+    // decodes.
     let content = document(&[entry(&format!(
         r#"{{ "GeneralPlanning": {{
             "first_week": null,
