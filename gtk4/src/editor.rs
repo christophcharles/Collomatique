@@ -73,6 +73,7 @@ mod teachers;
 mod week_patterns;
 
 mod warning_op;
+mod warning_save_ids;
 
 #[derive(Debug)]
 pub enum EditorInput {
@@ -82,6 +83,8 @@ pub enum EditorInput {
         data: collomatique_state_colloscopes::Data,
     },
     SaveCurrentFileAs(PathBuf),
+    SaveCheckedFileAs(PathBuf, collomatique_state_colloscopes::InnerData),
+    CancelSaveCompaction,
     SaveAsClicked,
     SaveClicked,
     UndoClicked,
@@ -230,6 +233,11 @@ pub struct EditorPanel {
     state_to_commit: Option<
         collomatique_state::AppState<collomatique_state_colloscopes::Data, collomatique_ops::Desc>,
     >,
+    /// The save the id-compaction dialog is asking about
+    ///
+    /// Same pattern as [Self::state_to_commit]: the payload of a save
+    /// that cannot go through as-is waits here while the user answers.
+    save_pending_compaction: Option<(PathBuf, collomatique_state_colloscopes::InnerData)>,
 
     show_particular_panel: Option<PanelNumbers>,
 
@@ -253,6 +261,7 @@ pub struct EditorPanel {
     check_script_dialog: Controller<check_script::Dialog>,
     run_python_script_dialog: Controller<run_python_script::Dialog>,
     warning_op_dialog: Controller<warning_op::Dialog>,
+    warning_save_ids_dialog: Controller<warning_save_ids::Dialog>,
 }
 
 impl EditorPanel {
@@ -918,6 +927,15 @@ impl Component for EditorPanel {
                 warning_op::DialogOutput::Cancel => EditorInput::CancelOp,
             });
 
+        let warning_save_ids_dialog = warning_save_ids::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                // The compact button is inert until the next commit.
+                warning_save_ids::DialogOutput::Compact => EditorInput::Ignore,
+                warning_save_ids::DialogOutput::Cancel => EditorInput::CancelSaveCompaction,
+            });
+
         let pages_names = PanelNumbers::iter().map(|x| x.panel_name()).collect();
         let pages_titles_map =
             BTreeMap::from_iter(PanelNumbers::iter().map(|x| (x.panel_name(), x.panel_title())));
@@ -931,6 +949,7 @@ impl Component for EditorPanel {
             pages_titles_map,
             show_particular_panel: None,
             state_to_commit: None,
+            save_pending_compaction: None,
             error_dialog,
             general_planning,
             subjects,
@@ -950,6 +969,7 @@ impl Component for EditorPanel {
             check_script_dialog,
             run_python_script_dialog,
             warning_op_dialog,
+            warning_save_ids_dialog,
         };
         let widgets = view_output!();
 
@@ -1022,7 +1042,23 @@ impl Component for EditorPanel {
                 });
             }
             EditorInput::SaveCurrentFileAs(path) => {
-                let data_copy = self.data.get_data().get_inner_data().clone();
+                let inner_data = self.data.get_data().get_inner_data().clone();
+                match collomatique_storage::check_encodable(&inner_data) {
+                    Ok(()) => sender.input(EditorInput::SaveCheckedFileAs(path, inner_data)),
+                    // The document's ids outgrew the file format. The
+                    // dialog offers the one way out — compacting — and the
+                    // payload waits here in the meantime, like
+                    // state_to_commit does for destructive ops.
+                    Err(collomatique_storage::EncodeError::IdAboveCeiling { .. }) => {
+                        self.save_pending_compaction = Some((path, inner_data));
+                        self.warning_save_ids_dialog
+                            .sender()
+                            .send(warning_save_ids::DialogInput::Show)
+                            .unwrap();
+                    }
+                }
+            }
+            EditorInput::SaveCheckedFileAs(path, inner_data) => {
                 self.dirty = false;
                 // A successful save graduates any state to a clean file.
                 self.file_name = FileName::OkFile(path.clone());
@@ -1033,23 +1069,24 @@ impl Component for EditorPanel {
                     timeout: None,
                 });
                 sender.oneshot_command(async move {
-                    match collomatique_storage::save_data_to_file(&data_copy, &path).await {
+                    match collomatique_storage::save_data_to_file(&inner_data, &path).await {
                         Ok(()) => EditorCommandOutput::SaveSuccessful(path),
                         Err(collomatique_storage::SaveError::IO(e)) => {
                             EditorCommandOutput::SaveFailed(path, e.to_string())
                         }
-                        // The document cannot be written in the file format at
-                        // all (an id above the format's ceiling). There is no
-                        // rescue path in the interface yet — compacting the
-                        // ids, which would fix it, is not wired to anything —
-                        // so this is deliberately loud rather than a toast the
-                        // user could not act on.
+                        // This arm only receives documents that passed
+                        // check_encodable (directly, or after compaction),
+                        // so an encode error here is a programming bug,
+                        // not a user situation.
                         Err(e @ collomatique_storage::SaveError::Encode(_)) => {
                             panic!("Cannot write the document: {e}")
                         }
                     }
                 });
                 sender.output(EditorOutput::UpdateActions).unwrap();
+            }
+            EditorInput::CancelSaveCompaction => {
+                self.save_pending_compaction = None;
             }
             EditorInput::UndoClicked => {
                 if self.data.can_undo() {

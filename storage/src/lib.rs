@@ -156,6 +156,18 @@ pub fn serialize_data(data: &InnerData) -> Result<String, EncodeError> {
     Ok(serde_json::to_string_pretty(&document).expect("Serializing to JSON should not fail"))
 }
 
+/// Checks whether a document can be written by [serialize_data]
+///
+/// This runs exactly the check the writer runs, on exactly the values the
+/// writer would write — so `Ok(())` here means [serialize_data] will not
+/// fail, and the error is the same one it would return. It exists so an
+/// interface can warn *before* writing (and offer
+/// [collomatique_state_colloscopes::InnerData::compact_ids] as the way
+/// out) instead of failing mid-save.
+pub fn check_encodable(data: &InnerData) -> Result<(), EncodeError> {
+    encode::spec2::check_encodable(data)
+}
+
 /// Errors when loading data from a file
 ///
 /// There are two main possibilities of errors:

@@ -16,14 +16,11 @@ use mem::ids::Id;
 
 use std::collections::BTreeSet;
 
-pub fn encode(inner: &InnerData) -> Result<Spec2Document, EncodeError> {
+/// Builds the sixteen format blocks of the document — the exact values
+/// [encode] writes, which is what makes a check on them faithful
+fn build_blocks(inner: &InnerData) -> format::Blocks {
     let params = &inner.params;
-
-    // The whole document is built first, then checked, then written out:
-    // the id ceiling is a rule about the document as a whole, so it is
-    // checked on the format values (where all the ids that will actually
-    // be written live) rather than on the in-memory data.
-    let blocks = format::Blocks {
+    format::Blocks {
         general_planning: Some(build_general_planning(params)),
         subjects: Some(build_subjects(params)),
         teachers: Some(build_teachers(params)),
@@ -40,7 +37,23 @@ pub fn encode(inner: &InnerData) -> Result<Spec2Document, EncodeError> {
         balancing: Some(build_balancing(params)),
         colloscope: Some(build_colloscope(inner)),
         export_config: Some(build_export_config(&inner.export_config)),
-    };
+    }
+}
+
+/// Runs the writer's id check without writing anything
+///
+/// It builds the very blocks [encode] would write and checks those, so
+/// its verdict is exactly [encode]'s — see [crate::check_encodable].
+pub(crate) fn check_encodable(inner: &InnerData) -> Result<(), EncodeError> {
+    check_ids(&build_blocks(inner))
+}
+
+pub fn encode(inner: &InnerData) -> Result<Spec2Document, EncodeError> {
+    // The whole document is built first, then checked, then written out:
+    // the id ceiling is a rule about the document as a whole, so it is
+    // checked on the format values (where all the ids that will actually
+    // be written live) rather than on the in-memory data.
+    let blocks = build_blocks(inner);
 
     check_ids(&blocks)?;
 

@@ -95,6 +95,35 @@ fn one_edit_past_the_ceiling_makes_the_document_unwritable() {
 }
 
 #[test]
+fn check_encodable_agrees_with_the_writer_on_both_sides_of_the_ceiling() {
+    // check_encodable exists so an interface can ask "would this save
+    // fail?" without writing anything. It is only useful if it answers
+    // exactly what serialize_data would — including the error value — so
+    // this pins the two against each other on both sides of the ceiling.
+    let content = document_at_the_ceiling();
+    let (inner, _caveats) = deserialize_data(&content).expect("A boundary document should decode");
+
+    let mut state = AppState::<_, String>::new(gate(inner));
+    assert_eq!(check_encodable(state.get_data().get_inner_data()), Ok(()));
+    assert!(serialize_data(state.get_data().get_inner_data()).is_ok());
+
+    let result = state.apply(
+        Op::Student(StudentOp::Add(Student::default())),
+        "Add one student past the ceiling".to_string(),
+    );
+    assert!(matches!(result, Ok(Some(NewId::StudentId(_)))));
+
+    assert_eq!(
+        check_encodable(state.get_data().get_inner_data()),
+        Err(EncodeError::IdAboveCeiling { id: 1 << 63 })
+    );
+    assert_eq!(
+        serialize_data(state.get_data().get_inner_data()),
+        Err(EncodeError::IdAboveCeiling { id: 1 << 63 })
+    );
+}
+
+#[test]
 fn a_document_past_the_ceiling_is_rescued_by_compacting() {
     // The same unwritable document as above, and the way out of it. The
     // writer never renumbers on its own; compacting is a decision about
