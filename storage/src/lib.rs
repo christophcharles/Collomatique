@@ -130,6 +130,28 @@ pub enum EncodeError {
     IdAboveCeiling { id: u64 },
 }
 
+/// Options for [serialize_data_with_options]
+///
+/// The default value is the plain behaviour of [serialize_data]: write
+/// the document exactly as it is in memory.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SerializeOptions {
+    /// When true, all ids are regenerated before writing: every id of the
+    /// document is renumbered densely from 0, in ascending order of the
+    /// old values, so their relative order — and therefore the canonical
+    /// form's sort orders — is preserved
+    ///
+    /// The in-memory [Data] is not modified; only the written file uses
+    /// the new ids, so reloading the file yields a document that differs
+    /// from the one in memory by its ids alone.
+    ///
+    /// This is the way out of [EncodeError::IdAboveCeiling]: a document
+    /// that grew an id above the format's ceiling holds far fewer than
+    /// 2^63 entities, so dense ids always fit. It is off by default
+    /// because renumbering breaks any id an outside party remembers.
+    pub regenerate_ids: bool,
+}
+
 /// Serialize the content of a colloscope file
 ///
 /// This function takes an in-memory [Data] representation
@@ -141,7 +163,18 @@ pub enum EncodeError {
 /// format at all — see [EncodeError], which has a single cause: an id
 /// above the format's ceiling.
 pub fn serialize_data(data: &Data) -> Result<String, EncodeError> {
-    let document = encode::spec2::encode(data)?;
+    serialize_data_with_options(data, &SerializeOptions::default())
+}
+
+/// Serialize the content of a colloscope file, with options
+///
+/// This is [serialize_data] with the extra behaviours of
+/// [SerializeOptions] available; see that type for what they do.
+pub fn serialize_data_with_options(
+    data: &Data,
+    options: &SerializeOptions,
+) -> Result<String, EncodeError> {
+    let document = encode::spec2::encode(data, options)?;
     Ok(serde_json::to_string_pretty(&document).expect("Serializing to JSON should not fail"))
 }
 

@@ -6,9 +6,9 @@
 //! omitted, blocks appear in canonical order, and unordered collections
 //! are sorted.
 
-use crate::EncodeError;
 use crate::format;
 use crate::json::{Spec2Document, Spec2Entry};
+use crate::{EncodeError, SerializeOptions};
 
 use collomatique_state_colloscopes as mem;
 use collomatique_state_colloscopes::Data;
@@ -16,7 +16,7 @@ use mem::ids::Id;
 
 use std::collections::BTreeSet;
 
-pub fn encode(data: &Data) -> Result<Spec2Document, EncodeError> {
+pub fn encode(data: &Data, options: &SerializeOptions) -> Result<Spec2Document, EncodeError> {
     let inner = data.get_inner_data();
     let params = &inner.params;
 
@@ -42,6 +42,14 @@ pub fn encode(data: &Data) -> Result<Spec2Document, EncodeError> {
         colloscope: Some(build_colloscope(inner)),
         export_config: Some(build_export_config(&inner.export_config)),
     };
+
+    // Renumbering happens on the built document, before the ceiling
+    // check: the ids that matter here are the ones about to be written,
+    // and the whole point of the pass is to make a document that fails
+    // the check pass it.
+    if options.regenerate_ids {
+        format::id_visit::remap_ids(&mut blocks);
+    }
 
     check_ids(&mut blocks)?;
 

@@ -19,6 +19,8 @@
 use super::Blocks;
 use super::keyed::{KeyedRow, KeyedVec, UniqueVec};
 
+use std::collections::{BTreeMap, BTreeSet};
+
 /// Visits every id-valued field of the document, in block order
 ///
 /// The ids are handed over as `&mut u64` so a caller may rewrite them in
@@ -140,6 +142,35 @@ pub fn visit_ids(blocks: &mut Blocks, f: &mut impl FnMut(&mut u64)) {
         });
     }
     // ExportConfig holds no ids at all.
+}
+
+/// Renumbers every id of the document densely from 0, in ascending order
+/// of the old values
+///
+/// The map is built from the very same walk that applies it, so it covers
+/// every id the document holds — defining and referencing alike — and the
+/// rewrite cannot fail. It is strictly monotone, so it preserves every
+/// order the canonical form is built on (rows sorted by id, ascending id
+/// sets) and, being injective, it preserves distinctness: two ids that
+/// differed still differ, and two ids that were equal — the same entity
+/// named twice, or a duplicate — stay equal.
+///
+/// This is deliberately *not* a repair pass. A dangling reference is an
+/// id no entity defines; after renumbering it is still an id no entity
+/// defines, because the map is injective. A duplicated id is likewise
+/// still duplicated. Only the *values* change, so only the one rule that
+/// is about values — the 2^63 - 1 ceiling of spec §3 — is affected.
+pub fn remap_ids(blocks: &mut Blocks) {
+    let mut all_ids = BTreeSet::new();
+    visit_ids(blocks, &mut |id| {
+        all_ids.insert(*id);
+    });
+    let map: BTreeMap<u64, u64> = all_ids.into_iter().zip(0u64..).collect();
+    visit_ids(blocks, &mut |id| {
+        *id = *map
+            .get(id)
+            .expect("The map was built from this very walk, so it covers every id");
+    });
 }
 
 /// Visits the rows of a keyed collection, mutably
