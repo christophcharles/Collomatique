@@ -2,7 +2,7 @@ use adw::prelude::NavigationPageExt;
 use collomatique_state::traits::Manager;
 use gtk::prelude::{ButtonExt, ObjectExt, OrientableExt, WidgetExt};
 use libadwaita::prelude::Cast;
-use relm4::prelude::{ComponentController, RelmWidgetExt};
+use relm4::prelude::ComponentController;
 use relm4::{Component, ComponentParts, ComponentSender, Controller};
 use relm4::{adw, gtk};
 use std::collections::{BTreeMap, BTreeSet};
@@ -14,7 +14,6 @@ use collomatique_state::AppState;
 use collomatique_state_colloscopes::Data;
 
 use crate::editor::colloscope::ColloscopeOutput;
-use crate::editor::export_panel::ExportPanelInput;
 use crate::tools;
 
 pub const DEFAULT_FILE_STEM: &str = "FichierSansNom";
@@ -51,6 +50,7 @@ impl FileName {
 
 mod error_dialog;
 
+mod advanced_tools;
 mod assignments;
 mod balancing;
 mod check_script;
@@ -72,7 +72,9 @@ mod subjects;
 mod teachers;
 mod week_patterns;
 
+mod warning_compact_ids;
 mod warning_op;
+mod warning_save_ids;
 
 #[derive(Debug)]
 pub enum EditorInput {
@@ -82,6 +84,11 @@ pub enum EditorInput {
         data: collomatique_state_colloscopes::Data,
     },
     SaveCurrentFileAs(PathBuf),
+    SaveCheckedFileAs(PathBuf, collomatique_state_colloscopes::InnerData),
+    CompactAndSave,
+    CancelSaveCompaction,
+    CompactIdsClicked,
+    CompactIds,
     SaveAsClicked,
     SaveClicked,
     UndoClicked,
@@ -97,8 +104,9 @@ pub enum EditorInput {
     NewStateFromSecondInstance(AppState<Data, Desc>),
     UpdateFullColloscope(collomatique_state_colloscopes::colloscopes::Colloscope),
     ExportColloscopeAs(PathBuf, collomatique_xlsx::Config),
-    ExportMpsAs(PathBuf, export_panel::IlpInnerProblem),
-    UpdateIlpProblem(Option<export_panel::IlpInnerProblem>),
+    ExportMpsClicked,
+    ExportMpsAs(PathBuf),
+    UpdateIlpProblem(Option<collomatique_constraints_colloscopes::IlpInnerProblem>),
 }
 
 #[derive(Debug)]
@@ -123,6 +131,8 @@ pub enum EditorCommandOutput {
     ScriptLoadingFailed(PathBuf, String),
     ExportXlsxSuccessful(PathBuf),
     ExportXlsxFailed(PathBuf, String),
+    MpsFileChosen(PathBuf),
+    MpsFileNotChosen,
     ExportMpsSuccessful(PathBuf),
     ExportMpsFailed(PathBuf, String),
 }
@@ -155,6 +165,7 @@ enum PanelNumbers {
     Balancing = 12,
     Colloscope = 13,
     Export = 14,
+    AdvancedTools = 15,
 }
 
 impl PanelNumbers {
@@ -175,6 +186,7 @@ impl PanelNumbers {
             PanelNumbers::Balancing,
             PanelNumbers::Colloscope,
             PanelNumbers::Export,
+            PanelNumbers::AdvancedTools,
         ]
         .into_iter()
     }
@@ -196,6 +208,7 @@ impl PanelNumbers {
             PanelNumbers::ExtraSettings => "extra_settings",
             PanelNumbers::Colloscope => "colloscope",
             PanelNumbers::Export => "export",
+            PanelNumbers::AdvancedTools => "advanced_tools",
         }
     }
 
@@ -216,6 +229,7 @@ impl PanelNumbers {
             PanelNumbers::ExtraSettings => "Paramètres par élève",
             PanelNumbers::Colloscope => "Colloscope",
             PanelNumbers::Export => "Exporter",
+            PanelNumbers::AdvancedTools => "Outils avancés",
         }
     }
 }
@@ -230,6 +244,17 @@ pub struct EditorPanel {
     state_to_commit: Option<
         collomatique_state::AppState<collomatique_state_colloscopes::Data, collomatique_ops::Desc>,
     >,
+    /// The save the id-compaction dialog is asking about
+    ///
+    /// Same pattern as [Self::state_to_commit]: the payload of a save
+    /// that cannot go through as-is waits here while the user answers.
+    save_pending_compaction: Option<(PathBuf, collomatique_state_colloscopes::InnerData)>,
+
+    /// The current ILP problem, pushed here by the colloscope panel.
+    ///
+    /// It lives in the editor — and not in a panel — because two buttons
+    /// export it now. The panels only ever receive its size.
+    ilp_problem: Option<collomatique_constraints_colloscopes::IlpInnerProblem>,
 
     show_particular_panel: Option<PanelNumbers>,
 
@@ -250,9 +275,12 @@ pub struct EditorPanel {
     balancing: Controller<balancing::Balancing>,
     colloscope: Controller<colloscope::Colloscope>,
     export_panel: Controller<export_panel::ExportPanel>,
+    advanced_tools: Controller<advanced_tools::AdvancedTools>,
     check_script_dialog: Controller<check_script::Dialog>,
     run_python_script_dialog: Controller<run_python_script::Dialog>,
     warning_op_dialog: Controller<warning_op::Dialog>,
+    warning_save_ids_dialog: Controller<warning_save_ids::Dialog>,
+    warning_compact_ids_dialog: Controller<warning_compact_ids::Dialog>,
 }
 
 impl EditorPanel {
@@ -579,6 +607,12 @@ impl EditorPanel {
                 annotations,
             ))
             .unwrap();
+        self.advanced_tools
+            .sender()
+            .send(advanced_tools::AdvancedToolsInput::Update(
+                advanced_tools::Stats::from_inner_data(self.data.get_data().get_inner_data()),
+            ))
+            .unwrap();
     }
 
     fn op_cat_to_panel_number(op: &collomatique_ops::OpCategory) -> Option<PanelNumbers> {
@@ -657,18 +691,6 @@ impl Component for EditorPanel {
                             set_vexpand: true,
                             set_size_request: (200, -1),
                             set_stack: &main_stack,
-                        },
-                        gtk::Button {
-                            set_hexpand: true,
-                            set_size_request: (-1,50),
-                            add_css_class: "frame",
-                            add_css_class: "warning",
-                            set_margin_all: 5,
-                            adw::ButtonContent {
-                                set_icon_name: "text-x-script",
-                                set_label: "Exécuter un script",
-                            },
-                            connect_clicked => EditorInput::RunScriptClicked,
                         },
                     },
                 },
@@ -879,13 +901,25 @@ impl Component for EditorPanel {
                     export_panel::ExportPanelOutput::ExportColloscopeAs(path, config) => {
                         EditorInput::ExportColloscopeAs(path, config)
                     }
-                    export_panel::ExportPanelOutput::ExportMpsAs(path, problem) => {
-                        EditorInput::ExportMpsAs(path, problem)
-                    }
                     export_panel::ExportPanelOutput::UpdateExportConfig(update_op) => {
                         EditorInput::UpdateOp(collomatique_ops::UpdateOp::ExportConfig(update_op))
                     }
                 });
+
+        let advanced_tools = advanced_tools::AdvancedTools::builder().launch(()).forward(
+            sender.input_sender(),
+            |msg| match msg {
+                advanced_tools::AdvancedToolsOutput::RunPythonScriptClicked => {
+                    EditorInput::RunScriptClicked
+                }
+                advanced_tools::AdvancedToolsOutput::ExportMpsClicked => {
+                    EditorInput::ExportMpsClicked
+                }
+                advanced_tools::AdvancedToolsOutput::CompactIdsClicked => {
+                    EditorInput::CompactIdsClicked
+                }
+            },
+        );
 
         let check_script_dialog = check_script::Dialog::builder()
             .transient_for(&root)
@@ -918,6 +952,21 @@ impl Component for EditorPanel {
                 warning_op::DialogOutput::Cancel => EditorInput::CancelOp,
             });
 
+        let warning_save_ids_dialog = warning_save_ids::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                warning_save_ids::DialogOutput::Compact => EditorInput::CompactAndSave,
+                warning_save_ids::DialogOutput::Cancel => EditorInput::CancelSaveCompaction,
+            });
+
+        let warning_compact_ids_dialog = warning_compact_ids::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                warning_compact_ids::DialogOutput::Compact => EditorInput::CompactIds,
+            });
+
         let pages_names = PanelNumbers::iter().map(|x| x.panel_name()).collect();
         let pages_titles_map =
             BTreeMap::from_iter(PanelNumbers::iter().map(|x| (x.panel_name(), x.panel_title())));
@@ -931,6 +980,8 @@ impl Component for EditorPanel {
             pages_titles_map,
             show_particular_panel: None,
             state_to_commit: None,
+            save_pending_compaction: None,
+            ilp_problem: None,
             error_dialog,
             general_planning,
             subjects,
@@ -947,9 +998,12 @@ impl Component for EditorPanel {
             balancing,
             colloscope,
             export_panel,
+            advanced_tools,
             check_script_dialog,
             run_python_script_dialog,
             warning_op_dialog,
+            warning_save_ids_dialog,
+            warning_compact_ids_dialog,
         };
         let widgets = view_output!();
 
@@ -970,6 +1024,7 @@ impl Component for EditorPanel {
                 PanelNumbers::ExtraSettings => model.settings.widget().clone().upcast(),
                 PanelNumbers::Colloscope => model.colloscope.widget().clone().upcast(),
                 PanelNumbers::Export => model.export_panel.widget().clone().upcast(),
+                PanelNumbers::AdvancedTools => model.advanced_tools.widget().clone().upcast(),
             };
             widgets
                 .main_stack
@@ -1022,7 +1077,23 @@ impl Component for EditorPanel {
                 });
             }
             EditorInput::SaveCurrentFileAs(path) => {
-                let data_copy = self.data.get_data().clone();
+                let inner_data = self.data.get_data().get_inner_data().clone();
+                match collomatique_storage::check_encodable(&inner_data) {
+                    Ok(()) => sender.input(EditorInput::SaveCheckedFileAs(path, inner_data)),
+                    // The document's ids outgrew the file format. The
+                    // dialog offers the one way out — compacting — and the
+                    // payload waits here in the meantime, like
+                    // state_to_commit does for destructive ops.
+                    Err(collomatique_storage::EncodeError::IdAboveCeiling { .. }) => {
+                        self.save_pending_compaction = Some((path, inner_data));
+                        self.warning_save_ids_dialog
+                            .sender()
+                            .send(warning_save_ids::DialogInput::Show)
+                            .unwrap();
+                    }
+                }
+            }
+            EditorInput::SaveCheckedFileAs(path, inner_data) => {
                 self.dirty = false;
                 // A successful save graduates any state to a clean file.
                 self.file_name = FileName::OkFile(path.clone());
@@ -1033,12 +1104,63 @@ impl Component for EditorPanel {
                     timeout: None,
                 });
                 sender.oneshot_command(async move {
-                    match collomatique_storage::save_data_to_file(&data_copy, &path).await {
+                    match collomatique_storage::save_data_to_file(&inner_data, &path).await {
                         Ok(()) => EditorCommandOutput::SaveSuccessful(path),
-                        Err(e) => EditorCommandOutput::SaveFailed(path, e.to_string()),
+                        Err(collomatique_storage::SaveError::IO(e)) => {
+                            EditorCommandOutput::SaveFailed(path, e.to_string())
+                        }
+                        // This arm only receives documents that passed
+                        // check_encodable (directly, or after compaction),
+                        // so an encode error here is a programming bug,
+                        // not a user situation.
+                        Err(e @ collomatique_storage::SaveError::Encode(_)) => {
+                            panic!("Cannot write the document: {e}")
+                        }
                     }
                 });
                 sender.output(EditorOutput::UpdateActions).unwrap();
+            }
+            EditorInput::CompactAndSave => {
+                if let Some((path, inner_data)) = self.save_pending_compaction.take() {
+                    // Compaction renumbers every id densely from 0, so the
+                    // result always fits the format. The compacted document
+                    // replaces the current one: what is saved and what is
+                    // being edited stay the same thing. Rebuilding Data
+                    // resets the id issuer to just above the new dense ids
+                    // — which is why the undo/redo history cannot survive:
+                    // its entries hold ids the reset issuer would hand out
+                    // again. The dialog warned about exactly this.
+                    let compacted = inner_data.compact_ids();
+                    let data = Data::from_inner_data(compacted.clone())
+                        .expect("compaction preserves validity");
+                    self.update_data(DataUpdate::Replace(AppState::new(data)));
+                    sender.input(EditorInput::SaveCheckedFileAs(path, compacted));
+                }
+            }
+            EditorInput::CancelSaveCompaction => {
+                self.save_pending_compaction = None;
+            }
+            EditorInput::CompactIdsClicked => {
+                self.warning_compact_ids_dialog
+                    .sender()
+                    .send(warning_compact_ids::DialogInput::Show)
+                    .unwrap();
+            }
+            EditorInput::CompactIds => {
+                // The same replacement CompactAndSave does, without the save.
+                // Rebuilding Data resets the id issuer to just above the new
+                // dense ids, which is what condemns the history: its entries
+                // hold ids the issuer would hand out again. The dialog warned.
+                let compacted = self.data.get_data().get_inner_data().clone().compact_ids();
+                let data = Data::from_inner_data(compacted).expect("compaction preserves validity");
+                self.update_data(DataUpdate::Replace(AppState::new(data)));
+                // Nothing was written, so the document and the file now differ.
+                self.dirty = true;
+                self.toast_info = Some(ToastInfo::Toast {
+                    text: "Identifiants compactés.".into(),
+                    timeout: DEFAULT_TOAST_TIMEOUT,
+                });
+                self.send_msg_for_interface_update(sender);
             }
             EditorInput::UndoClicked => {
                 if self.data.can_undo() {
@@ -1187,7 +1309,33 @@ impl Component for EditorPanel {
                     }
                 });
             }
-            EditorInput::ExportMpsAs(path, problem) => {
+            // The file chooser lives here rather than in a panel: both the
+            // export panel and the advanced-tools panel offer this export, and
+            // the editor is the one holding the problem to export.
+            EditorInput::ExportMpsClicked => {
+                let default = match self.file_name.path() {
+                    Some(path) => {
+                        let mut mps_path = path.clone();
+                        mps_path.set_extension("mps");
+                        tools::open_save::DefaultSaveFile::ExistingFile(mps_path)
+                    }
+                    None => tools::open_save::DefaultSaveFile::SuggestedName(
+                        format!("{DEFAULT_FILE_STEM}.mps").into(),
+                    ),
+                };
+                sender.oneshot_command(async move {
+                    match tools::open_save::save_mps_dialog(default).await {
+                        Some(path) => EditorCommandOutput::MpsFileChosen(path),
+                        None => EditorCommandOutput::MpsFileNotChosen,
+                    }
+                });
+            }
+            EditorInput::ExportMpsAs(path) => {
+                // Both buttons are insensitive without a problem, but the click
+                // and the arrival of a `None` can cross: give up silently.
+                let Some(problem) = self.ilp_problem.clone() else {
+                    return;
+                };
                 self.toast_info = Some(ToastInfo::Toast {
                     text: format!("Export MPS en cours de {}...", path.to_string_lossy()),
                     timeout: None,
@@ -1200,8 +1348,14 @@ impl Component for EditorPanel {
                 });
             }
             EditorInput::UpdateIlpProblem(problem) => {
-                self.export_panel
-                    .emit(ExportPanelInput::UpdateIlpProblem(problem));
+                let info = problem
+                    .as_ref()
+                    .map(advanced_tools::IlpProblemInfo::from_problem);
+                self.ilp_problem = problem;
+                self.advanced_tools
+                    .emit(advanced_tools::AdvancedToolsInput::UpdateIlpProblemInfo(
+                        info,
+                    ));
             }
         }
     }
@@ -1269,6 +1423,10 @@ impl Component for EditorPanel {
                 sender
                     .output(EditorOutput::ExportError(path, error))
                     .unwrap();
+            }
+            EditorCommandOutput::MpsFileNotChosen => {}
+            EditorCommandOutput::MpsFileChosen(path) => {
+                sender.input(EditorInput::ExportMpsAs(path));
             }
             EditorCommandOutput::ExportMpsSuccessful(path) => {
                 self.toast_info = Some(ToastInfo::Toast {

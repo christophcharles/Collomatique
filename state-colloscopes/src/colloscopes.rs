@@ -45,6 +45,52 @@ impl Colloscope {
     }
 }
 
+// The colloscope's half of the dense renumbering walk (see [crate::compact]).
+// The two methods must visit exactly the same id occurrences: both components
+// of an interrogation key, and both the key and the placed students of a
+// group-list row. The group *numbers* in either table are not ids.
+impl Colloscope {
+    pub(crate) fn collect_ids(&self, ids: &mut BTreeSet<u64>) {
+        use crate::ids::Id as _;
+        for ((slot_id, week_id), _assigned_groups) in self.interrogations.iter() {
+            ids.insert(slot_id.inner());
+            ids.insert(week_id.inner());
+        }
+        for (group_list_id, groups_for_students) in self.group_lists.iter() {
+            ids.insert(group_list_id.inner());
+            for student_id in groups_for_students.keys() {
+                ids.insert(student_id.inner());
+            }
+        }
+    }
+
+    pub(crate) fn remap_ids(self, map: &crate::compact::IdMap) -> Self {
+        use crate::compact::remap;
+        Colloscope {
+            interrogations: self
+                .interrogations
+                .into_iter()
+                .map(|((slot_id, week_id), assigned_groups)| {
+                    ((remap(map, slot_id), remap(map, week_id)), assigned_groups)
+                })
+                .collect(),
+            group_lists: self
+                .group_lists
+                .into_iter()
+                .map(|(group_list_id, groups_for_students)| {
+                    (
+                        remap(map, group_list_id),
+                        groups_for_students
+                            .into_iter()
+                            .map(|(student_id, group)| (remap(map, student_id), group))
+                            .collect(),
+                    )
+                })
+                .collect(),
+        }
+    }
+}
+
 /// Sparse read/write surface (canonical view: a cell is a "row" iff it holds a
 /// non-empty group set / non-empty placement map).
 ///

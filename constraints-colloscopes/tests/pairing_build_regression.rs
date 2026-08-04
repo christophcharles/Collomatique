@@ -34,8 +34,8 @@ const SUBJECT_PAIRING_NOT_HAVING: &str =
 /// `UndeclaredExtra(InterrogationHasGroups { slot: SlotId(156), .. })`.
 #[test]
 fn slot_pairing_uses_group_extra_builds() {
-    let (data, _caveats) = deserialize_data(SLOT_PAIRING_USED).expect("fixture should decode");
-    let _ = build_model(&data.get_inner_data().params);
+    let (inner, _caveats) = deserialize_data(SLOT_PAIRING_USED).expect("fixture should decode");
+    let _ = build_model(&inner.params);
 }
 
 /// Defect B (soundness): a `(should_have = false, true)` slot pairing emits
@@ -54,8 +54,8 @@ fn slot_pairing_uses_group_extra_builds() {
 /// FAILS today: exactly such a `0 >= 1` constraint is present.
 #[test]
 fn slot_pairing_not_used_has_no_infeasible_constraint() {
-    let (data, _caveats) = deserialize_data(SLOT_PAIRING_NOT_USED).expect("fixture should decode");
-    let model = build_model(&data.get_inner_data().params);
+    let (inner, _caveats) = deserialize_data(SLOT_PAIRING_NOT_USED).expect("fixture should decode");
+    let model = build_model(&inner.params);
 
     for (constraint, source) in model.problem().get_constraints() {
         if let ConstraintSource::User(ConstraintDesc::Level3(
@@ -89,9 +89,9 @@ fn slot_pairing_not_used_has_no_infeasible_constraint() {
 /// `UndeclaredExtra(StudentHasInterrogationIn { subject: SubjectId(300), .. })`.
 #[test]
 fn subject_pairing_uses_interrogation_extra_builds() {
-    let (data, _caveats) =
+    let (inner, _caveats) =
         deserialize_data(SUBJECT_PAIRING_SLOTLESS_ANT).expect("fixture should decode");
-    let _ = build_model(&data.get_inner_data().params);
+    let _ = build_model(&inner.params);
 }
 
 /// Defect D (soundness): a `(should_have = false, true)` subject pairing emits
@@ -108,9 +108,9 @@ fn subject_pairing_uses_interrogation_extra_builds() {
 /// FAILS today: exactly such a `0 >= 1` constraint is present.
 #[test]
 fn subject_pairing_not_having_has_no_infeasible_constraint() {
-    let (data, _caveats) =
+    let (inner, _caveats) =
         deserialize_data(SUBJECT_PAIRING_NOT_HAVING).expect("fixture should decode");
-    let model = build_model(&data.get_inner_data().params);
+    let model = build_model(&inner.params);
 
     for (constraint, source) in model.problem().get_constraints() {
         if let ConstraintSource::User(ConstraintDesc::Level4(

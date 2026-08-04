@@ -220,6 +220,103 @@ impl GroupListFilling {
     }
 }
 
+// The filling's half of the dense renumbering walk (see [crate::compact]). The
+// referenced students live inside the enum variants, so the walk has to match
+// on the variant — exactly as the `References` impl above does.
+impl GroupListFilling {
+    pub(crate) fn collect_ids(&self, ids: &mut BTreeSet<u64>) {
+        use crate::ids::Id as _;
+        match self {
+            GroupListFilling::Prefilled { groups } => {
+                for group in groups {
+                    for student_id in &group.students {
+                        ids.insert(student_id.inner());
+                    }
+                }
+            }
+            GroupListFilling::Automatic { excluded_students } => {
+                for student_id in excluded_students {
+                    ids.insert(student_id.inner());
+                }
+            }
+        }
+    }
+
+    pub(crate) fn remap_ids(self, map: &crate::compact::IdMap) -> Self {
+        use crate::compact::remap;
+        match self {
+            GroupListFilling::Prefilled { groups } => GroupListFilling::Prefilled {
+                groups: groups
+                    .into_iter()
+                    .map(|group| {
+                        let PrefilledGroup { students } = group;
+                        PrefilledGroup {
+                            students: students
+                                .into_iter()
+                                .map(|student_id| remap(map, student_id))
+                                .collect(),
+                        }
+                    })
+                    .collect(),
+            },
+            GroupListFilling::Automatic { excluded_students } => GroupListFilling::Automatic {
+                excluded_students: excluded_students
+                    .into_iter()
+                    .map(|student_id| remap(map, student_id))
+                    .collect(),
+            },
+        }
+    }
+}
+
+// The container's half of the dense renumbering walk (see [crate::compact]).
+// The two methods must visit exactly the same id occurrences — here the group
+// lists themselves, and the association mirror whose *value* is an id too.
+impl GroupLists {
+    pub(crate) fn collect_ids(&self, ids: &mut BTreeSet<u64>) {
+        use crate::ids::Id as _;
+        for (group_list_id, group_list) in self.group_list_map.iter() {
+            ids.insert(group_list_id.inner());
+            group_list.filling.collect_ids(ids);
+        }
+        for ((period_id, subject_id), group_list_id) in self.subjects_associations.iter() {
+            ids.insert(period_id.inner());
+            ids.insert(subject_id.inner());
+            ids.insert(group_list_id.inner());
+        }
+    }
+
+    pub(crate) fn remap_ids(self, map: &crate::compact::IdMap) -> Self {
+        use crate::compact::remap;
+        GroupLists {
+            group_list_map: self
+                .group_list_map
+                .into_iter()
+                .map(|(group_list_id, group_list)| {
+                    let GroupList { params, filling } = group_list;
+                    (
+                        remap(map, group_list_id),
+                        GroupList {
+                            params,
+                            filling: filling.remap_ids(map),
+                        },
+                    )
+                })
+                .collect(),
+            subjects_associations: self
+                .subjects_associations
+                .into_iter()
+                .map(|((period_id, subject_id), group_list_id)| {
+                    (
+                        (remap(map, period_id), remap(map, subject_id)),
+                        remap(map, group_list_id),
+                    )
+                })
+                .collect(),
+        }
+    }
+}
+
 /// Prefilled groups for a single group list
 // Deliberately **no** `ContentIdentity`: a prefilled group is identified by
 // its position in the list, never by its value, so it must never be matched

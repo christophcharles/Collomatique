@@ -41,6 +41,7 @@ pub mod assignments;
 pub mod balancing;
 pub mod colloscope_params;
 pub mod colloscopes;
+pub mod compact;
 pub mod export_config;
 pub mod group_lists;
 pub mod incompats;

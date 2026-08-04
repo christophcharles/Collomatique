@@ -42,6 +42,29 @@ impl Balancing {
     }
 }
 
+// The container's half of the dense renumbering walk (see [crate::compact]).
+// Only the per-subject override keys are ids; the option values are not.
+impl Balancing {
+    pub(crate) fn collect_ids(&self, ids: &mut std::collections::BTreeSet<u64>) {
+        use crate::ids::Id as _;
+        for subject_id in self.subjects.keys() {
+            ids.insert(subject_id.inner());
+        }
+    }
+
+    pub(crate) fn remap_ids(self, map: &crate::compact::IdMap) -> Self {
+        use crate::compact::remap;
+        Balancing {
+            global: self.global,
+            subjects: self
+                .subjects
+                .into_iter()
+                .map(|(subject_id, options)| (remap(map, subject_id), options))
+                .collect(),
+        }
+    }
+}
+
 /// Options for balancing interrogations
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BalancingOptions {

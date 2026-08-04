@@ -36,6 +36,46 @@ pub struct Student {
     pub excluded_periods: BTreeSet<PeriodId>,
 }
 
+// The container's half of the dense renumbering walk (see [crate::compact]).
+// The two methods must visit exactly the same id occurrences.
+impl Students {
+    pub(crate) fn collect_ids(&self, ids: &mut BTreeSet<u64>) {
+        use crate::ids::Id as _;
+        for (student_id, student) in self.student_map.iter() {
+            ids.insert(student_id.inner());
+            for period_id in &student.excluded_periods {
+                ids.insert(period_id.inner());
+            }
+        }
+    }
+
+    pub(crate) fn remap_ids(self, map: &crate::compact::IdMap) -> Self {
+        use crate::compact::remap;
+        Students {
+            student_map: self
+                .student_map
+                .into_iter()
+                .map(|(student_id, student)| {
+                    let Student {
+                        desc,
+                        excluded_periods,
+                    } = student;
+                    (
+                        remap(map, student_id),
+                        Student {
+                            desc,
+                            excluded_periods: excluded_periods
+                                .into_iter()
+                                .map(|period_id| remap(map, period_id))
+                                .collect(),
+                        },
+                    )
+                })
+                .collect(),
+        }
+    }
+}
+
 /// Precondition errors of the forced student ops — the carve-out subset
 /// (step-3 survey Table 2, pinned `git show 26d88024:docs/plans/plan_step_3.md`).
 ///

@@ -16,13 +16,10 @@ use collomatique_state_colloscopes::export_config;
 
 use crate::tools;
 
-pub use collomatique_constraints_colloscopes::IlpInnerProblem;
-
 pub struct ExportPanel {
     export_config: export_config::ExportConfig,
     file_name: Option<PathBuf>,
     annotations: BTreeSet<String>,
-    ilp_problem: Option<IlpInnerProblem>,
     colloscope_config_dialog: Controller<colloscope_config_dialog::Dialog>,
     global_config_dialog: Controller<global_config_dialog::Dialog>,
     all_groups_config_dialog: Controller<per_student_groups_config_dialog::Dialog>,
@@ -39,9 +36,6 @@ pub enum ExportPanelInput {
         BTreeSet<String>,
     ),
     ExportClicked,
-    ExportMpsClicked,
-
-    UpdateIlpProblem(Option<IlpInnerProblem>),
 
     UpdateColloscopeEnabled(bool),
     UpdateAllGroupsEnabled(bool),
@@ -75,15 +69,12 @@ pub enum ExportPanelInput {
 pub enum ExportPanelOutput {
     UpdateExportConfig(collomatique_ops::ExportConfigUpdateOp),
     ExportColloscopeAs(PathBuf, collomatique_xlsx::Config),
-    ExportMpsAs(PathBuf, IlpInnerProblem),
 }
 
 #[derive(Debug)]
 pub enum ExportPanelCommandOutput {
     FileChosen(PathBuf),
     FileNotChosen,
-    MpsFileChosen(PathBuf),
-    MpsFileNotChosen,
 }
 
 #[relm4::component(pub)]
@@ -519,35 +510,6 @@ impl Component for ExportPanel {
                         connect_clicked => ExportPanelInput::ExportClicked,
                     },
                 },
-                gtk::Box {
-                    set_hexpand: true,
-                    set_spacing: 10,
-                    set_margin_top: 30,
-                    set_orientation: gtk::Orientation::Vertical,
-                    gtk::Separator {
-                        set_orientation: gtk::Orientation::Horizontal,
-                    },
-                    gtk::Label {
-                        set_label: "<b><i><big>Options de débogage</big></i></b>",
-                        set_use_markup: true,
-                        set_margin_all: 5,
-                        set_margin_bottom: 10,
-                    },
-                    gtk::Button {
-                        add_css_class: "frame",
-                        add_css_class: "warning",
-                        set_hexpand: true,
-                        set_margin_start: 10,
-                        set_margin_end: 10,
-                        #[watch]
-                        set_sensitive: model.ilp_problem.is_some(),
-                        adw::ButtonContent {
-                            set_icon_name: "document-export-symbolic",
-                            set_label: "Exporter le problème ILP (MPS)",
-                        },
-                        connect_clicked => ExportPanelInput::ExportMpsClicked,
-                    },
-                },
             },
         }
     }
@@ -615,7 +577,6 @@ impl Component for ExportPanel {
             export_config: export_config::ExportConfig::default(),
             file_name: None,
             annotations: BTreeSet::new(),
-            ilp_problem: None,
             colloscope_config_dialog,
             global_config_dialog,
             all_groups_config_dialog,
@@ -666,27 +627,6 @@ impl Component for ExportPanel {
                     match tools::open_save::save_xlsx_dialog(default).await {
                         Some(path) => ExportPanelCommandOutput::FileChosen(path),
                         None => ExportPanelCommandOutput::FileNotChosen,
-                    }
-                });
-            }
-            ExportPanelInput::UpdateIlpProblem(problem) => {
-                self.ilp_problem = problem;
-            }
-            ExportPanelInput::ExportMpsClicked => {
-                let default = match &self.file_name {
-                    Some(path) => {
-                        let mut mps_path = path.clone();
-                        mps_path.set_extension("mps");
-                        tools::open_save::DefaultSaveFile::ExistingFile(mps_path)
-                    }
-                    None => tools::open_save::DefaultSaveFile::SuggestedName(
-                        format!("{}.mps", super::DEFAULT_FILE_STEM).into(),
-                    ),
-                };
-                sender.oneshot_command(async move {
-                    match tools::open_save::save_mps_dialog(default).await {
-                        Some(path) => ExportPanelCommandOutput::MpsFileChosen(path),
-                        None => ExportPanelCommandOutput::MpsFileNotChosen,
                     }
                 });
             }
@@ -897,20 +837,12 @@ impl Component for ExportPanel {
         _root: &Self::Root,
     ) {
         match message {
-            ExportPanelCommandOutput::FileNotChosen
-            | ExportPanelCommandOutput::MpsFileNotChosen => {}
+            ExportPanelCommandOutput::FileNotChosen => {}
             ExportPanelCommandOutput::FileChosen(path) => {
                 let xlsx_config = super::export::to_xlsx_config(&self.export_config);
                 sender
                     .output(ExportPanelOutput::ExportColloscopeAs(path, xlsx_config))
                     .unwrap();
-            }
-            ExportPanelCommandOutput::MpsFileChosen(path) => {
-                if let Some(problem) = self.ilp_problem.clone() {
-                    sender
-                        .output(ExportPanelOutput::ExportMpsAs(path, problem))
-                        .unwrap();
-                }
             }
         }
     }

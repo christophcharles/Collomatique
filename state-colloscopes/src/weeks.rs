@@ -463,6 +463,63 @@ impl Weeks {
     }
 }
 
+// The container's half of the dense renumbering walk (see [crate::compact]).
+// The two methods must visit exactly the same id occurrences — here both the
+// week table and the per-period ordering mirror, keys and values alike.
+impl Weeks {
+    pub(crate) fn collect_ids(&self, ids: &mut std::collections::BTreeSet<u64>) {
+        use crate::ids::Id as _;
+        for (week_id, week) in self.week_map.iter() {
+            ids.insert(week_id.inner());
+            ids.insert(week.period_id.inner());
+        }
+        for (period_id, week_list) in self.ordering.iter() {
+            ids.insert(period_id.inner());
+            for week_id in week_list {
+                ids.insert(week_id.inner());
+            }
+        }
+    }
+
+    pub(crate) fn remap_ids(self, map: &crate::compact::IdMap) -> Self {
+        use crate::compact::remap;
+        Weeks {
+            week_map: self
+                .week_map
+                .into_iter()
+                .map(|(week_id, week)| {
+                    let Week {
+                        period_id,
+                        interrogations,
+                        annotation,
+                    } = week;
+                    (
+                        remap(map, week_id),
+                        Week {
+                            period_id: remap(map, period_id),
+                            interrogations,
+                            annotation,
+                        },
+                    )
+                })
+                .collect(),
+            ordering: self
+                .ordering
+                .into_iter()
+                .map(|(period_id, week_list)| {
+                    (
+                        remap(map, period_id),
+                        week_list
+                            .into_iter()
+                            .map(|week_id| remap(map, week_id))
+                            .collect(),
+                    )
+                })
+                .collect(),
+        }
+    }
+}
+
 /// Precondition errors of the forced week ops — the carve-out subset
 /// (step-3 survey Table 2). Kept: no-clobber, op-target existence
 /// ([Self::InvalidWeekId]), destination-period existence for add/move

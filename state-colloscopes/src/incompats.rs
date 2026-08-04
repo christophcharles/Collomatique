@@ -59,6 +59,51 @@ pub struct Incompatibility {
     pub week_pattern_id: Option<WeekPatternId>,
 }
 
+// The container's half of the dense renumbering walk (see [crate::compact]).
+// The two methods must visit exactly the same id occurrences. The `slots` of an
+// incompatibility are time windows, not ids.
+impl Incompats {
+    pub(crate) fn collect_ids(&self, ids: &mut std::collections::BTreeSet<u64>) {
+        use crate::ids::Id as _;
+        for (incompat_id, incompat) in self.incompat_map.iter() {
+            ids.insert(incompat_id.inner());
+            ids.insert(incompat.subject_id.inner());
+            if let Some(week_pattern_id) = incompat.week_pattern_id {
+                ids.insert(week_pattern_id.inner());
+            }
+        }
+    }
+
+    pub(crate) fn remap_ids(self, map: &crate::compact::IdMap) -> Self {
+        use crate::compact::remap;
+        Incompats {
+            incompat_map: self
+                .incompat_map
+                .into_iter()
+                .map(|(incompat_id, incompat)| {
+                    let Incompatibility {
+                        subject_id,
+                        name,
+                        slots,
+                        minimum_free_slots,
+                        week_pattern_id,
+                    } = incompat;
+                    (
+                        remap(map, incompat_id),
+                        Incompatibility {
+                            subject_id: remap(map, subject_id),
+                            name,
+                            slots,
+                            minimum_free_slots,
+                            week_pattern_id: week_pattern_id.map(|id| remap(map, id)),
+                        },
+                    )
+                })
+                .collect(),
+        }
+    }
+}
+
 /// Precondition errors of the forced incompat ops — the carve-out subset
 /// (step-3 survey Table 2). Only no-clobber and op-target existence survive;
 /// `validate_incompat` is stripped.

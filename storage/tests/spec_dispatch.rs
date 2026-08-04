@@ -91,10 +91,12 @@ fn spec_2_document_decodes_cleanly() {
 
     // The spec-2 writer must not emit any InnerDataDump entry, and its
     // documents must decode without caveats.
-    let content = serialize_data(&data);
+    let content = serialize_data(data.get_inner_data()).expect("Data should be writable");
     assert!(!content.contains("InnerDataDump"));
 
     let (decoded, caveats) = deserialize_data(&content).expect("Spec-2 document should decode");
+    let decoded = collomatique_state_colloscopes::Data::from_inner_data(decoded)
+        .expect("decoded documents must pass the invariant gate");
     assert_eq!(decoded, data);
     assert!(caveats.is_empty());
 }

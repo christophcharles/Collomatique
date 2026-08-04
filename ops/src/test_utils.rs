@@ -16,12 +16,14 @@ const HOGWARTS: &str = include_str!("../tests/fixtures/hogwarts.collomatique");
 
 /// The frozen base document, decoded and wrapped in a blank-history state.
 pub(crate) fn hogwarts() -> AppState<Data, Desc> {
-    let (data, caveats) =
+    let (inner_data, caveats) =
         collomatique_storage::deserialize_data(HOGWARTS).expect("the frozen fixture should decode");
     assert!(
         caveats.is_empty(),
         "the frozen fixture should decode cleanly, got {caveats:?}"
     );
+    let data = Data::from_inner_data(inner_data)
+        .expect("the frozen fixture should pass the invariant gate");
 
     AppState::new(data)
 }

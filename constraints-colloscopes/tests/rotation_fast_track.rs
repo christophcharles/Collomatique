@@ -26,8 +26,8 @@ const FIXTURE: &str = include_str!("fixtures/single_teacher_single_slot.collomat
 
 #[test]
 fn single_teacher_single_slot_subjects_skip_rotation_entirely() {
-    let (data, _caveats) = deserialize_data(FIXTURE).expect("fixture should decode");
-    let model = build_model(&data.get_inner_data().params);
+    let (inner, _caveats) = deserialize_data(FIXTURE).expect("fixture should decode");
+    let model = build_model(&inner.params);
 
     for (_constraint, source) in model.problem().get_constraints() {
         match source {

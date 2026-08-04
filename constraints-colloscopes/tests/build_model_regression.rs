@@ -13,9 +13,9 @@ const WITHOUT_ASSOC: &str =
 
 #[test]
 fn builds_with_group_list_association() {
-    let (data, _caveats) = deserialize_data(WITH_ASSOC).expect("fixture should decode");
+    let (inner, _caveats) = deserialize_data(WITH_ASSOC).expect("fixture should decode");
     // Every period has a group-list association -> model builds. Passes today.
-    let _ = build_model(&data.get_inner_data().params);
+    let _ = build_model(&inner.params);
 }
 
 #[test]
@@ -28,6 +28,6 @@ fn builds_without_group_list_association() {
     // `groups_for_interrogation(..).is_empty()` guard that gates its declaration in
     // extras.rs, so the build panics with
     // `UndeclaredExtra(InterrogationHasGroups { slot: SlotId(169), week: GlobalWeek(24) })`.
-    let (data, _caveats) = deserialize_data(WITHOUT_ASSOC).expect("fixture should decode");
-    let _ = build_model(&data.get_inner_data().params);
+    let (inner, _caveats) = deserialize_data(WITHOUT_ASSOC).expect("fixture should decode");
+    let _ = build_model(&inner.params);
 }

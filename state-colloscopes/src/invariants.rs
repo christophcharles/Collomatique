@@ -77,6 +77,26 @@
 //! - The id-issuer high-water check lives in `Data::assert_id_issuer_high_water`:
 //!   the issuer is `Data`-level state outside [crate::InnerData], so it stays a
 //!   separate companion to `broken_invariants`.
+//!
+//! ## Contract with the file decoder
+//!
+//! Every invariant declared here that a *file* could encode is also checked,
+//! independently, while decoding a file, in `storage/src/decode/spec2.rs` — with
+//! an error that names the block, the row and the field in the vocabulary of the
+//! file format rather than of this model. Because of that, `Data::from_inner_data`
+//! never rejects a decoded document, and the decoder **panics** if it ever does.
+//!
+//! So adding an invariant here — a new [Reference] site, a new [Convergence]
+//! predicate, a new [LogicError] — carries an obligation: ship the decode-time
+//! counterpart and a rejection test in `storage/tests/spec2_format.rs` in the same
+//! change. Skipping it does not merely degrade a message; it makes that panic
+//! reachable from a merely-corrupt file. That test corpus is the enforcement
+//! mechanism — nothing in the type system ties the two sides together.
+//!
+//! Two families need no counterpart, and only these: the ordering-mirror
+//! [LogicError]s and anything targeting a week. The file has no ordering sidecars
+//! and no week ids (weeks are positional, and the decoder synthesizes their ids),
+//! so no file content can reach them.
 
 use std::collections::BTreeSet;
 

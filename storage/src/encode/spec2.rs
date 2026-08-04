@@ -1,80 +1,130 @@
 //! Spec-2 encode submodule
 //!
-//! This module builds a [json::Spec2Document] from a [Data], in the
+//! This module builds a [json::Spec2Document] from an [InnerData], in the
 //! spec's canonical form (`docs/file_format.md` §3): blocks in default
 //! state and neutral entries of derived-key-set collections are
 //! omitted, blocks appear in canonical order, and unordered collections
 //! are sorted.
 
+use crate::EncodeError;
 use crate::format;
 use crate::json::{Spec2Document, Spec2Entry};
 
 use collomatique_state_colloscopes as mem;
-use collomatique_state_colloscopes::Data;
+use collomatique_state_colloscopes::InnerData;
 use mem::ids::Id;
 
 use std::collections::BTreeSet;
 
-pub fn encode(data: &Data) -> Spec2Document {
-    let inner = data.get_inner_data();
+/// Builds the sixteen format blocks of the document — the exact values
+/// [encode] writes, which is what makes a check on them faithful
+fn build_blocks(inner: &InnerData) -> format::Blocks {
     let params = &inner.params;
+    format::Blocks {
+        general_planning: Some(build_general_planning(params)),
+        subjects: Some(build_subjects(params)),
+        teachers: Some(build_teachers(params)),
+        students: Some(build_students(params)),
+        assignments: Some(build_assignments(params)),
+        week_patterns: Some(build_week_patterns(params)),
+        slots: Some(build_slots(params)),
+        incompatibilities: Some(build_incompatibilities(params)),
+        group_lists: Some(build_group_lists(params)),
+        group_list_associations: Some(build_group_list_associations(params)),
+        pairings: Some(build_pairings(params)),
+        slot_pairings: Some(build_slot_pairings(params)),
+        settings: Some(build_settings(params)),
+        balancing: Some(build_balancing(params)),
+        colloscope: Some(build_colloscope(inner)),
+        export_config: Some(build_export_config(&inner.export_config)),
+    }
+}
+
+/// Runs the writer's id check without writing anything
+///
+/// It builds the very blocks [encode] would write and checks those, so
+/// its verdict is exactly [encode]'s — see [crate::check_encodable].
+pub(crate) fn check_encodable(inner: &InnerData) -> Result<(), EncodeError> {
+    check_ids(&build_blocks(inner))
+}
+
+pub fn encode(inner: &InnerData) -> Result<Spec2Document, EncodeError> {
+    // The whole document is built first, then checked, then written out:
+    // the id ceiling is a rule about the document as a whole, so it is
+    // checked on the format values (where all the ids that will actually
+    // be written live) rather than on the in-memory data.
+    let blocks = build_blocks(inner);
+
+    check_ids(&blocks)?;
 
     let mut entries = Vec::new();
     use format::Block;
     push(
         &mut entries,
-        build_general_planning(params),
+        blocks.general_planning,
         Block::GeneralPlanning,
     );
-    push(&mut entries, build_subjects(params), Block::Subjects);
-    push(&mut entries, build_teachers(params), Block::Teachers);
-    push(&mut entries, build_students(params), Block::Students);
-    push(&mut entries, build_assignments(params), Block::Assignments);
+    push(&mut entries, blocks.subjects, Block::Subjects);
+    push(&mut entries, blocks.teachers, Block::Teachers);
+    push(&mut entries, blocks.students, Block::Students);
+    push(&mut entries, blocks.assignments, Block::Assignments);
+    push(&mut entries, blocks.week_patterns, Block::WeekPatterns);
+    push(&mut entries, blocks.slots, Block::Slots);
     push(
         &mut entries,
-        build_week_patterns(params),
-        Block::WeekPatterns,
-    );
-    push(&mut entries, build_slots(params), Block::Slots);
-    push(
-        &mut entries,
-        build_incompatibilities(params),
+        blocks.incompatibilities,
         Block::Incompatibilities,
     );
-    push(&mut entries, build_group_lists(params), Block::GroupLists);
+    push(&mut entries, blocks.group_lists, Block::GroupLists);
     push(
         &mut entries,
-        build_group_list_associations(params),
+        blocks.group_list_associations,
         Block::GroupListAssociations,
     );
-    push(&mut entries, build_pairings(params), Block::Pairings);
-    push(
-        &mut entries,
-        build_slot_pairings(params),
-        Block::SlotPairings,
-    );
-    push(&mut entries, build_settings(params), Block::Settings);
-    push(&mut entries, build_balancing(params), Block::Balancing);
-    push(&mut entries, build_colloscope(inner), Block::Colloscope);
-    push(
-        &mut entries,
-        build_export_config(&inner.export_config),
-        Block::ExportConfig,
-    );
+    push(&mut entries, blocks.pairings, Block::Pairings);
+    push(&mut entries, blocks.slot_pairings, Block::SlotPairings);
+    push(&mut entries, blocks.settings, Block::Settings);
+    push(&mut entries, blocks.balancing, Block::Balancing);
+    push(&mut entries, blocks.colloscope, Block::Colloscope);
+    push(&mut entries, blocks.export_config, Block::ExportConfig);
 
-    Spec2Document {
+    Ok(Spec2Document {
         header: super::generate_header(),
         entries,
+    })
+}
+
+/// Refuses to write a document holding an id above the spec's ceiling
+///
+/// Nothing in memory forbids such an id: the id issuer hands out numbers
+/// without an upper bound, so a long enough editing history — or one
+/// operation on a document whose largest id was already the ceiling —
+/// produces one. It is the file format, not the model, that caps ids
+/// (spec §3), so this is where the document stops being writable.
+fn check_ids(blocks: &format::Blocks) -> Result<(), EncodeError> {
+    let mut error = None;
+    format::id_visit::visit_ids(blocks, &mut |id| {
+        if error.is_none() && id > (u64::MAX >> 1) {
+            error = Some(EncodeError::IdAboveCeiling { id });
+        }
+    });
+    match error {
+        Some(error) => Err(error),
+        None => Ok(()),
     }
 }
 
 /// Appends an entry for the block — unless the block is in its default
 /// state, which the canonical form encodes by omission
+///
+/// The block comes as the `Option` field of [format::Blocks]; the writer
+/// fills every field, so `None` cannot happen here.
 fn push<B: Default + PartialEq>(
     entries: &mut Vec<Spec2Entry>,
-    block: B,
+    block: Option<B>,
     wrap: fn(B) -> format::Block,
 ) {
+    let block = block.expect("The writer builds every block");
     if block == B::default() {
         return;
     }

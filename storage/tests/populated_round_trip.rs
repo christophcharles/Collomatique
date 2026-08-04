@@ -15,11 +15,22 @@ use collomatique_state::{AppState, traits::Manager};
 use collomatique_state_colloscopes::{NewId, Op, StudentOp, students::Student};
 use collomatique_storage::{deserialize_data, serialize_data};
 
+/// Runs the in-memory invariant gate on a decoded document
+///
+/// The decoder returns a raw [InnerData](collomatique_state_colloscopes::InnerData)
+/// and diagnoses every constraint of the file format itself, so this is
+/// expected to always succeed — holding it to that is exactly why the
+/// tests below call it.
+fn gate(inner: collomatique_state_colloscopes::InnerData) -> collomatique_state_colloscopes::Data {
+    collomatique_state_colloscopes::Data::from_inner_data(inner)
+        .expect("decoded documents must pass the invariant gate")
+}
+
 #[test]
 fn round_trip_identity() {
     let data = builder::build_rich_data();
 
-    let serialized = serialize_data(&data);
+    let serialized = serialize_data(data.get_inner_data()).expect("Data should be writable");
     let (decoded, caveats) =
         deserialize_data(&serialized).expect("Serialized data should deserialize");
 
@@ -28,7 +39,10 @@ fn round_trip_identity() {
     // values (nothing references them yet). The meaningful round-trip identity
     // is therefore byte-level: re-encoding the decoded state reproduces the
     // original document exactly.
-    assert_eq!(serialize_data(&decoded), serialized);
+    assert_eq!(
+        serialize_data(gate(decoded).get_inner_data()).expect("Decoded data should be writable"),
+        serialized
+    );
     assert!(caveats.is_empty());
 }
 
@@ -37,11 +51,14 @@ fn reserialize_is_stable() {
     // Pins the canonical-form guarantee: one state, one byte sequence
     let data = builder::build_rich_data();
 
-    let serialized = serialize_data(&data);
+    let serialized = serialize_data(data.get_inner_data()).expect("Data should be writable");
     let (decoded, _caveats) =
         deserialize_data(&serialized).expect("Serialized data should deserialize");
 
-    assert_eq!(serialize_data(&decoded), serialized);
+    assert_eq!(
+        serialize_data(gate(decoded).get_inner_data()).expect("Decoded data should be writable"),
+        serialized
+    );
 }
 
 /// The bytes `serialize_data` produced for [builder::build_rich_data] on
@@ -83,7 +100,8 @@ fn writer_output_matches_the_golden_fixture() {
     //         -- --ignored regenerate_golden_fixture
     // and read the resulting diff before committing it. A diff nobody
     // intended is this test doing its job.
-    let serialized = serialize_data(&builder::build_rich_data());
+    let serialized = serialize_data(builder::build_rich_data().get_inner_data())
+        .expect("Data should be writable");
 
     assert_eq!(mask_version(&serialized), mask_version(GOLDEN));
 }
@@ -93,21 +111,22 @@ fn writer_output_matches_the_golden_fixture() {
 fn regenerate_golden_fixture() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/spec2_populated_golden.json");
-    std::fs::write(&path, serialize_data(&builder::build_rich_data()))
-        .expect("The fixture should be writable");
+    let serialized = serialize_data(builder::build_rich_data().get_inner_data())
+        .expect("Data should be writable");
+    std::fs::write(&path, serialized).expect("The fixture should be writable");
 }
 
 #[test]
 fn deserialized_data_is_still_editable() {
     let data = builder::build_rich_data();
 
-    let serialized = serialize_data(&data);
+    let serialized = serialize_data(data.get_inner_data()).expect("Data should be writable");
     let (decoded, _caveats) =
         deserialize_data(&serialized).expect("Serialized data should deserialize");
 
     // The rebuilt IdIssuer must issue fresh ids that do not collide
     // with the ids already present in the loaded document
-    let mut state = AppState::<_, String>::new(decoded);
+    let mut state = AppState::<_, String>::new(gate(decoded));
     let result = state.apply(
         Op::Student(StudentOp::Add(Student::default())),
         "Add a student after reload".to_string(),

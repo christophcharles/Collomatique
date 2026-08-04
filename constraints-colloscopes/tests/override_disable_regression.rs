@@ -45,8 +45,8 @@ const BALANCING_FIXTURE: &str = include_str!("fixtures/override_disable_balancin
 
 #[test]
 fn per_student_override_can_disable_global_weekly_max() {
-    let (data, _caveats) = deserialize_data(FIXTURE).expect("fixture should decode");
-    let params = &data.get_inner_data().params;
+    let (inner, _caveats) = deserialize_data(FIXTURE).expect("fixture should decode");
+    let params = &inner.params;
 
     // The fixture pins exactly one overridden student (the disable target); the
     // other enrolled student is the control that must stay constrained.
@@ -83,8 +83,8 @@ fn per_student_override_can_disable_global_weekly_max() {
 
 #[test]
 fn per_subject_override_can_soften_global_teacher_rotation() {
-    let (data, _caveats) = deserialize_data(BALANCING_FIXTURE).expect("fixture should decode");
-    let params = &data.get_inner_data().params;
+    let (inner, _caveats) = deserialize_data(BALANCING_FIXTURE).expect("fixture should decode");
+    let params = &inner.params;
 
     // The fixture pins exactly one overridden subject (the soften target); the
     // other interrogated subject is the control that must stay hard-constrained.

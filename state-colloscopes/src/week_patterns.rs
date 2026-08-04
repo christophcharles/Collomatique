@@ -67,6 +67,46 @@ impl WeekPatterns {
     }
 }
 
+// The container's half of the dense renumbering walk (see [crate::compact]).
+// The two methods must visit exactly the same id occurrences.
+impl WeekPatterns {
+    pub(crate) fn collect_ids(&self, ids: &mut BTreeSet<u64>) {
+        use crate::ids::Id as _;
+        for (week_pattern_id, week_pattern) in self.week_pattern_map.iter() {
+            ids.insert(week_pattern_id.inner());
+            for week_id in &week_pattern.excluded_weeks {
+                ids.insert(week_id.inner());
+            }
+        }
+    }
+
+    pub(crate) fn remap_ids(self, map: &crate::compact::IdMap) -> Self {
+        use crate::compact::remap;
+        WeekPatterns {
+            week_pattern_map: self
+                .week_pattern_map
+                .into_iter()
+                .map(|(week_pattern_id, week_pattern)| {
+                    let WeekPattern {
+                        name,
+                        excluded_weeks,
+                    } = week_pattern;
+                    (
+                        remap(map, week_pattern_id),
+                        WeekPattern {
+                            name,
+                            excluded_weeks: excluded_weeks
+                                .into_iter()
+                                .map(|week_id| remap(map, week_id))
+                                .collect(),
+                        },
+                    )
+                })
+                .collect(),
+        }
+    }
+}
+
 /// Precondition errors of the forced week-pattern ops — the carve-out subset
 /// (step-3 survey Table 2). Only no-clobber and op-target existence survive;
 /// `validate_week_pattern` and the reference scans are stripped.
