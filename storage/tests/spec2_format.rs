@@ -999,6 +999,37 @@ fn object_id_exactly_at_the_ceiling_is_accepted() {
 }
 
 #[test]
+fn an_id_at_the_ceiling_next_to_a_week_is_accepted() {
+    // The same boundary id as above, in a document that also has a week.
+    // The file is just as legal: it defines one id, 2^63 - 1, and weeks
+    // carry no id at all (they are positional — §4.1).
+    //
+    // It does not decode today, and the failure is the worst kind: the
+    // decoder synthesizes week ids *above* every id the file defines, so
+    // the first week here gets 2^63, one past the ceiling. Nothing in
+    // the decoder objects — the id it built is not one the file wrote —
+    // but the in-memory id issuer refuses to resume from it, so the
+    // document trips the invariant gate and the "decoder bug" panic
+    // fires on a file that is not broken at all.
+    //
+    // This test is committed red on purpose: it records the gap, and it
+    // is the thing that must go green once week ids stop being minted
+    // above the ceiling.
+    let content = document(&[entry(&format!(
+        r#"{{ "GeneralPlanning": {{
+            "first_week": null,
+            "periods": [
+                {{ "id": {}, "weeks": [ {{ "interrogations": true, "annotation": null }} ] }}
+            ]
+        }} }}"#,
+        u64::MAX >> 1
+    ))]);
+
+    let (_data, caveats) = deserialize_data(&content).expect("boundary id should decode");
+    assert!(caveats.is_empty());
+}
+
+#[test]
 fn duplicate_id_across_blocks_is_rejected() {
     // §3: an id value is defined at most once across the whole file, not
     // just within its own block. The error names both defining blocks, in
