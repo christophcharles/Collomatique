@@ -84,6 +84,7 @@ pub enum EditorInput {
     },
     SaveCurrentFileAs(PathBuf),
     SaveCheckedFileAs(PathBuf, collomatique_state_colloscopes::InnerData),
+    CompactAndSave,
     CancelSaveCompaction,
     SaveAsClicked,
     SaveClicked,
@@ -931,8 +932,7 @@ impl Component for EditorPanel {
             .transient_for(&root)
             .launch(())
             .forward(sender.input_sender(), |msg| match msg {
-                // The compact button is inert until the next commit.
-                warning_save_ids::DialogOutput::Compact => EditorInput::Ignore,
+                warning_save_ids::DialogOutput::Compact => EditorInput::CompactAndSave,
                 warning_save_ids::DialogOutput::Cancel => EditorInput::CancelSaveCompaction,
             });
 
@@ -1084,6 +1084,18 @@ impl Component for EditorPanel {
                     }
                 });
                 sender.output(EditorOutput::UpdateActions).unwrap();
+            }
+            EditorInput::CompactAndSave => {
+                if let Some((path, inner_data)) = self.save_pending_compaction.take() {
+                    // Compaction renumbers every id densely from 0; the
+                    // result always fits the format. Only the file gets
+                    // the new ids — the in-memory document (and its undo
+                    // history) is untouched.
+                    sender.input(EditorInput::SaveCheckedFileAs(
+                        path,
+                        inner_data.compact_ids(),
+                    ));
+                }
             }
             EditorInput::CancelSaveCompaction => {
                 self.save_pending_compaction = None;

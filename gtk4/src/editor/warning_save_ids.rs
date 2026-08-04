@@ -91,9 +91,6 @@ impl SimpleComponent for Dialog {
                     gtk::Button {
                         set_size_request: (200, 40),
                         set_label: "Compacter et enregistrer",
-                        // Wired in the next commit; shown inert so the
-                        // rescue path is visible but cannot yet run.
-                        set_sensitive: false,
                         connect_clicked[sender] => move |_| {
                             sender.input(DialogInput::Compact);
                         },
