@@ -2,7 +2,7 @@ use adw::prelude::NavigationPageExt;
 use collomatique_state::traits::Manager;
 use gtk::prelude::{ButtonExt, ObjectExt, OrientableExt, WidgetExt};
 use libadwaita::prelude::Cast;
-use relm4::prelude::{ComponentController, RelmWidgetExt};
+use relm4::prelude::ComponentController;
 use relm4::{Component, ComponentParts, ComponentSender, Controller};
 use relm4::{adw, gtk};
 use std::collections::{BTreeMap, BTreeSet};
@@ -14,7 +14,6 @@ use collomatique_state::AppState;
 use collomatique_state_colloscopes::Data;
 
 use crate::editor::colloscope::ColloscopeOutput;
-use crate::editor::export_panel::ExportPanelInput;
 use crate::tools;
 
 pub const DEFAULT_FILE_STEM: &str = "FichierSansNom";
@@ -689,18 +688,6 @@ impl Component for EditorPanel {
                             set_size_request: (200, -1),
                             set_stack: &main_stack,
                         },
-                        gtk::Button {
-                            set_hexpand: true,
-                            set_size_request: (-1,50),
-                            add_css_class: "frame",
-                            add_css_class: "warning",
-                            set_margin_all: 5,
-                            adw::ButtonContent {
-                                set_icon_name: "text-x-script",
-                                set_label: "Exécuter un script",
-                            },
-                            connect_clicked => EditorInput::RunScriptClicked,
-                        },
                     },
                 },
             },
@@ -909,9 +896,6 @@ impl Component for EditorPanel {
                 .forward(sender.input_sender(), |msg| match msg {
                     export_panel::ExportPanelOutput::ExportColloscopeAs(path, config) => {
                         EditorInput::ExportColloscopeAs(path, config)
-                    }
-                    export_panel::ExportPanelOutput::ExportMpsClicked => {
-                        EditorInput::ExportMpsClicked
                     }
                     export_panel::ExportPanelOutput::UpdateExportConfig(update_op) => {
                         EditorInput::UpdateOp(collomatique_ops::UpdateOp::ExportConfig(update_op))
@@ -1331,8 +1315,6 @@ impl Component for EditorPanel {
                     .as_ref()
                     .map(advanced_tools::IlpProblemInfo::from_problem);
                 self.ilp_problem = problem;
-                self.export_panel
-                    .emit(ExportPanelInput::UpdateIlpAvailable(info.is_some()));
                 self.advanced_tools
                     .emit(advanced_tools::AdvancedToolsInput::UpdateIlpProblemInfo(
                         info,

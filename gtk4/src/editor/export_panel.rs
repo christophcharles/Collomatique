@@ -20,11 +20,6 @@ pub struct ExportPanel {
     export_config: export_config::ExportConfig,
     file_name: Option<PathBuf>,
     annotations: BTreeSet<String>,
-    /// Whether the editor currently holds an ILP problem to export.
-    ///
-    /// The problem itself lives in the editor — this panel only needs to know
-    /// whether the button has anything to act on.
-    ilp_available: bool,
     colloscope_config_dialog: Controller<colloscope_config_dialog::Dialog>,
     global_config_dialog: Controller<global_config_dialog::Dialog>,
     all_groups_config_dialog: Controller<per_student_groups_config_dialog::Dialog>,
@@ -41,9 +36,6 @@ pub enum ExportPanelInput {
         BTreeSet<String>,
     ),
     ExportClicked,
-    ExportMpsClicked,
-
-    UpdateIlpAvailable(bool),
 
     UpdateColloscopeEnabled(bool),
     UpdateAllGroupsEnabled(bool),
@@ -77,7 +69,6 @@ pub enum ExportPanelInput {
 pub enum ExportPanelOutput {
     UpdateExportConfig(collomatique_ops::ExportConfigUpdateOp),
     ExportColloscopeAs(PathBuf, collomatique_xlsx::Config),
-    ExportMpsClicked,
 }
 
 #[derive(Debug)]
@@ -519,35 +510,6 @@ impl Component for ExportPanel {
                         connect_clicked => ExportPanelInput::ExportClicked,
                     },
                 },
-                gtk::Box {
-                    set_hexpand: true,
-                    set_spacing: 10,
-                    set_margin_top: 30,
-                    set_orientation: gtk::Orientation::Vertical,
-                    gtk::Separator {
-                        set_orientation: gtk::Orientation::Horizontal,
-                    },
-                    gtk::Label {
-                        set_label: "<b><i><big>Options de débogage</big></i></b>",
-                        set_use_markup: true,
-                        set_margin_all: 5,
-                        set_margin_bottom: 10,
-                    },
-                    gtk::Button {
-                        add_css_class: "frame",
-                        add_css_class: "warning",
-                        set_hexpand: true,
-                        set_margin_start: 10,
-                        set_margin_end: 10,
-                        #[watch]
-                        set_sensitive: model.ilp_available,
-                        adw::ButtonContent {
-                            set_icon_name: "document-export-symbolic",
-                            set_label: "Exporter le problème ILP (MPS)",
-                        },
-                        connect_clicked => ExportPanelInput::ExportMpsClicked,
-                    },
-                },
             },
         }
     }
@@ -615,7 +577,6 @@ impl Component for ExportPanel {
             export_config: export_config::ExportConfig::default(),
             file_name: None,
             annotations: BTreeSet::new(),
-            ilp_available: false,
             colloscope_config_dialog,
             global_config_dialog,
             all_groups_config_dialog,
@@ -668,14 +629,6 @@ impl Component for ExportPanel {
                         None => ExportPanelCommandOutput::FileNotChosen,
                     }
                 });
-            }
-            ExportPanelInput::UpdateIlpAvailable(available) => {
-                self.ilp_available = available;
-            }
-            // The file chooser and the problem itself both live in the editor:
-            // this panel only reports the click.
-            ExportPanelInput::ExportMpsClicked => {
-                sender.output(ExportPanelOutput::ExportMpsClicked).unwrap();
             }
             ExportPanelInput::UpdateColloscopeEnabled(enabled) => {
                 if self.export_config.colloscope_enabled == enabled {
