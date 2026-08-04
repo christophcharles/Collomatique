@@ -139,8 +139,6 @@ impl FileLoader {
 
     fn generate_decode_error_message(decode_error: DecodeError) -> String {
         match decode_error {
-            DecodeError::EndOfTheUniverse => "Le fichier est probablement un fichier malicieux ou est corrompu.\n(Dernier ID utilisé supérieur à 2^63)".into(),
-            DecodeError::DuplicatedID => "Le fichier est mal formé et est probablement corrompu.\n(ID en double)".into(),
             DecodeError::DuplicatedIdInBlock { block, id } => format!(
                 "Le fichier est mal formé et est probablement corrompu.\n(L'ID {} apparaît en double dans le bloc {})",
                 id, block
@@ -291,14 +289,6 @@ impl FileLoader {
             DecodeError::WrongWeekCountInWeekPattern { week_pattern_id, expected, found } => format!(
                 "Fichier mal formé et est probablement corrompu.\n(Le motif de semaines {} décrit {} semaines alors que le calendrier en compte {})",
                 week_pattern_id, found, expected
-            ),
-            DecodeError::LogicError(set) => format!(
-                "Fichier mal formé et est probablement corrompu.\n(Les données sont logiquement impossibles : {})",
-                set.iter().map(|e| e.to_string()).collect::<Vec<_>>().join(" ; ")
-            ),
-            DecodeError::BrokenInvariants(set) => format!(
-                "Fichier mal formé et est probablement corrompu.\n(Les données ne vérifient pas un invariant : {})",
-                set.iter().map(|e| e.to_string()).collect::<Vec<_>>().join(" ; ")
             ),
         }
     }

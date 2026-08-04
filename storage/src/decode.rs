@@ -3,26 +3,27 @@
 //! This module contains the logic that builds a [Data] from a file
 //! document via [spec2::decode], the spec-2 pipeline. (Spec 1, the
 //! pre-alpha dump format, is permanently retired and rejected before
-//! decoding — see the versioning notes in `docs/file_format.md`.)
+//! decoding — see the versioning notes in `docs/file_format/file_format.md`.)
 //!
-//! Decoding funnels through [Data::from_inner_data], which revalidates
-//! any [InnerData](collomatique_state_colloscopes::InnerData) whatever
-//! its provenance. That gate is the **last line of defence**: it makes a
-//! decoded document safe no matter what the decoder missed, and it can
-//! be trusted for that, being the same check every in-application edit
-//! goes through.
+//! **Every constraint of the file format is diagnosed here**, while
+//! decoding, with a [DecodeError] that names the offending block, row and
+//! field in the vocabulary of the file: the id-space rules of spec §3, and
+//! every `Constraints:` line of spec §4 — referential ("this id must
+//! exist", [DecodeError::DanglingReference]) as well as semantic ("and
+//! that subject must have interrogations", one variant per constraint).
+//! That is what a user can act on; the in-memory invariant checker, which
+//! speaks of the model as a whole rather than of a row, is not a reporter
+//! a user could use.
 //!
-//! It is not the *reporter*, though. It speaks the vocabulary of the
-//! in-memory model, not of the file, and it answers about the document
-//! as a whole rather than about a row — so a user who is told an
-//! invariant broke still cannot tell which entry to go and fix. Wherever
-//! the decoder can name the offending block, row and field, it must, and
-//! return a precise [DecodeError]. Several constraints of the spec still
-//! reach the gate instead; that is a known bug, not a design — see
-//! `docs/todos/fixme_spec2_storage.md`, which also records where this is
-//! headed: once the decoder diagnoses every constraint, a break at the
-//! gate stops being a bad file and becomes a bug in this crate, and
-//! [DecodeError::BrokenInvariants] gives way to a panic.
+//! Decoding still funnels through [Data::from_inner_data], the in-memory
+//! invariant gate, but that call is now a **contract, not a defence**: no
+//! file can reach it in a broken state, so a rejection there means this
+//! crate built an `InnerData` it had no business building. It therefore
+//! panics rather than producing an error — see [spec2::decode]. Keeping
+//! that true is a maintenance obligation, recorded in the module docs of
+//! `collomatique_state_colloscopes::invariants`: a new invariant needs a
+//! decode-time counterpart here and a rejection test in
+//! `storage/tests/spec2_format.rs`.
 //!
 //! Diagnostics ([DecodeError]) distinguish an *unrecognised* block
 //! (handled by the forward-compatibility rules — a [Caveat] or
@@ -101,16 +102,6 @@ pub enum DecodeError {
     InconsistentPairingRule(u64),
     #[error("Slot pairing rule id {0} has its antecedent and consequent on the same slot")]
     InconsistentSlotPairingRule(u64),
-    #[error("generating new IDs is not secure, half the usable IDs have been used already")]
-    EndOfTheUniverse,
-    /// Two ids collide across the whole document, without a single block
-    /// being able to name the culprit
-    ///
-    /// This is the cross-kind check run by [Data::from_inner_data]; the
-    /// in-block collisions carry their block and id, see
-    /// [DecodeError::DuplicatedIdInBlock].
-    #[error("Duplicated ID")]
-    DuplicatedID,
     #[error("Duplicated ID {id} in block {block:?}")]
     DuplicatedIdInBlock { block: &'static str, id: u64 },
     #[error("Block {block:?} defines id {id}, which is above the id ceiling (2^63 - 1)")]
@@ -198,10 +189,6 @@ pub enum DecodeError {
         expected: usize,
         found: usize,
     },
-    #[error("The loaded data is logically impossible: {0:?}")]
-    LogicError(BTreeSet<collomatique_state_colloscopes::LogicError>),
-    #[error("The loaded data breaks an invariant: {0:?}")]
-    BrokenInvariants(BTreeSet<collomatique_state_colloscopes::FixableInvariant>),
 }
 
 /// File-vocabulary coordinates of a row inside a block
@@ -250,21 +237,6 @@ impl std::fmt::Display for IdKind {
             IdKind::Slot => "slot",
             IdKind::GroupList => "group list",
         })
-    }
-}
-
-impl From<collomatique_state_colloscopes::FromInnerDataError> for DecodeError {
-    fn from(value: collomatique_state_colloscopes::FromInnerDataError) -> Self {
-        use collomatique_state::tools::IdError;
-        use collomatique_state_colloscopes::FromInnerDataError;
-        match value {
-            FromInnerDataError::IdError(id_error) => match id_error {
-                IdError::DuplicatedId => DecodeError::DuplicatedID,
-                IdError::EndOfTheUniverse => DecodeError::EndOfTheUniverse,
-            },
-            FromInnerDataError::Logic(set) => DecodeError::LogicError(set),
-            FromInnerDataError::BrokenInvariants(set) => DecodeError::BrokenInvariants(set),
-        }
     }
 }
 

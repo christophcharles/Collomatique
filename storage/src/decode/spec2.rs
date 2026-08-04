@@ -11,14 +11,11 @@
 //!    [InnerData](collomatique_state_colloscopes::InnerData) from the
 //!    blocks, completing everything the file deliberately omits (absent
 //!    blocks, derived key sets).
-//! 3. [Data::from_inner_data]: the invariant layer — the last line of
-//!    defence, which makes the result safe whatever layer 2 let through.
-//!    Layer 2 should still diagnose every constraint it can name (the
-//!    "honest decode" checks below); where it does not yet, the user
-//!    gets a poor message and that is a bug to close — see
-//!    `docs/todos/fixme_spec2_storage.md`. The target is a layer 2 that
-//!    lets nothing broken through, so that a rejection here means this
-//!    crate built an `InnerData` it should not have.
+//! 3. [Data::from_inner_data]: the invariant layer. Layer 2 diagnoses
+//!    every constraint of the spec, so nothing broken reaches this
+//!    layer: a rejection here means this crate built an `InnerData` it
+//!    should not have, and [decode] panics on it rather than dressing a
+//!    programming error up as a file error.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -45,7 +42,13 @@ pub fn decode(
 ) -> Result<Data, DecodeError> {
     let blocks = collect_blocks(entries, version, caveats)?;
     let inner_data = reconstruct(blocks)?;
-    Ok(Data::from_inner_data(inner_data)?)
+    // The decoder has diagnosed every constraint of the spec by now (the
+    // id-space rules of §3, and every dangling reference and semantic
+    // condition of §4). A rejection here therefore means this crate built
+    // an InnerData it had no business building — a bug, not a bad file.
+    Ok(Data::from_inner_data(inner_data).unwrap_or_else(|error| {
+        panic!("spec-2 decoder bug: reconstructed an InnerData the invariant gate rejects: {error}")
+    }))
 }
 
 /// The typed payloads of a document, at most one per block name

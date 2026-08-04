@@ -1,8 +1,9 @@
 //! Scalar encodings of the spec-2 format (spec §3)
 //!
 //! Ids are plain `u64` on purpose: the spec's "at most 2⁶³ − 1" rule is
-//! enforced at layer 3 with its dedicated error (`EndOfTheUniverse`), and
-//! a layer-1 serde check would only shadow it with a generic message.
+//! enforced at layer 2 with its dedicated error (`IdAboveCeiling`, which
+//! names the defining block and the id), and a layer-1 serde check would
+//! only shadow it with a generic message.
 
 use serde::{Deserialize, Deserializer, Serialize};
 use std::num::NonZeroU32;
