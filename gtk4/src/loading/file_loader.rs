@@ -145,6 +145,14 @@ impl FileLoader {
                 "Le fichier est mal formé et est probablement corrompu.\n(L'ID {} apparaît en double dans le bloc {})",
                 id, block
             ),
+            DecodeError::IdAboveCeiling { block, id } => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(Le bloc {} définit l'id {}, au-dessus du plafond autorisé (2^63 - 1))",
+                block, id
+            ),
+            DecodeError::DuplicatedIdAcrossBlocks { first, second, id } => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(L'id {} est défini à la fois dans le bloc {} et dans le bloc {})",
+                id, first, second
+            ),
             DecodeError::MismatchedSpecRequirementInEntry(block) => format!(
                 "Le fichier est mal formé et est probablement corrompu.\n(Information de version erronée dans l'entrée du bloc {})",
                 block

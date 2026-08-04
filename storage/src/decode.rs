@@ -91,6 +91,14 @@ pub enum DecodeError {
     DuplicatedID,
     #[error("Duplicated ID {id} in block {block:?}")]
     DuplicatedIdInBlock { block: &'static str, id: u64 },
+    #[error("Block {block:?} defines id {id}, which is above the id ceiling (2^63 - 1)")]
+    IdAboveCeiling { block: &'static str, id: u64 },
+    #[error("Id {id} is defined in both block {first:?} and block {second:?}")]
+    DuplicatedIdAcrossBlocks {
+        first: &'static str,
+        second: &'static str,
+        id: u64,
+    },
     #[error("The assignments reference an unknown period (period id {0})")]
     UnknownPeriodInAssignments(u64),
     #[error("The assignments reference an unknown subject (subject id {0})")]

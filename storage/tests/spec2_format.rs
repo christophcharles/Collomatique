@@ -960,8 +960,8 @@ fn incompatibility_slot_crossing_midnight_is_rejected() {
 
 #[test]
 fn object_id_above_the_id_space_is_rejected() {
-    // The spec's id range rule (> 2^63 - 1 is invalid) is enforced at
-    // layer 3 with its dedicated error, not by the format structs
+    // The spec's id range rule (§3: ids above 2^63 - 1 make the file
+    // invalid) is enforced by the decoder's id sweep, naming the block
     let content = document(&[entry(&format!(
         r#"{{ "Students": [
             {{ "id": {}, "surname": "Potter", "firstname": "Harry", "tel": null, "email": null, "excluded_periods": [] }}
@@ -969,7 +969,56 @@ fn object_id_above_the_id_space_is_rejected() {
         u64::MAX
     ))]);
 
-    assert_eq!(expect_decode_error(&content), DecodeError::EndOfTheUniverse);
+    assert_eq!(
+        expect_decode_error(&content),
+        DecodeError::IdAboveCeiling {
+            block: "Students",
+            id: u64::MAX
+        }
+    );
+}
+
+#[test]
+fn object_id_exactly_at_the_ceiling_is_accepted() {
+    // 2^63 - 1 is the last legal id (§3): the ceiling check is strict
+    let content = document(&[entry(&format!(
+        r#"{{ "Students": [
+            {{ "id": {}, "surname": "Potter", "firstname": "Harry", "tel": null, "email": null, "excluded_periods": [] }}
+        ] }}"#,
+        u64::MAX >> 1
+    ))]);
+
+    let (_data, caveats) = deserialize_data(&content).expect("boundary id should decode");
+    assert!(caveats.is_empty());
+}
+
+#[test]
+fn duplicate_id_across_blocks_is_rejected() {
+    // §3: an id value is defined at most once across the whole file, not
+    // just within its own block. The error names both defining blocks, in
+    // canonical block order.
+    let entries = vec![
+        entry(
+            r#"{ "Subjects": [
+                { "id": 3, "name": "Mathématiques", "interrogation_parameters": null, "excluded_periods": [] }
+            ] }"#,
+        ),
+        entry(
+            r#"{ "Teachers": [
+                { "id": 3, "surname": "Rogue", "firstname": "Severus", "tel": null, "email": null, "subjects": [] }
+            ] }"#,
+        ),
+    ];
+    let content = document(&entries);
+
+    assert_eq!(
+        expect_decode_error(&content),
+        DecodeError::DuplicatedIdAcrossBlocks {
+            first: "Subjects",
+            second: "Teachers",
+            id: 3
+        }
+    );
 }
 
 #[test]

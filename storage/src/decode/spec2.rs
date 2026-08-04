@@ -210,78 +210,114 @@ fn soft_param<T>(param: format::scalars::SoftParam<T>) -> mem::soft_param::SoftP
     }
 }
 
-/// Highest entity id defined anywhere in the document.
+/// Walks every *defining* id of the document — the ids that create an
+/// entity, not the ids that reference one — with the name of the block
+/// that defines it, in the canonical §2 block order. The ten defining
+/// kinds are: periods, subjects, teachers, students, week patterns,
+/// slots, incompatibilities, group lists, pairing rules, slot pairing
+/// rules.
 ///
 /// Week ids are never serialized (the file stores weeks positionally), so
 /// decode synthesizes them; they must be assigned above every id the file
 /// *does* define. In a valid file every reference id is also a defining id, so
-/// scanning the defining ids of each block bounds the whole id space; a file
-/// whose references exceed that bound is dangling and rejected by layer 3
-/// regardless. Returns 0 for a document that defines no ids (weeks then start
-/// at 1, which cannot collide with anything).
-fn max_used_id(blocks: &Blocks) -> u64 {
-    let mut max = 0u64;
+/// the defining ids of each block bound the whole id space; a reference id
+/// outside that set is dangling and rejected as such regardless.
+fn for_each_defining_id(blocks: &Blocks, f: &mut impl FnMut(&'static str, u64)) {
     if let Some(b) = &blocks.general_planning {
         for period in &b.periods {
-            max = max.max(period.id);
+            f(BlockName::GeneralPlanning.as_str(), period.id);
         }
     }
     if let Some(b) = &blocks.subjects {
         for subject in b.iter() {
-            max = max.max(subject.id);
+            f(BlockName::Subjects.as_str(), subject.id);
         }
     }
     if let Some(b) = &blocks.teachers {
         for teacher in b.iter() {
-            max = max.max(teacher.id);
+            f(BlockName::Teachers.as_str(), teacher.id);
         }
     }
     if let Some(b) = &blocks.students {
         for student in b.iter() {
-            max = max.max(student.id);
+            f(BlockName::Students.as_str(), student.id);
         }
     }
     if let Some(b) = &blocks.week_patterns {
         for week_pattern in b.iter() {
-            max = max.max(week_pattern.id);
+            f(BlockName::WeekPatterns.as_str(), week_pattern.id);
         }
     }
     if let Some(b) = &blocks.slots {
         for subject_slots in b.iter() {
             for slot in &subject_slots.slots {
-                max = max.max(slot.id);
+                f(BlockName::Slots.as_str(), slot.id);
             }
         }
     }
     if let Some(b) = &blocks.incompatibilities {
         for incompat in b.iter() {
-            max = max.max(incompat.id);
+            f(BlockName::Incompatibilities.as_str(), incompat.id);
         }
     }
     if let Some(b) = &blocks.group_lists {
         for group_list in b.iter() {
-            max = max.max(group_list.id);
+            f(BlockName::GroupLists.as_str(), group_list.id);
         }
     }
     if let Some(b) = &blocks.pairings {
         for pairing in b.iter() {
-            max = max.max(pairing.id);
+            f(BlockName::Pairings.as_str(), pairing.id);
         }
     }
     if let Some(b) = &blocks.slot_pairings {
         for slot_pairing in b.iter() {
-            max = max.max(slot_pairing.id);
+            f(BlockName::SlotPairings.as_str(), slot_pairing.id);
         }
     }
-    max
 }
 
 fn reconstruct(blocks: Blocks) -> Result<InnerData, DecodeError> {
-    // Week ids are synthesized above every id the file defines (S11).
-    // `saturating_add` keeps synthesis panic-free when the file carries an
-    // out-of-range id near `u64::MAX`; such an id is rejected by layer 3
-    // regardless (the synthesized weeks never reach it).
-    let mut next_week_id = max_used_id(&blocks).saturating_add(1);
+    // The two id-space rules of spec §3 in one walk over the defining ids:
+    // every id is at most 2^63 - 1, and an id value is defined at most once
+    // across the whole file. Same-block duplicates keep the established
+    // per-block diagnostic.
+    let mut seen: BTreeMap<u64, &'static str> = BTreeMap::new();
+    let mut first_error = None;
+    for_each_defining_id(&blocks, &mut |block, id| {
+        if first_error.is_some() {
+            return;
+        }
+        if id > (u64::MAX >> 1) {
+            first_error = Some(DecodeError::IdAboveCeiling { block, id });
+            return;
+        }
+        if let Some(&first) = seen.get(&id) {
+            first_error = Some(if first == block {
+                DecodeError::DuplicatedIdInBlock { block, id }
+            } else {
+                DecodeError::DuplicatedIdAcrossBlocks {
+                    first,
+                    second: block,
+                    id,
+                }
+            });
+            return;
+        }
+        seen.insert(id, block);
+    });
+    if let Some(error) = first_error {
+        return Err(error);
+    }
+    // Week ids are synthesized above every id the file defines (S11). All
+    // defining ids are at most 2^63 - 1 here, so the synthesized ids stay
+    // well inside u64; `saturating_add` is kept as a cost-free safety.
+    let mut next_week_id = seen
+        .keys()
+        .next_back()
+        .copied()
+        .unwrap_or(0)
+        .saturating_add(1);
     let (periods, weeks) = reconstruct_periods(
         blocks.general_planning.unwrap_or_default(),
         &mut next_week_id,
