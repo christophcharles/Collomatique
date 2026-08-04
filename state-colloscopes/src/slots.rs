@@ -341,6 +341,74 @@ impl Slots {
     }
 }
 
+// The container's half of the dense renumbering walk (see [crate::compact]).
+// The two methods must visit exactly the same id occurrences — here both the
+// slot table and the per-subject ordering mirror, keys and values alike.
+impl Slots {
+    pub(crate) fn collect_ids(&self, ids: &mut std::collections::BTreeSet<u64>) {
+        use crate::ids::Id as _;
+        for (slot_id, slot) in self.slot_map.iter() {
+            ids.insert(slot_id.inner());
+            ids.insert(slot.subject_id.inner());
+            ids.insert(slot.teacher_id.inner());
+            if let Some(week_pattern_id) = slot.week_pattern {
+                ids.insert(week_pattern_id.inner());
+            }
+        }
+        for (subject_id, slot_list) in self.ordering.iter() {
+            ids.insert(subject_id.inner());
+            for slot_id in slot_list {
+                ids.insert(slot_id.inner());
+            }
+        }
+    }
+
+    pub(crate) fn remap_ids(self, map: &crate::compact::IdMap) -> Self {
+        use crate::compact::remap;
+        Slots {
+            slot_map: self
+                .slot_map
+                .into_iter()
+                .map(|(slot_id, slot)| {
+                    let Slot {
+                        subject_id,
+                        teacher_id,
+                        start_time,
+                        extra_info,
+                        week_pattern,
+                        cost,
+                    } = slot;
+                    (
+                        remap(map, slot_id),
+                        Slot {
+                            subject_id: remap(map, subject_id),
+                            teacher_id: remap(map, teacher_id),
+                            start_time,
+                            extra_info,
+                            week_pattern: week_pattern
+                                .map(|week_pattern_id| remap(map, week_pattern_id)),
+                            cost,
+                        },
+                    )
+                })
+                .collect(),
+            ordering: self
+                .ordering
+                .into_iter()
+                .map(|(subject_id, slot_list)| {
+                    (
+                        remap(map, subject_id),
+                        slot_list
+                            .into_iter()
+                            .map(|slot_id| remap(map, slot_id))
+                            .collect(),
+                    )
+                })
+                .collect(),
+        }
+    }
+}
+
 /// Precondition errors of the forced slot ops — the carve-out subset
 /// (step-3 survey Table 2). Kept: no-clobber, op-target existence
 /// ([Self::InvalidSlotId]), the `AddAfter` same-subject anchor

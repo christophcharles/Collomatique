@@ -167,6 +167,67 @@ impl SlotPairingRule {
     }
 }
 
+// The rule's half of the dense renumbering walk (see [crate::compact]). The
+// slot of each part is a distinct occurrence, as in the reference walk.
+impl SlotPairingRule {
+    pub(crate) fn collect_ids(&self, ids: &mut BTreeSet<u64>) {
+        use crate::ids::Id as _;
+        ids.insert(self.antecedent.slot_id.inner());
+        ids.insert(self.consequent.slot_id.inner());
+        for period_id in &self.excluded_periods {
+            ids.insert(period_id.inner());
+        }
+    }
+
+    pub(crate) fn remap_ids(self, map: &crate::compact::IdMap) -> Self {
+        use crate::compact::remap;
+        let SlotPairingRule {
+            antecedent,
+            consequent,
+            excluded_periods,
+            soft,
+        } = self;
+        SlotPairingRule::new(
+            SlotRulePart {
+                slot_id: remap(map, antecedent.slot_id),
+                should_have: antecedent.should_have,
+            },
+            SlotRulePart {
+                slot_id: remap(map, consequent.slot_id),
+                should_have: consequent.should_have,
+            },
+            excluded_periods
+                .into_iter()
+                .map(|period_id| remap(map, period_id))
+                .collect(),
+            soft,
+        )
+        .expect("An injective remap keeps the two slots distinct")
+    }
+}
+
+// The container's half of the dense renumbering walk (see [crate::compact]).
+impl SlotPairings {
+    pub(crate) fn collect_ids(&self, ids: &mut BTreeSet<u64>) {
+        use crate::ids::Id as _;
+        for (rule_id, rule) in self.slot_pairing_rule_map.iter() {
+            ids.insert(rule_id.inner());
+            rule.collect_ids(ids);
+        }
+    }
+
+    pub(crate) fn remap_ids(self, map: &crate::compact::IdMap) -> Self {
+        use crate::compact::remap;
+        SlotPairings {
+            slot_pairing_rule_map: self
+                .slot_pairing_rule_map
+                .into_iter()
+                .map(|(rule_id, rule)| (remap(map, rule_id), rule.remap_ids(map)))
+                .collect(),
+        }
+    }
+}
+
 // The `Join` derive gives [`JoinedSlotPairingRule`] the same field visibility
 // as [`SlotPairingRule`], so sealing the base made the joined view's fields
 // private too. The joined view is a transient read-only borrow (it cannot be

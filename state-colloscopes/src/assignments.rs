@@ -52,6 +52,41 @@ impl Assignments {
     }
 }
 
+// The container's half of the dense renumbering walk (see [crate::compact]).
+// The two methods must visit exactly the same id occurrences — here both
+// components of the composite key and every assigned student.
+impl Assignments {
+    pub(crate) fn collect_ids(&self, ids: &mut BTreeSet<u64>) {
+        use crate::ids::Id as _;
+        for ((period_id, subject_id), students) in self.map.iter() {
+            ids.insert(period_id.inner());
+            ids.insert(subject_id.inner());
+            for student_id in students {
+                ids.insert(student_id.inner());
+            }
+        }
+    }
+
+    pub(crate) fn remap_ids(self, map: &crate::compact::IdMap) -> Self {
+        use crate::compact::remap;
+        Assignments {
+            map: self
+                .map
+                .into_iter()
+                .map(|((period_id, subject_id), students)| {
+                    (
+                        (remap(map, period_id), remap(map, subject_id)),
+                        students
+                            .into_iter()
+                            .map(|student_id| remap(map, student_id))
+                            .collect(),
+                    )
+                })
+                .collect(),
+        }
+    }
+}
+
 /// Precondition errors of the forced assignment op — the carve-out subset
 /// (step-3 survey Table 2, as revised by the pre-step-7 review).
 ///

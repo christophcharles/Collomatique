@@ -166,6 +166,67 @@ impl PairingRule {
     }
 }
 
+// The rule's half of the dense renumbering walk (see [crate::compact]). The
+// subject of each part is a distinct occurrence, as in the reference walk.
+impl PairingRule {
+    pub(crate) fn collect_ids(&self, ids: &mut BTreeSet<u64>) {
+        use crate::ids::Id as _;
+        ids.insert(self.antecedent.subject_id.inner());
+        ids.insert(self.consequent.subject_id.inner());
+        for period_id in &self.excluded_periods {
+            ids.insert(period_id.inner());
+        }
+    }
+
+    pub(crate) fn remap_ids(self, map: &crate::compact::IdMap) -> Self {
+        use crate::compact::remap;
+        let PairingRule {
+            antecedent,
+            consequent,
+            excluded_periods,
+            soft,
+        } = self;
+        PairingRule::new(
+            RulePart {
+                subject_id: remap(map, antecedent.subject_id),
+                should_have: antecedent.should_have,
+            },
+            RulePart {
+                subject_id: remap(map, consequent.subject_id),
+                should_have: consequent.should_have,
+            },
+            excluded_periods
+                .into_iter()
+                .map(|period_id| remap(map, period_id))
+                .collect(),
+            soft,
+        )
+        .expect("An injective remap keeps the two subjects distinct")
+    }
+}
+
+// The container's half of the dense renumbering walk (see [crate::compact]).
+impl Pairings {
+    pub(crate) fn collect_ids(&self, ids: &mut BTreeSet<u64>) {
+        use crate::ids::Id as _;
+        for (rule_id, rule) in self.pairing_rule_map.iter() {
+            ids.insert(rule_id.inner());
+            rule.collect_ids(ids);
+        }
+    }
+
+    pub(crate) fn remap_ids(self, map: &crate::compact::IdMap) -> Self {
+        use crate::compact::remap;
+        Pairings {
+            pairing_rule_map: self
+                .pairing_rule_map
+                .into_iter()
+                .map(|(rule_id, rule)| (remap(map, rule_id), rule.remap_ids(map)))
+                .collect(),
+        }
+    }
+}
+
 // The `Join` derive gives [`JoinedPairingRule`] the same field visibility as
 // [`PairingRule`], so sealing the base made the joined view's fields private
 // too. The joined view is a transient read-only borrow (it cannot be turned

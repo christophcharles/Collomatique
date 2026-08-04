@@ -268,6 +268,49 @@ impl Subjects {
     }
 }
 
+// The container's half of the dense renumbering walk (see [crate::compact]).
+// The two methods must visit exactly the same id occurrences.
+impl Subjects {
+    pub(crate) fn collect_ids(&self, ids: &mut BTreeSet<u64>) {
+        use crate::ids::Id as _;
+        for (subject_id, subject) in self.ordered_subject_list.iter() {
+            ids.insert(subject_id.inner());
+            for period_id in &subject.excluded_periods {
+                ids.insert(period_id.inner());
+            }
+        }
+    }
+
+    pub(crate) fn remap_ids(self, map: &crate::compact::IdMap) -> Self {
+        use crate::compact::remap;
+        let rows: Vec<(SubjectId, Subject)> = self
+            .ordered_subject_list
+            .into_iter()
+            .map(|(subject_id, subject)| {
+                let Subject {
+                    parameters,
+                    excluded_periods,
+                } = subject;
+                (
+                    remap(map, subject_id),
+                    Subject {
+                        parameters,
+                        excluded_periods: excluded_periods
+                            .into_iter()
+                            .map(|period_id| remap(map, period_id))
+                            .collect(),
+                    },
+                )
+            })
+            .collect();
+        Subjects {
+            ordered_subject_list: rows
+                .try_into()
+                .expect("An injective remap cannot create duplicate keys"),
+        }
+    }
+}
+
 /// Precondition errors of the forced subject ops — the carve-out subset
 /// (step-3 survey Table 2). Kept: no-clobber, op-target existence + `AddAfter`
 /// anchor ([Self::InvalidSubjectId]), and position bounds. `validate_subject`,

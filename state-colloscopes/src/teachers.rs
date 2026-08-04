@@ -36,6 +36,43 @@ pub struct Teacher {
     pub subjects: BTreeSet<SubjectId>,
 }
 
+// The container's half of the dense renumbering walk (see [crate::compact]).
+// The two methods must visit exactly the same id occurrences.
+impl Teachers {
+    pub(crate) fn collect_ids(&self, ids: &mut BTreeSet<u64>) {
+        use crate::ids::Id as _;
+        for (teacher_id, teacher) in self.teacher_map.iter() {
+            ids.insert(teacher_id.inner());
+            for subject_id in &teacher.subjects {
+                ids.insert(subject_id.inner());
+            }
+        }
+    }
+
+    pub(crate) fn remap_ids(self, map: &crate::compact::IdMap) -> Self {
+        use crate::compact::remap;
+        Teachers {
+            teacher_map: self
+                .teacher_map
+                .into_iter()
+                .map(|(teacher_id, teacher)| {
+                    let Teacher { desc, subjects } = teacher;
+                    (
+                        remap(map, teacher_id),
+                        Teacher {
+                            desc,
+                            subjects: subjects
+                                .into_iter()
+                                .map(|subject_id| remap(map, subject_id))
+                                .collect(),
+                        },
+                    )
+                })
+                .collect(),
+        }
+    }
+}
+
 /// Precondition errors of the forced teacher ops — the carve-out subset
 /// (step-3 survey Table 2). See [StudentPrecheckError](crate::StudentPrecheckError)
 /// for the shape rationale.

@@ -36,6 +36,29 @@ impl Settings {
     }
 }
 
+// The container's half of the dense renumbering walk (see [crate::compact]).
+// Only the per-student override keys are ids; the limit values are not.
+impl Settings {
+    pub(crate) fn collect_ids(&self, ids: &mut std::collections::BTreeSet<u64>) {
+        use crate::ids::Id as _;
+        for student_id in self.students.keys() {
+            ids.insert(student_id.inner());
+        }
+    }
+
+    pub(crate) fn remap_ids(self, map: &crate::compact::IdMap) -> Self {
+        use crate::compact::remap;
+        Settings {
+            global: self.global,
+            students: self
+                .students
+                .into_iter()
+                .map(|(student_id, limits)| (remap(map, student_id), limits))
+                .collect(),
+        }
+    }
+}
+
 /// Strict limits in resolution
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Limits {
