@@ -5,6 +5,20 @@ use relm4::{adw, gtk};
 
 use collomatique_constraints_colloscopes::IlpInnerProblem;
 
+/// Whether the document cannot be written to a file as it stands
+///
+/// An exhaustive match rather than `is_err`: a new
+/// [collomatique_storage::EncodeError] variant must come back through here and
+/// be given its own answer. Compaction only cures ids above the ceiling, so
+/// folding every future error into "compact it" would be a wrong answer told
+/// confidently.
+fn needs_compaction(data: &collomatique_state_colloscopes::InnerData) -> bool {
+    match collomatique_storage::check_encodable(data) {
+        Ok(()) => false,
+        Err(collomatique_storage::EncodeError::IdAboveCeiling { .. }) => true,
+    }
+}
+
 /// Counts shown in the "Statistiques du document" section.
 ///
 /// The counting happens here, on the editor side, rather than in the panel:
@@ -29,6 +43,12 @@ pub struct Stats {
     pub possible_interrogations: usize,
     pub entity_count: usize,
     pub max_id: Option<u64>,
+    /// Whether the document cannot be written to a file as it stands
+    ///
+    /// The very check the save path runs: an id above the file format's
+    /// ceiling makes the document unwritable, and compaction is the way out.
+    /// Shown here so the wall is visible before one walks into it.
+    pub needs_compaction: bool,
 }
 
 impl Stats {
@@ -105,6 +125,7 @@ impl Stats {
             possible_interrogations,
             entity_count,
             max_id,
+            needs_compaction: needs_compaction(data),
         }
     }
 }
@@ -283,6 +304,17 @@ impl Component for AdvancedTools {
                         set_use_markup: true,
                         #[watch]
                         set_label: &model.generate_stats_text(),
+                    },
+                    gtk::Label {
+                        add_css_class: "warning",
+                        set_halign: gtk::Align::Start,
+                        set_margin_start: 10,
+                        set_margin_end: 10,
+                        set_margin_top: 10,
+                        set_wrap: true,
+                        set_label: "⚠ Ce document ne peut pas être enregistré tel quel : certains de ses identifiants dépassent la capacité du format de fichier. Le bouton « Compacter les identifiants » ci-dessous les renumérote et rend l'enregistrement possible.",
+                        #[watch]
+                        set_visible: model.stats.needs_compaction,
                     },
                 },
                 gtk::Box {
