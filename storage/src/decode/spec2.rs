@@ -20,6 +20,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{Caveat, DecodeError, IdKind, RowKey};
+use crate::DeserializeOptions;
 use crate::format::{self, BlockName, Blocks};
 use crate::json::{CURRENT_SPEC_VERSION, RawEntry, Version};
 
@@ -39,8 +40,17 @@ pub fn decode(
     entries: &[RawEntry],
     version: &Version,
     caveats: &mut BTreeSet<Caveat>,
+    options: &DeserializeOptions,
 ) -> Result<Data, DecodeError> {
-    let blocks = collect_blocks(entries, version, caveats)?;
+    let mut blocks = collect_blocks(entries, version, caveats)?;
+
+    // Renumbering happens on the parsed blocks, before layer 2 and
+    // therefore before the id-space sweep: the whole point of the pass is
+    // to rescue a file whose ids that sweep would reject.
+    if options.regenerate_ids {
+        format::id_visit::remap_ids(&mut blocks);
+    }
+
     let inner_data = reconstruct(blocks)?;
     // The decoder has diagnosed every constraint of the spec by now (the
     // id-space rules of §3, and every dangling reference and semantic
