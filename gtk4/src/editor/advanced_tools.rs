@@ -166,12 +166,14 @@ pub enum AdvancedToolsInput {
 
     RunPythonScriptClicked,
     ExportMpsClicked,
+    CompactIdsClicked,
 }
 
 #[derive(Debug)]
 pub enum AdvancedToolsOutput {
     RunPythonScriptClicked,
     ExportMpsClicked,
+    CompactIdsClicked,
 }
 
 impl AdvancedTools {
@@ -325,6 +327,19 @@ impl Component for AdvancedTools {
                         },
                         connect_clicked => AdvancedToolsInput::ExportMpsClicked,
                     },
+                    gtk::Button {
+                        add_css_class: "frame",
+                        add_css_class: "warning",
+                        set_hexpand: true,
+                        set_margin_start: 10,
+                        set_margin_end: 10,
+                        set_size_request: (-1, 40),
+                        adw::ButtonContent {
+                            set_icon_name: "application-x-compress",
+                            set_label: "Compacter les identifiants",
+                        },
+                        connect_clicked => AdvancedToolsInput::CompactIdsClicked,
+                    },
                 },
             },
         }
@@ -360,6 +375,11 @@ impl Component for AdvancedTools {
             AdvancedToolsInput::ExportMpsClicked => {
                 sender
                     .output(AdvancedToolsOutput::ExportMpsClicked)
+                    .unwrap();
+            }
+            AdvancedToolsInput::CompactIdsClicked => {
+                sender
+                    .output(AdvancedToolsOutput::CompactIdsClicked)
                     .unwrap();
             }
         }

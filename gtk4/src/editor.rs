@@ -72,6 +72,7 @@ mod subjects;
 mod teachers;
 mod week_patterns;
 
+mod warning_compact_ids;
 mod warning_op;
 mod warning_save_ids;
 
@@ -86,6 +87,8 @@ pub enum EditorInput {
     SaveCheckedFileAs(PathBuf, collomatique_state_colloscopes::InnerData),
     CompactAndSave,
     CancelSaveCompaction,
+    CompactIdsClicked,
+    CompactIds,
     SaveAsClicked,
     SaveClicked,
     UndoClicked,
@@ -277,6 +280,7 @@ pub struct EditorPanel {
     run_python_script_dialog: Controller<run_python_script::Dialog>,
     warning_op_dialog: Controller<warning_op::Dialog>,
     warning_save_ids_dialog: Controller<warning_save_ids::Dialog>,
+    warning_compact_ids_dialog: Controller<warning_compact_ids::Dialog>,
 }
 
 impl EditorPanel {
@@ -911,6 +915,9 @@ impl Component for EditorPanel {
                 advanced_tools::AdvancedToolsOutput::ExportMpsClicked => {
                     EditorInput::ExportMpsClicked
                 }
+                advanced_tools::AdvancedToolsOutput::CompactIdsClicked => {
+                    EditorInput::CompactIdsClicked
+                }
             },
         );
 
@@ -953,6 +960,13 @@ impl Component for EditorPanel {
                 warning_save_ids::DialogOutput::Cancel => EditorInput::CancelSaveCompaction,
             });
 
+        let warning_compact_ids_dialog = warning_compact_ids::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                warning_compact_ids::DialogOutput::Compact => EditorInput::CompactIds,
+            });
+
         let pages_names = PanelNumbers::iter().map(|x| x.panel_name()).collect();
         let pages_titles_map =
             BTreeMap::from_iter(PanelNumbers::iter().map(|x| (x.panel_name(), x.panel_title())));
@@ -989,6 +1003,7 @@ impl Component for EditorPanel {
             run_python_script_dialog,
             warning_op_dialog,
             warning_save_ids_dialog,
+            warning_compact_ids_dialog,
         };
         let widgets = view_output!();
 
@@ -1124,6 +1139,28 @@ impl Component for EditorPanel {
             }
             EditorInput::CancelSaveCompaction => {
                 self.save_pending_compaction = None;
+            }
+            EditorInput::CompactIdsClicked => {
+                self.warning_compact_ids_dialog
+                    .sender()
+                    .send(warning_compact_ids::DialogInput::Show)
+                    .unwrap();
+            }
+            EditorInput::CompactIds => {
+                // The same replacement CompactAndSave does, without the save.
+                // Rebuilding Data resets the id issuer to just above the new
+                // dense ids, which is what condemns the history: its entries
+                // hold ids the issuer would hand out again. The dialog warned.
+                let compacted = self.data.get_data().get_inner_data().clone().compact_ids();
+                let data = Data::from_inner_data(compacted).expect("compaction preserves validity");
+                self.update_data(DataUpdate::Replace(AppState::new(data)));
+                // Nothing was written, so the document and the file now differ.
+                self.dirty = true;
+                self.toast_info = Some(ToastInfo::Toast {
+                    text: "Identifiants compactés.".into(),
+                    timeout: DEFAULT_TOAST_TIMEOUT,
+                });
+                self.send_msg_for_interface_update(sender);
             }
             EditorInput::UndoClicked => {
                 if self.data.can_undo() {
