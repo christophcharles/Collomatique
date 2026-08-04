@@ -18,7 +18,7 @@ mod json;
 pub use decode::{Caveat, DecodeError, IdKind, RowKey};
 pub use json::{CURRENT_SPEC_VERSION, Version};
 
-use collomatique_state_colloscopes::{Data, InnerData};
+use collomatique_state_colloscopes::InnerData;
 use std::collections::BTreeSet;
 use std::io;
 use std::path::Path;
@@ -123,7 +123,7 @@ pub fn deserialize_data(
 
 /// Error type when encoding data into a file
 ///
-/// A valid [Data] is almost always writable — the one thing the file
+/// A valid [InnerData] is almost always writable — the one thing the file
 /// format forbids and the in-memory model does not is an id above the
 /// format's ceiling.
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -140,7 +140,7 @@ pub enum EncodeError {
 
 /// Serialize the content of a colloscope file
 ///
-/// This function takes an in-memory [Data] representation
+/// This function takes a raw in-memory [InnerData] representation
 /// and serialize it into the content of a colloscope file
 /// represented as a UTF-8 string. The file is written in the
 /// current (spec-2) format.
@@ -151,7 +151,7 @@ pub enum EncodeError {
 /// [collomatique_state_colloscopes::InnerData::compact_ids], which
 /// renumbers the document densely: this crate writes documents as they
 /// are and never renumbers them itself.
-pub fn serialize_data(data: &Data) -> Result<String, EncodeError> {
+pub fn serialize_data(data: &InnerData) -> Result<String, EncodeError> {
     let document = encode::spec2::encode(data)?;
     Ok(serde_json::to_string_pretty(&document).expect("Serializing to JSON should not fail"))
 }
@@ -202,7 +202,7 @@ pub enum SaveError {
     Encode(#[from] EncodeError),
 }
 
-/// Save [Data] to a file
+/// Save an [InnerData] to a file
 ///
 /// No checks are done on the existence of the file. If the file
 /// exists it will be overwritten. If it doesn't, it will be created.
@@ -213,7 +213,7 @@ pub enum SaveError {
 /// ([SaveError::Encode]).
 ///
 /// This is a convenience function encapsulating [serialize_data].
-pub async fn save_data_to_file(data: &Data, file_path: &Path) -> Result<(), SaveError> {
+pub async fn save_data_to_file(data: &InnerData, file_path: &Path) -> Result<(), SaveError> {
     use tokio::fs;
     let content = serialize_data(data)?;
     fs::write(file_path, content.as_bytes()).await?;

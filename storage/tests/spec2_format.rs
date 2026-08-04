@@ -128,7 +128,7 @@ fn blank_data_serializes_to_zero_blocks() {
     // ExportConfig).
     let data = collomatique_state_colloscopes::Data::new();
 
-    let content = serialize_data(&data).expect("Data should be writable");
+    let content = serialize_data(data.get_inner_data()).expect("Data should be writable");
     let value: serde_json::Value =
         serde_json::from_str(&content).expect("Serialized data should be valid JSON");
     assert_eq!(value["entries"], serde_json::json!([]));
@@ -336,7 +336,8 @@ fn spec_complete_example_decodes_and_reserializes_identically() {
     // displays records more compactly than our pretty-printer does);
     // byte determinism itself is pinned just below and by
     // `populated_round_trip::reserialize_is_stable`.
-    let reserialized = serialize_data(&data).expect("The example should be writable");
+    let reserialized =
+        serialize_data(data.get_inner_data()).expect("The example should be writable");
     let expected: serde_json::Value = serde_json::from_str(SPEC_COMPLETE_EXAMPLE).unwrap();
     let actual: serde_json::Value = serde_json::from_str(&reserialized).unwrap();
     assert_eq!(actual, expected);
@@ -347,7 +348,7 @@ fn spec_complete_example_decodes_and_reserializes_identically() {
     let decoded_again = gate(decoded_again);
     assert_eq!(decoded_again, data);
     assert_eq!(
-        serialize_data(&decoded_again).expect("The example should be writable"),
+        serialize_data(decoded_again.get_inner_data()).expect("The example should be writable"),
         reserialized
     );
 }
@@ -669,8 +670,9 @@ fn neutral_rows_decode_identically_to_their_absence() {
 
     // And the canonical form of both omits the neutral rows
     assert_eq!(
-        serialize_data(&bare_data).expect("The bare document should be writable"),
-        serialize_data(&redundant_data).expect("The redundant document should be writable")
+        serialize_data(bare_data.get_inner_data()).expect("The bare document should be writable"),
+        serialize_data(redundant_data.get_inner_data())
+            .expect("The redundant document should be writable")
     );
 }
 

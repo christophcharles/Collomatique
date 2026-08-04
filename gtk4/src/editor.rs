@@ -1022,7 +1022,7 @@ impl Component for EditorPanel {
                 });
             }
             EditorInput::SaveCurrentFileAs(path) => {
-                let data_copy = self.data.get_data().clone();
+                let data_copy = self.data.get_data().get_inner_data().clone();
                 self.dirty = false;
                 // A successful save graduates any state to a clean file.
                 self.file_name = FileName::OkFile(path.clone());

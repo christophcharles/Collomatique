@@ -62,7 +62,8 @@ fn a_document_at_the_ceiling_is_written_back() {
     assert!(caveats.is_empty());
     let data = gate(inner);
 
-    let serialized = serialize_data(&data).expect("A document at the ceiling should be writable");
+    let serialized = serialize_data(data.get_inner_data())
+        .expect("A document at the ceiling should be writable");
     assert!(serialized.contains(&(u64::MAX >> 1).to_string()));
 
     let (decoded, _caveats) =
@@ -88,7 +89,7 @@ fn one_edit_past_the_ceiling_makes_the_document_unwritable() {
     assert!(matches!(result, Ok(Some(NewId::StudentId(_)))));
 
     assert_eq!(
-        serialize_data(state.get_data()),
+        serialize_data(state.get_data().get_inner_data()),
         Err(EncodeError::IdAboveCeiling { id: 1 << 63 })
     );
 }
@@ -109,20 +110,21 @@ fn a_document_past_the_ceiling_is_rescued_by_compacting() {
     );
     assert!(matches!(result, Ok(Some(NewId::StudentId(_)))));
     assert_eq!(
-        serialize_data(state.get_data()),
+        serialize_data(state.get_data().get_inner_data()),
         Err(EncodeError::IdAboveCeiling { id: 1 << 63 })
     );
 
     let compacted = state.get_data().get_inner_data().clone().compact_ids();
-    let compacted = Data::from_inner_data(compacted).expect("Compaction preserves the invariants");
     let rescued = serialize_data(&compacted).expect("Compacted ids fit the format");
 
     // The rescued file is an ordinary document: it reloads cleanly and
-    // reserializes identically, with no special handling anywhere.
+    // reserializes identically, with no special handling anywhere. The
+    // gate call also proves the compacted document is still valid.
     let (reloaded, caveats) = deserialize_data(&rescued).expect("The rescued file should decode");
     assert!(caveats.is_empty());
+    let reloaded = gate(reloaded);
     assert_eq!(
-        serialize_data(&gate(reloaded)).expect("Writable again"),
+        serialize_data(reloaded.get_inner_data()).expect("Writable again"),
         rescued
     );
 }

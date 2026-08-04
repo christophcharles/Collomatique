@@ -1,7 +1,7 @@
 //! Json submodule
 //!
 //! This module defines the various types matching the JSON representation
-//! of [collomatique_state_colloscopes::Data].
+//! of [collomatique_state_colloscopes::InnerData].
 //!
 //! Reading goes through [RawJsonData], whose entry payloads stay raw so
 //! that the spec-version check and the block-name tolerance rules can run

@@ -91,7 +91,7 @@ fn spec_2_document_decodes_cleanly() {
 
     // The spec-2 writer must not emit any InnerDataDump entry, and its
     // documents must decode without caveats.
-    let content = serialize_data(&data).expect("Data should be writable");
+    let content = serialize_data(data.get_inner_data()).expect("Data should be writable");
     assert!(!content.contains("InnerDataDump"));
 
     let (decoded, caveats) = deserialize_data(&content).expect("Spec-2 document should decode");

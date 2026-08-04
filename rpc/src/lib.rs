@@ -70,8 +70,10 @@ pub struct InternalDataStream {
 //
 // The conversion is `To`/`From Data` (not `InnerData`) on purpose: `Data`
 // carries the "is valid" invariant, whereas an arbitrary `InnerData` is not
-// guaranteed to be a valid document. The storage layer works on `InnerData`,
-// so the read direction runs the invariant gate itself; it only ever sees
+// guaranteed to be a valid document, and only valid documents should cross a
+// process boundary. The storage layer itself works on `InnerData`, so both
+// directions bridge explicitly: the write direction hands it the inner
+// document, and the read direction runs the invariant gate. It only ever sees
 // documents this very writer produced, so a rejection would be a bug and is
 // treated as one. Writing a valid document can still fail on one thing the
 // model allows and the file format does not — an id above the format's
@@ -80,7 +82,7 @@ pub struct InternalDataStream {
 impl From<&collomatique_state_colloscopes::Data> for InternalDataStream {
     fn from(value: &collomatique_state_colloscopes::Data) -> Self {
         InternalDataStream {
-            serialized: collomatique_storage::serialize_data(value)
+            serialized: collomatique_storage::serialize_data(value.get_inner_data())
                 .expect("document ids exceed the file-format ceiling"),
         }
     }

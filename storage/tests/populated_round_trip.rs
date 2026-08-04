@@ -30,7 +30,7 @@ fn gate(inner: collomatique_state_colloscopes::InnerData) -> collomatique_state_
 fn round_trip_identity() {
     let data = builder::build_rich_data();
 
-    let serialized = serialize_data(&data).expect("Data should be writable");
+    let serialized = serialize_data(data.get_inner_data()).expect("Data should be writable");
     let (decoded, caveats) =
         deserialize_data(&serialized).expect("Serialized data should deserialize");
 
@@ -40,7 +40,7 @@ fn round_trip_identity() {
     // is therefore byte-level: re-encoding the decoded state reproduces the
     // original document exactly.
     assert_eq!(
-        serialize_data(&gate(decoded)).expect("Decoded data should be writable"),
+        serialize_data(gate(decoded).get_inner_data()).expect("Decoded data should be writable"),
         serialized
     );
     assert!(caveats.is_empty());
@@ -51,12 +51,12 @@ fn reserialize_is_stable() {
     // Pins the canonical-form guarantee: one state, one byte sequence
     let data = builder::build_rich_data();
 
-    let serialized = serialize_data(&data).expect("Data should be writable");
+    let serialized = serialize_data(data.get_inner_data()).expect("Data should be writable");
     let (decoded, _caveats) =
         deserialize_data(&serialized).expect("Serialized data should deserialize");
 
     assert_eq!(
-        serialize_data(&gate(decoded)).expect("Decoded data should be writable"),
+        serialize_data(gate(decoded).get_inner_data()).expect("Decoded data should be writable"),
         serialized
     );
 }
@@ -100,7 +100,8 @@ fn writer_output_matches_the_golden_fixture() {
     //         -- --ignored regenerate_golden_fixture
     // and read the resulting diff before committing it. A diff nobody
     // intended is this test doing its job.
-    let serialized = serialize_data(&builder::build_rich_data()).expect("Data should be writable");
+    let serialized = serialize_data(builder::build_rich_data().get_inner_data())
+        .expect("Data should be writable");
 
     assert_eq!(mask_version(&serialized), mask_version(GOLDEN));
 }
@@ -110,7 +111,8 @@ fn writer_output_matches_the_golden_fixture() {
 fn regenerate_golden_fixture() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/spec2_populated_golden.json");
-    let serialized = serialize_data(&builder::build_rich_data()).expect("Data should be writable");
+    let serialized = serialize_data(builder::build_rich_data().get_inner_data())
+        .expect("Data should be writable");
     std::fs::write(&path, serialized).expect("The fixture should be writable");
 }
 
@@ -118,7 +120,7 @@ fn regenerate_golden_fixture() {
 fn deserialized_data_is_still_editable() {
     let data = builder::build_rich_data();
 
-    let serialized = serialize_data(&data).expect("Data should be writable");
+    let serialized = serialize_data(data.get_inner_data()).expect("Data should be writable");
     let (decoded, _caveats) =
         deserialize_data(&serialized).expect("Serialized data should deserialize");
 

@@ -1,6 +1,6 @@
 //! Spec-2 encode submodule
 //!
-//! This module builds a [json::Spec2Document] from a [Data], in the
+//! This module builds a [json::Spec2Document] from an [InnerData], in the
 //! spec's canonical form (`docs/file_format.md` §3): blocks in default
 //! state and neutral entries of derived-key-set collections are
 //! omitted, blocks appear in canonical order, and unordered collections
@@ -11,13 +11,12 @@ use crate::format;
 use crate::json::{Spec2Document, Spec2Entry};
 
 use collomatique_state_colloscopes as mem;
-use collomatique_state_colloscopes::Data;
+use collomatique_state_colloscopes::InnerData;
 use mem::ids::Id;
 
 use std::collections::BTreeSet;
 
-pub fn encode(data: &Data) -> Result<Spec2Document, EncodeError> {
-    let inner = data.get_inner_data();
+pub fn encode(inner: &InnerData) -> Result<Spec2Document, EncodeError> {
     let params = &inner.params;
 
     // The whole document is built first, then checked, then written out:
