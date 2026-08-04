@@ -70,7 +70,7 @@ impl SimpleComponent for Dialog {
                 },
 
                 gtk::Label {
-                    set_label: "Le compactage renumérote tous les identifiants internes puis enregistre le fichier. Le contenu du colloscope (matières, colleurs, élèves, créneaux…) n'est pas modifié.",
+                    set_label: "Le compactage renumérote tous les identifiants internes du document, puis l'enregistre. Le contenu du colloscope (matières, colleurs, élèves, créneaux…) n'est pas modifié, mais l'historique des modifications (annuler/rétablir) est perdu.",
                     set_wrap: true,
                     set_halign: gtk::Align::Start,
                 },
@@ -91,6 +91,7 @@ impl SimpleComponent for Dialog {
                     gtk::Button {
                         set_size_request: (200, 40),
                         set_label: "Compacter et enregistrer",
+                        add_css_class: "warning",
                         connect_clicked[sender] => move |_| {
                             sender.input(DialogInput::Compact);
                         },

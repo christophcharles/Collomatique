@@ -1087,14 +1087,19 @@ impl Component for EditorPanel {
             }
             EditorInput::CompactAndSave => {
                 if let Some((path, inner_data)) = self.save_pending_compaction.take() {
-                    // Compaction renumbers every id densely from 0; the
-                    // result always fits the format. Only the file gets
-                    // the new ids — the in-memory document (and its undo
-                    // history) is untouched.
-                    sender.input(EditorInput::SaveCheckedFileAs(
-                        path,
-                        inner_data.compact_ids(),
-                    ));
+                    // Compaction renumbers every id densely from 0, so the
+                    // result always fits the format. The compacted document
+                    // replaces the current one: what is saved and what is
+                    // being edited stay the same thing. Rebuilding Data
+                    // resets the id issuer to just above the new dense ids
+                    // — which is why the undo/redo history cannot survive:
+                    // its entries hold ids the reset issuer would hand out
+                    // again. The dialog warned about exactly this.
+                    let compacted = inner_data.compact_ids();
+                    let data = Data::from_inner_data(compacted.clone())
+                        .expect("compaction preserves validity");
+                    self.update_data(DataUpdate::Replace(AppState::new(data)));
+                    sender.input(EditorInput::SaveCheckedFileAs(path, compacted));
                 }
             }
             EditorInput::CancelSaveCompaction => {
