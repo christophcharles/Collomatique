@@ -3,8 +3,8 @@
 //! This crate implements storage of the colloscopes data into a (JSON) file
 //!
 //! This crate provides two main utility functions: [deserialize_data] and [serialize_data].
-//! Their goal is to allow translation of the in-memory data described in
-//! [collomatique_state_colloscopes::Data] and a in-file representation.
+//! Their goal is to allow translation of the raw in-memory document
+//! [collomatique_state_colloscopes::InnerData] and a in-file representation.
 //!
 //! The actual representation is done in JSON. [deserialize_data] and [serialize_data] do
 //! not actually handle reading and writing from a file. You can use [load_data_from_file]
@@ -18,7 +18,7 @@ mod json;
 pub use decode::{Caveat, DecodeError, IdKind, RowKey};
 pub use json::{CURRENT_SPEC_VERSION, Version};
 
-use collomatique_state_colloscopes::Data;
+use collomatique_state_colloscopes::{Data, InnerData};
 use std::collections::BTreeSet;
 use std::io;
 use std::path::Path;
@@ -82,17 +82,25 @@ fn reject_retired_or_invalid_spec_versions(
 /// Deserialize the content of a colloscope file
 ///
 /// This function takes the content of a colloscope file
-/// represented as a UTF8-string and deserialize it into a valid
-/// in-memory [Data] representation.
+/// represented as a UTF8-string and deserialize it into an
+/// in-memory [InnerData] representation.
 ///
 /// This can fail for numerous reasons, described by [DeserializationError].
 ///
 /// Even in case of success, the deserialization might only be partial. This
 /// can happen for instance if we try to open a file from a newer version
 /// of Collomatique. The type [Caveat] list possible issues in this situation.
+///
+/// The returned document is checked against every constraint of the file
+/// format, so it should also satisfy the in-memory invariants — the test
+/// suite enforces that the decoder and the invariant gate agree. The type
+/// does not prove it, however: callers that need a
+/// [collomatique_state_colloscopes::Data] apply
+/// [collomatique_state_colloscopes::Data::from_inner_data] themselves and
+/// own the (theoretically unreachable) rejection path.
 pub fn deserialize_data(
     file_content: &str,
-) -> Result<(Data, BTreeSet<Caveat>), DeserializationError> {
+) -> Result<(InnerData, BTreeSet<Caveat>), DeserializationError> {
     let raw_data = serde_json::from_str::<json::RawJsonData>(file_content)?;
 
     // The header check is path-independent: it must run before the
@@ -105,12 +113,12 @@ pub fn deserialize_data(
     // before any payload interpretation. Everything else is spec 2 or later.
     reject_retired_or_invalid_spec_versions(&raw_data.entries)?;
 
-    let data = decode::spec2::decode(
+    let inner_data = decode::spec2::decode(
         &raw_data.entries,
         &raw_data.header.produced_with_version,
         &mut caveats,
     )?;
-    Ok((data, caveats))
+    Ok((inner_data, caveats))
 }
 
 /// Error type when encoding data into a file
@@ -164,14 +172,17 @@ pub enum LoadError {
     Deserialization(#[from] DeserializationError),
 }
 
-/// Load [Data] from an existing file
+/// Load an [InnerData] from an existing file
 ///
-/// This is a convenience function encapsulating [deserialize_data].
+/// This is a convenience function encapsulating [deserialize_data], and
+/// it carries the same contract about the in-memory invariants.
 ///
 /// Even in case of success, the deserialization might only be partial. This
 /// can happen for instance if we try to open a file from a newer version
 /// of Collomatique. The type [Caveat] list possible issues in this situation.
-pub async fn load_data_from_file(file_path: &Path) -> Result<(Data, BTreeSet<Caveat>), LoadError> {
+pub async fn load_data_from_file(
+    file_path: &Path,
+) -> Result<(InnerData, BTreeSet<Caveat>), LoadError> {
     use tokio::fs;
     let content = fs::read_to_string(file_path).await?;
     Ok(deserialize_data(&content)?)

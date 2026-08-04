@@ -28,6 +28,17 @@ fn entry(content: &str) -> String {
     )
 }
 
+/// Runs the in-memory invariant gate on a decoded document
+///
+/// The decoder returns a raw [InnerData](collomatique_state_colloscopes::InnerData)
+/// and diagnoses every constraint of the file format itself, so this is
+/// expected to always succeed — holding it to that is exactly why the
+/// tests below call it.
+fn gate(inner: collomatique_state_colloscopes::InnerData) -> collomatique_state_colloscopes::Data {
+    collomatique_state_colloscopes::Data::from_inner_data(inner)
+        .expect("decoded documents must pass the invariant gate")
+}
+
 fn expect_decode_error(content: &str) -> DecodeError {
     let error = deserialize_data(content).expect_err("Document should be rejected");
     let DeserializationError::Decode(decode_error) = error else {
@@ -123,7 +134,7 @@ fn blank_data_serializes_to_zero_blocks() {
     assert_eq!(value["entries"], serde_json::json!([]));
 
     let (decoded, caveats) = deserialize_data(&content).expect("Blank document should decode");
-    assert_eq!(decoded, data);
+    assert_eq!(gate(decoded), data);
     assert!(caveats.is_empty());
 }
 
@@ -315,9 +326,10 @@ const SPEC_COMPLETE_EXAMPLE: &str = r#"{
 
 #[test]
 fn spec_complete_example_decodes_and_reserializes_identically() {
-    let (data, caveats) =
+    let (inner, caveats) =
         deserialize_data(SPEC_COMPLETE_EXAMPLE).expect("The spec §6 example should decode");
     assert!(caveats.is_empty());
+    let data = gate(inner);
 
     // The example is in canonical form, so re-serializing must produce
     // the same document. The comparison is on JSON values (the doc
@@ -332,6 +344,7 @@ fn spec_complete_example_decodes_and_reserializes_identically() {
     // Byte stability of the writer's own output
     let (decoded_again, _caveats) =
         deserialize_data(&reserialized).expect("Reserialized document should decode");
+    let decoded_again = gate(decoded_again);
     assert_eq!(decoded_again, data);
     assert_eq!(
         serialize_data(&decoded_again).expect("The example should be writable"),
@@ -623,8 +636,9 @@ fn derived_key_sets_are_completed() {
     ];
     let content = document(&entries);
 
-    let (data, caveats) = deserialize_data(&content).expect("Document should decode");
+    let (inner, caveats) = deserialize_data(&content).expect("Document should decode");
     assert!(caveats.is_empty());
+    let data = gate(inner);
 
     let params = &data.get_inner_data().params;
     assert_eq!(params.assignments.map.len(), 0);
@@ -649,6 +663,8 @@ fn neutral_rows_decode_identically_to_their_absence() {
     let (bare_data, _caveats) = deserialize_data(&bare).expect("Bare document should decode");
     let (redundant_data, _caveats) =
         deserialize_data(&redundant).expect("Redundant document should decode");
+    let bare_data = gate(bare_data);
+    let redundant_data = gate(redundant_data);
     assert_eq!(bare_data, redundant_data);
 
     // And the canonical form of both omits the neutral rows
@@ -994,8 +1010,9 @@ fn object_id_exactly_at_the_ceiling_is_accepted() {
         u64::MAX >> 1
     ))]);
 
-    let (_data, caveats) = deserialize_data(&content).expect("boundary id should decode");
+    let (inner, caveats) = deserialize_data(&content).expect("boundary id should decode");
     assert!(caveats.is_empty());
+    gate(inner);
 }
 
 #[test]
@@ -1008,10 +1025,14 @@ fn an_id_at_the_ceiling_next_to_a_week_is_accepted() {
     // decoder minted them *above* every id the file defines, the week here
     // got 2^63, one past the ceiling: nothing in the decoder objected —
     // the id it built is not one the file wrote — but the in-memory id
-    // issuer refused to resume from it, and the "decoder bug" panic fired
-    // on a file that is not broken at all. Week ids now fill the holes of
-    // the id space from the bottom, so the week gets id 0 and the document
-    // decodes.
+    // issuer refused to resume from it, and decoding a file that is not
+    // broken at all failed. Week ids now fill the holes of the id space
+    // from the bottom, so the week gets id 0 and the document decodes.
+    //
+    // The failure lives in the id issuer, which is built by the invariant
+    // gate — the decoder itself never looks at it. So the `gate` call
+    // below is the point of this test, not a formality: without it the
+    // test passes no matter where the week ids land.
     let content = document(&[entry(&format!(
         r#"{{ "GeneralPlanning": {{
             "first_week": null,
@@ -1022,8 +1043,9 @@ fn an_id_at_the_ceiling_next_to_a_week_is_accepted() {
         u64::MAX >> 1
     ))]);
 
-    let (_data, caveats) = deserialize_data(&content).expect("boundary id should decode");
+    let (inner, caveats) = deserialize_data(&content).expect("boundary id should decode");
     assert!(caveats.is_empty());
+    gate(inner);
 }
 
 #[test]

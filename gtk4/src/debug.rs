@@ -76,8 +76,7 @@ pub fn run(mode: DebugMode, file: PathBuf) -> Result<(), anyhow::Error> {
 
         let t = Instant::now();
         eprintln!("Loading file: {:?}", file);
-        let (data, _caveats) = collomatique_storage::load_data_from_file(&file).await?;
-        let inner_data = data.get_inner_data().clone();
+        let (inner_data, _caveats) = collomatique_storage::load_data_from_file(&file).await?;
         eprintln!("  File loaded in {:.2?}", t.elapsed());
 
         eprintln!("Building ILP model...");

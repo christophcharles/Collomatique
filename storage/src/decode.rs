@@ -1,6 +1,7 @@
 //! Decode submodule
 //!
-//! This module contains the logic that builds a [Data] from a file
+//! This module contains the logic that builds an
+//! [InnerData](collomatique_state_colloscopes::InnerData) from a file
 //! document via [spec2::decode], the spec-2 pipeline. (Spec 1, the
 //! pre-alpha dump format, is permanently retired and rejected before
 //! decoding — see the versioning notes in `docs/file_format/file_format.md`.)
@@ -15,15 +16,17 @@
 //! speaks of the model as a whole rather than of a row, is not a reporter
 //! a user could use.
 //!
-//! Decoding still funnels through [Data::from_inner_data], the in-memory
-//! invariant gate, but that call is now a **contract, not a defence**: no
-//! file can reach it in a broken state, so a rejection there means this
-//! crate built an `InnerData` it had no business building. It therefore
-//! panics rather than producing an error — see [spec2::decode]. Keeping
-//! that true is a maintenance obligation, recorded in the module docs of
-//! `collomatique_state_colloscopes::invariants`: a new invariant needs a
-//! decode-time counterpart here and a rejection test in
-//! `storage/tests/spec2_format.rs`.
+//! Because of that, whatever this module decodes should also pass
+//! `collomatique_state_colloscopes::Data::from_inner_data`, the in-memory
+//! invariant gate. That is a **contract, not a defence**: no file can
+//! reach the gate in a broken state, so a rejection there means this
+//! crate built an `InnerData` it had no business building. Decoding no
+//! longer runs the gate itself — the callers that need a `Data` do, and
+//! the storage test suite runs it on everything it decodes so the two
+//! stay in step. Keeping that true is a maintenance obligation, recorded
+//! in the module docs of `collomatique_state_colloscopes::invariants`: a
+//! new invariant needs a decode-time counterpart here and a rejection
+//! test in `storage/tests/spec2_format.rs`.
 //!
 //! Diagnostics ([DecodeError]) distinguish an *unrecognised* block
 //! (handled by the forward-compatibility rules — a [Caveat] or

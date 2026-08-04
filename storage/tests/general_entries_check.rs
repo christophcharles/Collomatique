@@ -30,8 +30,10 @@ fn decode_unknown_unneeded_entry() {
         CURRENT_SPEC_VERSION + 1
     );
 
-    let (data, caveats) =
+    let (inner, caveats) =
         collomatique_storage::deserialize_data(&content).expect("File structure should be valid");
+    let data = collomatique_state_colloscopes::Data::from_inner_data(inner)
+        .expect("decoded documents must pass the invariant gate");
     let expected_data = collomatique_state_colloscopes::Data::new();
     let expected_caveats = BTreeSet::from([Caveat::UnknownEntries]);
 

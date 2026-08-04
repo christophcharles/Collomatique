@@ -95,6 +95,8 @@ fn spec_2_document_decodes_cleanly() {
     assert!(!content.contains("InnerDataDump"));
 
     let (decoded, caveats) = deserialize_data(&content).expect("Spec-2 document should decode");
+    let decoded = collomatique_state_colloscopes::Data::from_inner_data(decoded)
+        .expect("decoded documents must pass the invariant gate");
     assert_eq!(decoded, data);
     assert!(caveats.is_empty());
 }

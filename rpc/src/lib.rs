@@ -70,10 +70,13 @@ pub struct InternalDataStream {
 //
 // The conversion is `To`/`From Data` (not `InnerData`) on purpose: `Data`
 // carries the "is valid" invariant, whereas an arbitrary `InnerData` is not
-// guaranteed to be a valid document. Writing a valid document can still fail
-// on one thing the model allows and the file format does not — an id above
-// the format's ceiling — which this panics on for now, like every other
-// consumer of the writer.
+// guaranteed to be a valid document. The storage layer works on `InnerData`,
+// so the read direction runs the invariant gate itself; it only ever sees
+// documents this very writer produced, so a rejection would be a bug and is
+// treated as one. Writing a valid document can still fail on one thing the
+// model allows and the file format does not — an id above the format's
+// ceiling — which this panics on for now, like every other consumer of the
+// writer.
 impl From<&collomatique_state_colloscopes::Data> for InternalDataStream {
     fn from(value: &collomatique_state_colloscopes::Data) -> Self {
         InternalDataStream {
@@ -87,9 +90,10 @@ impl From<InternalDataStream> for collomatique_state_colloscopes::Data {
     fn from(value: InternalDataStream) -> Self {
         // Round-tripping our own writer's output must always succeed; any
         // caveats only arise for foreign or newer-version files, never here.
-        let (data, _caveats) = collomatique_storage::deserialize_data(&value.serialized)
+        let (inner_data, _caveats) = collomatique_storage::deserialize_data(&value.serialized)
             .expect("data from our own data stream should always be deserializable");
-        data
+        collomatique_state_colloscopes::Data::from_inner_data(inner_data)
+            .expect("our own writer only serializes valid documents")
     }
 }
 

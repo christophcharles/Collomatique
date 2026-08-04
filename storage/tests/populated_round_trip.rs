@@ -15,6 +15,17 @@ use collomatique_state::{AppState, traits::Manager};
 use collomatique_state_colloscopes::{NewId, Op, StudentOp, students::Student};
 use collomatique_storage::{deserialize_data, serialize_data};
 
+/// Runs the in-memory invariant gate on a decoded document
+///
+/// The decoder returns a raw [InnerData](collomatique_state_colloscopes::InnerData)
+/// and diagnoses every constraint of the file format itself, so this is
+/// expected to always succeed — holding it to that is exactly why the
+/// tests below call it.
+fn gate(inner: collomatique_state_colloscopes::InnerData) -> collomatique_state_colloscopes::Data {
+    collomatique_state_colloscopes::Data::from_inner_data(inner)
+        .expect("decoded documents must pass the invariant gate")
+}
+
 #[test]
 fn round_trip_identity() {
     let data = builder::build_rich_data();
@@ -29,7 +40,7 @@ fn round_trip_identity() {
     // is therefore byte-level: re-encoding the decoded state reproduces the
     // original document exactly.
     assert_eq!(
-        serialize_data(&decoded).expect("Decoded data should be writable"),
+        serialize_data(&gate(decoded)).expect("Decoded data should be writable"),
         serialized
     );
     assert!(caveats.is_empty());
@@ -45,7 +56,7 @@ fn reserialize_is_stable() {
         deserialize_data(&serialized).expect("Serialized data should deserialize");
 
     assert_eq!(
-        serialize_data(&decoded).expect("Decoded data should be writable"),
+        serialize_data(&gate(decoded)).expect("Decoded data should be writable"),
         serialized
     );
 }
@@ -113,7 +124,7 @@ fn deserialized_data_is_still_editable() {
 
     // The rebuilt IdIssuer must issue fresh ids that do not collide
     // with the ids already present in the loaded document
-    let mut state = AppState::<_, String>::new(decoded);
+    let mut state = AppState::<_, String>::new(gate(decoded));
     let result = state.apply(
         Op::Student(StudentOp::Add(Student::default())),
         "Add a student after reload".to_string(),

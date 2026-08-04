@@ -16,7 +16,9 @@ fn decode_empty_file_with_correct_header() {
     "entries": []
 }"#;
 
-    let (data, caveats) = deserialize_data(content).expect("Empty file should be valid");
+    let (inner, caveats) = deserialize_data(content).expect("Empty file should be valid");
+    let data = collomatique_state_colloscopes::Data::from_inner_data(inner)
+        .expect("decoded documents must pass the invariant gate");
 
     let expected_data = collomatique_state_colloscopes::Data::new();
     let expected_caveats = BTreeSet::new();

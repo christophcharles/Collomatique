@@ -69,8 +69,8 @@ fn subjects_with_penalty(model: &ColloscopeModel) -> BTreeSet<SubjectId> {
 /// hard rule subsumes the objective, so that subject must get no penalty.
 #[test]
 fn window_objective_emitted_iff_subject_has_several_teachers() {
-    let (data, _caveats) = deserialize_data(WINDOW_FIXTURE).expect("fixture should decode");
-    let params = &data.get_inner_data().params;
+    let (inner, _caveats) = deserialize_data(WINDOW_FIXTURE).expect("fixture should decode");
+    let params = &inner.params;
 
     let multi_teacher = multi_teacher_subjects(params);
     let hard: BTreeSet<SubjectId> = multi_teacher
@@ -102,8 +102,8 @@ fn window_objective_emitted_iff_subject_has_several_teachers() {
 /// `IsLastTeacherSeen` chain is what produces the penalty here.
 #[test]
 fn recursive_objective_emitted_for_multi_teacher_amount_in_year_subject() {
-    let (data, _caveats) = deserialize_data(RECURSIVE_FIXTURE).expect("fixture should decode");
-    let params = &data.get_inner_data().params;
+    let (inner, _caveats) = deserialize_data(RECURSIVE_FIXTURE).expect("fixture should decode");
+    let params = &inner.params;
 
     // Fixture invariant: subject "A" has two teachers, subject "B" one.
     let expected = multi_teacher_subjects(params);

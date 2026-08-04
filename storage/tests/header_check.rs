@@ -142,8 +142,10 @@ fn decode_more_recent_file() {
         new_version.major, new_version.minor, new_version.patch
     );
 
-    let (data, caveats) = collomatique_storage::deserialize_data(&content)
+    let (inner, caveats) = collomatique_storage::deserialize_data(&content)
         .expect("Too recent version should not lead to invalid decoding");
+    let data = collomatique_state_colloscopes::Data::from_inner_data(inner)
+        .expect("decoded documents must pass the invariant gate");
 
     let expected_data = collomatique_state_colloscopes::Data::new();
     let expected_caveats = BTreeSet::from([Caveat::CreatedWithNewerVersion(new_version)]);

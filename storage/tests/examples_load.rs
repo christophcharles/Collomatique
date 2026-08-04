@@ -5,6 +5,11 @@
 //! signal forward-compatibility concerns (opening a file produced by a newer
 //! Collomatique version); a shipped example should never trip one.
 //!
+//! Each example also goes through the in-memory invariant gate. The decoder
+//! returns a raw document and diagnoses the file format's constraints on its
+//! own, so passing the gate is expected — this is where whole-document
+//! agreement between the two is checked on real files.
+//!
 //! The directory is walked at runtime, so adding a new `.collomatique` example
 //! is covered automatically with no edit here.
 
@@ -41,11 +46,13 @@ fn all_examples_load_pristine() {
         let name = path.display();
         let content =
             std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("cannot read {name}: {e}"));
-        let (_data, caveats) =
+        let (inner, caveats) =
             deserialize_data(&content).unwrap_or_else(|e| panic!("failed to load {name}: {e}"));
         assert!(
             caveats.is_empty(),
             "{name} is not pristine: loaded with caveats {caveats:?}"
         );
+        collomatique_state_colloscopes::Data::from_inner_data(inner)
+            .unwrap_or_else(|e| panic!("{name} does not pass the invariant gate: {e}"));
     }
 }

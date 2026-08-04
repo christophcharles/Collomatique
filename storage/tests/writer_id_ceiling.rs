@@ -10,6 +10,16 @@ use collomatique_state::{AppState, traits::Manager};
 use collomatique_state_colloscopes::{Data, NewId, Op, StudentOp, students::Student};
 use collomatique_storage::*;
 
+/// Runs the in-memory invariant gate on a decoded document
+///
+/// The decoder returns a raw [InnerData](collomatique_state_colloscopes::InnerData)
+/// and diagnoses every constraint of the file format itself, so this is
+/// expected to always succeed — holding it to that is exactly why the
+/// tests below call it.
+fn gate(inner: collomatique_state_colloscopes::InnerData) -> Data {
+    Data::from_inner_data(inner).expect("decoded documents must pass the invariant gate")
+}
+
 fn document(entries: &[String]) -> String {
     format!(
         r#"{{
@@ -48,15 +58,16 @@ fn a_document_at_the_ceiling_is_written_back() {
     // file is the same one it came from. This is the writer-side twin of
     // the decoder's `object_id_exactly_at_the_ceiling_is_accepted`.
     let content = document_at_the_ceiling();
-    let (data, caveats) = deserialize_data(&content).expect("A boundary document should decode");
+    let (inner, caveats) = deserialize_data(&content).expect("A boundary document should decode");
     assert!(caveats.is_empty());
+    let data = gate(inner);
 
     let serialized = serialize_data(&data).expect("A document at the ceiling should be writable");
     assert!(serialized.contains(&(u64::MAX >> 1).to_string()));
 
     let (decoded, _caveats) =
         deserialize_data(&serialized).expect("The written document should decode");
-    assert_eq!(decoded, data);
+    assert_eq!(gate(decoded), data);
 }
 
 #[test]
@@ -67,9 +78,9 @@ fn one_edit_past_the_ceiling_makes_the_document_unwritable() {
     // the writer produced that file silently, and no reader would take
     // it back.
     let content = document_at_the_ceiling();
-    let (data, _caveats) = deserialize_data(&content).expect("A boundary document should decode");
+    let (inner, _caveats) = deserialize_data(&content).expect("A boundary document should decode");
 
-    let mut state = AppState::<_, String>::new(data);
+    let mut state = AppState::<_, String>::new(gate(inner));
     let result = state.apply(
         Op::Student(StudentOp::Add(Student::default())),
         "Add one student past the ceiling".to_string(),
@@ -89,9 +100,9 @@ fn a_document_past_the_ceiling_is_rescued_by_compacting() {
     // the document, taken by whoever owns it, and it always suffices:
     // renumbered densely, these two entities need the ids 0 and 1.
     let content = document_at_the_ceiling();
-    let (data, _caveats) = deserialize_data(&content).expect("A boundary document should decode");
+    let (inner, _caveats) = deserialize_data(&content).expect("A boundary document should decode");
 
-    let mut state = AppState::<_, String>::new(data);
+    let mut state = AppState::<_, String>::new(gate(inner));
     let result = state.apply(
         Op::Student(StudentOp::Add(Student::default())),
         "Add one student past the ceiling".to_string(),
@@ -110,5 +121,8 @@ fn a_document_past_the_ceiling_is_rescued_by_compacting() {
     // reserializes identically, with no special handling anywhere.
     let (reloaded, caveats) = deserialize_data(&rescued).expect("The rescued file should decode");
     assert!(caveats.is_empty());
-    assert_eq!(serialize_data(&reloaded).expect("Writable again"), rescued);
+    assert_eq!(
+        serialize_data(&gate(reloaded)).expect("Writable again"),
+        rescued
+    );
 }

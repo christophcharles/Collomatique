@@ -29,11 +29,14 @@ fn desc(text: &str) -> Desc {
 
 /// The frozen base document, decoded and wrapped in a blank-history state.
 fn hogwarts() -> AppState<Data, Desc> {
-    let (data, caveats) = deserialize_data(HOGWARTS).expect("the frozen fixture should decode");
+    let (inner_data, caveats) =
+        deserialize_data(HOGWARTS).expect("the frozen fixture should decode");
     assert!(
         caveats.is_empty(),
         "the frozen fixture should decode cleanly, got {caveats:?}"
     );
+    let data = Data::from_inner_data(inner_data)
+        .expect("the frozen fixture should pass the invariant gate");
 
     AppState::new(data)
 }

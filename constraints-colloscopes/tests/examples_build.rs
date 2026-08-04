@@ -39,9 +39,9 @@ fn all_examples_build() {
         let name = path.display();
         let content =
             std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("cannot read {name}: {e}"));
-        let (data, _caveats) =
+        let (inner, _caveats) =
             deserialize_data(&content).unwrap_or_else(|e| panic!("failed to load {name}: {e}"));
         // Panics on internal inconsistency; building without a panic is the check.
-        let _ = build_model(&data.get_inner_data().params);
+        let _ = build_model(&inner.params);
     }
 }

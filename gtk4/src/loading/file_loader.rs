@@ -25,6 +25,13 @@ pub enum FileLoadingCmdOutput {
         BTreeSet<Caveat>,
     ),
     Failed(PathBuf, LoadError),
+    /// The file decoded, but the document it describes does not satisfy
+    /// the in-memory invariants
+    ///
+    /// The decoder diagnoses every constraint of the file format, so this
+    /// should be unreachable: it means a bug in the storage crate. It is
+    /// reported as an unreadable file rather than crashing the interface.
+    GateRejected(PathBuf, collomatique_state_colloscopes::FromInnerDataError),
 }
 
 pub struct FileLoader;
@@ -57,8 +64,17 @@ impl Component for FileLoader {
                 .register(async move {
                     out.send(
                         match collomatique_storage::load_data_from_file(&path).await {
-                            Ok((data, caveats)) => {
-                                FileLoadingCmdOutput::Loaded(path, data, caveats)
+                            Ok((inner_data, caveats)) => {
+                                // The loader returns the raw document; the
+                                // interface works on a Data, so the invariant
+                                // gate runs here, off the main thread with the
+                                // rest of the loading work.
+                                match collomatique_state_colloscopes::Data::from_inner_data(
+                                    inner_data,
+                                ) {
+                                    Ok(data) => FileLoadingCmdOutput::Loaded(path, data, caveats),
+                                    Err(e) => FileLoadingCmdOutput::GateRejected(path, e),
+                                }
                             }
                             Err(e) => FileLoadingCmdOutput::Failed(path, e),
                         },
@@ -83,6 +99,14 @@ impl Component for FileLoader {
             }
             FileLoadingCmdOutput::Failed(path, error) => {
                 let error_msg = Self::generate_error_message(error);
+                sender
+                    .output(FileLoadingOutput::Failed(path, error_msg))
+                    .unwrap();
+            }
+            FileLoadingCmdOutput::GateRejected(path, error) => {
+                let error_msg = format!(
+                    "Le fichier est mal formé et est probablement corrompu.\n(Le document décodé ne satisfait pas les invariants internes : {error})"
+                );
                 sender
                     .output(FileLoadingOutput::Failed(path, error_msg))
                     .unwrap();

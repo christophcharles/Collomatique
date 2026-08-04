@@ -1,21 +1,23 @@
 //! Spec-2 decode submodule
 //!
-//! This module builds a [Data] from the raw entries of a spec-2
-//! document, in three layers:
+//! This module builds an [InnerData] from the raw entries of a spec-2
+//! document, in two layers:
 //!
 //! 1. [collect_blocks]: sort the entries into typed blocks. Unknown
 //!    block names go through the forward-compatibility rules (spec §5);
 //!    known block payloads are parsed with the format structs, which
 //!    enforce every local validity rule.
-//! 2. [reconstruct]: rebuild the in-memory
-//!    [InnerData](collomatique_state_colloscopes::InnerData) from the
-//!    blocks, completing everything the file deliberately omits (absent
-//!    blocks, derived key sets).
-//! 3. [Data::from_inner_data]: the invariant layer. Layer 2 diagnoses
-//!    every constraint of the spec, so nothing broken reaches this
-//!    layer: a rejection here means this crate built an `InnerData` it
-//!    should not have, and [decode] panics on it rather than dressing a
-//!    programming error up as a file error.
+//! 2. [reconstruct]: rebuild the in-memory [InnerData] from the blocks,
+//!    completing everything the file deliberately omits (absent blocks,
+//!    derived key sets).
+//!
+//! Layer 2 diagnoses every constraint of the spec, so the document it
+//! returns should also satisfy the in-memory invariants — the storage
+//! test suite holds this module to that by running
+//! [Data](collomatique_state_colloscopes::Data)`::from_inner_data` on
+//! what it decodes. The type does not prove it: the gate belongs to the
+//! callers that need a `Data`, and they own its (theoretically
+//! unreachable) rejection path.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -26,7 +28,7 @@ use crate::json::{CURRENT_SPEC_VERSION, RawEntry, Version};
 use collomatique_state_colloscopes as mem;
 use mem::ids::Id;
 use mem::{
-    Data, GroupListId, InnerData, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId,
+    GroupListId, InnerData, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId,
     SubjectId, TeacherId, WeekId, WeekPatternId,
 };
 
@@ -39,16 +41,15 @@ pub fn decode(
     entries: &[RawEntry],
     version: &Version,
     caveats: &mut BTreeSet<Caveat>,
-) -> Result<Data, DecodeError> {
+) -> Result<InnerData, DecodeError> {
     let blocks = collect_blocks(entries, version, caveats)?;
-    let inner_data = reconstruct(blocks)?;
     // The decoder has diagnosed every constraint of the spec by now (the
     // id-space rules of §3, and every dangling reference and semantic
-    // condition of §4). A rejection here therefore means this crate built
-    // an InnerData it had no business building — a bug, not a bad file.
-    Ok(Data::from_inner_data(inner_data).unwrap_or_else(|error| {
-        panic!("spec-2 decoder bug: reconstructed an InnerData the invariant gate rejects: {error}")
-    }))
+    // condition of §4), so the document returned here should always pass
+    // the in-memory invariant gate. Running that gate is the caller's
+    // business: whoever needs a Data decides what a rejection — a bug in
+    // this crate, not a bad file — means for them.
+    reconstruct(blocks)
 }
 
 fn store_block<T>(slot: &mut Option<T>, value: T, name: &'static str) -> Result<(), DecodeError> {
@@ -146,8 +147,8 @@ fn collect_blocks(
 /// # Safety of the underlying call
 ///
 /// Building unchecked ids is exactly the decoder's job: uniqueness and
-/// referential validity of every id are checked by layer 3
-/// ([Data::from_inner_data]) on the fully reconstructed data.
+/// referential validity of every id are checked by [reconstruct] on the
+/// fully reconstructed data.
 fn id<I: Id>(value: u64) -> I {
     unsafe { I::new(value) }
 }
