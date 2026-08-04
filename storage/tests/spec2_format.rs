@@ -954,7 +954,7 @@ fn incompatibility_slot_crossing_midnight_is_rejected() {
 
     assert_eq!(
         expect_decode_error(&content),
-        DecodeError::SlotCrossesMidnight
+        DecodeError::IncompatibilitySlotCrossesMidnight { incompat_id: 9 }
     );
 }
 
@@ -1879,6 +1879,530 @@ fn document_with_all_references_resolving_decodes() {
     let (_data, caveats) =
         deserialize_data(&content).expect("Document with resolving references should decode");
     assert!(caveats.is_empty());
+}
+
+// Semantic constraints (spec §4). Beyond existence, several constraints
+// bear on the *state* of a referenced entity (it has interrogations, it
+// runs on the row's period, a number is within its bounds…). Each gets
+// its own per-constraint variant, mirroring its invariant-sweep
+// counterpart so the decoder and the gate agree on semantics. As with
+// the dangling-reference family, each fixture is the smallest document
+// that reaches its check.
+
+/// §4.3: every subject of a teacher has interrogations
+#[test]
+fn teacher_subject_without_interrogations_is_rejected() {
+    let content = document(&[
+        entry(&format!(
+            r#"{{ "Subjects": [
+                {},
+                {{ "id": 20, "name": "Quidditch", "interrogation_parameters": null, "excluded_periods": [] }}
+            ] }}"#,
+            subject_with_interrogations(2, "Mathématiques")
+        )),
+        entry(
+            r#"{ "Teachers": [
+                { "id": 3, "surname": "Rogue", "firstname": "Severus", "tel": null, "email": null, "subjects": [20] }
+            ] }"#,
+        ),
+    ]);
+
+    assert_eq!(
+        expect_decode_error(&content),
+        DecodeError::TeacherSubjectWithoutInterrogations {
+            teacher_id: 3,
+            subject_id: 20
+        }
+    );
+}
+
+/// §4.5: an assigned student is present for the row's period
+#[test]
+fn assigned_student_excluded_from_the_period_is_rejected() {
+    let content = document(&[
+        entry(
+            r#"{ "GeneralPlanning": {
+                "first_week": null,
+                "periods": [ { "id": 1, "weeks": [ { "interrogations": true, "annotation": null } ] } ]
+            } }"#,
+        ),
+        entry(
+            r#"{ "Subjects": [
+                { "id": 2, "name": "Mathématiques", "interrogation_parameters": null, "excluded_periods": [] }
+            ] }"#,
+        ),
+        entry(
+            r#"{ "Students": [
+                { "id": 4, "surname": "Potter", "firstname": "Harry", "tel": null, "email": null, "excluded_periods": [1] }
+            ] }"#,
+        ),
+        entry(r#"{ "Assignments": [ { "period_id": 1, "subject_id": 2, "students": [4] } ] }"#),
+    ]);
+
+    assert_eq!(
+        expect_decode_error(&content),
+        DecodeError::AssignedStudentExcludedFromPeriod {
+            period_id: 1,
+            subject_id: 2,
+            student_id: 4
+        }
+    );
+}
+
+/// §4.7: the slot's teacher teaches the slot's subject
+#[test]
+fn slot_whose_teacher_does_not_teach_the_subject_is_rejected() {
+    let content = document(&[
+        entry(&format!(
+            r#"{{ "Subjects": [ {} ] }}"#,
+            subject_with_interrogations(2, "Mathématiques")
+        )),
+        entry(
+            r#"{ "Teachers": [
+                { "id": 3, "surname": "Rogue", "firstname": "Severus", "tel": null, "email": null, "subjects": [] }
+            ] }"#,
+        ),
+        entry(
+            r#"{ "Slots": [
+                { "subject_id": 2, "slots": [
+                    { "id": 7, "teacher_id": 3, "start": { "day": "monday", "time": "14:00" }, "extra_info": "", "week_pattern_id": null, "cost": 0 }
+                ] }
+            ] }"#,
+        ),
+    ]);
+
+    assert_eq!(
+        expect_decode_error(&content),
+        DecodeError::SlotTeacherDoesNotTeachSubject {
+            slot_id: 7,
+            teacher_id: 3,
+            subject_id: 2
+        }
+    );
+}
+
+/// The scheduling setup of [scheduling_entries] with the slot's start
+/// time written verbatim (the subject's interrogations last 60 minutes)
+fn document_with_slot_start_time(time: &str) -> String {
+    let mut entries = scheduling_entries(true, false);
+    entries.pop().expect("The Slots entry is pushed last");
+    entries.push(entry(&format!(
+        r#"{{ "Slots": [
+            {{ "subject_id": 2, "slots": [
+                {{ "id": 7, "teacher_id": 3, "start": {{ "day": "monday", "time": "{time}" }}, "extra_info": "", "week_pattern_id": null, "cost": 0 }}
+            ] }}
+        ] }}"#
+    )));
+    document(&entries)
+}
+
+/// §4.7: the slot plus its subject's interrogation duration stays within
+/// the day
+#[test]
+fn slot_overflowing_the_day_is_rejected() {
+    let content = document_with_slot_start_time("23:30");
+
+    assert_eq!(
+        expect_decode_error(&content),
+        DecodeError::SlotOverflowsDay { slot_id: 7 }
+    );
+}
+
+/// The boundary: an interrogation ending exactly at midnight does not
+/// cross it
+#[test]
+fn slot_ending_exactly_at_midnight_decodes() {
+    let content = document_with_slot_start_time("23:00");
+
+    let (_data, caveats) =
+        deserialize_data(&content).expect("A slot ending at midnight should decode");
+    assert!(caveats.is_empty());
+}
+
+/// §4.10: an association's subject has interrogations
+#[test]
+fn association_for_a_subject_without_interrogations_is_rejected() {
+    let content = document(&[
+        entry(
+            r#"{ "GeneralPlanning": {
+                "first_week": null,
+                "periods": [ { "id": 1, "weeks": [ { "interrogations": true, "annotation": null } ] } ]
+            } }"#,
+        ),
+        entry(
+            r#"{ "Subjects": [
+                { "id": 2, "name": "Mathématiques", "interrogation_parameters": null, "excluded_periods": [] }
+            ] }"#,
+        ),
+        entry(SIMPLE_GROUP_LIST),
+        entry(
+            r#"{ "GroupListAssociations": [ { "period_id": 1, "subject_id": 2, "group_list_id": 8 } ] }"#,
+        ),
+    ]);
+
+    assert_eq!(
+        expect_decode_error(&content),
+        DecodeError::AssociationForSubjectWithoutInterrogations {
+            period_id: 1,
+            subject_id: 2
+        }
+    );
+}
+
+/// §4.10: an association's subject runs on the association's period. The
+/// subject here has interrogations, isolating the exclusion constraint
+/// (a subject failing both reports the interrogations variant first).
+#[test]
+fn association_on_an_excluded_period_is_rejected() {
+    let subject = subject_with_interrogations(2, "Mathématiques")
+        .replace(r#""excluded_periods": []"#, r#""excluded_periods": [1]"#);
+    let content = document(&[
+        entry(
+            r#"{ "GeneralPlanning": {
+                "first_week": null,
+                "periods": [ { "id": 1, "weeks": [ { "interrogations": true, "annotation": null } ] } ]
+            } }"#,
+        ),
+        entry(&format!(r#"{{ "Subjects": [ {subject} ] }}"#)),
+        entry(SIMPLE_GROUP_LIST),
+        entry(
+            r#"{ "GroupListAssociations": [ { "period_id": 1, "subject_id": 2, "group_list_id": 8 } ] }"#,
+        ),
+    ]);
+
+    assert_eq!(
+        expect_decode_error(&content),
+        DecodeError::AssociationOnExcludedPeriod {
+            period_id: 1,
+            subject_id: 2
+        }
+    );
+}
+
+/// §4.12: both slots of a slot pairing belong to the same subject
+#[test]
+fn slot_pairing_across_subjects_is_rejected() {
+    let content = document(&[
+        entry(&format!(
+            r#"{{ "Subjects": [ {}, {} ] }}"#,
+            subject_with_interrogations(2, "Mathématiques"),
+            subject_with_interrogations(20, "Physique")
+        )),
+        entry(
+            r#"{ "Teachers": [
+                { "id": 3, "surname": "Rogue", "firstname": "Severus", "tel": null, "email": null, "subjects": [2, 20] }
+            ] }"#,
+        ),
+        entry(
+            r#"{ "Slots": [
+                { "subject_id": 2, "slots": [
+                    { "id": 7, "teacher_id": 3, "start": { "day": "monday", "time": "14:00" }, "extra_info": "", "week_pattern_id": null, "cost": 0 }
+                ] },
+                { "subject_id": 20, "slots": [
+                    { "id": 21, "teacher_id": 3, "start": { "day": "friday", "time": "10:00" }, "extra_info": "", "week_pattern_id": null, "cost": 0 }
+                ] }
+            ] }"#,
+        ),
+        entry(
+            r#"{ "SlotPairings": [
+                { "id": 14,
+                  "antecedent": { "slot_id": 7, "should_have": true },
+                  "consequent": { "slot_id": 21, "should_have": true },
+                  "excluded_periods": [], "soft": false }
+            ] }"#,
+        ),
+    ]);
+
+    assert_eq!(
+        expect_decode_error(&content),
+        DecodeError::SlotPairingAcrossSubjects {
+            rule_id: 14,
+            antecedent_slot_id: 7,
+            consequent_slot_id: 21
+        }
+    );
+}
+
+/// §4.14: a balancing override names a subject with interrogations
+#[test]
+fn balancing_override_for_a_subject_without_interrogations_is_rejected() {
+    let content = document(&[
+        entry(
+            r#"{ "Subjects": [
+                { "id": 2, "name": "Mathématiques", "interrogation_parameters": null, "excluded_periods": [] }
+            ] }"#,
+        ),
+        entry(
+            r#"{ "Balancing": {
+                "global": {
+                    "teacher_rotation": false,
+                    "slot_rotation": false,
+                    "avoid_twice_in_a_row": true,
+                    "year_teacher_rotation": false,
+                    "period_teacher_rotation": false
+                },
+                "subjects": [
+                    { "subject_id": 2, "options": {
+                        "teacher_rotation": true,
+                        "slot_rotation": false,
+                        "avoid_twice_in_a_row": true,
+                        "year_teacher_rotation": false,
+                        "period_teacher_rotation": false
+                    } }
+                ]
+            } }"#,
+        ),
+    ]);
+
+    assert_eq!(
+        expect_decode_error(&content),
+        DecodeError::BalancingForSubjectWithoutInterrogations { subject_id: 2 }
+    );
+}
+
+/// §4.15: an assigned group number is within the bounds of the group
+/// list associated at (the week's period, the slot's subject)
+#[test]
+fn interrogation_group_out_of_bounds_is_rejected() {
+    let mut entries = scheduling_entries(true, false);
+    entries.push(entry(
+        r#"{ "GroupLists": [
+            {
+                "id": 8,
+                "name": "Groupes",
+                "students_per_group": { "min": 1, "max": 2 },
+                "group_names": [null],
+                "filling": { "Automatic": { "excluded_students": [] } }
+            }
+        ] }"#,
+    ));
+    entries.push(entry(
+        r#"{ "GroupListAssociations": [ { "period_id": 1, "subject_id": 2, "group_list_id": 8 } ] }"#,
+    ));
+    entries.push(entry(
+        r#"{ "Colloscope": {
+            "interrogations": [ { "slot_id": 7, "week": 0, "assigned_groups": [1] } ],
+            "group_lists": []
+        } }"#,
+    ));
+    let content = document(&entries);
+
+    assert_eq!(
+        expect_decode_error(&content),
+        DecodeError::InterrogationGroupOutOfBounds {
+            slot_id: 7,
+            week: 0,
+            group: 1,
+            group_count: 1
+        }
+    );
+}
+
+/// §4.15: with no group list associated at (period, subject), no group
+/// number is valid at all — the bound is zero
+#[test]
+fn interrogation_group_without_an_association_is_rejected() {
+    let content = scheduling_document(
+        true,
+        false,
+        r#"{ "Colloscope": {
+            "interrogations": [ { "slot_id": 7, "week": 0, "assigned_groups": [0] } ],
+            "group_lists": []
+        } }"#,
+    );
+
+    assert_eq!(
+        expect_decode_error(&content),
+        DecodeError::InterrogationGroupOutOfBounds {
+            slot_id: 7,
+            week: 0,
+            group: 0,
+            group_count: 0
+        }
+    );
+}
+
+/// §4.15: a placed student is not excluded from the automatic list
+#[test]
+fn colloscope_placement_of_an_excluded_student_is_rejected() {
+    let content = document(&[
+        entry(
+            r#"{ "Students": [
+                { "id": 4, "surname": "Potter", "firstname": "Harry", "tel": null, "email": null, "excluded_periods": [] }
+            ] }"#,
+        ),
+        entry(
+            r#"{ "GroupLists": [
+                {
+                    "id": 8,
+                    "name": "Groupes",
+                    "students_per_group": { "min": 1, "max": 2 },
+                    "group_names": [null],
+                    "filling": { "Automatic": { "excluded_students": [4] } }
+                }
+            ] }"#,
+        ),
+        entry(
+            r#"{ "Colloscope": {
+                "interrogations": [],
+                "group_lists": [
+                    { "group_list_id": 8, "students": [ { "student_id": 4, "group": 0 } ] }
+                ]
+            } }"#,
+        ),
+    ]);
+
+    assert_eq!(
+        expect_decode_error(&content),
+        DecodeError::ColloscopeStudentExcluded {
+            group_list_id: 8,
+            student_id: 4
+        }
+    );
+}
+
+/// §4.15: a placed student's group number is within the list's bounds
+#[test]
+fn colloscope_placement_group_out_of_bounds_is_rejected() {
+    let content = document(&[
+        entry(
+            r#"{ "Students": [
+                { "id": 4, "surname": "Potter", "firstname": "Harry", "tel": null, "email": null, "excluded_periods": [] }
+            ] }"#,
+        ),
+        entry(
+            r#"{ "GroupLists": [
+                {
+                    "id": 8,
+                    "name": "Groupes",
+                    "students_per_group": { "min": 1, "max": 2 },
+                    "group_names": [null, null],
+                    "filling": { "Automatic": { "excluded_students": [] } }
+                }
+            ] }"#,
+        ),
+        entry(
+            r#"{ "Colloscope": {
+                "interrogations": [],
+                "group_lists": [
+                    { "group_list_id": 8, "students": [ { "student_id": 4, "group": 2 } ] }
+                ]
+            } }"#,
+        ),
+    ]);
+
+    assert_eq!(
+        expect_decode_error(&content),
+        DecodeError::ColloscopeStudentGroupOutOfBounds {
+            group_list_id: 8,
+            student_id: 4,
+            group: 2,
+            group_count: 2
+        }
+    );
+}
+
+/// Cell condition 1 of §4.15: an interrogation on a week whose period
+/// the slot's subject excludes lands on a nonexistent cell
+#[test]
+fn colloscope_row_on_a_week_of_an_excluded_period_is_rejected() {
+    let subject = subject_with_interrogations(2, "Mathématiques")
+        .replace(r#""excluded_periods": []"#, r#""excluded_periods": [10]"#);
+    let content = document(&[
+        entry(
+            r#"{ "GeneralPlanning": {
+                "first_week": null,
+                "periods": [
+                    { "id": 1, "weeks": [ { "interrogations": true, "annotation": null } ] },
+                    { "id": 10, "weeks": [ { "interrogations": true, "annotation": null } ] }
+                ]
+            } }"#,
+        ),
+        entry(&format!(r#"{{ "Subjects": [ {subject} ] }}"#)),
+        entry(
+            r#"{ "Teachers": [
+                { "id": 3, "surname": "Rogue", "firstname": "Severus", "tel": null, "email": null, "subjects": [2] }
+            ] }"#,
+        ),
+        entry(
+            r#"{ "Slots": [
+                { "subject_id": 2, "slots": [
+                    { "id": 7, "teacher_id": 3, "start": { "day": "monday", "time": "14:00" }, "extra_info": "", "week_pattern_id": null, "cost": 0 }
+                ] }
+            ] }"#,
+        ),
+        // Week 1 is the single week of period 10, which subject 2 excludes.
+        entry(
+            r#"{ "Colloscope": {
+                "interrogations": [ { "slot_id": 7, "week": 1, "assigned_groups": [] } ],
+                "group_lists": []
+            } }"#,
+        ),
+    ]);
+
+    assert_eq!(
+        expect_decode_error(&content),
+        DecodeError::InvalidInterrogationCell {
+            slot_id: 7,
+            week: 1
+        }
+    );
+}
+
+// The three tests below cover decoder variants that predate this test
+// corpus: the diagnostics existed but nothing pinned them.
+
+#[test]
+fn assignments_row_on_an_unknown_period_is_rejected() {
+    let content = document(&[entry(
+        r#"{ "Assignments": [ { "period_id": 99, "subject_id": 2, "students": [] } ] }"#,
+    )]);
+
+    assert_eq!(
+        expect_decode_error(&content),
+        DecodeError::UnknownPeriodInAssignments(99)
+    );
+}
+
+#[test]
+fn group_list_with_wrong_prefilled_group_count_is_rejected() {
+    // One group name but two prefilled groups: the (params, filling)
+    // pair is internally inconsistent.
+    let content = document(&[entry(
+        r#"{ "GroupLists": [
+            {
+                "id": 8,
+                "name": "Groupes",
+                "students_per_group": { "min": 1, "max": 2 },
+                "group_names": [null],
+                "filling": { "Prefilled": { "groups": [ { "students": [] }, { "students": [] } ] } }
+            }
+        ] }"#,
+    )]);
+
+    assert_eq!(
+        expect_decode_error(&content),
+        DecodeError::InconsistentGroupList(8)
+    );
+}
+
+#[test]
+fn slot_pairing_naming_one_slot_twice_is_inconsistent() {
+    // The internal seal runs before the existence checks, like the
+    // pairings block: the slot does not even have to exist.
+    let content = document(&[entry(
+        r#"{ "SlotPairings": [
+            { "id": 14,
+              "antecedent": { "slot_id": 7, "should_have": true },
+              "consequent": { "slot_id": 7, "should_have": true },
+              "excluded_periods": [], "soft": false }
+        ] }"#,
+    )]);
+
+    assert_eq!(
+        expect_decode_error(&content),
+        DecodeError::InconsistentSlotPairingRule(14)
+    );
 }
 
 #[test]

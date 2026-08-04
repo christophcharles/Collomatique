@@ -179,7 +179,10 @@ impl FileLoader {
                 "Le fichier est mal formé et est probablement corrompu.\n(Le bloc {} est mal formé : {})",
                 block, detail
             ),
-            DecodeError::SlotCrossesMidnight => "Le fichier est mal formé et est probablement corrompu.\n(Un créneau d'incompatibilité dépasse minuit)".into(),
+            DecodeError::IncompatibilitySlotCrossesMidnight { incompat_id } => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(Un créneau de l'incompatibilité id {} dépasse minuit)",
+                incompat_id
+            ),
             DecodeError::UnknownSlotInColloscope(slot_id) => format!(
                 "Le fichier est mal formé et est probablement corrompu.\n(Le colloscope référence un créneau inconnu, id {})",
                 slot_id
@@ -188,9 +191,30 @@ impl FileLoader {
                 "Le fichier est mal formé et est probablement corrompu.\n(Le colloscope place une interrogation sur une case inexistante : créneau {}, semaine {})",
                 slot_id, week
             ),
+            DecodeError::InterrogationGroupOutOfBounds { slot_id, week, group, group_count } => {
+                if group_count == 0 {
+                    format!(
+                        "Le fichier est mal formé et est probablement corrompu.\n(Le colloscope assigne le groupe {} sur la case (créneau {}, semaine {}), mais aucune liste de groupes n'est associée à cette matière sur cette période)",
+                        group, slot_id, week
+                    )
+                } else {
+                    format!(
+                        "Le fichier est mal formé et est probablement corrompu.\n(Le colloscope assigne le groupe {} sur la case (créneau {}, semaine {}), mais la liste de groupes associée n'a que {} groupes)",
+                        group, slot_id, week, group_count
+                    )
+                }
+            }
             DecodeError::InvalidColloscopeGroupList(group_list_id) => format!(
                 "Le fichier est mal formé et est probablement corrompu.\n(Le colloscope remplit une liste de groupes invalide, id {})",
                 group_list_id
+            ),
+            DecodeError::ColloscopeStudentExcluded { group_list_id, student_id } => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(Le colloscope place l'élève id {} dans la liste de groupes id {}, qui exclut cet élève)",
+                student_id, group_list_id
+            ),
+            DecodeError::ColloscopeStudentGroupOutOfBounds { group_list_id, student_id, group, group_count } => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(Le colloscope place l'élève id {} de la liste de groupes id {} dans le groupe {}, mais la liste n'a que {} groupes)",
+                student_id, group_list_id, group, group_count
             ),
             DecodeError::InconsistentGroupList(group_list_id) => format!(
                 "Le fichier est mal formé et est probablement corrompu.\n(Une liste de groupes est incohérente : nombre de groupes préremplis ou élève en double, id {})",
@@ -216,6 +240,14 @@ impl FileLoader {
                 "Fichier mal formé et est probablement corrompu.\n(Les affectations ont une ligne pour la matière {} sur la période {}, dont elle est exclue)",
                 subject_id, period_id
             ),
+            DecodeError::AssignedStudentExcludedFromPeriod { period_id, subject_id, student_id } => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(L'élève id {}, affecté dans la ligne (période {}, matière {}), est exclu de cette période)",
+                student_id, period_id, subject_id
+            ),
+            DecodeError::TeacherSubjectWithoutInterrogations { teacher_id, subject_id } => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(Le colleur id {} référence la matière {}, qui n'a pas d'interrogations)",
+                teacher_id, subject_id
+            ),
             DecodeError::UnknownSubjectInSlots(subject_id) => format!(
                 "Fichier mal formé et est probablement corrompu.\n(Les créneaux référencent une matière inconnue, id {})",
                 subject_id
@@ -224,13 +256,37 @@ impl FileLoader {
                 "Fichier mal formé et est probablement corrompu.\n(Les créneaux ont une ligne pour la matière {}, qui n'a pas d'interrogations)",
                 subject_id
             ),
+            DecodeError::SlotTeacherDoesNotTeachSubject { slot_id, teacher_id, subject_id } => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(Le créneau id {} nomme le colleur id {}, qui n'interroge pas dans la matière {})",
+                slot_id, teacher_id, subject_id
+            ),
+            DecodeError::SlotOverflowsDay { slot_id } => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(Le créneau id {}, avec la durée d'interrogation de sa matière, dépasse minuit)",
+                slot_id
+            ),
             DecodeError::DanglingReference { block, row, referenced, id } => format!(
                 "Le fichier est mal formé et est probablement corrompu.\n(Le bloc {}, {}, référence {} (id {}))",
                 block, Self::row_fr(&row), Self::id_kind_fr(&referenced), id
             ),
+            DecodeError::AssociationForSubjectWithoutInterrogations { period_id, subject_id } => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(L'association de liste de groupes (période {}, matière {}) porte sur une matière sans interrogations)",
+                period_id, subject_id
+            ),
+            DecodeError::AssociationOnExcludedPeriod { period_id, subject_id } => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(L'association de liste de groupes (période {}, matière {}) porte sur une matière exclue de cette période)",
+                period_id, subject_id
+            ),
             DecodeError::PairingRuleForSubjectWithoutInterrogations { rule_id, subject_id } => format!(
                 "Fichier mal formé et est probablement corrompu.\n(La règle d'appariement {} nomme la matière {}, qui n'a pas d'interrogations)",
                 rule_id, subject_id
+            ),
+            DecodeError::SlotPairingAcrossSubjects { rule_id, antecedent_slot_id, consequent_slot_id } => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(L'appariement de créneaux id {} associe les créneaux id {} et id {}, qui appartiennent à des matières différentes)",
+                rule_id, antecedent_slot_id, consequent_slot_id
+            ),
+            DecodeError::BalancingForSubjectWithoutInterrogations { subject_id } => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(Les options d'équilibrage portent sur la matière id {}, qui n'a pas d'interrogations)",
+                subject_id
             ),
             DecodeError::WrongWeekCountInWeekPattern { week_pattern_id, expected, found } => format!(
                 "Fichier mal formé et est probablement corrompu.\n(Le motif de semaines {} décrit {} semaines alors que le calendrier en compte {})",

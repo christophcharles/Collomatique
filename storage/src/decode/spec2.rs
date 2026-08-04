@@ -538,15 +538,19 @@ fn reconstruct_teachers(
     let mut teacher_map = BTreeMap::new();
     for teacher in block.into_inner() {
         for &subject_raw in teacher.subjects.iter() {
-            if subjects
-                .find_subject(id::<SubjectId>(subject_raw))
-                .is_none()
-            {
+            let Some(subject) = subjects.find_subject(id::<SubjectId>(subject_raw)) else {
                 return Err(DecodeError::DanglingReference {
                     block: BlockName::Teachers.as_str(),
                     row: RowKey::Id(teacher.id),
                     referenced: IdKind::Subject,
                     id: subject_raw,
+                });
+            };
+            // §4.3: a teacher's subjects all have interrogations.
+            if subject.parameters.interrogation_parameters.is_none() {
+                return Err(DecodeError::TeacherSubjectWithoutInterrogations {
+                    teacher_id: teacher.id,
+                    subject_id: subject_raw,
                 });
             }
         }
@@ -637,11 +641,7 @@ fn reconstruct_assignments(
             });
         }
         for &student_raw in row.students.iter() {
-            if students
-                .student_map
-                .get(&id::<StudentId>(student_raw))
-                .is_none()
-            {
+            let Some(student) = students.student_map.get(&id::<StudentId>(student_raw)) else {
                 return Err(DecodeError::DanglingReference {
                     block: BlockName::Assignments.as_str(),
                     row: RowKey::PeriodSubject {
@@ -650,6 +650,14 @@ fn reconstruct_assignments(
                     },
                     referenced: IdKind::Student,
                     id: student_raw,
+                });
+            };
+            // §4.5: an assigned student is present for the row's period.
+            if student.excluded_periods.contains(&period_id) {
+                return Err(DecodeError::AssignedStudentExcludedFromPeriod {
+                    period_id: row.period_id,
+                    subject_id: row.subject_id,
+                    student_id: student_raw,
                 });
             }
         }
@@ -729,23 +737,27 @@ fn reconstruct_slots(
         let Some(subject) = subjects.find_subject(subject_id) else {
             return Err(DecodeError::UnknownSubjectInSlots(row.subject_id));
         };
-        if subject.parameters.interrogation_parameters.is_none() {
+        let Some(interrogation_params) = &subject.parameters.interrogation_parameters else {
             return Err(DecodeError::SlotsForSubjectWithoutInterrogations(
                 row.subject_id,
             ));
-        }
+        };
         let mut ordered_slots: Vec<(SlotId, mem::slots::Slot)> = Vec::new();
         for slot in row.slots {
-            if teachers
-                .teacher_map
-                .get(&id::<TeacherId>(slot.teacher_id))
-                .is_none()
-            {
+            let Some(teacher) = teachers.teacher_map.get(&id::<TeacherId>(slot.teacher_id)) else {
                 return Err(DecodeError::DanglingReference {
                     block: BlockName::Slots.as_str(),
                     row: RowKey::Id(slot.id),
                     referenced: IdKind::Teacher,
                     id: slot.teacher_id,
+                });
+            };
+            // §4.7: the slot's teacher teaches the slot's subject.
+            if !teacher.subjects.contains(&subject_id) {
+                return Err(DecodeError::SlotTeacherDoesNotTeachSubject {
+                    slot_id: slot.id,
+                    teacher_id: slot.teacher_id,
+                    subject_id: row.subject_id,
                 });
             }
             if let Some(week_pattern_raw) = slot.week_pattern_id {
@@ -762,15 +774,26 @@ fn reconstruct_slots(
                     });
                 }
             }
+            let start_time = collomatique_time::SlotStart {
+                weekday: weekday(slot.start.day),
+                start_time: time_of_day(slot.start.time),
+            };
+            // §4.7: the slot plus its subject's interrogation duration stays
+            // within the day (ending exactly at midnight is allowed).
+            if collomatique_time::SlotWithDuration::new(
+                start_time.clone(),
+                interrogation_params.duration,
+            )
+            .is_none()
+            {
+                return Err(DecodeError::SlotOverflowsDay { slot_id: slot.id });
+            }
             ordered_slots.push((
                 id::<SlotId>(slot.id),
                 mem::slots::Slot {
                     subject_id,
                     teacher_id: id(slot.teacher_id),
-                    start_time: collomatique_time::SlotStart {
-                        weekday: weekday(slot.start.day),
-                        start_time: time_of_day(slot.start.time),
-                    },
+                    start_time,
                     extra_info: slot.extra_info,
                     week_pattern: slot.week_pattern_id.map(id),
                     cost: slot.cost,
@@ -818,12 +841,14 @@ fn reconstruct_incompats(
                 weekday: weekday(slot.day),
                 start_time: time_of_day(slot.time),
             };
-            // The only semantic check the decoder must do itself: the
-            // in-memory type cannot represent a slot crossing midnight
+            // §4.8: an incompatibility slot stays within the day — the
+            // in-memory type cannot even represent one crossing midnight.
             let Some(slot) =
                 collomatique_time::SlotWithDuration::new(start, slot.duration_minutes.get().into())
             else {
-                return Err(DecodeError::SlotCrossesMidnight);
+                return Err(DecodeError::IncompatibilitySlotCrossesMidnight {
+                    incompat_id: row.id,
+                });
             };
             slots.push(slot);
         }
@@ -935,10 +960,8 @@ fn reconstruct_group_lists(
             period_id: row.period_id,
             subject_id: row.subject_id,
         };
-        if periods
-            .find_period_position(id::<PeriodId>(row.period_id))
-            .is_none()
-        {
+        let period_id = id::<PeriodId>(row.period_id);
+        if periods.find_period_position(period_id).is_none() {
             return Err(DecodeError::DanglingReference {
                 block: BlockName::GroupListAssociations.as_str(),
                 row: row_key,
@@ -946,23 +969,35 @@ fn reconstruct_group_lists(
                 id: row.period_id,
             });
         }
-        if subjects
-            .find_subject(id::<SubjectId>(row.subject_id))
-            .is_none()
-        {
+        let Some(subject) = subjects.find_subject(id::<SubjectId>(row.subject_id)) else {
             return Err(DecodeError::DanglingReference {
                 block: BlockName::GroupListAssociations.as_str(),
                 row: row_key,
                 referenced: IdKind::Subject,
                 id: row.subject_id,
             });
-        }
+        };
         if !group_list_map.contains_key(&id::<GroupListId>(row.group_list_id)) {
             return Err(DecodeError::DanglingReference {
                 block: BlockName::GroupListAssociations.as_str(),
                 row: row_key,
                 referenced: IdKind::GroupList,
                 id: row.group_list_id,
+            });
+        }
+        // §4.10's two state constraints on the association's subject, after
+        // the reference checks, in the invariant sweep's declaration order:
+        // interrogations first, then the period exclusion.
+        if subject.parameters.interrogation_parameters.is_none() {
+            return Err(DecodeError::AssociationForSubjectWithoutInterrogations {
+                period_id: row.period_id,
+                subject_id: row.subject_id,
+            });
+        }
+        if subject.excluded_periods.contains(&period_id) {
+            return Err(DecodeError::AssociationOnExcludedPeriod {
+                period_id: row.period_id,
+                subject_id: row.subject_id,
             });
         }
         subjects_associations.insert(
@@ -1130,6 +1165,22 @@ fn reconstruct_slot_pairings(
                     });
                 }
             }
+            // §4.12: both slots belong to the same subject. After the
+            // reference checks, so both lookups are known to succeed.
+            let [antecedent_raw, consequent_raw] = raw_slots;
+            let antecedent_slot = slots
+                .find_slot(id::<SlotId>(antecedent_raw))
+                .expect("existence checked above");
+            let consequent_slot = slots
+                .find_slot(id::<SlotId>(consequent_raw))
+                .expect("existence checked above");
+            if antecedent_slot.subject_id != consequent_slot.subject_id {
+                return Err(DecodeError::SlotPairingAcrossSubjects {
+                    rule_id: raw_id,
+                    antecedent_slot_id: antecedent_raw,
+                    consequent_slot_id: consequent_raw,
+                });
+            }
             Ok((id::<SlotPairingRuleId>(raw_id), value))
         })
         .collect::<Result<_, DecodeError>>()?;
@@ -1154,15 +1205,18 @@ fn reconstruct_balancing(
 ) -> Result<mem::balancing::Balancing, DecodeError> {
     let mut per_subject = BTreeMap::new();
     for row in block.subjects.into_inner() {
-        if subjects
-            .find_subject(id::<SubjectId>(row.subject_id))
-            .is_none()
-        {
+        let Some(subject) = subjects.find_subject(id::<SubjectId>(row.subject_id)) else {
             return Err(DecodeError::DanglingReference {
                 block: BlockName::Balancing.as_str(),
                 row: RowKey::Id(row.subject_id),
                 referenced: IdKind::Subject,
                 id: row.subject_id,
+            });
+        };
+        // §4.14: a balancing override names a subject with interrogations.
+        if subject.parameters.interrogation_parameters.is_none() {
+            return Err(DecodeError::BalancingForSubjectWithoutInterrogations {
+                subject_id: row.subject_id,
             });
         }
         per_subject.insert(
@@ -1207,9 +1261,9 @@ fn reconstruct_colloscope(
         };
 
         let slot_id = id::<SlotId>(row.slot_id);
-        if params.slots.find_slot(slot_id).is_none() {
+        let Some(slot) = params.slots.find_slot(slot_id) else {
             return Err(DecodeError::UnknownSlotInColloscope(row.slot_id));
-        }
+        };
 
         if !params.is_interrogation_possible(slot_id, week_id) {
             // The slot's subject does not run on the week's period, or the
@@ -1222,7 +1276,38 @@ fn reconstruct_colloscope(
             });
         }
 
+        // §4.15: every assigned group number is within the bounds of the
+        // group list associated at (the week's period, the slot's subject);
+        // no association there means no group number is valid. The smallest
+        // offending number is reported (the set iterates ascending).
+        let (period_id, _pos) = params
+            .weeks
+            .week_position(week_id)
+            .expect("cell existence checked above");
+        let group_count: u32 = match params
+            .group_lists
+            .subjects_associations
+            .get(&(period_id, slot.subject_id))
+        {
+            None => 0,
+            Some(group_list_id) => params
+                .group_lists
+                .group_list_map
+                .get(group_list_id)
+                .expect("association target existence checked in reconstruct_group_lists")
+                .params()
+                .group_names
+                .len() as u32,
+        };
         let assigned_groups: BTreeSet<u32> = row.assigned_groups.into_inner().into_iter().collect();
+        if let Some(&group) = assigned_groups.iter().find(|&&group| group >= group_count) {
+            return Err(DecodeError::InterrogationGroupOutOfBounds {
+                slot_id: row.slot_id,
+                week: row.week,
+                group,
+                group_count,
+            });
+        }
         if !assigned_groups.is_empty() {
             colloscope.set_interrogation(slot_id, week_id, assigned_groups);
         }
@@ -1230,16 +1315,16 @@ fn reconstruct_colloscope(
 
     for row in block.group_lists.into_inner() {
         let group_list_id = id::<GroupListId>(row.group_list_id);
-        let known_non_prefilled = params
-            .group_lists
-            .group_list_map
-            .get(&group_list_id)
-            .is_some_and(|group_list| !group_list.is_prefilled());
-        if !known_non_prefilled {
-            // Unknown id, or a prefilled list (whose composition lives in the
-            // GroupLists block): only automatic group lists carry placements.
+        let Some(group_list) = params.group_lists.group_list_map.get(&group_list_id) else {
+            // Only automatic group lists carry placements.
+            return Err(DecodeError::InvalidColloscopeGroupList(row.group_list_id));
+        };
+        if group_list.is_prefilled() {
+            // A prefilled list's composition lives in the GroupLists block.
             return Err(DecodeError::InvalidColloscopeGroupList(row.group_list_id));
         }
+        let excluded_students = group_list.filling().excluded_students();
+        let group_count = group_list.params().group_names.len() as u32;
         let mut placements: BTreeMap<StudentId, u32> = BTreeMap::new();
         for placement in row.students.into_inner() {
             if params
@@ -1253,6 +1338,23 @@ fn reconstruct_colloscope(
                     row: RowKey::Id(row.group_list_id),
                     referenced: IdKind::Student,
                     id: placement.student_id,
+                });
+            }
+            // §4.15: the placed student is not excluded from the list, and
+            // the group number is within the list's bounds — checked in the
+            // invariant sweep's declaration order.
+            if excluded_students.contains(&id::<StudentId>(placement.student_id)) {
+                return Err(DecodeError::ColloscopeStudentExcluded {
+                    group_list_id: row.group_list_id,
+                    student_id: placement.student_id,
+                });
+            }
+            if placement.group >= group_count {
+                return Err(DecodeError::ColloscopeStudentGroupOutOfBounds {
+                    group_list_id: row.group_list_id,
+                    student_id: placement.student_id,
+                    group: placement.group,
+                    group_count,
                 });
             }
             placements.insert(id::<StudentId>(placement.student_id), placement.group);

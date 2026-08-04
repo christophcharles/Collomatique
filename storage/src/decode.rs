@@ -63,14 +63,36 @@ pub enum DecodeError {
         /// position relative to the block's entry content)
         detail: String,
     },
-    #[error("An incompatibility slot crosses midnight")]
-    SlotCrossesMidnight,
+    #[error("A slot of incompatibility id {incompat_id} crosses midnight")]
+    IncompatibilitySlotCrossesMidnight { incompat_id: u64 },
     #[error("The colloscope references an unknown slot id ({0})")]
     UnknownSlotInColloscope(u64),
     #[error("The colloscope interrogation cell (slot id {slot_id}, week {week}) does not exist")]
     InvalidInterrogationCell { slot_id: u64, week: u32 },
+    #[error(
+        "The colloscope cell (slot id {slot_id}, week {week}) assigns group number {group}, but the associated group list has {group_count} groups"
+    )]
+    InterrogationGroupOutOfBounds {
+        slot_id: u64,
+        week: u32,
+        group: u32,
+        group_count: u32,
+    },
     #[error("The colloscope fills group list id {0} which is not an automatic group list")]
     InvalidColloscopeGroupList(u64),
+    #[error(
+        "The colloscope places student id {student_id} in group list id {group_list_id}, but the list excludes that student"
+    )]
+    ColloscopeStudentExcluded { group_list_id: u64, student_id: u64 },
+    #[error(
+        "The colloscope places student id {student_id} of group list id {group_list_id} in group number {group}, but the list has {group_count} groups"
+    )]
+    ColloscopeStudentGroupOutOfBounds {
+        group_list_id: u64,
+        student_id: u64,
+        group: u32,
+        group_count: u32,
+    },
     #[error(
         "Group list id {0} has an internally inconsistent filling (prefill group count or duplicated student)"
     )]
@@ -99,6 +121,10 @@ pub enum DecodeError {
         second: &'static str,
         id: u64,
     },
+    #[error(
+        "Teacher id {teacher_id} references subject id {subject_id}, which has no interrogations"
+    )]
+    TeacherSubjectWithoutInterrogations { teacher_id: u64, subject_id: u64 },
     #[error("The assignments reference an unknown period (period id {0})")]
     UnknownPeriodInAssignments(u64),
     #[error("The assignments reference an unknown subject (subject id {0})")]
@@ -107,10 +133,28 @@ pub enum DecodeError {
         "The assignments have a row for subject id {subject_id} on period id {period_id}, but the subject is excluded from that period"
     )]
     AssignmentOnExcludedPeriod { period_id: u64, subject_id: u64 },
+    #[error(
+        "Student id {student_id}, assigned in row (period {period_id}, subject {subject_id}), is excluded from that period"
+    )]
+    AssignedStudentExcludedFromPeriod {
+        period_id: u64,
+        subject_id: u64,
+        student_id: u64,
+    },
     #[error("The slots reference an unknown subject (subject id {0})")]
     UnknownSubjectInSlots(u64),
     #[error("The slots have a row for subject id {0} which has no interrogations")]
     SlotsForSubjectWithoutInterrogations(u64),
+    #[error(
+        "Slot id {slot_id} names teacher id {teacher_id}, who does not teach subject id {subject_id}"
+    )]
+    SlotTeacherDoesNotTeachSubject {
+        slot_id: u64,
+        teacher_id: u64,
+        subject_id: u64,
+    },
+    #[error("Slot id {slot_id} plus its subject's interrogation duration crosses midnight")]
+    SlotOverflowsDay { slot_id: u64 },
     /// The row named by `row` in block `block` references an id that no
     /// entity of kind `referenced` defines anywhere in the document.
     ///
@@ -126,8 +170,26 @@ pub enum DecodeError {
         referenced: IdKind,
         id: u64,
     },
+    #[error(
+        "The group-list association (period {period_id}, subject {subject_id}) names a subject with no interrogations"
+    )]
+    AssociationForSubjectWithoutInterrogations { period_id: u64, subject_id: u64 },
+    #[error(
+        "The group-list association (period {period_id}, subject {subject_id}) names a subject excluded from that period"
+    )]
+    AssociationOnExcludedPeriod { period_id: u64, subject_id: u64 },
     #[error("Pairing rule id {rule_id} names subject id {subject_id}, which has no interrogations")]
     PairingRuleForSubjectWithoutInterrogations { rule_id: u64, subject_id: u64 },
+    #[error(
+        "Slot pairing rule id {rule_id} pairs slot id {antecedent_slot_id} and slot id {consequent_slot_id}, which belong to different subjects"
+    )]
+    SlotPairingAcrossSubjects {
+        rule_id: u64,
+        antecedent_slot_id: u64,
+        consequent_slot_id: u64,
+    },
+    #[error("The balancing options name subject id {subject_id}, which has no interrogations")]
+    BalancingForSubjectWithoutInterrogations { subject_id: u64 },
     #[error(
         "Week pattern id {week_pattern_id} has {found} week entries but the schedule has {expected} weeks"
     )]
