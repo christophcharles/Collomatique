@@ -113,6 +113,23 @@ pub fn deserialize_data(
     Ok((data, caveats))
 }
 
+/// Error type when encoding data into a file
+///
+/// A valid [Data] is almost always writable — the one thing the file
+/// format forbids and the in-memory model does not is an id above the
+/// format's ceiling.
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum EncodeError {
+    /// The document holds an id above the file format's ceiling of
+    /// 2^63 - 1 (spec §3) and cannot be written faithfully
+    ///
+    /// The in-memory id issuer has no upper bound, so this is reachable:
+    /// by a very long editing history, or by a single operation on a
+    /// document loaded from a file whose ids already sat at the ceiling.
+    #[error("id {id} exceeds the file-format ceiling (2^63 - 1); the file cannot be written")]
+    IdAboveCeiling { id: u64 },
+}
+
 /// Serialize the content of a colloscope file
 ///
 /// This function takes an in-memory [Data] representation
@@ -120,10 +137,12 @@ pub fn deserialize_data(
 /// represented as a UTF-8 string. The file is written in the
 /// current (spec-2) format.
 ///
-/// This cannot fail as [Data] is always a valid representation.
-pub fn serialize_data(data: &Data) -> String {
-    let document = encode::spec2::encode(data);
-    serde_json::to_string_pretty(&document).expect("Serializing to JSON should not fail")
+/// This fails only when the document cannot be represented in the file
+/// format at all — see [EncodeError], which has a single cause: an id
+/// above the format's ceiling.
+pub fn serialize_data(data: &Data) -> Result<String, EncodeError> {
+    let document = encode::spec2::encode(data)?;
+    Ok(serde_json::to_string_pretty(&document).expect("Serializing to JSON should not fail"))
 }
 
 /// Errors when loading data from a file
@@ -155,17 +174,34 @@ pub async fn load_data_from_file(file_path: &Path) -> Result<(Data, BTreeSet<Cav
     Ok(deserialize_data(&content)?)
 }
 
+/// Errors when saving data to a file
+///
+/// There are two main possibilities of errors:
+/// - I/O errors: when there is a problem with access to the file
+/// - encoding errors: the data cannot be represented in the file format
+#[derive(Error, Debug)]
+pub enum SaveError {
+    #[error("Error while reading/writing file: {0}")]
+    IO(#[from] io::Error),
+
+    #[error("Error while encoding: {0}")]
+    Encode(#[from] EncodeError),
+}
+
 /// Save [Data] to a file
 ///
 /// No checks are done on the existence of the file. If the file
 /// exists it will be overwritten. If it doesn't, it will be created.
 ///
 /// The method can fail for various reasons like wrong permissions.
-/// This will be reported as an [io::Error].
+/// This will be reported as a [SaveError::IO]. It can also fail because
+/// the data cannot be written in the file format at all
+/// ([SaveError::Encode]).
 ///
 /// This is a convenience function encapsulating [serialize_data].
-pub async fn save_data_to_file(data: &Data, file_path: &Path) -> Result<(), io::Error> {
+pub async fn save_data_to_file(data: &Data, file_path: &Path) -> Result<(), SaveError> {
     use tokio::fs;
-    let content = serialize_data(data);
-    fs::write(file_path, content.as_bytes()).await
+    let content = serialize_data(data)?;
+    fs::write(file_path, content.as_bytes()).await?;
+    Ok(())
 }

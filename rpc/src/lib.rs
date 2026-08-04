@@ -69,12 +69,16 @@ pub struct InternalDataStream {
 // it contains.
 //
 // The conversion is `To`/`From Data` (not `InnerData`) on purpose: `Data`
-// carries the "is valid" invariant, so serialization is genuinely infallible,
-// whereas an arbitrary `InnerData` is not guaranteed to be a valid document.
+// carries the "is valid" invariant, whereas an arbitrary `InnerData` is not
+// guaranteed to be a valid document. Writing a valid document can still fail
+// on one thing the model allows and the file format does not — an id above
+// the format's ceiling — which this panics on for now, like every other
+// consumer of the writer.
 impl From<&collomatique_state_colloscopes::Data> for InternalDataStream {
     fn from(value: &collomatique_state_colloscopes::Data) -> Self {
         InternalDataStream {
-            serialized: collomatique_storage::serialize_data(value),
+            serialized: collomatique_storage::serialize_data(value)
+                .expect("document ids exceed the file-format ceiling"),
         }
     }
 }

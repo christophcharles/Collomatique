@@ -15,6 +15,7 @@
 //! (the meaning of the block's absence) as specified in the spec. These
 //! defaults are frozen forever; the in-module tests pin them.
 
+pub mod id_visit;
 pub mod keyed;
 pub mod scalars;
 
@@ -163,6 +164,35 @@ impl Block {
             Block::ExportConfig(_) => BlockName::ExportConfig,
         }
     }
+}
+
+/// The typed payloads of a document, at most one per block name
+///
+/// `None` means the block is absent: its default state.
+///
+/// This is the shared shape of a document at layer 1, used by both
+/// directions: the decoder sorts the entries of a file into it before
+/// reconstructing, and the encoder fills it from the in-memory data
+/// before writing the entries out. Having one shape for both lets the id
+/// machinery of [id_visit] serve reading and writing alike.
+#[derive(Default)]
+pub struct Blocks {
+    pub general_planning: Option<general_planning::GeneralPlanning>,
+    pub subjects: Option<subjects::Subjects>,
+    pub teachers: Option<teachers::Teachers>,
+    pub students: Option<students::Students>,
+    pub assignments: Option<assignments::Assignments>,
+    pub week_patterns: Option<week_patterns::WeekPatterns>,
+    pub slots: Option<slots::Slots>,
+    pub incompatibilities: Option<incompatibilities::Incompatibilities>,
+    pub group_lists: Option<group_lists::GroupLists>,
+    pub group_list_associations: Option<group_list_associations::GroupListAssociations>,
+    pub pairings: Option<pairings::Pairings>,
+    pub slot_pairings: Option<slot_pairings::SlotPairings>,
+    pub settings: Option<settings::Settings>,
+    pub balancing: Option<balancing::Balancing>,
+    pub colloscope: Option<colloscope::Colloscope>,
+    pub export_config: Option<export_config::ExportConfig>,
 }
 
 #[cfg(test)]

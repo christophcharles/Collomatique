@@ -20,7 +20,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{Caveat, DecodeError, IdKind, RowKey};
-use crate::format::{self, BlockName};
+use crate::format::{self, BlockName, Blocks};
 use crate::json::{CURRENT_SPEC_VERSION, RawEntry, Version};
 
 use collomatique_state_colloscopes as mem;
@@ -51,29 +51,6 @@ pub fn decode(
     }))
 }
 
-/// The typed payloads of a document, at most one per block name
-///
-/// `None` means the block is absent: its default state.
-#[derive(Default)]
-struct Blocks {
-    general_planning: Option<format::general_planning::GeneralPlanning>,
-    subjects: Option<format::subjects::Subjects>,
-    teachers: Option<format::teachers::Teachers>,
-    students: Option<format::students::Students>,
-    assignments: Option<format::assignments::Assignments>,
-    week_patterns: Option<format::week_patterns::WeekPatterns>,
-    slots: Option<format::slots::Slots>,
-    incompatibilities: Option<format::incompatibilities::Incompatibilities>,
-    group_lists: Option<format::group_lists::GroupLists>,
-    group_list_associations: Option<format::group_list_associations::GroupListAssociations>,
-    pairings: Option<format::pairings::Pairings>,
-    slot_pairings: Option<format::slot_pairings::SlotPairings>,
-    settings: Option<format::settings::Settings>,
-    balancing: Option<format::balancing::Balancing>,
-    colloscope: Option<format::colloscope::Colloscope>,
-    export_config: Option<format::export_config::ExportConfig>,
-}
-
 fn store_block<T>(slot: &mut Option<T>, value: T, name: &'static str) -> Result<(), DecodeError> {
     if slot.is_some() {
         return Err(DecodeError::DuplicatedBlock(name));
@@ -82,7 +59,7 @@ fn store_block<T>(slot: &mut Option<T>, value: T, name: &'static str) -> Result<
     Ok(())
 }
 
-impl Blocks {
+impl format::Blocks {
     fn store(&mut self, block: format::Block) -> Result<(), DecodeError> {
         let name = block.name().as_str();
         use format::Block;

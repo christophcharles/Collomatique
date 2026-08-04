@@ -1035,7 +1035,18 @@ impl Component for EditorPanel {
                 sender.oneshot_command(async move {
                     match collomatique_storage::save_data_to_file(&data_copy, &path).await {
                         Ok(()) => EditorCommandOutput::SaveSuccessful(path),
-                        Err(e) => EditorCommandOutput::SaveFailed(path, e.to_string()),
+                        Err(collomatique_storage::SaveError::IO(e)) => {
+                            EditorCommandOutput::SaveFailed(path, e.to_string())
+                        }
+                        // The document cannot be written in the file format at
+                        // all (an id above the format's ceiling). There is no
+                        // rescue path in the interface yet — the id
+                        // regeneration that would fix it is not wired to
+                        // anything — so this is deliberately loud rather than
+                        // a toast the user could not act on.
+                        Err(e @ collomatique_storage::SaveError::Encode(_)) => {
+                            panic!("Cannot write the document: {e}")
+                        }
                     }
                 });
                 sender.output(EditorOutput::UpdateActions).unwrap();
