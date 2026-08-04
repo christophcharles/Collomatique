@@ -64,13 +64,14 @@ impl SimpleComponent for Dialog {
                 },
 
                 gtk::Label {
-                    set_label: "Le document ne peut pas être enregistré tel quel : ses identifiants internes dépassent la capacité du format de fichier.",
+                    set_label: "Le document ne peut pas être enregistré tel quel.\nSes identifiants internes dépassent la capacité du format de fichier.",
                     set_wrap: true,
                     set_halign: gtk::Align::Start,
                 },
 
                 gtk::Label {
-                    set_label: "Le compactage renumérote tous les identifiants internes du document, puis l'enregistre. Le contenu du colloscope (matières, colleurs, élèves, créneaux…) n'est pas modifié, mais l'historique des modifications (annuler/rétablir) est perdu.",
+                    set_label: "Le compactage renumérote tous les identifiants internes du document, puis l'enregistre.\nLe contenu du colloscope (matières, colleurs, élèves, créneaux…) ne sera pas modifié.\nPar contre l'historique des modifications (annuler/rétablir) est <b>perdu</b>.",
+                    set_use_markup: true,
                     set_wrap: true,
                     set_halign: gtk::Align::Start,
                 },
