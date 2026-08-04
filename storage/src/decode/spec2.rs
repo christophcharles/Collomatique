@@ -22,7 +22,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::{Caveat, DecodeError};
+use super::{Caveat, DecodeError, IdKind, RowKey};
 use crate::format::{self, BlockName};
 use crate::json::{CURRENT_SPEC_VERSION, RawEntry, Version};
 
@@ -286,23 +286,40 @@ fn reconstruct(blocks: Blocks) -> Result<InnerData, DecodeError> {
         blocks.general_planning.unwrap_or_default(),
         &mut next_week_id,
     )?;
-    let subjects = reconstruct_subjects(blocks.subjects.unwrap_or_default())?;
-    let teachers = reconstruct_teachers(blocks.teachers.unwrap_or_default());
-    let students = reconstruct_students(blocks.students.unwrap_or_default());
-    let assignments =
-        reconstruct_assignments(blocks.assignments.unwrap_or_default(), &periods, &subjects)?;
+    let subjects = reconstruct_subjects(blocks.subjects.unwrap_or_default(), &periods)?;
+    let teachers = reconstruct_teachers(blocks.teachers.unwrap_or_default(), &subjects)?;
+    let students = reconstruct_students(blocks.students.unwrap_or_default(), &periods)?;
+    let assignments = reconstruct_assignments(
+        blocks.assignments.unwrap_or_default(),
+        &periods,
+        &subjects,
+        &students,
+    )?;
     let week_patterns =
         reconstruct_week_patterns(blocks.week_patterns.unwrap_or_default(), &weeks, &periods)?;
-    let slots = reconstruct_slots(blocks.slots.unwrap_or_default(), &subjects)?;
-    let incompats = reconstruct_incompats(blocks.incompatibilities.unwrap_or_default())?;
+    let slots = reconstruct_slots(
+        blocks.slots.unwrap_or_default(),
+        &subjects,
+        &teachers,
+        &week_patterns,
+    )?;
+    let incompats = reconstruct_incompats(
+        blocks.incompatibilities.unwrap_or_default(),
+        &subjects,
+        &week_patterns,
+    )?;
     let group_lists = reconstruct_group_lists(
         blocks.group_lists.unwrap_or_default(),
         blocks.group_list_associations.unwrap_or_default(),
+        &periods,
+        &subjects,
+        &students,
     )?;
-    let settings = reconstruct_settings(blocks.settings.unwrap_or_default());
-    let pairings = reconstruct_pairings(blocks.pairings.unwrap_or_default(), &subjects)?;
-    let slot_pairings = reconstruct_slot_pairings(blocks.slot_pairings.unwrap_or_default())?;
-    let balancing = reconstruct_balancing(blocks.balancing.unwrap_or_default());
+    let settings = reconstruct_settings(blocks.settings.unwrap_or_default(), &students)?;
+    let pairings = reconstruct_pairings(blocks.pairings.unwrap_or_default(), &subjects, &periods)?;
+    let slot_pairings =
+        reconstruct_slot_pairings(blocks.slot_pairings.unwrap_or_default(), &slots, &periods)?;
+    let balancing = reconstruct_balancing(blocks.balancing.unwrap_or_default(), &subjects)?;
 
     let params = mem::colloscope_params::Parameters {
         periods,
@@ -388,33 +405,44 @@ fn reconstruct_periods(
 
 fn reconstruct_subjects(
     block: format::subjects::Subjects,
+    periods: &mem::periods::Periods,
 ) -> Result<mem::subjects::Subjects, DecodeError> {
-    let ordered_subject_list = block
-        .into_iter()
-        .map(|subject| {
-            (
-                id(subject.id),
-                mem::subjects::Subject {
-                    parameters: mem::subjects::SubjectParameters {
-                        name: subject.name,
-                        interrogation_parameters: subject
-                            .interrogation_parameters
-                            .map(interrogation_parameters),
-                    },
-                    excluded_periods: id_set(subject.excluded_periods),
-                },
-            )
-        })
-        .collect::<Vec<_>>()
-        .try_into()
-        .map_err(
-            |e: collomatique_state::tables::DuplicatedIdError<SubjectId>| {
-                DecodeError::DuplicatedIdInBlock {
+    let mut rows = Vec::new();
+    for subject in block {
+        for &period_raw in subject.excluded_periods.iter() {
+            if periods
+                .find_period_position(id::<PeriodId>(period_raw))
+                .is_none()
+            {
+                return Err(DecodeError::DanglingReference {
                     block: BlockName::Subjects.as_str(),
-                    id: e.0.inner(),
-                }
+                    row: RowKey::Id(subject.id),
+                    referenced: IdKind::Period,
+                    id: period_raw,
+                });
+            }
+        }
+        rows.push((
+            id(subject.id),
+            mem::subjects::Subject {
+                parameters: mem::subjects::SubjectParameters {
+                    name: subject.name,
+                    interrogation_parameters: subject
+                        .interrogation_parameters
+                        .map(interrogation_parameters),
+                },
+                excluded_periods: id_set(subject.excluded_periods),
             },
-        )?;
+        ));
+    }
+    let ordered_subject_list = rows.try_into().map_err(
+        |e: collomatique_state::tables::DuplicatedIdError<SubjectId>| {
+            DecodeError::DuplicatedIdInBlock {
+                block: BlockName::Subjects.as_str(),
+                id: e.0.inner(),
+            }
+        },
+    )?;
 
     Ok(mem::subjects::Subjects {
         ordered_subject_list,
@@ -467,56 +495,85 @@ fn periodicity(periodicity: format::subjects::Periodicity) -> mem::subjects::Sub
     }
 }
 
-fn reconstruct_teachers(block: format::teachers::Teachers) -> mem::teachers::Teachers {
-    mem::teachers::Teachers {
-        teacher_map: block
-            .into_inner()
-            .into_iter()
-            .map(|teacher| {
-                (
-                    id::<TeacherId>(teacher.id),
-                    mem::teachers::Teacher {
-                        desc: mem::PersonWithContact {
-                            surname: teacher.surname,
-                            firstname: teacher.firstname,
-                            tel: teacher.tel,
-                            email: teacher.email,
-                        },
-                        subjects: id_set(teacher.subjects),
-                    },
-                )
-            })
-            .collect(),
+fn reconstruct_teachers(
+    block: format::teachers::Teachers,
+    subjects: &mem::subjects::Subjects,
+) -> Result<mem::teachers::Teachers, DecodeError> {
+    let mut teacher_map = BTreeMap::new();
+    for teacher in block.into_inner() {
+        for &subject_raw in teacher.subjects.iter() {
+            if subjects
+                .find_subject(id::<SubjectId>(subject_raw))
+                .is_none()
+            {
+                return Err(DecodeError::DanglingReference {
+                    block: BlockName::Teachers.as_str(),
+                    row: RowKey::Id(teacher.id),
+                    referenced: IdKind::Subject,
+                    id: subject_raw,
+                });
+            }
+        }
+        teacher_map.insert(
+            id::<TeacherId>(teacher.id),
+            mem::teachers::Teacher {
+                desc: mem::PersonWithContact {
+                    surname: teacher.surname,
+                    firstname: teacher.firstname,
+                    tel: teacher.tel,
+                    email: teacher.email,
+                },
+                subjects: id_set(teacher.subjects),
+            },
+        );
     }
+    Ok(mem::teachers::Teachers {
+        teacher_map: teacher_map.into(),
+    })
 }
 
-fn reconstruct_students(block: format::students::Students) -> mem::students::Students {
-    mem::students::Students {
-        student_map: block
-            .into_inner()
-            .into_iter()
-            .map(|student| {
-                (
-                    id::<StudentId>(student.id),
-                    mem::students::Student {
-                        desc: mem::PersonWithContact {
-                            surname: student.surname,
-                            firstname: student.firstname,
-                            tel: student.tel,
-                            email: student.email,
-                        },
-                        excluded_periods: id_set(student.excluded_periods),
-                    },
-                )
-            })
-            .collect(),
+fn reconstruct_students(
+    block: format::students::Students,
+    periods: &mem::periods::Periods,
+) -> Result<mem::students::Students, DecodeError> {
+    let mut student_map = BTreeMap::new();
+    for student in block.into_inner() {
+        for &period_raw in student.excluded_periods.iter() {
+            if periods
+                .find_period_position(id::<PeriodId>(period_raw))
+                .is_none()
+            {
+                return Err(DecodeError::DanglingReference {
+                    block: BlockName::Students.as_str(),
+                    row: RowKey::Id(student.id),
+                    referenced: IdKind::Period,
+                    id: period_raw,
+                });
+            }
+        }
+        student_map.insert(
+            id::<StudentId>(student.id),
+            mem::students::Student {
+                desc: mem::PersonWithContact {
+                    surname: student.surname,
+                    firstname: student.firstname,
+                    tel: student.tel,
+                    email: student.email,
+                },
+                excluded_periods: id_set(student.excluded_periods),
+            },
+        );
     }
+    Ok(mem::students::Students {
+        student_map: student_map.into(),
+    })
 }
 
 fn reconstruct_assignments(
     block: format::assignments::Assignments,
     periods: &mem::periods::Periods,
     subjects: &mem::subjects::Subjects,
+    students: &mem::students::Students,
 ) -> Result<mem::assignments::Assignments, DecodeError> {
     // Sparse canonical form: a row is stored iff at least one student is
     // assigned (spec §4.5). An explicitly-empty row in the file decodes to an
@@ -543,12 +600,29 @@ fn reconstruct_assignments(
                 subject_id: row.subject_id,
             });
         }
-        let students = id_set(row.students);
-        if students.is_empty() {
+        for &student_raw in row.students.iter() {
+            if students
+                .student_map
+                .get(&id::<StudentId>(student_raw))
+                .is_none()
+            {
+                return Err(DecodeError::DanglingReference {
+                    block: BlockName::Assignments.as_str(),
+                    row: RowKey::PeriodSubject {
+                        period_id: row.period_id,
+                        subject_id: row.subject_id,
+                    },
+                    referenced: IdKind::Student,
+                    id: student_raw,
+                });
+            }
+        }
+        let assigned_students = id_set(row.students);
+        if assigned_students.is_empty() {
             // Neutral row: drop it to keep the canonical (absent) form.
             continue;
         }
-        entries.push(((period_id, subject_id), students));
+        entries.push(((period_id, subject_id), assigned_students));
     }
 
     Ok(mem::assignments::Assignments {
@@ -602,6 +676,8 @@ fn reconstruct_week_patterns(
 fn reconstruct_slots(
     block: format::slots::Slots,
     subjects: &mem::subjects::Subjects,
+    teachers: &mem::teachers::Teachers,
+    week_patterns: &mem::week_patterns::WeekPatterns,
 ) -> Result<mem::slots::Slots, DecodeError> {
     // Sparse ordering: one row per subject that has slots. An explicitly-empty
     // row in the file (a redundant neutral entry of the derived key set, spec
@@ -622,26 +698,49 @@ fn reconstruct_slots(
                 row.subject_id,
             ));
         }
-        let ordered_slots: Vec<(SlotId, mem::slots::Slot)> = row
-            .slots
-            .into_iter()
-            .map(|slot| {
-                (
-                    id::<SlotId>(slot.id),
-                    mem::slots::Slot {
-                        subject_id,
-                        teacher_id: id(slot.teacher_id),
-                        start_time: collomatique_time::SlotStart {
-                            weekday: weekday(slot.start.day),
-                            start_time: time_of_day(slot.start.time),
-                        },
-                        extra_info: slot.extra_info,
-                        week_pattern: slot.week_pattern_id.map(id),
-                        cost: slot.cost,
+        let mut ordered_slots: Vec<(SlotId, mem::slots::Slot)> = Vec::new();
+        for slot in row.slots {
+            if teachers
+                .teacher_map
+                .get(&id::<TeacherId>(slot.teacher_id))
+                .is_none()
+            {
+                return Err(DecodeError::DanglingReference {
+                    block: BlockName::Slots.as_str(),
+                    row: RowKey::Id(slot.id),
+                    referenced: IdKind::Teacher,
+                    id: slot.teacher_id,
+                });
+            }
+            if let Some(week_pattern_raw) = slot.week_pattern_id {
+                if week_patterns
+                    .week_pattern_map
+                    .get(&id::<WeekPatternId>(week_pattern_raw))
+                    .is_none()
+                {
+                    return Err(DecodeError::DanglingReference {
+                        block: BlockName::Slots.as_str(),
+                        row: RowKey::Id(slot.id),
+                        referenced: IdKind::WeekPattern,
+                        id: week_pattern_raw,
+                    });
+                }
+            }
+            ordered_slots.push((
+                id::<SlotId>(slot.id),
+                mem::slots::Slot {
+                    subject_id,
+                    teacher_id: id(slot.teacher_id),
+                    start_time: collomatique_time::SlotStart {
+                        weekday: weekday(slot.start.day),
+                        start_time: time_of_day(slot.start.time),
                     },
-                )
-            })
-            .collect();
+                    extra_info: slot.extra_info,
+                    week_pattern: slot.week_pattern_id.map(id),
+                    cost: slot.cost,
+                },
+            ));
+        }
         if ordered_slots.is_empty() {
             // Neutral row: drop it to keep the canonical (absent) form.
             continue;
@@ -660,10 +759,23 @@ fn reconstruct_slots(
 
 fn reconstruct_incompats(
     block: format::incompatibilities::Incompatibilities,
+    subjects: &mem::subjects::Subjects,
+    week_patterns: &mem::week_patterns::WeekPatterns,
 ) -> Result<mem::incompats::Incompats, DecodeError> {
     let mut incompat_map = BTreeMap::new();
 
     for row in block.into_inner() {
+        if subjects
+            .find_subject(id::<SubjectId>(row.subject_id))
+            .is_none()
+        {
+            return Err(DecodeError::DanglingReference {
+                block: BlockName::Incompatibilities.as_str(),
+                row: RowKey::Id(row.id),
+                referenced: IdKind::Subject,
+                id: row.subject_id,
+            });
+        }
         let mut slots = Vec::new();
         for slot in row.slots {
             let start = collomatique_time::SlotStart {
@@ -678,6 +790,21 @@ fn reconstruct_incompats(
                 return Err(DecodeError::SlotCrossesMidnight);
             };
             slots.push(slot);
+        }
+
+        if let Some(week_pattern_raw) = row.week_pattern_id {
+            if week_patterns
+                .week_pattern_map
+                .get(&id::<WeekPatternId>(week_pattern_raw))
+                .is_none()
+            {
+                return Err(DecodeError::DanglingReference {
+                    block: BlockName::Incompatibilities.as_str(),
+                    row: RowKey::Id(row.id),
+                    referenced: IdKind::WeekPattern,
+                    id: week_pattern_raw,
+                });
+            }
         }
 
         incompat_map.insert(
@@ -700,65 +827,120 @@ fn reconstruct_incompats(
 fn reconstruct_group_lists(
     block: format::group_lists::GroupLists,
     associations: format::group_list_associations::GroupListAssociations,
+    periods: &mem::periods::Periods,
+    subjects: &mem::subjects::Subjects,
+    students: &mem::students::Students,
 ) -> Result<mem::group_lists::GroupLists, DecodeError> {
-    let group_list_map = block
-        .into_inner()
-        .into_iter()
-        .map(|group_list| {
-            let raw_id = group_list.id;
-            let filling = match group_list.filling {
-                format::group_lists::Filling::Prefilled(prefilled) => {
-                    mem::group_lists::GroupListFilling::Prefilled {
-                        groups: prefilled
-                            .groups
-                            .into_iter()
-                            .map(|group| mem::group_lists::PrefilledGroup {
-                                students: id_set(group.students),
-                            })
-                            .collect(),
-                    }
+    let mut group_list_map = BTreeMap::new();
+    for group_list in block.into_inner() {
+        let raw_id = group_list.id;
+        // The student ids of the filling, kept raw so they can be checked
+        // after the internal seal below (same order as the pairings block:
+        // seal first, then references).
+        let raw_students: Vec<u64> = match &group_list.filling {
+            format::group_lists::Filling::Prefilled(prefilled) => prefilled
+                .groups
+                .iter()
+                .flat_map(|group| group.students.iter().copied())
+                .collect(),
+            format::group_lists::Filling::Automatic(automatic) => {
+                automatic.excluded_students.iter().copied().collect()
+            }
+        };
+        let filling = match group_list.filling {
+            format::group_lists::Filling::Prefilled(prefilled) => {
+                mem::group_lists::GroupListFilling::Prefilled {
+                    groups: prefilled
+                        .groups
+                        .into_iter()
+                        .map(|group| mem::group_lists::PrefilledGroup {
+                            students: id_set(group.students),
+                        })
+                        .collect(),
                 }
-                format::group_lists::Filling::Automatic(automatic) => {
-                    mem::group_lists::GroupListFilling::Automatic {
-                        excluded_students: id_set(automatic.excluded_students),
-                    }
+            }
+            format::group_lists::Filling::Automatic(automatic) => {
+                mem::group_lists::GroupListFilling::Automatic {
+                    excluded_students: id_set(automatic.excluded_students),
                 }
-            };
-            let params = mem::group_lists::GroupListParameters {
-                name: group_list.name,
-                students_per_group: range(group_list.students_per_group),
-                group_names: group_list.group_names,
-            };
-            // Honest decode: an inconsistent (params, filling) pair is a hard
-            // error here rather than being caught later by layer 3.
-            let value = mem::group_lists::GroupList::new(params, filling)
-                .map_err(|_| DecodeError::InconsistentGroupList(raw_id))?;
-            Ok((id::<GroupListId>(raw_id), value))
-        })
-        .collect::<Result<_, DecodeError>>()?;
+            }
+        };
+        let params = mem::group_lists::GroupListParameters {
+            name: group_list.name,
+            students_per_group: range(group_list.students_per_group),
+            group_names: group_list.group_names,
+        };
+        // Honest decode: an inconsistent (params, filling) pair is a hard
+        // error here rather than being caught later by layer 3.
+        let value = mem::group_lists::GroupList::new(params, filling)
+            .map_err(|_| DecodeError::InconsistentGroupList(raw_id))?;
+        for student_raw in raw_students {
+            if students
+                .student_map
+                .get(&id::<StudentId>(student_raw))
+                .is_none()
+            {
+                return Err(DecodeError::DanglingReference {
+                    block: BlockName::GroupLists.as_str(),
+                    row: RowKey::Id(raw_id),
+                    referenced: IdKind::Student,
+                    id: student_raw,
+                });
+            }
+        }
+        group_list_map.insert(id::<GroupListId>(raw_id), value);
+    }
 
     // The associations table is sparse: one row per associated
-    // `(period, subject)` (spec §4.10). Rows on an unknown period are kept
-    // here and left to layer 3, which reports them in model vocabulary
-    // instead of naming the block and row — one of the diagnostic gaps
-    // listed in `docs/todos/fixme_spec2_storage.md`.
-    let subjects_associations = associations
-        .into_inner()
-        .into_iter()
-        .map(|row| {
+    // `(period, subject)` (spec §4.10).
+    let mut subjects_associations = BTreeMap::new();
+    for row in associations.into_inner() {
+        let row_key = RowKey::PeriodSubject {
+            period_id: row.period_id,
+            subject_id: row.subject_id,
+        };
+        if periods
+            .find_period_position(id::<PeriodId>(row.period_id))
+            .is_none()
+        {
+            return Err(DecodeError::DanglingReference {
+                block: BlockName::GroupListAssociations.as_str(),
+                row: row_key,
+                referenced: IdKind::Period,
+                id: row.period_id,
+            });
+        }
+        if subjects
+            .find_subject(id::<SubjectId>(row.subject_id))
+            .is_none()
+        {
+            return Err(DecodeError::DanglingReference {
+                block: BlockName::GroupListAssociations.as_str(),
+                row: row_key,
+                referenced: IdKind::Subject,
+                id: row.subject_id,
+            });
+        }
+        if !group_list_map.contains_key(&id::<GroupListId>(row.group_list_id)) {
+            return Err(DecodeError::DanglingReference {
+                block: BlockName::GroupListAssociations.as_str(),
+                row: row_key,
+                referenced: IdKind::GroupList,
+                id: row.group_list_id,
+            });
+        }
+        subjects_associations.insert(
             (
-                (
-                    id::<PeriodId>(row.period_id),
-                    id::<SubjectId>(row.subject_id),
-                ),
-                id::<GroupListId>(row.group_list_id),
-            )
-        })
-        .collect();
+                id::<PeriodId>(row.period_id),
+                id::<SubjectId>(row.subject_id),
+            ),
+            id::<GroupListId>(row.group_list_id),
+        );
+    }
 
     Ok(mem::group_lists::GroupLists {
-        group_list_map,
-        subjects_associations,
+        group_list_map: group_list_map.into(),
+        subjects_associations: subjects_associations.into(),
     })
 }
 
@@ -770,21 +952,36 @@ fn limits(limits: format::settings::Limits) -> mem::settings::Limits {
     }
 }
 
-fn reconstruct_settings(block: format::settings::Settings) -> mem::settings::Settings {
-    mem::settings::Settings {
-        global: limits(block.global),
-        students: block
-            .students
-            .into_inner()
-            .into_iter()
-            .map(|row| (id::<StudentId>(row.student_id), limits(row.limits)))
-            .collect(),
+fn reconstruct_settings(
+    block: format::settings::Settings,
+    students: &mem::students::Students,
+) -> Result<mem::settings::Settings, DecodeError> {
+    let mut per_student = BTreeMap::new();
+    for row in block.students.into_inner() {
+        if students
+            .student_map
+            .get(&id::<StudentId>(row.student_id))
+            .is_none()
+        {
+            return Err(DecodeError::DanglingReference {
+                block: BlockName::Settings.as_str(),
+                row: RowKey::Id(row.student_id),
+                referenced: IdKind::Student,
+                id: row.student_id,
+            });
+        }
+        per_student.insert(id::<StudentId>(row.student_id), limits(row.limits));
     }
+    Ok(mem::settings::Settings {
+        global: limits(block.global),
+        students: per_student.into(),
+    })
 }
 
 fn reconstruct_pairings(
     block: format::pairings::Pairings,
     subjects: &mem::subjects::Subjects,
+    periods: &mem::periods::Periods,
 ) -> Result<mem::pairings::Pairings, DecodeError> {
     let pairing_rule_map = block
         .into_inner()
@@ -792,6 +989,7 @@ fn reconstruct_pairings(
         .map(|rule| {
             let raw_id = rule.id;
             let raw_subjects = [rule.antecedent.subject_id, rule.consequent.subject_id];
+            let raw_excluded_periods: Vec<u64> = rule.excluded_periods.iter().copied().collect();
             let part = |part: format::pairings::PairingPart| mem::pairings::RulePart {
                 subject_id: id(part.subject_id),
                 should_have: part.should_have,
@@ -811,15 +1009,30 @@ fn reconstruct_pairings(
             // rule that is wrong on both sides.
             for raw_subject in raw_subjects {
                 let Some(subject) = subjects.find_subject(id::<SubjectId>(raw_subject)) else {
-                    return Err(DecodeError::UnknownSubjectInPairingRule {
-                        rule_id: raw_id,
-                        subject_id: raw_subject,
+                    return Err(DecodeError::DanglingReference {
+                        block: BlockName::Pairings.as_str(),
+                        row: RowKey::Id(raw_id),
+                        referenced: IdKind::Subject,
+                        id: raw_subject,
                     });
                 };
                 if subject.parameters.interrogation_parameters.is_none() {
                     return Err(DecodeError::PairingRuleForSubjectWithoutInterrogations {
                         rule_id: raw_id,
                         subject_id: raw_subject,
+                    });
+                }
+            }
+            for &period_raw in &raw_excluded_periods {
+                if periods
+                    .find_period_position(id::<PeriodId>(period_raw))
+                    .is_none()
+                {
+                    return Err(DecodeError::DanglingReference {
+                        block: BlockName::Pairings.as_str(),
+                        row: RowKey::Id(raw_id),
+                        referenced: IdKind::Period,
+                        id: period_raw,
                     });
                 }
             }
@@ -831,12 +1044,16 @@ fn reconstruct_pairings(
 
 fn reconstruct_slot_pairings(
     block: format::slot_pairings::SlotPairings,
+    slots: &mem::slots::Slots,
+    periods: &mem::periods::Periods,
 ) -> Result<mem::slot_pairings::SlotPairings, DecodeError> {
     let slot_pairing_rule_map = block
         .into_inner()
         .into_iter()
         .map(|rule| {
             let raw_id = rule.id;
+            let raw_slots = [rule.antecedent.slot_id, rule.consequent.slot_id];
+            let raw_excluded_periods: Vec<u64> = rule.excluded_periods.iter().copied().collect();
             let part =
                 |part: format::slot_pairings::SlotPairingPart| mem::slot_pairings::SlotRulePart {
                     slot_id: id(part.slot_id),
@@ -851,6 +1068,32 @@ fn reconstruct_slot_pairings(
                 rule.soft,
             )
             .map_err(|_| DecodeError::InconsistentSlotPairingRule(raw_id))?;
+            // §4.12's reference checks, after the internal seal like the
+            // pairings block: antecedent first, then consequent, then the
+            // excluded periods (spec field order).
+            for raw_slot in raw_slots {
+                if slots.find_slot(id::<SlotId>(raw_slot)).is_none() {
+                    return Err(DecodeError::DanglingReference {
+                        block: BlockName::SlotPairings.as_str(),
+                        row: RowKey::Id(raw_id),
+                        referenced: IdKind::Slot,
+                        id: raw_slot,
+                    });
+                }
+            }
+            for &period_raw in &raw_excluded_periods {
+                if periods
+                    .find_period_position(id::<PeriodId>(period_raw))
+                    .is_none()
+                {
+                    return Err(DecodeError::DanglingReference {
+                        block: BlockName::SlotPairings.as_str(),
+                        row: RowKey::Id(raw_id),
+                        referenced: IdKind::Period,
+                        id: period_raw,
+                    });
+                }
+            }
             Ok((id::<SlotPairingRuleId>(raw_id), value))
         })
         .collect::<Result<_, DecodeError>>()?;
@@ -869,21 +1112,32 @@ fn balancing_options(options: format::balancing::Options) -> mem::balancing::Bal
     }
 }
 
-fn reconstruct_balancing(block: format::balancing::Balancing) -> mem::balancing::Balancing {
-    mem::balancing::Balancing {
-        global: balancing_options(block.global),
-        subjects: block
-            .subjects
-            .into_inner()
-            .into_iter()
-            .map(|row| {
-                (
-                    id::<SubjectId>(row.subject_id),
-                    balancing_options(row.options),
-                )
-            })
-            .collect(),
+fn reconstruct_balancing(
+    block: format::balancing::Balancing,
+    subjects: &mem::subjects::Subjects,
+) -> Result<mem::balancing::Balancing, DecodeError> {
+    let mut per_subject = BTreeMap::new();
+    for row in block.subjects.into_inner() {
+        if subjects
+            .find_subject(id::<SubjectId>(row.subject_id))
+            .is_none()
+        {
+            return Err(DecodeError::DanglingReference {
+                block: BlockName::Balancing.as_str(),
+                row: RowKey::Id(row.subject_id),
+                referenced: IdKind::Subject,
+                id: row.subject_id,
+            });
+        }
+        per_subject.insert(
+            id::<SubjectId>(row.subject_id),
+            balancing_options(row.options),
+        );
     }
+    Ok(mem::balancing::Balancing {
+        global: balancing_options(block.global),
+        subjects: per_subject.into(),
+    })
 }
 
 fn reconstruct_colloscope(
@@ -950,12 +1204,23 @@ fn reconstruct_colloscope(
             // GroupLists block): only automatic group lists carry placements.
             return Err(DecodeError::InvalidColloscopeGroupList(row.group_list_id));
         }
-        let placements: BTreeMap<StudentId, u32> = row
-            .students
-            .into_inner()
-            .into_iter()
-            .map(|placement| (id::<StudentId>(placement.student_id), placement.group))
-            .collect();
+        let mut placements: BTreeMap<StudentId, u32> = BTreeMap::new();
+        for placement in row.students.into_inner() {
+            if params
+                .students
+                .student_map
+                .get(&id::<StudentId>(placement.student_id))
+                .is_none()
+            {
+                return Err(DecodeError::DanglingReference {
+                    block: BlockName::Colloscope.as_str(),
+                    row: RowKey::Id(row.group_list_id),
+                    referenced: IdKind::Student,
+                    id: placement.student_id,
+                });
+            }
+            placements.insert(id::<StudentId>(placement.student_id), placement.group);
+        }
         if !placements.is_empty() {
             colloscope.set_group_list(group_list_id, placements);
         }

@@ -103,8 +103,21 @@ pub enum DecodeError {
     UnknownSubjectInSlots(u64),
     #[error("The slots have a row for subject id {0} which has no interrogations")]
     SlotsForSubjectWithoutInterrogations(u64),
-    #[error("Pairing rule id {rule_id} names subject id {subject_id}, which does not exist")]
-    UnknownSubjectInPairingRule { rule_id: u64, subject_id: u64 },
+    /// The row named by `row` in block `block` references an id that no
+    /// entity of kind `referenced` defines anywhere in the document.
+    ///
+    /// This is the shared variant for every spec §4 constraint of the
+    /// form "every id in X is an existing Y" — the referential half.
+    /// Constraints about the *state* of the referenced entity (e.g. "and
+    /// that subject has interrogations") have their own per-constraint
+    /// variants.
+    #[error("Block {block:?}, {row}: references an unknown {referenced} (id {id})")]
+    DanglingReference {
+        block: &'static str,
+        row: RowKey,
+        referenced: IdKind,
+        id: u64,
+    },
     #[error("Pairing rule id {rule_id} names subject id {subject_id}, which has no interrogations")]
     PairingRuleForSubjectWithoutInterrogations { rule_id: u64, subject_id: u64 },
     #[error(
@@ -119,6 +132,55 @@ pub enum DecodeError {
     LogicError(BTreeSet<collomatique_state_colloscopes::LogicError>),
     #[error("The loaded data breaks an invariant: {0:?}")]
     BrokenInvariants(BTreeSet<collomatique_state_colloscopes::FixableInvariant>),
+}
+
+/// File-vocabulary coordinates of a row inside a block
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RowKey {
+    /// A row keyed by its own id (teachers, students, subjects, slots,
+    /// incompatibilities, group lists, pairing rules, settings/balancing
+    /// override rows, colloscope group-list rows…)
+    Id(u64),
+    /// An association row keyed by (period, subject)
+    PeriodSubject { period_id: u64, subject_id: u64 },
+}
+
+impl std::fmt::Display for RowKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RowKey::Id(id) => write!(f, "row id {id}"),
+            RowKey::PeriodSubject {
+                period_id,
+                subject_id,
+            } => write!(f, "row (period {period_id}, subject {subject_id})"),
+        }
+    }
+}
+
+/// The kind of entity a dangling id was supposed to name
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IdKind {
+    Period,
+    Subject,
+    Teacher,
+    Student,
+    WeekPattern,
+    Slot,
+    GroupList,
+}
+
+impl std::fmt::Display for IdKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            IdKind::Period => "period",
+            IdKind::Subject => "subject",
+            IdKind::Teacher => "teacher",
+            IdKind::Student => "student",
+            IdKind::WeekPattern => "week pattern",
+            IdKind::Slot => "slot",
+            IdKind::GroupList => "group list",
+        })
+    }
 }
 
 impl From<collomatique_state_colloscopes::FromInnerDataError> for DecodeError {

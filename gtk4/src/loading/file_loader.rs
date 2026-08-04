@@ -1,4 +1,4 @@
-use collomatique_storage::{Caveat, DecodeError, DeserializationError, LoadError};
+use collomatique_storage::{Caveat, DecodeError, DeserializationError, IdKind, LoadError, RowKey};
 use relm4::{Component, ComponentParts, ComponentSender};
 use std::{collections::BTreeSet, path::PathBuf};
 
@@ -115,6 +115,28 @@ impl FileLoader {
         }
     }
 
+    fn row_fr(row: &RowKey) -> String {
+        match row {
+            RowKey::Id(id) => format!("entrée id {}", id),
+            RowKey::PeriodSubject {
+                period_id,
+                subject_id,
+            } => format!("ligne (période {}, matière {})", period_id, subject_id),
+        }
+    }
+
+    fn id_kind_fr(kind: &IdKind) -> &'static str {
+        match kind {
+            IdKind::Period => "une période inconnue",
+            IdKind::Subject => "une matière inconnue",
+            IdKind::Teacher => "un colleur inconnu",
+            IdKind::Student => "un élève inconnu",
+            IdKind::WeekPattern => "un motif de semaines inconnu",
+            IdKind::Slot => "un créneau inconnu",
+            IdKind::GroupList => "une liste de groupes inconnue",
+        }
+    }
+
     fn generate_decode_error_message(decode_error: DecodeError) -> String {
         match decode_error {
             DecodeError::EndOfTheUniverse => "Le fichier est probablement un fichier malicieux ou est corrompu.\n(Dernier ID utilisé supérieur à 2^63)".into(),
@@ -194,9 +216,9 @@ impl FileLoader {
                 "Fichier mal formé et est probablement corrompu.\n(Les créneaux ont une ligne pour la matière {}, qui n'a pas d'interrogations)",
                 subject_id
             ),
-            DecodeError::UnknownSubjectInPairingRule { rule_id, subject_id } => format!(
-                "Fichier mal formé et est probablement corrompu.\n(La règle d'appariement {} référence une matière inconnue, id {})",
-                rule_id, subject_id
+            DecodeError::DanglingReference { block, row, referenced, id } => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(Le bloc {}, {}, référence {} (id {}))",
+                block, Self::row_fr(&row), Self::id_kind_fr(&referenced), id
             ),
             DecodeError::PairingRuleForSubjectWithoutInterrogations { rule_id, subject_id } => format!(
                 "Fichier mal formé et est probablement corrompu.\n(La règle d'appariement {} nomme la matière {}, qui n'a pas d'interrogations)",

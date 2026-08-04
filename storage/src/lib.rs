@@ -15,7 +15,7 @@ mod encode;
 mod format;
 mod json;
 
-pub use decode::{Caveat, DecodeError};
+pub use decode::{Caveat, DecodeError, IdKind, RowKey};
 pub use json::{CURRENT_SPEC_VERSION, Version};
 
 use collomatique_state_colloscopes::Data;
