@@ -924,8 +924,16 @@ fn gen_group_lists(
     };
     let remove_w = if n > 0 { 3 } else { 0 };
     let duplicate_w = if pools.period_ids.is_empty() { 0 } else { 2 };
+    let generate_w = if !pools.period_ids.is_empty() && !pools.subject_ids.is_empty() {
+        2
+    } else {
+        0
+    };
 
-    match weighted(rng, &[add_w, update_w, assign_w, remove_w, duplicate_w]) {
+    match weighted(
+        rng,
+        &[add_w, update_w, assign_w, remove_w, duplicate_w, generate_w],
+    ) {
         0 => {
             let group_count = rng.random_range(2..=5);
             let params = synth::group_list_parameters(rng, group_count);
@@ -976,7 +984,39 @@ fn gen_group_lists(
             (n > 0 && rng.random_bool(0.8)).then(|| pick(rng, &pools.group_list_ids)),
         ),
         3 => GroupListsUpdateOp::DeleteGroupList(pick(rng, &pools.group_list_ids)),
-        _ => GroupListsUpdateOp::DuplicatePreviousPeriod(pick(rng, &pools.period_ids)),
+        4 => GroupListsUpdateOp::DuplicatePreviousPeriod(pick(rng, &pools.period_ids)),
+        // The generation's composite: one or two fresh lists, each with the
+        // coordinates it is to be associated to. A drawn subject may well be
+        // excluded from the drawn period, so some of these ops are refused —
+        // an `Err` outcome still exercises the atomicity assertion, exactly as
+        // it does for the single assignment above.
+        _ => {
+            let entries = (0..rng.random_range(1..=2))
+                .map(|_| {
+                    let group_count = rng.random_range(2..=5);
+                    let params = synth::group_list_parameters(rng, group_count);
+                    let filling = if rng.random_bool(0.5) {
+                        synth::prefilled_filling(rng, group_count, &pools.student_ids)
+                    } else {
+                        synth::automatic_filling(rng, &pools.student_ids)
+                    };
+                    let coverage = (0..rng.random_range(0..=2))
+                        .map(|_| {
+                            (
+                                pick(rng, &pools.period_ids),
+                                some_interrogation_subject(rng, pools),
+                            )
+                        })
+                        .collect();
+                    (
+                        GroupList::new(params, filling)
+                            .expect("the group count matches the parameters"),
+                        coverage,
+                    )
+                })
+                .collect();
+            GroupListsUpdateOp::AddGeneratedGroupLists(entries)
+        }
     }
 }
 
