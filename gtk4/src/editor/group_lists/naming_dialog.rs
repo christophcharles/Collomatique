@@ -1,6 +1,6 @@
 mod spec_row;
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 
 use adw::prelude::PreferencesGroupExt;
 use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, ToggleButtonExt, WidgetExt};
@@ -12,7 +12,7 @@ use relm4::{adw, gtk};
 
 use collomatique_constraints_groups::{
     GenerationPlan, GenerationRequest, GroupListsModel, Var, build_generation_plan,
-    build_model_with_log,
+    build_incremental_epochs, build_model_with_log,
 };
 use collomatique_state_colloscopes::colloscope_params::Parameters;
 use collomatique_state_colloscopes::{PeriodId, SubjectId};
@@ -374,11 +374,14 @@ impl Component for Dialog {
                     .expect("a built model implies a stored plan");
                 let names: Vec<String> = self.rows_data.iter().map(|d| d.name.clone()).collect();
 
-                // Phase A: an empty epoch map is the strategy contract's single priming solve.
-                // Piece 10 replaces it with the inclusion-based epochs.
+                // The inclusion-based epochs of §2.6: inclusion-minimal lists solve
+                // first, and each larger list aligns with the groups already fixed
+                // inside it through the pair objective. Cheap (quadratic in the spec
+                // count), so it runs right here rather than alongside the off-thread
+                // model build.
                 let payload = ConductorPayload {
                     incremental: IncrementalPayload {
-                        epochs: HashMap::new(),
+                        epochs: build_incremental_epochs(&plan),
                     },
                 };
 
