@@ -54,9 +54,16 @@ identical students and identical ranges always share a list (in particular one
 subject across several periods with no student change). Running the tool
 several times works around it when needed.
 
-The number of group *slots* in a spec's model is `floor(n / min_size)` where
-`n = students.len()` — more groups than that cannot all satisfy the minimum
-size. The objective then minimizes how many slots are actually used. (At least
+The number of group *slots* in a spec's model is
+`max(1, floor(n / min_size))` where `n = students.len()` — more groups than
+`floor(n / min_size)` cannot all satisfy the minimum size. The clamp matters
+when a spec has fewer students than the minimum group size (say 2 students,
+minimum 3): the bare formula gives 0 slots and the `StudentGroup` domain
+would be empty. With the clamp such a spec gets a single, necessarily
+undersized group, and the conditional min-size constraint (§2.3) then makes
+its model infeasible — the correct signal, since the data genuinely cannot
+satisfy the students-per-group policy.
+The objective then minimizes how many slots are actually used. (At least
 `ceil(n / max_size)` groups are always needed; pre-fixing that many
 `GroupHasStudents` to 1 is an optional strengthening, to be decided in the
 piece plan.)
@@ -358,6 +365,9 @@ space today only because of this keying, and becomes a plain
 base variable absent from the model (a stale name) stays representable and
 keeps the documented "ignored" behavior.
 
+**Done** — `d8d42ef0` (*strategies: key the incremental epoch payload by the
+base variable type*).
+
 ### Phase A — the skeleton
 
 **Piece 1 — minimal crate + full translation layer.** New crate
@@ -377,6 +387,21 @@ The fuzz-build net comes with this piece already — a `property_build.rs` /
 `GenerationRequest`s, cheap against the trivial model, guarding every later
 piece. To verify here: that the solver machinery accepts a model with no
 constraints and an empty objective.
+
+**Done** — two commits. `d97e2e3d` (*state-colloscopes:
+NonEmptyRangeInclusive implements Ord*) is the prerequisite: the dedup map is
+keyed by the spec itself, and a spec carries a `students_per_group` range, so
+the range needs a total order. It is a hand-written lexicographic order on the
+endpoint pair, because the wrapped `std::ops::RangeInclusive` implements `Eq`
+and `Hash` but not `PartialOrd`, and it is a storage order only — it says
+nothing about set inclusion, and the type's `ContentOrd` stays discrete.
+`6335e003` (*constraints-groups: minimal crate with the full translation
+layer (piece 1)*) is the crate itself, with the three tests described above.
+Two decisions the piece plan settled and the code carries: the slot-count
+clamp now recorded in §2.1, and the split between a malformed request (a
+`GenerationPlanError` — the config dialog only offers valid choices, so these
+are caller bugs) and a pair with no registered students (which merely lands
+in `skipped`).
 
 **Piece 2 — config dialog.** `gtk4/src/editor/group_lists/generate_dialog.rs`,
 modeled on `gtk4/src/editor/colloscope/config_dialog.rs` (same
@@ -454,7 +479,10 @@ ask for. Out of scope for the initial roadmap; not planned further here.
 ## 6. Points settled
 
 - No −1 in the `StudentGroup` domain; no `students_have_groups` analog.
-- Group slots per spec: `floor(n / min_size)`.
+- Group slots per spec: `max(1, floor(n / min_size))`. The clamp keeps the
+  variable domain non-empty when a spec has fewer students than the minimum
+  group size; that spec is then infeasible once the min-size constraint
+  lands, which is the intended signal (§2.1).
 - Kept lists restricted to prefilled ones; their only effect is pair pinning.
 - All reifications are full equivalences — never rely on objective pressure
   (strategies may strip the objective). Kept lists enter the `SharedPair`
@@ -480,7 +508,30 @@ ask for. Out of scope for the initial roadmap; not planned further here.
 
 ## 7. Points still open / to verify
 
-- **Piece-1 verification**: solver machinery on a constraint-free,
-  objective-free model.
+- ~~**Piece-1 verification**: solver machinery on a constraint-free,
+  objective-free model.~~ **Answered** by
+  `constraints-groups/tests/solve_smoke.rs` (commit `6335e003`). The test
+  builds one spec — 6 students, range 2..=3, hence 3 slots and 6 integer
+  variables with domain `0..=2` — and runs it through `build_model`,
+  `Model::solve` with a real `ColloCbcSolver`, and `build_group_lists`. Three
+  things could have broken and did not: `Modeler::build` accepts a model with
+  no bundle applied at all; an absent objective folds to a constant-0
+  minimize that CBC accepts; and a problem with variables but **zero
+  constraint rows** is solved rather than rejected. The returned assignment
+  converts back into a structurally valid prefilled list — 6 students placed,
+  at most 3 groups — so `GroupList::new`'s sealed invariants hold on solver
+  output.
+
+  Two adjacent things this does **not** establish, both deferred to their own
+  pieces rather than left as open questions here. First, the test drives the
+  in-process `Model::solve` path, whose `FeasibleSolution::get_data()` already
+  projects down to `ConfigData<Var>`; the gtk4 path instead goes through the
+  strategy/subprocess machinery over `InternalVar` and needs a
+  `filter_transmute` — that is piece 4's and piece 6's integration, and the
+  skeleton exists precisely so it gets exercised for real. Second, §2.6's
+  claim that an empty epoch map means a single priming solve is read off the
+  incremental strategy's contract, not yet executed: nothing has run the
+  conductor against this model. Piece 4 is where that first happens, and
+  piece 10 is where the map stops being empty.
 - **Phase-A check**: whether absurd (out-of-range-size) prefilled lists trip
   checker warnings on apply.
