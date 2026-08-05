@@ -2,18 +2,22 @@
 
 use crate::specs::{GenerationPlan, GroupListSpec};
 use collomatique_state_colloscopes::StudentId;
+use std::collections::BTreeSet;
 
 /// Pre-loaded data for variable enumeration: the deduplicated specs of a
-/// [`GenerationPlan`], in plan order.
+/// [`GenerationPlan`], in plan order, together with the pairs already
+/// grouped by the kept lists (the extras of piece 7 read them).
 #[derive(Debug, Clone)]
 pub struct VarEnv {
     specs: Vec<GroupListSpec>,
+    pinned_pairs: BTreeSet<(StudentId, StudentId)>,
 }
 
 impl VarEnv {
     pub fn new(plan: &GenerationPlan) -> VarEnv {
         VarEnv {
             specs: plan.specs.iter().map(|(spec, _)| spec.clone()).collect(),
+            pinned_pairs: plan.pinned_pairs.clone(),
         }
     }
 
@@ -29,6 +33,22 @@ impl VarEnv {
         let n = spec.students.len() as u32;
         let min = spec.students_per_group.start().get();
         (n / min).max(1)
+    }
+
+    /// The list indices of the plan, in order.
+    pub(crate) fn lists(&self) -> impl Iterator<Item = GroupListIdx> {
+        (0..self.specs.len()).map(GroupListIdx)
+    }
+
+    /// The students of a list's spec. Panics on a stale index, like
+    /// [`VarEnv::slot_count`].
+    pub(crate) fn students(&self, list: GroupListIdx) -> &BTreeSet<StudentId> {
+        &self.specs[list.0].students
+    }
+
+    /// The pairs fixed to "already shared" by the kept lists (`a < b`).
+    pub(crate) fn pinned_pairs(&self) -> &BTreeSet<(StudentId, StudentId)> {
+        &self.pinned_pairs
     }
 }
 

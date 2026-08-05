@@ -8,15 +8,17 @@
 //! ([`build_generation_plan`] on the way in, [`build_group_lists`] on the
 //! way out).
 //!
-//! Phase-A state: the model holds only the base `StudentGroup` variables —
-//! no constraints, no extras, no objective. Later pieces add the reified
-//! extras, the shape constraints, the stability objective, and the
-//! inclusion-based epochs. Until the epochs arrive, callers run the solver
-//! with an empty incremental epoch map, which the strategy contract defines
-//! as a single priming solve.
+//! Current state: the model holds the base `StudentGroup` variables and the
+//! reified extras of piece 7 — but no constraints and no objective, so
+//! nothing references the extras and the built model still has only the base
+//! variables. Later pieces add the shape constraints, the stability
+//! objective, and the inclusion-based epochs. Until the epochs arrive,
+//! callers run the solver with an empty incremental epoch map, which the
+//! strategy contract defines as a single priming solve.
 
 mod builder;
 mod convert;
+mod extras;
 mod specs;
 mod types;
 pub mod vars;
