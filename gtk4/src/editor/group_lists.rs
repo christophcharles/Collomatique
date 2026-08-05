@@ -7,6 +7,23 @@ use relm4::{adw, gtk};
 
 use collomatique_ops::GroupListsUpdateOp;
 
+use crate::editor::run_solver;
+
+/// The solver dialog instantiated for the group-list generation ILP model. In phase A the
+/// extra-variable and constraint-description spaces are uninhabited (the model is trivial);
+/// pieces 7-8 populate them without touching this instantiation.
+type SolverDialog = run_solver::Dialog<
+    collomatique_constraints_groups::Var,
+    collomatique_constraints_groups::ExtraVarName,
+    collomatique_constraints_groups::ConstraintDesc,
+>;
+
+/// Flattened variable of the group-list generation model (the solve path's ILP variable).
+type GroupsInternalVar = collomatique_ilp_modeler::InternalVar<
+    collomatique_constraints_groups::Var,
+    collomatique_constraints_groups::ExtraVarName,
+>;
+
 mod associations_display;
 mod edit_dialog;
 mod generate_dialog;
@@ -39,6 +56,8 @@ pub enum GroupListsInput {
         collomatique_strategies::ConductorPayload<collomatique_constraints_groups::Var>,
     ),
     GenerationNamingCancelled,
+    /// The solver dialog was validated with a solution.
+    GenerationSolveResult(collomatique_ilp::ConfigData<GroupsInternalVar>),
 }
 
 #[derive(Debug)]
@@ -58,6 +77,7 @@ pub struct GroupLists {
     edit_dialog: Controller<edit_dialog::Dialog>,
     generate_dialog: Controller<generate_dialog::Dialog>,
     naming_dialog: Controller<naming_dialog::Dialog>,
+    run_solver_dialog: Controller<SolverDialog>,
 
     /// The last-validated solver strategy, so the generation dialog reopens on the user's last
     /// choice instead of resetting. Reset to the parallel default on a new document, exactly as
@@ -212,6 +232,18 @@ impl Component for GroupLists {
                 }
             });
 
+        let run_solver_dialog = SolverDialog::builder()
+            .transient_for(&root)
+            .launch(run_solver::DialogSettings {
+                title: "Génération des listes de groupes".to_string(),
+                cancel_warning: "Les listes de groupes générées seront perdues.".to_string(),
+            })
+            .forward(sender.input_sender(), |msg| match msg {
+                run_solver::DialogOutput::NewConfig(config) => {
+                    GroupListsInput::GenerationSolveResult(config)
+                }
+            });
+
         let model = GroupLists {
             params: collomatique_state_colloscopes::colloscope_params::Parameters::default(),
             group_list_entries,
@@ -219,6 +251,7 @@ impl Component for GroupLists {
             edit_dialog,
             generate_dialog,
             naming_dialog,
+            run_solver_dialog,
             strategy: collomatique_strategies::ConductorStrategy::with_parallelism_defaults(),
             selection_reason: GroupListSelectionReason::New,
         };
@@ -268,14 +301,28 @@ impl Component for GroupLists {
                 // The generation was abandoned before it started; nothing to undo.
             }
             GroupListsInput::GenerationNamingAccepted(plan, names, model, payload) => {
-                // Piece 4 takes over from here: it feeds `model` and `payload`, together with the
-                // page's persisted strategy, into the generic solver dialog, and pieces 5-6 turn
-                // the solved config plus `plan` and `names` into the composite update op. Until
-                // then the built model is deliberately dropped and nothing else happens.
-                let _ = (plan, names, model, payload);
+                // Launch the solver on the freshly built model, with the page's persisted
+                // strategy. Piece 6 stores `plan` and `names` so the solve result can be turned
+                // into the composite update op; until then they are deliberately dropped.
+                let _ = (plan, names);
+                self.run_solver_dialog
+                    .sender()
+                    .send(run_solver::DialogInput::Run(
+                        self.strategy.clone(),
+                        model,
+                        payload,
+                    ))
+                    .unwrap();
             }
             GroupListsInput::GenerationNamingCancelled => {
                 // The generation was abandoned at the naming step; nothing to undo.
+            }
+            GroupListsInput::GenerationSolveResult(config) => {
+                // Pieces 5-6 take over from here: piece 6 projects the config down to base
+                // variables (`filter_transmute`), converts it with `build_group_lists` and the
+                // stored plan and names, and emits the composite op of piece 5. Until then the
+                // solution is deliberately dropped and nothing else happens.
+                let _ = config;
             }
             GroupListsInput::AddGroupList => {
                 self.selection_reason = GroupListSelectionReason::New;
