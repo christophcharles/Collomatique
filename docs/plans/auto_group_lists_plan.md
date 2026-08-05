@@ -516,6 +516,28 @@ the only place the user would ever learn why nothing was generated.
 `DialogInput::Run(strategy, model, payload)` from the naming/build dialog's
 output. The `NewConfig` result is received but not yet applied.
 
+**Done** — `bef11ce8` (*gtk4: launch the solver for automatic group-list
+generation (piece 4)*): the page instantiates `SolverDialog` for the groups
+model, launches it with its own title ("Génération des listes de groupes"), and
+sends `DialogInput::Run(strategy, model, payload)` from the naming dialog's
+output. This is the first time the conductor actually runs against this model,
+so §2.6's empty-epoch-map contract is executed rather than merely read off the
+incremental strategy's documentation. The `NewConfig` result comes back as a new
+`GenerationSolveResult` input and is dropped, together with the plan and the
+names, with a comment naming pieces 5-6 — storing them here would leave fields
+written but never read, and a warning-free build is this page's whole compile
+check.
+
+One deviation, forced by a string. The shared solver dialog hardcoded
+colloscope-specific copy in its cancel-while-running confirmation ("Toutes les
+modifications sur le colloscope seront perdues.", `run_solver.rs`), which would
+have shown verbatim during a group-list generation. Its `Init` therefore grew
+from a bare title `String` to a `DialogSettings { title, cancel_warning }`
+struct, in its own prerequisite commit `dbdf587b` (*gtk4: the solver dialog's
+cancel warning is caller-supplied*); the colloscope call site passes the two
+previously hardcoded strings, so its behaviour is unchanged. Every other French
+string in that dialog is generic and stayed hardcoded.
+
 **Piece 5 — the update op.** `GroupListsUpdateOp::AddGeneratedGroupLists`
 (§4), with its precise error enum, following the existing per-variant test
 style in `ops/src/group_lists.rs`.
@@ -615,11 +637,11 @@ ask for. Out of scope for the initial roadmap; not planned further here.
   in-process `Model::solve` path, whose `FeasibleSolution::get_data()` already
   projects down to `ConfigData<Var>`; the gtk4 path instead goes through the
   strategy/subprocess machinery over `InternalVar` and needs a
-  `filter_transmute` — that is piece 4's and piece 6's integration, and the
-  skeleton exists precisely so it gets exercised for real. Second, §2.6's
-  claim that an empty epoch map means a single priming solve is read off the
-  incremental strategy's contract, not yet executed: nothing has run the
-  conductor against this model. Piece 4 is where that first happens, and
-  piece 10 is where the map stops being empty.
+  `filter_transmute` — that is piece 6's integration, and the skeleton exists
+  precisely so it gets exercised for real. Second, §2.6's claim that an empty
+  epoch map means a single priming solve was read off the incremental
+  strategy's contract rather than executed — until piece 4 (`bef11ce8`), which
+  runs the conductor against this model for real. Piece 10 is where the map
+  stops being empty.
 - **Phase-A check**: whether absurd (out-of-range-size) prefilled lists trip
   checker warnings on apply.
