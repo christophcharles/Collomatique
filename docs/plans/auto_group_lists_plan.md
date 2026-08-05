@@ -663,6 +663,68 @@ intended test red.
 min size, ascending fill order (§2.3), each as its own commit with its unit
 tests. The fuzz net from piece 1 now has real builders to guard.
 
+**Done** — three commits: `2a87cc69` (*constraints-groups: max group size
+constraint (piece 8)*), `a3acddaf` (*constraints-groups: conditional min group
+size constraint (piece 8)*), `873e5c9b` (*constraints-groups: ascending fill
+order constraint (piece 8)*). The layout mirrors the sibling crate: a private
+`constraints-groups/src/constraints.rs` aggregator over a `constraints/`
+directory holding `students_per_group.rs` (min and max share one per-group
+helper and one `count` sum, as they do in
+`constraints-colloscopes/src/groups/students_per_group.rs`) and
+`groups_filled_by_ascending_order.rs`. `ConstraintDesc` went from uninhabited
+to three flat struct variants keyed by `list: GroupListIdx` and a plain `u32`
+group, each carrying its numeric bound; no severity tiers and no `From` impls,
+per §2.3. `VarEnv` grew two `pub(crate)` accessors, `min_size` and `max_size`,
+alongside the existing `slot_count`. The ascending builder needs no `< 2`
+guard, unlike the sibling's: `slot_count` is always at least 1, so
+`0..count - 1` cannot underflow and is simply empty for a single-slot list.
+
+The undersized-spec signal promised in §2.1 is now real rather than predicted:
+with 2 students and a range of 3..=4 the clamp gives one necessarily
+undersized slot, the min-size row has no satisfying assignment, and
+`Model::solve` returns `None`. `undersized_spec_is_infeasible` asserts exactly
+that through the public `build_model`.
+
+The builder's `trivial_model_has_only_base_vars` was rewritten rather than
+deleted — its "7 variables, 0 constraints" claim expires with the first
+constraint. Its successor, `shape_constraints_are_emitted`, counts user
+constraints per family through a deliberately **exhaustive** `match` (so a
+future family cannot land without this test growing to count it) and pins the
+half of the piece-7 lazy-expansion claim that survives: `PairInGroup` and
+`SharedPair` are referenced by nothing until the piece-9 objective and must
+stay out of the built model. `tests/solve_smoke.rs` lost its "piece-1
+verification" framing and its test became `model_solves_and_converts`; it now
+also asserts a *lower* bound on the group count, which the max cap forces.
+
+Two things the solver tests taught, both worth carrying forward. First,
+**`maximize` with a negative coefficient is not a penalty**: scaling an
+`Objective` by a negative number reverses its sense, and adding two objectives
+of opposite senses subtracts them, so the two flips cancel and
+`maximize(-1.0, x)` *rewards* `x`. This is documented at
+`ilp/src/objectives.rs:128-141`; the harness here routes negative weights
+through `minimize(-w, ...)` instead. It also means the "weight-±1 terms push
+the extra under test toward the wrong value" sentence in the piece-7 record
+above holds only for the `+1` terms — the `-1` ones push up too. Those tests
+still pass, because the asserted values are forced by the reifications rather
+than by objective pressure, but their intended direction is untested; fixing
+that harness is a loose end, not a piece. Second, **CBC returns integral
+variables as floats carrying tiny numerical error** (a 1 came back as
+`0.9999999999999999`), so every value assertion goes through
+`collomatique_ilp::f64_equals` and the crate's own `TOLERANCE`, never
+`assert_eq!`.
+
+Every commit was mutation-checked and two checks were informative. Dropping
+the min row left `min_size_forces_a_companion` green, because with the
+originally planned 5 students and a range of 2..=3 over 2 slots the *max*
+constraint already forces a companion by pigeonhole — the spec was widened to
+2..=4 so that only the minimum can produce the second student, and the test
+then went red as intended. Swapping the ascending inequality to
+`next.geq(&current)` turned the intended test red but killed two size tests as
+collateral: a descending order forbids piling students into group 0, which is
+what those tests do. Removing the constraint outright isolates it cleanly —
+exactly `ascending_fill_forbids_gaps` and the builder's count assertion turn
+red — so both mutations were run.
+
 **Piece 9 — the objective.** Both terms, equal weights (§2.4). Unit tests: a
 two-list instance where the optimum provably reuses groupings; a pinning test
 showing kept pairs make reuse free. From here the tool produces sensible
