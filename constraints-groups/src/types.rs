@@ -49,4 +49,7 @@ pub enum ConstraintDesc {
         group: u32,
         min_students: u32,
     },
+    /// `GroupHasStudents(list, group) >= GroupHasStudents(list, group + 1)`
+    /// — empty groups form a suffix. Doubles as symmetry breaking.
+    GroupFilledByAscendingOrder { list: GroupListIdx, group: u32 },
 }

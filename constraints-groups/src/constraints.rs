@@ -3,13 +3,17 @@
 //! constraints reference `StudentInGroup` and `GroupHasStudents`, which must
 //! be declared first.
 
+mod groups_filled_by_ascending_order;
 mod students_per_group;
 
 use crate::extras::MyBundle;
 use crate::vars::VarEnv;
 
 pub(crate) fn build(env: &VarEnv) -> MyBundle {
-    students_per_group::build(env)
+    let bundle = students_per_group::build(env);
+    bundle
+        .merge(groups_filled_by_ascending_order::build(env))
+        .expect("no duplicate extras from constraints")
 }
 
 #[cfg(test)]
@@ -209,6 +213,39 @@ mod tests {
             .map(|&s| value(&cfg, in_group_1(s)))
             .sum();
         assert_close(count_1, 2.0);
+    }
+
+    #[test]
+    fn ascending_fill_forbids_gaps() {
+        // 2 students, sizes 1..=2 → 2 slots. Push both into group 1: both
+        // there would leave group 0 empty below a non-empty group 1, so at
+        // most one push can win, and group 0 must hold the other student.
+        let plan = plan_of(&[(&[1, 2], (1, 2))]);
+        let list = GroupListIdx(0);
+        let in_group_1 = |s: u64| {
+            extra_var(ExtraVarName::StudentInGroup {
+                list,
+                student: student(s),
+                group: 1,
+            })
+        };
+        let has_students_0 = extra_var(ExtraVarName::GroupHasStudents { list, group: 0 });
+
+        let cfg = solve_with_objective(
+            &plan,
+            &[
+                place(0, 1, 1),
+                place(0, 2, 1),
+                // Adversarial: push the group-0 indicator the wrong way.
+                (-1.0, has_students_0.clone()),
+            ],
+        );
+
+        // Which of the two students lands in group 1 is the solver's
+        // choice, so the assertion is on the sum.
+        let count_1: f64 = [1, 2].iter().map(|&s| value(&cfg, in_group_1(s))).sum();
+        assert_close(count_1, 1.0);
+        assert_close(value(&cfg, has_students_0), 1.0);
     }
 
     #[test]

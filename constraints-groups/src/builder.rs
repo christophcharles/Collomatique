@@ -64,17 +64,21 @@ mod tests {
         // must not slip in without this test growing to count it.
         let mut max = 0;
         let mut min = 0;
+        let mut ascending = 0;
         for (_, source) in model.problem().get_constraints() {
             if let ConstraintSource::User(desc) = source {
                 match desc {
                     ConstraintDesc::StudentsPerGroupMax { .. } => max += 1,
                     ConstraintDesc::StudentsPerGroupMin { .. } => min += 1,
+                    ConstraintDesc::GroupFilledByAscendingOrder { .. } => ascending += 1,
                 }
             }
         }
         // One size constraint of each kind per (list, group): 2 + 3.
         assert_eq!(max, 5);
         assert_eq!(min, 5);
+        // One ordering constraint per adjacent pair: (2 − 1) + (3 − 1).
+        assert_eq!(ascending, 3);
 
         // The pair extras are referenced by nothing until the piece-9
         // objective: lazy expansion must keep them out of the problem.

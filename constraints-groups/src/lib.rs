@@ -10,9 +10,9 @@
 //!
 //! Current state: the model holds the base `StudentGroup` variables, the
 //! reified extras of piece 7, and the shape constraints of piece 8 (max
-//! size, conditional min size) — but no objective yet, so the pair extras
-//! are referenced by nothing and stay out of the built model. Later pieces
-//! add the remaining shape constraint, the stability objective, and the
+//! size, conditional min size, ascending fill order) — but no objective
+//! yet, so the pair extras are referenced by nothing and stay out of the
+//! built model. Later pieces add the stability objective and the
 //! inclusion-based epochs. Until the epochs arrive, callers run the solver
 //! with an empty incremental epoch map, which the strategy contract defines
 //! as a single priming solve.
