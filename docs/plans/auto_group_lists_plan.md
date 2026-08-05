@@ -1152,6 +1152,32 @@ a tooltip that appears only sometimes is worse than one that always does. It
 must be `#[watch]`ed like the label itself, so that renaming a list updates
 both.
 
+**Done** — commit `f411390a` (*gtk4: fixed-width ellipsized names in the
+group-list display (piece 13)*). One label changed, nothing else:
+`set_size_request: (150, -1)` gave way to `set_ellipsize:
+gtk::pango::EllipsizeMode::End` with `set_width_chars: 20` **and**
+`set_max_width_chars: 20`.
+
+Both width properties are needed. Once a label ellipsizes, its minimum width
+collapses to about the ellipsis and its natural width is still the full text;
+`width-chars` restores the minimum and `max-width-chars` caps the natural
+width, so pinning the two to the same value is what makes the column the same
+width on every row. `max-width-chars` alone would stop long names from
+widening a row but would let short names narrow one, which is the same
+misalignment from the other side. Twenty characters is roughly the old 150 px
+at the default font, so the layout looks as it did except that long names now
+truncate.
+
+The tooltip is `#[watch] set_tooltip_text: Some(&self.generate_list_name())`,
+set unconditionally as the entry above prescribes, and reusing the same helper
+as the label so the two can never disagree. Both watched setters re-run on
+`EntryInput::UpdateData`, which is the path a rename takes.
+
+No mutation checks: the gtk4 crate has no tests, and a relm4 `view!` block is
+not unit-testable without a display, so there is nothing a mutation could
+redden. `cargo check -p collomatique-gtk4` is the whole automated check; the
+alignment, the ellipsis and the tooltip were verified by eye.
+
 **Explicitly out of scope: Python.** The initial roadmap listed "Python wiring"
 here because the original todo mentioned it. It is dropped. If group-list
 generation ever becomes scriptable, that will come with the rewrite of the
