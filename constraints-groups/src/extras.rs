@@ -219,7 +219,13 @@ mod tests {
             .apply_bundle(build_extras(&env).into_general())
             .expect("no duplicate extras");
         for (weight, var) in terms {
-            modeler.maximize(*weight, LinExpr::var(var.clone()));
+            // The weight goes into the `LinExpr`, before the sense is
+            // applied. `maximize`'s own `coef` scales the finished
+            // `Objective` instead, and scaling an `Objective` by a negative
+            // number reverses its sense too (`ilp/src/objectives.rs:128`),
+            // so a negative weight there would reward the term rather than
+            // penalize it.
+            modeler.maximize(1.0, *weight * LinExpr::var(var.clone()));
         }
         let model = modeler.build(&env).expect("build should succeed");
         let solution = model
