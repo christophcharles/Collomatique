@@ -542,6 +542,21 @@ string in that dialog is generic and stayed hardcoded.
 (§4), with its precise error enum, following the existing per-variant test
 style in `ops/src/group_lists.rs`.
 
+**Done** — `c73d3d7f` (*ops: composite op to add generated group lists (piece
+5)*): the variant carries `Vec<(GroupList, BTreeSet<(PeriodId, SubjectId)>)>`
+and lands as one undo slot, prechecking the whole payload against the pre-state
+and then running `GroupListOp::Add` plus one `AssignToSubject` per coordinate
+on the caller's session — the `DuplicatePreviousPeriod` shape. Its
+`AddGeneratedGroupListsError` is the union of the two per-variant surfaces the
+composite is made of: the add's student sweep, and four of the assignment's
+five coordinate checks. The fifth has no input here, since every association
+names the list the session has just issued, so there is no
+`InvalidGroupListId`. Two things the growth rule kept out: duplicate
+coordinates across entries are last-wins rather than an error, and the filling
+shape is not checked. The property suite's `gen_group_lists` grew an arm for
+the variant (verified reached by a temporary panic in it, not merely weighted
+in).
+
 **Piece 6 — final plumbing.** Chain config dialog → naming/build dialog →
 solver dialog; on `NewConfig`, `filter_transmute` to base vars,
 `build_group_lists`, emit the composite op through the page's normal output.
