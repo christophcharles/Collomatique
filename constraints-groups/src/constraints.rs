@@ -52,18 +52,13 @@ mod tests {
             .apply_bundle(build(&env).into_general())
             .expect("no duplicate extras");
         for (weight, var) in terms {
-            // A negative weight must go through `minimize`, not through
-            // `maximize` with a negative coefficient: as the `Objective`
-            // documentation warns, scaling by a negative number also
-            // reverses the sense, and adding two objectives of opposite
-            // senses subtracts them — so the two flips cancel and
-            // `maximize(-1.0, x)` would reward `x` instead of penalizing
-            // it.
-            if *weight >= 0.0 {
-                modeler.maximize(*weight, LinExpr::var(var.clone()));
-            } else {
-                modeler.minimize(-*weight, LinExpr::var(var.clone()));
-            }
+            // The weight goes into the `LinExpr`, before the sense is
+            // applied. `maximize`'s own `coef` scales the finished
+            // `Objective` instead, and scaling an `Objective` by a negative
+            // number reverses its sense too (`ilp/src/objectives.rs:128`),
+            // so a negative weight there would reward the term rather than
+            // penalize it.
+            modeler.maximize(1.0, *weight * LinExpr::var(var.clone()));
         }
         let model = modeler.build(&env).expect("build should succeed");
         let solution = model

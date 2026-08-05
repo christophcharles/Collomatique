@@ -696,21 +696,12 @@ stay out of the built model. `tests/solve_smoke.rs` lost its "piece-1
 verification" framing and its test became `model_solves_and_converts`; it now
 also asserts a *lower* bound on the group count, which the max cap forces.
 
-Two things the solver tests taught, both worth carrying forward. First,
-**`maximize` with a negative coefficient is not a penalty**: scaling an
-`Objective` by a negative number reverses its sense, and adding two objectives
-of opposite senses subtracts them, so the two flips cancel and
-`maximize(-1.0, x)` *rewards* `x`. This is documented at
-`ilp/src/objectives.rs:128-141`; the harness here routes negative weights
-through `minimize(-w, ...)` instead. It also means the "weight-±1 terms push
-the extra under test toward the wrong value" sentence in the piece-7 record
-above holds only for the `+1` terms — the `-1` ones push up too. Those tests
-still pass, because the asserted values are forced by the reifications rather
-than by objective pressure, but their intended direction is untested; fixing
-that harness is a loose end, not a piece. Second, **CBC returns integral
-variables as floats carrying tiny numerical error** (a 1 came back as
-`0.9999999999999999`), so every value assertion goes through
-`collomatique_ilp::f64_equals` and the crate's own `TOLERANCE`, never
+Two small things about the test harness. A negative weight belongs in the
+`LinExpr` (`maximize(1.0, -1.0 * expr)`), not in `maximize`'s `coef`, which
+scales the finished `Objective` and therefore flips its sense too
+(`ilp/src/objectives.rs:128`). And CBC returns integral variables as floats
+carrying tiny numerical error (a 1 came back as `0.9999999999999999`), so
+value assertions go through `collomatique_ilp::f64_equals` rather than
 `assert_eq!`.
 
 Every commit was mutation-checked and two checks were informative. Dropping
