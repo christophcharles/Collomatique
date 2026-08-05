@@ -415,6 +415,54 @@ on for pairs with **no current association**, off otherwise; kept-list
 switches all on. This makes the two obvious cases right by default: an empty
 document, and a second period with no associations yet.
 
+**Done** — two commits. `c7a2d91a` (*gtk4: the group-lists page holds the
+whole colloscope Parameters*) is the mechanical prerequisite: the page stored
+five separate clones, and the dialog echoes its parameters back on `Accepted`
+the way `colloscope/config_dialog.rs` does, so that what piece 3 builds a model
+from is literally what the user configured against — and `build_generation_plan`
+takes a whole `&Parameters` anyway. `663c457b` (*gtk4: configuration dialog for
+automatic group-list generation (piece 2)*) is the dialog, its two factory
+modules, and the `collomatique-constraints-groups` dependency (used for the
+`GenerationRequest` type only; no model is built here). On "Valider" the page
+stores the strategy and drops the request, with a comment naming piece 3 as the
+consumer.
+
+Two deviations from the piece order above, both decided in the piece plan.
+First, **the button is enabled here, not in piece 6**: an insensitive button
+leaves `GroupListsInput::GenerateClicked` constructed nowhere, which is a
+dead-code warning on a `pub enum` in a private module, and an unreachable
+dialog never gets clicked and therefore never gets debugged. Strategy
+persistence moved along with it, since the dialog needs a strategy to display
+on `Show` anyway. Piece 6 shrinks accordingly.
+
+Second, **the request is recomputed from the document on every open; only the
+strategy persists**. The colloscope page persists its `SolveConfig` because
+that config carries per-run tuning with no cheap default. The generation
+request is not like that: its defaults are a function of the current document
+("rebuild what has no list yet, keep everything prefilled"), so a persisted
+request would mean a subject added between two openings silently arrives
+switched off, contradicting the default rule. The strategy does persist, and
+resets to `with_parallelism_defaults()` on a new document — the same treatment
+`ColloscopeInput::ResetSolveConfig` gives the colloscope page.
+
+Four smaller choices the piece plan settled and the code carries. A period
+with no eligible subject gets **no group at all** rather than an empty titled
+one, which makes "the left pane is empty" and "there is nothing to rebuild"
+the same condition and lets the empty state be one honest sentence. Subjects
+with **no registered student are still listed**: the dialog does not read
+`Assignments`, and such a pair lands in `GenerationPlan::skipped`, which piece
+3's dialog reports — filtering here would duplicate that logic and hide the
+warning. **"Valider" is insensitive when nothing is selected for rebuild**,
+since an empty `rebuild` set produces an empty plan and an empty model.
+Prefilled lists are listed **sorted by `(name, id)`**, the order the
+group-lists page itself uses, so the two views agree.
+
+Verification: `gtk4` has no test suite at all — not one `#[test]` under
+`gtk4/src` — so this piece is checked by compilation plus a manual
+click-through, and saying that plainly beats inventing a relm4 test harness
+for a piece whose whole content is a dialog. The compile check is not empty:
+a warning-free build is what proves every new enum variant is reachable.
+
 **Piece 3 — naming/build dialog.** New dialog replacing `loading_dialog.rs`
 in the chain: one row per spec with an editable name (`adw::EntryRow`) and a
 subtitle listing the covered subjects and periods; "Valider" disabled until
@@ -438,11 +486,11 @@ output. The `NewConfig` result is received but not yet applied.
 (§4), with its precise error enum, following the existing per-variant test
 style in `ops/src/group_lists.rs`.
 
-**Piece 6 — final plumbing.** Enable the button at `group_lists.rs:84-93`;
-chain button → config dialog → naming/build dialog → solver dialog; on
-`NewConfig`, `filter_transmute` to base vars, `build_group_lists`, emit the
-composite op through the page's normal output. Persist the last-used strategy
-across invocations (like the colloscope page at `colloscope.rs:166-171`).
+**Piece 6 — final plumbing.** Chain config dialog → naming/build dialog →
+solver dialog; on `NewConfig`, `filter_transmute` to base vars,
+`build_group_lists`, emit the composite op through the page's normal output.
+The button and the persisted strategy already landed in piece 2, so what is
+left here is the chaining and the apply.
 End state of phase A: the full pipeline works and produces absurd lists. To
 check along the way: whether prefilled lists with out-of-range group sizes
 trip any checker warning on apply (harmless if so, but the skeleton demos
@@ -500,7 +548,13 @@ ask for. Out of scope for the initial roadmap; not planned further here.
 - Overwritten associations may orphan old lists; they are kept.
 - Subjects listed in the config dialog: only those with interrogations.
 - Config dialog defaults: rebuild on where no association exists, kept lists
-  all on.
+  all on. They are recomputed from the document on every open — persisting
+  them would contradict the rule itself, since a subject added between two
+  openings would arrive switched off. Only the solver strategy persists.
+- A list may be both kept and rebuilt over: the new list takes over the
+  association (§4) while the old list's pairings still count as
+  already-shared. Keeping a list is about its *pairings*, not its
+  association, so this needs no guard.
 - Generated lists are `Prefilled`, unnamed groups, spec range as list range.
 - Epoch algorithm: longest strict-inclusion chain height, computed by
   ascending student count (§2.6). The epoch map lists base variables only;
