@@ -1,34 +1,64 @@
 //! The stability objective (piece 9 of the roadmap, §2.4).
 //!
-//! Minimize `W_GROUPS · Σ GroupHasStudents + W_PAIRS · Σ SharedPair`. The
+//! Minimize `w_groups · Σ GroupHasStudents + w_pairs · Σ SharedPair`. The
 //! first term uses as few groups as possible; the second keeps groups stable
 //! across lists — `SharedPair` counts a pair once however many lists it
 //! shares a group in, and a pair pinned by a kept list is the constant 1, so
 //! reusing an existing grouping costs nothing.
 //!
-//! The weights are hardcoded and equal for now (roadmap §2.4): exposing them
-//! is phase-C polish, and tuning them is expected — the two terms pull in
-//! opposite directions (fewer groups means fuller groups, which means more
-//! pairs inside each list).
+//! The weights are configurable ([`ObjectiveWeights`], piece 11) and the
+//! default is group-dominant (w_groups = 1000, w_pairs = 1): at equal
+//! weights the two terms cancel exactly when merging singletons, so the
+//! pair term is a tie-breaker among the solutions that already minimize
+//! the group count.
 
 use crate::extras::{MyBundle, co_occurrences, extra_var};
 use crate::types::ExtraVarName;
 use crate::vars::VarEnv;
 use collomatique_ilp::linexpr::LinExpr;
 
-/// Weight of the "use as few groups as possible" term.
-const W_GROUPS: f64 = 1.0;
-/// Weight of the "share as few pairs as possible" term.
-const W_PAIRS: f64 = 1.0;
+/// Default weight of the "use as few groups as possible" term. Group-dominant
+/// on purpose (roadmap §5 piece 11): at equal weights, moving a student out
+/// of a singleton into a group of size s trades one group against s new
+/// pairs — exactly cost-neutral — so the group count was drowned by the pair
+/// term. 1000 dominates every plausible instance while keeping the model
+/// well scaled; a strict lexicographic weight would have to exceed
+/// Σ C(n_i, 2) and would ill-condition the LP relaxation.
+const W_GROUPS_DEFAULT: f64 = 1000.0;
+/// Default weight of the "share as few pairs as possible" term: a tie-breaker
+/// among the solutions that already use as few groups as possible.
+const W_PAIRS_DEFAULT: f64 = 1.0;
 
-pub(crate) fn build(env: &VarEnv) -> MyBundle {
+/// The two weights of the stability objective (§2.4), handed to
+/// [`build_model`](crate::build_model) next to the plan. Deliberately not a
+/// field of [`GenerationRequest`](crate::GenerationRequest): the request says
+/// *what* to rebuild and is consumed by `build_generation_plan`; the weights
+/// are read only by the objective builder.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ObjectiveWeights {
+    /// Weight of the "use as few groups as possible" term.
+    pub w_groups: f64,
+    /// Weight of the "share as few pairs as possible" term.
+    pub w_pairs: f64,
+}
+
+impl Default for ObjectiveWeights {
+    fn default() -> Self {
+        ObjectiveWeights {
+            w_groups: W_GROUPS_DEFAULT,
+            w_pairs: W_PAIRS_DEFAULT,
+        }
+    }
+}
+
+pub(crate) fn build(env: &VarEnv, weights: ObjectiveWeights) -> MyBundle {
     let mut expr = LinExpr::constant(0.0);
     let mut has_terms = false;
 
     for list in env.lists() {
         for group in 0..env.slot_count(list) {
             expr = expr
-                + W_GROUPS
+                + weights.w_groups
                     * LinExpr::var(extra_var(ExtraVarName::GroupHasStudents { list, group }));
             has_terms = true;
         }
@@ -40,7 +70,7 @@ pub(crate) fn build(env: &VarEnv) -> MyBundle {
     // every declared variable is what makes "regrouping a kept pair is free"
     // literally true of the objective function.
     for ((a, b), _lists) in co_occurrences(env) {
-        expr = expr + W_PAIRS * LinExpr::var(extra_var(ExtraVarName::SharedPair { a, b }));
+        expr = expr + weights.w_pairs * LinExpr::var(extra_var(ExtraVarName::SharedPair { a, b }));
         has_terms = true;
     }
 
@@ -73,6 +103,7 @@ mod tests {
     /// variable by `w` against the real objective.
     fn solve_with_adversary(
         plan: &GenerationPlan,
+        weights: ObjectiveWeights,
         terms: &[(f64, V)],
     ) -> ConfigData<InternalVar<Var, ExtraVarName>> {
         let env = VarEnv::new(plan);
@@ -84,7 +115,7 @@ mod tests {
             .apply_bundle(crate::constraints::build(&env).into_general())
             .expect("no duplicate extras");
         modeler
-            .apply_bundle(build(&env).into_general())
+            .apply_bundle(build(&env, weights).into_general())
             .expect("no duplicate extras");
         for (weight, var) in terms {
             // The weight goes into the `LinExpr`; a negative `coef` on
@@ -99,9 +130,18 @@ mod tests {
         solution.get_complete_data()
     }
 
+    /// The equal weights the piece-9 tests were written against: their
+    /// comment arithmetic (and `place()`'s weight-100 scale) assumes 1/1.
+    const EQUAL: ObjectiveWeights = ObjectiveWeights {
+        w_groups: 1.0,
+        w_pairs: 1.0,
+    };
+
     /// A weight-100 term placing `student` in `group` of `list`. 100 dwarfs
-    /// both the real objective (at most ~10 on these instances) and the ±0.5
-    /// adversaries, so a placement never bends.
+    /// both the real objective at the explicit `EQUAL` weights the piece-9
+    /// tests pass (at most ~10 on these instances) and the ±0.5 adversaries,
+    /// so a placement never bends. Not for use with the group-dominant
+    /// default, which 100 does not dwarf.
     fn place(list: usize, s: u64, group: u32) -> (f64, V) {
         (
             100.0,
@@ -171,6 +211,7 @@ mod tests {
         let plan = plan_of(&[(&[1, 2, 3, 4], (2, 2)), (&[1, 2, 3, 4], (2, 3))]);
         let cfg = solve_with_adversary(
             &plan,
+            EQUAL,
             &[
                 place(0, 1, 0),
                 place(0, 2, 0),
@@ -208,6 +249,7 @@ mod tests {
         plan.pinned_pairs = [(student(1), student(2))].into_iter().collect();
         let cfg = solve_with_adversary(
             &plan,
+            EQUAL,
             &[
                 place(0, 1, 0),
                 (
@@ -246,6 +288,7 @@ mod tests {
         plan.pinned_pairs = [(student(1), student(2))].into_iter().collect();
         let cfg = solve_with_adversary(
             &plan,
+            EQUAL,
             &[(
                 0.5,
                 extra_var(ExtraVarName::StudentInGroup {
@@ -258,5 +301,68 @@ mod tests {
 
         assert_close(group_of(&cfg, 0, 1), 0.0);
         assert_close(group_of(&cfg, 0, 2), 0.0);
+    }
+
+    #[test]
+    fn default_weights_prefer_fewer_groups_over_fewer_pairs() {
+        // The regression piece 11 exists to fix: at the old equal weights,
+        // merging two singletons was exactly cost-neutral, so the 0.5
+        // adversary toward splitting would win. Two students, sizes 1..=2
+        // (hence 2 slots), nothing pinned. Together in group 0: 1 group + 1
+        // pair = 1000 + 1 = 1001. Split with 2 in group 1: 2 groups + 0
+        // pairs − 0.5 = 1999.5. The optimum merges — at w_groups = 1 it
+        // would split (2 vs 1.5). No `place` is needed: ascending fill
+        // forbids occupying group 1 while group 0 is empty, so "together"
+        // can only mean "both in group 0".
+        let plan = plan_of(&[(&[1, 2], (1, 2))]);
+        let cfg = solve_with_adversary(
+            &plan,
+            ObjectiveWeights::default(),
+            &[(
+                0.5,
+                extra_var(ExtraVarName::StudentInGroup {
+                    list: GroupListIdx(0),
+                    student: student(2),
+                    group: 1,
+                }),
+            )],
+        );
+
+        assert_close(group_of(&cfg, 0, 1), 0.0);
+        assert_close(group_of(&cfg, 0, 2), 0.0);
+        assert_close(value(&cfg, shared(1, 2)), 1.0);
+    }
+
+    #[test]
+    fn explicit_weights_override_the_default() {
+        // Pair-dominant weights on the same instance, with the adversary
+        // rewarding the shared pair (+0.5 toward merging). Together:
+        // 1 group + 1000 · 1 pair − 0.5 = 1000.5. Split: 2 groups + 0 = 2.
+        // The optimum splits — and a build that ignores the passed weights
+        // merges instead: hardcoded 1000/1 gives 1000.5 vs 2000, hardcoded
+        // w_pairs = 1 gives 1.5 vs 2. Which student lands in which group is
+        // a tie between the two splits, so the assertions are on `SharedPair`
+        // and `GroupHasStudents`, not on placements.
+        let plan = plan_of(&[(&[1, 2], (1, 2))]);
+        let cfg = solve_with_adversary(
+            &plan,
+            ObjectiveWeights {
+                w_groups: 1.0,
+                w_pairs: 1000.0,
+            },
+            &[(0.5, shared(1, 2))],
+        );
+
+        assert_close(value(&cfg, shared(1, 2)), 0.0);
+        assert_close(
+            value(
+                &cfg,
+                extra_var(ExtraVarName::GroupHasStudents {
+                    list: GroupListIdx(0),
+                    group: 1,
+                }),
+            ),
+            1.0,
+        );
     }
 }

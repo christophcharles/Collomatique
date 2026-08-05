@@ -250,7 +250,7 @@ mod tests {
         // 2 >= 3 has no satisfying assignment. Infeasibility is the correct
         // signal — the data genuinely cannot satisfy the policy.
         let plan = plan_of(&[(&[1, 2], (3, 4))]);
-        let model = crate::build_model(&plan);
+        let model = crate::build_model(&plan, crate::ObjectiveWeights::default());
         assert!(
             model
                 .solve(&ColloCbcSolver::with_disable_logging(true))

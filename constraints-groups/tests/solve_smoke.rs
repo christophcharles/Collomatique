@@ -5,7 +5,7 @@
 //! constrained model too.
 
 use collomatique_constraints_groups::{
-    GenerationPlan, GroupListSpec, build_group_lists, build_model,
+    GenerationPlan, GroupListSpec, ObjectiveWeights, build_group_lists, build_model,
 };
 use collomatique_ilp::solvers::collo_cbc::ColloCbcSolver;
 use collomatique_state_colloscopes::ids::Id;
@@ -38,7 +38,7 @@ fn model_solves_and_converts() {
         pinned_pairs: BTreeSet::new(),
     };
 
-    let model = build_model(&plan);
+    let model = build_model(&plan, ObjectiveWeights::default());
 
     let solver = ColloCbcSolver::with_disable_logging(true);
     let solution = model.solve(&solver).expect("the model must be feasible");

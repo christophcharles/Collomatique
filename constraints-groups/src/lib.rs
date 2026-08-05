@@ -12,7 +12,8 @@
 //! variables, the reified extras of piece 7, the shape constraints of
 //! piece 8 (max size, conditional min size, ascending fill order), the
 //! stability objective of piece 9 (minimize non-empty groups plus globally
-//! shared student pairs, equal weights), and the inclusion-based
+//! shared student pairs, with configurable, group-dominant-by-default
+//! weights — [`ObjectiveWeights`], piece 11), and the inclusion-based
 //! incremental epochs of piece 10 ([`build_incremental_epochs`]), which
 //! callers feed to the solver so the inclusion-minimal lists are built
 //! first and the larger lists align with them.
@@ -30,6 +31,7 @@ pub mod vars;
 pub use builder::{build_model, build_model_with_log};
 pub use convert::build_group_lists;
 pub use incremental::build_incremental_epochs;
+pub use objective::ObjectiveWeights;
 pub use specs::{
     GenerationPlan, GenerationPlanError, GenerationRequest, GroupListSpec, build_generation_plan,
 };

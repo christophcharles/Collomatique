@@ -11,8 +11,8 @@ use relm4::{
 use relm4::{adw, gtk};
 
 use collomatique_constraints_groups::{
-    GenerationPlan, GenerationRequest, GroupListsModel, Var, build_generation_plan,
-    build_incremental_epochs, build_model_with_log,
+    GenerationPlan, GenerationRequest, GroupListsModel, ObjectiveWeights, Var,
+    build_generation_plan, build_incremental_epochs, build_model_with_log,
 };
 use collomatique_state_colloscopes::colloscope_params::Parameters;
 use collomatique_state_colloscopes::{PeriodId, SubjectId};
@@ -353,7 +353,11 @@ impl Component for Dialog {
                         let mut log = move |line: &str| {
                             input.emit(DialogInput::Echo(format!("{}\n", line)));
                         };
-                        let model = build_model_with_log(&build_plan, &mut log);
+                        let model = build_model_with_log(
+                            &build_plan,
+                            ObjectiveWeights::default(),
+                            &mut log,
+                        );
                         DialogCommandOutput::Built(seq, model)
                     });
                 }

@@ -24,8 +24,8 @@ use collomatique_state_colloscopes::InnerData;
 use collomatique_state_colloscopes::colloscope_params::Parameters;
 
 use collomatique_constraints_groups::{
-    GenerationRequest, GroupListIdx, Var, build_generation_plan, build_group_lists,
-    build_incremental_epochs, build_model, vars::VarEnv,
+    GenerationRequest, GroupListIdx, ObjectiveWeights, Var, build_generation_plan,
+    build_group_lists, build_incremental_epochs, build_model, vars::VarEnv,
 };
 use collomatique_ilp::ConfigData;
 
@@ -94,7 +94,7 @@ fn build_and_check(rng: &mut ChaCha8Rng, inner: &InnerData) {
     }
 
     // The (trivial) model must build without panicking.
-    let model = build_model(&plan);
+    let model = build_model(&plan, ObjectiveWeights::default());
     let _ = model.stats();
 
     // The epoch map (piece 10) must name exactly one entry per base
