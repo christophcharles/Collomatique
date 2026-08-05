@@ -567,6 +567,47 @@ check along the way: whether prefilled lists with out-of-range group sizes
 trip any checker warning on apply (harmless if so, but the skeleton demos
 will show it).
 
+**Done** — `03e902af` (*gtk4: apply the generated group lists (piece 6)*): a
+single-file change to `gtk4/src/editor/group_lists.rs`, because the chaining
+sentence above was already discharged by pieces 2-4 — what was left was only
+the apply. The page grew one field, `pending_generation: Option<(GenerationPlan,
+Vec<String>)>`, written in the `GenerationNamingAccepted` arm that launches the
+solver and `take()`n in `GenerationSolveResult`. The `take()` carries an
+`.expect("a solve result implies a pending generation")` rather than a graceful
+fallback: `GenerationSolveResult` can only follow a `DialogInput::Run`, the only
+sender of `Run` is the arm that sets the field, and the solver dialog emits at
+most one `NewConfig` per run (`run_solver.rs`, `best_solution.take()`). A
+cancelled solve leaves a stale `Some`, which is harmless — nothing reads the
+field except that arm, which always follows a fresh write — so the cancel arms
+stayed empty and `run_solver::DialogOutput` did not grow a `Cancelled` variant
+just for hygiene.
+
+The projection is an inline `filter_transmute` keeping `InternalVar::Base`,
+copying the colloscope page's `SolveResult` handler rather than calling
+`Model::base_data_from_complete_data`: that method needs a `&Model`, and this
+page hands the model to the solver dialog and keeps nothing. The match arm is
+written generically (`_ => None`) even though `ExtraVarName` is uninhabited
+today, so pieces 7-9 change nothing here. `build_group_lists` is then called
+with no error handling, since it returns a plain `Vec` and its panics are
+solver-or-caller bugs unreachable by construction. The resulting entries go out
+through the page's existing `Output = GroupListsUpdateOp`, so the editor side
+needed no change at all: it wraps, `dry_apply`s, and commits one undo slot.
+
+**Phase-A check, answered — no warning fires.** The cascade's warning vocabulary
+is closed: `CascadeWarning::new` is `pub(crate)` with exactly one caller
+(`ops/src/cascade.rs`), fed by `apply_cascade`'s fixes, so every user-visible
+warning is a `Fix` produced by `broken_invariants` answering a broken invariant.
+That invariant set (`state-colloscopes/src/invariants.rs`) is `DanglingFk |
+Convergence`, and none of its predicates compares group cardinality to a range —
+`students_per_group` is never read in `invariants.rs` or `resolution.rs` at all.
+`GroupList::new` itself only checks that the prefilled group count matches
+`group_names.len()` and that no student sits in two groups; a 30-student group
+in a 2..=3 subject is a perfectly legal value. Group-size agreement is enforced
+only downstream, as an ILP constraint at colloscope-solve time
+(`constraints-colloscopes/src/groups/students_per_group*.rs`). So the skeleton's
+absurd lists apply silently, which is what phase A wanted: the demo shows the
+pipeline, not a wall of warnings.
+
 ### Phase B — the real model
 
 **Piece 7 — extra variables.** `StudentInGroup`, `GroupHasStudents`,
@@ -652,11 +693,15 @@ ask for. Out of scope for the initial roadmap; not planned further here.
   in-process `Model::solve` path, whose `FeasibleSolution::get_data()` already
   projects down to `ConfigData<Var>`; the gtk4 path instead goes through the
   strategy/subprocess machinery over `InternalVar` and needs a
-  `filter_transmute` — that is piece 6's integration, and the skeleton exists
-  precisely so it gets exercised for real. Second, §2.6's claim that an empty
+  `filter_transmute` — done in piece 6 (`03e902af`), which is where the
+  skeleton finally got exercised for real. Second, §2.6's claim that an empty
   epoch map means a single priming solve was read off the incremental
   strategy's contract rather than executed — until piece 4 (`bef11ce8`), which
   runs the conductor against this model for real. Piece 10 is where the map
   stops being empty.
-- **Phase-A check**: whether absurd (out-of-range-size) prefilled lists trip
-  checker warnings on apply.
+- ~~**Phase-A check**: whether absurd (out-of-range-size) prefilled lists trip
+  checker warnings on apply.~~ **Answered — they do not.** See the piece-6
+  record in §5 for the full argument: the warning vocabulary is exactly the
+  `Fix` values the invariant checker can emit, and no invariant looks at group
+  sizes. Out-of-range groups apply silently; the constraint exists only inside
+  the colloscope solver's model.
