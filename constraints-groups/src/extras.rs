@@ -1,9 +1,8 @@
 //! The reified extra variables of the model (piece 7 of the roadmap).
 //!
 //! Declaration is lazy: `Modeler::build` only expands extras that are
-//! (transitively) referenced by a constraint or the objective, so until
-//! pieces 8-9 reference them, applying this bundle leaves the built model
-//! unchanged.
+//! (transitively) referenced by a constraint or the objective, so a declared
+//! extra that nothing references costs nothing in the built model.
 //!
 //! Every reification is a full equivalence (roadmap §2.2): several solve
 //! strategies strip the objective, so a one-sided implication would let the
@@ -130,18 +129,23 @@ fn build_pair_in_group(env: &VarEnv) -> MyBundle {
     bundle
 }
 
-fn build_shared_pair(env: &VarEnv) -> MyBundle {
-    // Which pairs co-occur, and in which lists. A pair gets a variable iff
-    // this map has an entry for it (roadmap §2.2).
-    let mut co_occurrences: BTreeMap<(StudentId, StudentId), Vec<GroupListIdx>> = BTreeMap::new();
+/// Which pairs co-occur, and in which lists. A pair gets a `SharedPair`
+/// variable iff this map has an entry for it (roadmap §2.2). The objective
+/// (piece 9) must sum over exactly that set — referencing an undeclared
+/// extra is a build error — so both read this one function.
+pub(crate) fn co_occurrences(env: &VarEnv) -> BTreeMap<(StudentId, StudentId), Vec<GroupListIdx>> {
+    let mut map: BTreeMap<(StudentId, StudentId), Vec<GroupListIdx>> = BTreeMap::new();
     for list in env.lists() {
         for pair in pairs_of(env.students(list)) {
-            co_occurrences.entry(pair).or_default().push(list);
+            map.entry(pair).or_default().push(list);
         }
     }
+    map
+}
 
+fn build_shared_pair(env: &VarEnv) -> MyBundle {
     let mut bundle = MyBundle::new();
-    for ((a, b), lists) in co_occurrences {
+    for ((a, b), lists) in co_occurrences(env) {
         let var = ExtraVarName::SharedPair { a, b };
         if env.pinned_pairs().contains(&(a, b)) {
             // The pair already shares a group in a kept list, so the OR

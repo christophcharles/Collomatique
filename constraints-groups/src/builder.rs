@@ -36,12 +36,11 @@ pub fn build_model_with_log(
         }};
     }
 
-    // The extras must be declared before the constraints reference them.
-    // The pair extras (`PairInGroup`, `SharedPair`) stay unreferenced until
-    // the objective (piece 9), so lazy expansion keeps them out of the
-    // built model.
+    // The extras must be declared before the constraints and the objective
+    // reference them.
     apply!("extras", crate::extras::build_extras(&env));
     apply!("constraints", crate::constraints::build(&env));
+    apply!("objective", crate::objective::build(&env));
 
     modeler
         .build_with_log(&env, log)
@@ -80,15 +79,21 @@ mod tests {
         // One ordering constraint per adjacent pair: (2 − 1) + (3 − 1).
         assert_eq!(ascending, 3);
 
-        // The pair extras are referenced by nothing until the piece-9
-        // objective: lazy expansion must keep them out of the problem.
-        assert!(model.problem().get_variables().keys().all(|v| {
-            !matches!(
-                v,
-                InternalVar::Extra(
-                    ExtraVarName::PairInGroup { .. } | ExtraVarName::SharedPair { .. }
-                )
-            )
-        }));
+        // The objective references every `SharedPair`, and their definitions
+        // reference every `PairInGroup` of their lists, so the pair extras
+        // are now all expanded. `SharedPair`: the lists are disjoint, so the
+        // co-occurring pairs are C(4,2) + C(3,2) = 6 + 3. `PairInGroup`: one
+        // per co-occurring pair and group, 6 × 2 + 3 × 3.
+        let mut pair_in_group = 0;
+        let mut shared_pair = 0;
+        for v in model.problem().get_variables().keys() {
+            match v {
+                InternalVar::Extra(ExtraVarName::PairInGroup { .. }) => pair_in_group += 1,
+                InternalVar::Extra(ExtraVarName::SharedPair { .. }) => shared_pair += 1,
+                _ => {}
+            }
+        }
+        assert_eq!(pair_in_group, 21);
+        assert_eq!(shared_pair, 9);
     }
 }

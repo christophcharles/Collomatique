@@ -9,18 +9,19 @@
 //! way out).
 //!
 //! Current state: the model holds the base `StudentGroup` variables, the
-//! reified extras of piece 7, and the shape constraints of piece 8 (max
-//! size, conditional min size, ascending fill order) — but no objective
-//! yet, so the pair extras are referenced by nothing and stay out of the
-//! built model. Later pieces add the stability objective and the
-//! inclusion-based epochs. Until the epochs arrive, callers run the solver
-//! with an empty incremental epoch map, which the strategy contract defines
-//! as a single priming solve.
+//! reified extras of piece 7, the shape constraints of piece 8 (max size,
+//! conditional min size, ascending fill order), and the stability objective
+//! of piece 9 (minimize non-empty groups plus globally shared student
+//! pairs, equal weights). The remaining model piece is the inclusion-based
+//! epochs. Until the epochs arrive, callers run the solver with an empty
+//! incremental epoch map, which the strategy contract defines as a single
+//! priming solve.
 
 mod builder;
 mod constraints;
 mod convert;
 mod extras;
+mod objective;
 mod specs;
 mod types;
 pub mod vars;
