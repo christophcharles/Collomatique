@@ -528,26 +528,7 @@ impl EditorPanel {
         self.group_lists
             .sender()
             .send(group_lists::GroupListsInput::Update(
-                self.data.get_data().get_inner_data().params.periods.clone(),
-                self.data.get_data().get_inner_data().params.weeks.clone(),
-                self.data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .subjects
-                    .clone(),
-                self.data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .students
-                    .clone(),
-                self.data
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .group_lists
-                    .clone(),
+                self.data.get_data().get_inner_data().params.clone(),
             ))
             .unwrap();
         self.settings

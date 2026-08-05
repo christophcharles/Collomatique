@@ -13,13 +13,7 @@ mod group_lists_display;
 
 #[derive(Debug)]
 pub enum GroupListsInput {
-    Update(
-        collomatique_state_colloscopes::periods::Periods,
-        collomatique_state_colloscopes::weeks::Weeks,
-        collomatique_state_colloscopes::subjects::Subjects,
-        collomatique_state_colloscopes::students::Students,
-        collomatique_state_colloscopes::group_lists::GroupLists,
-    ),
+    Update(collomatique_state_colloscopes::colloscope_params::Parameters),
 
     EditGroupList(collomatique_state_colloscopes::GroupListId),
     DeleteGroupList(collomatique_state_colloscopes::GroupListId),
@@ -34,11 +28,10 @@ enum GroupListSelectionReason {
 }
 
 pub struct GroupLists {
-    periods: collomatique_state_colloscopes::periods::Periods,
-    weeks: collomatique_state_colloscopes::weeks::Weeks,
-    subjects: collomatique_state_colloscopes::subjects::Subjects,
-    students: collomatique_state_colloscopes::students::Students,
-    group_lists: collomatique_state_colloscopes::group_lists::GroupLists,
+    /// The whole colloscope parameters, as of the last `Update`. Held whole
+    /// rather than field by field because the generation dialog echoes them
+    /// back to the rest of the chain (see `generate_dialog`).
+    params: collomatique_state_colloscopes::colloscope_params::Parameters,
 
     group_list_entries: FactoryVecDeque<group_lists_display::Entry>,
     period_entries: FactoryVecDeque<associations_display::PeriodEntry>,
@@ -98,14 +91,14 @@ impl Component for GroupLists {
                         add_css_class: "boxed-list",
                         set_selection_mode: gtk::SelectionMode::None,
                         #[watch]
-                        set_visible: !model.group_lists.group_list_map.is_empty(),
+                        set_visible: !model.params.group_lists.group_list_map.is_empty(),
                     },
                     gtk::Label {
                         set_halign: gtk::Align::Start,
                         set_label: "<i>Aucune liste à afficher</i>",
                         set_use_markup: true,
                         #[watch]
-                        set_visible: model.group_lists.group_list_map.is_empty(),
+                        set_visible: model.params.group_lists.group_list_map.is_empty(),
                     },
                     gtk::Button {
                         set_margin_top: 10,
@@ -169,11 +162,7 @@ impl Component for GroupLists {
             });
 
         let model = GroupLists {
-            periods: collomatique_state_colloscopes::periods::Periods::default(),
-            weeks: collomatique_state_colloscopes::weeks::Weeks::default(),
-            subjects: collomatique_state_colloscopes::subjects::Subjects::default(),
-            students: collomatique_state_colloscopes::students::Students::default(),
-            group_lists: collomatique_state_colloscopes::group_lists::GroupLists::default(),
+            params: collomatique_state_colloscopes::colloscope_params::Parameters::default(),
             group_list_entries,
             period_entries,
             edit_dialog,
@@ -189,12 +178,8 @@ impl Component for GroupLists {
 
     fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match message {
-            GroupListsInput::Update(periods, weeks, subjects, students, group_lists) => {
-                self.periods = periods;
-                self.weeks = weeks;
-                self.subjects = subjects;
-                self.students = students;
-                self.group_lists = group_lists;
+            GroupListsInput::Update(params) => {
+                self.params = params;
 
                 self.update_group_list_entries();
                 self.update_period_entries();
@@ -204,7 +189,7 @@ impl Component for GroupLists {
 
                 let mut group_list_params =
                     collomatique_state_colloscopes::group_lists::GroupListParameters::default();
-                let max_group_count = (self.students.student_map.len() as u32)
+                let max_group_count = (self.params.students.student_map.len() as u32)
                     / (group_list_params.students_per_group.start().get());
                 let group_count = max_group_count.max(1) as usize;
                 group_list_params.group_names = vec![None; group_count];
@@ -229,6 +214,7 @@ impl Component for GroupLists {
             }
             GroupListsInput::EditGroupList(group_list_id) => {
                 let group_list = self
+                    .params
                     .group_lists
                     .group_list_map
                     .get(&group_list_id)
@@ -266,6 +252,7 @@ impl GroupLists {
     fn show_edit_dialog(&self, group_list: collomatique_state_colloscopes::group_lists::GroupList) {
         // Pass all students - exclusion is handled inside the dialog
         let filtered_students = self
+            .params
             .students
             .student_map
             .iter()
@@ -283,6 +270,7 @@ impl GroupLists {
 
     fn update_group_list_entries(&mut self) {
         let mut group_lists_vec: Vec<_> = self
+            .params
             .group_lists
             .group_list_map
             .iter()
@@ -303,17 +291,22 @@ impl GroupLists {
 
     fn update_period_entries(&mut self) {
         let periods_vec: Vec<_> = self
+            .params
             .periods
             .period_ids()
             .map(|id| {
                 let id = &id;
-                let period =
-                    collomatique_ops::rendering::render_period(&self.periods, &self.weeks, *id)
-                        .expect("the period comes from the document being displayed");
+                let period = collomatique_ops::rendering::render_period(
+                    &self.params.periods,
+                    &self.params.weeks,
+                    *id,
+                )
+                .expect("the period comes from the document being displayed");
                 associations_display::PeriodEntryData {
                     period_id: *id,
                     period_text: format!("Associations pour la période {}", period),
                     subjects: self
+                        .params
                         .subjects
                         .ordered_subject_list
                         .iter()
@@ -327,6 +320,7 @@ impl GroupLists {
                         })
                         .collect(),
                     group_list_associations: self
+                        .params
                         .group_lists
                         .subjects_associations
                         .iter()
@@ -335,6 +329,7 @@ impl GroupLists {
                         })
                         .collect(),
                     group_lists: self
+                        .params
                         .group_lists
                         .group_list_map
                         .iter()
