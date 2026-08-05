@@ -11,6 +11,7 @@ mod associations_display;
 mod edit_dialog;
 mod generate_dialog;
 mod group_lists_display;
+mod naming_dialog;
 
 #[derive(Debug)]
 pub enum GroupListsInput {
@@ -31,6 +32,13 @@ pub enum GroupListsInput {
         collomatique_state_colloscopes::colloscope_params::Parameters,
     ),
     GenerationConfigCancelled,
+    GenerationNamingAccepted(
+        collomatique_constraints_groups::GenerationPlan,
+        Vec<String>,
+        collomatique_constraints_groups::GroupListsModel,
+        collomatique_strategies::ConductorPayload<collomatique_constraints_groups::Var>,
+    ),
+    GenerationNamingCancelled,
 }
 
 #[derive(Debug)]
@@ -49,6 +57,7 @@ pub struct GroupLists {
     period_entries: FactoryVecDeque<associations_display::PeriodEntry>,
     edit_dialog: Controller<edit_dialog::Dialog>,
     generate_dialog: Controller<generate_dialog::Dialog>,
+    naming_dialog: Controller<naming_dialog::Dialog>,
 
     /// The last-validated solver strategy, so the generation dialog reopens on the user's last
     /// choice instead of resetting. Reset to the parallel default on a new document, exactly as
@@ -191,12 +200,25 @@ impl Component for GroupLists {
                 }
             });
 
+        let naming_dialog = naming_dialog::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                naming_dialog::DialogOutput::Accepted(plan, names, model, payload) => {
+                    GroupListsInput::GenerationNamingAccepted(plan, names, model, payload)
+                }
+                naming_dialog::DialogOutput::Cancelled => {
+                    GroupListsInput::GenerationNamingCancelled
+                }
+            });
+
         let model = GroupLists {
             params: collomatique_state_colloscopes::colloscope_params::Parameters::default(),
             group_list_entries,
             period_entries,
             edit_dialog,
             generate_dialog,
+            naming_dialog,
             strategy: collomatique_strategies::ConductorStrategy::with_parallelism_defaults(),
             selection_reason: GroupListSelectionReason::New,
         };
@@ -231,17 +253,29 @@ impl Component for GroupLists {
                     ))
                     .unwrap();
             }
-            GroupListsInput::GenerationConfigAccepted(request, strategy, _params) => {
+            GroupListsInput::GenerationConfigAccepted(request, strategy, params) => {
                 // Persist the strategy so the dialog reopens on the last choice.
                 self.strategy = strategy;
-                // Piece 3 takes over from here: the naming/build dialog turns `request` and
-                // `_params` into a `GenerationPlan`, a model and one editable name per spec. Until
-                // it lands, the configured request is deliberately dropped and nothing else
-                // happens.
-                let _ = request;
+                // Hand the request to the naming/build dialog against the parameters the config
+                // dialog echoed back, so the plan and the model are built from exactly what the
+                // user configured against.
+                self.naming_dialog
+                    .sender()
+                    .send(naming_dialog::DialogInput::Show(request, params))
+                    .unwrap();
             }
             GroupListsInput::GenerationConfigCancelled => {
                 // The generation was abandoned before it started; nothing to undo.
+            }
+            GroupListsInput::GenerationNamingAccepted(plan, names, model, payload) => {
+                // Piece 4 takes over from here: it feeds `model` and `payload`, together with the
+                // page's persisted strategy, into the generic solver dialog, and pieces 5-6 turn
+                // the solved config plus `plan` and `names` into the composite update op. Until
+                // then the built model is deliberately dropped and nothing else happens.
+                let _ = (plan, names, model, payload);
+            }
+            GroupListsInput::GenerationNamingCancelled => {
+                // The generation was abandoned at the naming step; nothing to undo.
             }
             GroupListsInput::AddGroupList => {
                 self.selection_reason = GroupListSelectionReason::New;
