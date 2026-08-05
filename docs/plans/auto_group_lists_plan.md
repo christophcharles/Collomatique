@@ -226,9 +226,10 @@ Properties, on an example — German LV2 `{a…f}` and Spanish LV2 `{g…m}`
   intent.
 - The sciences list strictly contains both → epoch 1; the whole class →
   epoch 2. Each aligns to the groupings built before it.
-- Two *overlapping but incomparable* sets get the same height and are solved
-  jointly — correct, since pair variables couple them and neither is
-  "smaller".
+- Two *overlapping but incomparable* sets get the same height: neither is
+  "smaller", so neither waits for the other. (They were solved jointly until
+  piece 12bis, which gives every spec its own epoch — see below; the more
+  entangled of the two solves later.)
 - "Small first" really means "inclusion-minimal first": a large list that
   contains no other spec also lands in epoch 0, because nothing smaller
   exists for it to wait for.
@@ -247,16 +248,19 @@ Until piece 10, the skeleton ships an **empty epoch map**, which by the above
 contract is a plain single solve — no placeholder code needed.
 
 Refined in phase C. On realistic documents this ordering produces only two
-epochs, and the first one still bundles many lists that share no student. Piece
-12 (§5) cuts each epoch into its connected components — specs joined when their
-student sets intersect — and makes every component an epoch of its own. The
-inclusion ordering itself is untouched: the components of a level are numbered
-before those of the next level, so the recurrence above still decides *which
+epochs, and the first one still bundles many lists at once. Piece 12 (§5) first
+cut each level into its connected components, but real documents overlap too
+much for that: the components fuse into one big block and the level solves as a
+single large model anyway. Piece 12bis (§5) therefore gives **every spec an
+epoch of its own**, and inside a level runs the least-entangled lists first —
+ascending by the number of distinct students the spec shares with the other
+specs of that level, then by student count, then by spec index for determinism.
+The inclusion ordering itself is untouched: every spec of a level is numbered
+before every spec of the next, so the recurrence above still decides *which
 lists wait for which*, and the refinement only decides how far the resulting
-stages are broken apart. Inside a level the components run smaller-first, by
-their number of distinct students; two components of equal size share no
-student, so their relative order is semantically indifferent and is fixed only
-for determinism.
+stages are broken apart. §5 records what this costs — overlapping lists of a
+level now solve apart on purpose, so the staged result can differ from the joint
+one even at the true optima.
 
 ### 2.7 No `SolveConfig` equivalent
 
@@ -1057,6 +1061,83 @@ touching component) left the **fuzz probe green** and reddened only
 `connectivity_is_transitive_within_a_level`. The random walks never produce a
 three-way merge inside one level, so that hand-written fixture is the only guard
 on it.
+
+**Piece 12bis — one epoch per spec, least-entangled first.** Piece 12 was
+checked against the user's typical use cases and does not help. Its premise —
+that a level holds lists with nothing to do with each other — does not survive
+contact with real documents: there is simply too much overlap between the group
+lists of a level, so the connected components fuse into one big block, the level
+solves as a single large model exactly as before, and the split buys nothing.
+The piece-12 record above stays as written; it is history, and its reasoning is
+sound on the documents it imagined.
+
+So drop the components entirely. **Inside a level, every spec becomes an epoch
+of its own** — overlapping or not. The levels keep their order, so all specs of
+level `k` are numbered before any spec of level `k+1` and §2.6's recurrence
+still decides which lists wait for which; the refinement again only decides how
+far a level is broken apart, and now breaks it apart as far as it goes. Inside a
+level the ordering rule is: ascending by the number of **distinct students the
+spec shares with the other specs of that level**, then by student count (small
+lists first), then by spec index for determinism only. The rationale is the same
+one that motivates the whole inclusion ordering: a list that shares few students
+with the rest of its level is nearly independent, so its solo optimum is close
+to what a joint solve would have given it, and solving it first costs almost
+nothing; a heavily-shared list is better off later, when the lists it is
+entangled with are already anchored and it can align to them through the pair
+objective. When all the shared counts of a level are zero, the rule reduces
+exactly to piece 12's smaller-blocks-first.
+
+Sharing is counted **inside the level only**, and this is not the same
+consideration that made piece 12 compute connectivity per level. Counting
+against the whole plan degenerates arithmetically: as soon as a whole-class list
+exists, every student of every spec is shared with it, so every spec's count
+equals its own size and the ordering collapses into plain size ordering. The
+within-level count is also the only one that carries information here — a spec's
+coupling to the levels below it is fixed no matter where it sits inside its own
+level.
+
+This gives up piece 12's separability claim, deliberately. Two overlapping specs
+of a level used to solve jointly and now solve apart, so the staged result can
+differ from the joint one even at the true optima — not merely because of the
+strategy's anchors and tolerances, as was already the case, but because the
+sub-problems no longer add up to the level's problem. That is the accepted
+trade-off: tractability first, quality entrusted to the least-shared-first
+ordering plus the incremental strategy's L1 anchor (`l1_weight`, default 1000),
+which keeps an epoch close to what the previous ones decided. It is worth being
+plain about this rather than dressing the split as free.
+
+**Done** — commit `b536e657` (*constraints-groups: one epoch per spec,
+least-entangled first (piece 12bis)*). One commit again, for the same reason as
+piece 12: the fuzz probe would go red without its rewrite. Nothing outside
+`constraints-groups` changed; `build_incremental_epochs` keeps its signature and
+`IncrementalPayload` assumes nothing about the epoch count.
+
+Pass 1 is untouched. Pass 2 shrank to a sort: for each level, build the key
+`(shared, size, index)` per spec, sort, hand out consecutive numbers. The
+component machinery — the union sets, the multi-merge partition, `BTreeSet` and
+the `StudentId` import — is gone.
+
+`connectivity_is_transitive_within_a_level` was deleted (there are no components
+to merge), `overlapping_incomparable_sets_share_their_epoch` became
+`overlapping_incomparable_sets_get_their_own_epochs` with epochs 0 and 1, and
+`equal_sets_never_relate` now asserts two epochs — the fixture still pins what it
+was written for, that equal sets never *strictly* include each other and so
+neither waits for the other. Two tests were added:
+`least_shared_specs_solve_first_within_a_level`, where the biggest list solves
+first because it is untangled and the smallest solves last because it is the
+most entangled, and `sharing_is_counted_within_the_level_only`, where a
+whole-class list at another level must not perturb the level-0 ordering. The
+probe's component properties were replaced by the ones that define the new
+numbering: heights ascend with the epochs, the map is a bijection onto a
+contiguous range from 0, and inside a height the epochs ascend by
+`(shared-within-level, size)`.
+
+All five tabled mutations reddened their predicted tests. One is worth recording,
+and it is the same lesson as piece 12's fourth mutation: counting sharing
+globally instead of per level left the **fuzz probe green** and reddened only
+`sharing_is_counted_within_the_level_only`. The random walks do not produce a
+level whose ordering cross-level sharing would perturb, so that hand-written
+fixture is the only guard on the within-level rule.
 
 **Piece 13 — group-list display polish.** The list of group lists
 (`gtk4/src/editor/group_lists/group_lists_display.rs`) does not line up. The
