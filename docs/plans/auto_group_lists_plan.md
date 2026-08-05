@@ -776,6 +776,54 @@ path on every random plan for free.
 absent map of piece 1. Unit tests on hand-built spec families: disjoint sets,
 nested chains, overlapping incomparable sets, equal sets.
 
+**Done** — commits `bd9eecc1` (*constraints-groups: inclusion-based
+incremental epochs (piece 10)*) and `7ad30636` (*gtk4: ship the inclusion-based
+epoch payload (piece 10)*). A private `constraints-groups/src/incremental.rs`
+exports `build_incremental_epochs`, laid out like the sibling
+`constraints-colloscopes/src/incremental.rs` — but with a different signature,
+and that is the one real design decision of the piece. The colloscope version
+walks the *built model*, because there an epoch is a function of the variable
+alone (its week). Here the epoch depends on inclusion between student sets,
+which live in the plan, so the function takes `&GenerationPlan`. The model's
+base variables are enumerated from exactly those sets (`VarEnv::new(&plan)`
+plus the derive's `#[range]` attributes), so the two agree by construction;
+`map_names_exactly_the_base_variables` compares the map's key set against
+`<Var as DescribeVar>::enumerate` so the agreement cannot drift silently.
+
+No recursion is needed. A strict subset always has strictly fewer students, so
+processing the specs by ascending student count guarantees every strict subset
+of a spec is already computed when its turn comes, and the whole thing is one
+pass with k(k−1)/2 `is_subset` calls. That sort is not a detail:
+`GenerationPlan::specs` is ordered by the spec's `Ord`, which is lexicographic
+on the student `BTreeSet` and has nothing to do with size, so
+`nested_chain_counts_height` uses a deliberately superset-first fixture to pin
+it. Strictness is a length comparison guarding the `is_subset` call, since
+`BTreeSet::is_subset` accepts equality; the disjoint and overlapping fixtures
+were given sets of *unequal* size on purpose, so that a broken subset test
+cannot hide behind the length guard.
+
+Beyond the four prescribed families, a **fifth** test was needed:
+`height_is_a_max_over_all_strict_subsets`. Neither the chain nor the §2.6
+worked example can tell a `max` from a plain assignment, because in both the
+deepest subset happens to be visited last. Its fixture — `{1} ⊂ {1,2}`,
+an inclusion-minimal but *larger* `{3,4,5}`, and `{1,2,3,4,5}` on top — makes
+the ascending-size pass visit the shallow subset last, so last-wins gives 1
+where the max gives 2. It is the only test that reddens under that mutation;
+all six tabled mutations were run and each reddened its predicted test.
+
+The fuzz-build net now checks the epochs on every random plan, as a *fixpoint*
+of §2.6's recursive definition (0 with no strict subset, else 1 + the max over
+the strict subsets) rather than by re-running the algorithm. That is a real
+check and not a tautology because the recurrence is well-founded on strict
+inclusion, so it has a unique solution; the probe also counts one entry per
+base variable and asserts every variable of a spec shares its epoch.
+
+On the gtk4 side the naming dialog's `Accept` arm swapped `HashMap::new()` for
+the real call. It runs on the UI thread rather than joining the off-thread
+model build: it is quadratic in the spec count (itself bounded by the number of
+selected pairs) and reads nothing but the plan. This closes phase B — the model
+is complete, and the conductor now stages the lists instead of priming once.
+
 ### Phase C — polish
 
 **Piece 11 —** advanced parameters (objective weights), Python wiring (the
