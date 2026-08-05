@@ -24,8 +24,8 @@ use collomatique_state_colloscopes::InnerData;
 use collomatique_state_colloscopes::colloscope_params::Parameters;
 
 use collomatique_constraints_groups::{
-    GenerationRequest, GroupListIdx, Var, build_generation_plan, build_group_lists, build_model,
-    vars::VarEnv,
+    GenerationRequest, GroupListIdx, Var, build_generation_plan, build_group_lists,
+    build_incremental_epochs, build_model, vars::VarEnv,
 };
 use collomatique_ilp::ConfigData;
 
@@ -96,6 +96,50 @@ fn build_and_check(rng: &mut ChaCha8Rng, inner: &InnerData) {
     // The (trivial) model must build without panicking.
     let model = build_model(&plan);
     let _ = model.stats();
+
+    // The epoch map (piece 10) must name exactly one entry per base
+    // variable, give every variable of a spec the same epoch, and satisfy
+    // §2.6's recursive definition: 0 with no strict subset, else 1 + the
+    // max epoch over the strict subsets. The recurrence is well-founded on
+    // strict inclusion, so checking it as a fixpoint against the map's own
+    // values pins the unique solution without re-running the algorithm.
+    let epochs = build_incremental_epochs(&plan);
+    let var_count: usize = plan.specs.iter().map(|(s, _)| s.students.len()).sum();
+    assert_eq!(epochs.len(), var_count, "one epoch entry per base variable");
+    let spec_epoch = |i: usize| {
+        let spec = &plan.specs[i].0;
+        let student = *spec
+            .students
+            .first()
+            .expect("a spec always has registered students");
+        epochs[&Var::StudentGroup {
+            list: GroupListIdx(i),
+            student,
+        }]
+    };
+    for (i, (spec, _covered)) in plan.specs.iter().enumerate() {
+        for &student in &spec.students {
+            assert_eq!(
+                epochs[&Var::StudentGroup {
+                    list: GroupListIdx(i),
+                    student,
+                }],
+                spec_epoch(i),
+                "all variables of a spec share its epoch",
+            );
+        }
+        let expected = plan
+            .specs
+            .iter()
+            .enumerate()
+            .filter(|(_, (t, _))| {
+                t.students.len() < spec.students.len() && t.students.is_subset(&spec.students)
+            })
+            .map(|(j, _)| spec_epoch(j) + 1)
+            .max()
+            .unwrap_or(0);
+        assert_eq!(spec_epoch(i), expected, "the §2.6 chain-height definition");
+    }
 
     // A random in-domain assignment must convert into structurally valid
     // lists (`GroupList::new` inside `build_group_lists` panics otherwise),

@@ -8,19 +8,20 @@
 //! ([`build_generation_plan`] on the way in, [`build_group_lists`] on the
 //! way out).
 //!
-//! Current state: the model holds the base `StudentGroup` variables, the
-//! reified extras of piece 7, the shape constraints of piece 8 (max size,
-//! conditional min size, ascending fill order), and the stability objective
-//! of piece 9 (minimize non-empty groups plus globally shared student
-//! pairs, equal weights). The remaining model piece is the inclusion-based
-//! epochs. Until the epochs arrive, callers run the solver with an empty
-//! incremental epoch map, which the strategy contract defines as a single
-//! priming solve.
+//! The model is complete (end of phase B): the base `StudentGroup`
+//! variables, the reified extras of piece 7, the shape constraints of
+//! piece 8 (max size, conditional min size, ascending fill order), the
+//! stability objective of piece 9 (minimize non-empty groups plus globally
+//! shared student pairs, equal weights), and the inclusion-based
+//! incremental epochs of piece 10 ([`build_incremental_epochs`]), which
+//! callers feed to the solver so the inclusion-minimal lists are built
+//! first and the larger lists align with them.
 
 mod builder;
 mod constraints;
 mod convert;
 mod extras;
+mod incremental;
 mod objective;
 mod specs;
 mod types;
@@ -28,6 +29,7 @@ pub mod vars;
 
 pub use builder::{build_model, build_model_with_log};
 pub use convert::build_group_lists;
+pub use incremental::build_incremental_epochs;
 pub use specs::{
     GenerationPlan, GenerationPlanError, GenerationRequest, GroupListSpec, build_generation_plan,
 };
