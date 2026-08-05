@@ -161,6 +161,12 @@ which creates more pairs inside each list), so some tuning is expected —
 but that is a tuning question, not a design question. Exposing the weights in
 an advanced dialog is part of the polish phase (§5, piece 11).
 
+Amended after piece 9. Equal weights turned out to be worse than "a starting
+point to adjust from": they make the two terms cancel exactly in the cases that
+matter, so the group count is drowned rather than merely outvoted (the argument
+is in the piece-9 record in §5). Piece 11 therefore both exposes the weights
+*and* changes the default to a strongly group-dominant one.
+
 ### 2.5 Kept lists
 
 The user can select existing **prefilled** lists whose pairings should count
@@ -237,6 +243,15 @@ listing every `StudentGroup` variable is both necessary and sufficient.
 Until piece 10, the skeleton ships an **empty epoch map**, which by the above
 contract is a plain single solve — no placeholder code needed.
 
+Refined in phase C. On realistic documents this ordering produces only two
+epochs, and the first one still bundles many lists that share no student. Piece
+12 (§5) cuts each epoch into its connected components — specs joined when their
+student sets intersect — and makes every component an epoch of its own. The
+inclusion ordering itself is untouched: the components of a level are numbered
+before those of the next level, so the recurrence above still decides *which
+lists wait for which*, and the refinement only decides how far the resulting
+stages are broken apart.
+
 ### 2.7 No `SolveConfig` equivalent
 
 The colloscope crate's `SolveConfig` layer (filter/pin/anchor,
@@ -245,6 +260,12 @@ the configuration happens *upstream*, in the `GenerationRequest` (§3): the
 model is always built whole, in one pass. This is why the loading UI can be
 simpler than `loading_dialog.rs` (no 1/3–3/3 filtering phases, just one build
 with a streamed log).
+
+Piece 11 (§5) adds the two objective weights as a build-time parameter, which
+does not contradict this. What §2.7 rules out is the *filter/pin/anchor
+machinery* and the staged builds that come with it; a pair of numbers read by
+the objective builder is not that layer, and the model is still built whole in
+one pass.
 
 ## 3. Input and output helpers (in the new crate)
 
@@ -826,9 +847,113 @@ is complete, and the conductor now stages the lists instead of priming once.
 
 ### Phase C — polish
 
-**Piece 11 —** advanced parameters (objective weights), Python wiring (the
-todo mentions it), epoch-strategy tuning, and whatever the first real uses
-ask for. Out of scope for the initial roadmap; not planned further here.
+Phase C was left as a catch-all in the initial roadmap ("advanced parameters,
+Python wiring, epoch tuning, and whatever the first real uses ask for"). It is
+now scoped: three pieces are wanted, and one candidate is explicitly ruled out.
+
+**Piece 11 — configurable objective weights, and a new default.** Two related
+things: making the weights configurable, and changing what they default to.
+
+Today `constraints-groups/src/objective.rs:20,22` holds `const W_GROUPS: f64 =
+1.0` and `const W_PAIRS: f64 = 1.0`. They must become parameters, settable both
+at the crate level (a caller passes them in when building the model) and from
+the UI, through an advanced dialog modelled on the colloscope one
+(`gtk4/src/editor/colloscope/config_dialog/advanced_dialog.rs`): a modal with
+one preferences row per weight, opened from the generate dialog. The two
+weights are the only thing to expose; there is nothing else. That is a small
+surface but an important one, since the weights are what decides whether the
+tool produces the lists the user actually wants.
+
+Where the weights live is the piece's first question. They do not belong in
+`GenerationRequest`: that struct says which (period, subject) pairs to rebuild
+and which lists to keep, it is consumed by `build_generation_plan`, and the
+weights would have to be threaded through the plan for no reason. A small
+separate struct handed to `build_model` next to the plan is the natural shape.
+This is not a return of the `SolveConfig` layer that §2.7 rules out — there are
+still no filtering phases and still one build in one pass.
+
+**The default must not stay equal.** Fewer groups matters more than fewer
+shared pairs, in every real use, and the piece-9 record above measured how badly
+equal weights fail at this: at `w_groups = w_pairs = 1`, moving a student out of
+a singleton into a group of size `s` trades one group against `s` new pairs,
+which is *exactly* cost-neutral. The group count is not merely outvoted by the
+pair term, it is drowned by it. The new default puts two to three orders of
+magnitude more weight on the group count (`w_groups = 1000`, `w_pairs = 1` as
+the starting point), which makes the pair term what it should be: a tie-breaker
+among the solutions that already use as few groups as possible.
+
+A note on how far to push that. Strict lexicographic priority — no pair saving
+may *ever* justify one more group — would need `w_groups` to exceed the largest
+pair total the instance can reach, which is bounded by `Σ C(n_i, 2)` over the
+specs and runs into the thousands as soon as a couple of full-class lists are
+involved. Deriving the weight from the instance that way is possible, but it
+costs twice: the objective value stops being readable, and the coefficient range
+widens, which is exactly what makes an LP relaxation ill-conditioned. A fixed
+`1000` is the recommendation — it dominates in every plausible instance while
+keeping the model well scaled — and the dialog is there for the user who
+disagrees on a particular document.
+
+**Piece 12 — splitting epochs into independent components.** Piece 10 gives the
+inclusion ordering of §2.6, and on realistic documents that ordering yields only
+two epochs: everything inclusion-minimal, then the whole-class list on top. That
+is better than the single solve of phase A, but the first epoch is still one
+large model holding many lists that have nothing to do with each other.
+
+The refinement subdivides each epoch into its independent parts. Within one
+epoch level, build a graph whose nodes are the specs of that level and whose
+edges join two specs whose student sets intersect; every connected component is
+an independent block, and every block becomes an epoch of its own. The epochs
+are then renumbered by walking the levels in ascending order and giving each
+component of a level the next number, so the inclusion ordering is preserved
+exactly — every spec of level `k` still solves before every spec of level `k+1`
+— and each level is merely cut into pieces. A level with a single component is
+left unchanged. Connectivity is computed *inside* a level, never across levels:
+over the whole spec set almost everything is one component as soon as a
+whole-class list exists, which would defeat the purpose.
+
+Two claims make this safe and worthwhile. First, it cannot cost solution
+quality: two specs in different components of the same level share no student,
+hence no `SharedPair` and no `GroupHasStudents` variable and no constraint, so
+the objective is separable over the components and solving them in sequence
+reaches the same optima as solving them together. Second, it should genuinely
+help the solver, because branch and bound does not decompose a model into
+independent blocks by itself: `k` independent blocks in one model give a single
+search whose tree is roughly the product of the `k` small ones, where `k` epochs
+give `k` small searches in sequence.
+
+The visible cost is the number of solver invocations, each carrying the
+strategy's per-epoch overhead. The recommendation is to accept that and measure,
+rather than capping the epoch count pre-emptively: a real document holds on the
+order of ten lists, and a per-epoch overhead measured in milliseconds is nothing
+against the ILP solves themselves. Should measurement say otherwise, merging the
+smallest components back together is the obvious lever.
+
+One consequence to plan for. The fuzz probe added in piece 10
+(`constraints-groups/tests/property_build.rs`) asserts §2.6's recurrence as an
+exact equality, and the refined map no longer satisfies it. That probe has to be
+rewritten around the properties that survive: a strictly included spec gets a
+strictly smaller epoch, two specs of the same inclusion height that share a
+student land in the same epoch, and two specs sharing an epoch are connected
+through shared students — plus the one-entry-per-base-variable count, which is
+unaffected.
+
+**Piece 13 — group-list display polish.** The list of group lists
+(`gtk4/src/editor/group_lists/group_lists_display.rs`) does not line up. The
+name label at lines 82-90 uses `set_size_request: (150, -1)`, which sets a
+*minimum* width, so a long list name pushes its row wider than the others and
+every column after it stops aligning. The fix is to give that column a fixed
+width instead — ellipsize the label at the end, with a maximum width in
+characters — and to put the full name in a tooltip so nothing is lost. The
+tooltip should be set unconditionally rather than only when the label actually
+overflows: GTK does not readily expose whether a given label was truncated, and
+a tooltip that appears only sometimes is worse than one that always does. It
+must be `#[watch]`ed like the label itself, so that renaming a list updates
+both.
+
+**Explicitly out of scope: Python.** The initial roadmap listed "Python wiring"
+here because the original todo mentioned it. It is dropped. If group-list
+generation ever becomes scriptable, that will come with the rewrite of the
+Python API, not as a polish item bolted onto this feature.
 
 ## 6. Points settled
 
