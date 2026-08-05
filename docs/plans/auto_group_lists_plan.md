@@ -253,7 +253,10 @@ student sets intersect — and makes every component an epoch of its own. The
 inclusion ordering itself is untouched: the components of a level are numbered
 before those of the next level, so the recurrence above still decides *which
 lists wait for which*, and the refinement only decides how far the resulting
-stages are broken apart.
+stages are broken apart. Inside a level the components run smaller-first, by
+their number of distinct students; two components of equal size share no
+student, so their relative order is semantically indifferent and is fixed only
+for determinism.
 
 ### 2.7 No `SolveConfig` equivalent
 
@@ -981,15 +984,28 @@ left unchanged. Connectivity is computed *inside* a level, never across levels:
 over the whole spec set almost everything is one component as soon as a
 whole-class list exists, which would defeat the purpose.
 
-Two claims make this safe and worthwhile. First, it cannot cost solution
-quality: two specs in different components of the same level share no student,
-hence no `SharedPair` and no `GroupHasStudents` variable and no constraint, so
-the objective is separable over the components and solving them in sequence
-reaches the same optima as solving them together. Second, it should genuinely
+Two claims make this worthwhile. The first is separability: two specs in
+different components of the same level share no student, hence no `SharedPair`
+and no `GroupHasStudents` variable and no constraint, so the objective is
+separable over the components and the *true optima* of the components together
+are the true optimum of the level. The second is that this should genuinely
 help the solver, because branch and bound does not decompose a model into
 independent blocks by itself: `k` independent blocks in one model give a single
 search whose tree is roughly the product of the `k` small ones, where `k` epochs
 give `k` small searches in sequence.
+
+Separability is not, however, a promise that the split leaves the *computed*
+result alone. The incremental strategy deliberately does not compute the true
+optima: each epoch optimizes only its own margin of the objective, the previous
+epochs are held by a soft L1 anchor rather than fixed, and each epoch stops
+within its own tolerance (`strategies/src/strategies/incremental.rs`). Splitting
+a level therefore changes the sequence of sub-problems, and the order of the
+resulting stages changes what comes out. The settled rule: **inside a level the
+components run smaller-first, by their number of distinct students.** Two
+components of equal size share no student, so neither can see the other and
+their relative order is semantically indifferent; the implementation still
+tie-breaks on the smallest spec index, purely so runs and tests are
+reproducible.
 
 The visible cost is the number of solver invocations, each carrying the
 strategy's per-epoch overhead. The recommendation is to accept that and measure,
@@ -1006,6 +1022,41 @@ strictly smaller epoch, two specs of the same inclusion height that share a
 student land in the same epoch, and two specs sharing an epoch are connected
 through shared students — plus the one-entry-per-base-variable count, which is
 unaffected.
+
+**Done** — commit `233d96be` (*constraints-groups: split epoch levels into
+connected components (piece 12)*). One commit, not two: the fuzz probe would go
+red without its rewrite, so the algorithm and the probe had to move together.
+Nothing outside `constraints-groups` changed — `build_incremental_epochs` keeps
+its signature, so the gtk4 call site and the strategies crate were untouched.
+
+`build_incremental_epochs` is now two passes. The first is piece 10 verbatim,
+except that its result is named `heights` and is no longer the epoch, only the
+level. The second groups the specs by level, grows the components of a level in
+spec-index order, sorts them by `(distinct students, smallest member index)`,
+and hands out consecutive numbers — so epoch numbers come out contiguous from
+0. Growing a component needs a *multi-merge*: a spec can touch several existing
+components at once and must fuse them all, which is why the loop partitions the
+component list on `!union.is_disjoint(students)` instead of stopping at the
+first hit. Keeping each component's union set makes that test cheap and correct
+at the same time: intersecting the union is the same as intersecting some
+member, since the union is exactly their union.
+
+Two tests were added and one rewritten. `disjoint_sets_are_epoch_zero` no longer
+describes the behaviour at all — its two disjoint specs are now two epochs — so
+it became `disjoint_sets_of_a_level_split_smaller_first`.
+`smaller_blocks_solve_first_within_a_level` gives three disjoint blocks of
+distinct sizes in scrambled plan order, and `connectivity_is_transitive_within_a_level`
+puts the bridging spec `{2,3}` *last* in index order so that it must fuse two
+already-separate components. `roadmap_example_heights` doubles as the per-level
+connectivity pin: the whole-class list intersects both LV2 lists but sits at
+another level, and must not merge them.
+
+All four tabled mutations were run and each reddened its predicted test. The
+fourth is the one worth recording: breaking the multi-merge (keep only the first
+touching component) left the **fuzz probe green** and reddened only
+`connectivity_is_transitive_within_a_level`. The random walks never produce a
+three-way merge inside one level, so that hand-written fixture is the only guard
+on it.
 
 **Piece 13 — group-list display polish.** The list of group lists
 (`gtk4/src/editor/group_lists/group_lists_display.rs`) does not line up. The
