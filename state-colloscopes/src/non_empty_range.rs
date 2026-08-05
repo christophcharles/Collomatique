@@ -42,6 +42,30 @@ impl<T: Ord + Clone> collomatique_state::ContentOrd for NonEmptyRangeInclusive<T
 /// be matched by equality inside containers.
 impl<T: Ord + Clone> collomatique_state::ContentIdentity for NonEmptyRangeInclusive<T> {}
 
+/// The total order used to key ranges in sorted containers: lexicographic
+/// on the endpoint pair `(start, end)`. This is a storage order, not a
+/// semantic one — it says nothing about set inclusion (see [`ContentOrd`]
+/// above).
+///
+/// Hand-written because `#[derive(Ord)]` cannot apply here: the wrapped
+/// [`RangeInclusive`] implements `Eq` and `Hash` but not `PartialOrd`.
+///
+/// [`ContentOrd`]: collomatique_state::ContentOrd
+impl<T: Ord + Clone> Ord for NonEmptyRangeInclusive<T> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0
+            .start()
+            .cmp(other.0.start())
+            .then_with(|| self.0.end().cmp(other.0.end()))
+    }
+}
+
+impl<T: Ord + Clone> PartialOrd for NonEmptyRangeInclusive<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 impl<T: Ord + Clone> std::ops::Deref for NonEmptyRangeInclusive<T> {
     type Target = RangeInclusive<T>;
     fn deref(&self) -> &RangeInclusive<T> {
@@ -89,6 +113,17 @@ mod tests {
             Err(EmptyRangeError)
         );
         assert!(NonEmptyRangeInclusive::try_from(2..=3).is_ok());
+    }
+
+    #[test]
+    fn order_is_lexicographic_on_endpoints() {
+        let r = |a: u32, b: u32| NonEmptyRangeInclusive::new(a..=b).expect("non-empty");
+
+        // The start dominates...
+        assert!(r(1, 3) < r(2, 2));
+        // ...and the end breaks ties.
+        assert!(r(1, 2) < r(1, 3));
+        assert_eq!(r(1, 2).cmp(&r(1, 2)), std::cmp::Ordering::Equal);
     }
 
     #[test]
