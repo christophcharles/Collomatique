@@ -107,12 +107,17 @@ colloscope crate substitutes for prefilled lists in its reifications
 (`constraints-colloscopes/src/extras.rs:291-342`). For a pair already grouped
 in a kept list, one constant term is 1: the upper-bound side of the
 equivalence becomes trivially true, and the lower-bound side degenerates to
-`SharedPair = 1`. Implementation-wise the variable is **fixed to 1** (via the
-`check_fix` mechanism, like `Var::fix_student_group` in
-`constraints-colloscopes/src/vars.rs:125-154`) and its reification
-constraints are **omitted entirely**: with the constant term in, every one of
-them is degenerate (trivially true), so omitting them is exactly equivalent
-to writing them — and sends that many fewer constraints to the solver.
+`SharedPair = 1`. Implementation-wise the variable is **pinned to 1** and its
+reification constraints are **omitted entirely**: with the constant term in,
+every one of them is degenerate (trivially true), so omitting them is exactly
+equivalent to writing them — and sends that many fewer constraints to the
+solver. The pin is a **degenerate reified definition**, `and_reified(var, ||
+vec![])`, which the machinery turns into the single row `indicator = 1`
+(`ilp-modeler/src/bundle.rs:530-536`, the idiom of
+`constraints-colloscopes/src/extras.rs:637`). It is *not* the `check_fix`
+mechanism of `Var::fix_student_group`, as an earlier draft of this paragraph
+claimed: the modeler's fixer chain is typed `Fn(&B, &Env) -> Option<f64>`
+(`Modeler::add_fixer`) and reaches base variables only, never extras.
 Grouping such a pair in a new list
 then costs nothing — which is exactly the stability heuristic: the cheapest
 solution reuses last period's groupings where the student sets allow it.
@@ -616,6 +621,43 @@ pinned-pair fixing (§2.2). Note: the build-time DFS only expands extras that
 are referenced from constraints or objectives, so this piece leaves the built
 model unchanged; tests exercise the declarations directly (e.g. through
 throwaway constraints in test code).
+
+**Done** — `318e7455` (*constraints-groups: reified extra variables (piece
+7)*): a new private `constraints-groups/src/extras.rs` with one builder per
+family, merged into a single bundle and applied through the `apply!` macro
+copied from the colloscope builder. `VarEnv` grew a `pinned_pairs` field and
+three `pub(crate)` accessors (`lists`, `students`, `pinned_pairs`); the public
+constructor is unchanged, so `convert.rs` and the property test were not
+touched. The builder test still asserts 7 variables — now with a companion
+"and zero constraints" assertion — which is the piece's core claim: lazy
+expansion means declared-but-unreferenced extras cost nothing.
+
+Three deviations from the wording above, all settled while planning. The
+pinned-pair pin is a degenerate reification, not `check_fix` (§2.2 has been
+corrected in place: the fixer chain cannot reach extras). `PairInGroup` uses
+the single constraint `x_a + x_b >= 2` instead of the sibling crate's
+two-constraint AND (`constraints-colloscopes/src/extras.rs:374-390`): both
+operands are binary, so it is the same full equivalence, but it takes the
+single-constraint fast path and creates no helper column — worth it for by far
+the largest family (pairs × groups per list). And the tests reference the
+extras through **objectives**, not through throwaway constraints as suggested
+above: a user constraint needs a `ConstraintDesc` value, and that enum stays
+uninhabited until piece 8. Two mechanisms need no descriptor — `build_full`,
+which force-expands everything (used by `declarations_expand_cleanly` to sweep
+for undeclared names, cycles and duplicates in one call), and `add_objective`,
+which expands what it references.
+
+The four solver tests share an **adversarial-weight** shape: weight-100 terms
+on `StudentInGroup` indicators pin the placement (maximizing a
+full-equivalence indicator forces the base equality), and weight-±1 terms push
+the extra under test toward the *wrong* value. Landing on the semantic value
+anyway is precisely a test of the equivalence direction that objective
+pressure does not supply. One trap to remember when adding cases: an extra
+that only an *assertion* mentions is never expanded, so it is not a variable
+of the problem at all — every asserted extra must also appear in the
+objective. Both the AND encoding and the pinning branch were mutation-checked
+(weakened to `>= 1`, and disabled with `if false &&`); each turned exactly the
+intended test red.
 
 **Piece 8 — shape constraints, one class at a time.** Max size, conditional
 min size, ascending fill order (§2.3), each as its own commit with its unit
