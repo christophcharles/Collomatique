@@ -63,15 +63,18 @@ mod tests {
         // The `match` is exhaustive on purpose: a new constraint family
         // must not slip in without this test growing to count it.
         let mut max = 0;
+        let mut min = 0;
         for (_, source) in model.problem().get_constraints() {
             if let ConstraintSource::User(desc) = source {
                 match desc {
                     ConstraintDesc::StudentsPerGroupMax { .. } => max += 1,
+                    ConstraintDesc::StudentsPerGroupMin { .. } => min += 1,
                 }
             }
         }
-        // One max-size constraint per (list, group): 2 + 3.
+        // One size constraint of each kind per (list, group): 2 + 3.
         assert_eq!(max, 5);
+        assert_eq!(min, 5);
 
         // The pair extras are referenced by nothing until the piece-9
         // objective: lazy expansion must keep them out of the problem.

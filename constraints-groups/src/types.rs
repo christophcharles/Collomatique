@@ -41,4 +41,12 @@ pub enum ConstraintDesc {
         group: u32,
         max_students: u32,
     },
+    /// `Σ_s StudentInGroup(list, s, group) >= min_students ·
+    /// GroupHasStudents(list, group)` — the minimum binds only non-empty
+    /// groups.
+    StudentsPerGroupMin {
+        list: GroupListIdx,
+        group: u32,
+        min_students: u32,
+    },
 }

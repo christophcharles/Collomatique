@@ -46,6 +46,12 @@ impl VarEnv {
         &self.specs[list.0].students
     }
 
+    /// The smallest allowed group size of a list's spec. Panics on a stale
+    /// index, like [`VarEnv::slot_count`].
+    pub(crate) fn min_size(&self, list: GroupListIdx) -> u32 {
+        self.specs[list.0].students_per_group.start().get()
+    }
+
     /// The largest allowed group size of a list's spec. Panics on a stale
     /// index, like [`VarEnv::slot_count`].
     pub(crate) fn max_size(&self, list: GroupListIdx) -> u32 {
