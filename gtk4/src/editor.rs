@@ -1030,7 +1030,7 @@ impl Component for EditorPanel {
                     .unwrap();
                 self.group_lists
                     .sender()
-                    .send(group_lists::GroupListsInput::ResetStrategy)
+                    .send(group_lists::GroupListsInput::ResetGenerationConfig)
                     .unwrap();
                 self.send_msg_for_interface_update(sender);
             }

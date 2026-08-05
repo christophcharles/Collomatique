@@ -33,8 +33,8 @@ mod naming_dialog;
 #[derive(Debug)]
 pub enum GroupListsInput {
     Update(collomatique_state_colloscopes::colloscope_params::Parameters),
-    /// A new document was loaded: forget the last-used solver strategy.
-    ResetStrategy,
+    /// A new document was loaded: forget the last-used solver strategy and objective weights.
+    ResetGenerationConfig,
 
     EditGroupList(collomatique_state_colloscopes::GroupListId),
     DeleteGroupList(collomatique_state_colloscopes::GroupListId),
@@ -46,6 +46,7 @@ pub enum GroupListsInput {
     GenerationConfigAccepted(
         collomatique_constraints_groups::GenerationRequest,
         collomatique_strategies::ConductorStrategy,
+        collomatique_constraints_groups::ObjectiveWeights,
         collomatique_state_colloscopes::colloscope_params::Parameters,
     ),
     GenerationConfigCancelled,
@@ -83,6 +84,10 @@ pub struct GroupLists {
     /// choice instead of resetting. Reset to the parallel default on a new document, exactly as
     /// the colloscope page does with its own strategy.
     strategy: collomatique_strategies::ConductorStrategy,
+
+    /// The last-validated objective weights, reopened-on like the strategy.
+    /// Reset to the group-dominant default on a new document.
+    weights: collomatique_constraints_groups::ObjectiveWeights,
 
     /// The generation plan and the user-chosen list names, held across the
     /// solve: written when the naming dialog validates, consumed when the
@@ -219,8 +224,8 @@ impl Component for GroupLists {
             .transient_for(&root)
             .launch(())
             .forward(sender.input_sender(), |msg| match msg {
-                generate_dialog::DialogOutput::Accepted(request, strategy, params) => {
-                    GroupListsInput::GenerationConfigAccepted(request, strategy, params)
+                generate_dialog::DialogOutput::Accepted(request, strategy, weights, params) => {
+                    GroupListsInput::GenerationConfigAccepted(request, strategy, weights, params)
                 }
                 generate_dialog::DialogOutput::Cancelled => {
                     GroupListsInput::GenerationConfigCancelled
@@ -260,6 +265,7 @@ impl Component for GroupLists {
             naming_dialog,
             run_solver_dialog,
             strategy: collomatique_strategies::ConductorStrategy::with_parallelism_defaults(),
+            weights: collomatique_constraints_groups::ObjectiveWeights::default(),
             pending_generation: None,
             selection_reason: GroupListSelectionReason::New,
         };
@@ -279,9 +285,10 @@ impl Component for GroupLists {
                 self.update_group_list_entries();
                 self.update_period_entries();
             }
-            GroupListsInput::ResetStrategy => {
+            GroupListsInput::ResetGenerationConfig => {
                 self.strategy =
                     collomatique_strategies::ConductorStrategy::with_parallelism_defaults();
+                self.weights = collomatique_constraints_groups::ObjectiveWeights::default();
             }
             GroupListsInput::GenerateClicked => {
                 // The dialog is modal, so the parameters it is configured against stay valid until
@@ -290,19 +297,21 @@ impl Component for GroupLists {
                     .sender()
                     .send(generate_dialog::DialogInput::Show(
                         self.strategy.clone(),
+                        self.weights,
                         self.params.clone(),
                     ))
                     .unwrap();
             }
-            GroupListsInput::GenerationConfigAccepted(request, strategy, params) => {
-                // Persist the strategy so the dialog reopens on the last choice.
+            GroupListsInput::GenerationConfigAccepted(request, strategy, weights, params) => {
+                // Persist the strategy and the weights so the dialog reopens on the last choice.
                 self.strategy = strategy;
+                self.weights = weights;
                 // Hand the request to the naming/build dialog against the parameters the config
                 // dialog echoed back, so the plan and the model are built from exactly what the
                 // user configured against.
                 self.naming_dialog
                     .sender()
-                    .send(naming_dialog::DialogInput::Show(request, params))
+                    .send(naming_dialog::DialogInput::Show(request, weights, params))
                     .unwrap();
             }
             GroupListsInput::GenerationConfigCancelled => {

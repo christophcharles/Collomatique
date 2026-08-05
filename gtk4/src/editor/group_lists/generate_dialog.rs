@@ -1,3 +1,4 @@
+mod advanced_dialog;
 mod kept_list_row;
 mod period_group;
 
@@ -9,7 +10,7 @@ use relm4::{
 };
 use relm4::{adw, gtk};
 
-use collomatique_constraints_groups::GenerationRequest;
+use collomatique_constraints_groups::{GenerationRequest, ObjectiveWeights};
 use collomatique_state_colloscopes::colloscope_params::Parameters;
 use collomatique_strategies::ConductorStrategy;
 
@@ -24,6 +25,12 @@ pub struct Dialog {
     strategy: ConductorStrategy,
     /// The advanced solver-configuration dialog, opened via "Personnalisée".
     conductor_config_dialog: Controller<conductor_config::Dialog>,
+    /// The objective weights this window carries: seeded from the page on `Show`, edited
+    /// through the "Paramètres avancés" dialog, echoed back on `Accepted`.
+    weights: ObjectiveWeights,
+    /// The advanced model-parameter dialog (objective weights), opened via the
+    /// "Paramètres avancés" button.
+    advanced_dialog: Controller<advanced_dialog::Dialog>,
     /// One titled [`adw::PreferencesGroup`] per period, shown in the left panel.
     periods_list: FactoryVecDeque<period_group::PeriodGroup>,
     /// One switch row per existing prefilled list, shown in the right panel.
@@ -37,11 +44,13 @@ pub struct Dialog {
 
 #[derive(Debug)]
 pub enum DialogInput {
-    Show(ConductorStrategy, Parameters),
+    Show(ConductorStrategy, ObjectiveWeights, Parameters),
     Cancel,
     Accept,
     OpenAdvanced,
     UpdateStrategy(ConductorStrategy),
+    OpenAdvancedParams,
+    UpdateAdvancedParams(ObjectiveWeights),
     IgnoreOrRefresh,
     /// (period index, subject index within that period, new value)
     SetSubjectRebuild(usize, usize, bool),
@@ -52,7 +61,12 @@ pub enum DialogInput {
 #[derive(Debug)]
 pub enum DialogOutput {
     Cancelled,
-    Accepted(GenerationRequest, ConductorStrategy, Parameters),
+    Accepted(
+        GenerationRequest,
+        ConductorStrategy,
+        ObjectiveWeights,
+        Parameters,
+    ),
 }
 
 impl Dialog {
@@ -374,70 +388,85 @@ impl SimpleComponent for Dialog {
                             },
                         },
                     },
-                    gtk::Frame {
+                    gtk::Box {
+                        set_margin_all: 0,
+                        set_orientation: gtk::Orientation::Horizontal,
                         set_hexpand: true,
-                        set_margin_all: 5,
-                        gtk::Box {
-                            set_orientation: gtk::Orientation::Horizontal,
-                            set_spacing: 5,
-                            gtk::Label {
-                                set_margin_start: 10,
-                                set_margin_all: 5,
-                                set_label: "<b>Configuration du résolveur :</b>",
-                                set_use_markup: true,
-                            },
+                        gtk::Frame {
+                            set_hexpand: true,
+                            set_margin_all: 5,
                             gtk::Box {
-                                set_spacing: 0,
-                                add_css_class: "linked",
-                                #[name(opt_toggle_btn)]
-                                gtk::ToggleButton {
-                                    set_margin_top: 5,
-                                    set_margin_bottom: 5,
-                                    set_label: "Optimisation complète",
-                                    #[track(opt_toggle_btn.is_active() != model.is_opt_strategy())]
-                                    set_active: model.is_opt_strategy(),
-                                    connect_toggled[sender] => move |widget| {
-                                        let new_state = widget.is_active();
-                                        sender.input(if new_state {
-                                            DialogInput::UpdateStrategy(ConductorStrategy::with_parallelism_defaults())
-                                        } else {
-                                            DialogInput::IgnoreOrRefresh
-                                        });
-                                    }
+                                set_orientation: gtk::Orientation::Horizontal,
+                                set_spacing: 5,
+                                gtk::Label {
+                                    set_margin_start: 10,
+                                    set_margin_all: 5,
+                                    set_label: "<b>Configuration du résolveur :</b>",
+                                    set_use_markup: true,
                                 },
-                                #[name(search_toggle_btn)]
-                                gtk::ToggleButton {
-                                    set_margin_top: 5,
-                                    set_margin_bottom: 5,
-                                    set_label: "Recherche simple",
-                                    #[track(search_toggle_btn.is_active() != model.is_search_strategy())]
-                                    set_active: model.is_search_strategy(),
-                                    connect_toggled[sender] => move |widget| {
-                                        let new_state = widget.is_active();
-                                        sender.input(if new_state {
-                                            DialogInput::UpdateStrategy(ConductorStrategy::default())
-                                        } else {
-                                            DialogInput::IgnoreOrRefresh
-                                        });
-                                    }
+                                gtk::Box {
+                                    set_spacing: 0,
+                                    add_css_class: "linked",
+                                    #[name(opt_toggle_btn)]
+                                    gtk::ToggleButton {
+                                        set_margin_top: 5,
+                                        set_margin_bottom: 5,
+                                        set_label: "Optimisation complète",
+                                        #[track(opt_toggle_btn.is_active() != model.is_opt_strategy())]
+                                        set_active: model.is_opt_strategy(),
+                                        connect_toggled[sender] => move |widget| {
+                                            let new_state = widget.is_active();
+                                            sender.input(if new_state {
+                                                DialogInput::UpdateStrategy(ConductorStrategy::with_parallelism_defaults())
+                                            } else {
+                                                DialogInput::IgnoreOrRefresh
+                                            });
+                                        }
+                                    },
+                                    #[name(search_toggle_btn)]
+                                    gtk::ToggleButton {
+                                        set_margin_top: 5,
+                                        set_margin_bottom: 5,
+                                        set_label: "Recherche simple",
+                                        #[track(search_toggle_btn.is_active() != model.is_search_strategy())]
+                                        set_active: model.is_search_strategy(),
+                                        connect_toggled[sender] => move |widget| {
+                                            let new_state = widget.is_active();
+                                            sender.input(if new_state {
+                                                DialogInput::UpdateStrategy(ConductorStrategy::default())
+                                            } else {
+                                                DialogInput::IgnoreOrRefresh
+                                            });
+                                        }
+                                    },
+                                },
+                                gtk::Label {
+                                    set_margin_all: 5,
+                                    set_label: "<i><small>Personnalisée</small></i>",
+                                    set_use_markup: true,
+                                    #[watch]
+                                    set_visible: model.is_other_strategy(),
+                                },
+                                gtk::Box {
+                                    set_hexpand: true,
+                                },
+                                gtk::Button {
+                                    add_css_class: "frame",
+                                    set_margin_all: 5,
+                                    set_label: "Personnalisée",
+                                    connect_clicked => DialogInput::OpenAdvanced,
                                 },
                             },
-                            gtk::Label {
-                                set_margin_all: 5,
-                                set_label: "<i><small>Personnalisée</small></i>",
-                                set_use_markup: true,
-                                #[watch]
-                                set_visible: model.is_other_strategy(),
+                        },
+                        gtk::Button {
+                            add_css_class: "frame",
+                            add_css_class: "warning",
+                            set_margin_all: 5,
+                            adw::ButtonContent {
+                                set_icon_name: "configure-symbolic",
+                                set_label: "Paramètres avancés",
                             },
-                            gtk::Box {
-                                set_hexpand: true,
-                            },
-                            gtk::Button {
-                                add_css_class: "frame",
-                                set_margin_all: 5,
-                                set_label: "Personnalisée",
-                                connect_clicked => DialogInput::OpenAdvanced,
-                            },
+                            connect_clicked => DialogInput::OpenAdvancedParams,
                         },
                     },
                 },
@@ -460,6 +489,16 @@ impl SimpleComponent for Dialog {
                 conductor_config::DialogOutput::Cancelled => DialogInput::IgnoreOrRefresh,
             });
 
+        let advanced_dialog = advanced_dialog::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                advanced_dialog::DialogOutput::Accepted(weights) => {
+                    DialogInput::UpdateAdvancedParams(weights)
+                }
+                advanced_dialog::DialogOutput::Cancelled => DialogInput::IgnoreOrRefresh,
+            });
+
         let periods_list = FactoryVecDeque::builder()
             .launch(gtk::Box::default())
             .forward(sender.input_sender(), |msg| match msg {
@@ -480,6 +519,8 @@ impl SimpleComponent for Dialog {
             params: Parameters::default(),
             strategy: ConductorStrategy::with_parallelism_defaults(),
             conductor_config_dialog,
+            weights: ObjectiveWeights::default(),
+            advanced_dialog,
             periods_list,
             kept_lists_list,
             periods_data: Vec::new(),
@@ -496,10 +537,11 @@ impl SimpleComponent for Dialog {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         match msg {
-            DialogInput::Show(strategy, params) => {
+            DialogInput::Show(strategy, weights, params) => {
                 self.hidden = false;
                 self.params = params;
                 self.strategy = strategy;
+                self.weights = weights;
                 self.set_data_from_params();
 
                 self.refresh_periods_list();
@@ -513,6 +555,15 @@ impl SimpleComponent for Dialog {
             }
             DialogInput::UpdateStrategy(strategy) => {
                 self.strategy = strategy;
+            }
+            DialogInput::OpenAdvancedParams => {
+                self.advanced_dialog
+                    .sender()
+                    .send(advanced_dialog::DialogInput::Show(self.weights))
+                    .unwrap();
+            }
+            DialogInput::UpdateAdvancedParams(weights) => {
+                self.weights = weights;
             }
             DialogInput::IgnoreOrRefresh => {}
             DialogInput::SetSubjectRebuild(period, subject, value) => {
@@ -541,6 +592,7 @@ impl SimpleComponent for Dialog {
                     .output(DialogOutput::Accepted(
                         self.request_from_data(),
                         self.strategy.clone(),
+                        self.weights,
                         self.params.clone(),
                     ))
                     .unwrap();

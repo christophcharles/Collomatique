@@ -48,8 +48,9 @@ pub struct Dialog {
 
 #[derive(Debug)]
 pub enum DialogInput {
-    /// Open the dialog for this request, against the parameters the config dialog echoed back.
-    Show(GenerationRequest, Parameters),
+    /// Open the dialog for this request with these objective weights, against the parameters
+    /// the config dialog echoed back.
+    Show(GenerationRequest, ObjectiveWeights, Parameters),
     Cancel,
     Accept,
     /// One build-log line, streamed from the off-thread build.
@@ -302,7 +303,7 @@ impl Component for Dialog {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match msg {
-            DialogInput::Show(request, params) => {
+            DialogInput::Show(request, weights, params) => {
                 self.hidden = false;
                 self.show_debug = false;
                 self.built = false;
@@ -353,11 +354,7 @@ impl Component for Dialog {
                         let mut log = move |line: &str| {
                             input.emit(DialogInput::Echo(format!("{}\n", line)));
                         };
-                        let model = build_model_with_log(
-                            &build_plan,
-                            ObjectiveWeights::default(),
-                            &mut log,
-                        );
+                        let model = build_model_with_log(&build_plan, weights, &mut log);
                         DialogCommandOutput::Built(seq, model)
                     });
                 }
