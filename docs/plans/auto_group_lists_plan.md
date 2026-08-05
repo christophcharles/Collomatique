@@ -476,6 +476,40 @@ subjects/periods (French strings belong in gtk4); the naming scheme is a
 piece-plan detail. Build failure shows the error like `loading_dialog.rs`
 does.
 
+**Done** — `49da7238` (*gtk4: naming/build dialog for automatic group-list
+generation (piece 3)*): `naming_dialog.rs` and its `spec_row.rs` factory, plus
+the page seam moving one step forward (the request is forwarded here, and this
+dialog's output is dropped with a comment naming piece 4). Two file references
+in the sketch above were off: the toggle-to-`DebugView` pattern actually lives
+in `run_solver.rs:366-449`, and the loading dialog is
+`gtk4/src/editor/colloscope/loading_dialog.rs`.
+
+Two deviations, both forced by the code rather than by taste. First, **there is
+no error state**, contrary to the last sentence above: `build_model_with_log`
+is infallible (it panics on internal bugs, which the piece-1 fuzz net guards),
+and the only fallible call, `build_generation_plan`, fails solely on caller
+bugs — both dialogs are modal, so the document cannot change between the two —
+so it gets an `.expect`. Second, **`adw::EntryRow` has no subtitle property**,
+so the coverage lives in the row *title* ("Liste pour Maths et Physique
+(périodes 1 et 2)"), where it stays visible while the name is edited.
+
+Four choices the piece plan settled. The **default naming scheme** is the
+coverage string itself: distinct covered subjects in document order, then the
+distinct covered periods as 1-based numbers, joined the French way — "Maths
+(période 1)", "Maths et Physique (périodes 1 et 2)". Names are unique without
+any dedup pass, because distinct specs cover disjoint pair sets. **"Annuler"
+works at any moment, including mid-build**: unlike `loading_dialog`, this
+dialog is interactive from the moment it opens (the user edits names while the
+build streams), so blocking cancel would be arbitrary; a `build_seq` counter,
+incremented on every `Show` and captured by the command closure, discards a
+result that arrives after a cancel or a reopen. **The conductor payload is
+emitted by this dialog**, mirroring `loading_dialog::DialogOutput::ModelReady`,
+with the empty epoch map §2.6 defines as a single priming solve — which leaves
+piece 4 as pure dialog wiring. And **the all-skipped case still opens the
+dialog**: when every selected pair lands in `skipped`, `plan.specs` is empty,
+so nothing is built and "Valider" stays insensitive forever, but the dialog is
+the only place the user would ever learn why nothing was generated.
+
 **Piece 4 — launching the resolution.** Instantiate the generic
 `run_solver::Dialog<constraints_groups::Var, ExtraVarName, ConstraintDesc>`
 (`gtk4/src/editor/run_solver.rs:28`) with its own title, and feed it
