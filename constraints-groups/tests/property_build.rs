@@ -14,7 +14,7 @@
 //! On failure the harness prints the seed and the full op log, so re-running
 //! the binary reproduces the exact walk.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use collomatique_testgen_colloscopes::rand::Rng;
 use collomatique_testgen_colloscopes::{ChaCha8Rng, generator, harness};
@@ -97,12 +97,24 @@ fn build_and_check(rng: &mut ChaCha8Rng, inner: &InnerData) {
     let model = build_model(&plan, ObjectiveWeights::default());
     let _ = model.stats();
 
-    // The epoch map (piece 10) must name exactly one entry per base
-    // variable, give every variable of a spec the same epoch, and satisfy
-    // §2.6's recursive definition: 0 with no strict subset, else 1 + the
-    // max epoch over the strict subsets. The recurrence is well-founded on
-    // strict inclusion, so checking it as a fixpoint against the map's own
-    // values pins the unique solution without re-running the algorithm.
+    // The epoch map (pieces 10 + 12) must name exactly one entry per base
+    // variable and give every variable of a spec the same epoch. Piece 12
+    // splits each inclusion level into its connected components, so §2.6's
+    // recurrence no longer holds as an equality; instead the probe checks
+    // the properties that define the refined numbering, against inclusion
+    // heights recomputed here by naive fixpoint iteration (well-founded on
+    // strict inclusion, hence a unique solution — and an implementation
+    // independent of the production ascending-size pass):
+    //   (a) heights ascend with the epochs: a strictly lower height means
+    //       a strictly smaller epoch (this subsumes "a strictly included
+    //       spec solves strictly earlier");
+    //   (b) two specs of the same height that share a student share an
+    //       epoch;
+    //   (c) an epoch holds specs of a single height, connected through
+    //       shared students — epochs are components, never coarser;
+    //   (d) inside a height, epochs run the smaller blocks (fewer
+    //       distinct students) first;
+    //   (e) epoch numbers are contiguous from 0.
     let epochs = build_incremental_epochs(&plan);
     let var_count: usize = plan.specs.iter().map(|(s, _)| s.students.len()).sum();
     assert_eq!(epochs.len(), var_count, "one epoch entry per base variable");
@@ -128,17 +140,109 @@ fn build_and_check(rng: &mut ChaCha8Rng, inner: &InnerData) {
                 "all variables of a spec share its epoch",
             );
         }
-        let expected = plan
-            .specs
+    }
+
+    let n = plan.specs.len();
+    let strict_subset = |j: usize, i: usize| {
+        let (s, t) = (&plan.specs[j].0.students, &plan.specs[i].0.students);
+        s.len() < t.len() && s.is_subset(t)
+    };
+    let intersects = |i: usize, j: usize| {
+        !plan.specs[i]
+            .0
+            .students
+            .is_disjoint(&plan.specs[j].0.students)
+    };
+    let mut heights = vec![0u32; n];
+    loop {
+        let mut changed = false;
+        for i in 0..n {
+            let h = (0..n)
+                .filter(|&j| strict_subset(j, i))
+                .map(|j| heights[j] + 1)
+                .max()
+                .unwrap_or(0);
+            if heights[i] != h {
+                heights[i] = h;
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+
+    for i in 0..n {
+        for j in 0..n {
+            if heights[i] < heights[j] {
+                assert!(
+                    spec_epoch(i) < spec_epoch(j),
+                    "heights ascend with the epochs",
+                );
+            }
+            if i < j && heights[i] == heights[j] && intersects(i, j) {
+                assert_eq!(
+                    spec_epoch(i),
+                    spec_epoch(j),
+                    "same-height specs sharing a student share an epoch",
+                );
+            }
+        }
+    }
+
+    let mut groups: BTreeMap<u32, Vec<usize>> = BTreeMap::new();
+    for i in 0..n {
+        groups.entry(spec_epoch(i)).or_default().push(i);
+    }
+    let epoch_values: Vec<u32> = groups.keys().copied().collect();
+    let contiguous: Vec<u32> = (0..groups.len() as u32).collect();
+    assert_eq!(
+        epoch_values, contiguous,
+        "epoch numbers are contiguous from 0",
+    );
+
+    let mut prev: Option<(u32, usize)> = None; // previous epoch's (height, block size)
+    for members in groups.values() {
+        let h = heights[members[0]];
+        for &i in members {
+            assert_eq!(heights[i], h, "an epoch holds specs of a single height");
+        }
+        // Connectivity through shared students, by saturation from the
+        // first member.
+        let mut reached = vec![false; members.len()];
+        reached[0] = true;
+        loop {
+            let mut changed = false;
+            for a in 0..members.len() {
+                if !reached[a]
+                    && (0..members.len()).any(|b| reached[b] && intersects(members[a], members[b]))
+                {
+                    reached[a] = true;
+                    changed = true;
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+        assert!(
+            reached.iter().all(|&r| r),
+            "an epoch's specs are connected through shared students",
+        );
+
+        let union: BTreeSet<_> = members
             .iter()
-            .enumerate()
-            .filter(|(_, (t, _))| {
-                t.students.len() < spec.students.len() && t.students.is_subset(&spec.students)
-            })
-            .map(|(j, _)| spec_epoch(j) + 1)
-            .max()
-            .unwrap_or(0);
-        assert_eq!(spec_epoch(i), expected, "the §2.6 chain-height definition");
+            .flat_map(|&i| plan.specs[i].0.students.iter().copied())
+            .collect();
+        if let Some((prev_h, prev_size)) = prev {
+            if prev_h == h {
+                assert!(
+                    prev_size <= union.len(),
+                    "smaller blocks first inside a height",
+                );
+            }
+        }
+        prev = Some((h, union.len()));
     }
 
     // A random in-domain assignment must convert into structurally valid
