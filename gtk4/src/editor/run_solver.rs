@@ -25,6 +25,15 @@ use crate::widgets::debug_view::{DebugView, DebugViewInput};
 use strategy_display::{StrategyDisplayInput, StrategyFrame};
 use warning_icon::WarningIcon;
 
+/// Caller-supplied texts of the dialog: the window title, and the body of the confirmation shown
+/// when the user cancels a still-running solve (it names what is being thrown away, which only the
+/// caller knows — the colloscope resolution and the group-list generation discard different things).
+#[derive(Debug, Clone)]
+pub struct DialogSettings {
+    pub title: String,
+    pub cancel_warning: String,
+}
+
 pub struct Dialog<B: UsableData, E: UsableData, C: UsableData> {
     hidden: bool,
     is_running: bool,
@@ -114,7 +123,7 @@ where
     E: UsableData + 'static,
     C: UsableData + 'static,
 {
-    type Init = String;
+    type Init = DialogSettings;
 
     type Input = DialogInput<B, E, C>;
     type Output = DialogOutput<B, E>;
@@ -454,7 +463,7 @@ where
     }
 
     fn init(
-        title: Self::Init,
+        settings: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
@@ -465,7 +474,7 @@ where
 
         let warning_running = warning_running::Dialog::builder()
             .transient_for(&root)
-            .launch("Toutes les modifications sur le colloscope seront perdues.".to_string())
+            .launch(settings.cancel_warning)
             .forward(sender.input_sender(), |msg| match msg {
                 warning_running::DialogOutput::Accept => DialogInput::Cancel,
             });
@@ -509,7 +518,7 @@ where
             end_with_error: false,
             show_debug: false,
             global_debug_view,
-            title,
+            title: settings.title,
             last_line: String::new(),
             worker_strategies: Vec::new(),
             displayed_worker: None,

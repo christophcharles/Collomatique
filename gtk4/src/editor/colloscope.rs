@@ -560,7 +560,11 @@ impl Component for Colloscope {
 
         let run_solver_dialog = SolverDialog::builder()
             .transient_for(&root)
-            .launch("Résolution du colloscope".to_string())
+            .launch(run_solver::DialogSettings {
+                title: "Résolution du colloscope".to_string(),
+                cancel_warning: "Toutes les modifications sur le colloscope seront perdues."
+                    .to_string(),
+            })
             .forward(sender.input_sender(), |msg| match msg {
                 run_solver::DialogOutput::NewConfig(config) => ColloscopeInput::SolveResult(config),
             });
