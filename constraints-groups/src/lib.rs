@@ -1,8 +1,9 @@
 //! Standalone group-list generation model.
 //!
 //! This crate builds an ILP model that prefills group lists before — and
-//! independently of — any colloscope resolution. See
-//! `docs/plans/auto_group_lists_plan.md` for the full design. The model is
+//! independently of — any colloscope resolution. The full design is the
+//! retired roadmap, pinned at
+//! `git show 5556784b:docs/plans/auto_group_lists_plan.md`. The model is
 //! indexed by deduplicated [`GroupListSpec`]s, not by subjects: the
 //! translation between document state and model lives here too
 //! ([`build_generation_plan`] on the way in, [`build_group_lists`] on the
