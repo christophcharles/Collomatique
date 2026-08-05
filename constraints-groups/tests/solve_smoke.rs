@@ -1,6 +1,8 @@
-//! Piece-1 verification (roadmap §7): the solver machinery accepts a model
-//! with no constraints and an empty objective, and its solution converts
-//! back into structurally valid prefilled group lists.
+//! End-to-end smoke over the public API: a hand-built plan goes through
+//! `build_model`, a real CBC solve, and `build_group_lists`, and comes back
+//! as structurally valid prefilled group lists. It started as piece-1's
+//! verification of the solver machinery (roadmap §7) and now covers the
+//! constrained model too.
 
 use collomatique_constraints_groups::{
     GenerationPlan, GroupListSpec, build_group_lists, build_model,
@@ -23,7 +25,7 @@ fn range(min: u32, max: u32) -> NonEmptyRangeInclusive<NonZeroU32> {
 }
 
 #[test]
-fn constraint_free_model_solves_and_converts() {
+fn model_solves_and_converts() {
     // A hand-built plan: no document needed, the plan type is the model's
     // whole input. (An empty covered set is artificial but legal here.)
     let spec = GroupListSpec {
@@ -39,12 +41,12 @@ fn constraint_free_model_solves_and_converts() {
     let model = build_model(&plan);
 
     let solver = ColloCbcSolver::with_disable_logging(true);
-    let solution = model
-        .solve(&solver)
-        .expect("a constraint-free model must be feasible");
+    let solution = model.solve(&solver).expect("the model must be feasible");
 
-    // 6 students, min size 2 → 3 slots. Any in-domain assignment is
-    // acceptable; the conversion must be structurally valid.
+    // 6 students, min size 2 → 3 slots, max size 3. Any assignment the
+    // constraints allow is acceptable; the conversion must be structurally
+    // valid. The cap of 3 alone already forces at least two non-empty
+    // groups.
     let config = solution.get_data();
     let lists = build_group_lists(&plan, &[String::from("Test")], &config);
     assert_eq!(lists.len(), 1);
@@ -53,4 +55,5 @@ fn constraint_free_model_solves_and_converts() {
     assert!(list.is_prefilled());
     assert_eq!(list.filling().iter_students().count(), 6);
     assert!(list.params().group_names.len() <= 3);
+    assert!(list.params().group_names.len() >= 2);
 }

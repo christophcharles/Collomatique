@@ -46,6 +46,12 @@ impl VarEnv {
         &self.specs[list.0].students
     }
 
+    /// The largest allowed group size of a list's spec. Panics on a stale
+    /// index, like [`VarEnv::slot_count`].
+    pub(crate) fn max_size(&self, list: GroupListIdx) -> u32 {
+        self.specs[list.0].students_per_group.end().get()
+    }
+
     /// The pairs fixed to "already shared" by the kept lists (`a < b`).
     pub(crate) fn pinned_pairs(&self) -> &BTreeSet<(StudentId, StudentId)> {
         &self.pinned_pairs

@@ -1,4 +1,4 @@
-//! Build the (for now trivial) ILP model from a generation plan.
+//! Build the ILP model from a generation plan.
 
 use crate::GroupListsModel;
 use crate::specs::GenerationPlan;
@@ -36,11 +36,12 @@ pub fn build_model_with_log(
         }};
     }
 
-    // The extras are declarations only: nothing references them until the
-    // constraints (piece 8) and the objective (piece 9), so this bundle
-    // leaves the built model unchanged — an empty objective still folds to
-    // a constant-0 minimize.
+    // The extras must be declared before the constraints reference them.
+    // The pair extras (`PairInGroup`, `SharedPair`) stay unreferenced until
+    // the objective (piece 9), so lazy expansion keeps them out of the
+    // built model.
     apply!("extras", crate::extras::build_extras(&env));
+    apply!("constraints", crate::constraints::build(&env));
 
     modeler
         .build_with_log(&env, log)
@@ -50,16 +51,37 @@ pub fn build_model_with_log(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use collomatique_ilp_modeler::{ConstraintSource, InternalVar};
 
     #[test]
-    fn trivial_model_has_only_base_vars() {
+    fn shape_constraints_are_emitted() {
+        // List 0: 4 students, sizes 2..=3 → 2 slots. List 1: 3 students,
+        // sizes 1..=2 → 3 slots.
         let plan = crate::vars::tests::plan_of(&[(&[1, 2, 3, 4], (2, 3)), (&[5, 6, 7], (1, 2))]);
         let model = build_model(&plan);
 
-        // 7 base variables and nothing else: the extras of piece 7 are
-        // declared but referenced by nothing, so `Modeler::build` expands
-        // none of them and no helper variable can appear either.
-        assert_eq!(model.problem().get_variables().len(), 7);
-        assert_eq!(model.problem().get_constraints().len(), 0);
+        // The `match` is exhaustive on purpose: a new constraint family
+        // must not slip in without this test growing to count it.
+        let mut max = 0;
+        for (_, source) in model.problem().get_constraints() {
+            if let ConstraintSource::User(desc) = source {
+                match desc {
+                    ConstraintDesc::StudentsPerGroupMax { .. } => max += 1,
+                }
+            }
+        }
+        // One max-size constraint per (list, group): 2 + 3.
+        assert_eq!(max, 5);
+
+        // The pair extras are referenced by nothing until the piece-9
+        // objective: lazy expansion must keep them out of the problem.
+        assert!(model.problem().get_variables().keys().all(|v| {
+            !matches!(
+                v,
+                InternalVar::Extra(
+                    ExtraVarName::PairInGroup { .. } | ExtraVarName::SharedPair { .. }
+                )
+            )
+        }));
     }
 }

@@ -1,7 +1,4 @@
-//! Problem-description types. `ConstraintDesc` is still deliberately empty:
-//! piece 8 adds the constraint families. No severity tiers, ever — the tier
-//! machinery of the colloscope crate feeds a gtk4 warning display that has no
-//! counterpart here.
+//! Problem-description types.
 
 use crate::vars::GroupListIdx;
 use collomatique_state_colloscopes::StudentId;
@@ -33,7 +30,15 @@ pub enum ExtraVarName {
     SharedPair { a: StudentId, b: StudentId },
 }
 
-/// One variant per constraint family (max size, conditional min size,
-/// ascending fill order — piece 8).
+/// One variant per constraint family (piece 8). A flat enum, no severity
+/// tiers — the tier machinery of the colloscope crate feeds a gtk4 warning
+/// display that has no counterpart here.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub enum ConstraintDesc {}
+pub enum ConstraintDesc {
+    /// `Σ_s StudentInGroup(list, s, group) <= max_students`.
+    StudentsPerGroupMax {
+        list: GroupListIdx,
+        group: u32,
+        max_students: u32,
+    },
+}
