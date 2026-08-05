@@ -84,6 +84,13 @@ pub struct GroupLists {
     /// the colloscope page does with its own strategy.
     strategy: collomatique_strategies::ConductorStrategy,
 
+    /// The generation plan and the user-chosen list names, held across the
+    /// solve: written when the naming dialog validates, consumed when the
+    /// solver dialog returns a solution. A leftover value after a cancelled
+    /// solve is harmless — the next naming validation overwrites it, and
+    /// nothing else reads it.
+    pending_generation: Option<(collomatique_constraints_groups::GenerationPlan, Vec<String>)>,
+
     selection_reason: GroupListSelectionReason,
 }
 
@@ -253,6 +260,7 @@ impl Component for GroupLists {
             naming_dialog,
             run_solver_dialog,
             strategy: collomatique_strategies::ConductorStrategy::with_parallelism_defaults(),
+            pending_generation: None,
             selection_reason: GroupListSelectionReason::New,
         };
 
@@ -302,9 +310,9 @@ impl Component for GroupLists {
             }
             GroupListsInput::GenerationNamingAccepted(plan, names, model, payload) => {
                 // Launch the solver on the freshly built model, with the page's persisted
-                // strategy. Piece 6 stores `plan` and `names` so the solve result can be turned
-                // into the composite update op; until then they are deliberately dropped.
-                let _ = (plan, names);
+                // strategy. The plan and the names are held until the solver returns a
+                // solution, which is converted against exactly this plan.
+                self.pending_generation = Some((plan, names));
                 self.run_solver_dialog
                     .sender()
                     .send(run_solver::DialogInput::Run(
@@ -318,11 +326,22 @@ impl Component for GroupLists {
                 // The generation was abandoned at the naming step; nothing to undo.
             }
             GroupListsInput::GenerationSolveResult(config) => {
-                // Pieces 5-6 take over from here: piece 6 projects the config down to base
-                // variables (`filter_transmute`), converts it with `build_group_lists` and the
-                // stored plan and names, and emits the composite op of piece 5. Until then the
-                // solution is deliberately dropped and nothing else happens.
-                let _ = config;
+                let (plan, names) = self
+                    .pending_generation
+                    .take()
+                    .expect("a solve result implies a pending generation");
+                // The solved config is over the flattened model's variables; strip it down
+                // to base variables, which is all the conversion needs (the colloscope page
+                // does the same on its own solve result).
+                let base_config = config.filter_transmute(|var| match var {
+                    collomatique_ilp_modeler::InternalVar::Base(b) => Some(b.clone()),
+                    _ => None,
+                });
+                let entries =
+                    collomatique_constraints_groups::build_group_lists(&plan, &names, &base_config);
+                sender
+                    .output(GroupListsUpdateOp::AddGeneratedGroupLists(entries))
+                    .unwrap();
             }
             GroupListsInput::AddGroupList => {
                 self.selection_reason = GroupListSelectionReason::New;
