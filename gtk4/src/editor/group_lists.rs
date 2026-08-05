@@ -9,16 +9,28 @@ use collomatique_ops::GroupListsUpdateOp;
 
 mod associations_display;
 mod edit_dialog;
+mod generate_dialog;
 mod group_lists_display;
 
 #[derive(Debug)]
 pub enum GroupListsInput {
     Update(collomatique_state_colloscopes::colloscope_params::Parameters),
+    /// A new document was loaded: forget the last-used solver strategy.
+    ResetStrategy,
 
     EditGroupList(collomatique_state_colloscopes::GroupListId),
     DeleteGroupList(collomatique_state_colloscopes::GroupListId),
     AddGroupList,
     GroupListSelected(collomatique_state_colloscopes::group_lists::GroupList),
+
+    /// "Générer des listes automatiquement" was clicked.
+    GenerateClicked,
+    GenerationConfigAccepted(
+        collomatique_constraints_groups::GenerationRequest,
+        collomatique_strategies::ConductorStrategy,
+        collomatique_state_colloscopes::colloscope_params::Parameters,
+    ),
+    GenerationConfigCancelled,
 }
 
 #[derive(Debug)]
@@ -36,6 +48,12 @@ pub struct GroupLists {
     group_list_entries: FactoryVecDeque<group_lists_display::Entry>,
     period_entries: FactoryVecDeque<associations_display::PeriodEntry>,
     edit_dialog: Controller<edit_dialog::Dialog>,
+    generate_dialog: Controller<generate_dialog::Dialog>,
+
+    /// The last-validated solver strategy, so the generation dialog reopens on the user's last
+    /// choice instead of resetting. Reset to the parallel default on a new document, exactly as
+    /// the colloscope page does with its own strategy.
+    strategy: collomatique_strategies::ConductorStrategy,
 
     selection_reason: GroupListSelectionReason,
 }
@@ -77,12 +95,12 @@ impl Component for GroupLists {
                         gtk::Button {
                             add_css_class: "frame",
                             add_css_class: "accent",
-                            set_sensitive: false,
                             set_margin_all: 5,
                             adw::ButtonContent {
                                 set_icon_name: "system-run-symbolic",
                                 set_label: "Générer des listes automatiquement",
                             },
+                            connect_clicked => GroupListsInput::GenerateClicked,
                         },
                     },
                     #[local_ref]
@@ -161,11 +179,25 @@ impl Component for GroupLists {
                 }
             });
 
+        let generate_dialog = generate_dialog::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                generate_dialog::DialogOutput::Accepted(request, strategy, params) => {
+                    GroupListsInput::GenerationConfigAccepted(request, strategy, params)
+                }
+                generate_dialog::DialogOutput::Cancelled => {
+                    GroupListsInput::GenerationConfigCancelled
+                }
+            });
+
         let model = GroupLists {
             params: collomatique_state_colloscopes::colloscope_params::Parameters::default(),
             group_list_entries,
             period_entries,
             edit_dialog,
+            generate_dialog,
+            strategy: collomatique_strategies::ConductorStrategy::with_parallelism_defaults(),
             selection_reason: GroupListSelectionReason::New,
         };
 
@@ -183,6 +215,33 @@ impl Component for GroupLists {
 
                 self.update_group_list_entries();
                 self.update_period_entries();
+            }
+            GroupListsInput::ResetStrategy => {
+                self.strategy =
+                    collomatique_strategies::ConductorStrategy::with_parallelism_defaults();
+            }
+            GroupListsInput::GenerateClicked => {
+                // The dialog is modal, so the parameters it is configured against stay valid until
+                // it hands them back on `Accepted`.
+                self.generate_dialog
+                    .sender()
+                    .send(generate_dialog::DialogInput::Show(
+                        self.strategy.clone(),
+                        self.params.clone(),
+                    ))
+                    .unwrap();
+            }
+            GroupListsInput::GenerationConfigAccepted(request, strategy, _params) => {
+                // Persist the strategy so the dialog reopens on the last choice.
+                self.strategy = strategy;
+                // Piece 3 takes over from here: the naming/build dialog turns `request` and
+                // `_params` into a `GenerationPlan`, a model and one editable name per spec. Until
+                // it lands, the configured request is deliberately dropped and nothing else
+                // happens.
+                let _ = request;
+            }
+            GroupListsInput::GenerationConfigCancelled => {
+                // The generation was abandoned before it started; nothing to undo.
             }
             GroupListsInput::AddGroupList => {
                 self.selection_reason = GroupListSelectionReason::New;

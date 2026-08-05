@@ -1028,6 +1028,10 @@ impl Component for EditorPanel {
                     .sender()
                     .send(colloscope::ColloscopeInput::ResetSolveConfig)
                     .unwrap();
+                self.group_lists
+                    .sender()
+                    .send(group_lists::GroupListsInput::ResetStrategy)
+                    .unwrap();
                 self.send_msg_for_interface_update(sender);
             }
             EditorInput::SaveClicked => match &self.file_name {

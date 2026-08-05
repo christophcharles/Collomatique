@@ -375,6 +375,7 @@ dependencies = [
  "chrono",
  "clap",
  "collomatique-constraints-colloscopes",
+ "collomatique-constraints-groups",
  "collomatique-ilp",
  "collomatique-ilp-modeler",
  "collomatique-mps",
