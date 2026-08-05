@@ -154,18 +154,21 @@ constraint matters equally.
 
 Minimize `w_groups · Σ GroupHasStudents + w_pairs · Σ SharedPair`.
 
-The weights are plain hardcoded constants, and they start out **equal**
-(`w_groups = w_pairs = 1`); they will be adjusted later from experience. The
-two terms do pull in opposite directions (fewer groups means fuller groups,
-which creates more pairs inside each list), so some tuning is expected —
-but that is a tuning question, not a design question. Exposing the weights in
-an advanced dialog is part of the polish phase (§5, piece 11).
+The weights are **configurable**: `ObjectiveWeights` is handed to
+`build_model` next to the plan, and the generate dialog's "Paramètres avancés"
+modal edits it. The default is strongly **group-dominant**, `w_groups = 1000`
+and `w_pairs = 1`, which makes the pair term a tie-breaker among the solutions
+that already use as few groups as possible.
 
-Amended after piece 9. Equal weights turned out to be worse than "a starting
-point to adjust from": they make the two terms cancel exactly in the cases that
-matter, so the group count is drowned rather than merely outvoted (the argument
-is in the piece-9 record in §5). Piece 11 therefore both exposes the weights
-*and* changes the default to a strongly group-dominant one.
+That default is the result of two amendments. The weights first shipped as
+hardcoded constants that were **equal** (`w_groups = w_pairs = 1`), on the
+theory that the two terms merely pull in opposite directions (fewer groups
+means fuller groups, which creates more pairs inside each list) and would need
+tuning from experience. Piece 9 measured that equal weights are worse than "a
+starting point to adjust from": they make the two terms cancel *exactly* in the
+cases that matter, so the group count is drowned rather than merely outvoted
+(the argument is in the piece-9 record in §5). Piece 11 therefore both exposed
+the weights and changed the default, rather than only exposing them.
 
 ### 2.5 Kept lists
 
@@ -261,7 +264,7 @@ model is always built whole, in one pass. This is why the loading UI can be
 simpler than `loading_dialog.rs` (no 1/3–3/3 filtering phases, just one build
 with a streamed log).
 
-Piece 11 (§5) adds the two objective weights as a build-time parameter, which
+Piece 11 (§5) added the two objective weights as a build-time parameter, which
 does not contradict this. What §2.7 rules out is the *filter/pin/anchor
 machinery* and the staged builds that come with it; a pair of numbers read by
 the objective builder is not that layer, and the model is still built whole in
@@ -892,6 +895,73 @@ widens, which is exactly what makes an LP relaxation ill-conditioned. A fixed
 `1000` is the recommendation — it dominates in every plausible instance while
 keeping the model well scaled — and the dialog is there for the user who
 disagrees on a particular document.
+
+**Done** — commits `6fbd2e18` (*constraints-groups: configurable objective
+weights with a group-dominant default (piece 11)*), `cd5d0eee` (*gtk4: advanced
+dialog for the objective weights (piece 11)*) and this record. Everything above
+was implemented as specified, including the fixed `1000`: nothing in the
+implementation argued for deriving the weight from the instance.
+
+`ObjectiveWeights { w_groups, w_pairs }` is defined in the private `objective`
+module and re-exported from `lib.rs`, the pattern already used for
+`builder::build_model`. It derives `Debug, Clone, Copy, PartialEq` and has a
+**hand-written** `Default` reading two private consts `W_GROUPS_DEFAULT` and
+`W_PAIRS_DEFAULT` — the `constraints-colloscopes/src/config.rs` shape, where
+`L1_ANCHOR_WEIGHT = 1000.0` feeds a manual `Default` on `SolveConfig`. No
+serde: the crate uses none, and the value never crosses IPC, since the weights
+are baked into the model before the solver ever sees it. The signatures became
+`build_model(plan, weights)` and `build_model_with_log(plan, weights, log)`,
+weights before the log so the callback stays last. `VarEnv` was deliberately
+left alone: it describes the *variables*, its `new` is public API used by
+`tests/property_build.rs`, and the weights are not part of the variable space.
+
+The test decision worth recording: the three piece-9 objective tests **keep
+their arithmetic** by passing an explicit `EQUAL` (1/1) rather than being
+rewritten against the new default. Every comment in them — the margins, the
+"cost-neutral merge" rationale, and `place()`'s weight-100 scale, which 1000
+would no longer dwarf — was written against 1/1, and passing 1/1 explicitly
+keeps all of it literally true. Two new tests carry the piece instead.
+`default_weights_prefer_fewer_groups_over_fewer_pairs` runs
+`groups_term_pulls_toward_fewer_groups`'s instance *without* the pinned pair,
+so the pair term is live and must lose: two students, sizes 1..=2, together
+costs 1000 + 1 = 1001 against a split at 2000 − 0.5, where at `w_groups = 1` the
+split would win 1.5 to 2. `explicit_weights_override_the_default` passes
+pair-dominant 1/1000 with the adversary rewarding the shared pair, so the
+optimum splits; its assertions are on `SharedPair` and `GroupHasStudents`
+because which student lands in which group is a tie between the two splits. All
+four tabled mutations were run one at a time and each reddened exactly its
+predicted test: `W_GROUPS_DEFAULT` back to `1.0`, swapping the two fields in
+`Default`, and hardcoding either weight inside `build` (the first three redden
+the default test, the last the override test). Every other call site passes
+`ObjectiveWeights::default()`, `tests/solve_smoke.rs` included — the piece-9
+record's reason for leaving it weight-agnostic still holds, and it now
+exercises the new default for free.
+
+Two smaller decisions. The crate commit **carries the one-line gtk4 call-site
+fix** (`naming_dialog.rs` passing `ObjectiveWeights::default()`), so the
+workspace compiles at every commit; that is the piece-0 precedent (`d8d42ef0`),
+and the gtk4 commit then replaces the default with the threaded value. And
+parameterization and the default change are one commit rather than two: split,
+they would create an intermediate "configurable but still equal" state this
+section explicitly rejects, and the default-pinning test would have to be
+written twice.
+
+On the UI side the "Paramètres avancés" button sits **right of** the
+solver-configuration frame, not inside it — the strategy frame is wrapped in a
+horizontal box so the two are siblings, which is the literal shape of
+`colloscope/config_dialog.rs`, down to the `frame` + `warning` css classes and
+the `configure-symbolic` icon. That screen already draws the visual line
+between solver configuration and model parameters, and the weights are model
+parameters; consistency between the two screens decided it. The dialog itself
+clones the colloscope one (`hidden` + `should_redraw` so the model is pushed
+into the widgets only on `Show`, "Annuler" discarding the edits since the next
+`Show` re-seeds from the parent) with one departure: each `adw::SpinRow` carries
+a subtitle, because the two weights are opaque without a sentence of
+explanation. The weights persist on the group-lists page next to `strategy`,
+since the use case is iterating — run, look at the lists, re-run with a tweak —
+and are forgotten on a new document, so the page input `ResetStrategy` was
+renamed `ResetGenerationConfig` now that it resets both (the colloscope analog
+`ResetSolveConfig` likewise resets two things under one name).
 
 **Piece 12 — splitting epochs into independent components.** Piece 10 gives the
 inclusion ordering of §2.6, and on realistic documents that ordering yields only
