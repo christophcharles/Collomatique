@@ -721,6 +721,57 @@ two-list instance where the optimum provably reuses groupings; a pinning test
 showing kept pairs make reuse free. From here the tool produces sensible
 lists.
 
+**Done** — commit `a6778b55` (*constraints-groups: the stability objective
+(piece 9)*). A private `constraints-groups/src/objective.rs` builds one
+`LinExpr` and hands it to a single `with_minimize(1.0, expr)`, mirroring
+`constraints-colloscopes/src/misc/interrogation_cost.rs`, including its
+`has_terms` guard (only an empty plan has no terms, and it then builds the
+same empty model as before). Both weights are `const … : f64 = 1.0`; they live
+*inside* the `LinExpr`, never in the `coef`, for the sense-flip reason
+recorded under piece 8.
+
+The co-occurrence enumeration moved out of `build_shared_pair` into a
+`pub(crate) fn co_occurrences(env)` that both the declaration and the
+objective call. This is not tidying: the objective must sum over exactly the
+declared `SharedPair` set, because referencing an undeclared extra makes
+`Modeler::build` fail and `build_model` panic. One shared function makes that
+drift unrepresentable, so no test is needed for it.
+
+Pinned pairs stay in the sum. Their variables are the constant 1, so they only
+shift the objective and cannot change the argmin; keeping the sum uniform over
+every declared variable avoids a second filtering pass and makes "regrouping a
+kept pair is free" literally true of the objective function.
+
+The two prescribed tests were written as specified, but a **third** was needed:
+neither of them can catch a deleted groups term, because in both the group
+count is forced by the size constraints and the term is a constant.
+Isolating that term is subtler than it looks — at equal weights, moving a
+student from a singleton into a group of size `s` trades one group for `s` new
+pairs, so merging two singletons is exactly cost-neutral. A data point for the
+phase-C tuning of piece 11. `groups_term_pulls_toward_fewer_groups` gets around
+it with a *pinned* pair, which holds the pairs term constant so only the groups
+term distinguishes merging from splitting; ascending fill then makes "together"
+mean "both in group 0", so no placement term is needed at all.
+
+Each test carries a small (0.5) adversarial term against the real objective —
+the harness applies the objective bundle first, so the fold keeps `Minimize`
+and *subtracts* each later `maximize` term. Without those adversaries the
+mutations would merely produce ties, and a solver that happens to return the
+expected answer is not a green test. With them, every mutation loses strictly:
+neutralizing the pairs term reddens both prescribed tests, neutralizing the
+groups term reddens only the third (A and B stay green — the point of adding
+it), and rerunning the piece-7 `if false &&` on the pinning branch reddens the
+pinning tests of both pieces.
+
+One consequence outside the module: the pair extras are now referenced, so the
+lazy-expansion half of `shape_constraints_are_emitted` inverted. Instead of
+asserting their absence it counts them exactly — 21 `PairInGroup` and 9
+`SharedPair` on its two-disjoint-list fixture. `tests/solve_smoke.rs` was left
+alone on purpose: its `2 ≤ groups ≤ 3` bounds hold for any feasible solution,
+and welding it to today's weights would make a piece-11 retune look like a
+regression. The fuzz-build tests needed no change and now cover the objective
+path on every random plan for free.
+
 **Piece 10 — epochs.** The inclusion-based ordering of §2.6, replacing the
 absent map of piece 1. Unit tests on hand-built spec families: disjoint sets,
 nested chains, overlapping incomparable sets, equal sets.
