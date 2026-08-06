@@ -353,7 +353,7 @@ dependencies = [
  "collomatique-state-colloscopes",
  "collomatique-storage",
  "collomatique-testgen-colloscopes",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -414,7 +414,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sprs",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -425,7 +425,7 @@ dependencies = [
  "collomatique-ilp-modeler-derive",
  "serde",
  "serde_json",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -456,7 +456,7 @@ dependencies = [
  "collomatique-time",
  "non-empty-string",
  "serde",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -488,7 +488,7 @@ dependencies = [
  "collomatique-time",
  "csv",
  "non-empty-string",
- "thiserror",
+ "thiserror 1.0.69",
  "unicode-normalization",
 ]
 
@@ -512,7 +512,7 @@ dependencies = [
  "ordered-float",
  "serde",
  "serde_json",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -536,11 +536,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "collomatique-settings"
+version = "0.1.0-alpha.0.99"
+dependencies = [
+ "directories",
+ "semver",
+ "serde_json",
+]
+
+[[package]]
 name = "collomatique-state"
 version = "0.1.0-alpha.0.99"
 dependencies = [
  "collomatique-state-derive",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -553,7 +562,7 @@ dependencies = [
  "collomatique-time",
  "non-empty-string",
  "serde",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -578,7 +587,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with",
- "thiserror",
+ "thiserror 1.0.69",
  "tokio",
 ]
 
@@ -595,7 +604,7 @@ dependencies = [
  "rand_distr",
  "serde",
  "serde_json",
- "thiserror",
+ "thiserror 1.0.69",
  "tokio",
 ]
 
@@ -613,7 +622,7 @@ dependencies = [
  "libc",
  "ordered-float",
  "portable-pty",
- "thiserror",
+ "thiserror 1.0.69",
  "windows-sys 0.59.0",
 ]
 
@@ -637,7 +646,7 @@ dependencies = [
  "chrono",
  "serde",
  "serde_json",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -782,6 +791,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "directories"
+version = "6.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "16f5094c54661b38d03bd7e50df373292118db60b585c08a411c6d840017fe7d"
+dependencies = [
+ "dirs-sys",
+]
+
+[[package]]
+name = "dirs-sys"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e01a3366d27ee9890022452ee61b2b63a67e6f13f58900b651ff5665f0bb1fab"
+dependencies = [
+ "libc",
+ "option-ext",
+ "redox_users",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "dispatch2"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -918,7 +948,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e40758ed24c9b2eeb76c35fb0aebc66c626084edd827e07e1552279814c6682d"
 dependencies = [
  "libc",
- "thiserror",
+ "thiserror 1.0.69",
  "winapi",
 ]
 
@@ -1643,6 +1673,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
+name = "libredox"
+version = "0.1.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2026a5056764a10b2bf5d56488cba40da507f5493a6a429340e2004d9ed085fa"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "linux-raw-sys"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1898,6 +1937,12 @@ name = "once_cell_polyfill"
 version = "1.70.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
+
+[[package]]
+name = "option-ext"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
 name = "ordered-float"
@@ -2232,6 +2277,17 @@ checksum = "22e18b0f0062d30d4230b2e85ff77fdfe4326feb054b9783a3460d8435c8ab91"
 dependencies = [
  "crossbeam-deque",
  "crossbeam-utils",
+]
+
+[[package]]
+name = "redox_users"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4e608c6638b9c18977b00b475ac1f28d14e84b27d8d42f70e0bf1e3dec127ac"
+dependencies = [
+ "getrandom 0.2.17",
+ "libredox",
+ "thiserror 2.0.19",
 ]
 
 [[package]]
@@ -2626,6 +2682,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "syn"
+version = "3.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "53e9bae58849f64dfa4f5d5ae372c8341f7305f82a3868709269343628b659a3"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "unicode-ident",
+]
+
+[[package]]
 name = "synstructure"
 version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2680,7 +2747,16 @@ version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6aaf5339b578ea85b50e080feb250a3e8ae8cfcdff9a461c9ec2904bc923f52"
 dependencies = [
- "thiserror-impl",
+ "thiserror-impl 1.0.69",
+]
+
+[[package]]
+name = "thiserror"
+version = "2.0.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09a43598840e33d5b0331f38c5e30d13bb11c11210a4b58f0d9b18a5a5eefcd9"
+dependencies = [
+ "thiserror-impl 2.0.19",
 ]
 
 [[package]]
@@ -2692,6 +2768,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.114",
+]
+
+[[package]]
+name = "thiserror-impl"
+version = "2.0.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "43cbfe0cf76104d42a574802844187e84a305e531ed54455f11fbde0f10541cd"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.3",
 ]
 
 [[package]]
