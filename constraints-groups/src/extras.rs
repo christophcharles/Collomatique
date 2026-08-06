@@ -51,7 +51,7 @@ fn pairs_of(students: &BTreeSet<StudentId>) -> Vec<(StudentId, StudentId)> {
 fn build_student_in_group(env: &VarEnv) -> MyBundle {
     let mut bundle = MyBundle::new();
     for list in env.lists() {
-        for group in 0..env.slot_count(list) {
+        for group in 0..env.group_count(list) {
             for &student in env.students(list) {
                 let var = ExtraVarName::StudentInGroup {
                     list,
@@ -70,37 +70,11 @@ fn build_student_in_group(env: &VarEnv) -> MyBundle {
     bundle
 }
 
-fn build_group_has_students(env: &VarEnv) -> MyBundle {
-    let mut bundle = MyBundle::new();
-    for list in env.lists() {
-        for group in 0..env.slot_count(list) {
-            let students: Vec<StudentId> = env.students(list).iter().copied().collect();
-            let var = ExtraVarName::GroupHasStudents { list, group };
-            bundle = bundle
-                .and_reified(var, move || {
-                    let sum: IntLinExpr<V> = students
-                        .iter()
-                        .map(|&student| {
-                            IntLinExpr::var(extra_var(ExtraVarName::StudentInGroup {
-                                list,
-                                student,
-                                group,
-                            }))
-                        })
-                        .sum();
-                    vec![sum.geq(&IntLinExpr::constant(1))]
-                })
-                .expect("no duplicate extras");
-        }
-    }
-    bundle
-}
-
 fn build_pair_in_group(env: &VarEnv) -> MyBundle {
     let mut bundle = MyBundle::new();
     for list in env.lists() {
         for (a, b) in pairs_of(env.students(list)) {
-            for group in 0..env.slot_count(list) {
+            for group in 0..env.group_count(list) {
                 let var = ExtraVarName::PairInGroup { a, b, list, group };
                 bundle = bundle
                     .and_reified(var, move || {
@@ -160,14 +134,14 @@ fn build_shared_pair(env: &VarEnv) -> MyBundle {
         } else {
             let terms: Vec<(GroupListIdx, u32)> = lists
                 .iter()
-                .map(|&list| (list, env.slot_count(list)))
+                .map(|&list| (list, env.group_count(list)))
                 .collect();
             bundle = bundle
                 .and_reified(var, move || {
                     let sum: IntLinExpr<V> = terms
                         .iter()
-                        .flat_map(|&(list, slots)| {
-                            (0..slots).map(move |group| {
+                        .flat_map(|&(list, groups)| {
+                            (0..groups).map(move |group| {
                                 IntLinExpr::var(extra_var(ExtraVarName::PairInGroup {
                                     a,
                                     b,
@@ -187,9 +161,6 @@ fn build_shared_pair(env: &VarEnv) -> MyBundle {
 
 pub(crate) fn build_extras(env: &VarEnv) -> MyBundle {
     let bundle = build_student_in_group(env);
-    let bundle = bundle
-        .merge(build_group_has_students(env))
-        .expect("no duplicate extras");
     let bundle = bundle
         .merge(build_pair_in_group(env))
         .expect("no duplicate extras");
@@ -294,35 +265,38 @@ mod tests {
     }
 
     #[test]
-    fn student_in_group_and_group_has_students() {
-        // One list of 3 students with minimum size 1, hence 3 slots.
-        let plan = plan_of(&[(&[1, 2, 3], (1, 3))]);
+    fn student_in_group_follows_the_base_variable() {
+        // One list of 4 students in groups of 1 to 2, hence 2 groups. This
+        // harness applies no shape constraint, so the placement is free.
+        let plan = plan_of(&[(&[1, 2, 3, 4], (1, 2))]);
         let list = GroupListIdx(0);
 
-        let in_group_1 = extra_var(ExtraVarName::StudentInGroup {
-            list,
-            student: student(1),
-            group: 1,
-        });
-        let has_students = |group: u32| extra_var(ExtraVarName::GroupHasStudents { list, group });
+        let in_group = |s: u64, group: u32| {
+            extra_var(ExtraVarName::StudentInGroup {
+                list,
+                student: student(s),
+                group,
+            })
+        };
 
         let cfg = solve_with_objective(
             &plan,
             &[
-                // Everyone into slot 0.
+                // Students 1 and 2 into group 0, the others into group 1.
                 place(0, 1, 0),
                 place(0, 2, 0),
-                place(0, 3, 0),
-                // Adversarial: push the extras the wrong way. Landing on
-                // the semantic value anyway is what tests the equivalence
-                // direction the objective does not supply.
-                (1.0, in_group_1.clone()),
-                (1.0, has_students(1)),
-                (-1.0, has_students(0)),
+                place(0, 3, 1),
+                place(0, 4, 1),
+                // Adversarial: push the *other* indicator of each placed
+                // student the wrong way. Landing on the semantic value
+                // anyway is what tests the equivalence direction the
+                // objective does not supply.
+                (1.0, in_group(1, 1)),
+                (-1.0, in_group(3, 1)),
             ],
         );
 
-        for s in [1, 2, 3] {
+        for (s, group) in [(1, 0.0), (2, 0.0), (3, 1.0), (4, 1.0)] {
             assert_eq!(
                 value(
                     &cfg,
@@ -331,12 +305,11 @@ mod tests {
                         student: student(s)
                     })
                 ),
-                0.0
+                group
             );
         }
-        assert_eq!(value(&cfg, in_group_1), 0.0);
-        assert_eq!(value(&cfg, has_students(1)), 0.0);
-        assert_eq!(value(&cfg, has_students(0)), 1.0);
+        assert_eq!(value(&cfg, in_group(1, 1)), 0.0);
+        assert_eq!(value(&cfg, in_group(3, 1)), 1.0);
     }
 
     #[test]
@@ -434,11 +407,11 @@ mod tests {
     }
 
     #[test]
-    fn single_slot_list_forces_the_chain() {
-        // Two students with a minimum size of 3: the §2.1 clamp gives a
-        // single slot, so the `StudentGroup` domain is `0..=0` and the
-        // placement is forced by the domain alone.
-        let plan = plan_of(&[(&[1, 2], (3, 4))]);
+    fn single_group_list_forces_the_chain() {
+        // Three students in groups of 3 to 4: ceil(3 / 4) is a single
+        // group, so the `StudentGroup` domain is `0..=0` and the placement
+        // is forced by the domain alone.
+        let plan = plan_of(&[(&[1, 2, 3], (3, 4))]);
         let list = GroupListIdx(0);
 
         let in_group = extra_var(ExtraVarName::StudentInGroup {
@@ -446,7 +419,6 @@ mod tests {
             student: student(1),
             group: 0,
         });
-        let has_students = extra_var(ExtraVarName::GroupHasStudents { list, group: 0 });
         let pair = extra_var(ExtraVarName::PairInGroup {
             a: student(1),
             b: student(2),
@@ -465,14 +437,12 @@ mod tests {
             &plan,
             &[
                 (-1.0, in_group.clone()),
-                (-1.0, has_students.clone()),
                 (-1.0, pair.clone()),
                 (-1.0, shared.clone()),
             ],
         );
 
         assert_eq!(value(&cfg, in_group), 1.0);
-        assert_eq!(value(&cfg, has_students), 1.0);
         assert_eq!(value(&cfg, pair), 1.0);
         assert_eq!(value(&cfg, shared), 1.0);
     }

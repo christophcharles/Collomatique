@@ -35,21 +35,23 @@ pub fn build_group_lists(
         .enumerate()
         .map(|(i, (spec, covered))| {
             let list = GroupListIdx(i);
-            let slot_count = env.slot_count(list) as usize;
+            let group_count = env.group_count(list) as usize;
 
-            let mut slots: Vec<BTreeSet<StudentId>> = vec![BTreeSet::new(); slot_count];
-            for &student in &spec.students {
+            let mut slots: Vec<BTreeSet<StudentId>> = vec![BTreeSet::new(); group_count];
+            for &student in spec.students() {
                 let value = config
                     .get(Var::StudentGroup { list, student })
                     .expect("every spec student must have a solved StudentGroup value");
                 let slot = value.round() as usize;
-                assert!(slot < slot_count, "solved group index out of domain");
+                assert!(slot < group_count, "solved group index out of domain");
                 slots[slot].insert(student);
             }
 
             // Compact away empty slots and remap group indices. The
-            // ascending-fill constraint (piece 8) will make empties a
-            // suffix, but the conversion never assumes it.
+            // minimum-size constraint (piece 8) makes every group non-empty
+            // in a solved configuration, but the conversion is also handed
+            // arbitrary in-domain configurations (the fuzz-build test), so
+            // it never assumes it.
             let groups: Vec<PrefilledGroup> = slots
                 .into_iter()
                 .filter(|students| !students.is_empty())
@@ -58,7 +60,7 @@ pub fn build_group_lists(
 
             let group_list_params = GroupListParameters {
                 name: names[i].clone(),
-                students_per_group: spec.students_per_group.clone(),
+                students_per_group: spec.students_per_group().clone(),
                 group_names: vec![None; groups.len()],
             };
             let group_list =
@@ -78,39 +80,22 @@ mod tests {
 
     #[test]
     fn compaction_remaps_group_indices() {
-        // Minimum size 1 over 4 students → 4 slots, of which 2 stay empty.
-        let plan = plan_of(&[(&[1, 2, 3, 4], (1, 4))]);
+        // 6 students in groups of 1 to 2 → 3 groups. The configuration is
+        // in-domain but leaves the middle group empty, which the conversion
+        // must compact away rather than emit.
+        let plan = plan_of(&[(&[1, 2, 3, 4, 5, 6], (1, 2))]);
         let list = GroupListIdx(0);
 
-        let config = ConfigData::new()
-            .set(
+        let mut config = ConfigData::new();
+        for (s, slot) in [(1, 0.0), (2, 0.0), (3, 2.0), (4, 2.0), (5, 2.0), (6, 2.0)] {
+            config = config.set(
                 Var::StudentGroup {
                     list,
-                    student: student(1),
+                    student: student(s),
                 },
-                0.0,
-            )
-            .set(
-                Var::StudentGroup {
-                    list,
-                    student: student(2),
-                },
-                0.0,
-            )
-            .set(
-                Var::StudentGroup {
-                    list,
-                    student: student(3),
-                },
-                2.0,
-            )
-            .set(
-                Var::StudentGroup {
-                    list,
-                    student: student(4),
-                },
-                2.0,
+                slot,
             );
+        }
 
         let lists = build_group_lists(&plan, &[String::from("Liste")], &config);
         assert_eq!(lists.len(), 1);

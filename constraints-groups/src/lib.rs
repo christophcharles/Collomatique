@@ -11,13 +11,18 @@
 //!
 //! The model is complete (end of phase B): the base `StudentGroup`
 //! variables, the reified extras of piece 7, the shape constraints of
-//! piece 8 (max size, conditional min size, ascending fill order), the
-//! stability objective of piece 9 (minimize non-empty groups plus globally
-//! shared student pairs, with configurable, group-dominant-by-default
-//! weights — [`ObjectiveWeights`], piece 11), and the inclusion-based
-//! incremental epochs of piece 10 ([`build_incremental_epochs`]), which
-//! callers feed to the solver so the inclusion-minimal lists are built
-//! first and the larger lists align with them.
+//! piece 8 (min and max size), the stability objective of piece 9
+//! (minimize the globally shared student pairs, with a configurable weight
+//! — [`ObjectiveWeights`], piece 11), and the inclusion-based incremental
+//! epochs of piece 10 ([`build_incremental_epochs`]), which callers feed to
+//! the solver so the inclusion-minimal lists are built first and the larger
+//! lists align with them.
+//!
+//! The number of groups is *not* optimized: it is the closed-form minimum
+//! `⌈n / max_size⌉` ([`vars::VarEnv::group_count`]), imposed on the model.
+//! A student count the size range cannot split at all is rejected upfront
+//! by [`GroupListSpec::new`], so callers must build their specs through it
+//! — the config dialog does, before offering a subject for rebuild.
 
 mod builder;
 mod constraints;
@@ -34,7 +39,8 @@ pub use convert::build_group_lists;
 pub use incremental::build_incremental_epochs;
 pub use objective::ObjectiveWeights;
 pub use specs::{
-    GenerationPlan, GenerationPlanError, GenerationRequest, GroupListSpec, build_generation_plan,
+    GenerationPlan, GenerationPlanError, GenerationRequest, GroupListSpec, GroupListSpecError,
+    build_generation_plan,
 };
 pub use types::{ConstraintDesc, ExtraVarName};
 pub use vars::{GroupListIdx, Var};

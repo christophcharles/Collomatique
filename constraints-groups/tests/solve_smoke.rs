@@ -28,10 +28,8 @@ fn range(min: u32, max: u32) -> NonEmptyRangeInclusive<NonZeroU32> {
 fn model_solves_and_converts() {
     // A hand-built plan: no document needed, the plan type is the model's
     // whole input. (An empty covered set is artificial but legal here.)
-    let spec = GroupListSpec {
-        students: (1..=6).map(student).collect(),
-        students_per_group: range(2, 3),
-    };
+    let spec = GroupListSpec::new((1..=6).map(student).collect(), range(2, 3))
+        .expect("6 students split into groups of 2 to 3");
     let plan = GenerationPlan {
         specs: vec![(spec, BTreeSet::new())],
         skipped: BTreeSet::new(),
@@ -43,10 +41,10 @@ fn model_solves_and_converts() {
     let solver = ColloCbcSolver::with_disable_logging(true);
     let solution = model.solve(&solver).expect("the model must be feasible");
 
-    // 6 students, min size 2 → 3 slots, max size 3. Any assignment the
+    // 6 students, max size 3 → exactly ceil(6 / 3) = 2 groups, each
+    // holding between 2 and 3 students, hence 3 and 3. Any assignment the
     // constraints allow is acceptable; the conversion must be structurally
-    // valid. The cap of 3 alone already forces at least two non-empty
-    // groups.
+    // valid.
     let config = solution.get_data();
     let lists = build_group_lists(&plan, &[String::from("Test")], &config);
     assert_eq!(lists.len(), 1);
@@ -54,6 +52,5 @@ fn model_solves_and_converts() {
     assert!(covered.is_empty());
     assert!(list.is_prefilled());
     assert_eq!(list.filling().iter_students().count(), 6);
-    assert!(list.params().group_names.len() <= 3);
-    assert!(list.params().group_names.len() >= 2);
+    assert_eq!(list.params().group_names.len(), 2);
 }

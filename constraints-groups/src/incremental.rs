@@ -49,13 +49,13 @@ pub fn build_incremental_epochs(plan: &GenerationPlan) -> HashMap<Var, u32> {
     // comes. The plan's own order is lexicographic on the student sets, not
     // sorted by size, so this sort is what makes the single pass correct.
     let mut order: Vec<usize> = (0..plan.specs.len()).collect();
-    order.sort_by_key(|&i| plan.specs[i].0.students.len());
+    order.sort_by_key(|&i| plan.specs[i].0.students().len());
 
     let mut heights = vec![0u32; plan.specs.len()];
     for (pos, &i) in order.iter().enumerate() {
-        let students = &plan.specs[i].0.students;
+        let students = plan.specs[i].0.students();
         for &j in &order[..pos] {
-            let candidate = &plan.specs[j].0.students;
+            let candidate = plan.specs[j].0.students();
             // The length test makes the inclusion strict: the processed
             // prefix may hold sets of the same size (equal sets included),
             // and those must never relate.
@@ -89,13 +89,13 @@ pub fn build_incremental_epochs(plan: &GenerationPlan) -> HashMap<Var, u32> {
         let mut keyed: Vec<(usize, usize, usize)> = level_specs
             .iter()
             .map(|&i| {
-                let students = &plan.specs[i].0.students;
+                let students = plan.specs[i].0.students();
                 let shared = students
                     .iter()
                     .filter(|student| {
                         level_specs
                             .iter()
-                            .any(|&j| j != i && plan.specs[j].0.students.contains(student))
+                            .any(|&j| j != i && plan.specs[j].0.students().contains(student))
                     })
                     .count();
                 (shared, students.len(), i)
@@ -110,7 +110,7 @@ pub fn build_incremental_epochs(plan: &GenerationPlan) -> HashMap<Var, u32> {
 
     let mut epochs = HashMap::new();
     for (i, (spec, _covered)) in plan.specs.iter().enumerate() {
-        for &student in &spec.students {
+        for &student in spec.students() {
             epochs.insert(
                 Var::StudentGroup {
                     list: GroupListIdx(i),
@@ -136,7 +136,7 @@ mod tests {
     fn epoch_of(epochs: &HashMap<Var, u32>, plan: &GenerationPlan, list: usize) -> u32 {
         let values: BTreeSet<u32> = plan.specs[list]
             .0
-            .students
+            .students()
             .iter()
             .map(|&student| {
                 epochs[&Var::StudentGroup {

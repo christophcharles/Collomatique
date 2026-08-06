@@ -21,18 +21,21 @@ impl VarEnv {
         }
     }
 
-    /// Number of group slots for a list: `floor(n / min_size)`, clamped to
-    /// at least 1 so the `StudentGroup` domain is never empty. A spec with
-    /// fewer students than `min_size` gets a single (necessarily
-    /// undersized) slot; the conditional min-size constraint of piece 8
-    /// will make such a spec infeasible, which is the correct signal.
+    /// Number of groups for a list: `ceil(n / max_size)`, the smallest
+    /// feasible count. It is exact, not an upper bound — every group holds
+    /// between `min_size` and `max_size` students, so the model no longer
+    /// has to optimize the count.
+    ///
+    /// [`GroupListSpec::new`] rejects a spec with no feasible count, so
+    /// `count · min <= n <= count · max` always holds here, and `n >= 1`
+    /// makes the count at least 1.
     ///
     /// Panics if `list` is not an index of the plan the env was built from.
-    pub fn slot_count(&self, list: GroupListIdx) -> u32 {
+    pub fn group_count(&self, list: GroupListIdx) -> u32 {
         let spec = &self.specs[list.0];
-        let n = spec.students.len() as u32;
-        let min = spec.students_per_group.start().get();
-        (n / min).max(1)
+        let n = spec.students().len() as u32;
+        let max = spec.students_per_group().end().get();
+        n.div_ceil(max)
     }
 
     /// The list indices of the plan, in order.
@@ -41,21 +44,21 @@ impl VarEnv {
     }
 
     /// The students of a list's spec. Panics on a stale index, like
-    /// [`VarEnv::slot_count`].
+    /// [`VarEnv::group_count`].
     pub(crate) fn students(&self, list: GroupListIdx) -> &BTreeSet<StudentId> {
-        &self.specs[list.0].students
+        self.specs[list.0].students()
     }
 
     /// The smallest allowed group size of a list's spec. Panics on a stale
-    /// index, like [`VarEnv::slot_count`].
+    /// index, like [`VarEnv::group_count`].
     pub(crate) fn min_size(&self, list: GroupListIdx) -> u32 {
-        self.specs[list.0].students_per_group.start().get()
+        self.specs[list.0].students_per_group().start().get()
     }
 
     /// The largest allowed group size of a list's spec. Panics on a stale
-    /// index, like [`VarEnv::slot_count`].
+    /// index, like [`VarEnv::group_count`].
     pub(crate) fn max_size(&self, list: GroupListIdx) -> u32 {
-        self.specs[list.0].students_per_group.end().get()
+        self.specs[list.0].students_per_group().end().get()
     }
 
     /// The pairs fixed to "already shared" by the kept lists (`a < b`).
@@ -73,14 +76,14 @@ pub struct GroupListIdx(pub usize);
 )]
 #[env(VarEnv)]
 pub enum Var {
-    /// The group slot the student sits in, as an integer in
-    /// `0..=slot_count-1`. Unlike the colloscope crate there is no −1
+    /// The group the student sits in, as an integer in
+    /// `0..=group_count-1`. Unlike the colloscope crate there is no −1
     /// value: every student of a spec is registered and must be placed, so
     /// the domain itself enforces "exactly one group". No variable is ever
     /// fixed in this crate, so no fix attribute: the derive's default
     /// `check_fix` returns `None` for in-range names and `Some(0.0)` for
     /// stale ones.
-    #[var(Variable::integer().min(0.).max(Self::compute_max_slot(env, list)))]
+    #[var(Variable::integer().min(0.).max(Self::compute_max_group(env, list)))]
     StudentGroup {
         #[range(Self::compute_list_range(env))]
         list: GroupListIdx,
@@ -90,8 +93,10 @@ pub enum Var {
 }
 
 impl Var {
-    fn compute_max_slot(env: &VarEnv, list: &GroupListIdx) -> f64 {
-        (env.slot_count(*list) - 1) as f64
+    /// The group count is at least 1 (a spec always has a student), so the
+    /// subtraction never underflows.
+    fn compute_max_group(env: &VarEnv, list: &GroupListIdx) -> f64 {
+        (env.group_count(*list) - 1) as f64
     }
 
     fn compute_list_range(env: &VarEnv) -> Vec<GroupListIdx> {
@@ -104,7 +109,7 @@ impl Var {
     /// callable on its own.
     fn compute_student_range(env: &VarEnv, list: &GroupListIdx) -> Vec<StudentId> {
         match env.specs.get(list.0) {
-            Some(spec) => spec.students.iter().copied().collect(),
+            Some(spec) => spec.students().iter().copied().collect(),
             None => Vec::new(),
         }
     }
@@ -118,17 +123,16 @@ pub(crate) mod tests {
     use std::collections::BTreeSet;
 
     /// A plan of bare specs, with no covered pairs (the model never reads
-    /// them).
+    /// them). The specs must be feasible — an unsatisfiable one has no
+    /// place in a plan at all.
     pub(crate) fn plan_of(specs: &[(&[u64], (u32, u32))]) -> GenerationPlan {
         GenerationPlan {
             specs: specs
                 .iter()
                 .map(|(students, (min, max))| {
                     (
-                        GroupListSpec {
-                            students: set(students),
-                            students_per_group: range(*min, *max),
-                        },
+                        GroupListSpec::new(set(students), range(*min, *max))
+                            .expect("feasible test spec"),
                         BTreeSet::new(),
                     )
                 })
@@ -139,17 +143,17 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn slot_count_formula() {
+    fn group_count_formula() {
         let plan = plan_of(&[
             (&[1, 2, 3, 4, 5, 6], (2, 3)),
             (&[1, 2, 3, 4, 5, 6, 7], (2, 3)),
-            (&[1, 2], (3, 4)),
+            (&[1, 2, 3], (3, 4)),
         ]);
         let env = VarEnv::new(&plan);
 
-        assert_eq!(env.slot_count(GroupListIdx(0)), 3); // 6 / 2
-        assert_eq!(env.slot_count(GroupListIdx(1)), 3); // floor(7 / 2)
-        assert_eq!(env.slot_count(GroupListIdx(2)), 1); // clamped up from 0
+        assert_eq!(env.group_count(GroupListIdx(0)), 2); // ceil(6 / 3)
+        assert_eq!(env.group_count(GroupListIdx(1)), 3); // ceil(7 / 3)
+        assert_eq!(env.group_count(GroupListIdx(2)), 1); // ceil(3 / 4)
     }
 
     #[test]

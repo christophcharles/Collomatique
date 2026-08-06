@@ -24,7 +24,7 @@ use collomatique_state_colloscopes::InnerData;
 use collomatique_state_colloscopes::colloscope_params::Parameters;
 
 use collomatique_constraints_groups::{
-    GenerationRequest, GroupListIdx, ObjectiveWeights, Var, build_generation_plan,
+    GenerationRequest, GroupListIdx, GroupListSpec, ObjectiveWeights, Var, build_generation_plan,
     build_group_lists, build_incremental_epochs, build_model, vars::VarEnv,
 };
 use collomatique_ilp::ConfigData;
@@ -46,16 +46,28 @@ const CONFIG: RunConfig = RunConfig {
 const BUILD_STRIDE: usize = 5;
 
 /// Random valid request drawn from the current state: any assigned
-/// (period, subject) pair whose subject has interrogations may be rebuilt,
-/// any prefilled list may be kept.
+/// (period, subject) pair whose subject has interrogations *and* whose group
+/// sizes can be satisfied may be rebuilt, any prefilled list may be kept.
+///
+/// The feasibility filter mirrors the config dialog, which gates on the very
+/// same constructor before offering a subject: a valid document may perfectly
+/// well ask for groups of 5 to 6 students out of a class of 4, and neither
+/// the dialog nor this generator may hand such a pair to the planner.
 fn gen_generation_request(rng: &mut ChaCha8Rng, params: &Parameters) -> GenerationRequest {
     let mut rebuild = BTreeSet::new();
-    for (period, subject, _students) in params.assignments.iter() {
-        let has_interrogations = params
+    for (period, subject, students) in params.assignments.iter() {
+        let Some(interrogations) = params
             .subjects
             .find_subject(subject)
-            .is_some_and(|s| s.parameters.interrogation_parameters.is_some());
-        if has_interrogations && rng.random_bool(0.5) {
+            .and_then(|s| s.parameters.interrogation_parameters.clone())
+        else {
+            continue;
+        };
+        // An empty student set is legitimately `skipped` by the planner, so
+        // it stays in the request; only unsatisfiable sizes are filtered.
+        let usable = students.is_empty()
+            || GroupListSpec::new(students.clone(), interrogations.students_per_group).is_ok();
+        if usable && rng.random_bool(0.5) {
             rebuild.insert((period, subject));
         }
     }
@@ -114,12 +126,12 @@ fn build_and_check(rng: &mut ChaCha8Rng, inner: &InnerData) {
     //       the rest of the level, then student count) — the
     //       least-entangled, then smallest, lists solve first.
     let epochs = build_incremental_epochs(&plan);
-    let var_count: usize = plan.specs.iter().map(|(s, _)| s.students.len()).sum();
+    let var_count: usize = plan.specs.iter().map(|(s, _)| s.students().len()).sum();
     assert_eq!(epochs.len(), var_count, "one epoch entry per base variable");
     let spec_epoch = |i: usize| {
         let spec = &plan.specs[i].0;
         let student = *spec
-            .students
+            .students()
             .first()
             .expect("a spec always has registered students");
         epochs[&Var::StudentGroup {
@@ -128,7 +140,7 @@ fn build_and_check(rng: &mut ChaCha8Rng, inner: &InnerData) {
         }]
     };
     for (i, (spec, _covered)) in plan.specs.iter().enumerate() {
-        for &student in &spec.students {
+        for &student in spec.students() {
             assert_eq!(
                 epochs[&Var::StudentGroup {
                     list: GroupListIdx(i),
@@ -142,7 +154,7 @@ fn build_and_check(rng: &mut ChaCha8Rng, inner: &InnerData) {
 
     let n = plan.specs.len();
     let strict_subset = |j: usize, i: usize| {
-        let (s, t) = (&plan.specs[j].0.students, &plan.specs[i].0.students);
+        let (s, t) = (plan.specs[j].0.students(), plan.specs[i].0.students());
         s.len() < t.len() && s.is_subset(t)
     };
     let mut heights = vec![0u32; n];
@@ -191,12 +203,12 @@ fn build_and_check(rng: &mut ChaCha8Rng, inner: &InnerData) {
         let shared = |i: usize| {
             plan.specs[i]
                 .0
-                .students
+                .students()
                 .iter()
                 .filter(|student| {
                     members
                         .iter()
-                        .any(|&j| j != i && plan.specs[j].0.students.contains(student))
+                        .any(|&j| j != i && plan.specs[j].0.students().contains(student))
                 })
                 .count()
         };
@@ -204,7 +216,7 @@ fn build_and_check(rng: &mut ChaCha8Rng, inner: &InnerData) {
         by_epoch.sort_by_key(|&i| spec_epoch(i));
         let keys: Vec<(usize, usize)> = by_epoch
             .iter()
-            .map(|&i| (shared(i), plan.specs[i].0.students.len()))
+            .map(|&i| (shared(i), plan.specs[i].0.students().len()))
             .collect();
         assert!(
             keys.windows(2).all(|w| w[0] <= w[1]),
@@ -219,9 +231,9 @@ fn build_and_check(rng: &mut ChaCha8Rng, inner: &InnerData) {
     let mut config = ConfigData::new();
     for (i, (spec, _covered)) in plan.specs.iter().enumerate() {
         let list = GroupListIdx(i);
-        let slot_count = env.slot_count(list);
-        for &student in &spec.students {
-            let slot = rng.random_range(0..slot_count);
+        let group_count = env.group_count(list);
+        for &student in spec.students() {
+            let slot = rng.random_range(0..group_count);
             config = config.set(Var::StudentGroup { list, student }, slot as f64);
         }
     }
@@ -235,11 +247,11 @@ fn build_and_check(rng: &mut ChaCha8Rng, inner: &InnerData) {
     {
         assert_eq!(
             group_list.filling().iter_students().count(),
-            spec.students.len(),
+            spec.students().len(),
             "every student must be placed exactly once",
         );
         assert!(
-            group_list.params().group_names.len() <= env.slot_count(GroupListIdx(i)) as usize,
+            group_list.params().group_names.len() <= env.group_count(GroupListIdx(i)) as usize,
             "compaction can only reduce the group count",
         );
     }

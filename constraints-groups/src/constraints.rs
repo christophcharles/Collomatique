@@ -1,19 +1,14 @@
 //! The shape constraints of piece 8, one `pub(super)` builder per family,
 //! merged here and applied by `builder.rs` **after** the extras bundle: the
-//! constraints reference `StudentInGroup` and `GroupHasStudents`, which must
-//! be declared first.
+//! constraints reference `StudentInGroup`, which must be declared first.
 
-mod groups_filled_by_ascending_order;
 mod students_per_group;
 
 use crate::extras::MyBundle;
 use crate::vars::VarEnv;
 
 pub(crate) fn build(env: &VarEnv) -> MyBundle {
-    let bundle = students_per_group::build(env);
-    bundle
-        .merge(groups_filled_by_ascending_order::build(env))
-        .expect("no duplicate extras from constraints")
+    students_per_group::build(env)
 }
 
 #[cfg(test)]
@@ -96,7 +91,7 @@ mod tests {
 
     #[test]
     fn max_size_caps_each_group() {
-        // 4 students, sizes 1..=2 → 4 slots, max 2. Push all four into
+        // 4 students, sizes 1..=2 → 2 groups, max 2. Push all four into
         // group 0; the cap lets exactly two of the pushes win.
         let plan = plan_of(&[(&[1, 2, 3, 4], (1, 2))]);
         let list = GroupListIdx(0);
@@ -128,13 +123,21 @@ mod tests {
     }
 
     #[test]
-    fn min_size_binds_only_nonempty_groups() {
-        // 4 students, sizes 2..=4 → 2 slots. All four fit in group 0;
-        // group 1 stays empty, which the conditional minimum must allow —
-        // an unconditional one would forbid it.
-        let plan = plan_of(&[(&[1, 2, 3, 4], (2, 4))]);
+    fn min_size_binds_every_group() {
+        // 9 students, sizes 3..=4 → 3 groups. The maximum alone allows a
+        // 4 / 4 / 1 split, which the pushes below ask for; the minimum
+        // forbids the thin group, and 3 / 3 / 3 is then the only split
+        // left. The group count being exact is what makes the minimum
+        // unconditional: no group may be starved for another's benefit.
+        let plan = plan_of(&[(&[1, 2, 3, 4, 5, 6, 7, 8, 9], (3, 4))]);
         let list = GroupListIdx(0);
-        let has_students_1 = extra_var(ExtraVarName::GroupHasStudents { list, group: 1 });
+        let in_group = |s: u64, group: u32| {
+            extra_var(ExtraVarName::StudentInGroup {
+                list,
+                student: student(s),
+                group,
+            })
+        };
 
         let cfg = solve_with_objective(
             &plan,
@@ -143,29 +146,22 @@ mod tests {
                 place(0, 2, 0),
                 place(0, 3, 0),
                 place(0, 4, 0),
-                // Adversarial: push the emptiness indicator the wrong way.
-                (1.0, has_students_1.clone()),
+                place(0, 5, 1),
+                place(0, 6, 1),
+                place(0, 7, 1),
+                place(0, 8, 1),
             ],
         );
 
-        for s in [1, 2, 3, 4] {
-            assert_close(
-                value(
-                    &cfg,
-                    base_var(Var::StudentGroup {
-                        list,
-                        student: student(s),
-                    }),
-                ),
-                0.0,
-            );
+        for group in 0..3 {
+            let count: f64 = (1..=9).map(|s| value(&cfg, in_group(s, group))).sum();
+            assert_close(count, 3.0);
         }
-        assert_close(value(&cfg, has_students_1), 0.0);
     }
 
     #[test]
     fn min_size_forces_a_companion() {
-        // 5 students, sizes 2..=4 → 2 slots. Weight 100 sends student 1 to
+        // 5 students, sizes 2..=4 → 2 groups. Weight 100 sends student 1 to
         // group 1; weight −1 on every other student's presence there makes
         // any companion cost. The minimum of 2 forces exactly one anyway.
         //
@@ -208,53 +204,5 @@ mod tests {
             .map(|&s| value(&cfg, in_group_1(s)))
             .sum();
         assert_close(count_1, 2.0);
-    }
-
-    #[test]
-    fn ascending_fill_forbids_gaps() {
-        // 2 students, sizes 1..=2 → 2 slots. Push both into group 1: both
-        // there would leave group 0 empty below a non-empty group 1, so at
-        // most one push can win, and group 0 must hold the other student.
-        let plan = plan_of(&[(&[1, 2], (1, 2))]);
-        let list = GroupListIdx(0);
-        let in_group_1 = |s: u64| {
-            extra_var(ExtraVarName::StudentInGroup {
-                list,
-                student: student(s),
-                group: 1,
-            })
-        };
-        let has_students_0 = extra_var(ExtraVarName::GroupHasStudents { list, group: 0 });
-
-        let cfg = solve_with_objective(
-            &plan,
-            &[
-                place(0, 1, 1),
-                place(0, 2, 1),
-                // Adversarial: push the group-0 indicator the wrong way.
-                (-1.0, has_students_0.clone()),
-            ],
-        );
-
-        // Which of the two students lands in group 1 is the solver's
-        // choice, so the assertion is on the sum.
-        let count_1: f64 = [1, 2].iter().map(|&s| value(&cfg, in_group_1(s))).sum();
-        assert_close(count_1, 1.0);
-        assert_close(value(&cfg, has_students_0), 1.0);
-    }
-
-    #[test]
-    fn undersized_spec_is_infeasible() {
-        // 2 students, sizes 3..=4: the slot-count clamp of §2.1 gives one
-        // (necessarily undersized) slot, both students land there, and
-        // 2 >= 3 has no satisfying assignment. Infeasibility is the correct
-        // signal — the data genuinely cannot satisfy the policy.
-        let plan = plan_of(&[(&[1, 2], (3, 4))]);
-        let model = crate::build_model(&plan, crate::ObjectiveWeights::default());
-        assert!(
-            model
-                .solve(&ColloCbcSolver::with_disable_logging(true))
-                .is_none()
-        );
     }
 }

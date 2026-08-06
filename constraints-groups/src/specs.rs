@@ -12,13 +12,74 @@ use std::num::NonZeroU32;
 /// What one generated group list must satisfy. The solver knows nothing
 /// about subjects: one list is built per distinct spec. `Ord` (via the
 /// `NonEmptyRangeInclusive` ordering) makes the spec its own dedup key.
+///
+/// The fields are private and the constructor is fallible: an unsatisfiable
+/// (student count, size range) combination is unrepresentable, so everything
+/// downstream — the group count of `VarEnv`, the model, the conversion — may
+/// assume a feasible spec.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct GroupListSpec {
+    students: BTreeSet<StudentId>,
+    students_per_group: NonEmptyRangeInclusive<NonZeroU32>,
+}
+
+/// Why a [`GroupListSpec`] cannot exist. Splitting `n` students into `k`
+/// groups of `min` to `max` needs `k·min <= n <= k·max`, so the feasible
+/// counts are the interval `⌈n/max⌉ ..= ⌊n/min⌋`, and the spec is
+/// satisfiable exactly when that interval is non-empty.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum GroupListSpecError {
+    #[error("a group list spec needs at least one student")]
+    NoStudents,
+    #[error("{students} students cannot be split into groups of {min} to {max} students")]
+    UnsatisfiableSize {
+        students: u32,
+        min: NonZeroU32,
+        max: NonZeroU32,
+    },
+}
+
+impl GroupListSpec {
+    /// The single feasibility gate of the crate: at least one student, and
+    /// `⌈n/max⌉ · min <= n` (the minimal group count must not undershoot the
+    /// minimum size). The config dialog runs it before offering a pair for
+    /// rebuild, so a failure downstream is a caller bug.
+    pub fn new(
+        students: BTreeSet<StudentId>,
+        students_per_group: NonEmptyRangeInclusive<NonZeroU32>,
+    ) -> Result<GroupListSpec, GroupListSpecError> {
+        let n = u32::try_from(students.len()).unwrap_or(u32::MAX);
+        if n == 0 {
+            return Err(GroupListSpecError::NoStudents);
+        }
+        let min = *students_per_group.start();
+        let max = *students_per_group.end();
+        // The minimal count is the only one worth testing: below it the
+        // groups overflow `max`, above it they only get emptier.
+        let count = n.div_ceil(max.get());
+        if u64::from(count) * u64::from(min.get()) > u64::from(n) {
+            return Err(GroupListSpecError::UnsatisfiableSize {
+                students: n,
+                min,
+                max,
+            });
+        }
+        Ok(GroupListSpec {
+            students,
+            students_per_group,
+        })
+    }
+
     /// Exactly the students that must be placed. Every one gets a group.
-    pub students: BTreeSet<StudentId>,
+    pub fn students(&self) -> &BTreeSet<StudentId> {
+        &self.students
+    }
+
     /// The allowed group size range, from the subject's
     /// `SubjectInterrogationParameters.students_per_group`.
-    pub students_per_group: NonEmptyRangeInclusive<NonZeroU32>,
+    pub fn students_per_group(&self) -> &NonEmptyRangeInclusive<NonZeroU32> {
+        &self.students_per_group
+    }
 }
 
 /// The user's selection, as assembled by the config dialog (piece 2).
@@ -60,6 +121,8 @@ pub enum GenerationPlanError {
     UnknownKeptList(GroupListId),
     #[error("kept list {0:?} is not prefilled")]
     KeptListNotPrefilled(GroupListId),
+    #[error("rebuild pair ({0:?}, {1:?}) has an unusable spec: {2}")]
+    InvalidSpec(PeriodId, SubjectId, GroupListSpecError),
 }
 
 /// Turns a user request into the model's input: deduplicated specs, the
@@ -109,10 +172,10 @@ pub fn build_generation_plan(
             }
         };
 
-        let spec = GroupListSpec {
-            students,
-            students_per_group: interrogation_params.students_per_group.clone(),
-        };
+        // The config dialog gates on the very same constructor, so a
+        // failure here is a caller bug like the variants above.
+        let spec = GroupListSpec::new(students, interrogation_params.students_per_group.clone())
+            .map_err(|e| GenerationPlanError::InvalidSpec(period, subject, e))?;
         spec_map.entry(spec).or_default().insert((period, subject));
     }
 
@@ -134,9 +197,9 @@ pub fn build_generation_plan(
             let members: Vec<StudentId> = group.students.iter().copied().collect();
             for (i, &a) in members.iter().enumerate() {
                 for &b in &members[i + 1..] {
-                    let coexist = specs
-                        .iter()
-                        .any(|(spec, _)| spec.students.contains(&a) && spec.students.contains(&b));
+                    let coexist = specs.iter().any(|(spec, _)| {
+                        spec.students().contains(&a) && spec.students().contains(&b)
+                    });
                     if coexist {
                         pinned_pairs.insert((a, b));
                     }
@@ -230,8 +293,9 @@ pub(crate) mod tests {
     }
 
     /// Two periods; subjects 1 and 2 share the range 2..=3, subject 3 has
-    /// 1..=2 and subject 4 has no interrogations; three assignment rows,
-    /// all on period 1.
+    /// 1..=2, subject 4 has no interrogations and subject 5 has the range
+    /// 5..=6, unsatisfiable for the four students it is assigned; four
+    /// assignment rows, all on period 1.
     pub(crate) fn base_params() -> Parameters {
         let mut params = Parameters::default();
         params.periods.ordered_period_list = vec![(period_id(1), ()), (period_id(2), ())]
@@ -242,6 +306,7 @@ pub(crate) mod tests {
             (subject_id(2), subject_with_range(2, 3)),
             (subject_id(3), subject_with_range(1, 2)),
             (subject_id(4), subject_without_interrogations()),
+            (subject_id(5), subject_with_range(5, 6)),
         ]
         .try_into()
         .expect("distinct subject ids");
@@ -249,6 +314,7 @@ pub(crate) mod tests {
             ((period_id(1), subject_id(1)), set(&[1, 2, 3, 4])),
             ((period_id(1), subject_id(2)), set(&[1, 2, 3, 4])),
             ((period_id(1), subject_id(3)), set(&[1, 2, 3, 4])),
+            ((period_id(1), subject_id(5)), set(&[1, 2, 3, 4])),
         ]
         .into_iter()
         .collect();
@@ -266,6 +332,65 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn spec_needs_students() {
+        assert_eq!(
+            GroupListSpec::new(BTreeSet::new(), range(1, 2)),
+            Err(GroupListSpecError::NoStudents)
+        );
+    }
+
+    #[test]
+    fn spec_rejects_unsatisfiable_sizes() {
+        // 2 students in groups of 3 to 4: the minimal count is
+        // ceil(2 / 4) = 1 group, which then needs 3 students.
+        assert_eq!(
+            GroupListSpec::new(set(&[1, 2]), range(3, 4)),
+            Err(GroupListSpecError::UnsatisfiableSize {
+                students: 2,
+                min: NonZeroU32::new(3).expect("non-zero"),
+                max: NonZeroU32::new(4).expect("non-zero"),
+            })
+        );
+    }
+
+    #[test]
+    fn spec_feasibility_is_exact_at_the_boundary() {
+        // Fixed size 2: ceil(5 / 2) = 3 groups need 6 students, so 5 is
+        // rejected and 6 is accepted. A loose `n >= min` test would accept
+        // both, and a `n % min == 0` test would reject sizes that a wider
+        // range makes perfectly splittable (7 students in groups of 2 to 3).
+        assert_eq!(
+            GroupListSpec::new(set(&[1, 2, 3, 4, 5]), range(2, 2)),
+            Err(GroupListSpecError::UnsatisfiableSize {
+                students: 5,
+                min: NonZeroU32::new(2).expect("non-zero"),
+                max: NonZeroU32::new(2).expect("non-zero"),
+            })
+        );
+        assert!(GroupListSpec::new(set(&[1, 2, 3, 4, 5, 6]), range(2, 2)).is_ok());
+        assert!(GroupListSpec::new(set(&[1, 2, 3, 4, 5, 6, 7]), range(2, 3)).is_ok());
+    }
+
+    #[test]
+    fn unsatisfiable_sizes_error() {
+        let params = base_params();
+        // Subject 5 wants groups of 5 to 6 students out of the four
+        // registered ones.
+        assert_eq!(
+            build_generation_plan(&params, &request(&[(1, 5)], &[])),
+            Err(GenerationPlanError::InvalidSpec(
+                period_id(1),
+                subject_id(5),
+                GroupListSpecError::UnsatisfiableSize {
+                    students: 4,
+                    min: NonZeroU32::new(5).expect("non-zero"),
+                    max: NonZeroU32::new(6).expect("non-zero"),
+                }
+            ))
+        );
+    }
+
+    #[test]
     fn identical_pairs_dedup_into_one_spec() {
         let params = base_params();
         let plan = build_generation_plan(&params, &request(&[(1, 1), (1, 2)], &[]))
@@ -273,8 +398,8 @@ pub(crate) mod tests {
 
         assert_eq!(plan.specs.len(), 1);
         let (spec, covered) = &plan.specs[0];
-        assert_eq!(spec.students, set(&[1, 2, 3, 4]));
-        assert_eq!(spec.students_per_group, range(2, 3));
+        assert_eq!(*spec.students(), set(&[1, 2, 3, 4]));
+        assert_eq!(*spec.students_per_group(), range(2, 3));
         assert_eq!(
             *covered,
             BTreeSet::from([(period_id(1), subject_id(1)), (period_id(1), subject_id(2)),])
@@ -291,10 +416,10 @@ pub(crate) mod tests {
             .expect("well-formed request");
 
         assert_eq!(plan.specs.len(), 2);
-        assert_eq!(plan.specs[0].0.students, plan.specs[1].0.students);
+        assert_eq!(plan.specs[0].0.students(), plan.specs[1].0.students());
         assert_ne!(
-            plan.specs[0].0.students_per_group,
-            plan.specs[1].0.students_per_group
+            plan.specs[0].0.students_per_group(),
+            plan.specs[1].0.students_per_group()
         );
     }
 

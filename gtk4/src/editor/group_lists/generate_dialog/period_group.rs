@@ -16,6 +16,10 @@ pub struct SubjectData {
     pub title: String,
     pub subtitle: String,
     pub rebuild: bool,
+    /// Why no group list can be built for that pair — the group sizes the subject asks for
+    /// cannot split the students registered on it. Filled in on `Show` by the parent, which
+    /// blocks "Valider" while a *selected* subject carries one.
+    pub error: Option<String>,
 }
 
 /// One period group of the left panel. Carries its own `PeriodId` so the parent reads the
@@ -134,6 +138,33 @@ struct SubjectRow {
     index: DynamicIndex,
 }
 
+impl SubjectRow {
+    /// The error message to display, if any. An unselected subject is not part of the request,
+    /// so its error is moot and stays hidden.
+    fn shown_error(&self) -> Option<&str> {
+        if self.data.rebuild {
+            self.data.error.as_deref()
+        } else {
+            None
+        }
+    }
+
+    /// The message replaces the association subtitle: when a subject cannot be built at all,
+    /// why it cannot matters more than which list it currently uses.
+    fn shown_subtitle(&self) -> &str {
+        self.shown_error().unwrap_or(&self.data.subtitle)
+    }
+
+    /// The css class carrying the error colors. GTK rejects an empty class name, so the
+    /// "no error" case names a class no stylesheet defines rather than nothing.
+    fn error_css_class(&self) -> &'static str {
+        match self.shown_error() {
+            Some(_) => "error",
+            None => "no-error",
+        }
+    }
+}
+
 #[derive(Debug)]
 enum SubjectRowInput {
     UpdateData(SubjectData),
@@ -159,8 +190,20 @@ impl FactoryComponent for SubjectRow {
         adw::SwitchRow {
             #[watch]
             set_title: &self.data.title,
+            // The error, when there is one, takes the subtitle line — right below the subject
+            // name — in error colors, with the icon in front of the row.
             #[watch]
-            set_subtitle: &self.data.subtitle,
+            set_subtitle: self.shown_subtitle(),
+            set_subtitle_lines: 0,
+            #[watch]
+            remove_css_class: "error",
+            #[watch]
+            add_css_class: self.error_css_class(),
+            add_prefix = &gtk::Image {
+                set_icon_name: Some("dialog-error-symbolic"),
+                #[watch]
+                set_visible: self.shown_error().is_some(),
+            },
             #[track(switch_row.is_active() != self.data.rebuild)]
             #[block_signal(rebuild_handler)]
             set_active: self.data.rebuild,

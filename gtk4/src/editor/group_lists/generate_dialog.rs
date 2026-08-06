@@ -10,7 +10,9 @@ use relm4::{
 };
 use relm4::{adw, gtk};
 
-use collomatique_constraints_groups::{GenerationRequest, ObjectiveWeights};
+use collomatique_constraints_groups::{
+    GenerationRequest, GroupListSpec, GroupListSpecError, ObjectiveWeights,
+};
 use collomatique_state_colloscopes::colloscope_params::Parameters;
 use collomatique_strategies::ConductorStrategy;
 
@@ -102,20 +104,55 @@ impl Dialog {
             .any(|period| period.subjects.iter().any(|subject| subject.rebuild))
     }
 
+    /// Whether a subject *selected for rebuild* asks for group sizes its students cannot
+    /// satisfy. Such a request has no solution at all, so "Valider" stays disabled: everything
+    /// downstream of this window may then assume every spec is buildable.
+    fn has_spec_errors(&self) -> bool {
+        self.periods_data.iter().any(|period| {
+            period
+                .subjects
+                .iter()
+                .any(|subject| subject.rebuild && subject.error.is_some())
+        })
+    }
+
     /// The subjects eligible on a period, in document order: they must have interrogation
-    /// parameters (the roadmap's rule) and must not exclude the period.
+    /// parameters (the roadmap's rule) and must not exclude the period. The group size range
+    /// comes along, since the eligibility filter is what proves it is there.
     fn eligible_subjects(
         &self,
         period_id: collomatique_state_colloscopes::PeriodId,
-    ) -> Vec<(collomatique_state_colloscopes::SubjectId, String)> {
+    ) -> Vec<(
+        collomatique_state_colloscopes::SubjectId,
+        String,
+        collomatique_state_colloscopes::NonEmptyRangeInclusive<std::num::NonZeroU32>,
+    )> {
         self.params
             .subjects
             .ordered_subject_list
             .iter()
-            .filter(|(_id, subject)| subject.parameters.interrogation_parameters.is_some())
             .filter(|(_id, subject)| !subject.excluded_periods.contains(&period_id))
-            .map(|(id, subject)| (id, subject.parameters.name.clone()))
+            .filter_map(|(id, subject)| {
+                let params = subject.parameters.interrogation_parameters.as_ref()?;
+                Some((
+                    id,
+                    subject.parameters.name.clone(),
+                    params.students_per_group.clone(),
+                ))
+            })
             .collect()
+    }
+}
+
+/// The message shown under an unbuildable subject. `NoStudents` cannot reach the display —
+/// a pair with nobody registered is legitimately skipped, not an error — but the match stays
+/// exhaustive so a new variant is not silently mapped to something wrong.
+fn spec_error_message(error: GroupListSpecError) -> String {
+    match error {
+        GroupListSpecError::NoStudents => String::from("Aucun élève inscrit dans cette matière"),
+        GroupListSpecError::UnsatisfiableSize { students, min, max } => {
+            format!("Impossible de répartir {students} élèves en groupes de {min} à {max} élèves")
+        }
     }
 }
 
@@ -144,7 +181,20 @@ impl Dialog {
 
                 let subjects = eligible
                     .into_iter()
-                    .map(|(subject_id, name)| {
+                    .map(|(subject_id, name, students_per_group)| {
+                        // The feasibility gate, run here and nowhere else: a pair whose sizes
+                        // cannot split its students blocks "Valider", so `build_generation_plan`
+                        // downstream never sees one. A pair with nobody registered is not an
+                        // error — it is skipped by the planner.
+                        let error = match self.params.assignments.students(period_id, subject_id) {
+                            Some(students) if !students.is_empty() => {
+                                GroupListSpec::new(students.clone(), students_per_group)
+                                    .err()
+                                    .map(spec_error_message)
+                            }
+                            _ => None,
+                        };
+
                         let current = self
                             .params
                             .group_lists
@@ -170,6 +220,7 @@ impl Dialog {
                             subtitle,
                             // The default: rebuild exactly the pairs that have no list yet.
                             rebuild: current.is_none(),
+                            error,
                         }
                     })
                     .collect();
@@ -285,9 +336,19 @@ impl SimpleComponent for Dialog {
                     pack_end = &gtk::Button {
                         set_label: "Valider",
                         add_css_class: "suggested-action",
-                        // Nothing selected means an empty plan and an empty model.
+                        // Nothing selected means an empty plan and an empty model; a selected
+                        // subject with impossible group sizes has no solution at all.
                         #[watch]
-                        set_sensitive: model.has_any_rebuild(),
+                        set_sensitive: model.has_any_rebuild() && !model.has_spec_errors(),
+                        // Both disabled states say why, and the tooltip clears when enabled.
+                        #[watch]
+                        set_tooltip_text: if !model.has_any_rebuild() {
+                            Some("Aucune matière sélectionnée à recalculer")
+                        } else if model.has_spec_errors() {
+                            Some("Certaines matières sélectionnées demandent des tailles de groupes impossibles")
+                        } else {
+                            None
+                        },
                         connect_clicked => DialogInput::Accept,
                     },
                 },

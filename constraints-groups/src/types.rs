@@ -14,8 +14,6 @@ pub enum ExtraVarName {
         student: StudentId,
         group: u32,
     },
-    /// 1 ⟺ at least one student sits in group `group` of list `list`.
-    GroupHasStudents { list: GroupListIdx, group: u32 },
     /// 1 ⟺ `a` and `b` (with `a < b`) both sit in group `group` of list
     /// `list`. Declared for every pair of students sharing the list's spec.
     PairInGroup {
@@ -41,15 +39,13 @@ pub enum ConstraintDesc {
         group: u32,
         max_students: u32,
     },
-    /// `Σ_s StudentInGroup(list, s, group) >= min_students ·
-    /// GroupHasStudents(list, group)` — the minimum binds only non-empty
-    /// groups.
+    /// `Σ_s StudentInGroup(list, s, group) >= min_students` — every group
+    /// of the list must reach the minimum. The count is exact
+    /// ([`VarEnv::group_count`](crate::vars::VarEnv::group_count)), so no
+    /// group may stay empty.
     StudentsPerGroupMin {
         list: GroupListIdx,
         group: u32,
         min_students: u32,
     },
-    /// `GroupHasStudents(list, group) >= GroupHasStudents(list, group + 1)`
-    /// — empty groups form a suffix. Doubles as symmetry breaking.
-    GroupFilledByAscendingOrder { list: GroupListIdx, group: u32 },
 }
