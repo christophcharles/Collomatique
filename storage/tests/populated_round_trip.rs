@@ -70,21 +70,23 @@ fn reserialize_is_stable() {
 /// so consistently. This fixture is the outside witness that catches that.
 const GOLDEN: &str = include_str!("fixtures/spec2_populated_golden.json");
 
-/// Blanks out the header's `produced_with_version` object
+/// Blanks out the header's `produced_with_version` string
 ///
-/// That object is the package version, not a format decision, so a version
+/// That string is the package version, not a format decision, so a version
 /// bump must not force a fixture regeneration. Everything else — the
 /// header's own shape and key order included — stays under the byte
-/// comparison. The version object has no nested braces, so the first `}`
-/// closes it.
+/// comparison. A semver string carries no escapes, so the next `"` closes
+/// it.
 fn mask_version(document: &str) -> String {
+    const KEY: &str = "\"produced_with_version\": \"";
     let start = document
-        .find("\"produced_with_version\": {")
-        .expect("the header carries a produced_with_version object");
-    let end = start
-        + document[start..]
-            .find('}')
-            .expect("the version object is closed")
+        .find(KEY)
+        .expect("the header carries a produced_with_version string");
+    let value_start = start + KEY.len();
+    let end = value_start
+        + document[value_start..]
+            .find('"')
+            .expect("the version string is closed")
         + 1;
     format!(
         "{}\"produced_with_version\": <masked>{}",

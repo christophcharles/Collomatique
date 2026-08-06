@@ -7,11 +7,7 @@ fn decode_invalid_file_type() {
     let content = r#"{
     "header": {
         "file_type": "Collomatico",
-        "produced_with_version": {
-            "major": 0,
-            "minor": 1,
-            "patch": 0
-        },
+        "produced_with_version": "0.1.0-alpha.0.99",
         "file_content": "Colloscope"
     },
     "entries": []
@@ -26,7 +22,8 @@ fn decode_invalid_file_type() {
         panic!("The error should be in the decode process")
     };
 
-    let expected_error = DecodeError::UnknownFileType(Version::new(0, 1, 0));
+    let expected_error =
+        DecodeError::UnknownFileType(Version::parse("0.1.0-alpha.0.99").expect("valid semver"));
     assert_eq!(decode_error, expected_error);
 }
 
@@ -35,11 +32,7 @@ fn decode_invalid_file_content() {
     let content = r#"{
     "header": {
         "file_type": "Collomatique",
-        "produced_with_version": {
-            "major": 0,
-            "minor": 1,
-            "patch": 0
-        },
+        "produced_with_version": "0.1.0-alpha.0.99",
         "file_content": "Colloscopes"
     },
     "entries": []
@@ -52,7 +45,8 @@ fn decode_invalid_file_content() {
         panic!("The error should be in the decode process")
     };
 
-    let expected_error = DecodeError::UnknownFileContent(Version::new(0, 1, 0));
+    let expected_error =
+        DecodeError::UnknownFileContent(Version::parse("0.1.0-alpha.0.99").expect("valid semver"));
     assert_eq!(decode_error, expected_error);
 }
 
@@ -66,7 +60,7 @@ fn envelope(extra_header_field: &str, extra_entry_field: &str) -> String {
         r#"{{
     "header": {{
         "file_type": "Collomatique",
-        "produced_with_version": {{ "major": 0, "minor": 1, "patch": 0 }},
+        "produced_with_version": "0.1.0-alpha.0.99",
         "file_content": "Colloscope"{extra_header_field}
     }},
     "entries": [
@@ -119,27 +113,20 @@ fn decode_entry_with_unknown_field() {
 
 #[test]
 fn decode_more_recent_file() {
-    let current_version = Version::current();
-    let new_version = Version {
-        major: current_version.major,
-        minor: current_version.minor + 1,
-        patch: current_version.patch,
-    };
+    // `Version::new` drops any prerelease, so the built version is a plain
+    // release strictly above the current one whatever the package version is.
+    let current = current_version();
+    let new_version = Version::new(current.major, current.minor + 1, current.patch);
 
     let content = format!(
         r#"{{
     "header": {{
         "file_type": "Collomatique",
-        "produced_with_version": {{
-            "major": {},
-            "minor": {},
-            "patch": {}
-        }},
+        "produced_with_version": "{new_version}",
         "file_content": "Colloscope"
     }},
     "entries": []
-}}"#,
-        new_version.major, new_version.minor, new_version.patch
+}}"#
     );
 
     let (inner, caveats) = collomatique_storage::deserialize_data(&content)
@@ -151,4 +138,54 @@ fn decode_more_recent_file() {
     let expected_caveats = BTreeSet::from([Caveat::CreatedWithNewerVersion(new_version)]);
     assert_eq!(data, expected_data);
     assert_eq!(caveats, expected_caveats);
+}
+
+/// A prerelease in the header survives into the caveat, intact
+///
+/// The prerelease part is the whole point of storing the version as a
+/// semver string: the three-integer record that preceded it had no room
+/// for `-beta.2` and could not have parsed the string in the first place.
+/// The version here is far above any real one, so this stays valid
+/// whatever the package version becomes.
+#[test]
+fn decode_file_produced_with_a_prerelease() {
+    let content = r#"{
+    "header": {
+        "file_type": "Collomatique",
+        "produced_with_version": "999.0.0-beta.2",
+        "file_content": "Colloscope"
+    },
+    "entries": []
+}"#;
+
+    let (_inner, caveats) = collomatique_storage::deserialize_data(content)
+        .expect("A prerelease version should not lead to invalid decoding");
+
+    let expected_version = Version::parse("999.0.0-beta.2").expect("valid semver");
+    let expected_caveats = BTreeSet::from([Caveat::CreatedWithNewerVersion(expected_version)]);
+    assert_eq!(caveats, expected_caveats);
+}
+
+/// A header version that is not a semantic version invalidates the document
+///
+/// `produced_with_version` is informational, but it is still a record
+/// field: an unparsable value fails the envelope, exactly as a malformed
+/// number did before.
+#[test]
+fn decode_file_with_a_malformed_version() {
+    let content = r#"{
+    "header": {
+        "file_type": "Collomatique",
+        "produced_with_version": "banana",
+        "file_content": "Colloscope"
+    },
+    "entries": []
+}"#;
+
+    let error = collomatique_storage::deserialize_data(content)
+        .expect_err("A malformed version should lead to an invalid file");
+
+    let DeserializationError::InvalidJson(_) = error else {
+        panic!("The error should be in the JSON deserialization process, got {error:?}")
+    };
 }

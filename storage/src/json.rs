@@ -66,51 +66,17 @@ pub struct Header {
 
 /// Represents a semantic version number
 ///
-/// A semantic version number is structure as MAJOR.MINOR.PATCH
-/// as given by th various members
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord)]
-#[serde(deny_unknown_fields)]
-pub struct Version {
-    /// Major version number
-    pub major: u32,
-    /// Minor version number
-    pub minor: u32,
-    /// Patch version number
-    pub patch: u32,
-}
+/// Serialized as a plain semver string (`"0.1.0-alpha.0.99"`), and ordered
+/// with semver precedence — so a prerelease sorts *below* its own release:
+/// `0.1.0-alpha.0.99` is older than `0.1.0`. A version string that semver
+/// cannot parse makes the whole envelope invalid, like any other malformed
+/// record field.
+pub use semver::Version;
 
-impl std::fmt::Display for Version {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}.{}.{}", self.major, self.minor, self.patch)
-    }
-}
-
-impl Version {
-    /// Returns the version number of the compiled Collomatique package
-    pub fn current() -> Version {
-        let major_str = env!("CARGO_PKG_VERSION_MAJOR");
-        let minor_str = env!("CARGO_PKG_VERSION_MINOR");
-        let patch_str = env!("CARGO_PKG_VERSION_PATCH");
-
-        use std::str::FromStr;
-        let major = u32::from_str(major_str).expect("Major version should be a valid u32");
-        let minor = u32::from_str(minor_str).expect("Minor version should be a valid u32");
-        let patch = u32::from_str(patch_str).expect("Patch number should be a valid u32");
-
-        Version {
-            major,
-            minor,
-            patch,
-        }
-    }
-
-    pub fn new(major: u32, minor: u32, patch: u32) -> Version {
-        Version {
-            major,
-            minor,
-            patch,
-        }
-    }
+/// Returns the version number of the compiled Collomatique package
+pub fn current_version() -> Version {
+    Version::parse(env!("CARGO_PKG_VERSION"))
+        .expect("CARGO_PKG_VERSION should be a valid semantic version")
 }
 
 /// The `file_type` discriminant

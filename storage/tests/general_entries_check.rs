@@ -7,11 +7,7 @@ fn decode_unknown_unneeded_entry() {
         r#"{{
     "header": {{
         "file_type": "Collomatique",
-        "produced_with_version": {{
-            "major": 0,
-            "minor": 1,
-            "patch": 0
-        }},
+        "produced_with_version": "0.1.0-alpha.0.99",
         "file_content": "Colloscope"
     }},
     "entries": [
@@ -47,11 +43,7 @@ fn decode_fails_with_unknown_needed_entry() {
         r#"{{
     "header": {{
         "file_type": "Collomatique",
-        "produced_with_version": {{
-            "major": 0,
-            "minor": 1,
-            "patch": 0
-        }},
+        "produced_with_version": "0.1.0-alpha.0.99",
         "file_content": "Colloscope"
     }},
     "entries": [
@@ -78,7 +70,7 @@ fn decode_fails_with_unknown_needed_entry() {
 
     assert_eq!(
         decode_error,
-        DecodeError::UnknownNeededEntry(Version::new(0, 1, 0))
+        DecodeError::UnknownNeededEntry(Version::parse("0.1.0-alpha.0.99").expect("valid semver"))
     );
 }
 
@@ -90,11 +82,7 @@ fn decode_fails_on_retired_spec1_entry() {
     let content = r#"{
     "header": {
         "file_type": "Collomatique",
-        "produced_with_version": {
-            "major": 0,
-            "minor": 1,
-            "patch": 0
-        },
+        "produced_with_version": "0.1.0-alpha.0.99",
         "file_content": "Colloscope"
     },
     "entries": [

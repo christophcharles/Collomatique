@@ -21,8 +21,8 @@ versioning information, which is what makes the format evolvable (§5).
 Two version numbers coexist, with different roles:
 
 - `produced_with_version`, in the header, is the version of the application that
-  wrote the file. It is **informational only**: it never decides whether a file can
-  be read.
+  wrote the file, as a Semantic Versioning 2.0.0 string. It is **informational
+  only**: it never decides whether a file can be read.
 - `minimum_spec_version`, on each block, is the format spec revision needed to
   understand that block, together with a `needed_entry` flag saying whether the
   document is meaningful without it. These two fields are what actually gate
@@ -41,7 +41,7 @@ The top-level document is:
 {
   "header": {
     "file_type": "Collomatique",
-    "produced_with_version": { "major": 0, "minor": 1, "patch": 0 },
+    "produced_with_version": "0.1.0-alpha.0.99",
     "file_content": "Colloscope"
   },
   "entries": [
@@ -59,11 +59,13 @@ The top-level document is:
 | Field | Type | Meaning |
 |---|---|---|
 | `file_type` | string | Always `"Collomatique"`. |
-| `produced_with_version` | record `{major, minor, patch}` (non-negative integers) | Version of the writing application. Informational. |
+| `produced_with_version` | version string | Version of the writing application. Informational. |
 | `file_content` | string | Kind of document. This document specifies the `"Colloscope"` kind. A reader that does not recognise the value must refuse the file. |
 
 A reader may open a file whose `produced_with_version` is newer than itself, and
-should let the user know it was produced by a newer application.
+should let the user know it was produced by a newer application. Versions are
+compared with semver precedence, so a prerelease sorts **below** its own release:
+`0.1.0-alpha.0.99` is older than `0.1.0`.
 
 ### Blocks
 
@@ -125,6 +127,7 @@ above makes the reservation invisible in practice.
 | integer range | record `{"min": n, "max": n}` | `min <= max` |
 | color | record `{"red": n, "green": n, "blue": n}` | each 0–255 |
 | non-empty string | string | the empty string is invalid where "non-empty" is stated |
+| version | string | Semantic Versioning 2.0.0: `MAJOR.MINOR.PATCH`, with an optional `-prerelease` and an optional `+build`; anything else is invalid |
 | string | string | may be empty unless stated otherwise |
 
 ### Integer widths
@@ -135,8 +138,7 @@ unsigned integer field must fit in 32 bits: 0 to 2³² − 1, or 1 to 2³² − 
 a minimum of 1 is stated. The single signed integer field — a slot's `cost`
 (§4.7) — must fit in a signed 32-bit integer: −2³¹ to 2³¹ − 1. This covers,
 among others, durations, week indices, group numbers, limit values, periodicity
-parameters, and the version numbers of the envelope (`produced_with_version`
-components and `minimum_spec_version`).
+parameters, and the envelope's `minimum_spec_version`.
 
 ### Records and keyed collections
 
@@ -896,7 +898,7 @@ therefore omitted.
 {
   "header": {
     "file_type": "Collomatique",
-    "produced_with_version": { "major": 0, "minor": 1, "patch": 0 },
+    "produced_with_version": "0.1.0-alpha.0.99",
     "file_content": "Colloscope"
   },
   "entries": [

@@ -6,11 +6,7 @@ fn decode_empty_file_with_correct_header() {
     let content = r#"{
     "header": {
         "file_type": "Collomatique",
-        "produced_with_version": {
-            "major": 0,
-            "minor": 1,
-            "patch": 0
-        },
+        "produced_with_version": "0.1.0-alpha.0.99",
         "file_content": "Colloscope"
     },
     "entries": []

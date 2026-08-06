@@ -282,7 +282,7 @@ pub(crate) fn check_header(
             header.produced_with_version.clone(),
         ));
     }
-    if header.produced_with_version > Version::current() {
+    if header.produced_with_version > current_version() {
         caveats.insert(Caveat::CreatedWithNewerVersion(
             header.produced_with_version.clone(),
         ));

@@ -12,7 +12,7 @@ fn document(entries: &[String]) -> String {
         r#"{{
     "header": {{
         "file_type": "Collomatique",
-        "produced_with_version": {{ "major": 0, "minor": 1, "patch": 0 }},
+        "produced_with_version": "0.1.0-alpha.0.99",
         "file_content": "Colloscope"
     }},
     "entries": [{}]
@@ -142,7 +142,7 @@ fn blank_data_serializes_to_zero_blocks() {
 const SPEC_COMPLETE_EXAMPLE: &str = r#"{
   "header": {
     "file_type": "Collomatique",
-    "produced_with_version": { "major": 0, "minor": 1, "patch": 0 },
+    "produced_with_version": "0.1.0-alpha.0.99",
     "file_content": "Colloscope"
   },
   "entries": [

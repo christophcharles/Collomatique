@@ -11,6 +11,7 @@ collomatique-time = { path = "../time" }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true, features = [ "raw_value"] }
 serde_with.workspace = true
+semver = { workspace = true, features = ["serde"] }
 thiserror.workspace = true
 tokio = { workspace = true , features = [ "fs" ] }
 non-empty-string = { workspace = true, features = ["serde"] }
