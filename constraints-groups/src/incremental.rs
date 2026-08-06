@@ -41,7 +41,17 @@ use crate::vars::{GroupListIdx, Var, VarEnv};
 /// count equal its size and collapse the ordering into plain size ordering.
 ///
 /// The resulting epoch numbers are contiguous from 0 (each level occupying a
-/// contiguous run), and the map names exactly the model's base variables.
+/// contiguous run), and the map names exactly the model's `StudentInGroup`
+/// variables.
+///
+/// The template's `StudentInGhostGroup` matrix is deliberately left unnamed:
+/// the template is not a spec, and no inclusion relation orders it against
+/// one. The strategy files unlisted base variables into a final epoch of
+/// their own (`strategies/src/strategies/incremental.rs`, "unlisted base
+/// variables form the final epoch"), which is where a grouping that only the
+/// objective reads belongs — it settles cheaply once the real lists are
+/// fixed, and the earlier epochs simply drop the template's extras, exactly
+/// as the incremental seed has always treated the pair extras.
 pub fn build_incremental_epochs(plan: &GenerationPlan) -> HashMap<Var, u32> {
     // Pass 1 — inclusion levels. Process the specs by ascending student
     // count: a strict subset always has strictly fewer students, so every
@@ -330,15 +340,30 @@ mod tests {
     }
 
     #[test]
-    fn map_names_exactly_the_base_variables() {
+    fn map_names_exactly_the_list_variables() {
         // The strategy contract: entries are base variables; a base
         // variable absent from the map lands in the final epoch, so
-        // covering all of them is what makes the epochs authoritative.
+        // covering all of the *list* variables is what makes the epochs
+        // authoritative over them.
         let plan = plan_of(&[(&[1, 2, 3, 4], (2, 3)), (&[3, 4, 5], (1, 2))]);
         let epochs = build_incremental_epochs(&plan);
         let env = VarEnv::new(&plan);
         let enumerated: BTreeSet<Var> = <Var as DescribeVar>::enumerate(&env).into_keys().collect();
+        let listed: BTreeSet<Var> = enumerated
+            .iter()
+            .filter(|var| matches!(var, Var::StudentInGroup { .. }))
+            .cloned()
+            .collect();
         let named: BTreeSet<Var> = epochs.into_keys().collect();
-        assert_eq!(named, enumerated);
+        assert_eq!(named, listed);
+
+        // The template's variables are the ones deliberately left out — and
+        // this instance does have some, so the filter above is not vacuous.
+        assert!(
+            enumerated
+                .iter()
+                .any(|var| matches!(var, Var::StudentInGhostGroup { .. })),
+            "the instance must actually have a template",
+        );
     }
 }

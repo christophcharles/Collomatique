@@ -125,6 +125,19 @@ pub struct GenerationPlan {
     /// in the stability objective (see `VarEnv::class_weight`). `None` only
     /// when the plan has no specs at all.
     pub canonical_range: Option<(NonEmptyRangeInclusive<NonZeroU32>, RangeSource)>,
+    /// The template ("ghost") grouping: every student of the plan, split at
+    /// the canonical size. It is not a list of the plan — it is never
+    /// converted to output ([`build_group_lists`](crate::build_group_lists)
+    /// iterates `specs`) and gets no `SharedPair` variable — but a grouping
+    /// the solver decides like any other, which the objective then asks the
+    /// real lists to resemble. That is what tells "nine identical lists and
+    /// one different" from "five and five", which the per-pair step term
+    /// cannot see.
+    ///
+    /// `None` when the plan has no specs, and when the canonical size cannot
+    /// split the whole student body at all: the template term is then simply
+    /// absent.
+    pub ghost: Option<GroupListSpec>,
 }
 
 /// A malformed request. These are caller bugs (the config dialog only
@@ -145,44 +158,87 @@ pub enum GenerationPlanError {
     InvalidSpec(PeriodId, SubjectId, GroupListSpecError),
 }
 
-/// Elect the canonical group-size range: the size the typical student is
-/// grouped at. Each spec votes for its own range with weight `students ×
-/// covering (period, subject) pairs` — one vote per real grouping
-/// obligation, weighted by how many students it concerns — so a range used
-/// by two subjects of the whole class beats one used by a single subject
-/// with four students registered.
+/// The distinct group-size ranges of the specs, best canonical candidate
+/// first. Each spec votes for its own range with weight `students × covering
+/// (period, subject) pairs` — one vote per real grouping obligation,
+/// weighted by how many students it concerns — so a range used by two
+/// subjects of the whole class beats one used by a single subject with four
+/// students registered.
 ///
 /// Ties break toward the *tighter* range: smaller maximum first, then larger
-/// minimum. A range is exactly its (start, end), so that ordering is total
-/// and the outcome never depends on iteration order.
+/// minimum. A range is exactly its (start, end), so no two candidates can
+/// share a full sort key and the order never depends on iteration order.
 ///
 /// A spec covering nothing votes with weight `students`: that only happens
 /// in hand-built test plans, and a plan whose specs all cover nothing would
-/// otherwise elect on ties alone.
-pub(crate) fn elect_canonical_range(
+/// otherwise be ranked on ties alone.
+pub(crate) fn ranked_canonical_ranges(
     specs: &[(GroupListSpec, BTreeSet<(PeriodId, SubjectId)>)],
-) -> Option<NonEmptyRangeInclusive<NonZeroU32>> {
+) -> Vec<NonEmptyRangeInclusive<NonZeroU32>> {
     let mut votes: BTreeMap<NonEmptyRangeInclusive<NonZeroU32>, u64> = BTreeMap::new();
     for (spec, covered) in specs {
         let weight = spec.students().len() as u64 * covered.len().max(1) as u64;
         *votes.entry(spec.students_per_group().clone()).or_default() += weight;
     }
-    votes
-        .into_iter()
-        .max_by_key(|(range, weight)| {
-            (
-                *weight,
-                std::cmp::Reverse(range.end().get()),
-                range.start().get(),
-            )
-        })
-        .map(|(range, _)| range)
+    let mut ranked: Vec<(NonEmptyRangeInclusive<NonZeroU32>, u64)> = votes.into_iter().collect();
+    ranked.sort_by_key(|(range, weight)| {
+        std::cmp::Reverse((
+            *weight,
+            std::cmp::Reverse(range.end().get()),
+            range.start().get(),
+        ))
+    });
+    ranked.into_iter().map(|(range, _)| range).collect()
+}
+
+/// Elect the canonical group-size range: the winner of the vote described by
+/// [`ranked_canonical_ranges`]. `None` only when there is no spec to vote.
+pub(crate) fn elect_canonical_range(
+    specs: &[(GroupListSpec, BTreeSet<(PeriodId, SubjectId)>)],
+) -> Option<NonEmptyRangeInclusive<NonZeroU32>> {
+    ranked_canonical_ranges(specs).into_iter().next()
+}
+
+/// The template grouping of a plan: every student of every spec, split at
+/// the canonical size. A [`GroupListSpec`] like any other, so the model can
+/// enumerate and constrain it exactly as it does the real lists — it is only
+/// the *use* that differs (no output list, no `SharedPair`).
+///
+/// The canonical range need not be able to split the whole student body: it
+/// was elected as the typical size of a *subject*, and the union of the
+/// subjects is larger than any of them. When it cannot, an automatic range
+/// falls through to the runners-up of the vote — the other real group sizes
+/// of the document, in vote order — and takes the first that partitions the
+/// union. A *manual* range does not: the user fixed it on purpose, and
+/// templating at a size they did not ask for would be worse than having no
+/// template at all.
+pub(crate) fn build_ghost(
+    specs: &[(GroupListSpec, BTreeSet<(PeriodId, SubjectId)>)],
+    canonical_range: Option<&(NonEmptyRangeInclusive<NonZeroU32>, RangeSource)>,
+) -> Option<GroupListSpec> {
+    let (range, source) = canonical_range?;
+    let students: BTreeSet<StudentId> = specs
+        .iter()
+        .flat_map(|(spec, _covered)| spec.students().iter().copied())
+        .collect();
+    if let Ok(ghost) = GroupListSpec::new(students.clone(), range.clone()) {
+        return Some(ghost);
+    }
+    match source {
+        RangeSource::Manual => None,
+        // The elected range is retried first and fails again — one wasted
+        // constructor call for a search that reads as the plain fallback it
+        // is.
+        RangeSource::Automatic => ranked_canonical_ranges(specs)
+            .into_iter()
+            .find_map(|range| GroupListSpec::new(students.clone(), range).ok()),
+    }
 }
 
 /// Turns a user request into the model's input: deduplicated specs, the
 /// pairs nobody is registered for, the pinned student pairs the kept lists
-/// impose, and the canonical group size the objective weighs classes
-/// against.
+/// impose, the canonical group size the objective weighs classes against,
+/// and the template grouping it measures deviations from.
 pub fn build_generation_plan(
     params: &Parameters,
     request: &GenerationRequest,
@@ -241,6 +297,7 @@ pub fn build_generation_plan(
         Some(range) => Some((range.clone(), RangeSource::Manual)),
         None => elect_canonical_range(&specs).map(|range| (range, RangeSource::Automatic)),
     };
+    let ghost = build_ghost(&specs, canonical_range.as_ref());
 
     let mut pinned_pairs: BTreeMap<_, BTreeSet<(StudentId, StudentId)>> = BTreeMap::new();
     for list_id in &request.kept_lists {
@@ -281,6 +338,7 @@ pub fn build_generation_plan(
         skipped,
         pinned_pairs,
         canonical_range,
+        ghost,
     })
 }
 
@@ -701,5 +759,85 @@ pub(crate) mod tests {
             build_generation_plan(&params, &request(&[(2, 1)], &[])).expect("well-formed request");
         assert!(plan.specs.is_empty());
         assert_eq!(plan.canonical_range, None);
+        // And with no canonical size and no student, no template either.
+        assert_eq!(plan.ghost, None);
+    }
+
+    #[test]
+    fn ghost_is_the_canonical_partition_of_every_student() {
+        let mut params = base_params();
+        // Subjects 1 and 2 share the range 2..=3 and carry eight students
+        // between them; subject 3's 1..=2 covers only four, so 2..=3 takes
+        // the election 8 votes to 4.
+        params
+            .assignments
+            .map
+            .insert((period_id(1), subject_id(2)), set(&[5, 6, 7, 8]));
+        let plan = build_generation_plan(&params, &request(&[(1, 1), (1, 2), (1, 3)], &[]))
+            .expect("well-formed request");
+
+        // The template spans the *union* of the specs, which is wider than
+        // any single one of them: it is the grouping every list is asked to
+        // resemble, so every student needs a place in it.
+        let ghost = plan.ghost.expect("the canonical range splits the union");
+        assert_eq!(*ghost.students(), set(&[1, 2, 3, 4, 5, 6, 7, 8]));
+        assert_eq!(*ghost.students_per_group(), range(2, 3));
+    }
+
+    #[test]
+    fn an_unsplittable_canonical_range_falls_back_to_the_next_voted_one() {
+        let mut params = base_params();
+        // Groups of exactly 3 for six students, groups of exactly 2 for two
+        // others: 3..=3 wins the vote 6 to 2, but the union of eight
+        // students cannot be split into groups of exactly 3 (three groups
+        // would need nine). The runner-up 2..=2 splits it into four.
+        params.subjects.ordered_subject_list = vec![
+            (subject_id(1), subject_with_range(3, 3)),
+            (subject_id(3), subject_with_range(2, 2)),
+        ]
+        .try_into()
+        .expect("distinct subject ids");
+        params.assignments.map = vec![
+            ((period_id(1), subject_id(1)), set(&[1, 2, 3, 4, 5, 6])),
+            ((period_id(1), subject_id(3)), set(&[7, 8])),
+        ]
+        .into_iter()
+        .collect();
+
+        let plan = build_generation_plan(&params, &request(&[(1, 1), (1, 3)], &[]))
+            .expect("well-formed request");
+
+        // The election itself is untouched — the class weights still measure
+        // against 3..=3. Only the template moves.
+        assert_eq!(
+            plan.canonical_range,
+            Some((range(3, 3), RangeSource::Automatic))
+        );
+        let ghost = plan.ghost.expect("the runner-up splits the union");
+        assert_eq!(*ghost.students(), set(&[1, 2, 3, 4, 5, 6, 7, 8]));
+        assert_eq!(*ghost.students_per_group(), range(2, 2));
+    }
+
+    #[test]
+    fn an_unsplittable_manual_range_leaves_no_ghost() {
+        let params = base_params();
+        // Four students in groups of 5 to 6: the single group is short of
+        // the minimum, so no template exists at that size.
+        let mut req = request(&[(1, 1), (1, 3)], &[]);
+        req.canonical_range = Some(range(5, 6));
+        let plan = build_generation_plan(&params, &req).expect("well-formed request");
+
+        assert_eq!(
+            plan.canonical_range,
+            Some((range(5, 6), RangeSource::Manual))
+        );
+        assert_eq!(plan.ghost, None);
+
+        // The very same union does get a template when the range was
+        // elected rather than chosen: only an explicit choice suppresses
+        // the fallback.
+        let plan = build_generation_plan(&params, &request(&[(1, 1), (1, 3)], &[]))
+            .expect("well-formed request");
+        assert!(plan.ghost.is_some());
     }
 }

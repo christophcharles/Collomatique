@@ -4,6 +4,10 @@
 //! The minimum is unconditional. The group count is exact
 //! ([`VarEnv::group_count`]), so an empty group would leave the others
 //! oversized: emptiness is not something the model must tolerate any more.
+//!
+//! The template grouping gets the same rows at the canonical size. Without
+//! them the objective would be free to collapse it into a couple of large
+//! groups — the cheapest possible template, and a meaningless one.
 
 use crate::extras::{MyBundle, V, base_var};
 use crate::types::ConstraintDesc;
@@ -53,6 +57,39 @@ fn build_for_group(
     )
 }
 
+fn build_for_ghost_group(
+    env: &VarEnv,
+    bundle: MyBundle,
+    group: u32,
+    min_students: u32,
+    max_students: u32,
+) -> MyBundle {
+    let ghost = env.ghost().expect("the caller checked for a template");
+    let count: IntLinExpr<V> = ghost
+        .students()
+        .iter()
+        .map(|&student| IntLinExpr::var(base_var(Var::StudentInGhostGroup { student, group })))
+        .sum();
+
+    let bundle = bundle.with_constraint(
+        count
+            .clone()
+            .geq(&IntLinExpr::constant(i64::from(min_students))),
+        ConstraintDesc::GhostStudentsPerGroupMin {
+            group,
+            min_students,
+        },
+    );
+
+    bundle.with_constraint(
+        count.leq(&IntLinExpr::constant(i64::from(max_students))),
+        ConstraintDesc::GhostStudentsPerGroupMax {
+            group,
+            max_students,
+        },
+    )
+}
+
 pub(super) fn build(env: &VarEnv) -> MyBundle {
     let mut bundle = MyBundle::new();
     for list in env.lists() {
@@ -60,6 +97,13 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         let max_students = env.max_size(list);
         for group in 0..env.group_count(list) {
             bundle = build_for_group(env, bundle, list, group, min_students, max_students);
+        }
+    }
+    if let Some(ghost) = env.ghost() {
+        let min_students = ghost.students_per_group().start().get();
+        let max_students = ghost.students_per_group().end().get();
+        for group in 0..env.ghost_group_count() {
+            bundle = build_for_ghost_group(env, bundle, group, min_students, max_students);
         }
     }
     bundle

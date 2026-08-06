@@ -87,6 +87,14 @@ mod tests {
         )
     }
 
+    /// The base binary "`s` sits in `group` of the template grouping".
+    fn ghost_in_group(s: u64, group: u32) -> V {
+        base_var(Var::StudentInGhostGroup {
+            student: student(s),
+            group,
+        })
+    }
+
     fn value(cfg: &ConfigData<InternalVar<Var, ExtraVarName>>, var: V) -> f64 {
         cfg.get(var.clone())
             .unwrap_or_else(|| panic!("{:?} should be part of the solved problem", var))
@@ -239,5 +247,46 @@ mod tests {
             .map(|&s| value(&cfg, in_group_1(s)))
             .sum();
         assert_close(count_1, 2.0);
+    }
+
+    #[test]
+    fn the_template_is_a_partition_too() {
+        // 9 students, sizes 3..=4 — the only spec, so the template is those
+        // same 9 students in ceil(9 / 4) = 3 groups. Both families are
+        // pushed against at once: student 1 into two template groups at
+        // once, and four students into each of the first two groups, which
+        // asks for a 4 / 4 / 1 split.
+        //
+        // "Exactly one group" must bring student 1 back to a single group,
+        // the maximum caps the crowded groups at 4 and the minimum forbids
+        // the thin one — so the split is 3 / 3 / 3, exactly as for a real
+        // list. A template free of these rows would collapse instead.
+        let plan = plan_of(&[(&[1, 2, 3, 4, 5, 6, 7, 8, 9], (3, 4))]);
+
+        let cfg = solve_with_objective(
+            &plan,
+            &[
+                (100.0, ghost_in_group(1, 0)),
+                (100.0, ghost_in_group(1, 1)),
+                (100.0, ghost_in_group(2, 0)),
+                (100.0, ghost_in_group(3, 0)),
+                (100.0, ghost_in_group(4, 0)),
+                (100.0, ghost_in_group(5, 1)),
+                (100.0, ghost_in_group(6, 1)),
+                (100.0, ghost_in_group(7, 1)),
+                (100.0, ghost_in_group(8, 1)),
+            ],
+        );
+
+        for s in 1..=9 {
+            let count: f64 = (0..3)
+                .map(|group| value(&cfg, ghost_in_group(s, group)))
+                .sum();
+            assert_close(count, 1.0);
+        }
+        for group in 0..3 {
+            let count: f64 = (1..=9).map(|s| value(&cfg, ghost_in_group(s, group))).sum();
+            assert_close(count, 3.0);
+        }
     }
 }

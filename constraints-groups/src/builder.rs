@@ -66,12 +66,18 @@ mod tests {
         let mut one_group = 0;
         let mut max = 0;
         let mut min = 0;
+        let mut ghost_one_group = 0;
+        let mut ghost_max = 0;
+        let mut ghost_min = 0;
         for (_, source) in model.problem().get_constraints() {
             if let ConstraintSource::User(desc) = source {
                 match desc {
                     ConstraintDesc::StudentInOneGroup { .. } => one_group += 1,
                     ConstraintDesc::StudentsPerGroupMax { .. } => max += 1,
                     ConstraintDesc::StudentsPerGroupMin { .. } => min += 1,
+                    ConstraintDesc::GhostStudentInOneGroup { .. } => ghost_one_group += 1,
+                    ConstraintDesc::GhostStudentsPerGroupMax { .. } => ghost_max += 1,
+                    ConstraintDesc::GhostStudentsPerGroupMin { .. } => ghost_min += 1,
                 }
             }
         }
@@ -80,6 +86,12 @@ mod tests {
         // One size constraint of each kind per (list, group): 2 + 2.
         assert_eq!(max, 4);
         assert_eq!(min, 4);
+        // The template spans the union of the two lists — 7 students at the
+        // canonical 2..=3 (list 0's range wins the vote 4 to 3), so
+        // ceil(7 / 3) = 3 groups — and carries the same two families.
+        assert_eq!(ghost_one_group, 7);
+        assert_eq!(ghost_max, 3);
+        assert_eq!(ghost_min, 3);
 
         // The objective references every `SharedPair`, so they are all
         // expanded. The lists are disjoint, so the co-occurring pairs are

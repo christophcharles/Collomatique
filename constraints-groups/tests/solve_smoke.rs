@@ -31,11 +31,13 @@ fn model_solves_and_converts() {
     let spec = GroupListSpec::new((1..=6).map(student).collect(), range(2, 3))
         .expect("6 students split into groups of 2 to 3");
     let plan = GenerationPlan {
-        specs: vec![(spec, BTreeSet::new())],
+        specs: vec![(spec.clone(), BTreeSet::new())],
         skipped: BTreeSet::new(),
         pinned_pairs: BTreeMap::new(),
         // The only spec, so the vote could only ever elect its own range.
         canonical_range: Some((range(2, 3), RangeSource::Automatic)),
+        // And the template spans the same students at the same size.
+        ghost: Some(spec),
     };
 
     let model = build_model(&plan, ObjectiveWeights::default());

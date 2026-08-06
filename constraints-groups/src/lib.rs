@@ -11,9 +11,12 @@
 //!
 //! The model is complete (end of phase B): the base `StudentInGroup`
 //! binaries — the assignment matrix itself, one variable per (list,
-//! student, group) — the `SharedPair` extras of piece 7, the shape constraints
-//! of piece 8 (one group per student, min and max size), the stability
-//! objective of piece 9
+//! student, group) — the `StudentInGhostGroup` matrix of the *template*
+//! grouping ([`GenerationPlan::ghost`], a virtual list of every student at
+//! the canonical size, which the objective asks the real lists to resemble),
+//! the `SharedPair` extras of piece 7, the shape constraints
+//! of piece 8 (one group per student, min and max size — over the template
+//! too), the stability objective of piece 9
 //! (minimize the globally shared student pairs, with a configurable weight
 //! — [`ObjectiveWeights`], piece 11), and the inclusion-based incremental
 //! epochs of piece 10 ([`build_incremental_epochs`]), which callers feed to

@@ -51,4 +51,14 @@ pub enum ConstraintDesc {
         group: u32,
         min_students: u32,
     },
+    /// `Σ_g StudentInGhostGroup(student, g) == 1` — the template's own
+    /// "exactly one group per student".
+    GhostStudentInOneGroup { student: StudentId },
+    /// `Σ_s StudentInGhostGroup(s, group) <= max_students`.
+    GhostStudentsPerGroupMax { group: u32, max_students: u32 },
+    /// `Σ_s StudentInGhostGroup(s, group) >= min_students`. The template is
+    /// held to the same size discipline as a real list: left free of it, the
+    /// objective would collapse it into a few degenerate groups and the
+    /// grouping the real lists are asked to resemble would mean nothing.
+    GhostStudentsPerGroupMin { group: u32, min_students: u32 },
 }
