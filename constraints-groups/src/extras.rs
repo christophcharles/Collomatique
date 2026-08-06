@@ -15,7 +15,11 @@
 //! `CanonicalPair` is capped from above by its defining rows (a template
 //! group holding exactly one of the pair forces it to 0) and pushed up only
 //! by the objective, which gains by it: a high `t` relaxes the `Deviation`
-//! rows. `Deviation` is floored from below by its rows (a meeting of a
+//! rows, and the affinity term rewards it outright. That reward is the same
+//! direction as the relief, so it changes nothing here beyond making the cap
+//! tight for every pair — including one the template groups but that meets in
+//! no list, which the relief alone would leave undecided. `Deviation` is
+//! floored from below by its rows (a meeting of a
 //! non-template pair forces it to 1) and pushed down only by the objective,
 //! which pays for it. Each therefore lands on its tight value under the
 //! minimize, and neither is ever read anywhere else. `Deviation` references

@@ -21,6 +21,9 @@ pub struct Dialog {
     w_pairs: f64,
     /// Weight of the "stay close to the reference grouping" objective term.
     w_template: f64,
+    /// Weight of the "group affine students in the reference grouping"
+    /// objective term.
+    w_affinity: f64,
     /// Whether the reference group size is imposed rather than elected.
     canonical_enabled: bool,
     /// The imposed size, kept even while `canonical_enabled` is false so that
@@ -54,6 +57,7 @@ pub enum DialogInput {
     Accept,
     UpdatePairsWeight(f64),
     UpdateTemplateWeight(f64),
+    UpdateAffinityWeight(f64),
     SetCanonicalEnabled(bool),
     UpdateCanonicalMin(u32),
     UpdateCanonicalMax(u32),
@@ -158,6 +162,27 @@ impl SimpleComponent for Dialog {
                                         sender.input(DialogInput::UpdateTemplateWeight(value));
                                     },
                                 },
+                                adw::SpinRow {
+                                    set_hexpand: true,
+                                    set_title: "Poids des affinités",
+                                    set_subtitle: "Récompense le regroupement, dans le découpage de référence, des élèves qui partagent beaucoup de listes : le découpage de référence suit les affinités du document",
+                                    #[wrap(Some)]
+                                    set_adjustment = &gtk::Adjustment {
+                                        set_lower: 0.,
+                                        set_upper: f64::MAX,
+                                        set_step_increment: 0.05,
+                                        set_page_increment: 0.25,
+                                    },
+                                    set_digits: 2,
+                                    set_wrap: false,
+                                    set_numeric: true,
+                                    #[track(self.should_redraw)]
+                                    set_value: model.w_affinity,
+                                    connect_value_notify[sender] => move |widget| {
+                                        let value = widget.value();
+                                        sender.input(DialogInput::UpdateAffinityWeight(value));
+                                    },
+                                },
                             },
                             adw::PreferencesGroup {
                                 set_title: "Groupe de référence",
@@ -238,6 +263,7 @@ impl SimpleComponent for Dialog {
             should_redraw: false,
             w_pairs: defaults.w_pairs,
             w_template: defaults.w_template,
+            w_affinity: defaults.w_affinity,
             canonical_enabled: false,
             canonical_min: SEED_CANONICAL_MIN,
             canonical_max: SEED_CANONICAL_MAX,
@@ -256,6 +282,7 @@ impl SimpleComponent for Dialog {
                 self.should_redraw = true;
                 self.w_pairs = weights.w_pairs;
                 self.w_template = weights.w_template;
+                self.w_affinity = weights.w_affinity;
                 self.canonical_enabled = canonical_range.is_some();
                 if let Some(range) = canonical_range {
                     self.canonical_min = range.start().get();
@@ -273,6 +300,7 @@ impl SimpleComponent for Dialog {
                         ObjectiveWeights {
                             w_pairs: self.w_pairs,
                             w_template: self.w_template,
+                            w_affinity: self.w_affinity,
                         },
                         self.canonical_range(),
                     ))
@@ -289,6 +317,12 @@ impl SimpleComponent for Dialog {
                     return;
                 }
                 self.w_template = value;
+            }
+            DialogInput::UpdateAffinityWeight(value) => {
+                if self.w_affinity == value {
+                    return;
+                }
+                self.w_affinity = value;
             }
             DialogInput::SetCanonicalEnabled(value) => {
                 if self.canonical_enabled == value {
