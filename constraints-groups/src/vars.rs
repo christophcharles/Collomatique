@@ -173,7 +173,11 @@ impl VarEnv {
     /// Number of groups of the template, by the same closed form as
     /// [`VarEnv::group_count`]. 0 without a template, so `0..count` is the
     /// empty loop everywhere the ghost pass runs.
-    pub(crate) fn ghost_group_count(&self) -> u32 {
+    ///
+    /// Public for the same reason [`VarEnv::group_count`] is: the shape of
+    /// the assignment matrix is what a caller needs to read a solved
+    /// configuration, or to enumerate the base variables of an epoch.
+    pub fn ghost_group_count(&self) -> u32 {
         match &self.ghost {
             Some(ghost) => {
                 let n = ghost.students().len() as u32;
