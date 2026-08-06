@@ -311,9 +311,13 @@ impl FactoryComponent for Slot {
                 set_xalign: 0.,
                 set_margin_start: 5,
                 set_margin_end: 5,
+                set_ellipsize: gtk::pango::EllipsizeMode::End,
+                set_width_chars: 24,
+                set_max_width_chars: 24,
                 #[watch]
                 set_label: &self.generate_teacher_name(),
-                set_size_request: (200, -1),
+                #[watch]
+                set_tooltip_text: Some(&self.generate_teacher_name()),
             },
             gtk::Separator {
                 set_orientation: gtk::Orientation::Vertical,
@@ -335,9 +339,13 @@ impl FactoryComponent for Slot {
                 set_xalign: 0.,
                 set_margin_start: 5,
                 set_margin_end: 5,
+                set_ellipsize: gtk::pango::EllipsizeMode::End,
+                set_width_chars: 20,
+                set_max_width_chars: 20,
                 #[watch]
                 set_label: &self.data.week_pattern_name,
-                set_size_request: (200, -1),
+                #[watch]
+                set_tooltip_text: Some(&self.data.week_pattern_name),
             },
             gtk::Box {
                 set_hexpand: true,
