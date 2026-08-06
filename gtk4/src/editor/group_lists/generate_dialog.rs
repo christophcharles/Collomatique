@@ -543,7 +543,7 @@ impl SimpleComponent for Dialog {
                             add_css_class: "warning",
                             set_margin_all: 5,
                             adw::ButtonContent {
-                                set_icon_name: "configure-symbolic",
+                                set_icon_name: "emblem-system-symbolic",
                                 set_label: "Paramètres avancés",
                             },
                             connect_clicked => DialogInput::OpenAdvancedParams,

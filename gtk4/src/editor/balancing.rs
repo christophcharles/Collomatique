@@ -68,7 +68,7 @@ impl Component for Balancing {
                         set_margin_all: 5,
                         set_spacing: 5,
                         gtk::Button {
-                            set_icon_name: "edit-symbolic",
+                            set_icon_name: "document-edit-symbolic",
                             add_css_class: "flat",
                             set_tooltip_text: Some("Modifier les paramètres globaux d'équilibrage strict"),
                             connect_clicked => BalancingInput::EditGlobalOptions,
@@ -341,7 +341,7 @@ impl FactoryComponent for SubjectEntry {
             set_orientation: gtk::Orientation::Horizontal,
             set_spacing: 5,
             gtk::Button {
-                set_icon_name: "edit-symbolic",
+                set_icon_name: "document-edit-symbolic",
                 add_css_class: "flat",
                 connect_clicked => SubjectEntryInput::EditClicked,
                 #[watch]

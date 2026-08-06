@@ -61,7 +61,7 @@ impl FactoryComponent for Entry {
             set_orientation: gtk::Orientation::Horizontal,
             set_spacing: 5,
             gtk::Button {
-                set_icon_name: "edit-symbolic",
+                set_icon_name: "document-edit-symbolic",
                 add_css_class: "flat",
                 connect_clicked => EntryInput::EditClicked,
                 set_tooltip_text: Some("Modifier les paramètres"),

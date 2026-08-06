@@ -236,7 +236,7 @@ impl FactoryComponent for Entry {
             set_hexpand: true,
             set_orientation: gtk::Orientation::Horizontal,
             gtk::Button {
-                set_icon_name: "edit-symbolic",
+                set_icon_name: "document-edit-symbolic",
                 add_css_class: "flat",
                 connect_clicked => EntryInput::EditClicked,
                 set_tooltip_text: Some("Modifier le modèle"),

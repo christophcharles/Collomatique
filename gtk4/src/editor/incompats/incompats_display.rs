@@ -260,7 +260,7 @@ impl FactoryComponent for Incompat {
             set_orientation: gtk::Orientation::Horizontal,
             set_spacing: 5,
             gtk::Button {
-                set_icon_name: "edit-symbolic",
+                set_icon_name: "document-edit-symbolic",
                 add_css_class: "flat",
                 connect_clicked => IncompatInput::EditIncompatClicked,
                 set_tooltip_text: Some("Modifier l'incompatibilité"),

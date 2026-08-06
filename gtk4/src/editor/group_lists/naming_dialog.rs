@@ -209,7 +209,7 @@ impl Component for Dialog {
                                 #[watch]
                                 set_visible: !model.built,
                             },
-                            gtk::Image::from_icon_name("emblem-ok-symbolic") {
+                            gtk::Image::from_icon_name("object-select-symbolic") {
                                 #[watch]
                                 set_visible: model.built,
                             },

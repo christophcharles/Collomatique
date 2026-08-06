@@ -116,7 +116,7 @@ impl Component for Dialog {
                         set_valign: gtk::Align::Center,
                         #[watch]
                         set_visible: model.worker.is_none() && !model.end_with_error && model.has_modifications(),
-                        gtk::Image::from_icon_name("emblem-ok-symbolic") {
+                        gtk::Image::from_icon_name("object-select-symbolic") {
                             set_size_request: (50, 50),
                             set_pixel_size: 50,
                         },

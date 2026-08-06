@@ -504,7 +504,7 @@ impl Component for ExportPanel {
                         set_margin_start: 10,
                         set_margin_end: 10,
                         adw::ButtonContent {
-                            set_icon_name: "document-export-symbolic",
+                            set_icon_name: "document-send-symbolic",
                             set_label: "Exporter le colloscope (xlsx)",
                         },
                         connect_clicked => ExportPanelInput::ExportClicked,

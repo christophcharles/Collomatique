@@ -168,7 +168,7 @@ impl SimpleComponent for Dialog {
                             set_visible: matches!(&model.warnings, ComputationState::ResultAvailable(Ok(w)) if w.is_empty()),
                             gtk::Image {
                                 set_pixel_size: 30,
-                                set_icon_name: Some("emblem-ok-symbolic"),
+                                set_icon_name: Some("object-select-symbolic"),
                             },
                             gtk::Label {
                                 set_label: "Toutes les contraintes sont satisfaites",

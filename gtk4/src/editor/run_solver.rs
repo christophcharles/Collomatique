@@ -235,7 +235,7 @@ where
                                         set_size_request: (350,-1),
                                         #[watch]
                                         set_visible: !model.is_running && !model.end_with_error,
-                                        gtk::Image::from_icon_name("emblem-ok-symbolic") {
+                                        gtk::Image::from_icon_name("object-select-symbolic") {
                                             set_size_request: (60, 60),
                                             set_pixel_size: 60,
                                         },
@@ -420,7 +420,7 @@ where
                             set_valign: gtk::Align::Center,
                             #[watch]
                             set_visible: !model.is_running && !model.end_with_error,
-                            gtk::Image::from_icon_name("emblem-ok-symbolic") {
+                            gtk::Image::from_icon_name("object-select-symbolic") {
                                 set_size_request: (30, 30),
                                 set_icon_size: gtk::IconSize::Normal,
                             },

@@ -298,7 +298,7 @@ impl FactoryComponent for Slot {
             set_orientation: gtk::Orientation::Horizontal,
             set_spacing: 5,
             gtk::Button {
-                set_icon_name: "edit-symbolic",
+                set_icon_name: "document-edit-symbolic",
                 add_css_class: "flat",
                 connect_clicked => SlotInput::EditSlotClicked,
                 set_tooltip_text: Some("Modifier le créneau"),
@@ -361,7 +361,7 @@ impl FactoryComponent for Slot {
                 set_orientation: gtk::Orientation::Vertical,
             },
             gtk::Button {
-                set_icon_name: "go-up",
+                set_icon_name: "go-up-symbolic",
                 add_css_class: "flat",
                 #[watch]
                 set_sensitive: self.index.current_index() != 0,
@@ -369,7 +369,7 @@ impl FactoryComponent for Slot {
                 connect_clicked => SlotInput::MoveUpClicked,
             },
             gtk::Button {
-                set_icon_name: "go-down",
+                set_icon_name: "go-down-symbolic",
                 add_css_class: "flat",
                 #[watch]
                 set_sensitive: self.index.current_index() < self.data.slot_count-1,

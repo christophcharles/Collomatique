@@ -187,7 +187,7 @@ impl<Id: Identifier> FactoryComponent for Entry<Id> {
             set_hexpand: true,
             set_orientation: gtk::Orientation::Horizontal,
             gtk::Button {
-                set_icon_name: "edit-symbolic",
+                set_icon_name: "document-edit-symbolic",
                 add_css_class: "flat",
                 set_tooltip_text: Some("Modifier le contact"),
                 connect_clicked => EntryInput::EditClicked,

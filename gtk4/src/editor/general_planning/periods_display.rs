@@ -88,7 +88,7 @@ impl FactoryComponent for Entry {
                     set_use_markup: true,
                 },
                 gtk::Button {
-                    set_icon_name: "edit-symbolic",
+                    set_icon_name: "document-edit-symbolic",
                     add_css_class: "flat",
                     set_tooltip_text: Some("Modifier la période"),
                     connect_clicked => EntryInput::EditClicked,
@@ -103,7 +103,7 @@ impl FactoryComponent for Entry {
                     set_hexpand: true,
                 },
                 gtk::Button {
-                    set_icon_name: "go-up",
+                    set_icon_name: "go-up-symbolic",
                     add_css_class: "flat",
                     #[watch]
                     set_visible: self.index.current_index() != 0,
@@ -295,7 +295,7 @@ impl FactoryComponent for Week {
                 set_attributes: Some(&gtk::pango::AttrList::from_string("style italic, scale 0.8").unwrap()),
             },
             gtk::Button {
-                set_icon_name: "edit-symbolic",
+                set_icon_name: "document-edit-symbolic",
                 add_css_class: "flat",
                 set_tooltip_text: Some("Modifier l'annotation"),
                 connect_clicked => WeekInput::EditAnnotationClicked,
