@@ -5,7 +5,7 @@ use collomatique_state_colloscopes::StudentId;
 
 /// Names of the extra variables (piece 7). The live families are
 /// objective-only, and both are defined by one-sided rows rather than a full
-/// equivalence — see [`crate::extras`] for why that is sound here.
+/// equivalence — see `crate::extras` for why that is sound here.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum ExtraVarName {
     /// 1 if the pair (with `a < b`) shares some group in some list *of this

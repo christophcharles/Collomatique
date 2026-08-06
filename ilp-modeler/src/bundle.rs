@@ -1045,7 +1045,7 @@ where
     /// Objectify as a plain weighted sum of per-constraint violations.
     ///
     /// Emits `penalty = Σ wᵢ·λᵢ` where each `λᵢ` bounds one
-    /// constraint's violation (via [`objectify_single`]) and `wᵢ` is
+    /// constraint's violation (via `objectify_single`) and `wᵢ` is
     /// `weight_fn` applied to that constraint's description. Unlike
     /// [`ConstraintBundle::objectify_with_balance_and_coef`] there is
     /// **no `1/n` normalization and no global `L∞` bound**: the penalty

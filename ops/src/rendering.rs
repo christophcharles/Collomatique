@@ -20,7 +20,7 @@
 //! A `&Data` signature would therefore force every title to be rendered up
 //! there and threaded back down through the message tree, which is a lot of
 //! plumbing to hide the fact that naming a week reads two tables. The one
-//! caller that *does* hold the whole document, [crate::warning_text], projects
+//! caller that *does* hold the whole document, `crate::warning_text`, projects
 //! it in one line.
 //!
 //! # Why `Result` and not `Option`
@@ -310,8 +310,8 @@ fn have_condition(should_have: bool) -> &'static str {
     if should_have { "Avoir" } else { "Ne pas avoir" }
 }
 
-/// A slot pairing rule: « Physique : [utilisé] Séverus Rogue - Lundi 14h00 ⟹
-/// [non utilisé] Minerve McGonagall - Mardi 15h00 ».
+/// A slot pairing rule: « Physique : \[utilisé\] Séverus Rogue - Lundi 14h00 ⟹
+/// \[non utilisé\] Minerve McGonagall - Mardi 15h00 ».
 ///
 /// The subject is fronted once — the rule's own tab groups rules by subject and
 /// so never repeats it, but a warning arrives without that context. Both slots

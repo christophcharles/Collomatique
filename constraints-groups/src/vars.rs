@@ -192,7 +192,7 @@ pub enum Var {
     ///
     /// "Exactly one group per student" is not a property of the domain any
     /// more — it is the constraint family of
-    /// [`crate::constraints`]`::student_in_one_group`. No variable is ever
+    /// `crate::constraints::student_in_one_group`. No variable is ever
     /// fixed in this crate, so no fix attribute: the derive's default
     /// `check_fix` returns `None` for in-range names and `Some(0.0)` for
     /// stale ones.

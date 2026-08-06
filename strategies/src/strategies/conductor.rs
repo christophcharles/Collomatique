@@ -341,7 +341,7 @@ pub struct IncrementalConfig {
     /// (see [`IncrementalStrategy::epoch_incumbent_time_limit`](crate::IncrementalStrategy)).
     /// Independent of [`IncrementalConfig::epoch_time_limit`]; each epoch stops at whichever
     /// deadline comes first. Does not affect the final reconstruction solve. Defaults to five
-    /// minutes, unlike [`IncrementalStrategy`](crate::IncrementalStrategy)'s own unbounded default.
+    /// minutes, unlike [`IncrementalStrategy`]'s own unbounded default.
     pub epoch_incumbent_time_limit: collomatique_time::TimeLimit,
 }
 

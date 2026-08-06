@@ -48,7 +48,7 @@ pub struct RulePart {
 /// antecedent and consequent must name different subjects — an implication from
 /// a subject to itself is meaningless). State-dependent facts (subject and
 /// period existence) stay with the checker/walker as dangling FKs. Serialized
-/// exactly like the raw four-field struct via [`RawPairingRule`]; deserializing
+/// exactly like the raw four-field struct via `RawPairingRule`; deserializing
 /// a rule with both parts on one subject is a hard error (the
 /// [`crate::non_empty_range::NonEmptyRangeInclusive`] precedent).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References, Join, ContentOrd)]

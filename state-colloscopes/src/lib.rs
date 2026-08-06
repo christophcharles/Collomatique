@@ -318,7 +318,7 @@ impl InMemoryData for Data {
     /// [InnerData::broken_invariants], and roll back on any breakage.
     ///
     /// On the accepted path the id-issuer high-water assert
-    /// ([Data::assert_id_issuer_high_water]) is the surviving [Data]-level
+    /// (`Data::assert_id_issuer_high_water`) is the surviving [Data]-level
     /// companion of the checker. It cannot fire through the [Manager] surface:
     /// `annotate` draws every fresh id from this issuer, and the `GlobalUpdate`
     /// annotate arm absorbs foreign payload ids up front via

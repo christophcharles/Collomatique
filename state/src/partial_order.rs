@@ -264,7 +264,7 @@ impl_atoms!(
 
 /// Enrolls local types into the document order as atoms (discretely
 /// compared: equal or incomparable), together with
-/// [ContentIdentity][crate::ContentIdentity] — an atom's content
+/// [ContentIdentity] — an atom's content
 /// equivalence is `==` by construction, so the marker is always truthful
 /// for it. For foreign types use `#[ord(atom)]` on the field instead; for
 /// generic types write the impls by hand.

@@ -30,7 +30,7 @@ pub fn derive_entity_id(input: proc_macro::TokenStream) -> proc_macro::TokenStre
     entity_id::derive(input)
 }
 
-/// Derive macro for [`collomatique_state::refs::References`].
+/// Derive macro for `collomatique_state::refs::References`.
 ///
 /// Walks every field annotated with `#[fk]` in declaration order and
 /// forwards to that field's own `References<K>` implementation, so IDs,
@@ -57,7 +57,7 @@ pub fn derive_references(input: proc_macro::TokenStream) -> proc_macro::TokenStr
     references::derive(input)
 }
 
-/// Derive macro for [`collomatique_state::join::Join`].
+/// Derive macro for `collomatique_state::join::Join`.
 ///
 /// Generates a joined view struct (fields borrow from the join context
 /// with lifetime `'a`), the `collomatique_state::join::Joinable`
@@ -93,7 +93,7 @@ pub fn derive_join(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     join::derive(input)
 }
 
-/// Derive macro for [`collomatique_state::partial_order::ContentOrd`].
+/// Derive macro for `collomatique_state::partial_order::ContentOrd`.
 ///
 /// Implements the document order as the **product of all fields**, in
 /// declaration order: `Equal` iff every field is `Equal`, `Less` iff at
@@ -145,7 +145,7 @@ pub fn derive_content_ord(input: proc_macro::TokenStream) -> proc_macro::TokenSt
         .into()
 }
 
-/// Derive macro for [`collomatique_state::partial_order::ContentIdentity`].
+/// Derive macro for `collomatique_state::partial_order::ContentIdentity`.
 ///
 /// Asserts that `==` coincides with content equivalence for this type, so
 /// containers may match it by `==`/`Ord`. Deliberately explicit and never

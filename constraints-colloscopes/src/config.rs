@@ -73,7 +73,7 @@ pub struct SolveConfig {
     /// behavior (the constraint stays in the model when it can, dropped otherwise).
     pub objectify_cross_fixed_period: Option<f64>,
     /// Penalty weight applied to each softly-anchored "keep the current value" variable (see
-    /// [`apply_anchor`](SolveConfig::apply_anchor)).
+    /// `SolveConfig::apply_anchor`).
     pub l1_anchor_weight: f64,
 }
 

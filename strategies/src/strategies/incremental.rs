@@ -112,7 +112,7 @@ pub struct IncrementalStrategy {
     pub l1_weight: f64,
     /// Absolute tolerance on each epoch's objective gap: stop an epoch's solve as soon as a
     /// feasible incumbent is within this distance of the best bound, instead of proving the
-    /// epoch optimal. Mirrors [`FindClosestStrategy::distance_tolerance`](super::find_closest).
+    /// epoch optimal. Mirrors [`FindClosestStrategy::distance_tolerance`](crate::FindClosestStrategy::distance_tolerance).
     /// `0.0` means "solve each epoch to proven optimality".
     pub distance_tolerance: f64,
     /// Time limit for each epoch's solve.

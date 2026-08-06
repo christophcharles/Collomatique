@@ -1,7 +1,7 @@
 //! Decode submodule
 //!
 //! This module contains the logic that builds an
-//! [InnerData](collomatique_state_colloscopes::InnerData) from a file
+//! [InnerData] from a file
 //! document via [spec2::decode], the spec-2 pipeline. (Spec 1, the
 //! pre-alpha dump format, is permanently retired and rejected before
 //! decoding — see the versioning notes in `docs/file_format/file_format.md`.)

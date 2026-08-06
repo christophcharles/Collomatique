@@ -49,7 +49,7 @@ pub struct SlotRulePart {
 /// from a slot to itself is meaningless). The cross-entity fact that both slots
 /// belong to the same subject is state-dependent (it needs the slot→subject
 /// map) and stays with the checker/validator. Serialized exactly like the raw
-/// four-field struct via [`RawSlotPairingRule`]; deserializing a rule with both
+/// four-field struct via `RawSlotPairingRule`; deserializing a rule with both
 /// parts on one slot is a hard error (the
 /// [`crate::non_empty_range::NonEmptyRangeInclusive`] precedent).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References, Join, ContentOrd)]

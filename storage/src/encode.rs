@@ -1,7 +1,7 @@
 //! Encode submodule
 //!
 //! This module contains the logic that builds a file document from an
-//! [InnerData](collomatique_state_colloscopes::InnerData):
+//! [InnerData]:
 //! [spec2::encode] produces the spec-2 format. The shared file header is
 //! built by [generate_header].
 
