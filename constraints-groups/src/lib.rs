@@ -9,18 +9,24 @@
 //! ([`build_generation_plan`] on the way in, [`build_group_lists`] on the
 //! way out).
 //!
-//! The model is complete (end of phase B): the base `StudentInGroup`
-//! binaries — the assignment matrix itself, one variable per (list, student,
-//! group), and the only variable of the model — the `SharedPair` extras of
-//! piece 7 and the `RefGroupInGroup` extras that count how many pieces a list
-//! breaks a reference group into, the shape constraints of piece 8 (one group
-//! per student, min and max size), the two-term stability objective of piece 9
-//! (minimize the shared student pairs *and* the shattering of the template,
-//! with configurable weights — [`ObjectiveWeights`], piece 11), and the
-//! inclusion-based incremental epochs of piece 10
-//! ([`build_incremental_epochs`]), which callers feed to the solver so the
-//! inclusion-minimal lists are built first and the larger lists align with
-//! them.
+//! The model holds the base `StudentInGroup` binaries — the assignment matrix
+//! itself, one variable per (list, student, group), and the only variable of
+//! the model — the `SharedPair` extras of piece 7 and the `RefGroupInGroup`
+//! extras that count how many pieces a list breaks a reference group into, the
+//! shape constraints of piece 8 (one group per student, min and max size), the
+//! two-term stability objective of piece 9 (minimize the shared student pairs
+//! *and* the shattering of the template, with configurable weights —
+//! [`ObjectiveWeights`], piece 11), and the incremental epochs
+//! ([`build_incremental_epochs`]), which callers feed to the solver.
+//!
+//! The epochs stagger the solve. Strict inclusion of the specs' student sets
+//! (piece 10) orders them into *levels*, so the inclusion-minimal lists are
+//! built first and every larger list aligns with the ones already fixed. A
+//! level is not solved in one go, though: every spec gets an epoch of its own,
+//! and inside a level the least entangled lists — those sharing the fewest
+//! students with the rest of the level — run before the more entangled ones,
+//! smaller before larger on a tie (pieces 12 and 12bis). See
+//! [`build_incremental_epochs`] for the two passes that build them.
 //!
 //! The *template* ([`GenerationPlan::ghost`]) is a grouping of every student
 //! at the canonical group size, which the objective asks the real lists to
