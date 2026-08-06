@@ -16,7 +16,7 @@
 }:
 rustPlatform.buildRustPackage rec {
     pname = "collomatique";
-    version = "0.1.0";
+    version = "0.1.0-alpha.0.99";
 
     src = lib.cleanSourceWith {
         src = ./.;
@@ -29,7 +29,7 @@ rustPlatform.buildRustPackage rec {
             !(baseName == "target" && type == "directory");
     };
 
-    cargoHash = "sha256-bdflaYvcWueOri5P+QbCZTVwdqv1uJGhgFdlSzXpEPA=";
+    cargoHash = "sha256-Dbm8lnVREWoKTwRRZXvPce/S7adloJO8RN7x2Y92o4k=";
 
     nativeBuildInputs = [
         rustPlatform.bindgenHook
