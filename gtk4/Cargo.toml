@@ -14,6 +14,7 @@ collomatique-ilp-modeler = { path = "../ilp-modeler" }
 collomatique-ops = { path = "../ops" }
 collomatique-rpc = { path = "../rpc" }
 collomatique-rpc-engine = { path = "../rpc-engine" }
+collomatique-settings = { path = "../settings" }
 collomatique-constraints-colloscopes = { path = "../constraints-colloscopes" }
 collomatique-constraints-groups = { path = "../constraints-groups" }
 collomatique-xlsx = { path = "../xlsx" }

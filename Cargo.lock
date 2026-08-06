@@ -382,6 +382,7 @@ dependencies = [
  "collomatique-ops",
  "collomatique-rpc",
  "collomatique-rpc-engine",
+ "collomatique-settings",
  "collomatique-state",
  "collomatique-state-colloscopes",
  "collomatique-storage",

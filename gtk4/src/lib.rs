@@ -11,7 +11,6 @@ use std::path::PathBuf;
 mod dialogs;
 #[allow(dead_code)]
 mod tools;
-mod version;
 mod widgets;
 
 mod editor;
@@ -247,9 +246,12 @@ impl Component for AppModel {
             development_warning,
         };
 
-        // A prerelease version warns about itself on every startup, and stops
-        // doing so on its own the day the version becomes a plain release.
-        if let Some(version) = version::development_build() {
+        // A prerelease version warns about itself at startup, and stops doing so
+        // on its own the day the version becomes a plain release. Whether the
+        // warning is due is not a question for the GTK layer: collomatique-settings
+        // answers it, so another frontend would get the same answer.
+        let version = collomatique_storage::current_version();
+        if collomatique_settings::development_warning::is_due(&version) {
             controllers
                 .development_warning
                 .sender()
