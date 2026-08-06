@@ -11,6 +11,7 @@ use std::path::PathBuf;
 mod dialogs;
 #[allow(dead_code)]
 mod tools;
+mod version;
 mod widgets;
 
 mod editor;
@@ -31,6 +32,7 @@ struct AppControllers {
     file_error: Controller<dialogs::file_error::Dialog>,
     file_caveats: Controller<dialogs::file_caveats::Dialog>,
     warn_dirty: Controller<dialogs::warning_changed::Dialog>,
+    development_warning: Controller<dialogs::development_warning::Dialog>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -228,6 +230,13 @@ impl Component for AppModel {
                 dialogs::warning_changed::DialogOutput::Accept => AppInput::OkDirty,
             });
 
+        let development_warning = dialogs::development_warning::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                dialogs::development_warning::DialogOutput::Quit => AppInput::Quit,
+            });
+
         let controllers = AppControllers {
             welcome,
             loading,
@@ -235,7 +244,20 @@ impl Component for AppModel {
             file_error,
             file_caveats,
             warn_dirty,
+            development_warning,
         };
+
+        // A prerelease version warns about itself on every startup, and stops
+        // doing so on its own the day the version becomes a plain release.
+        if let Some(version) = version::development_build() {
+            controllers
+                .development_warning
+                .sender()
+                .send(dialogs::development_warning::DialogInput::Show(
+                    version.to_string(),
+                ))
+                .unwrap();
+        }
 
         let state = GlobalState::WelcomeScreen;
 
