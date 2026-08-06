@@ -273,9 +273,13 @@ impl FactoryComponent for Incompat {
                 set_xalign: 0.,
                 set_margin_start: 5,
                 set_margin_end: 5,
+                set_ellipsize: gtk::pango::EllipsizeMode::End,
+                set_width_chars: 20,
+                set_max_width_chars: 20,
                 #[watch]
                 set_label: &self.data.incompat_name,
-                set_size_request: (130, -1),
+                #[watch]
+                set_tooltip_text: Some(&self.data.incompat_name),
             },
             gtk::Separator {
                 set_orientation: gtk::Orientation::Vertical,
@@ -285,9 +289,13 @@ impl FactoryComponent for Incompat {
                 set_xalign: 0.,
                 set_margin_start: 5,
                 set_margin_end: 5,
+                set_ellipsize: gtk::pango::EllipsizeMode::End,
+                set_width_chars: 20,
+                set_max_width_chars: 20,
                 #[watch]
                 set_label: &self.data.week_pattern_name,
-                set_size_request: (150, -1),
+                #[watch]
+                set_tooltip_text: Some(&self.data.week_pattern_name),
             },
             gtk::Separator {
                 set_orientation: gtk::Orientation::Vertical,
