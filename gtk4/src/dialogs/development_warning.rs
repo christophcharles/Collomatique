@@ -1,22 +1,27 @@
-use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
+use collomatique_settings::Version;
+use gtk::prelude::{BoxExt, ButtonExt, CheckButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
 use relm4::gtk;
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
 
 pub struct Dialog {
     hidden: bool,
-    version: String,
+    version: Version,
+    silence: bool,
 }
 
 #[derive(Debug)]
 pub enum DialogInput {
-    Show(String),
+    Show(Version),
     Quit,
     Acknowledge,
+    SetSilence(bool),
 }
 
 #[derive(Debug)]
 pub enum DialogOutput {
     Quit,
+    /// `Some(version)` when the user asked not to be warned about it again
+    Acknowledged(Option<Version>),
 }
 
 impl Dialog {
@@ -86,6 +91,19 @@ impl SimpleComponent for Dialog {
                     set_halign: gtk::Align::Center,
                 },
 
+                // « pour cette version » is not padding: acknowledging one
+                // development version says nothing about the next one, and the
+                // label is where the user finds that out.
+                gtk::CheckButton {
+                    set_label: Some("Ne plus afficher pour cette version"),
+                    set_halign: gtk::Align::Center,
+                    #[watch]
+                    set_active: model.silence,
+                    connect_toggled[sender] => move |check| {
+                        sender.input(DialogInput::SetSilence(check.is_active()));
+                    },
+                },
+
                 gtk::Box {
                     set_orientation: gtk::Orientation::Horizontal,
                     set_spacing: 10,
@@ -121,7 +139,8 @@ impl SimpleComponent for Dialog {
     ) -> ComponentParts<Self> {
         let model = Dialog {
             hidden: true,
-            version: String::new(),
+            version: Version::new(0, 0, 0),
+            silence: false,
         };
 
         let widgets = view_output!();
@@ -133,9 +152,17 @@ impl SimpleComponent for Dialog {
         match msg {
             DialogInput::Show(version) => {
                 self.version = version;
+                self.silence = false;
                 self.hidden = false;
             }
-            DialogInput::Acknowledge => self.hidden = true,
+            DialogInput::SetSilence(silence) => self.silence = silence,
+            DialogInput::Acknowledge => {
+                self.hidden = true;
+                let silenced = self.silence.then(|| self.version.clone());
+                sender.output(DialogOutput::Acknowledged(silenced)).unwrap()
+            }
+            // Quitting records nothing, even with the box ticked: the user
+            // never got past the warning.
             DialogInput::Quit => {
                 self.hidden = true;
                 sender.output(DialogOutput::Quit).unwrap()

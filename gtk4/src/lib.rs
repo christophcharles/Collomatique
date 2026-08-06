@@ -79,6 +79,7 @@ impl AppModel {
 #[derive(Debug)]
 pub enum AppInput {
     Ignore,
+    AcknowledgeDevelopmentVersion(collomatique_settings::Version),
     WarnDirty,
     OkDirty,
     RequestNewColloscope,
@@ -234,6 +235,10 @@ impl Component for AppModel {
             .launch(())
             .forward(sender.input_sender(), |msg| match msg {
                 dialogs::development_warning::DialogOutput::Quit => AppInput::Quit,
+                dialogs::development_warning::DialogOutput::Acknowledged(None) => AppInput::Ignore,
+                dialogs::development_warning::DialogOutput::Acknowledged(Some(version)) => {
+                    AppInput::AcknowledgeDevelopmentVersion(version)
+                }
             });
 
         let controllers = AppControllers {
@@ -255,9 +260,7 @@ impl Component for AppModel {
             controllers
                 .development_warning
                 .sender()
-                .send(dialogs::development_warning::DialogInput::Show(
-                    version.to_string(),
-                ))
+                .send(dialogs::development_warning::DialogInput::Show(version))
                 .unwrap();
         }
 
@@ -367,6 +370,9 @@ impl Component for AppModel {
         match message {
             AppInput::Ignore => {
                 // This message exists only to be ignored (as its name suggests)
+            }
+            AppInput::AcknowledgeDevelopmentVersion(version) => {
+                collomatique_settings::development_warning::acknowledge(&version);
             }
             AppInput::RequestNewColloscope => {
                 self.send_but_check_dirty(sender, AppInput::NewColloscope(None));
