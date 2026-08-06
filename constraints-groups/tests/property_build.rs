@@ -55,6 +55,9 @@ const BUILD_STRIDE: usize = 5;
 /// the dialog nor this generator may hand such a pair to the planner.
 fn gen_generation_request(rng: &mut ChaCha8Rng, params: &Parameters) -> GenerationRequest {
     let mut rebuild = BTreeSet::new();
+    // Every size range seen along the way, so the canonical-range override
+    // can be drawn from a plausible one.
+    let mut ranges = Vec::new();
     for (period, subject, students) in params.assignments.iter() {
         let Some(interrogations) = params
             .subjects
@@ -66,9 +69,11 @@ fn gen_generation_request(rng: &mut ChaCha8Rng, params: &Parameters) -> Generati
         // An empty student set is legitimately `skipped` by the planner, so
         // it stays in the request; only unsatisfiable sizes are filtered.
         let usable = students.is_empty()
-            || GroupListSpec::new(students.clone(), interrogations.students_per_group).is_ok();
+            || GroupListSpec::new(students.clone(), interrogations.students_per_group.clone())
+                .is_ok();
         if usable && rng.random_bool(0.5) {
             rebuild.insert((period, subject));
+            ranges.push(interrogations.students_per_group);
         }
     }
 
@@ -79,9 +84,20 @@ fn gen_generation_request(rng: &mut ChaCha8Rng, params: &Parameters) -> Generati
         }
     }
 
+    // Mostly automatic, as the dialog leaves it: the manual path is rarer
+    // but must survive the same round trip. The override is not required to
+    // be a range any spec uses, but drawing it from one keeps the walk
+    // exercising realistic elections.
+    let canonical_range = if ranges.is_empty() || !rng.random_bool(0.1) {
+        None
+    } else {
+        Some(ranges[rng.random_range(0..ranges.len())].clone())
+    };
+
     GenerationRequest {
         rebuild,
         kept_lists,
+        canonical_range,
     }
 }
 

@@ -42,9 +42,9 @@ pub use incremental::build_incremental_epochs;
 pub use objective::ObjectiveWeights;
 pub use specs::{
     GenerationPlan, GenerationPlanError, GenerationRequest, GroupListSpec, GroupListSpecError,
-    build_generation_plan,
+    RangeSource, build_generation_plan,
 };
 pub use types::{ConstraintDesc, ExtraVarName};
-pub use vars::{GroupListIdx, Var};
+pub use vars::{GroupListIdx, SizeClassIdx, Var};
 
 pub type GroupListsModel = collomatique_ilp_modeler::Model<Var, ExtraVarName, ConstraintDesc>;

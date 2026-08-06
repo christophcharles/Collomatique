@@ -289,6 +289,9 @@ impl Dialog {
                 .filter(|list| list.keep)
                 .map(|list| list.group_list_id)
                 .collect(),
+            // Always automatic for now: the advanced dialog exposes the
+            // override in a later commit.
+            canonical_range: None,
         }
     }
 

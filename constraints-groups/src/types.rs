@@ -1,6 +1,6 @@
 //! Problem-description types.
 
-use crate::vars::GroupListIdx;
+use crate::vars::{GroupListIdx, SizeClassIdx};
 use collomatique_state_colloscopes::StudentId;
 
 /// Names of the extra variables (piece 7). The single family left is
@@ -8,11 +8,20 @@ use collomatique_state_colloscopes::StudentId;
 /// equivalence — see [`crate::extras`] for why that is sound here.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum ExtraVarName {
-    /// 1 if the pair (with `a < b`) shares some group in some list, and
-    /// what the minimizing objective drives to 0 otherwise. Declared only
-    /// for pairs that co-occur in at least one spec; pinned to 1 when the
-    /// pair is already grouped by a kept list.
-    SharedPair { a: StudentId, b: StudentId },
+    /// 1 if the pair (with `a < b`) shares some group in some list *of this
+    /// size class*, and what the minimizing objective drives to 0 otherwise.
+    /// Declared only for pairs that co-occur in at least one spec of the
+    /// class; pinned to 1 when a kept list of the same size range already
+    /// groups the pair.
+    ///
+    /// Split per class so that a cheap meeting in a tutorial group of twenty
+    /// — where everyone meets everyone whatever the model does — cannot
+    /// pre-pay, and thereby free, a colle pair.
+    SharedPair {
+        a: StudentId,
+        b: StudentId,
+        class: SizeClassIdx,
+    },
 }
 
 /// One variant per constraint family (piece 8). A flat enum, no severity

@@ -5,12 +5,12 @@
 //! constrained model too.
 
 use collomatique_constraints_groups::{
-    GenerationPlan, GroupListSpec, ObjectiveWeights, build_group_lists, build_model,
+    GenerationPlan, GroupListSpec, ObjectiveWeights, RangeSource, build_group_lists, build_model,
 };
 use collomatique_ilp::solvers::collo_cbc::ColloCbcSolver;
 use collomatique_state_colloscopes::ids::Id;
 use collomatique_state_colloscopes::{NonEmptyRangeInclusive, StudentId};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU32;
 
 fn student(n: u64) -> StudentId {
@@ -33,7 +33,9 @@ fn model_solves_and_converts() {
     let plan = GenerationPlan {
         specs: vec![(spec, BTreeSet::new())],
         skipped: BTreeSet::new(),
-        pinned_pairs: BTreeSet::new(),
+        pinned_pairs: BTreeMap::new(),
+        // The only spec, so the vote could only ever elect its own range.
+        canonical_range: Some((range(2, 3), RangeSource::Automatic)),
     };
 
     let model = build_model(&plan, ObjectiveWeights::default());

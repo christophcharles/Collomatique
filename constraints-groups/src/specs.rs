@@ -89,6 +89,18 @@ pub struct GenerationRequest {
     pub rebuild: BTreeSet<(PeriodId, SubjectId)>,
     /// Existing prefilled lists whose pairs are pinned as already-shared.
     pub kept_lists: BTreeSet<GroupListId>,
+    /// Canonical group-size range override: `None` elects it automatically
+    /// (a student-weighted vote among the rebuilt specs), `Some` fixes it.
+    pub canonical_range: Option<NonEmptyRangeInclusive<NonZeroU32>>,
+}
+
+/// Where a plan's canonical range came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RangeSource {
+    /// Elected by the student-weighted vote among the specs.
+    Automatic,
+    /// Fixed by the request's override.
+    Manual,
 }
 
 /// The deduplicated, model-ready form of a request.
@@ -102,9 +114,17 @@ pub struct GenerationPlan {
     /// reported so the UI can warn instead of silently dropping them.
     pub skipped: BTreeSet<(PeriodId, SubjectId)>,
     /// Pairs of students (a < b) fixed to "already shared" by the kept
-    /// lists. Only contains pairs where both students co-occur in at least
-    /// one spec — other pairs never get a variable. Unused until piece 7.
-    pub pinned_pairs: BTreeSet<(StudentId, StudentId)>,
+    /// lists, keyed by the kept list's own size range: a pin only discounts
+    /// the size class it was observed in — a kept tutorial must not make
+    /// colle pairs free. Only contains pairs where both students co-occur in
+    /// a spec of that same range; other pairs never get a variable there.
+    pub pinned_pairs:
+        BTreeMap<NonEmptyRangeInclusive<NonZeroU32>, BTreeSet<(StudentId, StudentId)>>,
+    /// The canonical group size — the size the *typical* student is grouped
+    /// at — and where it came from. Size classes further from it weigh less
+    /// in the stability objective (see `VarEnv::class_weight`). `None` only
+    /// when the plan has no specs at all.
+    pub canonical_range: Option<(NonEmptyRangeInclusive<NonZeroU32>, RangeSource)>,
 }
 
 /// A malformed request. These are caller bugs (the config dialog only
@@ -125,9 +145,44 @@ pub enum GenerationPlanError {
     InvalidSpec(PeriodId, SubjectId, GroupListSpecError),
 }
 
+/// Elect the canonical group-size range: the size the typical student is
+/// grouped at. Each spec votes for its own range with weight `students ×
+/// covering (period, subject) pairs` — one vote per real grouping
+/// obligation, weighted by how many students it concerns — so a range used
+/// by two subjects of the whole class beats one used by a single subject
+/// with four students registered.
+///
+/// Ties break toward the *tighter* range: smaller maximum first, then larger
+/// minimum. A range is exactly its (start, end), so that ordering is total
+/// and the outcome never depends on iteration order.
+///
+/// A spec covering nothing votes with weight `students`: that only happens
+/// in hand-built test plans, and a plan whose specs all cover nothing would
+/// otherwise elect on ties alone.
+pub(crate) fn elect_canonical_range(
+    specs: &[(GroupListSpec, BTreeSet<(PeriodId, SubjectId)>)],
+) -> Option<NonEmptyRangeInclusive<NonZeroU32>> {
+    let mut votes: BTreeMap<NonEmptyRangeInclusive<NonZeroU32>, u64> = BTreeMap::new();
+    for (spec, covered) in specs {
+        let weight = spec.students().len() as u64 * covered.len().max(1) as u64;
+        *votes.entry(spec.students_per_group().clone()).or_default() += weight;
+    }
+    votes
+        .into_iter()
+        .max_by_key(|(range, weight)| {
+            (
+                *weight,
+                std::cmp::Reverse(range.end().get()),
+                range.start().get(),
+            )
+        })
+        .map(|(range, _)| range)
+}
+
 /// Turns a user request into the model's input: deduplicated specs, the
-/// pairs nobody is registered for, and the pinned student pairs the kept
-/// lists impose.
+/// pairs nobody is registered for, the pinned student pairs the kept lists
+/// impose, and the canonical group size the objective weighs classes
+/// against.
 pub fn build_generation_plan(
     params: &Parameters,
     request: &GenerationRequest,
@@ -182,13 +237,21 @@ pub fn build_generation_plan(
     let specs: Vec<(GroupListSpec, BTreeSet<(PeriodId, SubjectId)>)> =
         spec_map.into_iter().collect();
 
-    let mut pinned_pairs = BTreeSet::new();
+    let canonical_range = match &request.canonical_range {
+        Some(range) => Some((range.clone(), RangeSource::Manual)),
+        None => elect_canonical_range(&specs).map(|range| (range, RangeSource::Automatic)),
+    };
+
+    let mut pinned_pairs: BTreeMap<_, BTreeSet<(StudentId, StudentId)>> = BTreeMap::new();
     for list_id in &request.kept_lists {
         let list = params
             .group_lists
             .group_list_map
             .get(list_id)
             .expect("kept lists were validated above");
+        // The kept list's own size range is the class its pairs were formed
+        // in, and the only class they discount.
+        let range = list.params().students_per_group.clone();
         let GroupListFilling::Prefilled { groups } = list.filling() else {
             unreachable!("kept lists were validated to be prefilled above");
         };
@@ -198,10 +261,15 @@ pub fn build_generation_plan(
             for (i, &a) in members.iter().enumerate() {
                 for &b in &members[i + 1..] {
                     let coexist = specs.iter().any(|(spec, _)| {
-                        spec.students().contains(&a) && spec.students().contains(&b)
+                        *spec.students_per_group() == range
+                            && spec.students().contains(&a)
+                            && spec.students().contains(&b)
                     });
                     if coexist {
-                        pinned_pairs.insert((a, b));
+                        pinned_pairs
+                            .entry(range.clone())
+                            .or_default()
+                            .insert((a, b));
                     }
                 }
             }
@@ -212,6 +280,7 @@ pub fn build_generation_plan(
         specs,
         skipped,
         pinned_pairs,
+        canonical_range,
     })
 }
 
@@ -273,23 +342,10 @@ pub(crate) mod tests {
         }
     }
 
-    /// A prefilled list with the given groups, unnamed.
+    /// A prefilled list with the given groups, unnamed, at the range of
+    /// subjects 1 and 2 — so its pins land in the class those subjects build.
     pub(crate) fn prefilled_list(groups: &[&[u64]]) -> GroupList {
-        let groups: Vec<PrefilledGroup> = groups
-            .iter()
-            .map(|students| PrefilledGroup {
-                students: set(students),
-            })
-            .collect();
-        GroupList::new(
-            GroupListParameters {
-                name: "Kept".to_string(),
-                students_per_group: range(2, 3),
-                group_names: vec![None; groups.len()],
-            },
-            GroupListFilling::Prefilled { groups },
-        )
-        .expect("consistent prefilled list")
+        prefilled_list_with_range(groups, range(2, 3))
     }
 
     /// Two periods; subjects 1 and 2 share the range 2..=3, subject 3 has
@@ -328,7 +384,30 @@ pub(crate) mod tests {
                 .map(|&(p, s)| (period_id(p), subject_id(s)))
                 .collect(),
             kept_lists: kept.iter().map(|&id| group_list_id(id)).collect(),
+            canonical_range: None,
         }
+    }
+
+    /// A prefilled list with the given groups and size range, unnamed.
+    pub(crate) fn prefilled_list_with_range(
+        groups: &[&[u64]],
+        students_per_group: NonEmptyRangeInclusive<NonZeroU32>,
+    ) -> GroupList {
+        let groups: Vec<PrefilledGroup> = groups
+            .iter()
+            .map(|students| PrefilledGroup {
+                students: set(students),
+            })
+            .collect();
+        GroupList::new(
+            GroupListParameters {
+                name: "Kept".to_string(),
+                students_per_group,
+                group_names: vec![None; groups.len()],
+            },
+            GroupListFilling::Prefilled { groups },
+        )
+        .expect("consistent prefilled list")
     }
 
     #[test]
@@ -497,10 +576,130 @@ pub(crate) mod tests {
             build_generation_plan(&params, &request(&[(1, 1)], &[7])).expect("well-formed request");
 
         // Student 9 belongs to no spec, so the pair (3, 9) never gets a
-        // variable and must not be pinned.
+        // variable and must not be pinned. The kept list has the range
+        // 2..=3, which is the range of subject 1's spec, so the pin lands
+        // in that class.
         assert_eq!(
             plan.pinned_pairs,
-            BTreeSet::from([(student(1), student(2))])
+            BTreeMap::from([(range(2, 3), BTreeSet::from([(student(1), student(2))]))])
         );
+    }
+
+    #[test]
+    fn pins_only_discount_their_own_size_class() {
+        let mut params = base_params();
+        // The kept list groups its students two at a time, so it says
+        // nothing about the 1..=2 class subject 3 builds — and nothing at
+        // all about a class no rebuilt spec uses.
+        params
+            .group_lists
+            .group_list_map
+            .insert(group_list_id(7), prefilled_list(&[&[1, 2], &[3, 4]]));
+
+        // Subject 1 is 2..=3, subject 3 is 1..=2: both are rebuilt, only
+        // the first matches the kept list's range.
+        let plan = build_generation_plan(&params, &request(&[(1, 1), (1, 3)], &[7]))
+            .expect("well-formed request");
+
+        assert_eq!(
+            plan.pinned_pairs,
+            BTreeMap::from([(
+                range(2, 3),
+                BTreeSet::from([(student(1), student(2)), (student(3), student(4))]),
+            )])
+        );
+
+        // A kept list of a range nobody rebuilds pins nothing at all.
+        params.group_lists.group_list_map.insert(
+            group_list_id(8),
+            prefilled_list_with_range(&[&[1, 2, 3, 4]], range(4, 4)),
+        );
+        let plan =
+            build_generation_plan(&params, &request(&[(1, 3)], &[8])).expect("well-formed request");
+        assert!(plan.pinned_pairs.is_empty());
+    }
+
+    #[test]
+    fn canonical_range_is_the_student_weighted_mode() {
+        let mut params = base_params();
+        // Subject 3 (1..=2) covers the whole class of four; subjects 1 and 2
+        // share the range 2..=3 and cover the same four students. Two
+        // covering pairs against one, so 2..=3 wins 8 votes to 4.
+        let plan = build_generation_plan(&params, &request(&[(1, 1), (1, 2), (1, 3)], &[]))
+            .expect("well-formed request");
+        assert_eq!(
+            plan.canonical_range,
+            Some((range(2, 3), RangeSource::Automatic))
+        );
+
+        // Shrink subject 1 and 2's audience to a two-student oddball: 1..=2
+        // now carries 4 votes against 2 + 2, and takes the election.
+        params
+            .assignments
+            .map
+            .insert((period_id(1), subject_id(1)), set(&[1, 2]));
+        params
+            .assignments
+            .map
+            .insert((period_id(1), subject_id(2)), set(&[3, 4]));
+        let plan = build_generation_plan(&params, &request(&[(1, 1), (1, 2), (1, 3)], &[]))
+            .expect("well-formed request");
+        assert_eq!(
+            plan.canonical_range,
+            Some((range(1, 2), RangeSource::Automatic))
+        );
+    }
+
+    #[test]
+    fn canonical_range_ties_break_toward_the_tighter_range() {
+        let mut params = base_params();
+        // One subject each, same four students: 2..=3 and 1..=2 both score
+        // 4. The smaller maximum wins, and among equal maxima the larger
+        // minimum would.
+        let plan = build_generation_plan(&params, &request(&[(1, 1), (1, 3)], &[]))
+            .expect("well-formed request");
+        assert_eq!(
+            plan.canonical_range,
+            Some((range(1, 2), RangeSource::Automatic))
+        );
+
+        // Same maximum now: 2..=2 against 1..=2, still tied at 4 votes each.
+        params.subjects.ordered_subject_list = vec![
+            (subject_id(1), subject_with_range(2, 2)),
+            (subject_id(3), subject_with_range(1, 2)),
+        ]
+        .try_into()
+        .expect("distinct subject ids");
+        let plan = build_generation_plan(&params, &request(&[(1, 1), (1, 3)], &[]))
+            .expect("well-formed request");
+        assert_eq!(
+            plan.canonical_range,
+            Some((range(2, 2), RangeSource::Automatic))
+        );
+    }
+
+    #[test]
+    fn canonical_range_override_wins_and_is_reported_as_manual() {
+        let params = base_params();
+        let mut req = request(&[(1, 1), (1, 2), (1, 3)], &[]);
+        // The vote would elect 2..=3 (see above), and the override need not
+        // even be a range any spec uses.
+        req.canonical_range = Some(range(4, 5));
+        let plan = build_generation_plan(&params, &req).expect("well-formed request");
+        assert_eq!(
+            plan.canonical_range,
+            Some((range(4, 5), RangeSource::Manual))
+        );
+    }
+
+    #[test]
+    fn empty_plan_has_no_canonical_range() {
+        let params = base_params();
+        // Period 2 carries no assignment row, so every requested pair is
+        // skipped and no spec survives to vote.
+        let plan =
+            build_generation_plan(&params, &request(&[(2, 1)], &[])).expect("well-formed request");
+        assert!(plan.specs.is_empty());
+        assert_eq!(plan.canonical_range, None);
     }
 }

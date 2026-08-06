@@ -1,23 +1,50 @@
 //! The variable environment and the base variable of the model.
 
 use crate::specs::{GenerationPlan, GroupListSpec};
-use collomatique_state_colloscopes::StudentId;
+use collomatique_state_colloscopes::{NonEmptyRangeInclusive, StudentId};
 use std::collections::BTreeSet;
+use std::num::NonZeroU32;
 
 /// Pre-loaded data for variable enumeration: the deduplicated specs of a
-/// [`GenerationPlan`], in plan order, together with the pairs already
-/// grouped by the kept lists (the extras of piece 7 read them).
+/// [`GenerationPlan`], in plan order, together with the size classes they
+/// fall into, the pairs already grouped by the kept lists (the extras of
+/// piece 7 read them) and the canonical group size the classes are weighed
+/// against.
 #[derive(Debug, Clone)]
 pub struct VarEnv {
     specs: Vec<GroupListSpec>,
-    pinned_pairs: BTreeSet<(StudentId, StudentId)>,
+    /// The distinct `students_per_group` ranges of the specs, sorted.
+    /// [`SizeClassIdx`] indexes into this vector.
+    classes: Vec<NonEmptyRangeInclusive<NonZeroU32>>,
+    /// Per class, the pairs pinned by a kept list of that same range. Same
+    /// indexing as `classes`; a class no kept list matches gets an empty set.
+    pinned_pairs: Vec<BTreeSet<(StudentId, StudentId)>>,
+    canonical_range: Option<NonEmptyRangeInclusive<NonZeroU32>>,
 }
 
 impl VarEnv {
     pub fn new(plan: &GenerationPlan) -> VarEnv {
+        let specs: Vec<GroupListSpec> = plan.specs.iter().map(|(spec, _)| spec.clone()).collect();
+        let classes: Vec<NonEmptyRangeInclusive<NonZeroU32>> = specs
+            .iter()
+            .map(|spec| spec.students_per_group().clone())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        // Pins of a range no spec uses are dropped here: their pairs have no
+        // variable to discount.
+        let pinned_pairs = classes
+            .iter()
+            .map(|range| plan.pinned_pairs.get(range).cloned().unwrap_or_default())
+            .collect();
         VarEnv {
-            specs: plan.specs.iter().map(|(spec, _)| spec.clone()).collect(),
-            pinned_pairs: plan.pinned_pairs.clone(),
+            specs,
+            classes,
+            pinned_pairs,
+            canonical_range: plan
+                .canonical_range
+                .as_ref()
+                .map(|(range, _source)| range.clone()),
         }
     }
 
@@ -61,15 +88,64 @@ impl VarEnv {
         self.specs[list.0].students_per_group().end().get()
     }
 
-    /// The pairs fixed to "already shared" by the kept lists (`a < b`).
-    pub(crate) fn pinned_pairs(&self) -> &BTreeSet<(StudentId, StudentId)> {
-        &self.pinned_pairs
+    /// The size class of a list: the position of its `students_per_group`
+    /// range in the class table. Panics on a stale index, like
+    /// [`VarEnv::group_count`].
+    pub(crate) fn class_of(&self, list: GroupListIdx) -> SizeClassIdx {
+        let range = self.specs[list.0].students_per_group();
+        SizeClassIdx(
+            self.classes
+                .binary_search(range)
+                .expect("every spec's range is a class of the table"),
+        )
+    }
+
+    /// The size range a class stands for. Panics on a stale class index.
+    pub(crate) fn class_range(&self, class: SizeClassIdx) -> &NonEmptyRangeInclusive<NonZeroU32> {
+        &self.classes[class.0]
+    }
+
+    /// Weight of a size class in the stability objective: how much a pair
+    /// meeting in a group of this class matters, relative to a meeting at
+    /// the canonical size. 1 for the canonical class and anything tighter,
+    /// then decaying like `(canonical_max − 1) / (class_max − 1)` — in a
+    /// tutorial group of 20 every student meets 19 others whatever the model
+    /// does, so such a meeting is a far weaker tie than one in a group of 3,
+    /// and pricing them alike lets tutorials pre-pay (and thereby free) every
+    /// colle pair.
+    ///
+    /// Without a canonical range (a plan with no specs) every class weighs 1.
+    /// A class of maximum size 1 never meets at all and is skipped upstream
+    /// ([`co_occurrences`](crate::extras::co_occurrences)), so the divisor is
+    /// never 0; a *canonical* size of 1 is read as 2 instead, so that a
+    /// document whose typical subject takes students one at a time still
+    /// ranks its real groups by size rather than zeroing the objective.
+    pub(crate) fn class_weight(&self, class: SizeClassIdx) -> f64 {
+        let Some(canonical) = &self.canonical_range else {
+            return 1.0;
+        };
+        let canon_max = canonical.end().get().max(2);
+        let class_max = self.class_range(class).end().get();
+        (f64::from(canon_max - 1) / f64::from(class_max - 1)).min(1.0)
+    }
+
+    /// The pairs fixed to "already shared" *in this class* by the kept lists
+    /// (`a < b`). Panics on a stale class index.
+    pub(crate) fn pinned_pairs(&self, class: SizeClassIdx) -> &BTreeSet<(StudentId, StudentId)> {
+        &self.pinned_pairs[class.0]
     }
 }
 
 /// Index into the deduplicated spec vector of a [`GenerationPlan`].
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct GroupListIdx(pub usize);
+
+/// Index into the deduplicated size-class table of a [`VarEnv`]: the distinct
+/// `students_per_group` ranges of the plan's specs, sorted. Two lists of the
+/// same class are groupings of the same shape, and only inside a class does
+/// reusing a pair mean anything.
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct SizeClassIdx(pub usize);
 
 #[derive(
     Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, collomatique_ilp_modeler::DescribeVar,
@@ -128,25 +204,31 @@ pub(crate) mod tests {
     use super::*;
     use crate::specs::tests::{range, set, student};
     use collomatique_ilp_modeler::DescribeVar;
-    use std::collections::BTreeSet;
+    use std::collections::{BTreeMap, BTreeSet};
 
     /// A plan of bare specs, with no covered pairs (the model never reads
     /// them). The specs must be feasible — an unsatisfiable one has no
-    /// place in a plan at all.
+    /// place in a plan at all. The canonical range is elected from the specs
+    /// by the production vote, so a test plan weighs its size classes exactly
+    /// as a real one would.
     pub(crate) fn plan_of(specs: &[(&[u64], (u32, u32))]) -> GenerationPlan {
+        let specs: Vec<_> = specs
+            .iter()
+            .map(|(students, (min, max))| {
+                (
+                    GroupListSpec::new(set(students), range(*min, *max))
+                        .expect("feasible test spec"),
+                    BTreeSet::new(),
+                )
+            })
+            .collect();
+        let canonical_range = crate::specs::elect_canonical_range(&specs)
+            .map(|range| (range, crate::specs::RangeSource::Automatic));
         GenerationPlan {
-            specs: specs
-                .iter()
-                .map(|(students, (min, max))| {
-                    (
-                        GroupListSpec::new(set(students), range(*min, *max))
-                            .expect("feasible test spec"),
-                        BTreeSet::new(),
-                    )
-                })
-                .collect(),
+            specs,
             skipped: BTreeSet::new(),
-            pinned_pairs: BTreeSet::new(),
+            pinned_pairs: BTreeMap::new(),
+            canonical_range,
         }
     }
 
@@ -162,6 +244,71 @@ pub(crate) mod tests {
         assert_eq!(env.group_count(GroupListIdx(0)), 2); // ceil(6 / 3)
         assert_eq!(env.group_count(GroupListIdx(1)), 3); // ceil(7 / 3)
         assert_eq!(env.group_count(GroupListIdx(2)), 1); // ceil(3 / 4)
+    }
+
+    #[test]
+    fn size_classes_dedup_and_weigh_by_distance_to_the_canonical_size() {
+        // Two lists of 2..=3 (four students each, so 8 votes) against one
+        // tutorial list of 6..=6 (6 votes): the small range is canonical.
+        let plan = plan_of(&[
+            (&[1, 2, 3, 4], (2, 3)),
+            (&[3, 4, 5, 6], (2, 3)),
+            (&[1, 2, 3, 4, 5, 6], (6, 6)),
+        ]);
+        let env = VarEnv::new(&plan);
+
+        // The table is the *distinct* ranges, sorted: 2..=3 then 6..=6.
+        let small = env.class_of(GroupListIdx(0));
+        assert_eq!(small, SizeClassIdx(0));
+        assert_eq!(env.class_of(GroupListIdx(1)), small);
+        let big = env.class_of(GroupListIdx(2));
+        assert_eq!(big, SizeClassIdx(1));
+        assert_eq!(*env.class_range(big), range(6, 6));
+
+        // The canonical class weighs 1; a group of 6 ties its members five
+        // times as loosely as a group of 3.
+        assert_eq!(env.class_weight(small), 1.0);
+        assert_eq!(env.class_weight(big), 2.0 / 5.0);
+    }
+
+    #[test]
+    fn classes_tighter_than_canonical_weigh_one() {
+        // 6..=6 carries 6 votes against 4, so the tutorial size is canonical
+        // here. The formula would give the small class a weight of 5; the
+        // clamp keeps a meeting worth at most one meeting.
+        let plan = plan_of(&[(&[1, 2, 3, 4], (2, 2)), (&[1, 2, 3, 4, 5, 6], (6, 6))]);
+        let env = VarEnv::new(&plan);
+
+        assert_eq!(env.class_weight(env.class_of(GroupListIdx(0))), 1.0);
+        assert_eq!(env.class_weight(env.class_of(GroupListIdx(1))), 1.0);
+    }
+
+    #[test]
+    fn pins_are_read_per_class() {
+        let mut plan = plan_of(&[(&[1, 2, 3, 4], (2, 2)), (&[1, 2, 3, 4], (2, 3))]);
+        plan.pinned_pairs = [
+            (
+                range(2, 2),
+                [(student(1), student(2))].into_iter().collect(),
+            ),
+            // A range no spec uses: dropped, since its pairs have no
+            // variable in any class.
+            (
+                range(4, 4),
+                [(student(3), student(4))].into_iter().collect(),
+            ),
+        ]
+        .into_iter()
+        .collect();
+        let env = VarEnv::new(&plan);
+
+        let tight = env.class_of(GroupListIdx(0));
+        let loose = env.class_of(GroupListIdx(1));
+        assert_eq!(
+            *env.pinned_pairs(tight),
+            BTreeSet::from([(student(1), student(2))])
+        );
+        assert!(env.pinned_pairs(loose).is_empty());
     }
 
     #[test]

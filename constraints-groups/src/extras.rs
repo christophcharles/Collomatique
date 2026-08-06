@@ -28,7 +28,7 @@
 //!   one-sided rows are tight.
 
 use crate::types::{ConstraintDesc, ExtraVarName};
-use crate::vars::{GroupListIdx, Var, VarEnv};
+use crate::vars::{GroupListIdx, SizeClassIdx, Var, VarEnv};
 use collomatique_ilp::Variable;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_ilp_modeler::bundle::{ExtraEntry, ReifyError};
@@ -73,15 +73,26 @@ fn pairs_of(students: &BTreeSet<StudentId>) -> Vec<(StudentId, StudentId)> {
     pairs
 }
 
-/// Which pairs co-occur, and in which lists. A pair gets a `SharedPair`
-/// variable iff this map has an entry for it (roadmap §2.2). The objective
-/// (piece 9) must sum over exactly that set — referencing an undeclared
-/// extra is a build error — so both read this one function.
-pub(crate) fn co_occurrences(env: &VarEnv) -> BTreeMap<(StudentId, StudentId), Vec<GroupListIdx>> {
-    let mut map: BTreeMap<(StudentId, StudentId), Vec<GroupListIdx>> = BTreeMap::new();
+/// Which pairs co-occur, in which size class, and in which lists of it. A
+/// pair gets a `SharedPair` variable per class this map has an entry for
+/// (roadmap §2.2, split per class since the size-class objective). The
+/// objective (piece 9) must sum over exactly that set — referencing an
+/// undeclared extra is a build error — so both read this one function.
+///
+/// Classes of maximum size 1 are skipped: their groups hold one student, so
+/// no pair can ever meet there and the variable would be vacuously 0.
+pub(crate) fn co_occurrences(
+    env: &VarEnv,
+) -> BTreeMap<(StudentId, StudentId, SizeClassIdx), Vec<GroupListIdx>> {
+    let mut map: BTreeMap<(StudentId, StudentId, SizeClassIdx), Vec<GroupListIdx>> =
+        BTreeMap::new();
     for list in env.lists() {
-        for pair in pairs_of(env.students(list)) {
-            map.entry(pair).or_default().push(list);
+        let class = env.class_of(list);
+        if env.class_range(class).end().get() == 1 {
+            continue;
+        }
+        for (a, b) in pairs_of(env.students(list)) {
+            map.entry((a, b, class)).or_default().push(list);
         }
     }
     map
@@ -89,11 +100,12 @@ pub(crate) fn co_occurrences(env: &VarEnv) -> BTreeMap<(StudentId, StudentId), V
 
 fn build_shared_pair(env: &VarEnv) -> MyBundle {
     let mut bundle = MyBundle::new();
-    for ((a, b), lists) in co_occurrences(env) {
-        let var = ExtraVarName::SharedPair { a, b };
-        if env.pinned_pairs().contains(&(a, b)) {
-            // The pair already shares a group in a kept list, so it costs
-            // nothing whatever the model does: the variable is pinned to 1
+    for ((a, b, class), lists) in co_occurrences(env) {
+        let var = ExtraVarName::SharedPair { a, b, class };
+        if env.pinned_pairs(class).contains(&(a, b)) {
+            // The pair already shares a group in a kept list of this class,
+            // so it costs nothing there whatever the model does: the
+            // variable is pinned to 1
             // (an empty conjunction reifies to `indicator = 1`) and no
             // defining row is emitted at all. This is the extras equivalent
             // of the base-variable fixer, which cannot apply here — the
@@ -153,7 +165,7 @@ mod tests {
     use super::*;
     use crate::builder::MyModeler;
     use crate::specs::GenerationPlan;
-    use crate::specs::tests::student;
+    use crate::specs::tests::{range, student};
     use crate::vars::tests::plan_of;
     use collomatique_ilp::ConfigData;
     use collomatique_ilp::linexpr::LinExpr;
@@ -217,10 +229,15 @@ mod tests {
 
     #[test]
     fn declarations_expand_cleanly() {
-        // Two overlapping lists: 1 and 2 are in both, 3 and 4 only in the
-        // first, 5 and 6 only in the second.
+        // Two overlapping lists of the same size class: 1 and 2 are in both,
+        // 3 and 4 only in the first, 5 and 6 only in the second.
         let mut plan = plan_of(&[(&[1, 2, 3, 4], (2, 2)), (&[1, 2, 5, 6], (2, 2))]);
-        plan.pinned_pairs = [(student(1), student(2))].into_iter().collect();
+        plan.pinned_pairs = [(
+            range(2, 2),
+            [(student(1), student(2))].into_iter().collect(),
+        )]
+        .into_iter()
+        .collect();
         let env = VarEnv::new(&plan);
 
         let mut modeler: MyModeler<'_> = Modeler::from_described(&env);
@@ -237,18 +254,56 @@ mod tests {
             .expect("every declared extra should expand");
         let vars = model.problem().get_variables();
 
-        let shared = |a: u64, b: u64| {
+        let shared = |a: u64, b: u64, class: usize| {
             InternalVar::<Var, ExtraVarName>::Extra(ExtraVarName::SharedPair {
                 a: student(a),
                 b: student(b),
+                class: SizeClassIdx(class),
             })
         };
         // 1 and 2 co-occur in both lists (and are pinned), 1 and 5 only in
-        // the second one: both get a variable.
-        assert!(vars.contains_key(&shared(1, 2)));
-        assert!(vars.contains_key(&shared(1, 5)));
+        // the second one: both get a variable of the single class.
+        assert!(vars.contains_key(&shared(1, 2, 0)));
+        assert!(vars.contains_key(&shared(1, 5, 0)));
         // 3 and 5 never share a spec, so the pair is not declared at all.
-        assert!(!vars.contains_key(&shared(3, 5)));
+        assert!(!vars.contains_key(&shared(3, 5, 0)));
+    }
+
+    #[test]
+    fn a_pair_gets_one_variable_per_size_class() {
+        // The same four students grouped two ways — by pairs and by threes —
+        // plus a class of singletons, where nobody can meet anybody.
+        let plan = plan_of(&[
+            (&[1, 2, 3, 4], (1, 1)),
+            (&[1, 2, 3, 4], (2, 2)),
+            (&[1, 2, 3, 4], (3, 4)),
+        ]);
+        let env = VarEnv::new(&plan);
+
+        let mut modeler: MyModeler<'_> = Modeler::from_described(&env);
+        modeler
+            .apply_bundle(build_extras(&env).into_general())
+            .expect("no duplicate extras");
+        let model = modeler
+            .build_full(&env)
+            .expect("every declared extra should expand");
+        let vars = model.problem().get_variables();
+
+        let shared = |a: u64, b: u64, class: usize| {
+            InternalVar::<Var, ExtraVarName>::Extra(ExtraVarName::SharedPair {
+                a: student(a),
+                b: student(b),
+                class: SizeClassIdx(class),
+            })
+        };
+        // Classes are the sorted distinct ranges: 1..=1, 2..=2, 3..=4. The
+        // pair meets in the last two and is a separate variable in each, so
+        // meeting in one never pays for the other.
+        assert!(vars.contains_key(&shared(1, 2, 1)));
+        assert!(vars.contains_key(&shared(1, 2, 2)));
+        // Groups of one hold no pair at all: the variable would be a
+        // vacuous 0 and is not declared.
+        assert!(!vars.contains_key(&shared(1, 2, 0)));
     }
 
     #[test]
@@ -262,10 +317,12 @@ mod tests {
         // `objective.rs`'s tests instead.
         let plan = plan_of(&[(&[1, 2, 3, 4], (2, 2)), (&[1, 2, 5, 6], (2, 2))]);
 
+        // Both lists have the range 2..=2, hence the single class 0.
         let shared = |a: u64, b: u64| {
             extra_var(ExtraVarName::SharedPair {
                 a: student(a),
                 b: student(b),
+                class: SizeClassIdx(0),
             })
         };
 
@@ -300,12 +357,18 @@ mod tests {
     #[test]
     fn pinned_pair_is_free_even_when_never_sharing() {
         let mut plan = plan_of(&[(&[1, 2, 3, 4], (2, 2)), (&[1, 2, 5, 6], (2, 2))]);
-        plan.pinned_pairs = [(student(1), student(2))].into_iter().collect();
+        plan.pinned_pairs = [(
+            range(2, 2),
+            [(student(1), student(2))].into_iter().collect(),
+        )]
+        .into_iter()
+        .collect();
 
         let shared = |a: u64, b: u64| {
             extra_var(ExtraVarName::SharedPair {
                 a: student(a),
                 b: student(b),
+                class: SizeClassIdx(0),
             })
         };
 
@@ -362,6 +425,7 @@ mod tests {
         let shared = extra_var(ExtraVarName::SharedPair {
             a: student(1),
             b: student(2),
+            class: SizeClassIdx(0),
         });
 
         // Only adversarial terms: the placement and the pair are both

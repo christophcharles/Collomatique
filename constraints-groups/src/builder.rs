@@ -87,17 +87,23 @@ mod tests {
         // nothing but base variables, so the extras of the model are
         // exactly those nine columns — the whole `PairInGroup` block, and
         // the helper columns of its reification, are gone.
-        let mut shared_pair = 0;
+        //
+        // The two lists have different ranges, so they are two size classes,
+        // sorted: class 0 is list 1's 1..=2 and class 1 is list 0's 2..=3.
+        // Every pair belongs to exactly one of them here.
+        let mut per_class = [0, 0];
         let mut helpers = 0;
         for v in model.problem().get_variables().keys() {
             // Exhaustive for the same reason as the `match` above.
             match v {
-                InternalVar::Extra(ExtraVarName::SharedPair { .. }) => shared_pair += 1,
+                InternalVar::Extra(ExtraVarName::SharedPair { class, .. }) => {
+                    per_class[class.0] += 1
+                }
                 InternalVar::Helper { .. } => helpers += 1,
                 InternalVar::Base(_) => {}
             }
         }
-        assert_eq!(shared_pair, 9);
+        assert_eq!(per_class, [3, 6]);
         assert_eq!(helpers, 0);
     }
 }

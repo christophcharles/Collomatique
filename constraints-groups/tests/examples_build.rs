@@ -70,6 +70,7 @@ fn all_examples_build() {
         let request = GenerationRequest {
             rebuild,
             kept_lists,
+            canonical_range: None,
         };
         let plan = build_generation_plan(params, &request)
             .unwrap_or_else(|e| panic!("plan build failed for {name}: {e}"));
