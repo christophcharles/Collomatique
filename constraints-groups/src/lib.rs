@@ -12,13 +12,13 @@
 //! The model is complete (end of phase B): the base `StudentInGroup`
 //! binaries — the assignment matrix itself, one variable per (list,
 //! student, group) — the `StudentInGhostGroup` matrix of the *template*
-//! grouping ([`GenerationPlan::ghost`], a virtual list of every student at
-//! the canonical size, which the objective asks the real lists to resemble),
-//! the `SharedPair` extras of piece 7 and the `CanonicalPair` /
-//! `Deviation` extras that price a meeting against the template, the shape
-//! constraints of piece 8 (one group per student, min and max size — over
-//! the template too), the two-term stability objective of piece 9 (minimize
-//! the shared student pairs *and* the meetings away from the template, with
+//! grouping ([`GenerationPlan::ghost`], a computed grouping of every student
+//! at the canonical size, which the objective asks the real lists to
+//! resemble), the `SharedPair` extras of piece 7 and the `RefGroupInGroup`
+//! extras that count how many pieces a list breaks a reference group into,
+//! the shape constraints of piece 8 (one group per student, min and max size
+//! — over the template too), the two-term stability objective of piece 9
+//! (minimize the shared student pairs *and* the shattering of the template, with
 //! configurable weights — [`ObjectiveWeights`], piece 11), and the
 //! inclusion-based incremental
 //! epochs of piece 10 ([`build_incremental_epochs`]), which callers feed to
@@ -52,6 +52,6 @@ pub use specs::{
     RangeSource, build_generation_plan,
 };
 pub use types::{ConstraintDesc, ExtraVarName};
-pub use vars::{GroupListIdx, SizeClassIdx, Var};
+pub use vars::{GroupListIdx, RefGroupIdx, SizeClassIdx, Var};
 
 pub type GroupListsModel = collomatique_ilp_modeler::Model<Var, ExtraVarName, ConstraintDesc>;

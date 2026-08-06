@@ -45,15 +45,12 @@ use crate::vars::{GroupListIdx, Var, VarEnv};
 /// contiguous run). The map therefore names *every* base variable of the
 /// model.
 ///
-/// Solving the template first is the by-hand workflow: prepare generic
-/// groups, then build each list by reusing them, bending the template only if
-/// really needed — which is exactly what the strategy's soft L1 anchor allows
-/// and a hard fix would not. The epoch filter stages the objective by itself.
-/// At epoch 0 the only terms whose footprint is complete are the affinity
-/// rewards (they touch the ghost matrix and nothing else), so epoch 0 is
-/// "partition everybody by affinity" and nothing more; each spec epoch then
-/// picks up its own `Deviation` terms and aligns its list to the anchored
-/// template.
+/// The matrix is now the only thing left in epoch 0: the template grouping is
+/// computed ([`crate::ghost`]), so no extra and no objective term touches
+/// that matrix any more, and epoch 0 is a pure feasibility solve over its
+/// shape rows. Each spec epoch then picks up its own `RefGroupInGroup` terms
+/// and aligns its list to the computed reference grouping. The matrix and its
+/// epoch go away with the rest of the dead template machinery.
 ///
 /// The template used to be left unnamed, on the grounds that a grouping only
 /// the objective reads settles cheaply at the end. It does not: unlisted base

@@ -1,10 +1,10 @@
 //! Problem-description types.
 
-use crate::vars::{GroupListIdx, SizeClassIdx};
+use crate::vars::{GroupListIdx, RefGroupIdx, SizeClassIdx};
 use collomatique_state_colloscopes::StudentId;
 
-/// Names of the extra variables (piece 7). The single family left is
-/// objective-only, and it is defined by one-sided rows rather than a full
+/// Names of the extra variables (piece 7). The live families are
+/// objective-only, and both are defined by one-sided rows rather than a full
 /// equivalence — see [`crate::extras`] for why that is sound here.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum ExtraVarName {
@@ -22,31 +22,38 @@ pub enum ExtraVarName {
         b: StudentId,
         class: SizeClassIdx,
     },
-    /// 1 only if the pair (with `a < b`) shares a group of the *template*
-    /// grouping ([`GenerationPlan::ghost`](crate::GenerationPlan::ghost)).
-    /// One-sided from *above*: any template group holding exactly one of the
-    /// two forces it down, and nothing pushes it up but the objective, which
-    /// wants it up because it is what excuses a meeting from
-    /// [`ExtraVarName::Deviation`]. Under the minimize it is therefore
-    /// exactly "the pair is a template pair".
-    ///
-    /// Declared only when the plan has a template, and only for pairs that
-    /// co-occur somewhere (a pair that never meets is never asked to deviate).
+    /// Dead: nothing declares it any more. It used to say "the template
+    /// groups this pair", which only had to be a variable because the
+    /// template itself was one. Kept for one commit so that this one carries
+    /// no deletion.
     CanonicalPair { a: StudentId, b: StudentId },
-    /// 1 if the pair (with `a < b`) meets in `list` while *not* being a
-    /// template pair. One-sided from below: such a meeting forces it up and
-    /// only the objective holds it down.
-    ///
-    /// This is what [`ExtraVarName::SharedPair`] cannot say. `SharedPair` is
-    /// a step: once a pair has met anywhere in its size class, every further
-    /// meeting is free, so nine lists agreeing on one grouping and one list
-    /// differing cost exactly as much as five and five. A deviation is paid
-    /// per list instead, so the cheapest plan is the one where every list
-    /// looks like the same template.
+    /// Dead, like [`ExtraVarName::CanonicalPair`]. It priced a pair's meeting
+    /// away from the template, which [`ExtraVarName::RefGroupInGroup`] now
+    /// measures directly and per reference group instead of per pair.
     Deviation {
         a: StudentId,
         b: StudentId,
         list: GroupListIdx,
+    },
+    /// 1 ⟺ some student of reference group `ref_group` sits in group `group`
+    /// of `list`. Summed over the list's groups, this is the number of pieces
+    /// the list breaks that reference group into — 1 when the list keeps it
+    /// whole. That sum is the template term of the objective.
+    ///
+    /// This is what [`ExtraVarName::SharedPair`] cannot say. `SharedPair` is
+    /// a step: once a pair has met anywhere in its size class, every further
+    /// meeting is free, so nine lists agreeing on one grouping and one list
+    /// differing cost exactly as much as five and five. A piece count is paid
+    /// per list instead, so the cheapest plan is the one where every list
+    /// reuses the same reference grouping.
+    ///
+    /// Declared only when the plan has a template, and only for (list,
+    /// reference group) pairs that actually intersect — elsewhere it would be
+    /// a vacuous 0.
+    RefGroupInGroup {
+        list: GroupListIdx,
+        ref_group: RefGroupIdx,
+        group: u32,
     },
 }
 

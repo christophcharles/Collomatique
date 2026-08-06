@@ -11,21 +11,15 @@
 //! indicator per (pair, list, group), which was the largest block of the
 //! model by far.
 //!
-//! The template families are one-sided too, in the two opposite directions.
-//! `CanonicalPair` is capped from above by its defining rows (a template
-//! group holding exactly one of the pair forces it to 0) and pushed up only
-//! by the objective, which gains by it: a high `t` relaxes the `Deviation`
-//! rows, and the affinity term rewards it outright. That reward is the same
-//! direction as the relief, so it changes nothing here beyond making the cap
-//! tight for every pair — including one the template groups but that meets in
-//! no list, which the relief alone would leave undecided. `Deviation` is
-//! floored from below by its rows (a meeting of a
-//! non-template pair forces it to 1) and pushed down only by the objective,
-//! which pays for it. Each therefore lands on its tight value under the
-//! minimize, and neither is ever read anywhere else. `Deviation` references
-//! `CanonicalPair`, an extra referencing an extra — the lazy expansion
-//! follows such chains transitively, so declaring `Deviation` is enough to
-//! bring `CanonicalPair` into the built model.
+//! `RefGroupInGroup` is one-sided in the same direction as `SharedPair` and
+//! for the same reasons: `x_s − u ≤ 0` for every member of the reference
+//! group that belongs to the list, so any of them sitting in that group of
+//! the list forces `u` up, and nothing brings it back down but the objective,
+//! which pays for it. Under the minimize each therefore lands on its tight
+//! value — "this reference group has a member here" — and the sum over the
+//! list's groups is exactly the number of pieces the list breaks the
+//! reference group into. The template grouping itself is no longer a
+//! variable: it is computed by [`crate::ghost`] and read here as data.
 //!
 //! One-sidedness is sound because nothing ever reads the variable outside a
 //! minimizing objective:
@@ -45,7 +39,7 @@
 
 use crate::specs::pairs_of;
 use crate::types::{ConstraintDesc, ExtraVarName};
-use crate::vars::{GroupListIdx, SizeClassIdx, Var, VarEnv};
+use crate::vars::{GroupListIdx, RefGroupIdx, SizeClassIdx, Var, VarEnv};
 use collomatique_ilp::Variable;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_ilp_modeler::bundle::{ExtraEntry, ReifyError};
@@ -101,112 +95,78 @@ pub(crate) fn co_occurrences(
     map
 }
 
-/// The (pair, list) sites that get a [`ExtraVarName::Deviation`] variable, and
-/// whose keys are the pairs that get a [`ExtraVarName::CanonicalPair`] one:
-/// the co-occurrence sites of [`co_occurrences`] with the size class dropped.
-/// A deviation is paid once per list a pair meets in, whatever the class,
-/// because the template is a single grouping of everybody — the class only
-/// enters through the weight the objective puts on the site.
+/// The (list, reference group) sites that get a piece count: those whose
+/// intersection is non-empty. A reference group no member of the list belongs
+/// to would be a vacuous 0 in every group of the list and is not declared.
 ///
-/// A list belongs to exactly one class, so merging the class-keyed entries of
-/// a pair never repeats a list. Every pair here also lies inside the template:
-/// the template spans the union of the specs' students, so two students who
-/// co-occur in a spec both have a template group.
+/// Lists whose groups hold a single student are skipped. Their piece count is
+/// the same whatever the model does — one piece per member — so the whole
+/// block would be a constant, and their size class is the one
+/// [`VarEnv::class_weight`] has no meaningful value for.
 ///
-/// Empty without a template ([`VarEnv::ghost`]) — the whole family is then
-/// absent from the extras and from the objective alike, both of which read
-/// this one function.
-pub(crate) fn deviation_sites(env: &VarEnv) -> BTreeMap<(StudentId, StudentId), Vec<GroupListIdx>> {
-    let mut map: BTreeMap<(StudentId, StudentId), Vec<GroupListIdx>> = BTreeMap::new();
-    if env.ghost().is_none() {
-        return map;
+/// Empty without a template ([`VarEnv::ghost`]), since there is then no
+/// reference group at all — so the whole family, and the objective term that
+/// reads it, self-gate on this one function.
+pub(crate) fn scatter_sites(env: &VarEnv) -> Vec<(GroupListIdx, RefGroupIdx)> {
+    let mut sites = Vec::new();
+    for list in env.lists() {
+        if env.max_size(list) == 1 {
+            continue;
+        }
+        let students = env.students(list);
+        for ref_group in env.ref_groups() {
+            if env
+                .ref_group(ref_group)
+                .iter()
+                .any(|s| students.contains(s))
+            {
+                sites.push((list, ref_group));
+            }
+        }
     }
-    for ((a, b, _class), lists) in co_occurrences(env) {
-        map.entry((a, b)).or_default().extend(lists);
-    }
-    for lists in map.values_mut() {
-        lists.sort();
-    }
-    map
+    sites
 }
 
-fn build_canonical_pair(env: &VarEnv) -> MyBundle {
+fn build_ref_group_in_group(env: &VarEnv) -> MyBundle {
     let mut bundle = MyBundle::new();
-    let ghost_groups = env.ghost_group_count();
-    for (a, b) in deviation_sites(env).into_keys() {
-        bundle = bundle
-            .with_extra(
-                ExtraVarName::CanonicalPair { a, b },
-                ExtraEntry::new(Variable::binary(), move |_helpers, _ctx, name| {
-                    // Two rows per template group `g`:
-                    //   `t + y_a − y_b <= 1` and `t − y_a + y_b <= 1`.
-                    // A group holding exactly one of the two makes one of them
-                    // read `t + 1 <= 1`, so `t` is capped at 0; a group
-                    // holding both, or neither, leaves it free. Every student
-                    // sits in exactly one template group, so `t` may reach 1
-                    // exactly when the template groups the pair.
-                    let canonical: IntLinExpr<DefV> = IntLinExpr::var(DefV::Extra(name));
-                    let mut rows = Vec::new();
-                    for group in 0..ghost_groups {
-                        let ya = IntLinExpr::var(DefV::Base(Var::StudentInGhostGroup {
-                            student: a,
-                            group,
-                        }));
-                        let yb = IntLinExpr::var(DefV::Base(Var::StudentInGhostGroup {
-                            student: b,
-                            group,
-                        }));
-                        rows.push(
-                            (canonical.clone() + ya.clone() - yb.clone())
-                                .leq(&IntLinExpr::constant(1))
-                                .into_constraint(),
-                        );
-                        rows.push(
-                            (canonical.clone() - ya + yb)
-                                .leq(&IntLinExpr::constant(1))
-                                .into_constraint(),
-                        );
-                    }
-                    Ok(rows)
-                }),
-            )
-            .expect("no duplicate extras");
-    }
-    bundle
-}
-
-fn build_deviation(env: &VarEnv) -> MyBundle {
-    let mut bundle = MyBundle::new();
-    for ((a, b), lists) in deviation_sites(env) {
-        for list in lists {
-            let groups = env.group_count(list);
+    for (list, ref_group) in scatter_sites(env) {
+        // Only the members the list actually holds — reference groups span
+        // the union of the specs, so they routinely straddle several lists.
+        // A row for an outsider would be harmless (the name is stale, hence
+        // fixed to 0, so the row reads `0 <= u`), just pointless.
+        let members: Vec<StudentId> = env
+            .ref_group(ref_group)
+            .iter()
+            .copied()
+            .filter(|s| env.students(list).contains(s))
+            .collect();
+        for group in 0..env.group_count(list) {
+            let members = members.clone();
             bundle = bundle
                 .with_extra(
-                    ExtraVarName::Deviation { a, b, list },
+                    ExtraVarName::RefGroupInGroup {
+                        list,
+                        ref_group,
+                        group,
+                    },
                     ExtraEntry::new(Variable::binary(), move |_helpers, _ctx, name| {
-                        // `x_a + x_b − t − p <= 1` for every group of the
-                        // list: meeting there while the pair is not a
-                        // template pair reads `2 − 0 − p <= 1` and forces `p`
-                        // up. A template pair (`t = 1`) is excused, and so is
-                        // a group where they do not meet.
-                        let deviation: IntLinExpr<DefV> = IntLinExpr::var(DefV::Extra(name));
-                        let canonical: IntLinExpr<DefV> =
-                            IntLinExpr::var(DefV::Extra(ExtraVarName::CanonicalPair { a, b }));
+                        // `x_s − u <= 0` for every member of the reference
+                        // group that belongs to this list: any of them
+                        // sitting in this group forces `u` up. Nothing pushes
+                        // it back down but the objective, which pays for it —
+                        // the same one-sidedness as `SharedPair`, and sound
+                        // for the same reasons.
+                        let piece: IntLinExpr<DefV> = IntLinExpr::var(DefV::Extra(name));
                         let mut rows = Vec::new();
-                        for group in 0..groups {
-                            let xa = IntLinExpr::var(DefV::Base(Var::StudentInGroup {
+                        for &s in &members {
+                            let x = IntLinExpr::var(DefV::Base(Var::StudentInGroup {
                                 list,
-                                student: a,
-                                group,
-                            }));
-                            let xb = IntLinExpr::var(DefV::Base(Var::StudentInGroup {
-                                list,
-                                student: b,
+                                student: s,
                                 group,
                             }));
                             rows.push(
-                                (xa + xb - canonical.clone() - deviation.clone())
-                                    .leq(&IntLinExpr::constant(1))
+                                (x - piece.clone())
+                                    .leq(&IntLinExpr::constant(0))
                                     .into_constraint(),
                             );
                         }
@@ -279,9 +239,7 @@ fn build_shared_pair(env: &VarEnv) -> MyBundle {
 
 pub(crate) fn build_extras(env: &VarEnv) -> MyBundle {
     build_shared_pair(env)
-        .merge(build_canonical_pair(env))
-        .expect("no duplicate extras")
-        .merge(build_deviation(env))
+        .merge(build_ref_group_in_group(env))
         .expect("no duplicate extras")
 }
 
@@ -290,7 +248,7 @@ mod tests {
     use super::*;
     use crate::builder::MyModeler;
     use crate::specs::GenerationPlan;
-    use crate::specs::tests::{range, student};
+    use crate::specs::tests::{range, set, student};
     use crate::vars::tests::plan_of;
     use collomatique_ilp::ConfigData;
     use collomatique_ilp::linexpr::LinExpr;
@@ -347,31 +305,13 @@ mod tests {
         )
     }
 
-    /// The same, for the template grouping. The harness leaves the size
-    /// constraints out, so the template — like every list here — is placed
-    /// entirely by these pushes, under its "exactly one group" rows alone.
-    fn place_ghost(s: u64, group: u32) -> (f64, V) {
-        (
-            100.0,
-            base_var(Var::StudentInGhostGroup {
-                student: student(s),
-                group,
-            }),
-        )
-    }
-
-    fn canonical(a: u64, b: u64) -> V {
-        extra_var(ExtraVarName::CanonicalPair {
-            a: student(a),
-            b: student(b),
-        })
-    }
-
-    fn deviation(a: u64, b: u64, list: usize) -> V {
-        extra_var(ExtraVarName::Deviation {
-            a: student(a),
-            b: student(b),
+    /// The piece indicator "reference group `ref_group` has a member in group
+    /// `group` of `list`".
+    fn piece(list: usize, ref_group: usize, group: u32) -> V {
+        extra_var(ExtraVarName::RefGroupInGroup {
             list: GroupListIdx(list),
+            ref_group: RefGroupIdx(ref_group),
+            group,
         })
     }
 
@@ -563,45 +503,20 @@ mod tests {
     }
 
     #[test]
-    fn the_template_caps_the_canonical_pair() {
-        // Four students at 2..=2, so the template has two groups. Placed by
-        // hand as {1, 3} / {2, 4}.
+    fn a_member_in_a_group_forces_the_piece_up() {
+        // Six students at 2..=2, so the list has three groups and the
+        // computed template three reference groups — {1, 2}, {3, 4} and
+        // {5, 6}, since nothing in this plan tells the pairs apart and the
+        // clustering breaks ties by student id.
         //
-        // Only the ≤ direction can be tested by an adversary, mirroring
-        // `SharedPair`: the rows are one-sided the other way round, so a pair
-        // the template *does* group is simply free to rise. Both cases show
-        // up here — the separated pair must fall against its push, the
-        // grouped one must follow it.
-        let plan = plan_of(&[(&[1, 2, 3, 4], (2, 2))]);
-
-        let cfg = solve_with_objective(
-            &plan,
-            &[
-                place_ghost(1, 0),
-                place_ghost(3, 0),
-                place_ghost(2, 1),
-                place_ghost(4, 1),
-                // Both pushed *up*, which is the direction the objective
-                // pushes them in the real model.
-                (1.0, canonical(1, 2)),
-                (1.0, canonical(1, 3)),
-            ],
-        );
-
-        assert_eq!(value(&cfg, canonical(1, 2)), 0.0);
-        assert_eq!(value(&cfg, canonical(1, 3)), 1.0);
-    }
-
-    #[test]
-    fn a_non_canonical_meeting_forces_the_deviation_up() {
-        // Six students at 2..=2: three groups in the list and three in the
-        // template. The list is placed as {1, 2} / {3, 4} / {5, 6} and the
-        // template as {1, 2} / {3, 5} / {4, 6}, so the three cases the
-        // deviation must tell apart are all present at once.
+        // The list is placed as {1, 2} / {3, 5} / {4, 6}: reference group 0
+        // stays whole in one group, while reference groups 1 and 2 are each
+        // cut in half.
         //
-        // Every deviation is pushed *down*, the direction the objective
-        // pushes it in: whichever one comes back at 1 was held up by its
-        // defining rows and by nothing else.
+        // Only the ≥ direction can be tested by an adversary, mirroring
+        // `SharedPair`: the rows are one-sided, so every piece is pushed
+        // *down* — the direction the objective pushes it in — and whichever
+        // comes back at 1 was held up by its defining rows alone.
         let plan = plan_of(&[(&[1, 2, 3, 4, 5, 6], (2, 2))]);
 
         let cfg = solve_with_objective(
@@ -610,31 +525,88 @@ mod tests {
                 place(0, 1, 0),
                 place(0, 2, 0),
                 place(0, 3, 1),
-                place(0, 4, 1),
-                place(0, 5, 2),
+                place(0, 5, 1),
+                place(0, 4, 2),
                 place(0, 6, 2),
-                place_ghost(1, 0),
-                place_ghost(2, 0),
-                place_ghost(3, 1),
-                place_ghost(5, 1),
-                place_ghost(4, 2),
-                place_ghost(6, 2),
-                (-1.0, deviation(1, 2, 0)),
-                (-1.0, deviation(3, 4, 0)),
-                (-1.0, deviation(3, 5, 0)),
+                (-1.0, piece(0, 0, 0)),
+                (-1.0, piece(0, 0, 1)),
+                (-1.0, piece(0, 1, 1)),
+                (-1.0, piece(0, 1, 2)),
             ],
         );
 
-        // 1 and 2 meet in the list *and* in the template: the meeting
-        // follows the template, so nothing holds the deviation up.
-        assert_eq!(value(&cfg, deviation(1, 2, 0)), 0.0);
-        // 3 and 4 meet in the list while the template separates them: this
-        // is the deviation, and the push cannot bring it down.
-        assert_eq!(value(&cfg, deviation(3, 4, 0)), 1.0);
-        // 3 and 5 are a template pair the list does not group. No meeting,
-        // no deviation — a pair may differ from the template for free as
-        // long as it is the list that stays apart.
-        assert_eq!(value(&cfg, deviation(3, 5, 0)), 0.0);
+        // Reference group 0 is whole in the list's group 0: one piece there,
+        // and nothing holds it up anywhere else.
+        assert_eq!(value(&cfg, piece(0, 0, 0)), 1.0);
+        assert_eq!(value(&cfg, piece(0, 0, 1)), 0.0);
+        // Reference group 1 is {3, 4}, and the list separates them: both
+        // indicators are held up, which is the two-piece count the objective
+        // charges for.
+        assert_eq!(value(&cfg, piece(0, 1, 1)), 1.0);
+        assert_eq!(value(&cfg, piece(0, 1, 2)), 1.0);
+    }
+
+    #[test]
+    fn a_reference_group_is_counted_over_the_members_the_list_holds() {
+        // Reference groups span the union of the specs, so one routinely
+        // straddles several lists. Here the two lists overlap in student 4
+        // alone, and the clustering — which follows the pair (4, ·) links
+        // and breaks the rest by id — makes the reference groups
+        // {1, 2, 4}, {3, 5} and {6, 7}.
+        //
+        // List 1 is {4, 5, 6, 7}, so it holds one member of reference group
+        // 0 and one of reference group 1. Placed as {4, 5} / {6, 7}, it
+        // keeps every reference group it touches in a single piece — the
+        // members it does *not* hold are none of its business.
+        let plan = plan_of(&[(&[1, 2, 3, 4], (2, 3)), (&[4, 5, 6, 7], (2, 3))]);
+        assert_eq!(
+            plan.ghost
+                .as_ref()
+                .expect("this plan has a template")
+                .groups(),
+            [set(&[1, 2, 4]), set(&[3, 5]), set(&[6, 7])],
+        );
+
+        let cfg = solve_with_objective(
+            &plan,
+            &[
+                place(1, 4, 0),
+                place(1, 5, 0),
+                place(1, 6, 1),
+                place(1, 7, 1),
+                (-1.0, piece(1, 0, 0)),
+                (-1.0, piece(1, 0, 1)),
+                (-1.0, piece(1, 1, 0)),
+            ],
+        );
+
+        // Student 4 is the only member of reference group 0 that list 1
+        // holds, and it sits in group 0.
+        assert_eq!(value(&cfg, piece(1, 0, 0)), 1.0);
+        assert_eq!(value(&cfg, piece(1, 0, 1)), 0.0);
+        // Same for student 5 and reference group 1: one piece, not two,
+        // even though student 3 is elsewhere entirely.
+        assert_eq!(value(&cfg, piece(1, 1, 0)), 1.0);
+    }
+
+    #[test]
+    fn a_reference_group_outside_the_list_is_not_declared() {
+        // Two disjoint lists of the same range. The template spans their
+        // union — eight students in four reference groups of two, which the
+        // tie-breaking clustering makes {1, 2}, {3, 4}, {5, 6}, {7, 8} — so
+        // each list meets exactly two of them.
+        let plan = plan_of(&[(&[1, 2, 3, 4], (2, 2)), (&[5, 6, 7, 8], (2, 2))]);
+        let env = VarEnv::new(&plan);
+
+        assert_eq!(
+            scatter_sites(&env),
+            vec![
+                (GroupListIdx(0), RefGroupIdx(0)),
+                (GroupListIdx(0), RefGroupIdx(1)),
+                (GroupListIdx(1), RefGroupIdx(2)),
+                (GroupListIdx(1), RefGroupIdx(3)),
+            ],
+        );
     }
 
     #[test]
@@ -642,7 +614,7 @@ mod tests {
         let mut plan = plan_of(&[(&[1, 2, 3, 4], (2, 2))]);
         plan.ghost = None;
         let env = VarEnv::new(&plan);
-        assert!(deviation_sites(&env).is_empty());
+        assert!(scatter_sites(&env).is_empty());
 
         let mut modeler: MyModeler<'_> = Modeler::from_described(&env);
         modeler
@@ -661,11 +633,10 @@ mod tests {
                 class: SizeClassIdx(0),
             }
         )));
-        assert!(vars.keys().all(|v| !matches!(
-            v,
-            InternalVar::Extra(ExtraVarName::CanonicalPair { .. })
-                | InternalVar::Extra(ExtraVarName::Deviation { .. })
-        )));
+        assert!(
+            vars.keys()
+                .all(|v| !matches!(v, InternalVar::Extra(ExtraVarName::RefGroupInGroup { .. })))
+        );
     }
 
     #[test]

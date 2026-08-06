@@ -178,6 +178,7 @@ mod tests {
         // sorted: class 0 is list 1's 1..=2 and class 1 is list 0's 2..=3.
         // Every pair belongs to exactly one of them here.
         let mut per_class = [0, 0];
+        let mut pieces = 0;
         let mut canonical = 0;
         let mut deviation = 0;
         let mut helpers = 0;
@@ -187,6 +188,7 @@ mod tests {
                 InternalVar::Extra(ExtraVarName::SharedPair { class, .. }) => {
                     per_class[class.0] += 1
                 }
+                InternalVar::Extra(ExtraVarName::RefGroupInGroup { .. }) => pieces += 1,
                 InternalVar::Extra(ExtraVarName::CanonicalPair { .. }) => canonical += 1,
                 InternalVar::Extra(ExtraVarName::Deviation { .. }) => deviation += 1,
                 InternalVar::Helper { .. } => helpers += 1,
@@ -194,12 +196,19 @@ mod tests {
             }
         }
         assert_eq!(per_class, [3, 6]);
-        // The template families ignore the size class — one `CanonicalPair`
-        // per co-occurring pair, and one `Deviation` per (pair, list) site.
-        // The lists are disjoint, so each of the nine pairs meets in exactly
-        // one of them and the two counts coincide here.
-        assert_eq!(canonical, 9);
-        assert_eq!(deviation, 9);
+        // The template spans the union at the canonical 2..=3, so its three
+        // reference groups are {1, 2, 3}, {4, 5} and {6, 7}: the clustering
+        // sees no signal beyond "same spec", and breaks ties by student id.
+        // List 0 ({1, 2, 3, 4}) meets the first two, list 1 ({5, 6, 7}) the
+        // last two, so there are four sites — and one variable per site and
+        // group of its list, 2 groups each.
+        assert_eq!(pieces, 4 * 2);
+        // The per-pair template families are gone from the built model: what
+        // used to be C(4,2) + C(3,2) = 9 columns of each, with two rows per
+        // template group behind every one of them. The declarations follow
+        // in the next commit.
+        assert_eq!(canonical, 0);
+        assert_eq!(deviation, 0);
         assert_eq!(helpers, 0);
     }
 

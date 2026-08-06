@@ -14,10 +14,6 @@ use std::num::NonZeroU32;
 #[derive(Debug, Clone)]
 pub struct VarEnv {
     specs: Vec<GroupListSpec>,
-    /// Per list, how many (period, subject) slots its spec covers, floored
-    /// at 1 — how many times the grouping is actually used. Same indexing as
-    /// `specs`; same floor as the canonical vote's weight.
-    multiplicities: Vec<u64>,
     /// The distinct `students_per_group` ranges of the specs, sorted.
     /// [`SizeClassIdx`] indexes into this vector.
     classes: Vec<NonEmptyRangeInclusive<NonZeroU32>>,
@@ -34,11 +30,6 @@ pub struct VarEnv {
 impl VarEnv {
     pub fn new(plan: &GenerationPlan) -> VarEnv {
         let specs: Vec<GroupListSpec> = plan.specs.iter().map(|(spec, _)| spec.clone()).collect();
-        let multiplicities: Vec<u64> = plan
-            .specs
-            .iter()
-            .map(|(_, covered)| covered.len().max(1) as u64)
-            .collect();
         let classes: Vec<NonEmptyRangeInclusive<NonZeroU32>> = specs
             .iter()
             .map(|spec| spec.students_per_group().clone())
@@ -53,7 +44,6 @@ impl VarEnv {
             .collect();
         VarEnv {
             specs,
-            multiplicities,
             classes,
             pinned_pairs,
             canonical_range: plan
@@ -79,13 +69,6 @@ impl VarEnv {
         let n = spec.students().len() as u32;
         let max = spec.students_per_group().end().get();
         n.div_ceil(max)
-    }
-
-    /// How many (period, subject) slots `list`'s spec covers (at least 1):
-    /// the weight of that list when the objective asks how much two students
-    /// share. Panics on a stale index, like [`VarEnv::group_count`].
-    pub(crate) fn multiplicity(&self, list: GroupListIdx) -> u64 {
-        self.multiplicities[list.0]
     }
 
     /// The list indices of the plan, in order.
@@ -156,6 +139,24 @@ impl VarEnv {
         self.ghost.as_ref()
     }
 
+    /// The reference groups of the template, in build order. Empty without a
+    /// template, so every family that loops over them self-gates on the
+    /// plan having one.
+    pub(crate) fn ref_groups(&self) -> impl Iterator<Item = RefGroupIdx> {
+        (0..self.ghost_group_count() as usize).map(RefGroupIdx)
+    }
+
+    /// The students of one reference group. Panics without a template, or on
+    /// a stale index — like [`VarEnv::group_count`], and for the same reason:
+    /// the index can only have come from [`VarEnv::ref_groups`].
+    pub(crate) fn ref_group(&self, ref_group: RefGroupIdx) -> &BTreeSet<StudentId> {
+        &self
+            .ghost
+            .as_ref()
+            .expect("a reference group index implies a template")
+            .groups()[ref_group.0]
+    }
+
     /// Number of groups of the template: the length of its group vector,
     /// which [`build_ghost`](crate::ghost) built at the same closed count as
     /// [`VarEnv::group_count`]. 0 without a template, so `0..count` is the
@@ -182,6 +183,14 @@ pub struct GroupListIdx(pub usize);
 /// reusing a pair mean anything.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SizeClassIdx(pub usize);
+
+/// Index into the group vector of the template
+/// ([`crate::GhostGrouping`]): one of the reference groups the
+/// generated lists are asked to reuse. Unlike [`SizeClassIdx`] it names a
+/// concrete set of students, since the template is computed rather than
+/// solved.
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct RefGroupIdx(pub usize);
 
 #[derive(
     Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, collomatique_ilp_modeler::DescribeVar,
