@@ -56,10 +56,10 @@ fn plan_report(plan: &GenerationPlan, env: &VarEnv) -> Vec<String> {
     match &plan.ghost {
         Some(ghost) => lines.push(format!(
             "[build_model] Template grouping: {} students in {} groups of {}-{}",
-            ghost.students().len(),
+            ghost.spec().students().len(),
             env.ghost_group_count(),
-            ghost.students_per_group().start().get(),
-            ghost.students_per_group().end().get(),
+            ghost.spec().students_per_group().start().get(),
+            ghost.spec().students_per_group().end().get(),
         )),
         // The three ways to end up without one, told apart by the canonical
         // range beside it: no specs at all, a manual size that cannot split

@@ -43,6 +43,7 @@
 //!   true objective with the base values fixed, and under a minimize the
 //!   one-sided rows are tight.
 
+use crate::specs::pairs_of;
 use crate::types::{ConstraintDesc, ExtraVarName};
 use crate::vars::{GroupListIdx, SizeClassIdx, Var, VarEnv};
 use collomatique_ilp::Variable;
@@ -50,7 +51,7 @@ use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_ilp_modeler::bundle::{ExtraEntry, ReifyError};
 use collomatique_ilp_modeler::{ExtraVar, IntConstraintBundle, Var as ModelerVar};
 use collomatique_state_colloscopes::StudentId;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 pub(crate) type V = ModelerVar<Var, ExtraVarName>;
 
@@ -73,20 +74,6 @@ pub(crate) fn base_var(v: Var) -> V {
 
 pub(crate) fn extra_var(v: ExtraVarName) -> V {
     ModelerVar::Extra(v)
-}
-
-/// The pairs `(a, b)` with `a < b` of a student set, in order. `BTreeSet`
-/// iteration is sorted, so taking the members in order and pairing each with
-/// its successors guarantees `a < b`.
-fn pairs_of(students: &BTreeSet<StudentId>) -> Vec<(StudentId, StudentId)> {
-    let members: Vec<StudentId> = students.iter().copied().collect();
-    let mut pairs = Vec::new();
-    for (i, &a) in members.iter().enumerate() {
-        for &b in &members[i + 1..] {
-            pairs.push((a, b));
-        }
-    }
-    pairs
 }
 
 /// Which pairs co-occur, in which size class, and in which lists of it. A

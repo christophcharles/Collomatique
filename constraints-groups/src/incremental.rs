@@ -155,7 +155,7 @@ pub fn build_incremental_epochs(plan: &GenerationPlan) -> HashMap<Var, u32> {
     // The template's own matrix, solved first. Naming it is also what keeps
     // the strategy's automatic final epoch empty.
     if let Some(ghost) = &plan.ghost {
-        for &student in ghost.students() {
+        for &student in ghost.spec().students() {
             for group in 0..env.ghost_group_count() {
                 epochs.insert(Var::StudentInGhostGroup { student, group }, 0);
             }

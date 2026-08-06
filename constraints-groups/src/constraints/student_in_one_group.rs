@@ -36,7 +36,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         }
     }
     if let Some(ghost) = env.ghost() {
-        for &student in ghost.students() {
+        for &student in ghost.spec().students() {
             let sum: IntLinExpr<V> = (0..env.ghost_group_count())
                 .map(|group| IntLinExpr::var(base_var(Var::StudentInGhostGroup { student, group })))
                 .sum();

@@ -5,7 +5,8 @@
 //! constrained model too.
 
 use collomatique_constraints_groups::{
-    GenerationPlan, GroupListSpec, ObjectiveWeights, RangeSource, build_group_lists, build_model,
+    GenerationPlan, GhostGrouping, GroupListSpec, ObjectiveWeights, RangeSource, build_group_lists,
+    build_model,
 };
 use collomatique_ilp::solvers::collo_cbc::ColloCbcSolver;
 use collomatique_state_colloscopes::ids::Id;
@@ -36,8 +37,15 @@ fn model_solves_and_converts() {
         pinned_pairs: BTreeMap::new(),
         // The only spec, so the vote could only ever elect its own range.
         canonical_range: Some((range(2, 3), RangeSource::Automatic)),
-        // And the template spans the same students at the same size.
-        ghost: Some(spec),
+        // And the template spans the same students at the same size, split
+        // by hand like everything else here — ceil(6 / 3) = 2 groups of 3.
+        ghost: Some(GhostGrouping::new(
+            spec,
+            vec![
+                (1..=3).map(student).collect(),
+                (4..=6).map(student).collect(),
+            ],
+        )),
     };
 
     let model = build_model(&plan, ObjectiveWeights::default());

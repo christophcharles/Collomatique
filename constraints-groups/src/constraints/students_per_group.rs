@@ -66,6 +66,7 @@ fn build_for_ghost_group(
 ) -> MyBundle {
     let ghost = env.ghost().expect("the caller checked for a template");
     let count: IntLinExpr<V> = ghost
+        .spec()
         .students()
         .iter()
         .map(|&student| IntLinExpr::var(base_var(Var::StudentInGhostGroup { student, group })))
@@ -100,8 +101,8 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         }
     }
     if let Some(ghost) = env.ghost() {
-        let min_students = ghost.students_per_group().start().get();
-        let max_students = ghost.students_per_group().end().get();
+        let min_students = ghost.spec().students_per_group().start().get();
+        let max_students = ghost.spec().students_per_group().end().get();
         for group in 0..env.ghost_group_count() {
             bundle = build_for_ghost_group(env, bundle, group, min_students, max_students);
         }

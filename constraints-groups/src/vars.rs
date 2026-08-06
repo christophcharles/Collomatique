@@ -1,5 +1,6 @@
 //! The variable environment and the base variable of the model.
 
+use crate::ghost::GhostGrouping;
 use crate::specs::{GenerationPlan, GroupListSpec};
 use collomatique_state_colloscopes::{NonEmptyRangeInclusive, StudentId};
 use std::collections::BTreeSet;
@@ -27,7 +28,7 @@ pub struct VarEnv {
     /// The template grouping. Deliberately *not* one of the `specs`: it has
     /// its own variable, gets no `SharedPair` and never becomes an output
     /// list.
-    ghost: Option<GroupListSpec>,
+    ghost: Option<GhostGrouping>,
 }
 
 impl VarEnv {
@@ -132,28 +133,13 @@ impl VarEnv {
         &self.classes[class.0]
     }
 
-    /// Weight of a size class in the stability objective: how much a pair
-    /// meeting in a group of this class matters, relative to a meeting at
-    /// the canonical size. 1 for the canonical class and anything tighter,
-    /// then decaying like `(canonical_max − 1) / (class_max − 1)` — in a
-    /// tutorial group of 20 every student meets 19 others whatever the model
-    /// does, so such a meeting is a far weaker tie than one in a group of 3,
-    /// and pricing them alike lets tutorials pre-pay (and thereby free) every
-    /// colle pair.
-    ///
-    /// Without a canonical range (a plan with no specs) every class weighs 1.
+    /// Weight of a size class in the stability objective, by class index:
+    /// [`crate::specs::class_weight`] applied to this env's canonical range.
     /// A class of maximum size 1 never meets at all and is skipped upstream
-    /// ([`co_occurrences`](crate::extras::co_occurrences)), so the divisor is
-    /// never 0; a *canonical* size of 1 is read as 2 instead, so that a
-    /// document whose typical subject takes students one at a time still
-    /// ranks its real groups by size rather than zeroing the objective.
+    /// ([`co_occurrences`](crate::extras::co_occurrences)), so the divisor of
+    /// that formula is never 0 here.
     pub(crate) fn class_weight(&self, class: SizeClassIdx) -> f64 {
-        let Some(canonical) = &self.canonical_range else {
-            return 1.0;
-        };
-        let canon_max = canonical.end().get().max(2);
-        let class_max = self.class_range(class).end().get();
-        (f64::from(canon_max - 1) / f64::from(class_max - 1)).min(1.0)
+        crate::specs::class_weight(self.canonical_range.as_ref(), self.class_range(class))
     }
 
     /// The pairs fixed to "already shared" *in this class* by the kept lists
@@ -164,13 +150,14 @@ impl VarEnv {
 
     /// The template grouping, or `None` when the plan has none. It is not
     /// one of the [`lists`](VarEnv::lists): the objective measures the real
-    /// lists *against* it, so it must be decided by the solver like a list
-    /// but must never be counted as one.
-    pub(crate) fn ghost(&self) -> Option<&GroupListSpec> {
+    /// lists *against* it, so it gets its own matrix but must never be
+    /// counted as a list.
+    pub(crate) fn ghost(&self) -> Option<&GhostGrouping> {
         self.ghost.as_ref()
     }
 
-    /// Number of groups of the template, by the same closed form as
+    /// Number of groups of the template: the length of its group vector,
+    /// which [`build_ghost`](crate::ghost) built at the same closed count as
     /// [`VarEnv::group_count`]. 0 without a template, so `0..count` is the
     /// empty loop everywhere the ghost pass runs.
     ///
@@ -179,10 +166,7 @@ impl VarEnv {
     /// configuration, or to enumerate the base variables of an epoch.
     pub fn ghost_group_count(&self) -> u32 {
         match &self.ghost {
-            Some(ghost) => {
-                let n = ghost.students().len() as u32;
-                n.div_ceil(ghost.students_per_group().end().get())
-            }
+            Some(ghost) => ghost.groups().len() as u32,
             None => 0,
         }
     }
@@ -268,7 +252,7 @@ impl Var {
 
     fn compute_ghost_student_range(env: &VarEnv) -> Vec<StudentId> {
         match env.ghost() {
-            Some(ghost) => ghost.students().iter().copied().collect(),
+            Some(ghost) => ghost.spec().students().iter().copied().collect(),
             None => Vec::new(),
         }
     }
@@ -306,7 +290,7 @@ pub(crate) mod tests {
             .collect();
         let canonical_range = crate::specs::elect_canonical_range(&specs)
             .map(|range| (range, crate::specs::RangeSource::Automatic));
-        let ghost = crate::specs::build_ghost(&specs, canonical_range.as_ref());
+        let ghost = crate::ghost::build_ghost(&specs, &BTreeMap::new(), canonical_range.as_ref());
         GenerationPlan {
             specs,
             skipped: BTreeSet::new(),

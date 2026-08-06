@@ -1,6 +1,7 @@
 //! Input side of the translation layer: from the document state and the
 //! user's request to the deduplicated list specs the model is built from.
 
+use crate::ghost::{GhostGrouping, build_ghost};
 use collomatique_state_colloscopes::colloscope_params::Parameters;
 use collomatique_state_colloscopes::group_lists::GroupListFilling;
 use collomatique_state_colloscopes::{
@@ -128,16 +129,18 @@ pub struct GenerationPlan {
     /// The template ("ghost") grouping: every student of the plan, split at
     /// the canonical size. It is not a list of the plan — it is never
     /// converted to output ([`build_group_lists`](crate::build_group_lists)
-    /// iterates `specs`) and gets no `SharedPair` variable — but a grouping
-    /// the solver decides like any other, which the objective then asks the
-    /// real lists to resemble. That is what tells "nine identical lists and
-    /// one different" from "five and five", which the per-pair step term
-    /// cannot see.
+    /// iterates `specs`) and gets no `SharedPair` variable — but a fixed
+    /// grouping the objective asks the real lists to resemble. That is what
+    /// tells "nine identical lists and one different" from "five and five",
+    /// which the per-pair step term cannot see.
+    ///
+    /// Computed here rather than decided by the solver: see the
+    /// [`ghost`](crate::ghost) module doc.
     ///
     /// `None` when the plan has no specs, and when the canonical size cannot
     /// split the whole student body at all: the template term is then simply
     /// absent.
-    pub ghost: Option<GroupListSpec>,
+    pub ghost: Option<GhostGrouping>,
 }
 
 /// A malformed request. These are caller bugs (the config dialog only
@@ -199,40 +202,48 @@ pub(crate) fn elect_canonical_range(
     ranked_canonical_ranges(specs).into_iter().next()
 }
 
-/// The template grouping of a plan: every student of every spec, split at
-/// the canonical size. A [`GroupListSpec`] like any other, so the model can
-/// enumerate and constrain it exactly as it does the real lists — it is only
-/// the *use* that differs (no output list, no `SharedPair`).
+/// Weight of a size class in the objective: how much a pair meeting in a
+/// group of this range matters, relative to a meeting at the canonical size.
+/// 1 for the canonical range and anything tighter, then decaying like
+/// `(canonical_max − 1) / (class_max − 1)` — in a tutorial group of 20 every
+/// student meets 19 others whatever the model does, so such a meeting is a
+/// far weaker tie than one in a group of 3, and pricing them alike lets
+/// tutorials pre-pay (and thereby free) every colle pair.
 ///
-/// The canonical range need not be able to split the whole student body: it
-/// was elected as the typical size of a *subject*, and the union of the
-/// subjects is larger than any of them. When it cannot, an automatic range
-/// falls through to the runners-up of the vote — the other real group sizes
-/// of the document, in vote order — and takes the first that partitions the
-/// union. A *manual* range does not: the user fixed it on purpose, and
-/// templating at a size they did not ask for would be worse than having no
-/// template at all.
-pub(crate) fn build_ghost(
-    specs: &[(GroupListSpec, BTreeSet<(PeriodId, SubjectId)>)],
-    canonical_range: Option<&(NonEmptyRangeInclusive<NonZeroU32>, RangeSource)>,
-) -> Option<GroupListSpec> {
-    let (range, source) = canonical_range?;
-    let students: BTreeSet<StudentId> = specs
-        .iter()
-        .flat_map(|(spec, _covered)| spec.students().iter().copied())
-        .collect();
-    if let Ok(ghost) = GroupListSpec::new(students.clone(), range.clone()) {
-        return Some(ghost);
+/// Without a canonical range (a plan with no specs) every class weighs 1.
+///
+/// Callers must skip ranges of maximum 1 — a group of one holds no pair, so
+/// the divisor is never 0. A *canonical* maximum of 1 is read as 2 instead,
+/// so a document whose typical subject takes students one at a time still
+/// ranks its real groups by size rather than zeroing the objective.
+///
+/// Free rather than a [`VarEnv`](crate::vars::VarEnv) method because the
+/// template grouping is computed from the raw specs, before any `VarEnv`
+/// exists; `VarEnv::class_weight` delegates here.
+pub(crate) fn class_weight(
+    canonical_range: Option<&NonEmptyRangeInclusive<NonZeroU32>>,
+    class_range: &NonEmptyRangeInclusive<NonZeroU32>,
+) -> f64 {
+    let Some(canonical) = canonical_range else {
+        return 1.0;
+    };
+    let canon_max = canonical.end().get().max(2);
+    let class_max = class_range.end().get();
+    (f64::from(canon_max - 1) / f64::from(class_max - 1)).min(1.0)
+}
+
+/// The pairs `(a, b)` with `a < b` of a student set, in order. `BTreeSet`
+/// iteration is sorted, so taking the members in order and pairing each with
+/// its successors guarantees `a < b`.
+pub(crate) fn pairs_of(students: &BTreeSet<StudentId>) -> Vec<(StudentId, StudentId)> {
+    let members: Vec<StudentId> = students.iter().copied().collect();
+    let mut pairs = Vec::new();
+    for (i, &a) in members.iter().enumerate() {
+        for &b in &members[i + 1..] {
+            pairs.push((a, b));
+        }
     }
-    match source {
-        RangeSource::Manual => None,
-        // The elected range is retried first and fails again — one wasted
-        // constructor call for a search that reads as the plain fallback it
-        // is.
-        RangeSource::Automatic => ranked_canonical_ranges(specs)
-            .into_iter()
-            .find_map(|range| GroupListSpec::new(students.clone(), range).ok()),
-    }
+    pairs
 }
 
 /// Turns a user request into the model's input: deduplicated specs, the
@@ -297,8 +308,6 @@ pub fn build_generation_plan(
         Some(range) => Some((range.clone(), RangeSource::Manual)),
         None => elect_canonical_range(&specs).map(|range| (range, RangeSource::Automatic)),
     };
-    let ghost = build_ghost(&specs, canonical_range.as_ref());
-
     let mut pinned_pairs: BTreeMap<_, BTreeSet<(StudentId, StudentId)>> = BTreeMap::new();
     for list_id in &request.kept_lists {
         let list = params
@@ -332,6 +341,10 @@ pub fn build_generation_plan(
             }
         }
     }
+
+    // After the pins: the template is clustered on an affinity graph that
+    // folds them in, so a kept list must already be known here.
+    let ghost = build_ghost(&specs, &pinned_pairs, canonical_range.as_ref());
 
     Ok(GenerationPlan {
         specs,
@@ -780,8 +793,37 @@ pub(crate) mod tests {
         // any single one of them: it is the grouping every list is asked to
         // resemble, so every student needs a place in it.
         let ghost = plan.ghost.expect("the canonical range splits the union");
-        assert_eq!(*ghost.students(), set(&[1, 2, 3, 4, 5, 6, 7, 8]));
-        assert_eq!(*ghost.students_per_group(), range(2, 3));
+        assert_eq!(*ghost.spec().students(), set(&[1, 2, 3, 4, 5, 6, 7, 8]));
+        assert_eq!(*ghost.spec().students_per_group(), range(2, 3));
+    }
+
+    #[test]
+    fn a_kept_list_shapes_the_template() {
+        // Why `build_ghost` runs *after* the pinned-pair loop and not before.
+        // One rebuilt spec of four students at 2..=3, so the canonical range
+        // is that same 2..=3 and the template is two groups of two. The spec
+        // alone says nothing — every pair co-occurs exactly once — so with an
+        // empty pin map the greedy falls back on its tie-break and groups
+        // {1, 2} / {3, 4}.
+        //
+        // The kept list, of that same range, has already grouped 1 with 3.
+        // Fed the pins, the greedy follows it.
+        let mut params = base_params();
+        params
+            .group_lists
+            .group_list_map
+            .insert(group_list_id(7), prefilled_list(&[&[1, 3], &[2, 4]]));
+
+        let plan =
+            build_generation_plan(&params, &request(&[(1, 1)], &[7])).expect("well-formed request");
+        let ghost = plan.ghost.expect("the canonical range splits the union");
+        assert_eq!(ghost.groups(), [set(&[1, 3]), set(&[2, 4])]);
+
+        // Without the kept list the very same document templates otherwise.
+        let plan =
+            build_generation_plan(&params, &request(&[(1, 1)], &[])).expect("well-formed request");
+        let ghost = plan.ghost.expect("the canonical range splits the union");
+        assert_eq!(ghost.groups(), [set(&[1, 2]), set(&[3, 4])]);
     }
 
     #[test]
@@ -814,8 +856,8 @@ pub(crate) mod tests {
             Some((range(3, 3), RangeSource::Automatic))
         );
         let ghost = plan.ghost.expect("the runner-up splits the union");
-        assert_eq!(*ghost.students(), set(&[1, 2, 3, 4, 5, 6, 7, 8]));
-        assert_eq!(*ghost.students_per_group(), range(2, 2));
+        assert_eq!(*ghost.spec().students(), set(&[1, 2, 3, 4, 5, 6, 7, 8]));
+        assert_eq!(*ghost.spec().students_per_group(), range(2, 2));
     }
 
     #[test]

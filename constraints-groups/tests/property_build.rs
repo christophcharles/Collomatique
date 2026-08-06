@@ -145,7 +145,7 @@ fn build_and_check(rng: &mut ChaCha8Rng, inner: &InnerData) {
     let epochs = build_incremental_epochs(&plan);
     let env = VarEnv::new(&plan);
     let ghost_var_count = match &plan.ghost {
-        Some(ghost) => ghost.students().len() * env.ghost_group_count() as usize,
+        Some(ghost) => ghost.spec().students().len() * env.ghost_group_count() as usize,
         None => 0,
     };
     let var_count: usize = ghost_var_count
@@ -157,7 +157,7 @@ fn build_and_check(rng: &mut ChaCha8Rng, inner: &InnerData) {
             .sum::<usize>();
     assert_eq!(epochs.len(), var_count, "one epoch entry per base variable");
     if let Some(ghost) = &plan.ghost {
-        for &student in ghost.students() {
+        for &student in ghost.spec().students() {
             for group in 0..env.ghost_group_count() {
                 assert_eq!(
                     epochs[&Var::StudentInGhostGroup { student, group }],
