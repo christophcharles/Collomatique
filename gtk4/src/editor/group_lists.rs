@@ -33,7 +33,8 @@ mod naming_dialog;
 #[derive(Debug)]
 pub enum GroupListsInput {
     Update(collomatique_state_colloscopes::colloscope_params::Parameters),
-    /// A new document was loaded: forget the last-used solver strategy and objective weights.
+    /// A new document was loaded: forget the last-used solver strategy, objective weights and
+    /// canonical group size.
     ResetGenerationConfig,
 
     EditGroupList(collomatique_state_colloscopes::GroupListId),
@@ -88,6 +89,12 @@ pub struct GroupLists {
     /// The last-validated objective weights, reopened-on like the strategy.
     /// Reset to the group-dominant default on a new document.
     weights: collomatique_constraints_groups::ObjectiveWeights,
+
+    /// The last-validated canonical group-size override, travelling with the
+    /// weights: `None` (the default, and the reset value) elects the size
+    /// from the document instead.
+    canonical_range:
+        Option<collomatique_state_colloscopes::NonEmptyRangeInclusive<std::num::NonZeroU32>>,
 
     /// The generation plan and the user-chosen list names, held across the
     /// solve: written when the naming dialog validates, consumed when the
@@ -266,6 +273,7 @@ impl Component for GroupLists {
             run_solver_dialog,
             strategy: collomatique_strategies::ConductorStrategy::with_parallelism_defaults(),
             weights: collomatique_constraints_groups::ObjectiveWeights::default(),
+            canonical_range: None,
             pending_generation: None,
             selection_reason: GroupListSelectionReason::New,
         };
@@ -289,6 +297,7 @@ impl Component for GroupLists {
                 self.strategy =
                     collomatique_strategies::ConductorStrategy::with_parallelism_defaults();
                 self.weights = collomatique_constraints_groups::ObjectiveWeights::default();
+                self.canonical_range = None;
             }
             GroupListsInput::GenerateClicked => {
                 // The dialog is modal, so the parameters it is configured against stay valid until
@@ -298,14 +307,18 @@ impl Component for GroupLists {
                     .send(generate_dialog::DialogInput::Show(
                         self.strategy.clone(),
                         self.weights,
+                        self.canonical_range.clone(),
                         self.params.clone(),
                     ))
                     .unwrap();
             }
             GroupListsInput::GenerationConfigAccepted(request, strategy, weights, params) => {
                 // Persist the strategy and the weights so the dialog reopens on the last choice.
+                // The canonical size travels inside the request, so it is read back from there
+                // rather than echoed separately.
                 self.strategy = strategy;
                 self.weights = weights;
+                self.canonical_range = request.canonical_range.clone();
                 // Hand the request to the naming/build dialog against the parameters the config
                 // dialog echoed back, so the plan and the model are built from exactly what the
                 // user configured against.

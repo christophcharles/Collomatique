@@ -93,6 +93,11 @@ impl VarEnv {
         self.specs[list.0].students_per_group().end().get()
     }
 
+    /// The size classes of the plan, in table order (sorted by range).
+    pub(crate) fn classes(&self) -> impl Iterator<Item = SizeClassIdx> {
+        (0..self.classes.len()).map(SizeClassIdx)
+    }
+
     /// The size class of a list: the position of its `students_per_group`
     /// range in the class table. Panics on a stale index, like
     /// [`VarEnv::group_count`].

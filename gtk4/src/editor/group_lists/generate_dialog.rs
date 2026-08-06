@@ -13,8 +13,10 @@ use relm4::{adw, gtk};
 use collomatique_constraints_groups::{
     GenerationRequest, GroupListSpec, GroupListSpecError, ObjectiveWeights,
 };
+use collomatique_state_colloscopes::NonEmptyRangeInclusive;
 use collomatique_state_colloscopes::colloscope_params::Parameters;
 use collomatique_strategies::ConductorStrategy;
+use std::num::NonZeroU32;
 
 use crate::editor::run_solver::conductor_config;
 
@@ -30,8 +32,11 @@ pub struct Dialog {
     /// The objective weights this window carries: seeded from the page on `Show`, edited
     /// through the "Paramètres avancés" dialog, echoed back on `Accepted`.
     weights: ObjectiveWeights,
-    /// The advanced model-parameter dialog (objective weights), opened via the
-    /// "Paramètres avancés" button.
+    /// The canonical group-size override this window carries, travelling with
+    /// `weights`: `None` asks the planner to elect the size itself.
+    canonical_range: Option<NonEmptyRangeInclusive<NonZeroU32>>,
+    /// The advanced model-parameter dialog (objective weights and canonical
+    /// size), opened via the "Paramètres avancés" button.
     advanced_dialog: Controller<advanced_dialog::Dialog>,
     /// One titled [`adw::PreferencesGroup`] per period, shown in the left panel.
     periods_list: FactoryVecDeque<period_group::PeriodGroup>,
@@ -46,13 +51,18 @@ pub struct Dialog {
 
 #[derive(Debug)]
 pub enum DialogInput {
-    Show(ConductorStrategy, ObjectiveWeights, Parameters),
+    Show(
+        ConductorStrategy,
+        ObjectiveWeights,
+        Option<NonEmptyRangeInclusive<NonZeroU32>>,
+        Parameters,
+    ),
     Cancel,
     Accept,
     OpenAdvanced,
     UpdateStrategy(ConductorStrategy),
     OpenAdvancedParams,
-    UpdateAdvancedParams(ObjectiveWeights),
+    UpdateAdvancedParams(ObjectiveWeights, Option<NonEmptyRangeInclusive<NonZeroU32>>),
     IgnoreOrRefresh,
     /// (period index, subject index within that period, new value)
     SetSubjectRebuild(usize, usize, bool),
@@ -289,9 +299,7 @@ impl Dialog {
                 .filter(|list| list.keep)
                 .map(|list| list.group_list_id)
                 .collect(),
-            // Always automatic for now: the advanced dialog exposes the
-            // override in a later commit.
-            canonical_range: None,
+            canonical_range: self.canonical_range.clone(),
         }
     }
 
@@ -557,8 +565,8 @@ impl SimpleComponent for Dialog {
             .transient_for(&root)
             .launch(())
             .forward(sender.input_sender(), |msg| match msg {
-                advanced_dialog::DialogOutput::Accepted(weights) => {
-                    DialogInput::UpdateAdvancedParams(weights)
+                advanced_dialog::DialogOutput::Accepted(weights, canonical_range) => {
+                    DialogInput::UpdateAdvancedParams(weights, canonical_range)
                 }
                 advanced_dialog::DialogOutput::Cancelled => DialogInput::IgnoreOrRefresh,
             });
@@ -584,6 +592,7 @@ impl SimpleComponent for Dialog {
             strategy: ConductorStrategy::with_parallelism_defaults(),
             conductor_config_dialog,
             weights: ObjectiveWeights::default(),
+            canonical_range: None,
             advanced_dialog,
             periods_list,
             kept_lists_list,
@@ -601,11 +610,12 @@ impl SimpleComponent for Dialog {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         match msg {
-            DialogInput::Show(strategy, weights, params) => {
+            DialogInput::Show(strategy, weights, canonical_range, params) => {
                 self.hidden = false;
                 self.params = params;
                 self.strategy = strategy;
                 self.weights = weights;
+                self.canonical_range = canonical_range;
                 self.set_data_from_params();
 
                 self.refresh_periods_list();
@@ -623,11 +633,15 @@ impl SimpleComponent for Dialog {
             DialogInput::OpenAdvancedParams => {
                 self.advanced_dialog
                     .sender()
-                    .send(advanced_dialog::DialogInput::Show(self.weights))
+                    .send(advanced_dialog::DialogInput::Show(
+                        self.weights,
+                        self.canonical_range.clone(),
+                    ))
                     .unwrap();
             }
-            DialogInput::UpdateAdvancedParams(weights) => {
+            DialogInput::UpdateAdvancedParams(weights, canonical_range) => {
                 self.weights = weights;
+                self.canonical_range = canonical_range;
             }
             DialogInput::IgnoreOrRefresh => {}
             DialogInput::SetSubjectRebuild(period, subject, value) => {
