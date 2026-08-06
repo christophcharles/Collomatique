@@ -1252,10 +1252,19 @@ impl Strategy for ConductorStrategy {
                 continue;
             };
             let worker_result = match end {
-                // A superseded Default was killed; its replacement is already queued at the front,
-                // so just free the slot and let the loop head refill it (Default first).
+                // A superseded Default was killed; its replacement was queued at the front (and has
+                // normally already been launched into the previously freed slot). Free this slot
+                // and report it idle unless something is queued to refill it — the same rule as the
+                // finished-worker path below. Without this event the UI keeps showing the killed
+                // Default as a live worker.
                 WorkerEnd::Cancelled { worker_num } => {
                     slots.free(worker_num as usize);
+                    if queue.is_empty() {
+                        on_progress(ConductorProgress::WorkerAssigned {
+                            worker_num,
+                            strategy: None,
+                        });
+                    }
                     continue;
                 }
                 WorkerEnd::Finished(wr) => wr,
