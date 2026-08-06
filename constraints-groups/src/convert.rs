@@ -14,9 +14,10 @@ use std::collections::BTreeSet;
 /// `filter_transmute`) into one prefilled `GroupList` per spec, paired with
 /// the (period, subject) pairs it must be associated to.
 ///
-/// Panics on internal inconsistency: a missing `StudentGroup` value, an
-/// out-of-domain group index, or a name-count mismatch are all caller or
-/// solver bugs — every student of every spec must have a solved value.
+/// Panics on internal inconsistency: a missing `StudentInGroup` value, a
+/// student sitting in no group at all, or a name-count mismatch are all
+/// caller or solver bugs — every student of every spec must have a solved
+/// value for each of its groups, exactly one of them being 1.
 pub fn build_group_lists(
     plan: &GenerationPlan,
     names: &[String],
@@ -39,19 +40,30 @@ pub fn build_group_lists(
 
             let mut slots: Vec<BTreeSet<StudentId>> = vec![BTreeSet::new(); group_count];
             for &student in spec.students() {
-                let value = config
-                    .get(Var::StudentGroup { list, student })
-                    .expect("every spec student must have a solved StudentGroup value");
-                let slot = value.round() as usize;
-                assert!(slot < group_count, "solved group index out of domain");
+                // The first group whose binary is 1. "Exactly one" is a
+                // constraint of the model, so a solved configuration has
+                // exactly one — reading the first is only how the index is
+                // recovered from the matrix.
+                let slot = (0..group_count)
+                    .find(|&group| {
+                        let value = config
+                            .get(Var::StudentInGroup {
+                                list,
+                                student,
+                                group: group as u32,
+                            })
+                            .expect("every (student, group) pair must have a solved value");
+                        value.round() as i64 == 1
+                    })
+                    .expect("every student must sit in a group");
                 slots[slot].insert(student);
             }
 
             // Compact away empty slots and remap group indices. The
             // minimum-size constraint (piece 8) makes every group non-empty
             // in a solved configuration, but the conversion is also handed
-            // arbitrary in-domain configurations (the fuzz-build test), so
-            // it never assumes it.
+            // arbitrary placements (the fuzz-build test), so it never
+            // assumes it.
             let groups: Vec<PrefilledGroup> = slots
                 .into_iter()
                 .filter(|students| !students.is_empty())
@@ -87,14 +99,17 @@ mod tests {
         let list = GroupListIdx(0);
 
         let mut config = ConfigData::new();
-        for (s, slot) in [(1, 0.0), (2, 0.0), (3, 2.0), (4, 2.0), (5, 2.0), (6, 2.0)] {
-            config = config.set(
-                Var::StudentGroup {
-                    list,
-                    student: student(s),
-                },
-                slot,
-            );
+        for (s, slot) in [(1, 0), (2, 0), (3, 2), (4, 2), (5, 2), (6, 2)] {
+            for group in 0..3 {
+                config = config.set(
+                    Var::StudentInGroup {
+                        list,
+                        student: student(s),
+                        group,
+                    },
+                    if group == slot { 1.0 } else { 0.0 },
+                );
+            }
         }
 
         let lists = build_group_lists(&plan, &[String::from("Liste")], &config);

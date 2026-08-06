@@ -110,18 +110,20 @@ mod tests {
         solution.get_complete_data()
     }
 
+    /// The base binary "`s` sits in `group` of `list`".
+    fn in_group(list: usize, s: u64, group: u32) -> V {
+        base_var(Var::StudentInGroup {
+            list: GroupListIdx(list),
+            student: student(s),
+            group,
+        })
+    }
+
     /// A weight-100 term placing `student` in `group` of `list`. 100 dwarfs
     /// both the real objective at the default weight (at most ~10 on these
     /// instances) and the ±0.5 adversaries, so a placement never bends.
     fn place(list: usize, s: u64, group: u32) -> (f64, V) {
-        (
-            100.0,
-            extra_var(ExtraVarName::StudentInGroup {
-                list: GroupListIdx(list),
-                student: student(s),
-                group,
-            }),
-        )
+        (100.0, in_group(list, s, group))
     }
 
     fn value(cfg: &ConfigData<InternalVar<Var, ExtraVarName>>, var: V) -> f64 {
@@ -151,16 +153,6 @@ mod tests {
             .sum()
     }
 
-    fn group_of(cfg: &ConfigData<InternalVar<Var, ExtraVarName>>, list: usize, s: u64) -> f64 {
-        value(
-            cfg,
-            base_var(Var::StudentGroup {
-                list: GroupListIdx(list),
-                student: student(s),
-            }),
-        )
-    }
-
     #[test]
     fn optimum_reuses_groupings_across_lists() {
         // Two lists over the same four students, with distinct specs (equal
@@ -188,14 +180,7 @@ mod tests {
                 place(0, 3, 1),
                 place(0, 4, 1),
                 place(1, 1, 0),
-                (
-                    0.5,
-                    extra_var(ExtraVarName::StudentInGroup {
-                        list: GroupListIdx(1),
-                        student: student(3),
-                        group: 0,
-                    }),
-                ),
+                (0.5, in_group(1, 3, 0)),
             ],
         );
 
@@ -220,20 +205,10 @@ mod tests {
         let cfg = solve_with_adversary(
             &plan,
             ObjectiveWeights::default(),
-            &[
-                place(0, 1, 0),
-                (
-                    0.5,
-                    extra_var(ExtraVarName::StudentInGroup {
-                        list: GroupListIdx(0),
-                        student: student(3),
-                        group: 0,
-                    }),
-                ),
-            ],
+            &[place(0, 1, 0), (0.5, in_group(0, 3, 0))],
         );
 
-        assert_close(group_of(&cfg, 0, 2), 0.0);
+        assert_close(value(&cfg, in_group(0, 2, 0)), 1.0);
         assert_close(shared_total_of_four(&cfg), 2.0);
     }
 
@@ -255,14 +230,7 @@ mod tests {
                 place(0, 3, 1),
                 place(0, 4, 1),
                 place(1, 1, 0),
-                (
-                    0.5,
-                    extra_var(ExtraVarName::StudentInGroup {
-                        list: GroupListIdx(1),
-                        student: student(3),
-                        group: 0,
-                    }),
-                ),
+                (0.5, in_group(1, 3, 0)),
             ],
         );
 

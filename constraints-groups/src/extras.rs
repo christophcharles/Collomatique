@@ -48,28 +48,6 @@ fn pairs_of(students: &BTreeSet<StudentId>) -> Vec<(StudentId, StudentId)> {
     pairs
 }
 
-fn build_student_in_group(env: &VarEnv) -> MyBundle {
-    let mut bundle = MyBundle::new();
-    for list in env.lists() {
-        for group in 0..env.group_count(list) {
-            for &student in env.students(list) {
-                let var = ExtraVarName::StudentInGroup {
-                    list,
-                    student,
-                    group,
-                };
-                bundle = bundle
-                    .and_reified(var, move || {
-                        let expr = IntLinExpr::var(base_var(Var::StudentGroup { list, student }));
-                        vec![expr.eq(&IntLinExpr::constant(group as i64))]
-                    })
-                    .expect("no duplicate extras");
-            }
-        }
-    }
-    bundle
-}
-
 fn build_pair_in_group(env: &VarEnv) -> MyBundle {
     let mut bundle = MyBundle::new();
     for list in env.lists() {
@@ -84,12 +62,12 @@ fn build_pair_in_group(env: &VarEnv) -> MyBundle {
                         // form of the sibling crate, and the same full
                         // equivalence). This is by far the largest family,
                         // so the saving matters.
-                        let sa = IntLinExpr::var(extra_var(ExtraVarName::StudentInGroup {
+                        let sa = IntLinExpr::var(base_var(Var::StudentInGroup {
                             list,
                             student: a,
                             group,
                         }));
-                        let sb = IntLinExpr::var(extra_var(ExtraVarName::StudentInGroup {
+                        let sb = IntLinExpr::var(base_var(Var::StudentInGroup {
                             list,
                             student: b,
                             group,
@@ -160,11 +138,7 @@ fn build_shared_pair(env: &VarEnv) -> MyBundle {
 }
 
 pub(crate) fn build_extras(env: &VarEnv) -> MyBundle {
-    let bundle = build_student_in_group(env);
-    let bundle = bundle
-        .merge(build_pair_in_group(env))
-        .expect("no duplicate extras");
-    bundle
+    build_pair_in_group(env)
         .merge(build_shared_pair(env))
         .expect("no duplicate extras")
 }
@@ -184,6 +158,11 @@ mod tests {
     /// Apply the extras to a fresh modeler, maximize each weighted term,
     /// build (lazily — the objective is what forces the expansion), solve,
     /// and return every variable of the solution, extras included.
+    ///
+    /// The "exactly one group per student" family comes along: the base
+    /// binaries only mean "the placement of the students" under it, and it
+    /// used to be the domain of the retired integer base variable. The size
+    /// constraints stay out — this harness places students by hand.
     fn solve_with_objective(
         plan: &GenerationPlan,
         terms: &[(f64, V)],
@@ -192,6 +171,9 @@ mod tests {
         let mut modeler: MyModeler<'_> = Modeler::from_described(&env);
         modeler
             .apply_bundle(build_extras(&env).into_general())
+            .expect("no duplicate extras");
+        modeler
+            .apply_bundle(crate::constraints::build_student_in_one_group(&env).into_general())
             .expect("no duplicate extras");
         for (weight, var) in terms {
             // The weight goes into the `LinExpr`, before the sense is
@@ -209,13 +191,13 @@ mod tests {
         solution.get_complete_data()
     }
 
-    /// A weight-100 term placing `student` in `group` of `list`. Maximizing
-    /// a full-equivalence indicator forces the base equality, and 100 is
-    /// far above the ±1 adversarial weights, so the placement never bends.
+    /// A weight-100 term placing `student` in `group` of `list` — the base
+    /// binary itself, at a weight far above the ±1 adversarial ones, so the
+    /// placement never bends.
     fn place(list: usize, s: u64, group: u32) -> (f64, V) {
         (
             100.0,
-            extra_var(ExtraVarName::StudentInGroup {
+            base_var(Var::StudentInGroup {
                 list: GroupListIdx(list),
                 student: student(s),
                 group,
@@ -262,54 +244,6 @@ mod tests {
         assert!(vars.contains_key(&shared(1, 5)));
         // 3 and 5 never share a spec, so the pair is not declared at all.
         assert!(!vars.contains_key(&shared(3, 5)));
-    }
-
-    #[test]
-    fn student_in_group_follows_the_base_variable() {
-        // One list of 4 students in groups of 1 to 2, hence 2 groups. This
-        // harness applies no shape constraint, so the placement is free.
-        let plan = plan_of(&[(&[1, 2, 3, 4], (1, 2))]);
-        let list = GroupListIdx(0);
-
-        let in_group = |s: u64, group: u32| {
-            extra_var(ExtraVarName::StudentInGroup {
-                list,
-                student: student(s),
-                group,
-            })
-        };
-
-        let cfg = solve_with_objective(
-            &plan,
-            &[
-                // Students 1 and 2 into group 0, the others into group 1.
-                place(0, 1, 0),
-                place(0, 2, 0),
-                place(0, 3, 1),
-                place(0, 4, 1),
-                // Adversarial: push the *other* indicator of each placed
-                // student the wrong way. Landing on the semantic value
-                // anyway is what tests the equivalence direction the
-                // objective does not supply.
-                (1.0, in_group(1, 1)),
-                (-1.0, in_group(3, 1)),
-            ],
-        );
-
-        for (s, group) in [(1, 0.0), (2, 0.0), (3, 1.0), (4, 1.0)] {
-            assert_eq!(
-                value(
-                    &cfg,
-                    base_var(Var::StudentGroup {
-                        list,
-                        student: student(s)
-                    })
-                ),
-                group
-            );
-        }
-        assert_eq!(value(&cfg, in_group(1, 1)), 0.0);
-        assert_eq!(value(&cfg, in_group(3, 1)), 1.0);
     }
 
     #[test]
@@ -409,12 +343,12 @@ mod tests {
     #[test]
     fn single_group_list_forces_the_chain() {
         // Three students in groups of 3 to 4: ceil(3 / 4) is a single
-        // group, so the `StudentGroup` domain is `0..=0` and the placement
-        // is forced by the domain alone.
+        // group, so the only term of each student's "exactly one group" row
+        // is `group 0` and the placement is forced by that row alone.
         let plan = plan_of(&[(&[1, 2, 3], (3, 4))]);
         let list = GroupListIdx(0);
 
-        let in_group = extra_var(ExtraVarName::StudentInGroup {
+        let in_group = base_var(Var::StudentInGroup {
             list,
             student: student(1),
             group: 0,
@@ -430,9 +364,9 @@ mod tests {
             b: student(2),
         });
 
-        // Only adversarial terms: every extra is pushed toward 0, and the
-        // equivalences must still propagate the forced placement through
-        // the whole chain.
+        // Only adversarial terms: the placement and both extras are pushed
+        // toward 0, and the equivalences must still propagate the forced
+        // placement through the whole chain.
         let cfg = solve_with_objective(
             &plan,
             &[

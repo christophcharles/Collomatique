@@ -9,9 +9,11 @@
 //! ([`build_generation_plan`] on the way in, [`build_group_lists`] on the
 //! way out).
 //!
-//! The model is complete (end of phase B): the base `StudentGroup`
-//! variables, the reified extras of piece 7, the shape constraints of
-//! piece 8 (min and max size), the stability objective of piece 9
+//! The model is complete (end of phase B): the base `StudentInGroup`
+//! binaries — the assignment matrix itself, one variable per (list,
+//! student, group) — the reified extras of piece 7, the shape constraints
+//! of piece 8 (one group per student, min and max size), the stability
+//! objective of piece 9
 //! (minimize the globally shared student pairs, with a configurable weight
 //! — [`ObjectiveWeights`], piece 11), and the inclusion-based incremental
 //! epochs of piece 10 ([`build_incremental_epochs`]), which callers feed to

@@ -2,20 +2,31 @@
 //! merged here and applied by `builder.rs` **after** the extras bundle: the
 //! constraints reference `StudentInGroup`, which must be declared first.
 
+mod student_in_one_group;
 mod students_per_group;
 
 use crate::extras::MyBundle;
 use crate::vars::VarEnv;
 
 pub(crate) fn build(env: &VarEnv) -> MyBundle {
-    students_per_group::build(env)
+    student_in_one_group::build(env)
+        .merge(students_per_group::build(env))
+        .expect("no duplicate extras")
+}
+
+/// The "exactly one group per student" family on its own, for the harnesses
+/// that place students by hand without the size constraints (`extras.rs`'s
+/// and this module's): the base binaries only describe a placement under it.
+#[cfg(test)]
+pub(crate) fn build_student_in_one_group(env: &VarEnv) -> MyBundle {
+    student_in_one_group::build(env)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::builder::MyModeler;
-    use crate::extras::{V, base_var, extra_var};
+    use crate::extras::{V, base_var};
     use crate::specs::GenerationPlan;
     use crate::specs::tests::student;
     use crate::types::ExtraVarName;
@@ -68,7 +79,7 @@ mod tests {
     fn place(list: usize, s: u64, group: u32) -> (f64, V) {
         (
             100.0,
-            extra_var(ExtraVarName::StudentInGroup {
+            base_var(Var::StudentInGroup {
                 list: GroupListIdx(list),
                 student: student(s),
                 group,
@@ -111,7 +122,7 @@ mod tests {
             .map(|&s| {
                 value(
                     &cfg,
-                    extra_var(ExtraVarName::StudentInGroup {
+                    base_var(Var::StudentInGroup {
                         list,
                         student: student(s),
                         group: 0,
@@ -120,6 +131,39 @@ mod tests {
             })
             .sum();
         assert_close(in_group_0, 2.0);
+    }
+
+    #[test]
+    fn every_student_sits_in_exactly_one_group() {
+        // 4 students, sizes 1..=2 → 2 groups. Student 1 is pushed into
+        // *both* groups at once and student 2 out of both: the placement is
+        // a matrix of independent binaries now, so "one group per student"
+        // is a constraint the pushes can fight — the retired integer domain
+        // made it unsayable.
+        let plan = plan_of(&[(&[1, 2, 3, 4], (1, 2))]);
+        let list = GroupListIdx(0);
+        let in_group = |s: u64, group: u32| {
+            base_var(Var::StudentInGroup {
+                list,
+                student: student(s),
+                group,
+            })
+        };
+
+        let cfg = solve_with_objective(
+            &plan,
+            &[
+                place(0, 1, 0),
+                place(0, 1, 1),
+                (-1.0, in_group(2, 0)),
+                (-1.0, in_group(2, 1)),
+            ],
+        );
+
+        for s in [1, 2] {
+            let count: f64 = (0..2).map(|group| value(&cfg, in_group(s, group))).sum();
+            assert_close(count, 1.0);
+        }
     }
 
     #[test]
@@ -132,7 +176,7 @@ mod tests {
         let plan = plan_of(&[(&[1, 2, 3, 4, 5, 6, 7, 8, 9], (3, 4))]);
         let list = GroupListIdx(0);
         let in_group = |s: u64, group: u32| {
-            extra_var(ExtraVarName::StudentInGroup {
+            base_var(Var::StudentInGroup {
                 list,
                 student: student(s),
                 group,
@@ -171,7 +215,7 @@ mod tests {
         let plan = plan_of(&[(&[1, 2, 3, 4, 5], (2, 4))]);
         let list = GroupListIdx(0);
         let in_group_1 = |s: u64| {
-            extra_var(ExtraVarName::StudentInGroup {
+            base_var(Var::StudentInGroup {
                 list,
                 student: student(s),
                 group: 1,
@@ -189,16 +233,7 @@ mod tests {
             ],
         );
 
-        assert_close(
-            value(
-                &cfg,
-                base_var(Var::StudentGroup {
-                    list,
-                    student: student(1),
-                }),
-            ),
-            1.0,
-        );
+        assert_close(value(&cfg, in_group_1(1)), 1.0);
         let count_1: f64 = [1, 2, 3, 4, 5]
             .iter()
             .map(|&s| value(&cfg, in_group_1(s)))

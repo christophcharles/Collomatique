@@ -20,11 +20,11 @@
 use std::collections::{BTreeMap, HashMap};
 
 use crate::specs::GenerationPlan;
-use crate::vars::{GroupListIdx, Var};
+use crate::vars::{GroupListIdx, Var, VarEnv};
 
 /// Assign each base variable an epoch for the incremental (staggered)
-/// solve: every `StudentGroup` variable gets its spec's epoch. The epochs
-/// are built in two passes.
+/// solve: every `StudentInGroup` binary of a spec gets that spec's epoch.
+/// The epochs are built in two passes.
 ///
 /// The first pass gives each spec its inclusion *level*: the height of the
 /// longest chain of strictly-included student sets below it. A spec with no
@@ -108,16 +108,24 @@ pub fn build_incremental_epochs(plan: &GenerationPlan) -> HashMap<Var, u32> {
         }
     }
 
+    // The base variable is the whole assignment matrix, so a spec's epoch
+    // covers every (student, group) binary of its list — the group count
+    // comes from a local `VarEnv`, which only needs the plan.
+    let env = VarEnv::new(plan);
     let mut epochs = HashMap::new();
     for (i, (spec, _covered)) in plan.specs.iter().enumerate() {
+        let list = GroupListIdx(i);
         for &student in spec.students() {
-            epochs.insert(
-                Var::StudentGroup {
-                    list: GroupListIdx(i),
-                    student,
-                },
-                spec_epochs[i],
-            );
+            for group in 0..env.group_count(list) {
+                epochs.insert(
+                    Var::StudentInGroup {
+                        list,
+                        student,
+                        group,
+                    },
+                    spec_epochs[i],
+                );
+            }
         }
     }
     epochs
@@ -126,7 +134,6 @@ pub fn build_incremental_epochs(plan: &GenerationPlan) -> HashMap<Var, u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::vars::VarEnv;
     use crate::vars::tests::plan_of;
     use collomatique_ilp_modeler::DescribeVar;
     use std::collections::BTreeSet;
@@ -134,16 +141,21 @@ mod tests {
     /// The epoch shared by every variable of a list, asserting on the way
     /// that the list's variables all agree on it.
     fn epoch_of(epochs: &HashMap<Var, u32>, plan: &GenerationPlan, list: usize) -> u32 {
+        let env = VarEnv::new(plan);
+        let idx = GroupListIdx(list);
+        let group_count = env.group_count(idx);
         let values: BTreeSet<u32> = plan.specs[list]
             .0
             .students()
             .iter()
-            .map(|&student| {
-                epochs[&Var::StudentGroup {
-                    list: GroupListIdx(list),
+            .flat_map(|&student| {
+                (0..group_count).map(move |group| Var::StudentInGroup {
+                    list: idx,
                     student,
-                }]
+                    group,
+                })
             })
+            .map(|var| epochs[&var])
             .collect();
         assert_eq!(values.len(), 1, "all variables of a spec share its epoch");
         values.into_iter().next().unwrap()

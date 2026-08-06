@@ -126,7 +126,13 @@ fn build_and_check(rng: &mut ChaCha8Rng, inner: &InnerData) {
     //       the rest of the level, then student count) — the
     //       least-entangled, then smallest, lists solve first.
     let epochs = build_incremental_epochs(&plan);
-    let var_count: usize = plan.specs.iter().map(|(s, _)| s.students().len()).sum();
+    let env = VarEnv::new(&plan);
+    let var_count: usize = plan
+        .specs
+        .iter()
+        .enumerate()
+        .map(|(i, (s, _))| s.students().len() * env.group_count(GroupListIdx(i)) as usize)
+        .sum();
     assert_eq!(epochs.len(), var_count, "one epoch entry per base variable");
     let spec_epoch = |i: usize| {
         let spec = &plan.specs[i].0;
@@ -134,21 +140,26 @@ fn build_and_check(rng: &mut ChaCha8Rng, inner: &InnerData) {
             .students()
             .first()
             .expect("a spec always has registered students");
-        epochs[&Var::StudentGroup {
+        epochs[&Var::StudentInGroup {
             list: GroupListIdx(i),
             student,
+            group: 0,
         }]
     };
     for (i, (spec, _covered)) in plan.specs.iter().enumerate() {
+        let list = GroupListIdx(i);
         for &student in spec.students() {
-            assert_eq!(
-                epochs[&Var::StudentGroup {
-                    list: GroupListIdx(i),
-                    student,
-                }],
-                spec_epoch(i),
-                "all variables of a spec share its epoch",
-            );
+            for group in 0..env.group_count(list) {
+                assert_eq!(
+                    epochs[&Var::StudentInGroup {
+                        list,
+                        student,
+                        group,
+                    }],
+                    spec_epoch(i),
+                    "all variables of a spec share its epoch",
+                );
+            }
         }
     }
 
@@ -224,17 +235,28 @@ fn build_and_check(rng: &mut ChaCha8Rng, inner: &InnerData) {
         );
     }
 
-    // A random in-domain assignment must convert into structurally valid
-    // lists (`GroupList::new` inside `build_group_lists` panics otherwise),
-    // with every student placed and no more groups than slots.
-    let env = VarEnv::new(&plan);
+    // A random placement must convert into structurally valid lists
+    // (`GroupList::new` inside `build_group_lists` panics otherwise), with
+    // every student placed and no more groups than slots. The placement is
+    // random but keeps every student in exactly one group: the conversion
+    // reads a solved assignment matrix, and "exactly one" is a constraint
+    // of the model rather than a shape the conversion re-derives.
     let mut config = ConfigData::new();
     for (i, (spec, _covered)) in plan.specs.iter().enumerate() {
         let list = GroupListIdx(i);
         let group_count = env.group_count(list);
         for &student in spec.students() {
             let slot = rng.random_range(0..group_count);
-            config = config.set(Var::StudentGroup { list, student }, slot as f64);
+            for group in 0..group_count {
+                config = config.set(
+                    Var::StudentInGroup {
+                        list,
+                        student,
+                        group,
+                    },
+                    if group == slot { 1.0 } else { 0.0 },
+                );
+            }
         }
     }
 

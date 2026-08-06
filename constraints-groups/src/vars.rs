@@ -76,29 +76,27 @@ pub struct GroupListIdx(pub usize);
 )]
 #[env(VarEnv)]
 pub enum Var {
-    /// The group the student sits in, as an integer in
-    /// `0..=group_count-1`. Unlike the colloscope crate there is no −1
-    /// value: every student of a spec is registered and must be placed, so
-    /// the domain itself enforces "exactly one group". No variable is ever
+    /// 1 ⟺ `student` sits in group `group` of `list`. Binary (the derive
+    /// default): the assignment matrix *is* the base variable, so no
+    /// channeling is needed to reach it from the constraints.
+    ///
+    /// "Exactly one group per student" is not a property of the domain any
+    /// more — it is the constraint family of
+    /// [`crate::constraints`]`::student_in_one_group`. No variable is ever
     /// fixed in this crate, so no fix attribute: the derive's default
     /// `check_fix` returns `None` for in-range names and `Some(0.0)` for
     /// stale ones.
-    #[var(Variable::integer().min(0.).max(Self::compute_max_group(env, list)))]
-    StudentGroup {
+    StudentInGroup {
         #[range(Self::compute_list_range(env))]
         list: GroupListIdx,
         #[range(Self::compute_student_range(env, list))]
         student: StudentId,
+        #[range(Self::compute_group_range(env, list))]
+        group: u32,
     },
 }
 
 impl Var {
-    /// The group count is at least 1 (a spec always has a student), so the
-    /// subtraction never underflows.
-    fn compute_max_group(env: &VarEnv, list: &GroupListIdx) -> f64 {
-        (env.group_count(*list) - 1) as f64
-    }
-
     fn compute_list_range(env: &VarEnv) -> Vec<GroupListIdx> {
         (0..env.specs.len()).map(GroupListIdx).collect()
     }
@@ -111,6 +109,16 @@ impl Var {
         match env.specs.get(list.0) {
             Some(spec) => spec.students().iter().copied().collect(),
             None => Vec::new(),
+        }
+    }
+
+    /// Defensive against a stale `list` too — [`VarEnv::group_count`] would
+    /// panic on one.
+    fn compute_group_range(env: &VarEnv, list: &GroupListIdx) -> Vec<u32> {
+        if list.0 < env.specs.len() {
+            (0..env.group_count(*list)).collect()
+        } else {
+            Vec::new()
         }
     }
 }
@@ -162,30 +170,44 @@ pub(crate) mod tests {
         let env = VarEnv::new(&plan);
 
         let vars = <Var as DescribeVar>::enumerate(&env);
-        assert_eq!(vars.len(), 7); // 4 students + 3 students
+        // One binary per (student, group): 4 students × ceil(4/3) groups,
+        // plus 3 students × ceil(3/2) groups.
+        assert_eq!(vars.len(), 4 * 2 + 3 * 2);
 
         // A variable of the enumerated set is free: nothing is ever fixed.
-        let free = Var::StudentGroup {
+        let free = Var::StudentInGroup {
             list: GroupListIdx(0),
             student: student(1),
+            group: 1,
         };
         assert!(vars.contains_key(&free));
         assert_eq!(free.check_fix(&env), None);
 
         // A student that belongs to the other spec is a stale name and is
         // neutralized to 0.
-        let stale_student = Var::StudentGroup {
+        let stale_student = Var::StudentInGroup {
             list: GroupListIdx(0),
             student: student(5),
+            group: 0,
         };
         assert!(!vars.contains_key(&stale_student));
         assert_eq!(stale_student.check_fix(&env), Some(0.0));
 
         // So is a list index beyond the plan.
-        let stale_list = Var::StudentGroup {
+        let stale_list = Var::StudentInGroup {
             list: GroupListIdx(2),
             student: student(1),
+            group: 0,
         };
         assert_eq!(stale_list.check_fix(&env), Some(0.0));
+
+        // And so is a group index beyond the list's group count.
+        let stale_group = Var::StudentInGroup {
+            list: GroupListIdx(0),
+            student: student(1),
+            group: 2,
+        };
+        assert!(!vars.contains_key(&stale_group));
+        assert_eq!(stale_group.check_fix(&env), Some(0.0));
     }
 }

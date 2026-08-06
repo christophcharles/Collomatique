@@ -5,9 +5,9 @@
 //! ([`VarEnv::group_count`]), so an empty group would leave the others
 //! oversized: emptiness is not something the model must tolerate any more.
 
-use crate::extras::{MyBundle, V, extra_var};
-use crate::types::{ConstraintDesc, ExtraVarName};
-use crate::vars::{GroupListIdx, VarEnv};
+use crate::extras::{MyBundle, V, base_var};
+use crate::types::ConstraintDesc;
+use crate::vars::{GroupListIdx, Var, VarEnv};
 use collomatique_ilp::int_linexpr::IntLinExpr;
 
 fn build_for_group(
@@ -22,7 +22,7 @@ fn build_for_group(
         .students(list)
         .iter()
         .map(|&student| {
-            IntLinExpr::var(extra_var(ExtraVarName::StudentInGroup {
+            IntLinExpr::var(base_var(Var::StudentInGroup {
                 list,
                 student,
                 group,

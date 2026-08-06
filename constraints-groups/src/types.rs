@@ -8,12 +8,6 @@ use collomatique_state_colloscopes::StudentId;
 /// objective, and the values must stay correct there.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum ExtraVarName {
-    /// 1 ⟺ `StudentGroup { list, student } == group`.
-    StudentInGroup {
-        list: GroupListIdx,
-        student: StudentId,
-        group: u32,
-    },
     /// 1 ⟺ `a` and `b` (with `a < b`) both sit in group `group` of list
     /// `list`. Declared for every pair of students sharing the list's spec.
     PairInGroup {
@@ -33,6 +27,13 @@ pub enum ExtraVarName {
 /// display that has no counterpart here.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum ConstraintDesc {
+    /// `Σ_g StudentInGroup(list, student, g) == 1` — every student of a
+    /// spec sits in exactly one group. Used to be enforced by the integer
+    /// domain of the retired `Var::StudentGroup`.
+    StudentInOneGroup {
+        list: GroupListIdx,
+        student: StudentId,
+    },
     /// `Σ_s StudentInGroup(list, s, group) <= max_students`.
     StudentsPerGroupMax {
         list: GroupListIdx,
