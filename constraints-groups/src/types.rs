@@ -3,22 +3,15 @@
 use crate::vars::GroupListIdx;
 use collomatique_state_colloscopes::StudentId;
 
-/// Names of the reified extra variables (piece 7). All reifications are
-/// full equivalences (roadmap §2.2): several solve strategies strip the
-/// objective, and the values must stay correct there.
+/// Names of the extra variables (piece 7). The single family left is
+/// objective-only, and it is defined by one-sided rows rather than a full
+/// equivalence — see [`crate::extras`] for why that is sound here.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum ExtraVarName {
-    /// 1 ⟺ `a` and `b` (with `a < b`) both sit in group `group` of list
-    /// `list`. Declared for every pair of students sharing the list's spec.
-    PairInGroup {
-        a: StudentId,
-        b: StudentId,
-        list: GroupListIdx,
-        group: u32,
-    },
-    /// 1 ⟺ the pair (with `a < b`) shares some group in some list.
-    /// Declared only for pairs that co-occur in at least one spec; fixed
-    /// to 1 when the pair is pinned by a kept list.
+    /// 1 if the pair (with `a < b`) shares some group in some list, and
+    /// what the minimizing objective drives to 0 otherwise. Declared only
+    /// for pairs that co-occur in at least one spec; pinned to 1 when the
+    /// pair is already grouped by a kept list.
     SharedPair { a: StudentId, b: StudentId },
 }
 

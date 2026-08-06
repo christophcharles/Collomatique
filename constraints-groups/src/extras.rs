@@ -1,22 +1,47 @@
-//! The reified extra variables of the model (piece 7 of the roadmap).
+//! The extra variables of the model (piece 7 of the roadmap).
 //!
 //! Declaration is lazy: `Modeler::build` only expands extras that are
 //! (transitively) referenced by a constraint or the objective, so a declared
 //! extra that nothing references costs nothing in the built model.
 //!
-//! Every reification is a full equivalence (roadmap §2.2): several solve
-//! strategies strip the objective, so a one-sided implication would let the
-//! solver report a wrong indicator value.
+//! `SharedPair` is defined by *one-sided* rows — `shared ≥ x_a + x_b − 1`,
+//! one per (list, group) the pair could meet in — so the variable is forced
+//! up when the pair shares a group and merely left free when it does not.
+//! The full equivalence the roadmap (§2.2) asked for would need one AND
+//! indicator per (pair, list, group), which was the largest block of the
+//! model by far.
+//!
+//! One-sidedness is sound because nothing ever reads the variable outside a
+//! minimizing objective:
+//!
+//! - the only consumer of the crate, gtk4, filters a solved configuration
+//!   down to the base variables before reading it
+//!   (`gtk4/src/editor/group_lists.rs`), so a floating extra value never
+//!   reaches a group list;
+//! - no constraint references `SharedPair`, so the defining rows are left
+//!   out of the checker problem entirely (`ilp-modeler/src/lib.rs`, the
+//!   `for_constraints: true` filter) — the strategies that strip the
+//!   objective never even see them;
+//! - reported objective values stay exact anyway: every strategy recovers
+//!   them through `Model::reconstruction_problem`, which re-minimizes the
+//!   true objective with the base values fixed, and under a minimize the
+//!   one-sided rows are tight.
 
 use crate::types::{ConstraintDesc, ExtraVarName};
 use crate::vars::{GroupListIdx, Var, VarEnv};
+use collomatique_ilp::Variable;
 use collomatique_ilp::int_linexpr::IntLinExpr;
-use collomatique_ilp_modeler::bundle::ReifyError;
-use collomatique_ilp_modeler::{IntConstraintBundle, Var as ModelerVar};
+use collomatique_ilp_modeler::bundle::{ExtraEntry, ReifyError};
+use collomatique_ilp_modeler::{ExtraVar, IntConstraintBundle, Var as ModelerVar};
 use collomatique_state_colloscopes::StudentId;
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(crate) type V = ModelerVar<Var, ExtraVarName>;
+
+/// The variable type *inside* an extra-definition closure: [`V`] plus the
+/// helper case. The one-sided rows declare no helper, but they still have to
+/// be written in this type.
+type DefV = ExtraVar<Var, ExtraVarName>;
 pub(crate) type MyBundle = IntConstraintBundle<
     'static,
     Var,
@@ -48,39 +73,6 @@ fn pairs_of(students: &BTreeSet<StudentId>) -> Vec<(StudentId, StudentId)> {
     pairs
 }
 
-fn build_pair_in_group(env: &VarEnv) -> MyBundle {
-    let mut bundle = MyBundle::new();
-    for list in env.lists() {
-        for (a, b) in pairs_of(env.students(list)) {
-            for group in 0..env.group_count(list) {
-                let var = ExtraVarName::PairInGroup { a, b, list, group };
-                bundle = bundle
-                    .and_reified(var, move || {
-                        // Both operands are binary, so `x_a + x_b >= 2` is
-                        // their AND, reified as a single constraint with no
-                        // helper column (cheaper than the two-constraint
-                        // form of the sibling crate, and the same full
-                        // equivalence). This is by far the largest family,
-                        // so the saving matters.
-                        let sa = IntLinExpr::var(base_var(Var::StudentInGroup {
-                            list,
-                            student: a,
-                            group,
-                        }));
-                        let sb = IntLinExpr::var(base_var(Var::StudentInGroup {
-                            list,
-                            student: b,
-                            group,
-                        }));
-                        vec![(sa + sb).geq(&IntLinExpr::constant(2))]
-                    })
-                    .expect("no duplicate extras");
-            }
-        }
-    }
-    bundle
-}
-
 /// Which pairs co-occur, and in which lists. A pair gets a `SharedPair`
 /// variable iff this map has an entry for it (roadmap §2.2). The objective
 /// (piece 9) must sum over exactly that set — referencing an undeclared
@@ -100,12 +92,12 @@ fn build_shared_pair(env: &VarEnv) -> MyBundle {
     for ((a, b), lists) in co_occurrences(env) {
         let var = ExtraVarName::SharedPair { a, b };
         if env.pinned_pairs().contains(&(a, b)) {
-            // The pair already shares a group in a kept list, so the OR
-            // holds by a constant term: the variable is pinned to 1 (an
-            // empty conjunction reifies to `indicator = 1`) and the
-            // degenerate `PairInGroup` rows are omitted entirely. This is
-            // the extras equivalent of the base-variable fixer, which
-            // cannot apply here — the fixer chain is base-only.
+            // The pair already shares a group in a kept list, so it costs
+            // nothing whatever the model does: the variable is pinned to 1
+            // (an empty conjunction reifies to `indicator = 1`) and no
+            // defining row is emitted at all. This is the extras equivalent
+            // of the base-variable fixer, which cannot apply here — the
+            // fixer chain is base-only.
             bundle = bundle
                 .and_reified(var, move || vec![])
                 .expect("no duplicate extras");
@@ -115,22 +107,37 @@ fn build_shared_pair(env: &VarEnv) -> MyBundle {
                 .map(|&list| (list, env.group_count(list)))
                 .collect();
             bundle = bundle
-                .and_reified(var, move || {
-                    let sum: IntLinExpr<V> = terms
-                        .iter()
-                        .flat_map(|&(list, groups)| {
-                            (0..groups).map(move |group| {
-                                IntLinExpr::var(extra_var(ExtraVarName::PairInGroup {
-                                    a,
-                                    b,
+                .with_extra(
+                    var,
+                    ExtraEntry::new(Variable::binary(), move |_helpers, _ctx, name| {
+                        // `x_a + x_b − shared <= 1` for every (list, group)
+                        // the pair could meet in: the pair sharing a group
+                        // forces `shared` up, and nothing forces it back
+                        // down but the objective (see the module doc).
+                        let shared: IntLinExpr<DefV> = IntLinExpr::var(DefV::Extra(name));
+                        let mut rows = Vec::new();
+                        for &(list, groups) in &terms {
+                            for group in 0..groups {
+                                let xa = IntLinExpr::var(DefV::Base(Var::StudentInGroup {
                                     list,
+                                    student: a,
                                     group,
-                                }))
-                            })
-                        })
-                        .sum();
-                    vec![sum.geq(&IntLinExpr::constant(1))]
-                })
+                                }));
+                                let xb = IntLinExpr::var(DefV::Base(Var::StudentInGroup {
+                                    list,
+                                    student: b,
+                                    group,
+                                }));
+                                rows.push(
+                                    (xa + xb - shared.clone())
+                                        .leq(&IntLinExpr::constant(1))
+                                        .into_constraint(),
+                                );
+                            }
+                        }
+                        Ok(rows)
+                    }),
+                )
                 .expect("no duplicate extras");
         }
     }
@@ -138,9 +145,7 @@ fn build_shared_pair(env: &VarEnv) -> MyBundle {
 }
 
 pub(crate) fn build_extras(env: &VarEnv) -> MyBundle {
-    build_pair_in_group(env)
-        .merge(build_shared_pair(env))
-        .expect("no duplicate extras")
+    build_shared_pair(env)
 }
 
 #[cfg(test)]
@@ -247,18 +252,16 @@ mod tests {
     }
 
     #[test]
-    fn pair_in_group_and_shared_pair() {
-        // Two lists of 4 students with fixed size 2, hence 2 slots each.
+    fn a_shared_group_forces_the_pair_up() {
+        // Two lists of 4 students with fixed size 2, hence 2 groups each.
+        //
+        // Only the ≥ direction can be tested by an adversary: the rows are
+        // one-sided, so pushing a *non*-sharing pair up would simply
+        // succeed. That the value comes back down to 0 when the pair does
+        // not share is a property of the minimizing objective, pinned by
+        // `objective.rs`'s tests instead.
         let plan = plan_of(&[(&[1, 2, 3, 4], (2, 2)), (&[1, 2, 5, 6], (2, 2))]);
 
-        let pair_in_group = |a: u64, b: u64, list: usize, group: u32| {
-            extra_var(ExtraVarName::PairInGroup {
-                a: student(a),
-                b: student(b),
-                list: GroupListIdx(list),
-                group,
-            })
-        };
         let shared = |a: u64, b: u64| {
             extra_var(ExtraVarName::SharedPair {
                 a: student(a),
@@ -278,19 +281,20 @@ mod tests {
                 place(1, 5, 0),
                 place(1, 2, 1),
                 place(1, 6, 1),
-                // Adversarial: 1 and 2 do share the first group of list 0,
-                // 1 and 3 co-occur in list 0 but never share a group.
-                (-1.0, pair_in_group(1, 2, 0, 0)),
+                // Adversarial: 1 and 2 share the first group of list 0 and
+                // 1 and 5 the first group of list 1, in both cases against
+                // the push. 1 and 6 co-occur but never share a group, so
+                // nothing holds them up and the same push wins there —
+                // which is what tells the two directions apart.
                 (-1.0, shared(1, 2)),
-                (1.0, pair_in_group(1, 3, 0, 0)),
-                (1.0, shared(1, 3)),
+                (-1.0, shared(1, 5)),
+                (-1.0, shared(1, 6)),
             ],
         );
 
-        assert_eq!(value(&cfg, pair_in_group(1, 2, 0, 0)), 1.0);
         assert_eq!(value(&cfg, shared(1, 2)), 1.0);
-        assert_eq!(value(&cfg, pair_in_group(1, 3, 0, 0)), 0.0);
-        assert_eq!(value(&cfg, shared(1, 3)), 0.0);
+        assert_eq!(value(&cfg, shared(1, 5)), 1.0);
+        assert_eq!(value(&cfg, shared(1, 6)), 0.0);
     }
 
     #[test]
@@ -318,15 +322,17 @@ mod tests {
                 place(1, 5, 0),
                 place(1, 2, 1),
                 place(1, 6, 1),
-                // Adversarial: push the pinned pair down, and push the
-                // non-pinned pairs of the same model the wrong way too.
-                // (Every extra an assertion reads must be referenced here:
-                // expansion is lazy, so an unreferenced extra is not a
-                // variable of the built problem at all.)
+                // Every pair is pushed down. The pinned one and the two
+                // sharing ones must resist; 3 and 4 are separated, so the
+                // push wins there and the pin is shown to be a property of
+                // the pair rather than of the whole family. (Every extra an
+                // assertion reads must be referenced here: expansion is
+                // lazy, so an unreferenced extra is not a variable of the
+                // built problem at all.)
                 (-1.0, shared(1, 2)),
                 (-1.0, shared(1, 5)),
                 (-1.0, shared(1, 3)),
-                (1.0, shared(3, 4)),
+                (-1.0, shared(3, 4)),
             ],
         );
 
@@ -341,7 +347,7 @@ mod tests {
     }
 
     #[test]
-    fn single_group_list_forces_the_chain() {
+    fn single_group_list_forces_the_shared_pair() {
         // Three students in groups of 3 to 4: ceil(3 / 4) is a single
         // group, so the only term of each student's "exactly one group" row
         // is `group 0` and the placement is forced by that row alone.
@@ -353,31 +359,17 @@ mod tests {
             student: student(1),
             group: 0,
         });
-        let pair = extra_var(ExtraVarName::PairInGroup {
-            a: student(1),
-            b: student(2),
-            list,
-            group: 0,
-        });
         let shared = extra_var(ExtraVarName::SharedPair {
             a: student(1),
             b: student(2),
         });
 
-        // Only adversarial terms: the placement and both extras are pushed
-        // toward 0, and the equivalences must still propagate the forced
-        // placement through the whole chain.
-        let cfg = solve_with_objective(
-            &plan,
-            &[
-                (-1.0, in_group.clone()),
-                (-1.0, pair.clone()),
-                (-1.0, shared.clone()),
-            ],
-        );
+        // Only adversarial terms: the placement and the pair are both
+        // pushed toward 0, and the forced placement must still propagate
+        // through the defining row.
+        let cfg = solve_with_objective(&plan, &[(-1.0, in_group.clone()), (-1.0, shared.clone())]);
 
         assert_eq!(value(&cfg, in_group), 1.0);
-        assert_eq!(value(&cfg, pair), 1.0);
         assert_eq!(value(&cfg, shared), 1.0);
     }
 }

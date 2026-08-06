@@ -213,6 +213,59 @@ mod tests {
     }
 
     #[test]
+    fn reconstruction_recovers_exact_pair_values() {
+        // The load-bearing assumption behind the one-sided `SharedPair`
+        // rows (see the `extras` module doc). Under a stripped objective a
+        // pair variable may float upward, so this solves the *checker*
+        // problem — no objective at all — and then hands its base values
+        // back through `Model::solution_from_data`, which is the
+        // reconstruction path every strategy uses to report an objective.
+        //
+        // The checker returns any feasible placement, so nothing here is
+        // hardcoded: each pair is checked against the placement it actually
+        // got, read off the base binaries.
+        let plan = plan_of(&[(&[1, 2, 3, 4], (2, 2)), (&[1, 2, 3, 4], (2, 3))]);
+        let model = crate::build_model(&plan, ObjectiveWeights::default());
+        let solver = ColloCbcSolver::with_disable_logging(true);
+
+        let base = model
+            .solve_checker(&solver)
+            .expect("the checker problem must be feasible")
+            .get_data();
+        let solution = model
+            .solution_from_data(&base, &solver)
+            .expect("reconstruction should succeed");
+        let cfg = solution.get_complete_data();
+
+        // Both specs hold 4 students with a maximum of at least 2, so both
+        // lists have ceil(4 / max) = 2 groups.
+        let group_of = |list: usize, s: u64| -> u32 {
+            (0..2)
+                .find(|&group| {
+                    base.get(Var::StudentInGroup {
+                        list: GroupListIdx(list),
+                        student: student(s),
+                        group,
+                    })
+                    .expect("every binary of the placement is a base variable")
+                    .round() as i64
+                        == 1
+                })
+                .expect("every student sits in a group")
+        };
+
+        let mut expected_total = 0.0;
+        for (a, b) in [(1, 2), (1, 3), (1, 4), (2, 3), (2, 4), (3, 4)] {
+            let together = (0..2).any(|list| group_of(list, a) == group_of(list, b));
+            let expected = if together { 1.0 } else { 0.0 };
+            assert_close(value(&cfg, shared(a, b)), expected);
+            expected_total += expected;
+        }
+        // `w_pairs` is 1, so the objective is the plain count.
+        assert_close(solution.eval(), expected_total);
+    }
+
+    #[test]
     fn explicit_weight_scales_the_pair_term() {
         // The instance of `optimum_reuses_groupings_across_lists`, with the
         // pair weight turned down to 0.1: reuse now costs 0.2 while the

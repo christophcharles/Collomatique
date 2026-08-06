@@ -81,21 +81,23 @@ mod tests {
         assert_eq!(max, 4);
         assert_eq!(min, 4);
 
-        // The objective references every `SharedPair`, and their definitions
-        // reference every `PairInGroup` of their lists, so the pair extras
-        // are now all expanded. `SharedPair`: the lists are disjoint, so the
-        // co-occurring pairs are C(4,2) + C(3,2) = 6 + 3. `PairInGroup`: one
-        // per co-occurring pair and group, 6 × 2 + 3 × 2.
-        let mut pair_in_group = 0;
+        // The objective references every `SharedPair`, so they are all
+        // expanded. The lists are disjoint, so the co-occurring pairs are
+        // C(4,2) + C(3,2) = 6 + 3. Their one-sided definitions reference
+        // nothing but base variables, so the extras of the model are
+        // exactly those nine columns — the whole `PairInGroup` block, and
+        // the helper columns of its reification, are gone.
         let mut shared_pair = 0;
+        let mut helpers = 0;
         for v in model.problem().get_variables().keys() {
+            // Exhaustive for the same reason as the `match` above.
             match v {
-                InternalVar::Extra(ExtraVarName::PairInGroup { .. }) => pair_in_group += 1,
                 InternalVar::Extra(ExtraVarName::SharedPair { .. }) => shared_pair += 1,
-                _ => {}
+                InternalVar::Helper { .. } => helpers += 1,
+                InternalVar::Base(_) => {}
             }
         }
-        assert_eq!(pair_in_group, 18);
         assert_eq!(shared_pair, 9);
+        assert_eq!(helpers, 0);
     }
 }

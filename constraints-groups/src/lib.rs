@@ -11,7 +11,7 @@
 //!
 //! The model is complete (end of phase B): the base `StudentInGroup`
 //! binaries — the assignment matrix itself, one variable per (list,
-//! student, group) — the reified extras of piece 7, the shape constraints
+//! student, group) — the `SharedPair` extras of piece 7, the shape constraints
 //! of piece 8 (one group per student, min and max size), the stability
 //! objective of piece 9
 //! (minimize the globally shared student pairs, with a configurable weight
