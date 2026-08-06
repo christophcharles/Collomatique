@@ -167,7 +167,8 @@ pub struct Colloscope {
     /// instead of resetting every time.
     solve_config: collomatique_constraints_colloscopes::SolveConfig,
     /// The last-validated conductor strategy, bolted onto the solve request by this UI (the
-    /// modelization-only [`SolveConfig`] does not carry it). Defaults to the parallel strategy.
+    /// modelization-only [`collomatique_constraints_colloscopes::SolveConfig`] does not carry
+    /// it). Defaults to the parallel strategy.
     strategy: collomatique_strategies::ConductorStrategy,
 
     edited_group_list: Option<collomatique_state_colloscopes::GroupListId>,

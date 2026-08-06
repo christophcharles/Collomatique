@@ -4,8 +4,10 @@
 //! [Solver] builds a [SolverModel] from a [Problem],
 //! and [SolverModel::solve] finds an optimal solution.
 //!
-//! It also contains the implementations of different solvers as submodules.
-//! The default solver for collomatique is [coin_cbc].
+//! It also contains the implementations of different solvers as submodules,
+//! each behind its own cargo feature. The default solver for collomatique is
+//! [collo_cbc], the only one enabled by default; `coin_cbc` and `good_lp` are
+//! opt-in.
 
 #[cfg(feature = "coin_cbc")]
 pub mod coin_cbc;

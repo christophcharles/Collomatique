@@ -18,7 +18,7 @@ use crate::ops::AnnotatedPeriodOp;
 /// each mapping to `()` — a period carries no other data of its own.
 ///
 /// Weeks and their per-period ordering live in the sibling [crate::weeks::Weeks]
-/// container, a sibling field on [crate::Parameters].
+/// container, a sibling field on [crate::colloscope_params::Parameters].
 ///
 /// The cross-container consistency (every `ordering` row names a live period,
 /// the row is non-empty, every week names its period, no week is left

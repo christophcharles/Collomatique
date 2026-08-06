@@ -319,7 +319,8 @@ impl InMemoryData for Data {
     ///
     /// On the accepted path the id-issuer high-water assert
     /// (`Data::assert_id_issuer_high_water`) is the surviving [Data]-level
-    /// companion of the checker. It cannot fire through the [Manager] surface:
+    /// companion of the checker. It cannot fire through the
+    /// [Manager](collomatique_state::traits::Manager) surface:
     /// `annotate` draws every fresh id from this issuer, and the `GlobalUpdate`
     /// annotate arm absorbs foreign payload ids up front via
     /// `IdIssuer::skip_to_id`. Its only trigger is an [AnnotatedOp] transplanted

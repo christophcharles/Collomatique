@@ -991,7 +991,8 @@ impl Dialog {
     }
 }
 
-/// Reads a backend [`TimeLimit`] into the dialog's `(enabled, secs)` pair. When the limit is
+/// Reads a backend [`collomatique_time::TimeLimit`] into the dialog's `(enabled, secs)` pair.
+/// When the limit is
 /// unbounded, keeps `current` so a later re-enable restores the last shown value.
 fn read_time_limit(tl: collomatique_time::TimeLimit, current: u32) -> (bool, u32) {
     match tl.get_seconds() {
@@ -1000,7 +1001,8 @@ fn read_time_limit(tl: collomatique_time::TimeLimit, current: u32) -> (bool, u32
     }
 }
 
-/// Builds a backend [`TimeLimit`] from the dialog's `(enabled, secs)` pair. `0 s` (or disabled)
+/// Builds a backend [`collomatique_time::TimeLimit`] from the dialog's `(enabled, secs)` pair.
+/// `0 s` (or disabled)
 /// maps to no limit.
 fn make_time_limit(enabled: bool, secs: u32) -> collomatique_time::TimeLimit {
     if enabled {

@@ -1,7 +1,7 @@
 //! Spec-2 encode submodule
 //!
-//! This module builds a [json::Spec2Document] from an [InnerData], in the
-//! spec's canonical form (`docs/file_format.md` §3): blocks in default
+//! This module builds a [Spec2Document] from an [InnerData], in the
+//! spec's canonical form (`docs/file_format/file_format.md` §3): blocks in default
 //! state and neutral entries of derived-key-set collections are
 //! omitted, blocks appear in canonical order, and unordered collections
 //! are sorted.

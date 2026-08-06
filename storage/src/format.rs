@@ -1,7 +1,7 @@
 //! Spec-2 format structs
 //!
 //! This module mirrors, field for field, the JSON shapes specified in
-//! `docs/file_format.md` (spec version 2). It is layer 1 of the decoding
+//! `docs/file_format/file_format.md` (spec version 2). It is layer 1 of the decoding
 //! pipeline: serde derives (plus a few custom scalar parsers) enforce the
 //! purely *local* validity rules — shapes, scalar encodings, key uniqueness
 //! within a collection. Referential rules (dangling ids, derived key sets,

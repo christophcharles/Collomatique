@@ -148,7 +148,7 @@ where
         }
     }
 
-    /// Construct equality constraints from a [`ConfigData`]: for
+    /// Construct equality constraints from a [`collomatique_ilp::ConfigData`]: for
     /// each `(var, value)` entry, add `var == value`.
     pub fn from_config_data(
         config: &collomatique_ilp::ConfigData<B>,
