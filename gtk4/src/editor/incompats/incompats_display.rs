@@ -108,7 +108,7 @@ impl FactoryComponent for Entry {
             gtk::Button {
                 set_margin_top: 10,
                 adw::ButtonContent {
-                    set_icon_name: "edit-add",
+                    set_icon_name: "list-add-symbolic",
                     set_label: "Ajouter une incompatibilité",
                 },
                 connect_clicked => EntryInput::AddIncompatClicked,

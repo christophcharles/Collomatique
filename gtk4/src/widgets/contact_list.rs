@@ -215,7 +215,7 @@ impl<Id: Identifier> FactoryComponent for Entry<Id> {
                 set_halign: gtk::Align::Start,
                 set_margin_start: 5,
                 set_margin_end: 5,
-                set_icon_name: Some("contact-symbolic"),
+                set_icon_name: Some("phone-symbolic"),
             },
             gtk::Label {
                 set_halign: gtk::Align::Start,
@@ -238,7 +238,7 @@ impl<Id: Identifier> FactoryComponent for Entry<Id> {
                 set_halign: gtk::Align::Start,
                 set_margin_start: 5,
                 set_margin_end: 5,
-                set_icon_name: Some("emblem-mail-symbolic"),
+                set_icon_name: Some("mail-unread-symbolic"),
             },
             gtk::Label {
                 set_halign: gtk::Align::Start,

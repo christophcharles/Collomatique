@@ -232,7 +232,7 @@ impl SimpleComponent for Dialog {
                             adw::ButtonRow {
                                 set_hexpand: true,
                                 set_title: "Ajouter un créneau",
-                                set_start_icon_name: Some("edit-add"),
+                                set_start_icon_name: Some("list-add-symbolic"),
                                 connect_activated[sender] => move |_widget| {
                                     sender.input(DialogInput::AddSlot);
                                 },
