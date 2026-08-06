@@ -40,7 +40,7 @@ impl<V: UsableData + Send> VarOrderSerializable<V> for DefaultPayload {
 #[async_trait]
 impl Strategy for DefaultStrategy {
     type Progress<V: UsableData + Send> = SolveProgress<V>;
-    type Payload<V: UsableData + Send> = DefaultPayload;
+    type Payload<B: UsableData + Send, E: UsableData + Send> = DefaultPayload;
 
     fn name(&self) -> &'static str {
         "default"

@@ -400,8 +400,10 @@ impl StrategyContext {
 pub trait Strategy: Send + Sync {
     type Progress<V: UsableData + Send>: Send + Sync + Clone;
     /// Per-run payload carrying data specific to *this* problem instance (as opposed to the
-    /// strategy's own configuration). Empty (`*Payload`) for strategies that need none.
-    type Payload<V: UsableData + Send>: Send + Sync + Clone;
+    /// strategy's own configuration). Parameterized by the base and extra variable types so
+    /// strategies that only consume base variables (e.g. incremental) can key their payload by
+    /// `B` alone. Empty (`*Payload`) for strategies that need none.
+    type Payload<B: UsableData + Send, E: UsableData + Send>: Send + Sync + Clone;
 
     fn name(&self) -> &'static str;
 
@@ -413,7 +415,7 @@ pub trait Strategy: Send + Sync {
         ctx: &StrategyContext,
         model: &Model<B, E, C>,
         warm_start: Option<ConfigData<InternalVar<B, E>>>,
-        payload: Self::Payload<InternalVar<B, E>>,
+        payload: Self::Payload<B, E>,
         on_progress: &(dyn Fn(Self::Progress<InternalVar<B, E>>) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
@@ -425,7 +427,7 @@ pub trait Strategy: Send + Sync {
         &self,
         ctx: &StrategyContext,
         model: &Model<B, E, C>,
-        payload: Self::Payload<InternalVar<B, E>>,
+        payload: Self::Payload<B, E>,
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
         B: UsableData + Send,
@@ -589,23 +591,27 @@ impl StrategyProgressData {
 /// `ConfigData<V>`.
 ///
 /// Mirrors [`StrategyProgress<V>`] but flows parent → subprocess. Not serializable by design
-/// (the target configs are only serializable when `V` is); the serializable counterpart is
-/// [`StrategyPayloadData`], reached via the [`VarOrderSerializable`] impl.
+/// (the target configs are only serializable when the variables are); the serializable
+/// counterpart is [`StrategyPayloadData`], reached via the [`VarOrderSerializable`] impl.
+///
+/// Parameterized by the base and extra variable types: variants carrying a full config are
+/// keyed by the flattened `InternalVar<B, E>`, while variants that only ever name base
+/// variables are keyed by `B` alone.
 #[derive(Debug, Clone)]
-pub enum StrategyPayload<V: UsableData + Send> {
+pub enum StrategyPayload<B: UsableData + Send, E: UsableData + Send> {
     Default(DefaultPayload),
     NoObjective(NoObjectivePayload),
     NoObjectiveStarter(NoObjectiveStarterPayload),
-    FindClosest(FindClosestPayload<V>),
-    Fuzzy(FuzzyPayload<V>),
-    Incremental(IncrementalPayload<V>),
-    Conductor(ConductorPayload<V>),
+    FindClosest(FindClosestPayload<InternalVar<B, E>>),
+    Fuzzy(FuzzyPayload<InternalVar<B, E>>),
+    Incremental(IncrementalPayload<B>),
+    Conductor(ConductorPayload<B>),
 }
 
 /// Serializable, type-erased union of every strategy's per-run payload — the only payload form
 /// that crosses the IPC barrier. Target configs are erased to column-indexed `Vec<f64>`;
-/// reconstruct the typed [`StrategyPayload<V>`] with [`VarOrderSerializable::from_data`] once a
-/// `var_order` is available.
+/// reconstruct the typed [`StrategyPayload<B, E>`] with [`VarOrderSerializable::from_data`]
+/// once a `var_order` is available.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum StrategyPayloadData {
     Default(DefaultPayload),
@@ -631,46 +637,63 @@ impl StrategyPayloadData {
 
 // Lift each strategy's own payload into the typed union, so the spawnable-strategy machinery can
 // erase any strategy's payload via `Into<StrategyPayload>` (mirrors the progress `From` impls).
-impl<V: UsableData + Send> From<DefaultPayload> for StrategyPayload<V> {
+impl<B: UsableData + Send, E: UsableData + Send> From<DefaultPayload> for StrategyPayload<B, E> {
     fn from(p: DefaultPayload) -> Self {
         StrategyPayload::Default(p)
     }
 }
-impl<V: UsableData + Send> From<NoObjectivePayload> for StrategyPayload<V> {
+impl<B: UsableData + Send, E: UsableData + Send> From<NoObjectivePayload>
+    for StrategyPayload<B, E>
+{
     fn from(p: NoObjectivePayload) -> Self {
         StrategyPayload::NoObjective(p)
     }
 }
-impl<V: UsableData + Send> From<NoObjectiveStarterPayload> for StrategyPayload<V> {
+impl<B: UsableData + Send, E: UsableData + Send> From<NoObjectiveStarterPayload>
+    for StrategyPayload<B, E>
+{
     fn from(p: NoObjectiveStarterPayload) -> Self {
         StrategyPayload::NoObjectiveStarter(p)
     }
 }
-impl<V: UsableData + Send> From<FindClosestPayload<V>> for StrategyPayload<V> {
-    fn from(p: FindClosestPayload<V>) -> Self {
+impl<B: UsableData + Send, E: UsableData + Send> From<FindClosestPayload<InternalVar<B, E>>>
+    for StrategyPayload<B, E>
+{
+    fn from(p: FindClosestPayload<InternalVar<B, E>>) -> Self {
         StrategyPayload::FindClosest(p)
     }
 }
-impl<V: UsableData + Send> From<FuzzyPayload<V>> for StrategyPayload<V> {
-    fn from(p: FuzzyPayload<V>) -> Self {
+impl<B: UsableData + Send, E: UsableData + Send> From<FuzzyPayload<InternalVar<B, E>>>
+    for StrategyPayload<B, E>
+{
+    fn from(p: FuzzyPayload<InternalVar<B, E>>) -> Self {
         StrategyPayload::Fuzzy(p)
     }
 }
-impl<V: UsableData + Send> From<IncrementalPayload<V>> for StrategyPayload<V> {
-    fn from(p: IncrementalPayload<V>) -> Self {
+impl<B: UsableData + Send, E: UsableData + Send> From<IncrementalPayload<B>>
+    for StrategyPayload<B, E>
+{
+    fn from(p: IncrementalPayload<B>) -> Self {
         StrategyPayload::Incremental(p)
     }
 }
-impl<V: UsableData + Send> From<ConductorPayload<V>> for StrategyPayload<V> {
-    fn from(p: ConductorPayload<V>) -> Self {
+impl<B: UsableData + Send, E: UsableData + Send> From<ConductorPayload<B>>
+    for StrategyPayload<B, E>
+{
+    fn from(p: ConductorPayload<B>) -> Self {
         StrategyPayload::Conductor(p)
     }
 }
 
-impl<V: UsableData + Send> VarOrderSerializable<V> for StrategyPayload<V> {
+impl<B: UsableData + Send, E: UsableData + Send> VarOrderSerializable<InternalVar<B, E>>
+    for StrategyPayload<B, E>
+{
     type Data = StrategyPayloadData;
     type Error = Infallible;
-    fn into_data(&self, var_order: &[V]) -> Result<StrategyPayloadData, Infallible> {
+    fn into_data(
+        &self,
+        var_order: &[InternalVar<B, E>],
+    ) -> Result<StrategyPayloadData, Infallible> {
         Ok(match self {
             StrategyPayload::Default(p) => {
                 StrategyPayloadData::Default(VarOrderSerializable::into_data(p, var_order)?)
@@ -695,29 +718,46 @@ impl<V: UsableData + Send> VarOrderSerializable<V> for StrategyPayload<V> {
             }
         })
     }
-    fn from_data(data: &StrategyPayloadData, var_order: &[V]) -> Result<Self, Infallible> {
+    fn from_data(
+        data: &StrategyPayloadData,
+        var_order: &[InternalVar<B, E>],
+    ) -> Result<Self, Infallible> {
         Ok(match data {
-            StrategyPayloadData::Default(d) => StrategyPayload::Default(
-                <DefaultPayload as VarOrderSerializable<V>>::from_data(d, var_order)?,
-            ),
-            StrategyPayloadData::NoObjective(d) => StrategyPayload::NoObjective(
-                <NoObjectivePayload as VarOrderSerializable<V>>::from_data(d, var_order)?,
-            ),
+            StrategyPayloadData::Default(d) => {
+                StrategyPayload::Default(<DefaultPayload as VarOrderSerializable<
+                    InternalVar<B, E>,
+                >>::from_data(d, var_order)?)
+            }
+            StrategyPayloadData::NoObjective(d) => {
+                StrategyPayload::NoObjective(<NoObjectivePayload as VarOrderSerializable<
+                    InternalVar<B, E>,
+                >>::from_data(d, var_order)?)
+            }
             StrategyPayloadData::NoObjectiveStarter(d) => StrategyPayload::NoObjectiveStarter(
-                <NoObjectiveStarterPayload as VarOrderSerializable<V>>::from_data(d, var_order)?,
+                <NoObjectiveStarterPayload as VarOrderSerializable<InternalVar<B, E>>>::from_data(
+                    d, var_order,
+                )?,
             ),
             StrategyPayloadData::FindClosest(d) => StrategyPayload::FindClosest(
-                <FindClosestPayload<V> as VarOrderSerializable<V>>::from_data(d, var_order)?,
+                <FindClosestPayload<InternalVar<B, E>> as VarOrderSerializable<
+                    InternalVar<B, E>,
+                >>::from_data(d, var_order)?,
             ),
-            StrategyPayloadData::Fuzzy(d) => StrategyPayload::Fuzzy(
-                <FuzzyPayload<V> as VarOrderSerializable<V>>::from_data(d, var_order)?,
-            ),
-            StrategyPayloadData::Incremental(d) => StrategyPayload::Incremental(
-                <IncrementalPayload<V> as VarOrderSerializable<V>>::from_data(d, var_order)?,
-            ),
-            StrategyPayloadData::Conductor(d) => StrategyPayload::Conductor(
-                <ConductorPayload<V> as VarOrderSerializable<V>>::from_data(d, var_order)?,
-            ),
+            StrategyPayloadData::Fuzzy(d) => {
+                StrategyPayload::Fuzzy(<FuzzyPayload<InternalVar<B, E>> as VarOrderSerializable<
+                    InternalVar<B, E>,
+                >>::from_data(d, var_order)?)
+            }
+            StrategyPayloadData::Incremental(d) => {
+                StrategyPayload::Incremental(<IncrementalPayload<B> as VarOrderSerializable<
+                    InternalVar<B, E>,
+                >>::from_data(d, var_order)?)
+            }
+            StrategyPayloadData::Conductor(d) => {
+                StrategyPayload::Conductor(<ConductorPayload<B> as VarOrderSerializable<
+                    InternalVar<B, E>,
+                >>::from_data(d, var_order)?)
+            }
         })
     }
 }
@@ -727,7 +767,9 @@ impl StrategyKind {
     /// `NoObjectiveStarter`, `Conductor`). Returns `None` for `Fuzzy`/`FindClosest`/`Incremental`,
     /// which require a target config or an epoch assignment and must have their payload built
     /// explicitly.
-    pub fn empty_payload<V: UsableData + Send>(&self) -> Option<StrategyPayload<V>> {
+    pub fn empty_payload<B: UsableData + Send, E: UsableData + Send>(
+        &self,
+    ) -> Option<StrategyPayload<B, E>> {
         match self {
             StrategyKind::Default(_) => Some(StrategyPayload::Default(DefaultPayload)),
             StrategyKind::NoObjective(_) => Some(StrategyPayload::NoObjective(NoObjectivePayload)),
@@ -973,12 +1015,13 @@ impl From<ConductorStrategy> for StrategyKind {
     }
 }
 
-/// A strategy that can be spawned as a subprocess for a given variable type `V`.
+/// A strategy that can be spawned as a subprocess for a given base/extra variable pair
+/// `(B, E)`.
 ///
-/// `V` is a trait parameter (not a GAT) so the blanket impl below can bound
-/// `Self::Progress: StrategyProgressVariant<V>` as an ordinary per-instantiation
-/// `where` clause — a GAT would require an (inexpressible) `for<V>` bound.
-pub trait SpawnableStrategy<V: UsableData + Send> {
+/// `(B, E)` are trait parameters (not GATs) so the blanket impl below can bound
+/// `Self::Progress: StrategyProgressVariant<InternalVar<B, E>>` as an ordinary
+/// per-instantiation `where` clause — a GAT would require an (inexpressible) `for<V>` bound.
+pub trait SpawnableStrategy<B: UsableData + Send, E: UsableData + Send> {
     type Progress: Send;
     type Payload: Send;
     fn to_strategy_kind(&self) -> StrategyKind;
@@ -986,48 +1029,61 @@ pub trait SpawnableStrategy<V: UsableData + Send> {
     /// the typed union unchanged if it carries a variant this strategy never emits.
     fn convert_progress(
         data: StrategyProgressData,
-        var_order: &[V],
-    ) -> Result<Self::Progress, StrategyProgress<V>>;
+        var_order: &[InternalVar<B, E>],
+    ) -> Result<Self::Progress, StrategyProgress<InternalVar<B, E>>>;
     /// Erase this strategy's typed payload into the serializable form sent over IPC, encoding
     /// any variable-keyed data against `var_order` (the inverse of [`Self::convert_progress`]).
-    fn payload_into_data(payload: Self::Payload, var_order: &[V]) -> StrategyPayloadData;
+    fn payload_into_data(
+        payload: Self::Payload,
+        var_order: &[InternalVar<B, E>],
+    ) -> StrategyPayloadData;
 }
 
 /// Every `Strategy` that can be turned into a `StrategyKind`, whose progress is a variant of
 /// the typed union and whose payload lifts into [`StrategyPayload`], is spawnable:
 /// deserialize-then-project for progress, lift-then-erase for the payload.
-impl<V, S> SpawnableStrategy<V> for S
+impl<B, E, S> SpawnableStrategy<B, E> for S
 where
-    V: UsableData + Send,
+    B: UsableData + Send,
+    E: UsableData + Send,
     S: Strategy + Clone,
     StrategyKind: From<S>,
-    <S as Strategy>::Progress<V>: StrategyProgressVariant<V>,
-    StrategyPayload<V>: From<<S as Strategy>::Payload<V>>,
+    <S as Strategy>::Progress<InternalVar<B, E>>: StrategyProgressVariant<InternalVar<B, E>>,
+    StrategyPayload<B, E>: From<<S as Strategy>::Payload<B, E>>,
 {
-    type Progress = <S as Strategy>::Progress<V>;
-    type Payload = <S as Strategy>::Payload<V>;
+    type Progress = <S as Strategy>::Progress<InternalVar<B, E>>;
+    type Payload = <S as Strategy>::Payload<B, E>;
     fn to_strategy_kind(&self) -> StrategyKind {
         StrategyKind::from(self.clone())
     }
     fn convert_progress(
         data: StrategyProgressData,
-        var_order: &[V],
-    ) -> Result<Self::Progress, StrategyProgress<V>> {
-        let typed = <StrategyProgress<V> as VarOrderSerializable<V>>::from_data(&data, var_order)
-            .unwrap_or_else(|e| match e {});
-        <Self::Progress as StrategyProgressVariant<V>>::from_strategy_progress(typed)
+        var_order: &[InternalVar<B, E>],
+    ) -> Result<Self::Progress, StrategyProgress<InternalVar<B, E>>> {
+        let typed = <StrategyProgress<InternalVar<B, E>> as VarOrderSerializable<
+            InternalVar<B, E>,
+        >>::from_data(&data, var_order)
+        .unwrap_or_else(|e| match e {});
+        <Self::Progress as StrategyProgressVariant<InternalVar<B, E>>>::from_strategy_progress(
+            typed,
+        )
     }
-    fn payload_into_data(payload: Self::Payload, var_order: &[V]) -> StrategyPayloadData {
-        let union: StrategyPayload<V> = StrategyPayload::from(payload);
-        <StrategyPayload<V> as VarOrderSerializable<V>>::into_data(&union, var_order)
-            .unwrap_or_else(|e| match e {})
+    fn payload_into_data(
+        payload: Self::Payload,
+        var_order: &[InternalVar<B, E>],
+    ) -> StrategyPayloadData {
+        let union: StrategyPayload<B, E> = StrategyPayload::from(payload);
+        <StrategyPayload<B, E> as VarOrderSerializable<InternalVar<B, E>>>::into_data(
+            &union, var_order,
+        )
+        .unwrap_or_else(|e| match e {})
     }
 }
 
 #[async_trait]
 impl Strategy for StrategyKind {
     type Progress<V: UsableData + Send> = StrategyProgress<V>;
-    type Payload<V: UsableData + Send> = StrategyPayload<V>;
+    type Payload<B: UsableData + Send, E: UsableData + Send> = StrategyPayload<B, E>;
 
     fn name(&self) -> &'static str {
         match self {
@@ -1058,7 +1114,7 @@ impl Strategy for StrategyKind {
         ctx: &StrategyContext,
         model: &Model<B, E, C>,
         warm_start: Option<ConfigData<InternalVar<B, E>>>,
-        payload: StrategyPayload<InternalVar<B, E>>,
+        payload: StrategyPayload<B, E>,
         on_progress: &(dyn Fn(StrategyProgress<InternalVar<B, E>>) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
@@ -1192,7 +1248,7 @@ impl StrategyContext {
         strategy: &StrategyKind,
         model: &Model<B, E, C>,
         warm_start: Option<ConfigData<InternalVar<B, E>>>,
-        payload: StrategyPayload<InternalVar<B, E>>,
+        payload: StrategyPayload<B, E>,
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
         B: UsableData + Send,
@@ -1209,7 +1265,7 @@ impl StrategyContext {
         strategy: &StrategyKind,
         model: &Model<B, E, C>,
         warm_start: Option<ConfigData<InternalVar<B, E>>>,
-        payload: StrategyPayload<InternalVar<B, E>>,
+        payload: StrategyPayload<B, E>,
         on_progress: &(dyn Fn(StrategyProgress<InternalVar<B, E>>) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
@@ -1230,10 +1286,10 @@ impl StrategyContext {
         payload: S::Payload,
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
-        B: UsableData,
-        E: UsableData,
+        B: UsableData + Send,
+        E: UsableData + Send,
         C: UsableData,
-        S: SpawnableStrategy<InternalVar<B, E>>,
+        S: SpawnableStrategy<B, E>,
     {
         self.spawn_strategy_with_callback(strategy, model, warm_start, payload, &|_| true)
             .await
@@ -1248,10 +1304,10 @@ impl StrategyContext {
         on_progress: &(dyn Fn(S::Progress) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
-        B: UsableData,
-        E: UsableData,
+        B: UsableData + Send,
+        E: UsableData + Send,
         C: UsableData,
-        S: SpawnableStrategy<InternalVar<B, E>>,
+        S: SpawnableStrategy<B, E>,
     {
         let (model_desc, var_order) = model.to_desc();
         let strategy_kind = strategy.to_strategy_kind();
@@ -1302,10 +1358,10 @@ impl StrategyContext {
         handle_echo: &(dyn Fn(String) -> Option<String> + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
-        B: UsableData,
-        E: UsableData,
+        B: UsableData + Send,
+        E: UsableData + Send,
         C: UsableData,
-        S: SpawnableStrategy<InternalVar<B, E>>,
+        S: SpawnableStrategy<B, E>,
     {
         let (model_desc, var_order) = model.to_desc();
         let strategy_kind = strategy.to_strategy_kind();
@@ -1407,11 +1463,16 @@ mod tests {
         // A Fuzzy payload's target lives in the model's variable space. Erasing it to a
         // StrategyPayloadData (Vec<f64>) and reconstructing against the same var_order must
         // recover the exact config, mirroring how an incumbent crosses the subprocess barrier.
-        let var_order: Vec<usize> = vec![0, 1, 2];
+        let var_order: Vec<InternalVar<usize, usize>> = vec![
+            InternalVar::Base(0),
+            InternalVar::Extra(7),
+            InternalVar::Base(1),
+        ];
         let raw = vec![1.0, 0.0, 1.0];
         let target = collomatique_ilp::solution_to_config_data(&raw, &var_order);
 
-        let payload: StrategyPayload<usize> = StrategyPayload::Fuzzy(FuzzyPayload { target });
+        let payload: StrategyPayload<usize, usize> =
+            StrategyPayload::Fuzzy(FuzzyPayload { target });
         let data = VarOrderSerializable::into_data(&payload, &var_order).unwrap();
         assert_eq!(
             data,
@@ -1420,9 +1481,10 @@ mod tests {
             })
         );
 
-        let restored =
-            <StrategyPayload<usize> as VarOrderSerializable<usize>>::from_data(&data, &var_order)
-                .unwrap();
+        let restored = <StrategyPayload<usize, usize> as VarOrderSerializable<
+            InternalVar<usize, usize>,
+        >>::from_data(&data, &var_order)
+        .unwrap();
         let StrategyPayload::Fuzzy(FuzzyPayload { target }) = restored else {
             panic!("expected a Fuzzy payload");
         };
@@ -1451,16 +1513,24 @@ mod tests {
         let json = serde_json::to_string(&kind).unwrap();
         assert_eq!(serde_json::from_str::<StrategyKind>(&json).unwrap(), kind);
 
-        // An epoch payload erases against var_order to a Vec<Option<u32>> and reconstructs.
-        let var_order: Vec<usize> = vec![0, 1, 2];
-        let payload: StrategyPayload<usize> = StrategyPayload::Incremental(IncrementalPayload {
-            epochs: HashMap::from([(0usize, 0u32), (2usize, 1u32)]),
-        });
+        // An epoch payload erases against var_order to a Vec<Option<u32>> and reconstructs. The
+        // epoch map is keyed by the *base* variable while var_order holds flattened variables:
+        // base columns look their key up, every non-base column encodes as `None`.
+        let var_order: Vec<InternalVar<usize, usize>> = vec![
+            InternalVar::Base(0),
+            InternalVar::Extra(7),
+            InternalVar::Base(1),
+            InternalVar::Base(2),
+        ];
+        let payload: StrategyPayload<usize, usize> =
+            StrategyPayload::Incremental(IncrementalPayload {
+                epochs: HashMap::from([(0usize, 0u32), (2usize, 1u32)]),
+            });
         let data = VarOrderSerializable::into_data(&payload, &var_order).unwrap();
         assert_eq!(
             data,
             StrategyPayloadData::Incremental(IncrementalPayloadData {
-                epochs: vec![Some(0), None, Some(1)]
+                epochs: vec![Some(0), None, None, Some(1)]
             })
         );
 
@@ -1468,9 +1538,10 @@ mod tests {
         let back: StrategyPayloadData = serde_json::from_str(&json).unwrap();
         assert_eq!(back, data);
 
-        let restored =
-            <StrategyPayload<usize> as VarOrderSerializable<usize>>::from_data(&back, &var_order)
-                .unwrap();
+        let restored = <StrategyPayload<usize, usize> as VarOrderSerializable<
+            InternalVar<usize, usize>,
+        >>::from_data(&back, &var_order)
+        .unwrap();
         let StrategyPayload::Incremental(IncrementalPayload { epochs }) = restored else {
             panic!("expected an Incremental payload");
         };

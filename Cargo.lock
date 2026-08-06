@@ -344,6 +344,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "collomatique-constraints-groups"
+version = "0.1.0"
+dependencies = [
+ "collomatique-ilp",
+ "collomatique-ilp-modeler",
+ "collomatique-state",
+ "collomatique-state-colloscopes",
+ "collomatique-storage",
+ "collomatique-testgen-colloscopes",
+ "thiserror",
+]
+
+[[package]]
 name = "collomatique-constraints-rooms"
 version = "0.1.0"
 dependencies = [
@@ -362,6 +375,7 @@ dependencies = [
  "chrono",
  "clap",
  "collomatique-constraints-colloscopes",
+ "collomatique-constraints-groups",
  "collomatique-ilp",
  "collomatique-ilp-modeler",
  "collomatique-mps",

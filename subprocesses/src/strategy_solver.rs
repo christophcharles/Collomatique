@@ -79,7 +79,7 @@ impl StrategySubprocess {
         log_callback: impl Fn(&str) + Send + 'static,
     ) -> Result<StrategySubprocess, WorkerSpawnError>
     where
-        S: SpawnableStrategy<InternalVar<B, E>>,
+        S: SpawnableStrategy<B, E>,
         S::Progress: Send + 'static,
         B: UsableData + Send + 'static,
         E: UsableData + Send + 'static,

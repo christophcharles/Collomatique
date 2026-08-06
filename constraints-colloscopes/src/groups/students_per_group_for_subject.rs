@@ -1,9 +1,10 @@
 use crate::extras::{
-    MyBundle, V, extra_var, students_for_subject_period_group_list, subject_interrogation_params,
+    MyBundle, V, base_var, extra_var, students_for_subject_period_group_list,
+    subject_interrogation_params,
 };
 use crate::ids::GroupNum;
 use crate::types::{ExtraVarName, ProgressiveConstraint, QualityConstraint};
-use crate::vars::VarEnv;
+use crate::vars::{Var, VarEnv};
 use collomatique_ilp::int_linexpr::{IntConstraint, IntLinExpr};
 use collomatique_state_colloscopes::group_lists::GroupListFilling;
 
@@ -28,7 +29,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
             let count: IntLinExpr<V> = students
                 .iter()
                 .map(|&student| {
-                    IntLinExpr::var(extra_var(ExtraVarName::StudentInGroup {
+                    IntLinExpr::var(base_var(Var::StudentInGroup {
                         student,
                         group_list,
                         group,
@@ -115,7 +116,7 @@ fn add_reification(
                     let sum: IntLinExpr<V> = students
                         .iter()
                         .map(|&student| {
-                            IntLinExpr::var(extra_var(ExtraVarName::StudentInGroup {
+                            IntLinExpr::var(base_var(Var::StudentInGroup {
                                 student,
                                 group_list,
                                 group,

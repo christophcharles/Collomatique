@@ -225,7 +225,7 @@ impl Parameters {
     /// This is the single declared enumeration of the ten entity tables. The
     /// order — students, periods, subjects, teachers, week patterns, slots,
     /// incompats, group lists, pairing rules, slot pairing rules — is kept
-    /// identical to the historical [`Parameters::ids`] chain, which now defers
+    /// identical to the historical `Parameters::ids` chain, which now defers
     /// to this method.
     pub fn all_ids(&self) -> impl Iterator<Item = NewId> + '_ {
         self.students

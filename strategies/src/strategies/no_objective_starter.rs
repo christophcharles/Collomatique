@@ -38,7 +38,7 @@ impl<V: UsableData + Send> VarOrderSerializable<V> for NoObjectiveStarterPayload
 #[async_trait]
 impl Strategy for NoObjectiveStarterStrategy {
     type Progress<V: UsableData + Send> = NoObjectiveStarterProgress<V>;
-    type Payload<V: UsableData + Send> = NoObjectiveStarterPayload;
+    type Payload<B: UsableData + Send, E: UsableData + Send> = NoObjectiveStarterPayload;
 
     fn name(&self) -> &'static str {
         "no-obj-starter"

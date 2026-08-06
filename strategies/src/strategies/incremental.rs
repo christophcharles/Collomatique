@@ -16,17 +16,18 @@ use crate::{
 };
 
 /// Per-run payload for [`IncrementalStrategy`]: an epoch index for (some of) the base
-/// variables. A base variable absent from the map is solved in the *final* epoch
-/// (`max epoch + 1`). Entries naming variables that are not base variables of the model
-/// are ignored.
+/// variables. The map is keyed by the model's *base* variable type, so entries naming
+/// extras or helpers are unrepresentable. A base variable absent from the map is solved
+/// in the *final* epoch (`max epoch + 1`). An entry naming a base variable that is not
+/// part of the model (a stale name) is ignored.
 #[derive(Debug, Clone)]
-pub struct IncrementalPayload<V: UsableData> {
-    pub epochs: HashMap<V, u32>,
+pub struct IncrementalPayload<B: UsableData> {
+    pub epochs: HashMap<B, u32>,
 }
 
-// Manual (not derived): `#[derive(Default)]` would wrongly require `V: Default`. An empty epoch map
+// Manual (not derived): `#[derive(Default)]` would wrongly require `B: Default`. An empty epoch map
 // puts every base variable in the final epoch, i.e. a single priming solve.
-impl<V: UsableData> Default for IncrementalPayload<V> {
+impl<B: UsableData> Default for IncrementalPayload<B> {
     fn default() -> Self {
         IncrementalPayload {
             epochs: HashMap::new(),
@@ -34,7 +35,7 @@ impl<V: UsableData> Default for IncrementalPayload<V> {
     }
 }
 
-/// Serializable counterpart of [`IncrementalPayload<V>`]: the epoch of each variable is
+/// Serializable counterpart of [`IncrementalPayload<B>`]: the epoch of each variable is
 /// erased to a column-indexed `Vec<Option<u32>>` against the model's `var_order`
 /// (`Some(e)` = epoch `e`; `None` = unlisted → final epoch), so it can cross the IPC barrier.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -42,23 +43,40 @@ pub struct IncrementalPayloadData {
     pub epochs: Vec<Option<u32>>,
 }
 
-impl<V: UsableData + Send> VarOrderSerializable<V> for IncrementalPayload<V> {
+impl<B, E> VarOrderSerializable<InternalVar<B, E>> for IncrementalPayload<B>
+where
+    B: UsableData + Send,
+    E: UsableData + Send,
+{
     type Data = IncrementalPayloadData;
     type Error = Infallible;
-    fn into_data(&self, var_order: &[V]) -> Result<IncrementalPayloadData, Infallible> {
-        // `None` distinguishes "unlisted" (→ final epoch) from "epoch 0".
+    fn into_data(
+        &self,
+        var_order: &[InternalVar<B, E>],
+    ) -> Result<IncrementalPayloadData, Infallible> {
+        // `None` distinguishes "unlisted" (→ final epoch) from "epoch 0"; non-base columns
+        // are always `None` (the payload cannot name them).
         let epochs = var_order
             .iter()
-            .map(|v| self.epochs.get(v).copied())
+            .map(|v| match v {
+                InternalVar::Base(b) => self.epochs.get(b).copied(),
+                _ => None,
+            })
             .collect();
         Ok(IncrementalPayloadData { epochs })
     }
-    fn from_data(data: &IncrementalPayloadData, var_order: &[V]) -> Result<Self, Infallible> {
+    fn from_data(
+        data: &IncrementalPayloadData,
+        var_order: &[InternalVar<B, E>],
+    ) -> Result<Self, Infallible> {
         let epochs = data
             .epochs
             .iter()
             .zip(var_order)
-            .filter_map(|(opt, v)| opt.map(|e| (v.clone(), e)))
+            .filter_map(|(opt, v)| match (opt, v) {
+                (Some(e), InternalVar::Base(b)) => Some((b.clone(), *e)),
+                _ => None,
+            })
             .collect();
         Ok(IncrementalPayload { epochs })
     }
@@ -94,7 +112,7 @@ pub struct IncrementalStrategy {
     pub l1_weight: f64,
     /// Absolute tolerance on each epoch's objective gap: stop an epoch's solve as soon as a
     /// feasible incumbent is within this distance of the best bound, instead of proving the
-    /// epoch optimal. Mirrors [`FindClosestStrategy::distance_tolerance`](super::find_closest).
+    /// epoch optimal. Mirrors [`FindClosestStrategy::distance_tolerance`](crate::FindClosestStrategy::distance_tolerance).
     /// `0.0` means "solve each epoch to proven optimality".
     pub distance_tolerance: f64,
     /// Time limit for each epoch's solve.
@@ -261,7 +279,7 @@ fn empty_outcome<V: UsableData>(status: SolveStatus) -> StrategyOutcome<V> {
 #[async_trait]
 impl Strategy for IncrementalStrategy {
     type Progress<V: UsableData + Send> = IncrementalProgressData;
-    type Payload<V: UsableData + Send> = IncrementalPayload<V>;
+    type Payload<B: UsableData + Send, E: UsableData + Send> = IncrementalPayload<B>;
 
     fn name(&self) -> &'static str {
         "incremental"
@@ -276,7 +294,7 @@ impl Strategy for IncrementalStrategy {
         ctx: &StrategyContext,
         model: &Model<B, E, C>,
         _warm_start: Option<ConfigData<InternalVar<B, E>>>,
-        payload: IncrementalPayload<InternalVar<B, E>>,
+        payload: IncrementalPayload<B>,
         on_progress: &(dyn Fn(Self::Progress<InternalVar<B, E>>) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where
@@ -296,15 +314,12 @@ impl Strategy for IncrementalStrategy {
             })
             .collect();
 
-        // Project the payload to base variables of the model (ignore extras/helpers and any
-        // variable that is not part of the problem).
+        // Drop entries naming base variables that are not part of the model (stale names keep
+        // the documented "ignored" behavior; non-base entries are unrepresentable).
         let mut epoch_of: HashMap<B, u32> = payload
             .epochs
             .into_iter()
-            .filter_map(|(v, e)| match v {
-                InternalVar::Base(b) if all_base.contains(&b) => Some((b, e)),
-                _ => None,
-            })
+            .filter(|(b, _)| all_base.contains(b))
             .collect();
 
         // Unlisted base variables form the final epoch (`max + 1`).
@@ -705,10 +720,16 @@ mod tests {
     }
 
     /// The payload's epoch map is aligned to `var_order` on the way out and reconstructed on
-    /// the way in, distinguishing "unlisted" (`None`) from "epoch 0".
+    /// the way in, distinguishing "unlisted" (`None`) from "epoch 0". The payload is keyed by
+    /// the base variable, so a non-base column of the order always encodes as `None`.
     #[test]
     fn payload_round_trips_against_var_order() {
-        let var_order: Vec<usize> = vec![0, 1, 2];
+        let var_order: Vec<InternalVar<usize, usize>> = vec![
+            InternalVar::Base(0),
+            InternalVar::Extra(7),
+            InternalVar::Base(1),
+            InternalVar::Base(2),
+        ];
         let epochs: HashMap<usize, u32> = HashMap::from([(0usize, 0u32), (2usize, 1u32)]);
         let payload = IncrementalPayload {
             epochs: epochs.clone(),
@@ -718,13 +739,13 @@ mod tests {
         assert_eq!(
             data,
             IncrementalPayloadData {
-                epochs: vec![Some(0), None, Some(1)]
+                epochs: vec![Some(0), None, None, Some(1)]
             }
         );
 
-        let restored = <IncrementalPayload<usize> as VarOrderSerializable<usize>>::from_data(
-            &data, &var_order,
-        )
+        let restored = <IncrementalPayload<usize> as VarOrderSerializable<
+            InternalVar<usize, usize>,
+        >>::from_data(&data, &var_order)
         .unwrap();
         assert_eq!(restored.epochs, epochs);
     }
@@ -761,10 +782,7 @@ mod tests {
         let model = modeler.build(&()).unwrap();
 
         let payload = IncrementalPayload {
-            epochs: HashMap::from([
-                (InternalVar::Base(0usize), 0u32),
-                (InternalVar::Base(1usize), 1u32),
-            ]),
+            epochs: HashMap::from([(0usize, 0u32), (1usize, 1u32)]),
         };
 
         let ctx = StrategyContext::new(Arc::new(RealBackend));
@@ -849,10 +867,7 @@ mod tests {
         let model = modeler.build(&()).unwrap();
 
         let payload = IncrementalPayload {
-            epochs: HashMap::from([
-                (InternalVar::Base(0usize), 0u32),
-                (InternalVar::Base(1usize), 1u32),
-            ]),
+            epochs: HashMap::from([(0usize, 0u32), (1usize, 1u32)]),
         };
 
         let ctx = StrategyContext::new(Arc::new(RealBackend));
@@ -872,9 +887,9 @@ mod tests {
         assert_eq!(x1, 0.0);
     }
 
-    /// An empty epoch index is skipped, and a payload entry naming a variable that is not a
-    /// base variable of the model is ignored. Here x0 → epoch 0 and x1 → epoch 2 (epoch 1 is
-    /// empty), plus a bogus variable at epoch 0; the run visits exactly two epochs.
+    /// An empty epoch index is skipped, and a payload entry naming a base variable that is not
+    /// part of the model (a stale name) is ignored. Here x0 → epoch 0 and x1 → epoch 2 (epoch 1
+    /// is empty), plus a bogus variable at epoch 0; the run visits exactly two epochs.
     #[tokio::test]
     async fn empty_epoch_skipped_and_unknown_var_ignored() {
         let vars: HashMap<usize, Variable> =
@@ -895,9 +910,9 @@ mod tests {
 
         let payload = IncrementalPayload {
             epochs: HashMap::from([
-                (InternalVar::Base(0usize), 0u32),
-                (InternalVar::Base(1usize), 2u32),
-                (InternalVar::Base(99usize), 0u32), // not a base variable of the model
+                (0usize, 0u32),
+                (1usize, 2u32),
+                (99usize, 0u32), // not a base variable of the model
             ]),
         };
 

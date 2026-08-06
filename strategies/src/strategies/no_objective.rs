@@ -38,7 +38,7 @@ impl<V: UsableData + Send> VarOrderSerializable<V> for NoObjectivePayload {
 #[async_trait]
 impl Strategy for NoObjectiveStrategy {
     type Progress<V: UsableData + Send> = NoObjectiveProgressData;
-    type Payload<V: UsableData + Send> = NoObjectivePayload;
+    type Payload<B: UsableData + Send, E: UsableData + Send> = NoObjectivePayload;
 
     fn name(&self) -> &'static str {
         "no-obj"

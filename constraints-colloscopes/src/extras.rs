@@ -258,36 +258,6 @@ fn build_interrogation_has_groups(env: &VarEnv) -> MyBundle {
     bundle
 }
 
-fn build_student_in_group(env: &VarEnv) -> MyBundle {
-    let mut bundle = MyBundle::new();
-    for (group_list, gl) in env.group_lists.group_list_map.iter() {
-        let students = students_for_group_list(env, gl);
-        for group in GroupNum::enumerate(env, group_list) {
-            for &student in &students {
-                let var = ExtraVarName::StudentInGroup {
-                    student,
-                    group_list,
-                    group,
-                };
-                bundle = bundle
-                    .and_reified(var, move || {
-                        let expr = IntLinExpr::var(base_var(Var::StudentGroup {
-                            group_list,
-                            student,
-                        }));
-                        let group_i64: i64 = group
-                            .index()
-                            .try_into()
-                            .expect("group index should fit in i64");
-                        vec![expr.eq(&IntLinExpr::constant(group_i64))]
-                    })
-                    .expect("no duplicate extras");
-            }
-        }
-    }
-    bundle
-}
-
 fn build_group_has_students(env: &VarEnv) -> MyBundle {
     use collomatique_state_colloscopes::group_lists::GroupListFilling;
 
@@ -324,7 +294,7 @@ fn build_group_has_students(env: &VarEnv) -> MyBundle {
                             let sum: IntLinExpr<V> = students
                                 .iter()
                                 .map(|&student| {
-                                    IntLinExpr::var(extra_var(ExtraVarName::StudentInGroup {
+                                    IntLinExpr::var(base_var(Var::StudentInGroup {
                                         student,
                                         group_list,
                                         group,
@@ -373,7 +343,7 @@ fn build_student_at_interrogation_in_group(env: &VarEnv) -> MyBundle {
                         };
                         bundle = bundle
                             .and_reified(var, move || {
-                                let c1 = IntLinExpr::var(extra_var(ExtraVarName::StudentInGroup {
+                                let c1 = IntLinExpr::var(base_var(Var::StudentInGroup {
                                     student,
                                     group_list,
                                     group,
@@ -666,9 +636,6 @@ fn build_student_not_at_incompat_slot(env: &VarEnv) -> MyBundle {
 
 pub fn build_extras(env: &VarEnv) -> MyBundle {
     let bundle = build_interrogation_has_groups(env);
-    let bundle = bundle
-        .merge(build_student_in_group(env))
-        .expect("no duplicate extras");
     let bundle = bundle
         .merge(build_group_has_students(env))
         .expect("no duplicate extras");

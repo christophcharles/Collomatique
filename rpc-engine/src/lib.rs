@@ -209,7 +209,7 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
 
     // Reconstruct the typed payload from its erased form against this subprocess's var_order,
     // mirroring how progress is erased on the way back out.
-    let payload = <StrategyPayload<InternalVar<usize, usize>> as VarOrderSerializable<
+    let payload = <StrategyPayload<usize, usize> as VarOrderSerializable<
         InternalVar<usize, usize>,
     >>::from_data(&request.payload, &var_order)
     .unwrap_or_else(|e| match e {});

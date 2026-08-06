@@ -145,7 +145,7 @@ where
 /// A high-level wrapper around [`gio::ListStore`],
 /// [`gtk::SignalListItemFactory`] and [`gtk::ColumnView`].
 ///
-/// [`TypedColumnView`] aims at keeping nearly the same functionality and
+/// [`DynamicColumnView`] aims at keeping nearly the same functionality and
 /// flexibility of the raw bindings while introducing a more idiomatic
 /// and type-safe interface.
 pub struct DynamicColumnView<T, S> {
@@ -191,7 +191,7 @@ where
     T: Any,
     S: RelmSelectionExt,
 {
-    /// Create a new, empty [`TypedColumnView`].
+    /// Create a new, empty [`DynamicColumnView`].
     #[must_use]
     pub fn new() -> Self {
         let store = gio::ListStore::new::<glib::BoxedAnyObject>();
@@ -335,7 +335,7 @@ where
         self.store.n_items()
     }
 
-    /// Get the [`TypedListItem`] at the specified position.
+    /// Get the [`ColumnItem`] at the specified position.
     ///
     /// Returns [`None`] if the position is invalid.
     pub fn get(&self, position: u32) -> Option<ColumnItem<T>> {
@@ -353,7 +353,7 @@ where
         self.store.splice(position, n_removals, &objects);
     }
 
-    /// Get the visible [`TypedListItem`] at the specified position,
+    /// Get the visible [`ColumnItem`] at the specified position,
     /// (the item at the given position after filtering and sorting).
     ///
     /// Returns [`None`] if the position is invalid.

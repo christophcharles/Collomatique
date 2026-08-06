@@ -153,7 +153,8 @@ where
 #[async_trait]
 impl Strategy for FindClosestStrategy {
     type Progress<V: UsableData + Send> = FindClosestProgressData;
-    type Payload<V: UsableData + Send> = FindClosestPayload<V>;
+    type Payload<B: UsableData + Send, E: UsableData + Send> =
+        FindClosestPayload<InternalVar<B, E>>;
 
     fn name(&self) -> &'static str {
         "find-closest"

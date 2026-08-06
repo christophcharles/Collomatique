@@ -39,7 +39,7 @@ pub struct GroupLists {
 /// prefilled group count matches the group-name count, and no student appears
 /// in two prefilled groups). State-dependent facts (student existence) stay
 /// with the checker/walker as dangling FKs. Serialized exactly like the raw
-/// `{ params, filling }` pair via [`RawGroupList`]; deserializing an
+/// `{ params, filling }` pair via `RawGroupList`; deserializing an
 /// inconsistent pair is a hard error (the [`NonEmptyRangeInclusive`] precedent).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References, ContentOrd)]
 #[serde(try_from = "RawGroupList", into = "RawGroupList")]

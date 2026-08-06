@@ -15,6 +15,7 @@ collomatique-ops = { path = "../ops" }
 collomatique-rpc = { path = "../rpc" }
 collomatique-rpc-engine = { path = "../rpc-engine" }
 collomatique-constraints-colloscopes = { path = "../constraints-colloscopes" }
+collomatique-constraints-groups = { path = "../constraints-groups" }
 collomatique-xlsx = { path = "../xlsx" }
 collomatique-mps = { path = "../mps" }
 collomatique-strategies = { path = "../strategies" }

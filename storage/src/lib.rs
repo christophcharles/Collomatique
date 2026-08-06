@@ -43,7 +43,8 @@ pub enum DeserializationError {
     ///
     /// Spec 1 was a raw dump of the in-memory data, used before any
     /// release. It is permanently retired: such files can no longer be
-    /// opened. This is the tombstone described in `docs/file_format.md` —
+    /// opened. This is the tombstone described in
+    /// `docs/file_format/file_format.md` —
     /// a spec-1 file (any entry declaring `minimum_spec_version: 1`) is
     /// rejected with this clear error rather than a generic decode failure.
     #[error(

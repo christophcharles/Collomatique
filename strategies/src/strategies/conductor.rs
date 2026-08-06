@@ -341,7 +341,7 @@ pub struct IncrementalConfig {
     /// (see [`IncrementalStrategy::epoch_incumbent_time_limit`](crate::IncrementalStrategy)).
     /// Independent of [`IncrementalConfig::epoch_time_limit`]; each epoch stops at whichever
     /// deadline comes first. Does not affect the final reconstruction solve. Defaults to five
-    /// minutes, unlike [`IncrementalStrategy`](crate::IncrementalStrategy)'s own unbounded default.
+    /// minutes, unlike [`IncrementalStrategy`]'s own unbounded default.
     pub epoch_incumbent_time_limit: collomatique_time::TimeLimit,
 }
 
@@ -451,11 +451,11 @@ impl Default for ConductorStrategy {
 /// `IncrementalStrategy` when [`ConductorStrategy::incremental_config`] is set. Always present (an
 /// empty assignment is a single-epoch priming solve); ignored when incremental is disabled.
 #[derive(Debug, Clone)]
-pub struct ConductorPayload<V: UsableData> {
-    pub incremental: IncrementalPayload<V>,
+pub struct ConductorPayload<B: UsableData> {
+    pub incremental: IncrementalPayload<B>,
 }
 
-impl<V: UsableData> Default for ConductorPayload<V> {
+impl<B: UsableData> Default for ConductorPayload<B> {
     fn default() -> Self {
         ConductorPayload {
             incremental: IncrementalPayload::default(),
@@ -463,21 +463,31 @@ impl<V: UsableData> Default for ConductorPayload<V> {
     }
 }
 
-/// Serializable counterpart of [`ConductorPayload<V>`] (crosses the IPC barrier).
+/// Serializable counterpart of [`ConductorPayload<B>`] (crosses the IPC barrier).
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct ConductorPayloadData {
     pub incremental: IncrementalPayloadData,
 }
 
-impl<V: UsableData + Send> VarOrderSerializable<V> for ConductorPayload<V> {
+impl<B, E> VarOrderSerializable<InternalVar<B, E>> for ConductorPayload<B>
+where
+    B: UsableData + Send,
+    E: UsableData + Send,
+{
     type Data = ConductorPayloadData;
     type Error = Infallible;
-    fn into_data(&self, var_order: &[V]) -> Result<ConductorPayloadData, Infallible> {
+    fn into_data(
+        &self,
+        var_order: &[InternalVar<B, E>],
+    ) -> Result<ConductorPayloadData, Infallible> {
         Ok(ConductorPayloadData {
             incremental: self.incremental.into_data(var_order)?,
         })
     }
-    fn from_data(data: &ConductorPayloadData, var_order: &[V]) -> Result<Self, Infallible> {
+    fn from_data(
+        data: &ConductorPayloadData,
+        var_order: &[InternalVar<B, E>],
+    ) -> Result<Self, Infallible> {
         Ok(ConductorPayload {
             incremental: IncrementalPayload::from_data(&data.incremental, var_order)?,
         })
@@ -998,7 +1008,7 @@ async fn run_one_worker<'a, B, E, C>(
     worker_num: u32,
     kind: StrategyKind,
     warm_start: Option<ConfigData<InternalVar<B, E>>>,
-    payload: StrategyPayload<InternalVar<B, E>>,
+    payload: StrategyPayload<B, E>,
     cancel: Option<oneshot::Receiver<()>>,
     wake_tx: &'a mpsc::UnboundedSender<()>,
 ) -> WorkerEnd<InternalVar<B, E>>
@@ -1079,7 +1089,7 @@ where
 #[async_trait]
 impl Strategy for ConductorStrategy {
     type Progress<V: UsableData + Send> = ConductorProgress<V>;
-    type Payload<V: UsableData + Send> = ConductorPayload<V>;
+    type Payload<B: UsableData + Send, E: UsableData + Send> = ConductorPayload<B>;
 
     fn name(&self) -> &'static str {
         "conductor"
@@ -1094,7 +1104,7 @@ impl Strategy for ConductorStrategy {
         ctx: &StrategyContext,
         model: &Model<B, E, C>,
         warm_start: Option<ConfigData<InternalVar<B, E>>>,
-        conductor_payload: ConductorPayload<InternalVar<B, E>>,
+        conductor_payload: ConductorPayload<B>,
         on_progress: &(dyn Fn(Self::Progress<InternalVar<B, E>>) -> bool + Send + Sync),
     ) -> Result<StrategyOutcome<InternalVar<B, E>>, StrategyError>
     where

@@ -1,0 +1,68 @@
+//! End-to-end smoke over the public API: a hand-built plan goes through
+//! `build_model`, a real CBC solve, and `build_group_lists`, and comes back
+//! as structurally valid prefilled group lists. It started as piece-1's
+//! verification of the solver machinery (roadmap §7) and now covers the
+//! constrained model too.
+
+use collomatique_constraints_groups::{
+    GenerationPlan, GhostGrouping, GroupListSpec, ObjectiveWeights, RangeSource, build_group_lists,
+    build_model,
+};
+use collomatique_ilp::solvers::collo_cbc::ColloCbcSolver;
+use collomatique_state_colloscopes::ids::Id;
+use collomatique_state_colloscopes::{NonEmptyRangeInclusive, StudentId};
+use std::collections::{BTreeMap, BTreeSet};
+use std::num::NonZeroU32;
+
+fn student(n: u64) -> StudentId {
+    unsafe { StudentId::new(n) }
+}
+
+fn range(min: u32, max: u32) -> NonEmptyRangeInclusive<NonZeroU32> {
+    NonEmptyRangeInclusive::new(
+        NonZeroU32::new(min).expect("non-zero")..=NonZeroU32::new(max).expect("non-zero"),
+    )
+    .expect("non-empty")
+}
+
+#[test]
+fn model_solves_and_converts() {
+    // A hand-built plan: no document needed, the plan type is the model's
+    // whole input. (An empty covered set is artificial but legal here.)
+    let spec = GroupListSpec::new((1..=6).map(student).collect(), range(2, 3))
+        .expect("6 students split into groups of 2 to 3");
+    let plan = GenerationPlan {
+        specs: vec![(spec.clone(), BTreeSet::new())],
+        skipped: BTreeSet::new(),
+        pinned_pairs: BTreeMap::new(),
+        // The only spec, so the vote could only ever elect its own range.
+        canonical_range: Some((range(2, 3), RangeSource::Automatic)),
+        // And the template spans the same students at the same size, split
+        // by hand like everything else here — ceil(6 / 3) = 2 groups of 3.
+        ghost: Some(GhostGrouping::new(
+            spec,
+            vec![
+                (1..=3).map(student).collect(),
+                (4..=6).map(student).collect(),
+            ],
+        )),
+    };
+
+    let model = build_model(&plan, ObjectiveWeights::default());
+
+    let solver = ColloCbcSolver::with_disable_logging(true);
+    let solution = model.solve(&solver).expect("the model must be feasible");
+
+    // 6 students, max size 3 → exactly ceil(6 / 3) = 2 groups, each
+    // holding between 2 and 3 students, hence 3 and 3. Any assignment the
+    // constraints allow is acceptable; the conversion must be structurally
+    // valid.
+    let config = solution.get_data();
+    let lists = build_group_lists(&plan, &[String::from("Test")], &config);
+    assert_eq!(lists.len(), 1);
+    let (list, covered) = &lists[0];
+    assert!(covered.is_empty());
+    assert!(list.is_prefilled());
+    assert_eq!(list.filling().iter_students().count(), 6);
+    assert_eq!(list.params().group_names.len(), 2);
+}

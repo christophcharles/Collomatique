@@ -16,6 +16,19 @@ pub enum GroupListsUpdateOp {
         Option<collomatique_state_colloscopes::GroupListId>,
     ),
     DuplicatePreviousPeriod(collomatique_state_colloscopes::PeriodId),
+    /// Lands the output of the automatic group-list generation as one undo
+    /// slot: each entry is a sealed group list plus the `(period, subject)`
+    /// coordinates it must be associated to. Associations overwrite whatever
+    /// the coordinate held; a list orphaned that way is kept, not deleted.
+    AddGeneratedGroupLists(
+        Vec<(
+            collomatique_state_colloscopes::group_lists::GroupList,
+            std::collections::BTreeSet<(
+                collomatique_state_colloscopes::PeriodId,
+                collomatique_state_colloscopes::SubjectId,
+            )>,
+        )>,
+    ),
 }
 
 #[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
@@ -30,6 +43,8 @@ pub enum GroupListsUpdateError {
     AssignGroupListToSubject(#[from] AssignGroupListToSubjectError),
     #[error(transparent)]
     DuplicatePreviousPeriod(#[from] DuplicatePreviousPeriodAssociationsError),
+    #[error(transparent)]
+    AddGeneratedGroupLists(#[from] AddGeneratedGroupListsError),
 }
 
 /// The payload carries a filling, which can name students, so adding a list
@@ -79,6 +94,30 @@ pub enum DuplicatePreviousPeriodAssociationsError {
     /// trying to override first period
     #[error("given period ({0:?}) is the first period")]
     FirstPeriodHasNoPreviousPeriod(collomatique_state_colloscopes::PeriodId),
+}
+
+/// The five ways the generated payload can be wrong, all of them address
+/// facts: a filling naming a student the document does not have, or a coverage
+/// pair naming a coordinate no association can be written at.
+///
+/// There is no `InvalidGroupListId` arm: every association the composite writes
+/// names the list the session has just issued, so a caller cannot name a bad
+/// one.
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+pub enum AddGeneratedGroupListsError {
+    #[error("Student id ({0:?}) is invalid")]
+    InvalidStudentId(collomatique_state_colloscopes::StudentId),
+    #[error("Subject ID {0:?} is invalid")]
+    InvalidSubjectId(collomatique_state_colloscopes::SubjectId),
+    #[error("Period ID {0:?} is invalid")]
+    InvalidPeriodId(collomatique_state_colloscopes::PeriodId),
+    #[error("Subject {0:?} has no interrogation and does not need a group list")]
+    SubjectHasNoInterrogation(collomatique_state_colloscopes::SubjectId),
+    #[error("invalid subject id {0:?} for period {1:?}")]
+    SubjectDoesNotRunOnPeriod(
+        collomatique_state_colloscopes::SubjectId,
+        collomatique_state_colloscopes::PeriodId,
+    ),
 }
 
 /// Every student id a filling names, whichever variant it is.
@@ -394,6 +433,121 @@ impl GroupListsUpdateOp {
 
                 Ok(None)
             }
+            Self::AddGeneratedGroupLists(entries) => {
+                // The whole payload is prechecked before anything lands, and
+                // the answers survive the loop below (the frame rule): adding a
+                // list and overwriting an association never touch students,
+                // subjects or periods, and the only cascade an association can
+                // trigger trims colles at its own coordinate.
+                for (group_list, coverage) in entries {
+                    for student_id in students_of(group_list.filling()) {
+                        if !session
+                            .get_data()
+                            .get_inner_data()
+                            .params
+                            .students
+                            .student_map
+                            .contains(&student_id)
+                        {
+                            return Err(
+                                AddGeneratedGroupListsError::InvalidStudentId(student_id).into()
+                            );
+                        }
+                    }
+
+                    for (period_id, subject_id) in coverage {
+                        // The same four checks, in the same order, as the
+                        // single assignment above — minus the group-list one,
+                        // whose id the session issues itself a few lines down.
+                        let Some(subject) = session
+                            .get_data()
+                            .get_inner_data()
+                            .params
+                            .subjects
+                            .find_subject(*subject_id)
+                        else {
+                            return Err(
+                                AddGeneratedGroupListsError::InvalidSubjectId(*subject_id).into()
+                            );
+                        };
+
+                        if subject.parameters.interrogation_parameters.is_none() {
+                            return Err(AddGeneratedGroupListsError::SubjectHasNoInterrogation(
+                                *subject_id,
+                            )
+                            .into());
+                        }
+
+                        if subject.excluded_periods.contains(period_id) {
+                            return Err(AddGeneratedGroupListsError::SubjectDoesNotRunOnPeriod(
+                                *subject_id,
+                                *period_id,
+                            )
+                            .into());
+                        }
+
+                        if session
+                            .get_data()
+                            .get_inner_data()
+                            .params
+                            .periods
+                            .find_period_position(*period_id)
+                            .is_none()
+                        {
+                            return Err(
+                                AddGeneratedGroupListsError::InvalidPeriodId(*period_id).into()
+                            );
+                        }
+                    }
+                }
+
+                for (group_list, coverage) in entries {
+                    let result = session
+                        .apply(
+                            collomatique_state_colloscopes::Op::GroupList(
+                                collomatique_state_colloscopes::GroupListOp::Add(
+                                    group_list.clone(),
+                                ),
+                            ),
+                            self.get_desc(),
+                        )
+                        // The same reasoning as the single add above: a brand
+                        // new list is named by nobody, and the only ids its
+                        // payload carries are its students', swept in the
+                        // precheck.
+                        .expect("a list nothing names yet contradicts nothing");
+                    let Some(collomatique_state_colloscopes::NewId::GroupListId(new_id)) = result
+                    else {
+                        panic!("Unexpected result from GroupListOp::Add");
+                    };
+
+                    for (period_id, subject_id) in coverage {
+                        let result = session
+                            .apply(
+                                collomatique_state_colloscopes::Op::GroupList(
+                                    collomatique_state_colloscopes::GroupListOp::AssignToSubject(
+                                        *period_id,
+                                        *subject_id,
+                                        Some(new_id),
+                                    ),
+                                ),
+                                self.get_desc(),
+                            )
+                            // The same reasoning as the single assignment
+                            // above, with the group list supplied by the
+                            // session itself. Only the colles already written
+                            // at this coordinate can be left out of range by
+                            // the new bound — pre-state material, so the
+                            // rendering corollary holds.
+                            .expect(
+                                "the cascade trims whatever colles the new bound leaves out of range",
+                            );
+                        assert!(result.is_none());
+                    }
+                }
+
+                Ok(None)
+            }
         }
     }
 
@@ -421,6 +575,9 @@ impl GroupListsUpdateOp {
                 }
                 GroupListsUpdateOp::DuplicatePreviousPeriod(_period_id) => {
                     "Dupliquer les listes de groupes d'une période".into()
+                }
+                GroupListsUpdateOp::AddGeneratedGroupLists(_entries) => {
+                    "Ajouter des listes de groupes générées automatiquement".into()
                 }
             },
         )
@@ -1478,5 +1635,298 @@ mod tests {
                 DuplicatePreviousPeriodAssociationsError::FirstPeriodHasNoPreviousPeriod(first)
             ),
         );
+    }
+
+    /// Replays one generated entry on `expected`: the add, whose issued id the
+    /// caller cannot know beforehand, then the associations that name it.
+    ///
+    /// Both sides of a comparison clone the same base, and the id issuer clones
+    /// with it, so as long as neither side retries an add the ids agree.
+    fn replay_generated_entry(
+        expected: &mut AppState<Data, Desc>,
+        group_list: GroupList,
+        coverage: &[(PeriodId, SubjectId)],
+    ) {
+        let new_id = match expected.apply(
+            Op::GroupList(GroupListOp::Add(group_list)),
+            (OpCategory::GroupLists, "Expected".into()),
+        ) {
+            Ok(Some(NewId::GroupListId(id))) => id,
+            other => panic!("adding a group list should hand back its id, got {other:?}"),
+        };
+        for (period, subject) in coverage {
+            expected
+                .apply(
+                    Op::GroupList(GroupListOp::AssignToSubject(
+                        *period,
+                        *subject,
+                        Some(new_id),
+                    )),
+                    (OpCategory::GroupLists, "Expected".into()),
+                )
+                .expect("the coordinate is live and the list was added a moment ago");
+        }
+    }
+
+    /// The generation's own composite, on the base document — which carries no
+    /// colloscope, so nothing here can cascade. Each entry's list is added
+    /// first and the coordinates it covers are then written to it, one subject
+    /// spanning two periods with a single list. The whole thing is one undo
+    /// slot, which is what the caller asked for: the user accepted a
+    /// generation, not fourteen edits.
+    ///
+    /// The second entry takes Divination's three coordinates away from the
+    /// list that held them, which leaves that list named by nobody. It stays:
+    /// an orphaned list is legal state, and no part of this op deletes one.
+    #[test]
+    fn generated_lists_land_with_their_associations_as_one_undo_slot() {
+        let base = hogwarts();
+        let first = period_at(base.get_data(), 0);
+        let second = period_at(base.get_data(), 1);
+        let third = period_at(base.get_data(), 2);
+        let potions = subject_by_name(base.get_data(), "Potions");
+        let divination = subject_by_name(base.get_data(), "Divination");
+        let harry = student_by_name(base.get_data(), "Potter", "Harry");
+        let ron = student_by_name(base.get_data(), "Weasley", "Ron");
+        let displaced = group_list_by_name(base.get_data(), "Divination");
+        assert_eq!(
+            associations_of(base.get_data(), displaced).len(),
+            3,
+            "the fixture's Divination list should serve its subject on all three periods",
+        );
+
+        let for_potions = prefilled_list(
+            "Potions (générée)",
+            vec![BTreeSet::from([harry]), BTreeSet::from([ron])],
+        );
+        let for_divination =
+            prefilled_list("Divination (générée)", vec![BTreeSet::from([harry, ron])]);
+        let potions_coverage = [(first, potions), (second, potions)];
+        let divination_coverage = [
+            (first, divination),
+            (second, divination),
+            (third, divination),
+        ];
+
+        let op = GroupListsUpdateOp::AddGeneratedGroupLists(vec![
+            (for_potions.clone(), potions_coverage.into()),
+            (for_divination.clone(), divination_coverage.into()),
+        ]);
+        let (state, warnings) = apply_alone(&base, &op);
+
+        assert!(warnings.is_empty(), "nothing to repair: {warnings:?}");
+        let mut expected = base.clone();
+        replay_generated_entry(&mut expected, for_potions, &potions_coverage);
+        replay_generated_entry(&mut expected, for_divination, &divination_coverage);
+        assert_eq!(state.get_data(), expected.get_data());
+
+        // The orphan rule, read off the result rather than through the replay.
+        assert!(
+            state
+                .get_data()
+                .get_inner_data()
+                .params
+                .group_lists
+                .group_list_map
+                .contains(&displaced),
+            "a list this op displaces is kept, not deleted",
+        );
+        assert_eq!(associations_of(state.get_data(), displaced), vec![]);
+    }
+
+    /// The composite's associations cascade like any other. The generated list
+    /// has two groups where the colle at that coordinate names group 2, so the
+    /// colle is trimmed — and the repair lands before the association that
+    /// needed it, after the add that the association names.
+    #[test]
+    fn generated_lists_trim_the_colles_their_new_bound_leaves_out_of_range() {
+        let placed = placed_list();
+        let payload = prefilled_list(
+            "Liste générée",
+            vec![BTreeSet::from([placed.harry]), BTreeSet::from([placed.ron])],
+        );
+        let coverage = [(placed.period, placed.subject)];
+
+        let op =
+            GroupListsUpdateOp::AddGeneratedGroupLists(vec![(payload.clone(), coverage.into())]);
+        let (state, warnings) = apply_alone(&placed.base, &op);
+
+        assert_eq!(
+            fixes(&warnings),
+            vec![Fix::RemoveGroupsFromInterrogationCell {
+                slot: placed.slot,
+                week: placed.week,
+                groups: BTreeSet::from([2]),
+                rebuilt: BTreeSet::from([0]),
+            }],
+        );
+
+        // Written out rather than replayed with the helper: the trimming sits
+        // between the add and the association.
+        let mut expected = placed.base.clone();
+        let new_id = match expected.apply(
+            Op::GroupList(GroupListOp::Add(payload)),
+            (OpCategory::GroupLists, "Expected".into()),
+        ) {
+            Ok(Some(NewId::GroupListId(id))) => id,
+            other => panic!("adding a group list should hand back its id, got {other:?}"),
+        };
+        prepare(
+            &mut expected,
+            Op::Colloscope(ColloscopeOp::SetInterrogation(
+                placed.slot,
+                placed.week,
+                BTreeSet::from([0]),
+            )),
+        );
+        prepare(
+            &mut expected,
+            Op::GroupList(GroupListOp::AssignToSubject(
+                placed.period,
+                placed.subject,
+                Some(new_id),
+            )),
+        );
+        assert_eq!(state.get_data(), expected.get_data());
+    }
+
+    /// The composite's precheck surface: the student sweep of the add, and the
+    /// four coordinate checks of the assignment — the fifth, the group-list id,
+    /// has no input here since the session issues it.
+    ///
+    /// The order is the surface too, and it is read three ways: entries answer
+    /// in payload order, an entry's filling answers before its coverage, and
+    /// within a pair the subject answers before the period.
+    #[test]
+    fn the_generated_lists_op_reports_every_way_its_payload_can_be_wrong() {
+        let mut base = hogwarts();
+        let divination = subject_by_name(base.get_data(), "Divination");
+        let quidditch = subject_by_name(base.get_data(), "Entrainement de Quidditch");
+        let first = period_at(base.get_data(), 0);
+        let last = period_at(base.get_data(), 2);
+
+        // A subject that skips a period, as in the single assignment's test:
+        // the enrolments and the association it holds there have to go before
+        // the exclusion is legal.
+        prepare(
+            &mut base,
+            Op::Assignment(AssignmentOp::SetRow(last, divination, BTreeSet::new())),
+        );
+        prepare(
+            &mut base,
+            Op::GroupList(GroupListOp::AssignToSubject(last, divination, None)),
+        );
+        let excluding = Subject {
+            excluded_periods: BTreeSet::from([last]),
+            ..base
+                .get_data()
+                .get_inner_data()
+                .params
+                .subjects
+                .find_subject(divination)
+                .expect("the fixture's Divination subject should be live")
+                .clone()
+        };
+        prepare(
+            &mut base,
+            Op::Subject(SubjectOp::Update(divination, excluding)),
+        );
+
+        let sound = || automatic_list("Liste générée", 2, BTreeSet::new());
+        let with_dead_student =
+            || prefilled_list("Liste générée", vec![BTreeSet::from([dangling_student()])]);
+
+        let mut session = CascadeSession::new(base.clone());
+        for (op, expected) in [
+            (
+                GroupListsUpdateOp::AddGeneratedGroupLists(vec![(
+                    with_dead_student(),
+                    BTreeSet::new(),
+                )]),
+                AddGeneratedGroupListsError::InvalidStudentId(dangling_student()),
+            ),
+            (
+                GroupListsUpdateOp::AddGeneratedGroupLists(vec![(
+                    sound(),
+                    BTreeSet::from([(first, dangling_subject())]),
+                )]),
+                AddGeneratedGroupListsError::InvalidSubjectId(dangling_subject()),
+            ),
+            (
+                GroupListsUpdateOp::AddGeneratedGroupLists(vec![(
+                    sound(),
+                    BTreeSet::from([(first, quidditch)]),
+                )]),
+                AddGeneratedGroupListsError::SubjectHasNoInterrogation(quidditch),
+            ),
+            (
+                GroupListsUpdateOp::AddGeneratedGroupLists(vec![(
+                    sound(),
+                    BTreeSet::from([(last, divination)]),
+                )]),
+                AddGeneratedGroupListsError::SubjectDoesNotRunOnPeriod(divination, last),
+            ),
+            (
+                GroupListsUpdateOp::AddGeneratedGroupLists(vec![(
+                    sound(),
+                    BTreeSet::from([(dangling_period(), divination)]),
+                )]),
+                AddGeneratedGroupListsError::InvalidPeriodId(dangling_period()),
+            ),
+            // The entries are swept in payload order, so the first entry's
+            // dead student answers before the second entry's dead subject.
+            (
+                GroupListsUpdateOp::AddGeneratedGroupLists(vec![
+                    (with_dead_student(), BTreeSet::new()),
+                    (sound(), BTreeSet::from([(first, dangling_subject())])),
+                ]),
+                AddGeneratedGroupListsError::InvalidStudentId(dangling_student()),
+            ),
+            // And within one entry, the filling answers before the coverage.
+            (
+                GroupListsUpdateOp::AddGeneratedGroupLists(vec![(
+                    with_dead_student(),
+                    BTreeSet::from([(first, dangling_subject())]),
+                )]),
+                AddGeneratedGroupListsError::InvalidStudentId(dangling_student()),
+            ),
+            // A pair wrong in two ways: the subject is checked first.
+            (
+                GroupListsUpdateOp::AddGeneratedGroupLists(vec![(
+                    sound(),
+                    BTreeSet::from([(dangling_period(), dangling_subject())]),
+                )]),
+                AddGeneratedGroupListsError::InvalidSubjectId(dangling_subject()),
+            ),
+        ] {
+            assert_eq!(
+                op.apply_to_session(&mut session).unwrap_err(),
+                GroupListsUpdateError::AddGeneratedGroupLists(expected),
+                "{op:?}",
+            );
+        }
+    }
+
+    /// The two degenerate payloads, both legal: a generation that produced
+    /// nothing changes nothing, and an entry covering no coordinate is simply a
+    /// list added and left unused.
+    #[test]
+    fn an_empty_payload_is_a_no_op_and_an_uncovered_entry_just_adds_its_list() {
+        let base = hogwarts();
+
+        let (state, warnings) =
+            apply_alone(&base, &GroupListsUpdateOp::AddGeneratedGroupLists(vec![]));
+        assert!(warnings.is_empty(), "nothing to repair: {warnings:?}");
+        assert_eq!(state.get_data(), base.get_data());
+
+        let payload = automatic_list("Liste orpheline", 2, BTreeSet::new());
+        let op =
+            GroupListsUpdateOp::AddGeneratedGroupLists(vec![(payload.clone(), BTreeSet::new())]);
+        let (state, warnings) = apply_alone(&base, &op);
+
+        assert!(warnings.is_empty(), "nothing to repair: {warnings:?}");
+        let new_id = group_list_by_name(state.get_data(), "Liste orpheline");
+        assert_eq!(list_of(state.get_data(), new_id), payload);
+        assert_eq!(associations_of(state.get_data(), new_id), vec![]);
     }
 }

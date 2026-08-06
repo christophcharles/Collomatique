@@ -12,11 +12,6 @@ pub enum ExtraVarName {
         slot: SlotId,
         week: GlobalWeek,
     },
-    StudentInGroup {
-        student: StudentId,
-        group_list: GroupListId,
-        group: GroupNum,
-    },
     GroupHasStudents {
         group_list: GroupListId,
         group: GroupNum,
@@ -142,6 +137,15 @@ pub enum StructuralConstraint {
         minimum_free_slots: u32,
     },
     StudentHasGroup {
+        student: StudentId,
+        group_list: GroupListId,
+    },
+    /// `Σ_g StudentInGroup(group_list, student, g) <= 1` — a student sits in
+    /// at most one group of a list. Together with the `>= 1` half (the
+    /// blamable [`StructuralConstraint::StudentHasGroup`]), this replaces the
+    /// domain of the retired integer `StudentGroup` variable; the all-zeros
+    /// row is the old -1 "no group" sentinel.
+    StudentInAtMostOneGroup {
         student: StudentId,
         group_list: GroupListId,
     },

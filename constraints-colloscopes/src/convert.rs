@@ -14,12 +14,15 @@ pub fn build_config(env: &Parameters, colloscope: &Colloscope) -> ConfigData<Var
     // the historical prefilled skip is dead here.
     for (group_list_id, placements) in colloscope.group_lists_iter() {
         for (student_id, group) in placements {
+            let group = GroupNum::new(env, group_list_id, *group as usize)
+                .expect("group number from a live colloscope row is valid");
             config_data = config_data.set(
-                Var::StudentGroup {
+                Var::StudentInGroup {
                     student: *student_id,
                     group_list: group_list_id,
+                    group,
                 },
-                *group as f64,
+                1.0,
             );
         }
     }
@@ -60,13 +63,7 @@ pub fn build_complete_config(env: &Parameters, colloscope: &Colloscope) -> Confi
     let mut config_data = build_config(env, colloscope);
 
     for (group_list_id, group_list) in env.group_lists.group_list_map.iter() {
-        let group_list_id = &group_list_id;
-        let data_group_list = env
-            .group_lists
-            .group_list_map
-            .get(group_list_id)
-            .expect("Group list ID should be valid");
-        if data_group_list.is_prefilled() {
+        if group_list.is_prefilled() {
             continue;
         }
         for student_id in env.students.student_map.keys() {
@@ -77,14 +74,17 @@ pub fn build_complete_config(env: &Parameters, colloscope: &Colloscope) -> Confi
             {
                 continue;
             }
-            let var = Var::StudentGroup {
-                student: student_id,
-                group_list: *group_list_id,
-            };
-            if config_data.get(var.clone()).is_some() {
-                continue;
+            for group in GroupNum::enumerate(env, group_list_id) {
+                let var = Var::StudentInGroup {
+                    student: student_id,
+                    group_list: group_list_id,
+                    group,
+                };
+                if config_data.get(var.clone()).is_some() {
+                    continue;
+                }
+                config_data = config_data.set(var, 0.0);
             }
-            config_data = config_data.set(var, -1.);
         }
     }
 
@@ -164,21 +164,27 @@ pub fn build_colloscope(env: &Parameters, config_data: &ConfigData<Var>) -> Opti
 
     for (var, value) in config_data.get_values() {
         match var {
-            Var::StudentGroup {
+            Var::StudentInGroup {
                 student,
                 group_list,
+                group,
             } => {
-                if value >= -0.1 {
+                if value > 0.5 {
                     // A colloscope row exists only for a valid, non-prefilled
                     // group list; anything else is a malformed config.
                     let data_group_list = env.group_lists.group_list_map.get(&group_list)?;
                     if data_group_list.is_prefilled() {
                         return None;
                     }
-                    group_lists
+                    let prev = group_lists
                         .entry(group_list)
                         .or_default()
-                        .insert(student, value as u32);
+                        .insert(student, group.index() as u32);
+                    if prev.is_some() {
+                        // >= 2 groups at once: the config is not a placement
+                        // (a blamed solution can violate the <= 1 row).
+                        return None;
+                    }
                 }
             }
             Var::GroupInInterrogation { slot, week, group } => {

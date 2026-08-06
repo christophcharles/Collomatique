@@ -134,7 +134,7 @@ fn perturb_value(current: f64, kind: &Variable, sigma: f64, rng: &mut StdRng) ->
 #[async_trait]
 impl Strategy for FuzzyStrategy {
     type Progress<V: UsableData + Send> = FuzzyProgressData;
-    type Payload<V: UsableData + Send> = FuzzyPayload<V>;
+    type Payload<B: UsableData + Send, E: UsableData + Send> = FuzzyPayload<InternalVar<B, E>>;
 
     fn name(&self) -> &'static str {
         "fuzzy"

@@ -12,7 +12,7 @@
 /// Reference magnitude for a soft balancing penalty.
 ///
 /// Chosen well above `InterrogationCost` (added with coefficient `1.0`, see
-/// [`crate::misc::interrogation_cost`]) so that balancing dominates and
+/// `crate::misc::interrogation_cost`) so that balancing dominates and
 /// `InterrogationCost` acts as a tie-breaker. Kept in the low hundreds for ILP
 /// conditioning. The rotation families weight each `λᵢ` by `BASE / n` (where `n`
 /// is the subject's active-week count) so a subject contributes `BASE·Σ|dᵢ|`
