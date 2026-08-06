@@ -22,6 +22,32 @@ pub enum ExtraVarName {
         b: StudentId,
         class: SizeClassIdx,
     },
+    /// 1 only if the pair (with `a < b`) shares a group of the *template*
+    /// grouping ([`GenerationPlan::ghost`](crate::GenerationPlan::ghost)).
+    /// One-sided from *above*: any template group holding exactly one of the
+    /// two forces it down, and nothing pushes it up but the objective, which
+    /// wants it up because it is what excuses a meeting from
+    /// [`ExtraVarName::Deviation`]. Under the minimize it is therefore
+    /// exactly "the pair is a template pair".
+    ///
+    /// Declared only when the plan has a template, and only for pairs that
+    /// co-occur somewhere (a pair that never meets is never asked to deviate).
+    CanonicalPair { a: StudentId, b: StudentId },
+    /// 1 if the pair (with `a < b`) meets in `list` while *not* being a
+    /// template pair. One-sided from below: such a meeting forces it up and
+    /// only the objective holds it down.
+    ///
+    /// This is what [`ExtraVarName::SharedPair`] cannot say. `SharedPair` is
+    /// a step: once a pair has met anywhere in its size class, every further
+    /// meeting is free, so nine lists agreeing on one grouping and one list
+    /// differing cost exactly as much as five and five. A deviation is paid
+    /// per list instead, so the cheapest plan is the one where every list
+    /// looks like the same template.
+    Deviation {
+        a: StudentId,
+        b: StudentId,
+        list: GroupListIdx,
+    },
 }
 
 /// One variant per constraint family (piece 8). A flat enum, no severity

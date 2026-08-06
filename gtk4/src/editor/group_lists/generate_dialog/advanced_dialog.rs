@@ -10,6 +10,10 @@ pub struct Dialog {
     should_redraw: bool,
     /// Weight of the "share as few pairs as possible" objective term.
     w_pairs: f64,
+    /// Weight of the "stay close to the reference grouping" objective term.
+    /// Carried through untouched for now — its row arrives with the
+    /// canonical-size settings.
+    w_template: f64,
 }
 
 #[derive(Debug)]
@@ -117,6 +121,7 @@ impl SimpleComponent for Dialog {
             hidden: true,
             should_redraw: false,
             w_pairs: defaults.w_pairs,
+            w_template: defaults.w_template,
         };
 
         let widgets = view_output!();
@@ -131,6 +136,7 @@ impl SimpleComponent for Dialog {
                 self.hidden = false;
                 self.should_redraw = true;
                 self.w_pairs = weights.w_pairs;
+                self.w_template = weights.w_template;
             }
             DialogInput::Cancel => {
                 self.hidden = true;
@@ -141,6 +147,7 @@ impl SimpleComponent for Dialog {
                 sender
                     .output(DialogOutput::Accepted(ObjectiveWeights {
                         w_pairs: self.w_pairs,
+                        w_template: self.w_template,
                     }))
                     .unwrap();
             }

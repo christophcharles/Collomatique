@@ -11,18 +11,32 @@
 //! where everyone meets everyone whatever the model does — pre-pay every
 //! pair of the class and leave the small groups free to churn.
 //!
+//! The second term is the *template* one: `w_template · Σ class_weight ·
+//! Deviation`, one term per (pair, list) site a pair could meet in. Where the
+//! step term prices a pair's first meeting, this one prices every meeting
+//! away from the template grouping, so that the lists converge on one
+//! grouping instead of merely on few pairs. Both are kept: on data with two
+//! genuinely different stable groupings the template term simply has no
+//! cheap optimum, and the step term still ranks the alternatives.
+//!
 //! The group count used to be a second, dominant term. It no longer is: the
 //! minimal count has a closed form (`VarEnv::group_count`) and is imposed by
 //! the model instead of optimized, which also makes it hold under the solve
 //! strategies that strip the objective.
 
-use crate::extras::{MyBundle, co_occurrences, extra_var};
+use crate::extras::{MyBundle, co_occurrences, deviation_sites, extra_var};
 use crate::types::ExtraVarName;
 use crate::vars::VarEnv;
 use collomatique_ilp::linexpr::LinExpr;
 
 /// Default weight of the "share as few pairs as possible" term.
 const W_PAIRS_DEFAULT: f64 = 1.0;
+
+/// Default weight of one meeting away from the template grouping: a quarter
+/// of a fresh pair. Deliberately well below [`W_PAIRS_DEFAULT`] — the step
+/// term still decides which pairs meet at all, and the template term only
+/// arbitrates between placements the step term rates alike.
+const W_TEMPLATE_DEFAULT: f64 = 0.25;
 
 /// The weights of the stability objective (§2.4), handed to
 /// [`build_model`](crate::build_model) next to the plan. Deliberately not a
@@ -31,17 +45,26 @@ const W_PAIRS_DEFAULT: f64 = 1.0;
 /// are read only by the objective builder.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ObjectiveWeights {
-    /// Weight of the "share as few pairs as possible" term. The only term
-    /// of the objective, but the scale still matters: the solve strategies
-    /// add terms of their own to it — the incremental strategy's L1 anchor
-    /// weighs 1000 per already-solved variable.
+    /// Weight of the "share as few pairs as possible" term. The scale
+    /// matters beyond the ratio to `w_template`: the solve strategies add
+    /// terms of their own to the objective — the incremental strategy's L1
+    /// anchor weighs 1000 per already-solved variable.
     pub w_pairs: f64,
+    /// Weight of one meeting away from the template grouping, before the
+    /// per-list class weight. The pair term prices a pair's *first* meeting;
+    /// this one prices every meeting that does not follow the template, so
+    /// that ten lists agreeing beat five and five. 0 makes deviations free,
+    /// leaving the pair term alone in charge — though the columns stay in
+    /// the model either way: a zero coefficient still counts as a reference,
+    /// so the extras are expanded all the same.
+    pub w_template: f64,
 }
 
 impl Default for ObjectiveWeights {
     fn default() -> Self {
         ObjectiveWeights {
             w_pairs: W_PAIRS_DEFAULT,
+            w_template: W_TEMPLATE_DEFAULT,
         }
     }
 }
@@ -59,6 +82,19 @@ pub(crate) fn build(env: &VarEnv, weights: ObjectiveWeights) -> MyBundle {
         let weight = weights.w_pairs * env.class_weight(class);
         expr = expr + weight * LinExpr::var(extra_var(ExtraVarName::SharedPair { a, b, class }));
         has_terms = true;
+    }
+
+    // Exactly the declared `Deviation` set (see `deviation_sites`), which is
+    // empty when the plan has no template. The class weight enters per *list*
+    // here, not per class: the template is one grouping of everybody, and a
+    // list deviating from it is only as expensive as its own groups are
+    // tight.
+    for ((a, b), lists) in deviation_sites(env) {
+        for list in lists {
+            let weight = weights.w_template * env.class_weight(env.class_of(list));
+            expr = expr + weight * LinExpr::var(extra_var(ExtraVarName::Deviation { a, b, list }));
+            has_terms = true;
+        }
     }
 
     if has_terms {
@@ -150,6 +186,21 @@ mod tests {
             a: student(a),
             b: student(b),
             class: SizeClassIdx(class),
+        })
+    }
+
+    fn canonical(a: u64, b: u64) -> V {
+        extra_var(ExtraVarName::CanonicalPair {
+            a: student(a),
+            b: student(b),
+        })
+    }
+
+    fn deviation(a: u64, b: u64, list: usize) -> V {
+        extra_var(ExtraVarName::Deviation {
+            a: student(a),
+            b: student(b),
+            list: GroupListIdx(list),
         })
     }
 
@@ -267,6 +318,69 @@ mod tests {
     }
 
     #[test]
+    fn the_template_makes_the_lists_agree_with_each_other() {
+        // The regression the template exists for. Four students and three
+        // lists that all split them two by two: ranges 2..=3, 1..=2 and
+        // 2..=2, distinct so the specs do not deduplicate, and each forcing
+        // two groups of exactly two. The vote ties three ways at four
+        // students apiece and breaks toward the tightest range, so the
+        // canonical size is 2..=2 and the template is two groups of two.
+        //
+        // Lists 0 and 1 are placed to {1, 2} / {3, 4}; list 2 is free, with
+        // a 0.5 reward for putting student 3 next to student 1 instead.
+        //
+        // `w_pairs` is 0, so the step term decides nothing: every pair of
+        // the four already meets somewhere, and going along with the
+        // adversary makes no *new* pair meet that the step term could
+        // charge for. That is exactly the blind spot — with the pair term
+        // alone the reward wins and list 2 comes out {1, 3} / {2, 4}.
+        //
+        // The template term sees it: the two placed lists make {1, 2} and
+        // {3, 4} the cheapest template, and list 2 disagreeing with it
+        // costs two deviations at class weight 1 — 2 against a reward of
+        // 0.5, so list 2 falls in line.
+        let plan = plan_of(&[
+            (&[1, 2, 3, 4], (2, 3)),
+            (&[1, 2, 3, 4], (1, 2)),
+            (&[1, 2, 3, 4], (2, 2)),
+        ]);
+        let cfg = solve_with_adversary(
+            &plan,
+            ObjectiveWeights {
+                w_pairs: 0.0,
+                w_template: 1.0,
+            },
+            &[
+                place(0, 1, 0),
+                place(0, 2, 0),
+                place(0, 3, 1),
+                place(0, 4, 1),
+                place(1, 1, 0),
+                place(1, 2, 0),
+                place(1, 3, 1),
+                place(1, 4, 1),
+                place(2, 1, 0),
+                (0.5, in_group(2, 3, 0)),
+            ],
+        );
+
+        // The alignment itself: student 2, not student 3, joins student 1.
+        assert_close(value(&cfg, in_group(2, 2, 0)), 1.0);
+        assert_close(value(&cfg, in_group(2, 3, 0)), 0.0);
+
+        // The template is the grouping the three lists share, so nothing
+        // deviates anywhere.
+        assert_close(value(&cfg, canonical(1, 2)), 1.0);
+        assert_close(value(&cfg, canonical(3, 4)), 1.0);
+        assert_close(value(&cfg, canonical(1, 3)), 0.0);
+        for (a, b) in [(1, 2), (1, 3), (1, 4), (2, 3), (2, 4), (3, 4)] {
+            for list in 0..3 {
+                assert_close(value(&cfg, deviation(a, b, list)), 0.0);
+            }
+        }
+    }
+
+    #[test]
     fn reconstruction_recovers_exact_pair_values() {
         // The load-bearing assumption behind the one-sided `SharedPair`
         // rows (see the `extras` module doc). Under a stripped objective a
@@ -312,19 +426,55 @@ mod tests {
                 .expect("every student sits in a group")
         };
 
+        // The canonical range is that same 2..=2, so the template also has
+        // ceil(4 / 2) = 2 groups.
+        let ghost_group_of = |s: u64| -> u32 {
+            (0..2)
+                .find(|&group| {
+                    base.get(Var::StudentInGhostGroup {
+                        student: student(s),
+                        group,
+                    })
+                    .expect("the template matrix is made of base variables")
+                    .round() as i64
+                        == 1
+                })
+                .expect("every student sits in a template group")
+        };
+
         // Class 0 is 2..=2 (list 0) and class 1 is 2..=3 (list 1): the
         // canonical range is the tighter 2..=2, so a meeting of class 1
         // weighs (2 − 1) / (3 − 1).
+        let weights = ObjectiveWeights::default();
         let mut expected_total = 0.0;
-        for (class, list, weight) in [(0usize, 0usize, 1.0), (1, 1, 0.5)] {
-            for (a, b) in [(1, 2), (1, 3), (1, 4), (2, 3), (2, 4), (3, 4)] {
+        for (a, b) in [(1, 2), (1, 3), (1, 4), (2, 3), (2, 4), (3, 4)] {
+            let is_canonical = ghost_group_of(a) == ghost_group_of(b);
+            let mut meets_somewhere = false;
+            for (class, list, weight) in [(0usize, 0usize, 1.0), (1, 1, 0.5)] {
                 let together = group_of(list, a) == group_of(list, b);
+                meets_somewhere |= together;
                 let expected = if together { 1.0 } else { 0.0 };
                 assert_close(value(&cfg, shared(a, b, class)), expected);
-                expected_total += weight * expected;
+                expected_total += weights.w_pairs * weight * expected;
+
+                // A deviation is a meeting the template does not sanction.
+                let deviates = if together && !is_canonical { 1.0 } else { 0.0 };
+                assert_close(value(&cfg, deviation(a, b, list)), deviates);
+                expected_total += weights.w_template * weight * deviates;
+            }
+
+            // `CanonicalPair` is pinned in only two of its three cases. The
+            // rows cap it at 0 whenever the template separates the pair, and
+            // the objective drives it to 1 whenever the template groups a
+            // pair that meets somewhere — leaving it up. A template pair
+            // that meets nowhere excuses nothing, so nothing decides it and
+            // there is no value to assert.
+            if !is_canonical {
+                assert_close(value(&cfg, canonical(a, b)), 0.0);
+            } else if meets_somewhere {
+                assert_close(value(&cfg, canonical(a, b)), 1.0);
             }
         }
-        // `w_pairs` is 1, so the objective is the class-weighted count.
         assert_close(solution.eval(), expected_total);
     }
 
@@ -336,8 +486,19 @@ mod tests {
         // reusing and list 1 becomes {1, 3} / {2, 4} / {5, 6} — five shared
         // pairs instead of three. A build that ignored the passed weight
         // would keep reusing, so this is what pins that `w_pairs` is read.
+        //
+        // The template term is switched off: it prefers reuse too, and at
+        // its default weight it would decide the instance on its own, which
+        // would say nothing about `w_pairs`.
         let plan = plan_of(&[(&[1, 2, 3, 4], (2, 2)), (&[1, 2, 3, 4, 5, 6], (2, 2))]);
-        let cfg = solve_with_adversary(&plan, ObjectiveWeights { w_pairs: 0.1 }, &reuse_places());
+        let cfg = solve_with_adversary(
+            &plan,
+            ObjectiveWeights {
+                w_pairs: 0.1,
+                w_template: 0.0,
+            },
+            &reuse_places(),
+        );
 
         assert_close(shared_total(&cfg, &[1, 2, 3, 4, 5, 6], 0), 5.0);
         assert_close(value(&cfg, shared(1, 3, 0)), 1.0);

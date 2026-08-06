@@ -104,6 +104,8 @@ mod tests {
         // sorted: class 0 is list 1's 1..=2 and class 1 is list 0's 2..=3.
         // Every pair belongs to exactly one of them here.
         let mut per_class = [0, 0];
+        let mut canonical = 0;
+        let mut deviation = 0;
         let mut helpers = 0;
         for v in model.problem().get_variables().keys() {
             // Exhaustive for the same reason as the `match` above.
@@ -111,11 +113,19 @@ mod tests {
                 InternalVar::Extra(ExtraVarName::SharedPair { class, .. }) => {
                     per_class[class.0] += 1
                 }
+                InternalVar::Extra(ExtraVarName::CanonicalPair { .. }) => canonical += 1,
+                InternalVar::Extra(ExtraVarName::Deviation { .. }) => deviation += 1,
                 InternalVar::Helper { .. } => helpers += 1,
                 InternalVar::Base(_) => {}
             }
         }
         assert_eq!(per_class, [3, 6]);
+        // The template families ignore the size class — one `CanonicalPair`
+        // per co-occurring pair, and one `Deviation` per (pair, list) site.
+        // The lists are disjoint, so each of the nine pairs meets in exactly
+        // one of them and the two counts coincide here.
+        assert_eq!(canonical, 9);
+        assert_eq!(deviation, 9);
         assert_eq!(helpers, 0);
     }
 }
