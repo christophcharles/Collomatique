@@ -34,7 +34,7 @@ pub enum DialogOutput {
     ModelReady(ConfiguredColloscopeModel, ConductorPayload<Var>),
 }
 
-/// Build the incremental epoch payload from the freshly-built model: every `StudentGroup` base
+/// Build the incremental epoch payload from the freshly-built model: every `StudentInGroup` base
 /// variable is solved first (epoch 0), then each `GroupInInterrogation` variable is solved in the
 /// epoch matching its week (week + 1), so the schedule fills in week by week on top of the fixed
 /// group assignment. Base variables absent from the map fall into the strategy's final epoch.

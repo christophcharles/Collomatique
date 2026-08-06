@@ -121,6 +121,17 @@ impl StructuralConstraint {
                     s_name, gl_name
                 )
             }
+            StructuralConstraint::StudentInAtMostOneGroup {
+                student,
+                group_list,
+            } => {
+                let s_name = student_name(env, *student);
+                let gl_name = group_list_name(env, *group_list);
+                format!(
+                    "L'élève {} doit avoir au plus un groupe dans la liste {}",
+                    s_name, gl_name
+                )
+            }
             StructuralConstraint::ForbiddenGroup {
                 group_list,
                 group,

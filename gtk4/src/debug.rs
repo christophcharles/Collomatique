@@ -831,7 +831,7 @@ fn incremental_solve(model: &collomatique_constraints_colloscopes::ColloscopeMod
         t.elapsed()
     );
 
-    // Epoch assignment: every StudentGroup base variable is solved first (epoch 0), then each
+    // Epoch assignment: every StudentInGroup base variable is solved first (epoch 0), then each
     // GroupInInterrogation variable is solved in the epoch matching its week (week + 1), so the
     // schedule fills in week by week on top of the fixed group assignment.
     let epochs = collomatique_constraints_colloscopes::build_incremental_epochs(model);

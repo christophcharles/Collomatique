@@ -1,9 +1,9 @@
 use crate::extras::{
-    MyBundle, V, base_var, extra_var, group_list_for_interrogation, groups_for_group_list,
+    MyBundle, V, base_var, group_list_for_interrogation, groups_for_group_list,
     students_for_subject_period_group_list, week_to_period_id, weeks_for_slot,
 };
 use crate::ids::GroupNum;
-use crate::types::{ExtraVarName, StructuralConstraint};
+use crate::types::StructuralConstraint;
 use crate::vars::{Var, VarEnv};
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::group_lists::GroupListFilling;
@@ -71,7 +71,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                             let sum: IntLinExpr<V> = students
                                 .iter()
                                 .map(|&student| {
-                                    IntLinExpr::var(extra_var(ExtraVarName::StudentInGroup {
+                                    IntLinExpr::var(base_var(Var::StudentInGroup {
                                         student,
                                         group_list,
                                         group,

@@ -1,7 +1,7 @@
-use crate::extras::{MyBundle, V, extra_var, students_for_group_list};
+use crate::extras::{MyBundle, V, base_var, extra_var, students_for_group_list};
 use crate::ids::GroupNum;
 use crate::types::{ExtraVarName, ProgressiveConstraint, QualityConstraint};
-use crate::vars::VarEnv;
+use crate::vars::{Var, VarEnv};
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::group_lists::GroupList;
 use collomatique_state_colloscopes::ids::GroupListId;
@@ -20,7 +20,7 @@ fn build_for_group(
     let count: IntLinExpr<V> = students
         .iter()
         .map(|&student| {
-            IntLinExpr::var(extra_var(ExtraVarName::StudentInGroup {
+            IntLinExpr::var(base_var(Var::StudentInGroup {
                 student,
                 group_list,
                 group,

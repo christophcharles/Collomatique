@@ -13,7 +13,7 @@ use collomatique_ilp_modeler::{
 
 use crate::ConfiguredColloscopeModel;
 use crate::ids::GlobalWeek;
-use crate::types::{ConstraintDesc, ExtraVarName};
+use crate::types::{ConstraintDesc, ExtraVarName, StructuralConstraint};
 use crate::vars::Var;
 
 /// Default weight of the soft L1 "keep the current value" anchor objectives, used when a
@@ -38,7 +38,7 @@ pub enum ConfiguredExtra {
     /// variables.
     AnchorWeek(GlobalWeek),
     /// L1 penalty for the "keep current values" anchors of one automatic group list's
-    /// `StudentGroup` variables.
+    /// `StudentInGroup` variables.
     AnchorGroupList(GroupListId),
     /// L1 penalty for one objectified cross-fixed-period constraint (indexed by its position
     /// in the stored set, so every such constraint is penalized independently).
@@ -94,7 +94,7 @@ impl Default for PeriodSolveData {
 
 #[derive(Debug, Clone)]
 pub struct GroupListSolveData {
-    /// `Some` recomputes this group list's `StudentGroup` variables (freely, or softly anchored
+    /// `Some` recomputes this group list's `StudentInGroup` variables (freely, or softly anchored
     /// per [`GroupListRecompute`]); `None` pins them to their current values.
     pub recompute: Option<GroupListRecompute>,
 }
@@ -181,7 +181,7 @@ impl SolveConfig {
         }
     }
 
-    /// The [`GroupListSolveData`] governing a `StudentGroup` variable of the given group list,
+    /// The [`GroupListSolveData`] governing a `StudentInGroup` variable of the given group list,
     /// defaulting to [`GroupListSolveData::default`] when the group list carries no explicit
     /// config.
     fn group_list_data(&self, group_list: &GroupListId) -> GroupListSolveData {
@@ -196,7 +196,7 @@ impl SolveConfig {
     /// anchored).
     fn var_is_recompute(&self, params: &Parameters, v: &Var) -> bool {
         match v {
-            Var::StudentGroup { group_list, .. } => {
+            Var::StudentInGroup { group_list, .. } => {
                 self.group_list_data(group_list).recompute.is_some()
             }
             Var::GroupInInterrogation { week, .. } => {
@@ -211,6 +211,7 @@ impl SolveConfig {
         &self,
         params: &Parameters,
         footprint: &HashSet<Var>,
+        desc: &ConstraintDesc,
     ) -> ConstraintClass {
         let touches_gii = footprint
             .iter()
@@ -218,7 +219,7 @@ impl SolveConfig {
 
         if touches_gii {
             // Interrogation-touching constraint: the group-list scoping of any incidental
-            // `StudentGroup` variable is irrelevant; only the periods matter.
+            // `StudentInGroup` variable is irrelevant; only the periods matter.
             let mut has_fixed = false;
             let mut has_x = false;
             for v in footprint {
@@ -242,14 +243,22 @@ impl SolveConfig {
                 ConstraintClass::Keep
             }
         } else {
-            // Pure `StudentGroup` (or empty) constraint: drop it as soon as any of its group
-            // lists is fixed, otherwise keep it.
+            // Pure `StudentInGroup` constraint: drop it as soon as any of its group lists is
+            // fixed, otherwise keep it. A zero-group list's `StudentHasGroup` row is an empty
+            // sum with no footprint, so its group list is recovered from the description
+            // instead.
             let drop = footprint.iter().any(|v| match v {
-                Var::StudentGroup { group_list, .. } => {
+                Var::StudentInGroup { group_list, .. } => {
                     self.group_list_data(group_list).recompute.is_none()
                 }
                 _ => false,
-            });
+            }) || (footprint.is_empty()
+                && matches!(
+                    desc,
+                    ConstraintDesc::Level1(StructuralConstraint::StudentHasGroup {
+                        group_list, ..
+                    }) if self.group_list_data(group_list).recompute.is_none()
+                ));
             if drop {
                 ConstraintClass::Drop
             } else {
@@ -295,7 +304,7 @@ impl SolveConfig {
             .filter(
                 |c, desc| {
                     let footprint = graph.constraint_footprint(c);
-                    match self.classify_constraint(params, &footprint) {
+                    match self.classify_constraint(params, &footprint, desc) {
                         ConstraintClass::Keep => {
                             kept += 1;
                             true
@@ -363,7 +372,7 @@ impl SolveConfig {
         log(&format!("  Pinned {pin_count} non-recomputed variables"));
 
         // 4. Softly anchor recomputed opt-in variables to their current value, with penalties
-        //    kept independent per week (GroupInInterrogation) and per group list (StudentGroup).
+        //    kept independent per week (GroupInInterrogation) and per group list (StudentInGroup).
         let mut anchor_weeks: BTreeMap<GlobalWeek, HashMap<Var, f64>> = BTreeMap::new();
         let mut anchor_group_lists: BTreeMap<GroupListId, HashMap<Var, f64>> = BTreeMap::new();
         for (v, value) in complete.get_values() {
@@ -374,7 +383,7 @@ impl SolveConfig {
                         anchor_weeks.entry(*week).or_default().insert(v, value);
                     }
                 }
-                Var::StudentGroup { group_list, .. } => {
+                Var::StudentInGroup { group_list, .. } => {
                     let data = self.group_list_data(group_list);
                     if data
                         .recompute
