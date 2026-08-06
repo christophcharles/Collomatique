@@ -16,6 +16,7 @@
 #include <CglPreProcess.hpp>
 
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <set>
 #include <string>
@@ -107,6 +108,42 @@ static double original_objective(
     return value;
 }
 
+// Opt-in event tracing, switched on with `COLLO_CBC_DEBUG_EVENTS=1` in the
+// environment. It prints one line per *raw* CbcEventHandler event, before any
+// of the filtering below, plus one line per handler installation and clone.
+//
+// It exists because from the Rust side "CBC never called us" and "CBC called us
+// and we discarded the event" look exactly the same: both show up as a solve
+// that produces no progress. Everything that enforces a limit — the global time
+// limit, the after-incumbent time limit, the strategies' distance cutoff — is
+// checked inside the callback, so a solve we hear nothing from runs unbounded.
+// Output goes to stdout, which is where CBC's own log already goes and which the
+// subprocess layer captures.
+static bool debug_events() {
+    static const bool on = []() {
+        const char* v = std::getenv("COLLO_CBC_DEBUG_EVENTS");
+        return v && v[0] != '\0' && std::strcmp(v, "0") != 0;
+    }();
+    return on;
+}
+
+static const char* event_name(CbcEventHandler::CbcEvent e) {
+    switch (e) {
+    case CbcEventHandler::node: return "node";
+    case CbcEventHandler::treeStatus: return "treeStatus";
+    case CbcEventHandler::solution: return "solution";
+    case CbcEventHandler::heuristicSolution: return "heuristicSolution";
+    case CbcEventHandler::beforeSolution1: return "beforeSolution1";
+    case CbcEventHandler::beforeSolution2: return "beforeSolution2";
+    case CbcEventHandler::afterHeuristic: return "afterHeuristic";
+    case CbcEventHandler::smallBranchAndBound: return "smallBranchAndBound";
+    case CbcEventHandler::heuristicPass: return "heuristicPass";
+    case CbcEventHandler::convertToCuts: return "convertToCuts";
+    case CbcEventHandler::endSearch: return "endSearch";
+    default: return "other";
+    }
+}
+
 class ColloEventHandler : public CbcEventHandler {
 public:
     ColloCbcCallback callback_;
@@ -150,10 +187,34 @@ public:
     ~ColloEventHandler() override {}
 
     CbcEventHandler* clone() const override {
+        // CBC clones the handler when it hands it to the model it actually runs
+        // branch and bound on, so this says whether the handler followed.
+        if (debug_events()) {
+            std::cout << "collo_cbc[dbg] clone handler from " << (const void*)this
+                      << " (model=" << (const void*)getModel() << ")" << std::endl;
+        }
         return new ColloEventHandler(*this);
     }
 
     CbcAction event(CbcEvent whichEvent) override {
+        // Trace every event before filtering, so a dropped event is
+        // distinguishable from an event that never happened. `model` is printed
+        // as a pointer: CbcMain1 runs branch and bound on a model it builds
+        // itself after preprocessing, so a changing pointer says which model the
+        // events are coming from.
+        if (debug_events()) {
+            const CbcModel* dm = getModel();
+            std::cout << "collo_cbc[dbg] event=" << event_name(whichEvent)
+                      << "(" << (int)whichEvent << ")"
+                      << " callback=" << (callback_ ? "set" : "null")
+                      << " model=" << (const void*)dm
+                      << " parent=" << (dm ? (const void*)dm->parentModel() : nullptr)
+                      << " nodes=" << (dm ? dm->getNodeCount() : -1)
+                      << " solutions=" << (dm ? dm->getSolutionCount() : -1)
+                      << " best_possible=" << (dm ? dm->getBestPossibleObjValue() : 0.0)
+                      << std::endl;
+        }
+
         if (!callback_)
             return noAction;
 
@@ -224,6 +285,17 @@ public:
         }
 
         int result = callback_(&progress, user_data_);
+        if (debug_events()) {
+            std::cout << "collo_cbc[dbg]   reported incumbent="
+                      << (progress.incumbent_status == COLLO_CBC_INCUMBENT_OK ? "ok"
+                          : progress.incumbent_status == COLLO_CBC_INCUMBENT_FAILED
+                              ? "failed"
+                              : "none")
+                      << " best_obj=" << progress.best_obj
+                      << " best_bound=" << progress.best_bound
+                      << " -> " << (result != 0 ? "stop" : "continue")
+                      << std::endl;
+        }
         return (result != 0) ? stop : noAction;
     }
 };
@@ -377,6 +449,16 @@ ColloCbcStatus collo_cbc_solve(ColloCbcModel* m, ColloCbcCallback cb, void* user
     // Install event handler (after CbcMain0, before CbcMain1)
     ColloEventHandler handler(&cbcModel, cb, user_data, m->solver, m->num_cols);
     cbcModel.passInEventHandler(&handler);
+
+    if (debug_events()) {
+        std::cout << "collo_cbc[dbg] solve start: model=" << (const void*)&cbcModel
+                  << " handler=" << (const void*)&handler
+                  << " cols=" << m->num_cols << " rows=" << m->num_rows
+                  << " sense=" << m->solver->getObjSense()
+                  << " callback=" << (cb ? "set" : "null")
+                  << " mip_start=" << (m->has_mip_start ? "yes" : "no")
+                  << std::endl;
+    }
 
     // Set MIPStart (before CbcMain1 so it's available during solve), in original
     // column space — CBC preprocesses it internally.
