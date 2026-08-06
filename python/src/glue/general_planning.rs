@@ -1,7 +1,7 @@
 use super::*;
 use pyo3::types::PyString;
 
-#[pyclass(eq, hash, frozen)]
+#[pyclass(eq, hash, frozen, from_py_object)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PeriodId {
     id: collomatique_state_colloscopes::PeriodId,
@@ -39,7 +39,7 @@ impl From<PeriodId> for collomatique_state_colloscopes::PeriodId {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Period {
     #[pyo3(set, get)]
@@ -61,7 +61,7 @@ impl Period {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WeekDesc {
     #[pyo3(set, get)]

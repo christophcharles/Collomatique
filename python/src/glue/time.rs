@@ -6,7 +6,7 @@ use collomatique_time::NonZeroMinutes;
 use pyo3::{exceptions::PyValueError, types::PyString};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[pyclass]
+#[pyclass(from_py_object)]
 pub struct NaiveMondayDate {
     internal: collomatique_time::WeekStart,
 }
@@ -45,7 +45,7 @@ impl From<NaiveMondayDate> for collomatique_time::WeekStart {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[pyclass]
+#[pyclass(from_py_object)]
 pub struct NaiveDate {
     internal: chrono::NaiveDate,
 }
@@ -86,7 +86,7 @@ impl From<NaiveDate> for chrono::NaiveDate {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[pyclass]
+#[pyclass(from_py_object)]
 pub struct Time {
     internal: collomatique_time::WholeMinuteTime,
 }
@@ -128,7 +128,7 @@ impl From<Time> for collomatique_time::WholeMinuteTime {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[pyclass]
+#[pyclass(from_py_object)]
 pub enum Weekday {
     Monday,
     Tuesday,
@@ -186,7 +186,7 @@ impl From<Weekday> for collomatique_time::Weekday {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[pyclass]
+#[pyclass(from_py_object)]
 pub struct SlotStart {
     #[pyo3(set, get)]
     pub start_time: Time,
@@ -236,7 +236,7 @@ impl From<SlotStart> for collomatique_time::SlotStart {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[pyclass]
+#[pyclass(from_py_object)]
 pub struct SlotWithDuration {
     #[pyo3(set, get)]
     pub start_time: SlotStart,

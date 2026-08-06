@@ -3,7 +3,7 @@ use pyo3::types::PyString;
 
 use collomatique_state_colloscopes::NonEmptyRangeInclusive;
 
-#[pyclass(eq, hash, frozen)]
+#[pyclass(eq, hash, frozen, from_py_object)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct GroupListId {
     id: collomatique_state_colloscopes::GroupListId,
@@ -41,7 +41,7 @@ impl From<GroupListId> for collomatique_state_colloscopes::GroupListId {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GroupList {
     #[pyo3(set, get)]
@@ -92,7 +92,7 @@ impl TryFrom<GroupList> for collomatique_state_colloscopes::group_lists::GroupLi
 use std::collections::BTreeSet;
 use std::num::NonZeroU32;
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GroupListParameters {
     #[pyo3(set, get)]
@@ -162,7 +162,7 @@ impl TryFrom<GroupListParameters>
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum GroupListFilling {
     Prefilled {
@@ -225,7 +225,7 @@ impl From<GroupListFilling> for collomatique_state_colloscopes::group_lists::Gro
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PrefilledGroup {
     #[pyo3(set, get)]

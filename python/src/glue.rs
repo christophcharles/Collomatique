@@ -81,7 +81,7 @@ pub fn current_session() -> Session {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone)]
 pub struct Session {
     file: Option<InternalFile>,

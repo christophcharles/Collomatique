@@ -5,7 +5,7 @@ use collomatique_state_colloscopes::NonEmptyRangeInclusive;
 use std::collections::BTreeSet;
 use std::num::NonZeroU32;
 
-#[pyclass(eq, hash, frozen)]
+#[pyclass(eq, hash, frozen, from_py_object)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SubjectId {
     id: collomatique_state_colloscopes::SubjectId,
@@ -43,7 +43,7 @@ impl From<SubjectId> for collomatique_state_colloscopes::SubjectId {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Subject {
     #[pyo3(get)]
@@ -62,7 +62,7 @@ impl Subject {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SubjectParameters {
     #[pyo3(set, get)]
@@ -109,7 +109,7 @@ impl SubjectParameters {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SubjectInterrogationParameters {
     #[pyo3(set, get)]
@@ -192,7 +192,7 @@ impl SubjectInterrogationParameters {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SubjectPeriodicity {
     OnceForEveryBlockOfWeeks {
@@ -213,7 +213,7 @@ pub enum SubjectPeriodicity {
     },
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SubjectWeekBlock {
     #[pyo3(set, get)]

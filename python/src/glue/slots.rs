@@ -1,7 +1,7 @@
 use super::*;
 use pyo3::types::PyString;
 
-#[pyclass(eq, hash, frozen)]
+#[pyclass(eq, hash, frozen, from_py_object)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SlotId {
     id: collomatique_state_colloscopes::SlotId,
@@ -39,7 +39,7 @@ impl From<SlotId> for collomatique_state_colloscopes::SlotId {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Slot {
     #[pyo3(set, get)]
@@ -61,7 +61,7 @@ impl Slot {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SlotParameters {
     #[pyo3(set, get)]
