@@ -6,10 +6,6 @@
 //! property has to be stated as a constraint. One plain equality row per
 //! (list, student): user constraints are never reified, so there is no
 //! helper column behind it.
-//!
-//! The template grouping gets the same family over its own matrix: it is a
-//! partition of the students like any list, only one that never leaves the
-//! model.
 
 use crate::extras::{MyBundle, V, base_var};
 use crate::types::ConstraintDesc;
@@ -32,17 +28,6 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
             bundle = bundle.with_constraint(
                 sum.eq(&IntLinExpr::constant(1)),
                 ConstraintDesc::StudentInOneGroup { list, student },
-            );
-        }
-    }
-    if let Some(ghost) = env.ghost() {
-        for &student in ghost.spec().students() {
-            let sum: IntLinExpr<V> = (0..env.ghost_group_count())
-                .map(|group| IntLinExpr::var(base_var(Var::StudentInGhostGroup { student, group })))
-                .sum();
-            bundle = bundle.with_constraint(
-                sum.eq(&IntLinExpr::constant(1)),
-                ConstraintDesc::GhostStudentInOneGroup { student },
             );
         }
     }

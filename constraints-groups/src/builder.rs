@@ -140,32 +140,22 @@ mod tests {
         let mut one_group = 0;
         let mut max = 0;
         let mut min = 0;
-        let mut ghost_one_group = 0;
-        let mut ghost_max = 0;
-        let mut ghost_min = 0;
         for (_, source) in model.problem().get_constraints() {
             if let ConstraintSource::User(desc) = source {
                 match desc {
                     ConstraintDesc::StudentInOneGroup { .. } => one_group += 1,
                     ConstraintDesc::StudentsPerGroupMax { .. } => max += 1,
                     ConstraintDesc::StudentsPerGroupMin { .. } => min += 1,
-                    ConstraintDesc::GhostStudentInOneGroup { .. } => ghost_one_group += 1,
-                    ConstraintDesc::GhostStudentsPerGroupMax { .. } => ghost_max += 1,
-                    ConstraintDesc::GhostStudentsPerGroupMin { .. } => ghost_min += 1,
                 }
             }
         }
         // One "exactly one group" row per (list, student): 4 + 3.
         assert_eq!(one_group, 7);
-        // One size constraint of each kind per (list, group): 2 + 2.
+        // One size constraint of each kind per (list, group): 2 + 2. The
+        // template adds none: it is plan data, not a grouping the model
+        // shapes.
         assert_eq!(max, 4);
         assert_eq!(min, 4);
-        // The template spans the union of the two lists — 7 students at the
-        // canonical 2..=3 (list 0's range wins the vote 4 to 3), so
-        // ceil(7 / 3) = 3 groups — and carries the same two families.
-        assert_eq!(ghost_one_group, 7);
-        assert_eq!(ghost_max, 3);
-        assert_eq!(ghost_min, 3);
 
         // The objective references every `SharedPair`, so they are all
         // expanded. The lists are disjoint, so the co-occurring pairs are
@@ -179,8 +169,6 @@ mod tests {
         // Every pair belongs to exactly one of them here.
         let mut per_class = [0, 0];
         let mut pieces = 0;
-        let mut canonical = 0;
-        let mut deviation = 0;
         let mut helpers = 0;
         for v in model.problem().get_variables().keys() {
             // Exhaustive for the same reason as the `match` above.
@@ -189,8 +177,6 @@ mod tests {
                     per_class[class.0] += 1
                 }
                 InternalVar::Extra(ExtraVarName::RefGroupInGroup { .. }) => pieces += 1,
-                InternalVar::Extra(ExtraVarName::CanonicalPair { .. }) => canonical += 1,
-                InternalVar::Extra(ExtraVarName::Deviation { .. }) => deviation += 1,
                 InternalVar::Helper { .. } => helpers += 1,
                 InternalVar::Base(_) => {}
             }
@@ -203,12 +189,6 @@ mod tests {
         // last two, so there are four sites — and one variable per site and
         // group of its list, 2 groups each.
         assert_eq!(pieces, 4 * 2);
-        // The per-pair template families are gone from the built model: what
-        // used to be C(4,2) + C(3,2) = 9 columns of each, with two rows per
-        // template group behind every one of them. The declarations follow
-        // in the next commit.
-        assert_eq!(canonical, 0);
-        assert_eq!(deviation, 0);
         assert_eq!(helpers, 0);
     }
 

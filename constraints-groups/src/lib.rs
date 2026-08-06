@@ -10,20 +10,22 @@
 //! way out).
 //!
 //! The model is complete (end of phase B): the base `StudentInGroup`
-//! binaries — the assignment matrix itself, one variable per (list,
-//! student, group) — the `StudentInGhostGroup` matrix of the *template*
-//! grouping ([`GenerationPlan::ghost`], a computed grouping of every student
-//! at the canonical size, which the objective asks the real lists to
-//! resemble), the `SharedPair` extras of piece 7 and the `RefGroupInGroup`
-//! extras that count how many pieces a list breaks a reference group into,
-//! the shape constraints of piece 8 (one group per student, min and max size
-//! — over the template too), the two-term stability objective of piece 9
-//! (minimize the shared student pairs *and* the shattering of the template, with
-//! configurable weights — [`ObjectiveWeights`], piece 11), and the
-//! inclusion-based incremental
-//! epochs of piece 10 ([`build_incremental_epochs`]), which callers feed to
-//! the solver so the inclusion-minimal lists are built first and the larger
-//! lists align with them.
+//! binaries — the assignment matrix itself, one variable per (list, student,
+//! group), and the only variable of the model — the `SharedPair` extras of
+//! piece 7 and the `RefGroupInGroup` extras that count how many pieces a list
+//! breaks a reference group into, the shape constraints of piece 8 (one group
+//! per student, min and max size), the two-term stability objective of piece 9
+//! (minimize the shared student pairs *and* the shattering of the template,
+//! with configurable weights — [`ObjectiveWeights`], piece 11), and the
+//! inclusion-based incremental epochs of piece 10
+//! ([`build_incremental_epochs`]), which callers feed to the solver so the
+//! inclusion-minimal lists are built first and the larger lists align with
+//! them.
+//!
+//! The *template* ([`GenerationPlan::ghost`]) is a grouping of every student
+//! at the canonical group size, which the objective asks the real lists to
+//! reuse. It is plan data, computed by clustering ([`ghost`]), not something
+//! the solver decides.
 //!
 //! The number of groups is *not* optimized: it is the closed-form minimum
 //! `⌈n / max_size⌉` ([`vars::VarEnv::group_count`]), imposed on the model.

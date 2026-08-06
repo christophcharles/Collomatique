@@ -22,19 +22,6 @@ pub enum ExtraVarName {
         b: StudentId,
         class: SizeClassIdx,
     },
-    /// Dead: nothing declares it any more. It used to say "the template
-    /// groups this pair", which only had to be a variable because the
-    /// template itself was one. Kept for one commit so that this one carries
-    /// no deletion.
-    CanonicalPair { a: StudentId, b: StudentId },
-    /// Dead, like [`ExtraVarName::CanonicalPair`]. It priced a pair's meeting
-    /// away from the template, which [`ExtraVarName::RefGroupInGroup`] now
-    /// measures directly and per reference group instead of per pair.
-    Deviation {
-        a: StudentId,
-        b: StudentId,
-        list: GroupListIdx,
-    },
     /// 1 ⟺ some student of reference group `ref_group` sits in group `group`
     /// of `list`. Summed over the list's groups, this is the number of pieces
     /// the list breaks that reference group into — 1 when the list keeps it
@@ -84,14 +71,4 @@ pub enum ConstraintDesc {
         group: u32,
         min_students: u32,
     },
-    /// `Σ_g StudentInGhostGroup(student, g) == 1` — the template's own
-    /// "exactly one group per student".
-    GhostStudentInOneGroup { student: StudentId },
-    /// `Σ_s StudentInGhostGroup(s, group) <= max_students`.
-    GhostStudentsPerGroupMax { group: u32, max_students: u32 },
-    /// `Σ_s StudentInGhostGroup(s, group) >= min_students`. The template is
-    /// held to the same size discipline as a real list: left free of it, the
-    /// objective would collapse it into a few degenerate groups and the
-    /// grouping the real lists are asked to resemble would mean nothing.
-    GhostStudentsPerGroupMin { group: u32, min_students: u32 },
 }

@@ -21,9 +21,10 @@ pub struct VarEnv {
     /// indexing as `classes`; a class no kept list matches gets an empty set.
     pinned_pairs: Vec<BTreeSet<(StudentId, StudentId)>>,
     canonical_range: Option<NonEmptyRangeInclusive<NonZeroU32>>,
-    /// The template grouping. Deliberately *not* one of the `specs`: it has
-    /// its own variable, gets no `SharedPair` and never becomes an output
-    /// list.
+    /// The template grouping. Deliberately *not* one of the `specs`: it is
+    /// plan data rather than a list, so it gets no variable of its own, no
+    /// `SharedPair`, and never becomes an output list. The model only reads
+    /// it through [`VarEnv::ref_groups`] and [`VarEnv::ref_group`].
     ghost: Option<GhostGrouping>,
 }
 
@@ -131,14 +132,6 @@ impl VarEnv {
         &self.pinned_pairs[class.0]
     }
 
-    /// The template grouping, or `None` when the plan has none. It is not
-    /// one of the [`lists`](VarEnv::lists): the objective measures the real
-    /// lists *against* it, so it gets its own matrix but must never be
-    /// counted as a list.
-    pub(crate) fn ghost(&self) -> Option<&GhostGrouping> {
-        self.ghost.as_ref()
-    }
-
     /// The reference groups of the template, in build order. Empty without a
     /// template, so every family that loops over them self-gates on the
     /// plan having one.
@@ -159,13 +152,9 @@ impl VarEnv {
 
     /// Number of groups of the template: the length of its group vector,
     /// which [`build_ghost`](crate::ghost) built at the same closed count as
-    /// [`VarEnv::group_count`]. 0 without a template, so `0..count` is the
-    /// empty loop everywhere the ghost pass runs.
-    ///
-    /// Public for the same reason [`VarEnv::group_count`] is: the shape of
-    /// the assignment matrix is what a caller needs to read a solved
-    /// configuration, or to enumerate the base variables of an epoch.
-    pub fn ghost_group_count(&self) -> u32 {
+    /// [`VarEnv::group_count`]. 0 without a template, so
+    /// [`VarEnv::ref_groups`] is the empty iterator there.
+    pub(crate) fn ghost_group_count(&self) -> u32 {
         match &self.ghost {
             Some(ghost) => ghost.groups().len() as u32,
             None => 0,
@@ -215,22 +204,6 @@ pub enum Var {
         #[range(Self::compute_group_range(env, list))]
         group: u32,
     },
-    /// 1 ⟺ `student` sits in group `group` of the *template* grouping — the
-    /// one grouping of the whole student body the objective asks the real
-    /// lists to resemble. Decided by the solver like any list (the shape
-    /// constraints partition it too), but never converted to output: it is a
-    /// yardstick, not a group list.
-    ///
-    /// Enumerated only when the plan has a template
-    /// ([`GenerationPlan::ghost`](crate::GenerationPlan::ghost)); without
-    /// one, both range helpers are empty and every such name is stale, hence
-    /// neutralized to 0 by the derive's default `check_fix`.
-    StudentInGhostGroup {
-        #[range(Self::compute_ghost_student_range(env))]
-        student: StudentId,
-        #[range(Self::compute_ghost_group_range(env))]
-        group: u32,
-    },
 }
 
 impl Var {
@@ -257,19 +230,6 @@ impl Var {
         } else {
             Vec::new()
         }
-    }
-
-    fn compute_ghost_student_range(env: &VarEnv) -> Vec<StudentId> {
-        match env.ghost() {
-            Some(ghost) => ghost.spec().students().iter().copied().collect(),
-            None => Vec::new(),
-        }
-    }
-
-    /// Empty without a template, since [`VarEnv::ghost_group_count`] is 0
-    /// there — the whole variant then enumerates to nothing.
-    fn compute_ghost_group_range(env: &VarEnv) -> Vec<u32> {
-        (0..env.ghost_group_count()).collect()
     }
 }
 
@@ -394,10 +354,10 @@ pub(crate) mod tests {
         let env = VarEnv::new(&plan);
 
         let vars = <Var as DescribeVar>::enumerate(&env);
-        // One binary per (student, group): 4 students × ceil(4/3) groups,
-        // plus 3 students × ceil(3/2) groups — and the template's own
-        // matrix, 7 students in ceil(7/3) groups at the canonical 2..=3.
-        assert_eq!(vars.len(), 4 * 2 + 3 * 2 + 7 * 3);
+        // One binary per (list, student, group): 4 students × ceil(4/3)
+        // groups, plus 3 students × ceil(3/2) groups. The template adds
+        // none — it is plan data, not a matrix the solver decides.
+        assert_eq!(vars.len(), 4 * 2 + 3 * 2);
 
         // A variable of the enumerated set is free: nothing is ever fixed.
         let free = Var::StudentInGroup {
@@ -434,59 +394,5 @@ pub(crate) mod tests {
         };
         assert!(!vars.contains_key(&stale_group));
         assert_eq!(stale_group.check_fix(&env), Some(0.0));
-    }
-
-    #[test]
-    fn the_template_gets_its_own_assignment_matrix() {
-        // Two overlapping lists of the same range: the template spans their
-        // union — six students in ceil(6 / 2) = 3 groups.
-        let plan = plan_of(&[(&[1, 2, 3, 4], (2, 2)), (&[3, 4, 5, 6], (2, 2))]);
-        let env = VarEnv::new(&plan);
-        assert_eq!(env.ghost_group_count(), 3);
-
-        let vars = <Var as DescribeVar>::enumerate(&env);
-        assert_eq!(vars.len(), 4 * 2 + 4 * 2 + 6 * 3);
-
-        let free = Var::StudentInGhostGroup {
-            student: student(1),
-            group: 2,
-        };
-        assert!(vars.contains_key(&free));
-        assert_eq!(free.check_fix(&env), None);
-
-        // Stale template names are neutralized exactly like stale list ones.
-        let stale_group = Var::StudentInGhostGroup {
-            student: student(1),
-            group: 3,
-        };
-        assert!(!vars.contains_key(&stale_group));
-        assert_eq!(stale_group.check_fix(&env), Some(0.0));
-        let stale_student = Var::StudentInGhostGroup {
-            student: student(9),
-            group: 0,
-        };
-        assert!(!vars.contains_key(&stale_student));
-        assert_eq!(stale_student.check_fix(&env), Some(0.0));
-    }
-
-    #[test]
-    fn a_plan_without_a_template_has_no_template_variables() {
-        // A plan whose canonical size cannot split the union has no ghost,
-        // and then the whole variant enumerates to nothing.
-        let mut plan = plan_of(&[(&[1, 2, 3, 4], (2, 2))]);
-        plan.ghost = None;
-        let env = VarEnv::new(&plan);
-        assert_eq!(env.ghost_group_count(), 0);
-
-        let vars = <Var as DescribeVar>::enumerate(&env);
-        assert_eq!(vars.len(), 4 * 2);
-        assert_eq!(
-            Var::StudentInGhostGroup {
-                student: student(1),
-                group: 0,
-            }
-            .check_fix(&env),
-            Some(0.0)
-        );
     }
 }

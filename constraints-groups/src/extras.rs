@@ -104,7 +104,7 @@ pub(crate) fn co_occurrences(
 /// block would be a constant, and their size class is the one
 /// [`VarEnv::class_weight`] has no meaningful value for.
 ///
-/// Empty without a template ([`VarEnv::ghost`]), since there is then no
+/// Empty without a template ([`VarEnv::ref_groups`]), since there is then no
 /// reference group at all — so the whole family, and the objective term that
 /// reads it, self-gate on this one function.
 pub(crate) fn scatter_sites(env: &VarEnv) -> Vec<(GroupListIdx, RefGroupIdx)> {

@@ -40,27 +40,18 @@ use crate::vars::{GroupListIdx, Var, VarEnv};
 /// against the whole plan, a single whole-class list would make every spec's
 /// count equal its size and collapse the ordering into plain size ordering.
 ///
-/// The template's `StudentInGhostGroup` matrix takes epoch 0, ahead of every
-/// spec, and the spec epochs are contiguous from 1 (each level occupying a
-/// contiguous run). The map therefore names *every* base variable of the
-/// model.
+/// The resulting epoch numbers are contiguous from 0 (each level occupying a
+/// contiguous run), and the map names *every* base variable of the model —
+/// `StudentInGroup` is the only variable there is. That matters to the
+/// strategy: a base variable absent from the map lands in an automatic final
+/// epoch (`strategies/src/strategies/incremental.rs`), and since the epoch
+/// anchors are soft, such an epoch is a full-size solve over the whole model.
 ///
-/// The matrix is now the only thing left in epoch 0: the template grouping is
-/// computed ([`crate::ghost`]), so no extra and no objective term touches
-/// that matrix any more, and epoch 0 is a pure feasibility solve over its
-/// shape rows. Each spec epoch then picks up its own `RefGroupInGroup` terms
-/// and aligns its list to the computed reference grouping. The matrix and its
-/// epoch go away with the rest of the dead template machinery.
-///
-/// The template used to be left unnamed, on the grounds that a grouping only
-/// the objective reads settles cheaply at the end. It does not: unlisted base
-/// variables form an automatic final epoch
-/// (`strategies/src/strategies/incremental.rs`), and since the anchors are
-/// soft that epoch was a full-size solve over the whole model. Naming the
-/// matrix here leaves it empty again.
-///
-/// A plan with no template leaves epoch 0 empty; the strategy skips empty
-/// epochs, so the specs simply start the run.
+/// Epoch 0 used to be reserved for the template's own assignment matrix,
+/// which the solver decided. The template is computed now ([`crate::ghost`]),
+/// so there is no matrix to solve and no reservation to make: each spec epoch
+/// picks up its own `RefGroupInGroup` terms and aligns its list to the
+/// reference grouping directly.
 pub fn build_incremental_epochs(plan: &GenerationPlan) -> HashMap<Var, u32> {
     // Pass 1 — inclusion levels. Process the specs by ascending student
     // count: a strict subset always has strictly fewer students, so every
@@ -103,8 +94,7 @@ pub fn build_incremental_epochs(plan: &GenerationPlan) -> HashMap<Var, u32> {
     }
 
     let mut spec_epochs = vec![0u32; plan.specs.len()];
-    // Epoch 0 belongs to the template; the specs start at 1.
-    let mut next_epoch = 1u32;
+    let mut next_epoch = 0u32;
     for level_specs in levels.into_values() {
         let mut keyed: Vec<(usize, usize, usize)> = level_specs
             .iter()
@@ -148,16 +138,6 @@ pub fn build_incremental_epochs(plan: &GenerationPlan) -> HashMap<Var, u32> {
             }
         }
     }
-
-    // The template's own matrix, solved first. Naming it is also what keeps
-    // the strategy's automatic final epoch empty.
-    if let Some(ghost) = &plan.ghost {
-        for &student in ghost.spec().students() {
-            for group in 0..env.ghost_group_count() {
-                epochs.insert(Var::StudentInGhostGroup { student, group }, 0);
-            }
-        }
-    }
     epochs
 }
 
@@ -169,8 +149,7 @@ mod tests {
     use std::collections::BTreeSet;
 
     /// The epoch shared by every variable of a list, asserting on the way
-    /// that the list's variables all agree on it. Epoch 0 is the template's,
-    /// so the specs of these instances — which all have one — run from 1.
+    /// that the list's variables all agree on it.
     fn epoch_of(epochs: &HashMap<Var, u32>, plan: &GenerationPlan, list: usize) -> u32 {
         let env = VarEnv::new(plan);
         let idx = GroupListIdx(list);
@@ -202,8 +181,8 @@ mod tests {
         // not mask it, and the size order needs a strict size difference.
         let plan = plan_of(&[(&[1, 2, 3], (1, 3)), (&[4, 5], (1, 2))]);
         let epochs = build_incremental_epochs(&plan);
-        assert_eq!(epoch_of(&epochs, &plan, 1), 1);
-        assert_eq!(epoch_of(&epochs, &plan, 0), 2);
+        assert_eq!(epoch_of(&epochs, &plan, 1), 0);
+        assert_eq!(epoch_of(&epochs, &plan, 0), 1);
     }
 
     #[test]
@@ -216,9 +195,9 @@ mod tests {
             (&[1, 2], (1, 2)),
         ]);
         let epochs = build_incremental_epochs(&plan);
-        assert_eq!(epoch_of(&epochs, &plan, 0), 3);
-        assert_eq!(epoch_of(&epochs, &plan, 1), 2);
-        assert_eq!(epoch_of(&epochs, &plan, 2), 1);
+        assert_eq!(epoch_of(&epochs, &plan, 0), 2);
+        assert_eq!(epoch_of(&epochs, &plan, 1), 1);
+        assert_eq!(epoch_of(&epochs, &plan, 2), 0);
     }
 
     #[test]
@@ -231,8 +210,8 @@ mod tests {
         // tie-break orders {1,2} first.
         let plan = plan_of(&[(&[1, 2], (1, 2)), (&[2, 3, 4], (1, 3))]);
         let epochs = build_incremental_epochs(&plan);
-        assert_eq!(epoch_of(&epochs, &plan, 0), 1);
-        assert_eq!(epoch_of(&epochs, &plan, 1), 2);
+        assert_eq!(epoch_of(&epochs, &plan, 0), 0);
+        assert_eq!(epoch_of(&epochs, &plan, 1), 1);
     }
 
     #[test]
@@ -246,8 +225,8 @@ mod tests {
         // spec index breaks the tie.
         let plan = plan_of(&[(&[1, 2, 3], (1, 2)), (&[1, 2, 3], (2, 3))]);
         let epochs = build_incremental_epochs(&plan);
-        assert_eq!(epoch_of(&epochs, &plan, 0), 1);
-        assert_eq!(epoch_of(&epochs, &plan, 1), 2);
+        assert_eq!(epoch_of(&epochs, &plan, 0), 0);
+        assert_eq!(epoch_of(&epochs, &plan, 1), 1);
     }
 
     #[test]
@@ -256,7 +235,7 @@ mod tests {
         // sciences list containing both, the whole class containing
         // everything. Levels 0, 0, 1, 2 — and the two LV2 lists are
         // disjoint (shared count 0) and of equal size, so the index
-        // tie-break orders them. Epochs 1, 2, 3, 4: the inclusion levels
+        // tie-break orders them. Epochs 0, 1, 2, 3: the inclusion levels
         // stay contiguous runs of epoch numbers.
         //
         // (That sharing is counted per level is pinned by the dedicated
@@ -268,10 +247,10 @@ mod tests {
             (&[1, 2, 3, 4, 5, 6, 7], (1, 7)),
         ]);
         let epochs = build_incremental_epochs(&plan);
-        assert_eq!(epoch_of(&epochs, &plan, 0), 1);
-        assert_eq!(epoch_of(&epochs, &plan, 1), 2);
-        assert_eq!(epoch_of(&epochs, &plan, 2), 3);
-        assert_eq!(epoch_of(&epochs, &plan, 3), 4);
+        assert_eq!(epoch_of(&epochs, &plan, 0), 0);
+        assert_eq!(epoch_of(&epochs, &plan, 1), 1);
+        assert_eq!(epoch_of(&epochs, &plan, 2), 2);
+        assert_eq!(epoch_of(&epochs, &plan, 3), 3);
     }
 
     #[test]
@@ -284,7 +263,7 @@ mod tests {
         //
         // Levels: {1} and {3,4,5} at 0, {1,2} at 1, the top at 2. Level 0
         // holds two disjoint specs, ordered by size ({1} first), so the
-        // epochs run 1, 2, 3, 4. Under the last-wins mutation the top
+        // epochs run 0, 1, 2, 3. Under the last-wins mutation the top
         // spec's level degrades to 1, it joins {1,2}'s level, and these
         // assertions fail.
         let plan = plan_of(&[
@@ -294,10 +273,10 @@ mod tests {
             (&[1, 2, 3, 4, 5], (1, 5)),
         ]);
         let epochs = build_incremental_epochs(&plan);
-        assert_eq!(epoch_of(&epochs, &plan, 0), 1);
-        assert_eq!(epoch_of(&epochs, &plan, 2), 2);
-        assert_eq!(epoch_of(&epochs, &plan, 1), 3);
-        assert_eq!(epoch_of(&epochs, &plan, 3), 4);
+        assert_eq!(epoch_of(&epochs, &plan, 0), 0);
+        assert_eq!(epoch_of(&epochs, &plan, 2), 1);
+        assert_eq!(epoch_of(&epochs, &plan, 1), 2);
+        assert_eq!(epoch_of(&epochs, &plan, 3), 3);
     }
 
     #[test]
@@ -312,9 +291,9 @@ mod tests {
             (&[7, 8, 9], (1, 3)),
         ]);
         let epochs = build_incremental_epochs(&plan);
-        assert_eq!(epoch_of(&epochs, &plan, 1), 1); // 2 students
-        assert_eq!(epoch_of(&epochs, &plan, 2), 2); // 3 students
-        assert_eq!(epoch_of(&epochs, &plan, 0), 3); // 4 students
+        assert_eq!(epoch_of(&epochs, &plan, 1), 0); // 2 students
+        assert_eq!(epoch_of(&epochs, &plan, 2), 1); // 3 students
+        assert_eq!(epoch_of(&epochs, &plan, 0), 2); // 4 students
     }
 
     #[test]
@@ -333,10 +312,10 @@ mod tests {
             (&[8, 9, 10], (1, 3)),
         ]);
         let epochs = build_incremental_epochs(&plan);
-        assert_eq!(epoch_of(&epochs, &plan, 0), 1); // shared 0
-        assert_eq!(epoch_of(&epochs, &plan, 1), 2); // shared 1, 2 students
-        assert_eq!(epoch_of(&epochs, &plan, 3), 3); // shared 1, 3 students
-        assert_eq!(epoch_of(&epochs, &plan, 2), 4); // shared 2
+        assert_eq!(epoch_of(&epochs, &plan, 0), 0); // shared 0
+        assert_eq!(epoch_of(&epochs, &plan, 1), 1); // shared 1, 2 students
+        assert_eq!(epoch_of(&epochs, &plan, 3), 2); // shared 1, 3 students
+        assert_eq!(epoch_of(&epochs, &plan, 2), 3); // shared 2
     }
 
     #[test]
@@ -354,59 +333,27 @@ mod tests {
             (&[1, 2, 3, 4, 5, 6], (1, 6)),
         ]);
         let epochs = build_incremental_epochs(&plan);
-        assert_eq!(epoch_of(&epochs, &plan, 0), 1);
-        assert_eq!(epoch_of(&epochs, &plan, 1), 2);
-        assert_eq!(epoch_of(&epochs, &plan, 2), 3);
-        assert_eq!(epoch_of(&epochs, &plan, 3), 4);
+        assert_eq!(epoch_of(&epochs, &plan, 0), 0);
+        assert_eq!(epoch_of(&epochs, &plan, 1), 1);
+        assert_eq!(epoch_of(&epochs, &plan, 2), 2);
+        assert_eq!(epoch_of(&epochs, &plan, 3), 3);
     }
 
     #[test]
     fn map_names_every_base_variable() {
         // The strategy contract: entries are base variables, and a base
         // variable absent from the map lands in an automatic *final* epoch.
-        // Naming all of them is what keeps that final epoch empty — an
-        // unnamed template matrix made it a full-model solve.
+        // Since the anchors are soft, such an epoch would be a full-size
+        // solve over the whole model, so naming all of them is what keeps it
+        // empty. This instance has a template, and it must contribute no
+        // variable of its own for the equality to hold.
         let plan = plan_of(&[(&[1, 2, 3, 4], (2, 3)), (&[3, 4, 5], (1, 2))]);
+        assert!(plan.ghost.is_some(), "this instance must have a template");
+
         let epochs = build_incremental_epochs(&plan);
         let env = VarEnv::new(&plan);
         let enumerated: BTreeSet<Var> = <Var as DescribeVar>::enumerate(&env).into_keys().collect();
         let named: BTreeSet<Var> = epochs.keys().cloned().collect();
         assert_eq!(named, enumerated);
-
-        // And the template goes first. This instance does have one, so the
-        // check below is not vacuous.
-        let ghost_vars: Vec<&Var> = enumerated
-            .iter()
-            .filter(|var| matches!(var, Var::StudentInGhostGroup { .. }))
-            .collect();
-        assert!(
-            !ghost_vars.is_empty(),
-            "the instance must actually have a template",
-        );
-        for var in ghost_vars {
-            assert_eq!(epochs[var], 0, "the template's matrix is epoch 0");
-        }
-    }
-
-    #[test]
-    fn a_plan_without_a_template_starts_at_the_first_spec() {
-        // Three students at 3..=3 and two at 2..=2: both specs are feasible
-        // on their own, the vote elects 3..=3, but the union of five
-        // students splits at neither range — so the plan has no template.
-        // Epoch 0 is then simply empty (the strategy skips such an epoch)
-        // and the specs still start at 1.
-        let plan = plan_of(&[(&[1, 2, 3], (3, 3)), (&[4, 5], (2, 2))]);
-        assert!(plan.ghost.is_none(), "this instance must have no template");
-
-        let epochs = build_incremental_epochs(&plan);
-        assert!(
-            epochs
-                .keys()
-                .all(|var| matches!(var, Var::StudentInGroup { .. })),
-            "no template variable to name",
-        );
-        // Disjoint level-0 specs, so the size tie-break puts {4, 5} first.
-        assert_eq!(epoch_of(&epochs, &plan, 1), 1);
-        assert_eq!(epoch_of(&epochs, &plan, 0), 2);
     }
 }

@@ -135,38 +135,21 @@ fn build_and_check(rng: &mut ChaCha8Rng, inner: &InnerData) {
     //   (a) heights ascend with the epochs: a strictly lower height
     //       means a strictly smaller epoch (this subsumes "a strictly
     //       included spec solves strictly earlier");
-    //   (b) the map is a bijection on the specs: every spec its own
-    //       epoch, numbers contiguous from 1 — with (a), each level
-    //       occupies a contiguous run of epochs. Epoch 0 is the
-    //       template's, so it is not one of the specs';
+    //   (b) the map is a bijection: every spec its own epoch, numbers
+    //       contiguous from 0 — with (a), each level occupies a
+    //       contiguous run of epochs;
     //   (c) inside a height, the epochs ascend by (students shared with
     //       the rest of the level, then student count) — the
     //       least-entangled, then smallest, lists solve first.
     let epochs = build_incremental_epochs(&plan);
     let env = VarEnv::new(&plan);
-    let ghost_var_count = match &plan.ghost {
-        Some(ghost) => ghost.spec().students().len() * env.ghost_group_count() as usize,
-        None => 0,
-    };
-    let var_count: usize = ghost_var_count
-        + plan
-            .specs
-            .iter()
-            .enumerate()
-            .map(|(i, (s, _))| s.students().len() * env.group_count(GroupListIdx(i)) as usize)
-            .sum::<usize>();
+    let var_count: usize = plan
+        .specs
+        .iter()
+        .enumerate()
+        .map(|(i, (s, _))| s.students().len() * env.group_count(GroupListIdx(i)) as usize)
+        .sum();
     assert_eq!(epochs.len(), var_count, "one epoch entry per base variable");
-    if let Some(ghost) = &plan.ghost {
-        for &student in ghost.spec().students() {
-            for group in 0..env.ghost_group_count() {
-                assert_eq!(
-                    epochs[&Var::StudentInGhostGroup { student, group }],
-                    0,
-                    "the template's matrix is solved first",
-                );
-            }
-        }
-    }
     let spec_epoch = |i: usize| {
         let spec = &plan.specs[i].0;
         let student = *spec
@@ -233,10 +216,10 @@ fn build_and_check(rng: &mut ChaCha8Rng, inner: &InnerData) {
 
     let epoch_values: BTreeSet<u32> = (0..n).map(spec_epoch).collect();
     assert_eq!(epoch_values.len(), n, "every spec gets its own epoch");
-    let contiguous: BTreeSet<u32> = (1..=n as u32).collect();
+    let contiguous: BTreeSet<u32> = (0..n as u32).collect();
     assert_eq!(
         epoch_values, contiguous,
-        "spec epoch numbers are contiguous from 1, epoch 0 being the template's",
+        "epoch numbers are contiguous from 0",
     );
 
     let mut levels: BTreeMap<u32, Vec<usize>> = BTreeMap::new();
