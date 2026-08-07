@@ -28,7 +28,7 @@ use super::avoid_twice_in_a_row::{
     RecursiveMode, WindowMode, build_recursive_constraints, build_window_constraints,
 };
 use super::helpers::{
-    effective_balancing_flag, rolling_windows, subject_active_weeks, teachers_for_subject,
+    effective_balancing_option, rolling_windows, subject_active_weeks, teachers_for_subject,
 };
 
 /// Kill switch for the recursive (`AmountInYear` /
@@ -66,7 +66,14 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         let Some(params) = subject_interrogation_params(env, *subject_id) else {
             continue;
         };
-        if effective_balancing_flag(env, *subject_id, |opts| opts.avoid_twice_in_a_row) {
+        // Soft path only: the goal must be on *and* soft. `None` (off) builds
+        // nothing at all — no objective term either — and `Some { soft: false }`
+        // is the hard builder's business.
+        let soft = matches!(
+            effective_balancing_option(env, *subject_id, |opts| &opts.avoid_twice_in_a_row),
+            Some(param) if param.soft
+        );
+        if !soft {
             continue;
         }
         let teachers = teachers_for_subject(env, *subject_id);

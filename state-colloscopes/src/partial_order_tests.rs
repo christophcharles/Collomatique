@@ -629,7 +629,10 @@ fn config_values_are_atoms() {
 
     let balancing = BalancingOptions::default();
     let mut other_balancing = BalancingOptions::default();
-    other_balancing.teacher_rotation = true;
+    other_balancing.teacher_rotation = Some(crate::soft_param::SoftParam {
+        soft: false,
+        value: (),
+    });
     assert_eq!(
         balancing.content_cmp(&balancing.clone()),
         Some(Ordering::Equal)

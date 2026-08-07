@@ -1451,7 +1451,7 @@ fn fixture_3_a_rejected_fix_cascades_through_convergence_breaks() {
     // different from the global ones, so that its removal is a real change and
     // the global ones can be checked untouched at the end.
     let override_options = BalancingOptions {
-        avoid_twice_in_a_row: false,
+        avoid_twice_in_a_row: None,
         year_teacher_rotation: true,
         ..Default::default()
     };

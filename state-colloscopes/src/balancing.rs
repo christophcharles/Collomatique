@@ -6,6 +6,7 @@
 use crate::Table;
 use crate::ids::SubjectId;
 use crate::ops::AnnotatedBalancingOp;
+use crate::soft_param::SoftParam;
 use collomatique_state::ContentOrd;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -68,14 +69,16 @@ impl Balancing {
 /// Options for balancing interrogations
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BalancingOptions {
-    /// Teacher rotation across groups is always active; `true` enforces it as
-    /// a strict constraint, `false` keeps it a soft optimisation goal.
-    pub teacher_rotation: bool,
-    /// Slot rotation across groups is always active; `true` enforces it as a
-    /// strict constraint, `false` keeps it a soft optimisation goal.
-    pub slot_rotation: bool,
-    /// Whether to avoid having the same teacher twice in a row for a group
-    pub avoid_twice_in_a_row: bool,
+    /// Teacher rotation across groups: `None` means the goal is not pursued at
+    /// all (no constraint and no objective term), `Some { soft: true }` makes it
+    /// a soft optimisation goal and `Some { soft: false }` a strict constraint.
+    pub teacher_rotation: Option<SoftParam<()>>,
+    /// Slot rotation across groups, with the same three states as
+    /// [`Self::teacher_rotation`].
+    pub slot_rotation: Option<SoftParam<()>>,
+    /// Avoiding the same teacher twice in a row for a group, with the same three
+    /// states as [`Self::teacher_rotation`].
+    pub avoid_twice_in_a_row: Option<SoftParam<()>>,
     /// Whether to enforce fair teacher distribution over the entire year
     pub year_teacher_rotation: bool,
     /// Whether to enforce fair teacher distribution within each period
@@ -91,9 +94,12 @@ collomatique_state::impl_content_ord_atom!(BalancingOptions);
 impl Default for BalancingOptions {
     fn default() -> Self {
         Self {
-            teacher_rotation: false,
-            slot_rotation: false,
-            avoid_twice_in_a_row: false,
+            teacher_rotation: Some(SoftParam {
+                soft: true,
+                value: (),
+            }),
+            slot_rotation: None,
+            avoid_twice_in_a_row: None,
             year_teacher_rotation: false,
             period_teacher_rotation: false,
         }
@@ -170,24 +176,45 @@ mod tests {
 
         let subject = unsafe { SubjectId::new(1) };
         assert_eq!(balancing.options_for(subject), &balancing.global);
-        assert!(!balancing.options_for(subject).teacher_rotation);
+        assert_eq!(
+            balancing.options_for(subject).teacher_rotation,
+            Some(SoftParam {
+                soft: true,
+                value: ()
+            })
+        );
     }
 
     #[test]
     fn options_for_returns_override_entry_verbatim() {
         let mut balancing = Balancing::default();
-        assert!(!balancing.global.teacher_rotation);
+        assert_eq!(
+            balancing.global.teacher_rotation,
+            Some(SoftParam {
+                soft: true,
+                value: ()
+            })
+        );
 
         // A whole-entry override must win verbatim — here it hardens the teacher
         // rotation that is soft in the global options.
         let subject = unsafe { SubjectId::new(1) };
         let override_options = BalancingOptions {
-            teacher_rotation: true,
+            teacher_rotation: Some(SoftParam {
+                soft: false,
+                value: (),
+            }),
             ..Default::default()
         };
         balancing.subjects.insert(subject, override_options.clone());
 
         assert_eq!(balancing.options_for(subject), &override_options);
-        assert!(balancing.options_for(subject).teacher_rotation);
+        assert_eq!(
+            balancing.options_for(subject).teacher_rotation,
+            Some(SoftParam {
+                soft: false,
+                value: ()
+            })
+        );
     }
 }

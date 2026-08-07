@@ -10,6 +10,8 @@ use collomatique_storage::deserialize_data;
 const WITH_ASSOC: &str = include_str!("fixtures/period_with_group_list_association.collomatique");
 const WITHOUT_ASSOC: &str =
     include_str!("fixtures/period_without_group_list_association.collomatique");
+const EXCLUDED_STUDENT: &str =
+    include_str!("fixtures/excluded_student_in_automatic_group_list.collomatique");
 
 #[test]
 fn builds_with_group_list_association() {
@@ -29,5 +31,26 @@ fn builds_without_group_list_association() {
     // extras.rs, so the build panics with
     // `UndeclaredExtra(InterrogationHasGroups { slot: SlotId(169), week: GlobalWeek(24) })`.
     let (inner, _caveats) = deserialize_data(WITHOUT_ASSOC).expect("fixture should decode");
+    let _ = build_model(&inner.params);
+}
+
+#[test]
+fn builds_with_a_student_excluded_from_the_automatic_group_list() {
+    // Regression: student 7 is assigned to subject 13 for period 0, and the group
+    // list associated to that (period, subject) is group list 46, which is
+    // `Automatic { excluded_students: [7, 11] }`. The state layer accepts this
+    // (the document comes from a fuzz walk and passes `broken_invariants`), so
+    // the builder must handle it too.
+    //
+    // It used to panic with
+    // `ExtraError(StudentAtInterrogation { student: 7, slot: 19, week: 0 },
+    //  UndeclaredVariable(Extra(StudentAtInterrogationInGroup { .., group_list: 46, .. })))`:
+    // `build_student_at_interrogation_in_group` (extras.rs) declares the per-group
+    // variables only for `students_for_group_list`, which drops the excluded
+    // students, while `build_student_at_interrogation` summed over those variables
+    // for every *enrolled* student, without the exclusion check. The `Automatic`
+    // branch of the latter now makes an excluded student's extra infeasible, the
+    // same way a `Prefilled` list with no group for them already did.
+    let (inner, _caveats) = deserialize_data(EXCLUDED_STUDENT).expect("fixture should decode");
     let _ = build_model(&inner.params);
 }

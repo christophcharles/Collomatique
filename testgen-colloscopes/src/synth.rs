@@ -358,11 +358,27 @@ pub fn limits(rng: &mut ChaCha8Rng) -> Limits {
     }
 }
 
+/// Uniform draw over the three states of a balancing goal: off, soft goal,
+/// strict constraint.
+fn balancing_goal(rng: &mut ChaCha8Rng) -> Option<SoftParam<()>> {
+    match rng.random_range(0..3) {
+        0 => None,
+        1 => Some(SoftParam {
+            soft: true,
+            value: (),
+        }),
+        _ => Some(SoftParam {
+            soft: false,
+            value: (),
+        }),
+    }
+}
+
 pub fn balancing_options(rng: &mut ChaCha8Rng) -> BalancingOptions {
     BalancingOptions {
-        teacher_rotation: rng.random_bool(0.5),
-        slot_rotation: rng.random_bool(0.5),
-        avoid_twice_in_a_row: rng.random_bool(0.5),
+        teacher_rotation: balancing_goal(rng),
+        slot_rotation: balancing_goal(rng),
+        avoid_twice_in_a_row: balancing_goal(rng),
         year_teacher_rotation: rng.random_bool(0.3),
         period_teacher_rotation: rng.random_bool(0.3),
     }

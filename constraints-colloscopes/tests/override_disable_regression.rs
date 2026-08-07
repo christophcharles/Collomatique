@@ -21,17 +21,21 @@
 //! That overridden student must have **no** `MaxInterrogationsPerWeek`
 //! constraint while the other (non-overridden) student keeps theirs.
 //!
-//! The balancing half pins the same whole-entry rule on the rotation side. It
-//! never had the flattening bug and cannot get it: only a field that is itself
-//! an `Option` can be flattened, and every balancing field is a plain `bool`.
-//! `teacher_rotation` is one of them: the rotation is always active and
-//! the flag only says whether it is enforced strictly (`true`) or kept as an
-//! optimisation goal (`false`). So an override cannot disable it — what it can
-//! do is *soften* it. Its fixture has two interrogated subjects, each taught by
-//! two teachers; the global options make the rotation hard, and the sole
-//! per-subject override makes it soft for one of them. That subject must emit
-//! the soft penalty rows and no hard `BalancingRotation` constraint, while the
-//! control subject keeps the hard constraints.
+//! The balancing half pins the same whole-entry rule on the rotation side.
+//! `teacher_rotation` is an `Option<SoftParam<()>>`, so an override entry can
+//! both *soften* the goal (`Some { soft: true }` against a globally-hard one)
+//! and *disable* it outright (`None`). Two fixtures, identical but for that one
+//! field, pin the two cases. Each has two interrogated subjects taught by two
+//! teachers each, globally-hard rotation, and a single per-subject override:
+//!
+//! - `override_disable_balancing.collomatique` softens the target subject: it
+//!   must emit the soft penalty rows and no hard `BalancingRotation`
+//!   constraint.
+//! - `override_disable_balancing_off.collomatique` turns it off: the target
+//!   subject must emit *neither* — no hard constraint and no penalty row, since
+//!   an off goal is not pursued at all.
+//!
+//! In both, the control subject keeps its hard constraints.
 
 use collomatique_constraints_colloscopes::{
     ConstraintDesc, ConstraintSource, ExtraVarName, PreferenceConstraint, build_model,
@@ -42,6 +46,8 @@ use std::collections::BTreeSet;
 
 const FIXTURE: &str = include_str!("fixtures/override_disable.collomatique");
 const BALANCING_FIXTURE: &str = include_str!("fixtures/override_disable_balancing.collomatique");
+const BALANCING_OFF_FIXTURE: &str =
+    include_str!("fixtures/override_disable_balancing_off.collomatique");
 
 #[test]
 fn per_student_override_can_disable_global_weekly_max() {
@@ -81,20 +87,21 @@ fn per_student_override_can_disable_global_weekly_max() {
     );
 }
 
-#[test]
-fn per_subject_override_can_soften_global_teacher_rotation() {
-    let (inner, _caveats) = deserialize_data(BALANCING_FIXTURE).expect("fixture should decode");
+/// The teacher-rotation footprint of a balancing fixture: the overridden
+/// subject, the subjects carrying hard rotation constraints, and the subjects
+/// carrying soft rotation penalty rows.
+fn rotation_footprint(fixture: &str) -> (SubjectId, BTreeSet<SubjectId>, BTreeSet<SubjectId>) {
+    let (inner, _caveats) = deserialize_data(fixture).expect("fixture should decode");
     let params = &inner.params;
 
-    // The fixture pins exactly one overridden subject (the soften target); the
-    // other interrogated subject is the control that must stay hard-constrained.
+    // The fixture pins exactly one overridden subject (the target); the other
+    // interrogated subject is the control that must stay hard-constrained.
     let overridden: Vec<SubjectId> = params.balancing.subjects.keys().collect();
     assert_eq!(
         overridden.len(),
         1,
         "fixture invariant: exactly one per-subject balancing override entry"
     );
-    let target = overridden[0];
 
     let model = build_model(params);
     let mut hard_constrained = BTreeSet::new();
@@ -118,13 +125,20 @@ fn per_subject_override_can_soften_global_teacher_rotation() {
         }
     }
 
+    (overridden[0], hard_constrained, softened)
+}
+
+#[test]
+fn per_subject_override_can_soften_global_teacher_rotation() {
+    let (target, hard_constrained, softened) = rotation_footprint(BALANCING_FIXTURE);
+
     assert!(
         hard_constrained.iter().any(|s| *s != target),
         "the globally-hard teacher rotation must still constrain the non-overridden subject"
     );
     assert!(
         !hard_constrained.contains(&target),
-        "a per-subject override entry with `teacher_rotation: false` must SOFTEN the \
+        "a per-subject override entry with a soft `teacher_rotation` must SOFTEN the \
          globally-hard teacher rotation for {target:?}, but a hard BalancingRotation \
          constraint is still emitted"
     );
@@ -132,5 +146,26 @@ fn per_subject_override_can_soften_global_teacher_rotation() {
         softened.contains(&target),
         "the softened rotation must show up as BalancingRotationPenalty rows for \
          {target:?} — otherwise the override dropped it instead of softening it"
+    );
+}
+
+#[test]
+fn per_subject_override_can_disable_global_teacher_rotation() {
+    let (target, hard_constrained, softened) = rotation_footprint(BALANCING_OFF_FIXTURE);
+
+    assert!(
+        hard_constrained.iter().any(|s| *s != target),
+        "the globally-hard teacher rotation must still constrain the non-overridden subject"
+    );
+    assert!(
+        !hard_constrained.contains(&target),
+        "a per-subject override entry with `teacher_rotation: null` must DISABLE the \
+         globally-hard teacher rotation for {target:?}, but a hard BalancingRotation \
+         constraint is still emitted"
+    );
+    assert!(
+        !softened.contains(&target),
+        "an off rotation must not be pursued at all, yet BalancingRotationPenalty rows \
+         are emitted for {target:?} — the override softened it instead of dropping it"
     );
 }

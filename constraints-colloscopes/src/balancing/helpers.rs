@@ -5,6 +5,7 @@ use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::balancing::BalancingOptions;
 use collomatique_state_colloscopes::ids::{SlotId, StudentId, SubjectId, TeacherId};
+use collomatique_state_colloscopes::soft_param::SoftParam;
 use collomatique_state_colloscopes::subjects::SubjectPeriodicity;
 use std::collections::BTreeSet;
 
@@ -14,6 +15,16 @@ pub(super) fn effective_balancing_flag(
     extract: impl Fn(&BalancingOptions) -> bool,
 ) -> bool {
     extract(env.balancing.options_for(subject_id))
+}
+
+/// Same as [`effective_balancing_flag`] for the three-state goals: `None` means
+/// the goal is not pursued at all, `Some { soft }` says how it is pursued.
+pub(super) fn effective_balancing_option<'a>(
+    env: &'a VarEnv,
+    subject_id: SubjectId,
+    extract: impl Fn(&BalancingOptions) -> &Option<SoftParam<()>>,
+) -> Option<&'a SoftParam<()>> {
+    extract(env.balancing.options_for(subject_id)).as_ref()
 }
 
 pub(super) fn teachers_for_subject(env: &VarEnv, subject_id: SubjectId) -> BTreeSet<TeacherId> {

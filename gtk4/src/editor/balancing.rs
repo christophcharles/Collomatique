@@ -70,7 +70,7 @@ impl Component for Balancing {
                         gtk::Button {
                             set_icon_name: "document-edit-symbolic",
                             add_css_class: "flat",
-                            set_tooltip_text: Some("Modifier les paramètres globaux d'équilibrage strict"),
+                            set_tooltip_text: Some("Modifier les paramètres globaux d'équilibrage"),
                             connect_clicked => BalancingInput::EditGlobalOptions,
                         },
                         gtk::Separator {
@@ -251,27 +251,47 @@ impl Balancing {
     }
 }
 
+// The parenthetical qualifies the constraint itself, so it stays feminine
+// whatever the goal it is appended to.
+fn soft_constraint_symbol(soft: bool) -> &'static str {
+    if soft { "(souple)" } else { "(stricte)" }
+}
+
 fn options_to_string(options: &BalancingOptions) -> String {
+    // Only the goals that are actually pursued get an entry, soft ones
+    // included. A goal that is off is not a constraint, so it says nothing.
     let mut parts = vec![];
 
-    if options.teacher_rotation {
-        parts.push("rotation des colleurs");
+    if let Some(param) = &options.teacher_rotation {
+        parts.push(format!(
+            "rotation des colleurs {}",
+            soft_constraint_symbol(param.soft)
+        ));
     }
-    if options.slot_rotation {
-        parts.push("rotation des créneaux");
+    if let Some(param) = &options.slot_rotation {
+        parts.push(format!(
+            "rotation des créneaux {}",
+            soft_constraint_symbol(param.soft)
+        ));
     }
-    if options.avoid_twice_in_a_row {
-        parts.push("éviter 2× de suite le même colleur");
+    if let Some(param) = &options.avoid_twice_in_a_row {
+        parts.push(format!(
+            "éviter 2× de suite le même colleur {}",
+            soft_constraint_symbol(param.soft)
+        ));
     }
+
+    // The year and period rotations are plain strictness booleans with no soft
+    // mode, so they carry no symbol.
     if options.year_teacher_rotation {
-        parts.push("rotation annuelle des colleurs");
+        parts.push(String::from("rotation annuelle des colleurs"));
     }
     if options.period_teacher_rotation {
-        parts.push("rotation des colleurs par période");
+        parts.push(String::from("rotation des colleurs par période"));
     }
 
     if parts.is_empty() {
-        String::from("aucune contrainte stricte")
+        String::from("aucune contrainte")
     } else {
         parts.join("    ―    ")
     }

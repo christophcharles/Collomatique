@@ -191,6 +191,13 @@ fn soft_param<T>(param: format::scalars::SoftParam<T>) -> mem::soft_param::SoftP
     }
 }
 
+fn soft_flag(flag: format::scalars::SoftFlag) -> mem::soft_param::SoftParam<()> {
+    mem::soft_param::SoftParam {
+        soft: flag.soft,
+        value: (),
+    }
+}
+
 /// Walks every *defining* id of the document — the ids that create an
 /// entity, not the ids that reference one — with the name of the block
 /// that defines it, in the canonical §2 block order. The ten defining
@@ -1201,9 +1208,9 @@ fn reconstruct_slot_pairings(
 
 fn balancing_options(options: format::balancing::Options) -> mem::balancing::BalancingOptions {
     mem::balancing::BalancingOptions {
-        teacher_rotation: options.teacher_rotation,
-        slot_rotation: options.slot_rotation,
-        avoid_twice_in_a_row: options.avoid_twice_in_a_row,
+        teacher_rotation: options.teacher_rotation.map(soft_flag),
+        slot_rotation: options.slot_rotation.map(soft_flag),
+        avoid_twice_in_a_row: options.avoid_twice_in_a_row.map(soft_flag),
         year_teacher_rotation: options.year_teacher_rotation,
         period_teacher_rotation: options.period_teacher_rotation,
     }

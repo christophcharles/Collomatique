@@ -4,16 +4,20 @@ use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
 use relm4::{adw, gtk};
 
 use collomatique_state_colloscopes::balancing::BalancingOptions;
+use collomatique_state_colloscopes::soft_param::SoftParam;
 
 pub struct Dialog {
     hidden: bool,
     should_redraw: bool,
     subject_name: Option<String>,
 
+    has_teacher_rotation: bool,
     strict_teacher_rotation: bool,
 
+    has_slot_rotation: bool,
     strict_slot_rotation: bool,
 
+    has_avoid_twice_in_a_row: bool,
     strict_avoid_twice_in_a_row: bool,
 
     has_year_teacher_rotation: bool,
@@ -27,10 +31,13 @@ pub enum DialogInput {
     Cancel,
     Accept,
 
+    UpdateHasTeacherRotation(bool),
     UpdateStrictTeacherRotation(bool),
 
+    UpdateHasSlotRotation(bool),
     UpdateStrictSlotRotation(bool),
 
+    UpdateHasAvoidTwiceInARow(bool),
     UpdateStrictAvoidTwiceInARow(bool),
 
     UpdateHasYearTeacherRotation(bool),
@@ -66,7 +73,7 @@ impl SimpleComponent for Dialog {
             set_resizable: true,
             #[watch]
             set_visible: !model.hidden,
-            set_title: Some("Paramètres d'équilibrage strict"),
+            set_title: Some("Paramètres d'équilibrage"),
             set_default_size: (500, 650),
             adw::ToolbarView {
                 add_top_bar = &adw::HeaderBar {
@@ -101,14 +108,28 @@ impl SimpleComponent for Dialog {
                             set_orientation: gtk::Orientation::Vertical,
                             adw::PreferencesGroup {
                                 set_title: "Rotation des colleurs",
-                                set_description: Some("Un élève ne doit pas toujours tomber sur le même colleur. Ses colles sont réparties entre les colleurs de la matière, proportionnellement au nombre de créneaux de chacun. Cet équilibrage est toujours actif : sans contrainte stricte, le logiciel s'en approche au mieux."),
+                                set_description: Some("Un élève ne doit pas toujours tomber sur le même colleur. Ses colles sont réparties entre les colleurs de la matière, proportionnellement au nombre de créneaux de chacun. Si l'équilibrage est activé sans contrainte stricte, le logiciel s'en approche au mieux."),
                                 set_margin_all: 5,
                                 set_hexpand: true,
                                 adw::SwitchRow {
                                     set_hexpand: true,
                                     set_use_markup: false,
+                                    set_title: "Activer",
+                                    set_subtitle: "Si désactivé, cet équilibrage n'est ni imposé ni même recherché. Le calcul du colloscope est alors plus rapide.",
+                                    #[track(self.should_redraw)]
+                                    set_active: model.has_teacher_rotation,
+                                    connect_active_notify[sender] => move |widget| {
+                                        let value = widget.is_active();
+                                        sender.input(DialogInput::UpdateHasTeacherRotation(value));
+                                    },
+                                },
+                                adw::SwitchRow {
+                                    set_hexpand: true,
+                                    set_use_markup: false,
                                     set_title: "Contrainte stricte",
                                     set_subtitle: "Si activé, la répartition devient obligatoire sur toute suite de semaines. Le colloscope peut alors devenir impossible à générer.",
+                                    #[watch]
+                                    set_visible: model.has_teacher_rotation,
                                     #[track(self.should_redraw)]
                                     set_active: model.strict_teacher_rotation,
                                     connect_active_notify[sender] => move |widget| {
@@ -119,14 +140,28 @@ impl SimpleComponent for Dialog {
                             },
                             adw::PreferencesGroup {
                                 set_title: "Rotation des créneaux",
-                                set_description: Some("Un élève ne doit pas toujours être collé au même horaire. Ses colles sont réparties entre les créneaux de la matière, proportionnellement à la fréquence de chacun. Cet équilibrage est toujours actif : sans contrainte stricte, le logiciel s'en approche au mieux."),
+                                set_description: Some("Un élève ne doit pas toujours être collé au même horaire. Ses colles sont réparties entre les créneaux de la matière, proportionnellement à la fréquence de chacun. Si l'équilibrage est activé sans contrainte stricte, le logiciel s'en approche au mieux."),
                                 set_margin_all: 5,
                                 set_hexpand: true,
                                 adw::SwitchRow {
                                     set_hexpand: true,
                                     set_use_markup: false,
+                                    set_title: "Activer",
+                                    set_subtitle: "Si désactivé, cet équilibrage n'est ni imposé ni même recherché. Le calcul du colloscope est alors plus rapide.",
+                                    #[track(self.should_redraw)]
+                                    set_active: model.has_slot_rotation,
+                                    connect_active_notify[sender] => move |widget| {
+                                        let value = widget.is_active();
+                                        sender.input(DialogInput::UpdateHasSlotRotation(value));
+                                    },
+                                },
+                                adw::SwitchRow {
+                                    set_hexpand: true,
+                                    set_use_markup: false,
                                     set_title: "Contrainte stricte",
                                     set_subtitle: "Si activé, la répartition devient obligatoire sur toute suite de semaines. Le colloscope peut alors devenir impossible à générer.",
+                                    #[watch]
+                                    set_visible: model.has_slot_rotation,
                                     #[track(self.should_redraw)]
                                     set_active: model.strict_slot_rotation,
                                     connect_active_notify[sender] => move |widget| {
@@ -137,14 +172,28 @@ impl SimpleComponent for Dialog {
                             },
                             adw::PreferencesGroup {
                                 set_title: "Éviter deux fois de suite le même colleur",
-                                set_description: Some("Deux colles qui se suivent ne devraient pas être assurées par le même colleur. C'est toujours recherché : sans contrainte stricte, une répétition reste possible mais elle est évitée autant que possible."),
+                                set_description: Some("Deux colles qui se suivent ne devraient pas être assurées par le même colleur. Si la règle est activée sans contrainte stricte, une répétition reste possible mais elle est évitée autant que possible."),
                                 set_margin_all: 5,
                                 set_hexpand: true,
                                 adw::SwitchRow {
                                     set_hexpand: true,
                                     set_use_markup: false,
+                                    set_title: "Activer",
+                                    set_subtitle: "Si désactivé, cette règle n'est ni imposée ni même recherchée. Le calcul du colloscope est alors plus rapide.",
+                                    #[track(self.should_redraw)]
+                                    set_active: model.has_avoid_twice_in_a_row,
+                                    connect_active_notify[sender] => move |widget| {
+                                        let value = widget.is_active();
+                                        sender.input(DialogInput::UpdateHasAvoidTwiceInARow(value));
+                                    },
+                                },
+                                adw::SwitchRow {
+                                    set_hexpand: true,
+                                    set_use_markup: false,
                                     set_title: "Contrainte stricte",
                                     set_subtitle: "Si activé, la répétition est interdite. Attention : c'est impossible si la matière n'a qu'un seul colleur.",
+                                    #[watch]
+                                    set_visible: model.has_avoid_twice_in_a_row,
                                     #[track(self.should_redraw)]
                                     set_active: model.strict_avoid_twice_in_a_row,
                                     connect_active_notify[sender] => move |widget| {
@@ -211,8 +260,11 @@ impl SimpleComponent for Dialog {
             hidden: true,
             should_redraw: false,
             subject_name: None,
+            has_teacher_rotation: false,
             strict_teacher_rotation: false,
+            has_slot_rotation: false,
             strict_slot_rotation: false,
+            has_avoid_twice_in_a_row: false,
             strict_avoid_twice_in_a_row: false,
             has_year_teacher_rotation: false,
             has_period_teacher_rotation: false,
@@ -241,17 +293,35 @@ impl SimpleComponent for Dialog {
                     .output(DialogOutput::Accepted(self.build_options()))
                     .unwrap();
             }
+            DialogInput::UpdateHasTeacherRotation(value) => {
+                if self.has_teacher_rotation == value {
+                    return;
+                }
+                self.has_teacher_rotation = value;
+            }
             DialogInput::UpdateStrictTeacherRotation(value) => {
                 if self.strict_teacher_rotation == value {
                     return;
                 }
                 self.strict_teacher_rotation = value;
             }
+            DialogInput::UpdateHasSlotRotation(value) => {
+                if self.has_slot_rotation == value {
+                    return;
+                }
+                self.has_slot_rotation = value;
+            }
             DialogInput::UpdateStrictSlotRotation(value) => {
                 if self.strict_slot_rotation == value {
                     return;
                 }
                 self.strict_slot_rotation = value;
+            }
+            DialogInput::UpdateHasAvoidTwiceInARow(value) => {
+                if self.has_avoid_twice_in_a_row == value {
+                    return;
+                }
+                self.has_avoid_twice_in_a_row = value;
             }
             DialogInput::UpdateStrictAvoidTwiceInARow(value) => {
                 if self.strict_avoid_twice_in_a_row == value {
@@ -284,21 +354,51 @@ impl SimpleComponent for Dialog {
 
 impl Dialog {
     fn update_state_from_options(&mut self, options: BalancingOptions) {
-        self.strict_teacher_rotation = options.teacher_rotation;
-        self.strict_slot_rotation = options.slot_rotation;
+        (self.has_teacher_rotation, self.strict_teacher_rotation) =
+            Self::split_goal(options.teacher_rotation);
+        (self.has_slot_rotation, self.strict_slot_rotation) =
+            Self::split_goal(options.slot_rotation);
+        (
+            self.has_avoid_twice_in_a_row,
+            self.strict_avoid_twice_in_a_row,
+        ) = Self::split_goal(options.avoid_twice_in_a_row);
 
-        self.strict_avoid_twice_in_a_row = options.avoid_twice_in_a_row;
         self.has_year_teacher_rotation = options.year_teacher_rotation;
         self.has_period_teacher_rotation = options.period_teacher_rotation;
     }
 
     fn build_options(&self) -> BalancingOptions {
         BalancingOptions {
-            teacher_rotation: self.strict_teacher_rotation,
-            slot_rotation: self.strict_slot_rotation,
-            avoid_twice_in_a_row: self.strict_avoid_twice_in_a_row,
+            teacher_rotation: Self::join_goal(
+                self.has_teacher_rotation,
+                self.strict_teacher_rotation,
+            ),
+            slot_rotation: Self::join_goal(self.has_slot_rotation, self.strict_slot_rotation),
+            avoid_twice_in_a_row: Self::join_goal(
+                self.has_avoid_twice_in_a_row,
+                self.strict_avoid_twice_in_a_row,
+            ),
             year_teacher_rotation: self.has_year_teacher_rotation,
             period_teacher_rotation: self.has_period_teacher_rotation,
         }
+    }
+
+    /// A three-state goal as the two switches show it: whether it is active,
+    /// and whether it is strict. An inactive goal has no strictness, so the
+    /// strict switch goes back to off.
+    fn split_goal(goal: Option<SoftParam<()>>) -> (bool, bool) {
+        match goal {
+            Some(param) => (true, !param.soft),
+            None => (false, false),
+        }
+    }
+
+    /// The reverse of [`Self::split_goal`]: the strict switch is meaningless
+    /// while the goal is off, and encodes `None`.
+    fn join_goal(has: bool, strict: bool) -> Option<SoftParam<()>> {
+        has.then_some(SoftParam {
+            soft: !strict,
+            value: (),
+        })
     }
 }

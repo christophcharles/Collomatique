@@ -10,7 +10,8 @@ use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::ids::SlotId;
 
 use super::helpers::{
-    count_student_teacher_expr, effective_balancing_flag, slot_weeks_in_range, subject_active_weeks,
+    count_student_teacher_expr, effective_balancing_option, slot_weeks_in_range,
+    subject_active_weeks,
 };
 use super::rotation::generate_windows;
 
@@ -35,7 +36,13 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         let Some(params) = subject_interrogation_params(env, *subject_id) else {
             continue;
         };
-        let is_soft = !effective_balancing_flag(env, *subject_id, |opts| opts.slot_rotation);
+        // `None` means the goal is off: neither the hard windows nor the soft
+        // penalties are built for this subject.
+        let Some(param) = effective_balancing_option(env, *subject_id, |opts| &opts.slot_rotation)
+        else {
+            continue;
+        };
+        let is_soft = param.soft;
 
         let slot_week_pairs =
             slot_week_pairs_for_subject(env, *subject_id, &subject.excluded_periods);

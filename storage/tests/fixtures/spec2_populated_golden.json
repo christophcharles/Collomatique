@@ -586,9 +586,13 @@
       "content": {
         "Balancing": {
           "global": {
-            "teacher_rotation": false,
-            "slot_rotation": false,
-            "avoid_twice_in_a_row": true,
+            "teacher_rotation": {
+              "soft": true
+            },
+            "slot_rotation": null,
+            "avoid_twice_in_a_row": {
+              "soft": false
+            },
             "year_teacher_rotation": false,
             "period_teacher_rotation": true
           },
@@ -596,9 +600,13 @@
             {
               "subject_id": 13,
               "options": {
-                "teacher_rotation": false,
-                "slot_rotation": true,
-                "avoid_twice_in_a_row": false,
+                "teacher_rotation": null,
+                "slot_rotation": {
+                  "soft": false
+                },
+                "avoid_twice_in_a_row": {
+                  "soft": true
+                },
                 "year_teacher_rotation": true,
                 "period_teacher_rotation": false
               }
