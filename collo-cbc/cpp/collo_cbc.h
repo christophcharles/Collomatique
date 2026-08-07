@@ -23,9 +23,22 @@ typedef enum {
     COLLO_CBC_ERROR = 3,
 } ColloCbcStatus;
 
+// What a progress event carries.
+//   SOLUTION    - CBC reported a solution. See incumbent_status for whether it
+//                 could be handed over.
+//   TREE_STATUS - a progress update from the model CBC is searching: a tree
+//                 status interval, a node, or any other event it fires.
+//                 best_bound, node_count and solutions_found are valid.
+//   TICK        - CBC is alive, and nothing more. It comes from a nested model
+//                 (a heuristic sub-MIP) whose bound and incumbent live in its
+//                 own reduced column space, so none of them is transmissible:
+//                 best_bound, node_count and solutions_found are all zero and
+//                 must not be read. It exists so time limits are still checked
+//                 and a stop request still relays while such a model runs.
 typedef enum {
     COLLO_CBC_EVENT_SOLUTION = 0,
     COLLO_CBC_EVENT_TREE_STATUS = 1,
+    COLLO_CBC_EVENT_TICK = 2,
 } ColloCbcEventType;
 
 // Whether this event carries a freshly reconstructed incumbent.

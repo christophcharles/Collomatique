@@ -110,6 +110,12 @@ fn main() -> ExitCode {
         let event = match p.event_type {
             EventType::Solution => "solution",
             EventType::TreeStatus => "treeStatus",
+            EventType::Tick => {
+                // A tick carries no numbers at all — printing zeros for the
+                // bound and the node count would read as real ones.
+                println!("event {events}: tick");
+                return true;
+            }
         };
         let incumbent = match &p.incumbent {
             IncumbentEvent::None => "none".to_string(),

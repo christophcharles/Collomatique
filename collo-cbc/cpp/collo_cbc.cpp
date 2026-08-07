@@ -40,9 +40,10 @@ extern CglPreProcess* cbcPreProcessPointer;
 // so a fresh copy is mandatory and is why distinct incumbents don't corrupt each
 // other. The postsolved solution lands in cbcPreProcessPointer->originalModel().
 //
-// `model` must be the top-level model (caller guards on !parentModel()).
 // Returns false (and leaves `out` untouched) if reconstruction can't be done
 // safely — the caller then withholds the vector rather than hand back garbage.
+// `model` may be any model CBC reports from; the shape check below is what
+// decides whether this one can be mapped.
 static bool reconstruct_incumbent(
     const CbcModel* model,
     int32_t orig_num_cols,
@@ -59,6 +60,26 @@ static bool reconstruct_incumbent(
         out.assign(incumbent, incumbent + orig_num_cols);
         return true;
     }
+
+    // Refuse a model whose column space the published preprocessing does not
+    // describe. cbcPreProcessPointer covers the *top-level* preprocessing and is
+    // not republished when CBC restarts its search on a smaller model
+    // ("Cbc0044I ... restarting search"); measured on the real case, it is
+    // byte-for-byte the same object before and after. Postsolving a
+    // restarted-search incumbent through it reads a 398-column vector into a map
+    // expecting 1056 and returns success with a wrong answer — objectives off by
+    // ~120000. A missing incumbent is far better than a confidently wrong one:
+    // the distance cutoff would measure the bound against garbage and never
+    // fire. Reconstructing those properly is written up in
+    // docs/todos/todo_subtree_incumbent_reconstruction.md.
+    //
+    // CglPreProcess has no presolvedModel(); the preprocessed end of its chain
+    // is modifiedModel(numberSolvers() - 1).
+    int num_solvers = cbcPreProcessPointer->numberSolvers();
+    const OsiSolverInterface* preprocessed =
+        (num_solvers > 0) ? cbcPreProcessPointer->modifiedModel(num_solvers - 1) : nullptr;
+    if (!preprocessed || model->getNumCols() != preprocessed->getNumCols())
+        return false;
 
     const OsiSolverInterface* cont = model->continuousSolver();
     auto* clone = dynamic_cast<OsiClpSolverInterface*>(cont ? cont->clone() : nullptr);
@@ -162,22 +183,41 @@ public:
     // actually searches, and the clone copies the pointer, so whichever
     // instance asks to stop raises the one flag collo_cbc_solve reads back.
     bool* stop_requested_;
+    // Points at a slot owned by collo_cbc_solve holding the model CBC is
+    // actually searching, identified by the `treeStatus` events it fires ("a
+    // tree status interval has arrived").
+    //
+    // After preprocessing, CbcMain1 searches a model whose parentModel() is the
+    // top-level one, and it may abandon that model and restart on a smaller one
+    // (reduced cost fixing) — so the parent pointer cannot identify the searcher
+    // and neither can nesting depth, because a heuristic sub-MIP sits at the
+    // same depth. Only treeStatus separates them: measured on the real case, the
+    // restarted searcher fired 12 and neither sub-MIP fired one.
+    //
+    // The slot is shared rather than a plain member for the same reason as
+    // stop_requested_: CBC clones the handler per model, so a per-instance latch
+    // would leave the top-level handler never learning about the searcher.
+    // Until the first treeStatus, the top-level model is authoritative — that is
+    // where the root incumbent comes from.
+    const CbcModel** search_model_;
 
     ColloEventHandler()
         : CbcEventHandler(), callback_(nullptr), user_data_(nullptr),
-          orig_solver_(nullptr), orig_num_cols_(0), stop_requested_(nullptr) {}
+          orig_solver_(nullptr), orig_num_cols_(0), stop_requested_(nullptr),
+          search_model_(nullptr) {}
 
     ColloEventHandler(CbcModel* model, ColloCbcCallback cb, void* ud,
                       const OsiSolverInterface* orig_solver, int32_t orig_num_cols,
-                      bool* stop_requested)
+                      bool* stop_requested, const CbcModel** search_model)
         : CbcEventHandler(model), callback_(cb), user_data_(ud),
           orig_solver_(orig_solver), orig_num_cols_(orig_num_cols),
-          stop_requested_(stop_requested) {}
+          stop_requested_(stop_requested), search_model_(search_model) {}
 
     ColloEventHandler(const ColloEventHandler& rhs)
         : CbcEventHandler(rhs), callback_(rhs.callback_), user_data_(rhs.user_data_),
           orig_solver_(rhs.orig_solver_), orig_num_cols_(rhs.orig_num_cols_),
-          seen_solutions_(rhs.seen_solutions_), stop_requested_(rhs.stop_requested_) {}
+          seen_solutions_(rhs.seen_solutions_), stop_requested_(rhs.stop_requested_),
+          search_model_(rhs.search_model_) {}
 
     ColloEventHandler& operator=(const ColloEventHandler& rhs) {
         if (this != &rhs) {
@@ -188,6 +228,7 @@ public:
             orig_num_cols_ = rhs.orig_num_cols_;
             seen_solutions_ = rhs.seen_solutions_;
             stop_requested_ = rhs.stop_requested_;
+            search_model_ = rhs.search_model_;
         }
         return *this;
     }
@@ -205,11 +246,12 @@ public:
     }
 
     CbcAction event(CbcEvent whichEvent) override {
-        // Trace every event before filtering, so a dropped event is
-        // distinguishable from an event that never happened. `model` is printed
-        // as a pointer: CbcMain1 runs branch and bound on a model it builds
-        // itself after preprocessing, so a changing pointer says which model the
-        // events are coming from.
+        // Trace every event as it arrives, so what CBC fires stays
+        // distinguishable from what we pass on (the "reported" line below).
+        // `model` is printed as a pointer: CbcMain1 runs branch and bound on a
+        // model it builds itself after preprocessing, and may restart on yet
+        // another one, so a changing pointer says which model the events are
+        // coming from.
         if (debug_events()) {
             const CbcModel* dm = getModel();
             std::cout << "collo_cbc[dbg] event=" << event_name(whichEvent)
@@ -226,20 +268,43 @@ public:
         if (!callback_)
             return noAction;
 
-        bool is_solution = (whichEvent == solution || whichEvent == heuristicSolution);
-        if (!is_solution && whichEvent != treeStatus)
-            return noAction;
-
         const CbcModel* m = getModel();
         if (!m)
             return noAction;
-        // Only report for the top-level model. Heuristics (e.g. the feasibility
-        // pump) run sub-models with their own column space; their incumbents are
-        // promoted to the main model, which fires its own `solution` event.
-        if (m->parentModel())
-            return noAction;
+
+        if (whichEvent == treeStatus && search_model_)
+            *search_model_ = m;
+
+        // The searching model speaks for the solve; anything else is a nested
+        // heuristic sub-MIP working in its own reduced column space, where the
+        // bound and the incumbent mean nothing to us.
+        const CbcModel* searcher = search_model_ ? *search_model_ : nullptr;
+        const bool authoritative =
+            searcher ? (m == searcher) : (m->parentModel() == nullptr);
 
         ColloCbcProgress progress;
+
+        if (!authoritative) {
+            // Report a bare tick: nothing here is transmissible, but the
+            // callback still has to run so the deadlines are checked and a stop
+            // request still relays while the sub-MIP holds the solve.
+            progress.event_type = COLLO_CBC_EVENT_TICK;
+            progress.incumbent_status = COLLO_CBC_INCUMBENT_NONE;
+            progress.best_obj = 0.0;
+            progress.best_bound = 0.0;
+            progress.node_count = 0;
+            progress.solutions_found = 0;
+            progress.solution = nullptr;
+            progress.num_cols = 0;
+            int result = callback_(&progress, user_data_);
+            if (debug_events()) {
+                std::cout << "collo_cbc[dbg]   reported tick -> "
+                          << (result != 0 ? "stop" : "continue") << std::endl;
+            }
+            return relay(result);
+        }
+
+        bool is_solution = (whichEvent == solution || whichEvent == heuristicSolution);
         progress.event_type = is_solution
             ? COLLO_CBC_EVENT_SOLUTION
             : COLLO_CBC_EVENT_TREE_STATUS;
@@ -304,6 +369,14 @@ public:
                       << " -> " << (result != 0 ? "stop" : "continue")
                       << std::endl;
         }
+        return relay(result);
+    }
+
+private:
+    // Turn the callback's answer into a CBC action, recording that the stop came
+    // from us — see the status mapping in collo_cbc_solve for why we track that
+    // rather than read CBC's status code.
+    CbcAction relay(int result) {
         if (result == 0)
             return noAction;
         if (stop_requested_)
@@ -460,10 +533,14 @@ ColloCbcStatus collo_cbc_solve(ColloCbcModel* m, ColloCbcCallback cb, void* user
 
     // Install event handler (after CbcMain0, before CbcMain1). The handler
     // raises `stop_requested` when the callback asks to stop; see the status
-    // mapping after CbcMain1 for why we track that ourselves.
+    // mapping after CbcMain1 for why we track that ourselves. `search_model`
+    // holds whichever model CBC ends up searching. Both live here, not in the
+    // handler, because CBC clones the handler per model and every clone has to
+    // see the same two.
     bool stop_requested = false;
+    const CbcModel* search_model = nullptr;
     ColloEventHandler handler(&cbcModel, cb, user_data, m->solver, m->num_cols,
-                              &stop_requested);
+                              &stop_requested, &search_model);
     cbcModel.passInEventHandler(&handler);
 
     if (debug_events()) {

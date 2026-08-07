@@ -38,8 +38,19 @@ impl From<sys::ColloCbcStatus> for Status {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EventType {
+    /// CBC reported a solution; [`Progress::incumbent`] says whether it could be
+    /// handed over.
     Solution,
+    /// A progress update from the model CBC is searching. `best_bound`,
+    /// `node_count` and `solutions_found` are valid.
     TreeStatus,
+    /// CBC is alive, and nothing more. It comes from a nested model — a
+    /// heuristic sub-MIP — whose bound and incumbent live in its own reduced
+    /// column space, so nothing about them is transmissible: `best_bound`,
+    /// `node_count` and `solutions_found` are all zero and must not be read.
+    /// It exists so a caller can still check its deadlines and still ask to stop
+    /// while such a model holds the solve.
+    Tick,
 }
 
 /// The incumbent-reconstruction outcome for a single progress event.
@@ -73,6 +84,7 @@ impl Progress {
         let event_type = match raw.event_type {
             sys::ColloCbcEventType::Solution => EventType::Solution,
             sys::ColloCbcEventType::TreeStatus => EventType::TreeStatus,
+            sys::ColloCbcEventType::Tick => EventType::Tick,
         };
         let incumbent = match raw.incumbent_status {
             sys::ColloCbcIncumbentStatus::None => IncumbentEvent::None,
