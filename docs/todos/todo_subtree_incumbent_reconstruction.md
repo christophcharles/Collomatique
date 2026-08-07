@@ -250,5 +250,8 @@ model never finishes — run it under `timeout 25`, which is well past the resta
 at ~0.9 s. Confirm the restart with `grep Cbc0044I`, and confirm the model split
 by grouping the `collo_cbc[dbg] event=` lines by `model=`/`parent=`.
 
-Dumps are not committed: a group-list epoch can be tens of megabytes, and they
-belong outside the repo.
+The failing epoch's own dump is committed as
+`collo-cbc/tests/data/restarted_search.collomodel` (57 KB), and
+`collo-cbc/tests/restarted_search.rs` replays it. That is the reproducer — there
+is no need to regenerate one. Other dumps stay outside the repo; a colloscope
+epoch can be tens of megabytes.
