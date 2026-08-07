@@ -29,6 +29,10 @@ pub struct Progress<V: UsableData> {
     solutions: u64,
     incumbent: Option<IncumbentInfo>,
     incumbent_config: Option<ConfigData<V>>,
+    /// Whether the event being reported is the one that brought
+    /// `incumbent_config`. Unlike the fields above, this describes the event
+    /// and is not carried forward.
+    incumbent_is_fresh: bool,
 }
 
 impl<V: UsableData> Progress<V> {
@@ -45,6 +49,11 @@ impl<V: UsableData> Progress<V> {
     /// called, so its deadlines still run and its stop request still relays
     /// while such a model holds the solve.
     fn update_from(&mut self, raw: &collo_cbc::Progress, col_indices: &HashMap<V, usize>) -> bool {
+        // Freshness describes this event, so it is cleared first and set only
+        // where an incumbent actually arrives. Everything else below is state
+        // that carries forward.
+        self.incumbent_is_fresh = false;
+
         if raw.event_type == collo_cbc::EventType::Tick {
             return false;
         }
@@ -70,6 +79,7 @@ impl<V: UsableData> Progress<V> {
                             .map(|(var, &col)| (var.clone(), solution[col])),
                     ),
                 );
+                self.incumbent_is_fresh = true;
                 false
             }
             // No fresh incumbent this event: keep the last known objective
@@ -110,6 +120,9 @@ impl<V: UsableData> ProgressIncumbentInfo for Progress<V> {
 impl<V: UsableData> ProgressIncumbentData<V> for Progress<V> {
     fn incumbent_data(&self) -> Option<&ConfigData<V>> {
         self.incumbent_config.as_ref()
+    }
+    fn incumbent_is_fresh(&self) -> bool {
+        self.incumbent_is_fresh
     }
 }
 
@@ -362,6 +375,7 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> CallbackSolverModel<'a
             solutions: 0,
             incumbent: None,
             incumbent_config: None,
+            incumbent_is_fresh: false,
         };
 
         let col_indices = &self.col_indices;
