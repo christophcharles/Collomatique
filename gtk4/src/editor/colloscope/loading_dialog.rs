@@ -11,21 +11,25 @@ use collomatique_strategies::{ConductorPayload, IncrementalPayload};
 
 use crate::widgets::debug_view::{DebugView, DebugViewInput};
 
-/// Modal, button-less dialog shown while the ILP model is (re)built off-thread from a
-/// [`SolveConfig`]. It streams the builder's log lines into a [`DebugView`] and, on success,
-/// hands the built model back to the parent. On failure it switches to an in-place error state
-/// (the only state with a dismiss button).
+/// Modal dialog shown while the ILP model is (re)built off-thread from a [`SolveConfig`]. It
+/// streams the builder's log lines into a [`DebugView`] and, on success, hands the built model
+/// back to the parent. While the build runs, "Annuler" abandons it; on failure the dialog
+/// switches to an in-place error state, dismissed with "Fermer".
 pub struct Dialog {
     hidden: bool,
     /// `None` while building; `Some(message)` once the build has failed (error state).
     error: Option<String>,
+    /// Discards log lines and build results from a superseded `Show` (or from after a cancel).
+    build_seq: u64,
     debug_view: Controller<DebugView>,
 }
 
 #[derive(Debug)]
 pub enum DialogInput {
     Show(SolveConfig, Parameters, Colloscope),
-    Echo(String),
+    /// One build-log line, streamed from the off-thread build that carries this sequence number.
+    Echo(u64, String),
+    Cancel,
     Close,
 }
 
@@ -47,7 +51,7 @@ fn build_incremental_payload(model: &ConfiguredColloscopeModel) -> ConductorPayl
 
 #[derive(Debug)]
 pub enum DialogCommandOutput {
-    Built(Result<ConfiguredColloscopeModel, String>),
+    Built(u64, Result<ConfiguredColloscopeModel, String>),
 }
 
 /// Build the configured model from the current `params` and `colloscope`. `build_model` both
@@ -146,6 +150,18 @@ impl Component for Dialog {
                 gtk::Box {
                     set_halign: gtk::Align::Center,
                     #[watch]
+                    set_visible: model.error.is_none(),
+                    gtk::Button {
+                        set_size_request: (200, 40),
+                        set_label: "Annuler",
+                        set_tooltip: "Abandonner la construction du modèle",
+                        connect_clicked => DialogInput::Cancel,
+                    },
+                },
+
+                gtk::Box {
+                    set_halign: gtk::Align::Center,
+                    #[watch]
                     set_visible: model.error.is_some(),
                     gtk::Button {
                         set_size_request: (200, 40),
@@ -167,6 +183,7 @@ impl Component for Dialog {
         let model = Dialog {
             hidden: true,
             error: None,
+            build_seq: 0,
             debug_view,
         };
 
@@ -180,23 +197,36 @@ impl Component for Dialog {
             DialogInput::Show(config, params, colloscope) => {
                 self.hidden = false;
                 self.error = None;
+                // Any build still running from a previous opening is now stale.
+                self.build_seq += 1;
                 self.debug_view.emit(DebugViewInput::Clear);
 
                 // Building the model is heavy work. Run it off the UI thread; each log line is
                 // emitted back as `Echo` and streams live into the DebugView while the build
                 // runs. `config`, `params` and `colloscope` are all consumed by the build; only
-                // the built model is handed back.
+                // the built model is handed back. Both the log lines and the result carry `seq`,
+                // so an abandoned build cannot write into a later one.
+                let seq = self.build_seq;
                 let input = sender.input_sender().clone();
                 sender.spawn_oneshot_command(move || {
                     let mut log = move |line: &str| {
-                        input.emit(DialogInput::Echo(format!("{}\n", line)));
+                        input.emit(DialogInput::Echo(seq, format!("{}\n", line)));
                     };
                     let result = build_configured_model(&config, params, colloscope, &mut log);
-                    DialogCommandOutput::Built(result)
+                    DialogCommandOutput::Built(seq, result)
                 });
             }
-            DialogInput::Echo(line) => {
-                self.debug_view.emit(DebugViewInput::Append(line));
+            DialogInput::Echo(seq, line) => {
+                if seq == self.build_seq {
+                    self.debug_view.emit(DebugViewInput::Append(line));
+                }
+            }
+            DialogInput::Cancel => {
+                // Abandon the build in flight: bumping the sequence number makes its remaining
+                // log lines and its eventual result no-ops. The worker thread itself cannot be
+                // interrupted — it runs to completion off-screen and its model is dropped.
+                self.build_seq += 1;
+                self.hidden = true;
             }
             DialogInput::Close => {
                 // Only dismissable once the build has failed; ignored while a build is in flight.
@@ -213,7 +243,12 @@ impl Component for Dialog {
         sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
-        let DialogCommandOutput::Built(result) = msg;
+        let DialogCommandOutput::Built(seq, result) = msg;
+        // A stale result: the build was cancelled, or superseded by a later `Show`, while it was
+        // running. Drop it.
+        if seq != self.build_seq {
+            return;
+        }
         match result {
             Ok(model) => {
                 self.hidden = true;
