@@ -31,6 +31,75 @@
 // this plain extern declaration resolves to it at link time.
 extern CglPreProcess* cbcPreProcessPointer;
 
+// Expand `child_solution` (child->getNumCols() values) into the parent's column
+// space. Returns false if the mapping is absent or does not account for every
+// parent column.
+//
+// CBC sometimes restarts its search on a smaller model ("Cbc0044I Reduced cost
+// fixing ... restarting search"): reduced-cost fixing proves that many columns
+// cannot take their other value in any improving solution, fixes them, and
+// branch and bound starts over on what is left. That restarted model's
+// originalColumns() maps its columns into its *parent's* space — not into the
+// original problem's — and the parent columns it dropped are exactly the fixed
+// ones, so their fixed bound is their value.
+//
+// Read those bounds from parent->solver(), not continuousSolver(): measured on
+// the real case, the continuous solver had zero fixed columns while solver() had
+// all 658 of them. solver() carries node-local bounds during a search, which
+// would be the wrong thing to read in general; it is safe here specifically
+// because these columns do not exist in the child model, so the child's
+// branching cannot have touched them. If a future CBC restarts with a different
+// reduction that leaves columns unfixed, the resolved[] sweep at the end refuses
+// rather than guessing.
+static bool expand_to_parent(
+    const CbcModel* child,
+    const std::vector<double>& child_solution,
+    std::vector<double>& out
+) {
+    const CbcModel* parent = child->parentModel();
+    if (!parent)
+        return false;
+    const int* oc = child->originalColumns();
+    if (!oc)
+        return false;
+
+    const OsiSolverInterface* ps = parent->solver();
+    if (!ps)
+        return false;
+    const int n = parent->getNumCols();
+    const double* lo = ps->getColLower();
+    const double* up = ps->getColUpper();
+
+    // Base: every parent column the child dropped must have been fixed, and the
+    // fixed bound is its value.
+    out.assign(n, 0.0);
+    std::vector<bool> resolved(n, false);
+    for (int j = 0; j < n; j++) {
+        if (up[j] - lo[j] < 1e-9) {
+            out[j] = lo[j];
+            resolved[j] = true;
+        }
+    }
+
+    // Overwrite the columns the child kept.
+    if (static_cast<size_t>(child->getNumCols()) != child_solution.size())
+        return false;
+    for (int i = 0; i < child->getNumCols(); i++) {
+        const int j = oc[i];
+        if (j < 0 || j >= n)
+            return false;
+        out[j] = child_solution[i];
+        resolved[j] = true;
+    }
+
+    // Anything neither mapped nor fixed would be a guess. Refuse instead.
+    for (int j = 0; j < n; j++) {
+        if (!resolved[j])
+            return false;
+    }
+    return true;
+}
+
 // Reconstruct the original-space solution for an incumbent that CBC reports in
 // its *preprocessed* column space, using CBC's own preprocessing object. This
 // follows the recipe from John Forrest's `postprocess.cpp` example (coin-or/Cbc
@@ -61,37 +130,58 @@ static bool reconstruct_incumbent(
         return true;
     }
 
-    // Refuse a model whose column space the published preprocessing does not
-    // describe. cbcPreProcessPointer covers the *top-level* preprocessing and is
-    // not republished when CBC restarts its search on a smaller model
-    // ("Cbc0044I ... restarting search"); measured on the real case, it is
-    // byte-for-byte the same object before and after. Postsolving a
-    // restarted-search incumbent through it reads a 398-column vector into a map
-    // expecting 1056 and returns success with a wrong answer — objectives off by
-    // ~120000. A missing incumbent is far better than a confidently wrong one:
-    // the distance cutoff would measure the bound against garbage and never
-    // fire. Reconstructing those properly is written up in
-    // docs/todos/todo_subtree_incumbent_reconstruction.md.
+    // cbcPreProcessPointer covers the *top-level* preprocessing and is not
+    // republished when CBC restarts its search on a smaller model ("Cbc0044I
+    // ... restarting search"); measured on the real case, it is byte-for-byte
+    // the same object before and after. Postsolving a restarted-search
+    // incumbent through it directly reads a 398-column vector into a map
+    // expecting 1056 and returns success with a wrong answer — objectives off
+    // by ~120000, which is far worse than no incumbent at all: the distance
+    // cutoff would measure the bound against garbage and never fire.
+    //
+    // So first expand the incumbent up the parent chain until it lives in the
+    // space the published preprocessing describes. One restart level has been
+    // observed; nothing rules out two, so loop rather than assume. In the
+    // common no-restart case the loop body never runs and `m` stays `model`.
     //
     // CglPreProcess has no presolvedModel(); the preprocessed end of its chain
     // is modifiedModel(numberSolvers() - 1).
     int num_solvers = cbcPreProcessPointer->numberSolvers();
     const OsiSolverInterface* preprocessed =
         (num_solvers > 0) ? cbcPreProcessPointer->modifiedModel(num_solvers - 1) : nullptr;
-    if (!preprocessed || model->getNumCols() != preprocessed->getNumCols())
+    if (!preprocessed)
         return false;
 
-    const OsiSolverInterface* cont = model->continuousSolver();
+    std::vector<double> current(incumbent, incumbent + model->getNumCols());
+    const CbcModel* m = model;
+    while (m->getNumCols() != preprocessed->getNumCols()) {
+        std::vector<double> up_one;
+        if (!expand_to_parent(m, current, up_one))
+            return false;
+        current.swap(up_one);
+        m = m->parentModel();
+        if (!m)
+            return false;
+    }
+
+    // `current` is now in preprocessed space; postsolve through a clone of the
+    // continuous solver of the model whose shape matches — the top-level one
+    // after a walk, `model` itself when no restart happened.
+    const OsiSolverInterface* cont = m->continuousSolver();
     auto* clone = dynamic_cast<OsiClpSolverInterface*>(cont ? cont->clone() : nullptr);
     if (!clone)
         return false;
 
     ClpSimplex* lp = clone->getModelPtr();
     int n = lp->numberColumns();
+    if (static_cast<size_t>(n) != current.size()) {
+        delete clone;
+        return false;
+    }
     double* sol = lp->primalColumnSolution();
     double* lower = lp->columnLower();
     double* upper = lp->columnUpper();
-    std::memcpy(sol, incumbent, n * sizeof(double));
+    std::memcpy(sol, current.data(), n * sizeof(double));
     for (int i = 0; i < n; i++) {
         if (clone->isInteger(i)) {
             double x = std::floor(sol[i] + 0.5);
