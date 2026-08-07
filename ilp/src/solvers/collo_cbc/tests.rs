@@ -356,7 +356,7 @@ fn collo_cbc_progress_tick_carries_state_forward() {
     // A tick from a nested heuristic sub-MIP. Its numeric fields are zero
     // placeholders, not measurements — reading them would report a bound of 0,
     // no nodes and no solutions, which is worse than reporting nothing.
-    let failed = progress.update_from(
+    progress.update_from(
         &collo_cbc::Progress {
             event_type: collo_cbc::EventType::Tick,
             best_bound: 0.0,
@@ -367,7 +367,6 @@ fn collo_cbc_progress_tick_carries_state_forward() {
         &col_indices,
     );
 
-    assert!(!failed);
     assert_eq!(progress.best_bound(), -12.5);
     assert_eq!(progress.nodes(), 42);
     assert_eq!(progress.solutions(), 3);
@@ -449,7 +448,7 @@ fn collo_cbc_progress_failed_reconstruction_keeps_the_last_incumbent() {
     // An incumbent from a restarted search: it cannot be mapped back, so it is
     // skipped. Unlike a tick, the event's own bound and counts are real and
     // must be applied.
-    let failed = progress.update_from(
+    progress.update_from(
         &collo_cbc::Progress {
             event_type: collo_cbc::EventType::Solution,
             best_bound: -12.0,
@@ -460,7 +459,6 @@ fn collo_cbc_progress_failed_reconstruction_keeps_the_last_incumbent() {
         &col_indices,
     );
 
-    assert!(failed);
     assert_eq!(progress.best_bound(), -12.0);
     assert_eq!(progress.nodes(), 57);
     assert_eq!(progress.solutions(), 4);

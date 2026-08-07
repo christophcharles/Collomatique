@@ -38,9 +38,6 @@ pub struct Progress<V: UsableData> {
 impl<V: UsableData> Progress<V> {
     /// Folds one raw CBC event into the carried state.
     ///
-    /// Returns `true` when the event carried an incumbent CBC could not map
-    /// back into the problem's own columns.
-    ///
     /// A tick is carried, not applied. It means "CBC is alive" and nothing
     /// more: it comes from a nested heuristic sub-MIP whose bound, node count
     /// and incumbent all live in that sub-MIP's own reduced column space, so
@@ -48,14 +45,14 @@ impl<V: UsableData> Progress<V> {
     /// in place keeps what the caller sees coherent. The caller is still
     /// called, so its deadlines still run and its stop request still relays
     /// while such a model holds the solve.
-    fn update_from(&mut self, raw: &collo_cbc::Progress, col_indices: &HashMap<V, usize>) -> bool {
+    fn update_from(&mut self, raw: &collo_cbc::Progress, col_indices: &HashMap<V, usize>) {
         // Freshness describes this event, so it is cleared first and set only
         // where an incumbent actually arrives. Everything else below is state
         // that carries forward.
         self.incumbent_is_fresh = false;
 
         if raw.event_type == collo_cbc::EventType::Tick {
-            return false;
+            return;
         }
 
         self.best_bound = raw.best_bound;
@@ -80,15 +77,15 @@ impl<V: UsableData> Progress<V> {
                     ),
                 );
                 self.incumbent_is_fresh = true;
-                false
             }
             // No fresh incumbent this event: keep the last known objective
             // and incumbent (they carry forward through tree-status events).
-            collo_cbc::IncumbentEvent::None => false,
+            collo_cbc::IncumbentEvent::None => {}
             // CBC found an incumbent but it couldn't be reconstructed into
             // original column space. We keep the last good incumbent rather
-            // than reporting a bogus one.
-            collo_cbc::IncumbentEvent::ReconstructionFailed => true,
+            // than reporting a bogus one. The shim traces these under
+            // COLLO_CBC_DEBUG_EVENTS; nothing is printed from here.
+            collo_cbc::IncumbentEvent::ReconstructionFailed => {}
         }
     }
 }
@@ -379,20 +376,8 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> CallbackSolverModel<'a
         };
 
         let col_indices = &self.col_indices;
-        // Every failure in one solve has the same cause, and CBC re-reports the
-        // same unmappable incumbent on each event that carries it, so saying it
-        // once is the whole of the diagnostic value.
-        let mut reported_failure = false;
         let result = self.model.solve_with_callback(|raw_progress| {
-            if progress.update_from(raw_progress, col_indices) && !reported_failure {
-                reported_failure = true;
-                eprintln!(
-                    "collo_cbc: an incumbent could not be mapped back into the problem's \
-                     own columns and was skipped. This is expected once CBC restarts its \
-                     search (see docs/todos/todo_subtree_incumbent_reconstruction.md); the \
-                     final solution is unaffected. Reported once per solve."
-                );
-            }
+            progress.update_from(raw_progress, col_indices);
             callback(&progress)
         });
 
