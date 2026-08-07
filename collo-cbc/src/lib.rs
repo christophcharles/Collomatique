@@ -1,8 +1,14 @@
+mod dump;
 pub mod sys;
+
+pub use dump::{read_mip_start, write_mip_start};
 
 use std::ffi::CString;
 use std::os::raw::{c_int, c_void};
+use std::path::PathBuf;
 use std::sync::Mutex;
+use std::sync::OnceLock;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 static CBC_LOCK: Mutex<()> = Mutex::new(());
 
@@ -111,6 +117,7 @@ pub struct SolveResult {
     pub solution: Option<Vec<f64>>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct ProblemDesc {
     pub num_cols: i32,
     pub num_rows: i32,
@@ -126,9 +133,43 @@ pub struct ProblemDesc {
     pub row_ub: Vec<f64>,
 }
 
+/// Opt-in model export, switched on with `COLLO_CBC_DUMP_MODEL=<prefix>` in the
+/// environment. Every problem loaded into a `Model` is then written to
+/// `<prefix>-<pid>-<NNN>.collomodel`, and a MIP start set on it afterwards to
+/// `<prefix>-<pid>-<NNN>.collomipstart`.
+///
+/// `NNN` counts the problems loaded in this process, so an 11-epoch incremental
+/// run yields 11 pairs. The pid is in the name because the conductor runs
+/// several solver subprocesses at once, and they would otherwise overwrite each
+/// other's dumps.
+///
+/// A dump is a complete reproducer — see `examples/replay.rs`, which reads one
+/// back and solves it through the same event handler production uses.
+fn dump_prefix() -> Option<&'static str> {
+    static PREFIX: OnceLock<Option<String>> = OnceLock::new();
+    PREFIX
+        .get_or_init(|| match std::env::var("COLLO_CBC_DUMP_MODEL") {
+            Ok(v) if !v.is_empty() => Some(v),
+            _ => None,
+        })
+        .as_deref()
+}
+
+static DUMP_COUNTER: AtomicU32 = AtomicU32::new(0);
+
+fn dump_path(prefix: &str, index: u32, extension: &str) -> PathBuf {
+    PathBuf::from(format!(
+        "{prefix}-{}-{index:03}.{extension}",
+        std::process::id()
+    ))
+}
+
 pub struct Model {
     ptr: *mut sys::ColloCbcModel,
     num_cols: i32,
+    /// Index this model's dump files carry, assigned by `load_problem`. `None`
+    /// when dumping is off or no problem has been loaded yet.
+    dump_index: Option<u32>,
 }
 
 // Safety: Model owns a heap-allocated C++ object behind a raw pointer.
@@ -148,10 +189,24 @@ impl Model {
     pub fn new() -> Self {
         let ptr = lock(|| unsafe { sys::collo_cbc_new() });
         assert!(!ptr.is_null(), "collo_cbc_new returned null");
-        Model { ptr, num_cols: 0 }
+        Model {
+            ptr,
+            num_cols: 0,
+            dump_index: None,
+        }
     }
 
     pub fn load_problem(&mut self, desc: &ProblemDesc) {
+        if let Some(prefix) = dump_prefix() {
+            let index = DUMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+            self.dump_index = Some(index);
+            let path = dump_path(prefix, index, "collomodel");
+            // A diagnostic must never break a solve: report and carry on.
+            if let Err(e) = desc.write_to(&path) {
+                eprintln!("collo-cbc: could not dump model to {}: {e}", path.display());
+            }
+        }
+
         self.num_cols = desc.num_cols;
         let nnz = desc.mat_value.len() as i32;
         lock(|| unsafe {
@@ -202,6 +257,16 @@ impl Model {
     }
 
     pub fn set_mip_start(&mut self, values: &[f64]) {
+        if let (Some(prefix), Some(index)) = (dump_prefix(), self.dump_index) {
+            let path = dump_path(prefix, index, "collomipstart");
+            if let Err(e) = dump::write_mip_start(&path, values) {
+                eprintln!(
+                    "collo-cbc: could not dump MIP start to {}: {e}",
+                    path.display()
+                );
+            }
+        }
+
         lock(|| unsafe {
             sys::collo_cbc_set_mip_start(self.ptr, values.as_ptr(), values.len() as i32);
         });
