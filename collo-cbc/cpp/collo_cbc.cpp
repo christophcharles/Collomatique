@@ -157,20 +157,27 @@ public:
     // Holds the original-space incumbent so the pointer handed to Rust stays
     // valid for the duration of the callback (Rust copies it immediately).
     std::vector<double> original_solution_;
+    // Points at a flag owned by collo_cbc_solve, raised whenever this handler
+    // returns `stop`. CBC clones the handler when it hands it to the model it
+    // actually searches, and the clone copies the pointer, so whichever
+    // instance asks to stop raises the one flag collo_cbc_solve reads back.
+    bool* stop_requested_;
 
     ColloEventHandler()
         : CbcEventHandler(), callback_(nullptr), user_data_(nullptr),
-          orig_solver_(nullptr), orig_num_cols_(0) {}
+          orig_solver_(nullptr), orig_num_cols_(0), stop_requested_(nullptr) {}
 
     ColloEventHandler(CbcModel* model, ColloCbcCallback cb, void* ud,
-                      const OsiSolverInterface* orig_solver, int32_t orig_num_cols)
+                      const OsiSolverInterface* orig_solver, int32_t orig_num_cols,
+                      bool* stop_requested)
         : CbcEventHandler(model), callback_(cb), user_data_(ud),
-          orig_solver_(orig_solver), orig_num_cols_(orig_num_cols) {}
+          orig_solver_(orig_solver), orig_num_cols_(orig_num_cols),
+          stop_requested_(stop_requested) {}
 
     ColloEventHandler(const ColloEventHandler& rhs)
         : CbcEventHandler(rhs), callback_(rhs.callback_), user_data_(rhs.user_data_),
           orig_solver_(rhs.orig_solver_), orig_num_cols_(rhs.orig_num_cols_),
-          seen_solutions_(rhs.seen_solutions_) {}
+          seen_solutions_(rhs.seen_solutions_), stop_requested_(rhs.stop_requested_) {}
 
     ColloEventHandler& operator=(const ColloEventHandler& rhs) {
         if (this != &rhs) {
@@ -180,6 +187,7 @@ public:
             orig_solver_ = rhs.orig_solver_;
             orig_num_cols_ = rhs.orig_num_cols_;
             seen_solutions_ = rhs.seen_solutions_;
+            stop_requested_ = rhs.stop_requested_;
         }
         return *this;
     }
@@ -296,7 +304,11 @@ public:
                       << " -> " << (result != 0 ? "stop" : "continue")
                       << std::endl;
         }
-        return (result != 0) ? stop : noAction;
+        if (result == 0)
+            return noAction;
+        if (stop_requested_)
+            *stop_requested_ = true;
+        return stop;
     }
 };
 
@@ -446,8 +458,12 @@ ColloCbcStatus collo_cbc_solve(ColloCbcModel* m, ColloCbcCallback cb, void* user
         cbcModel.setLogLevel(m->log_level);
     }
 
-    // Install event handler (after CbcMain0, before CbcMain1)
-    ColloEventHandler handler(&cbcModel, cb, user_data, m->solver, m->num_cols);
+    // Install event handler (after CbcMain0, before CbcMain1). The handler
+    // raises `stop_requested` when the callback asks to stop; see the status
+    // mapping after CbcMain1 for why we track that ourselves.
+    bool stop_requested = false;
+    ColloEventHandler handler(&cbcModel, cb, user_data, m->solver, m->num_cols,
+                              &stop_requested);
     cbcModel.passInEventHandler(&handler);
 
     if (debug_events()) {
@@ -502,7 +518,18 @@ ColloCbcStatus collo_cbc_solve(ColloCbcModel* m, ColloCbcCallback cb, void* user
         m->has_mip_start = true;
     }
 
-    // Map status
+    // Map status.
+    //
+    // A search we stopped ourselves is a stop, not an error. CBC has no named
+    // constant for "stopped on user event" — CbcModel::status() documents it
+    // only as the magic value 5 — so rather than trust a number that could
+    // change under us, we go by the flag the event handler raised. `stopped`
+    // is also what the Rust side means by stopped_by_callback, so this is the
+    // property we actually want to report, not a proxy for it.
+    //
+    // A finished proof still wins: if CBC completed the search despite a late
+    // stop request, "proven optimal" or "proven infeasible" is the better
+    // answer, so cbc_status == 0 keeps precedence.
     int cbc_status = cbcModel.status();
     if (cbc_status == 0) {
         if (cbcModel.isProvenOptimal()) {
@@ -512,6 +539,8 @@ ColloCbcStatus collo_cbc_solve(ColloCbcModel* m, ColloCbcCallback cb, void* user
         } else {
             m->status = COLLO_CBC_ERROR;
         }
+    } else if (stop_requested) {
+        m->status = COLLO_CBC_STOPPED;
     } else if (cbc_status == 1) {
         m->status = COLLO_CBC_STOPPED;
     } else {
