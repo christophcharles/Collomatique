@@ -31,6 +31,58 @@ pub struct Progress<V: UsableData> {
     incumbent_config: Option<ConfigData<V>>,
 }
 
+impl<V: UsableData> Progress<V> {
+    /// Folds one raw CBC event into the carried state.
+    ///
+    /// Returns `true` when the event carried an incumbent CBC could not map
+    /// back into the problem's own columns.
+    ///
+    /// A tick is carried, not applied. It means "CBC is alive" and nothing
+    /// more: it comes from a nested heuristic sub-MIP whose bound, node count
+    /// and incumbent all live in that sub-MIP's own reduced column space, so
+    /// none of them can be transmitted. Leaving the last authoritative values
+    /// in place keeps what the caller sees coherent. The caller is still
+    /// called, so its deadlines still run and its stop request still relays
+    /// while such a model holds the solve.
+    fn update_from(&mut self, raw: &collo_cbc::Progress, col_indices: &HashMap<V, usize>) -> bool {
+        if raw.event_type == collo_cbc::EventType::Tick {
+            return false;
+        }
+
+        self.best_bound = raw.best_bound;
+        self.nodes = raw.node_count as u64;
+        self.solutions = raw.solutions_found as u64;
+
+        match &raw.incumbent {
+            collo_cbc::IncumbentEvent::Reconstructed {
+                objective,
+                solution,
+            } => {
+                self.best_objective = Some(*objective);
+                self.incumbent = Some(IncumbentInfo {
+                    objective: *objective,
+                    feasible: true,
+                });
+                self.incumbent_config = Some(
+                    ConfigData::new().set_iter(
+                        col_indices
+                            .iter()
+                            .map(|(var, &col)| (var.clone(), solution[col])),
+                    ),
+                );
+                false
+            }
+            // No fresh incumbent this event: keep the last known objective
+            // and incumbent (they carry forward through tree-status events).
+            collo_cbc::IncumbentEvent::None => false,
+            // CBC found an incumbent but it couldn't be reconstructed into
+            // original column space. We keep the last good incumbent rather
+            // than reporting a bogus one.
+            collo_cbc::IncumbentEvent::ReconstructionFailed => true,
+        }
+    }
+}
+
 impl<V: UsableData> ProgressBounds for Progress<V> {
     fn best_bound(&self) -> f64 {
         self.best_bound
@@ -313,40 +365,19 @@ impl<'a, V: UsableData, C: UsableData, P: ProblemRepr<V>> CallbackSolverModel<'a
         };
 
         let col_indices = &self.col_indices;
+        // Every failure in one solve has the same cause, and CBC re-reports the
+        // same unmappable incumbent on each event that carries it, so saying it
+        // once is the whole of the diagnostic value.
+        let mut reported_failure = false;
         let result = self.model.solve_with_callback(|raw_progress| {
-            progress.best_bound = raw_progress.best_bound;
-            progress.nodes = raw_progress.node_count as u64;
-            progress.solutions = raw_progress.solutions_found as u64;
-            match &raw_progress.incumbent {
-                collo_cbc::IncumbentEvent::Reconstructed {
-                    objective,
-                    solution,
-                } => {
-                    progress.best_objective = Some(*objective);
-                    progress.incumbent = Some(IncumbentInfo {
-                        objective: *objective,
-                        feasible: true,
-                    });
-                    progress.incumbent_config = Some(
-                        ConfigData::new().set_iter(
-                            col_indices
-                                .iter()
-                                .map(|(var, &col)| (var.clone(), solution[col])),
-                        ),
-                    );
-                }
-                // No fresh incumbent this event: keep the last known objective
-                // and incumbent (they carry forward through tree-status events).
-                collo_cbc::IncumbentEvent::None => {}
-                // CBC found an incumbent but it couldn't be reconstructed into
-                // original column space. We keep the last good incumbent rather
-                // than reporting a bogus one; surface it for diagnostics.
-                collo_cbc::IncumbentEvent::ReconstructionFailed => {
-                    eprintln!(
-                        "collo_cbc: failed to reconstruct an incumbent into original \
-                         column space; skipping it"
-                    );
-                }
+            if progress.update_from(raw_progress, col_indices) && !reported_failure {
+                reported_failure = true;
+                eprintln!(
+                    "collo_cbc: an incumbent could not be mapped back into the problem's \
+                     own columns and was skipped. This is expected once CBC restarts its \
+                     search (see docs/todos/todo_subtree_incumbent_reconstruction.md); the \
+                     final solution is unaffected. Reported once per solve."
+                );
             }
             callback(&progress)
         });
