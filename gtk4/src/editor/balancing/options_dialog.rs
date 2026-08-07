@@ -73,7 +73,7 @@ impl SimpleComponent for Dialog {
             set_resizable: true,
             #[watch]
             set_visible: !model.hidden,
-            set_title: Some("Paramètres d'équilibrage strict"),
+            set_title: Some("Paramètres d'équilibrage"),
             set_default_size: (500, 650),
             adw::ToolbarView {
                 add_top_bar = &adw::HeaderBar {

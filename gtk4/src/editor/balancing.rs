@@ -12,7 +12,6 @@ mod options_dialog;
 use collomatique_ops::BalancingUpdateOp;
 use collomatique_state_colloscopes::balancing::BalancingOptions;
 use collomatique_state_colloscopes::ids::SubjectId;
-use collomatique_state_colloscopes::soft_param::SoftParam;
 
 #[derive(Debug)]
 pub enum BalancingInput {
@@ -71,7 +70,7 @@ impl Component for Balancing {
                         gtk::Button {
                             set_icon_name: "document-edit-symbolic",
                             add_css_class: "flat",
-                            set_tooltip_text: Some("Modifier les paramètres globaux d'équilibrage strict"),
+                            set_tooltip_text: Some("Modifier les paramètres globaux d'équilibrage"),
                             connect_clicked => BalancingInput::EditGlobalOptions,
                         },
                         gtk::Separator {
@@ -252,44 +251,47 @@ impl Balancing {
     }
 }
 
-fn is_strict(goal: &Option<SoftParam<()>>) -> bool {
-    matches!(goal, Some(param) if !param.soft)
+// The parenthetical qualifies the constraint itself, so it stays feminine
+// whatever the goal it is appended to.
+fn soft_constraint_symbol(soft: bool) -> &'static str {
+    if soft { "(souple)" } else { "(stricte)" }
 }
 
 fn options_to_string(options: &BalancingOptions) -> String {
+    // Only the goals that are actually pursued get an entry, soft ones
+    // included. A goal that is off is not a constraint, so it says nothing.
     let mut parts = vec![];
 
-    // First the strict constraints...
-    if is_strict(&options.teacher_rotation) {
-        parts.push("rotation des colleurs");
+    if let Some(param) = &options.teacher_rotation {
+        parts.push(format!(
+            "rotation des colleurs {}",
+            soft_constraint_symbol(param.soft)
+        ));
     }
-    if is_strict(&options.slot_rotation) {
-        parts.push("rotation des créneaux");
+    if let Some(param) = &options.slot_rotation {
+        parts.push(format!(
+            "rotation des créneaux {}",
+            soft_constraint_symbol(param.soft)
+        ));
     }
-    if is_strict(&options.avoid_twice_in_a_row) {
-        parts.push("éviter 2× de suite le même colleur");
-    }
-    if options.year_teacher_rotation {
-        parts.push("rotation annuelle des colleurs");
-    }
-    if options.period_teacher_rotation {
-        parts.push("rotation des colleurs par période");
+    if let Some(param) = &options.avoid_twice_in_a_row {
+        parts.push(format!(
+            "éviter 2× de suite le même colleur {}",
+            soft_constraint_symbol(param.soft)
+        ));
     }
 
-    // ...then the goals that are not pursued at all, which cost nothing to
-    // compute and are worth seeing without opening the dialog.
-    if options.teacher_rotation.is_none() {
-        parts.push("rotation des colleurs désactivée");
+    // The year and period rotations are plain strictness booleans with no soft
+    // mode, so they carry no symbol.
+    if options.year_teacher_rotation {
+        parts.push(String::from("rotation annuelle des colleurs"));
     }
-    if options.slot_rotation.is_none() {
-        parts.push("rotation des créneaux désactivée");
-    }
-    if options.avoid_twice_in_a_row.is_none() {
-        parts.push("éviter 2× de suite le même colleur désactivé");
+    if options.period_teacher_rotation {
+        parts.push(String::from("rotation des colleurs par période"));
     }
 
     if parts.is_empty() {
-        String::from("aucune contrainte stricte")
+        String::from("aucune contrainte")
     } else {
         parts.join("    ―    ")
     }
