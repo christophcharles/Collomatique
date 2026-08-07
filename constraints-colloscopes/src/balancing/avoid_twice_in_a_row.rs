@@ -12,7 +12,7 @@ use collomatique_state_colloscopes::ids::{StudentId, SubjectId, TeacherId};
 use collomatique_state_colloscopes::subjects::SubjectPeriodicity;
 
 use super::helpers::{
-    count_student_teacher_expr, effective_balancing_flag, rolling_windows,
+    count_student_teacher_expr, effective_balancing_option, rolling_windows,
     slot_week_pairs_for_teacher, subject_active_weeks, teachers_for_subject,
 };
 
@@ -233,7 +233,14 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         let Some(params) = subject_interrogation_params(env, *subject_id) else {
             continue;
         };
-        if !effective_balancing_flag(env, *subject_id, |opts| opts.avoid_twice_in_a_row) {
+        // Hard path only: the goal must be on *and* strict. `None` (off) and
+        // `Some { soft: true }` (soft objective, built by
+        // [`super::avoid_twice_in_a_row_soft`]) both skip the subject.
+        let strict = matches!(
+            effective_balancing_option(env, *subject_id, |opts| &opts.avoid_twice_in_a_row),
+            Some(param) if !param.soft
+        );
+        if !strict {
             continue;
         }
 

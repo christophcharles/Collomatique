@@ -12,6 +12,7 @@ mod options_dialog;
 use collomatique_ops::BalancingUpdateOp;
 use collomatique_state_colloscopes::balancing::BalancingOptions;
 use collomatique_state_colloscopes::ids::SubjectId;
+use collomatique_state_colloscopes::soft_param::SoftParam;
 
 #[derive(Debug)]
 pub enum BalancingInput {
@@ -251,16 +252,21 @@ impl Balancing {
     }
 }
 
+fn is_strict(goal: &Option<SoftParam<()>>) -> bool {
+    matches!(goal, Some(param) if !param.soft)
+}
+
 fn options_to_string(options: &BalancingOptions) -> String {
     let mut parts = vec![];
 
-    if options.teacher_rotation {
+    // First the strict constraints...
+    if is_strict(&options.teacher_rotation) {
         parts.push("rotation des colleurs");
     }
-    if options.slot_rotation {
+    if is_strict(&options.slot_rotation) {
         parts.push("rotation des créneaux");
     }
-    if options.avoid_twice_in_a_row {
+    if is_strict(&options.avoid_twice_in_a_row) {
         parts.push("éviter 2× de suite le même colleur");
     }
     if options.year_teacher_rotation {
@@ -268,6 +274,18 @@ fn options_to_string(options: &BalancingOptions) -> String {
     }
     if options.period_teacher_rotation {
         parts.push("rotation des colleurs par période");
+    }
+
+    // ...then the goals that are not pursued at all, which cost nothing to
+    // compute and are worth seeing without opening the dialog.
+    if options.teacher_rotation.is_none() {
+        parts.push("rotation des colleurs désactivée");
+    }
+    if options.slot_rotation.is_none() {
+        parts.push("rotation des créneaux désactivée");
+    }
+    if options.avoid_twice_in_a_row.is_none() {
+        parts.push("éviter 2× de suite le même colleur désactivé");
     }
 
     if parts.is_empty() {

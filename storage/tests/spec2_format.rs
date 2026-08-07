@@ -419,9 +419,9 @@ fn entry_content_must_be_an_object_with_exactly_one_key() {
             "Colloscope": { "interrogations": [], "group_lists": [] },
             "Balancing": {
                 "global": {
-                    "teacher_rotation": false,
-                    "slot_rotation": false,
-                    "avoid_twice_in_a_row": true,
+                    "teacher_rotation": { "soft": true },
+                    "slot_rotation": { "soft": true },
+                    "avoid_twice_in_a_row": { "soft": false },
                     "year_teacher_rotation": false,
                     "period_teacher_rotation": false
                 },
@@ -1737,17 +1737,17 @@ fn balancing_override_subject_must_exist() {
     let content = document(&[entry(
         r#"{ "Balancing": {
             "global": {
-                "teacher_rotation": false,
-                "slot_rotation": false,
-                "avoid_twice_in_a_row": true,
+                "teacher_rotation": { "soft": true },
+                "slot_rotation": { "soft": true },
+                "avoid_twice_in_a_row": { "soft": false },
                 "year_teacher_rotation": false,
                 "period_teacher_rotation": false
             },
             "subjects": [
                 { "subject_id": 99, "options": {
-                    "teacher_rotation": true,
-                    "slot_rotation": false,
-                    "avoid_twice_in_a_row": true,
+                    "teacher_rotation": { "soft": false },
+                    "slot_rotation": { "soft": true },
+                    "avoid_twice_in_a_row": { "soft": false },
                     "year_teacher_rotation": false,
                     "period_teacher_rotation": false
                 } }
@@ -1906,17 +1906,17 @@ fn document_with_all_references_resolving_decodes() {
         entry(
             r#"{ "Balancing": {
                 "global": {
-                    "teacher_rotation": false,
-                    "slot_rotation": false,
-                    "avoid_twice_in_a_row": true,
+                    "teacher_rotation": { "soft": true },
+                    "slot_rotation": { "soft": true },
+                    "avoid_twice_in_a_row": { "soft": false },
                     "year_teacher_rotation": false,
                     "period_teacher_rotation": false
                 },
                 "subjects": [
                     { "subject_id": 2, "options": {
-                        "teacher_rotation": true,
-                        "slot_rotation": false,
-                        "avoid_twice_in_a_row": true,
+                        "teacher_rotation": { "soft": false },
+                        "slot_rotation": { "soft": true },
+                        "avoid_twice_in_a_row": { "soft": false },
                         "year_teacher_rotation": false,
                         "period_teacher_rotation": false
                     } }
@@ -2193,17 +2193,17 @@ fn balancing_override_for_a_subject_without_interrogations_is_rejected() {
         entry(
             r#"{ "Balancing": {
                 "global": {
-                    "teacher_rotation": false,
-                    "slot_rotation": false,
-                    "avoid_twice_in_a_row": true,
+                    "teacher_rotation": { "soft": true },
+                    "slot_rotation": { "soft": true },
+                    "avoid_twice_in_a_row": { "soft": false },
                     "year_teacher_rotation": false,
                     "period_teacher_rotation": false
                 },
                 "subjects": [
                     { "subject_id": 2, "options": {
-                        "teacher_rotation": true,
-                        "slot_rotation": false,
-                        "avoid_twice_in_a_row": true,
+                        "teacher_rotation": { "soft": false },
+                        "slot_rotation": { "soft": true },
+                        "avoid_twice_in_a_row": { "soft": false },
                         "year_teacher_rotation": false,
                         "period_teacher_rotation": false
                     } }

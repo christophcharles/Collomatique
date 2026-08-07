@@ -3,10 +3,11 @@
 use serde::{Deserialize, Serialize};
 
 use super::keyed::{KeyedRow, KeyedVec};
+use super::scalars::SoftFlag;
 
 /// Global and per-subject balancing options for the solver
 ///
-/// Default: everything soft — no strict constraint at all.
+/// Default: a soft teacher rotation, everything else off.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct Balancing {
@@ -20,13 +21,13 @@ pub struct Balancing {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Options {
-    /// Teacher rotation is always active; `true` = strict constraint,
-    /// `false` = optimisation goal.
-    pub teacher_rotation: bool,
-    /// Slot rotation is always active; `true` = strict constraint,
-    /// `false` = optimisation goal.
-    pub slot_rotation: bool,
-    pub avoid_twice_in_a_row: bool,
+    /// `null` = off, `{"soft": true}` = optimisation goal,
+    /// `{"soft": false}` = strict constraint.
+    pub teacher_rotation: Option<SoftFlag>,
+    /// Same three states as [`Self::teacher_rotation`].
+    pub slot_rotation: Option<SoftFlag>,
+    /// Same three states as [`Self::teacher_rotation`].
+    pub avoid_twice_in_a_row: Option<SoftFlag>,
     pub year_teacher_rotation: bool,
     pub period_teacher_rotation: bool,
 }
@@ -38,9 +39,9 @@ pub struct Options {
 impl Default for Options {
     fn default() -> Self {
         Options {
-            teacher_rotation: false,
-            slot_rotation: false,
-            avoid_twice_in_a_row: false,
+            teacher_rotation: Some(SoftFlag { soft: true }),
+            slot_rotation: None,
+            avoid_twice_in_a_row: None,
             year_teacher_rotation: false,
             period_teacher_rotation: false,
         }
@@ -73,9 +74,9 @@ mod tests {
             serde_json::to_value(Balancing::default()).unwrap(),
             json!({
                 "global": {
-                    "teacher_rotation": false,
-                    "slot_rotation": false,
-                    "avoid_twice_in_a_row": false,
+                    "teacher_rotation": { "soft": true },
+                    "slot_rotation": null,
+                    "avoid_twice_in_a_row": null,
                     "year_teacher_rotation": false,
                     "period_teacher_rotation": false
                 },
@@ -86,11 +87,12 @@ mod tests {
 
     #[test]
     fn populated_block_round_trips() {
+        // All three states of the three-state fields appear at least once.
         let value = json!({
             "global": {
-                "teacher_rotation": false,
-                "slot_rotation": true,
-                "avoid_twice_in_a_row": false,
+                "teacher_rotation": { "soft": true },
+                "slot_rotation": { "soft": false },
+                "avoid_twice_in_a_row": null,
                 "year_teacher_rotation": true,
                 "period_teacher_rotation": false
             },
@@ -98,9 +100,9 @@ mod tests {
                 {
                     "subject_id": 2,
                     "options": {
-                        "teacher_rotation": false,
-                        "slot_rotation": false,
-                        "avoid_twice_in_a_row": true,
+                        "teacher_rotation": null,
+                        "slot_rotation": { "soft": true },
+                        "avoid_twice_in_a_row": { "soft": false },
                         "year_teacher_rotation": false,
                         "period_teacher_rotation": true
                     }
@@ -114,9 +116,9 @@ mod tests {
     #[test]
     fn duplicate_subject_id_is_rejected() {
         let options = json!({
-            "teacher_rotation": false,
-            "slot_rotation": false,
-            "avoid_twice_in_a_row": false,
+            "teacher_rotation": null,
+            "slot_rotation": null,
+            "avoid_twice_in_a_row": null,
             "year_teacher_rotation": false,
             "period_teacher_rotation": false
         });
@@ -131,25 +133,31 @@ mod tests {
     }
 
     #[test]
-    fn null_rotation_is_rejected() {
-        // `null` used to mean "off"; off no longer exists.
-        let value = json!({
-            "teacher_rotation": null,
-            "slot_rotation": false,
-            "avoid_twice_in_a_row": true,
-            "year_teacher_rotation": false,
-            "period_teacher_rotation": false
-        });
-        assert!(serde_json::from_value::<Options>(value).is_err());
+    fn bool_goal_is_rejected() {
+        // A plain boolean says nothing about the third state, so it is not a
+        // valid encoding of the three-state goals.
+        for field in ["teacher_rotation", "slot_rotation", "avoid_twice_in_a_row"] {
+            let mut value = json!({
+                "teacher_rotation": null,
+                "slot_rotation": null,
+                "avoid_twice_in_a_row": null,
+                "year_teacher_rotation": false,
+                "period_teacher_rotation": false
+            });
+            value[field] = json!(true);
+            assert!(
+                serde_json::from_value::<Options>(value).is_err(),
+                "a plain bool must be rejected for {field}"
+            );
+        }
     }
 
     #[test]
-    fn soft_record_rotation_is_rejected() {
-        // The old `{"soft": bool}` record shape is retired for the rotations.
+    fn stray_value_in_a_goal_is_rejected() {
         let value = json!({
-            "teacher_rotation": { "soft": true },
-            "slot_rotation": false,
-            "avoid_twice_in_a_row": true,
+            "teacher_rotation": { "soft": true, "value": null },
+            "slot_rotation": null,
+            "avoid_twice_in_a_row": null,
             "year_teacher_rotation": false,
             "period_teacher_rotation": false
         });
@@ -159,9 +167,9 @@ mod tests {
     #[test]
     fn missing_field_is_rejected() {
         let value = json!({
-            "teacher_rotation": false,
-            "slot_rotation": false,
-            "avoid_twice_in_a_row": true,
+            "teacher_rotation": null,
+            "slot_rotation": null,
+            "avoid_twice_in_a_row": { "soft": false },
             "year_teacher_rotation": false
         });
         assert!(serde_json::from_value::<Options>(value).is_err());
@@ -170,9 +178,9 @@ mod tests {
     #[test]
     fn unknown_field_is_rejected() {
         let value = json!({
-            "teacher_rotation": false,
-            "slot_rotation": false,
-            "avoid_twice_in_a_row": true,
+            "teacher_rotation": null,
+            "slot_rotation": null,
+            "avoid_twice_in_a_row": { "soft": false },
             "year_teacher_rotation": false,
             "period_teacher_rotation": false,
             "extra": 1

@@ -341,64 +341,6 @@
             "name": "Déjeuner à la Grande Salle",
             "interrogation_parameters": null,
             "excluded_periods": []
-          },
-          {
-            "id": 300,
-            "name": "Pairing Antecedent",
-            "interrogation_parameters": {
-              "students_per_group": {
-                "min": 1,
-                "max": 1
-              },
-              "groups_per_interrogation": {
-                "min": 1,
-                "max": 1
-              },
-              "duration_minutes": 60,
-              "take_duration_into_account": false,
-              "periodicity": {
-                "AmountInYear": {
-                  "interrogation_count_in_year": {
-                    "min": 0,
-                    "max": 0
-                  },
-                  "minimum_week_separation": 0
-                }
-              }
-            },
-            "excluded_periods": [
-              172,
-              173
-            ]
-          },
-          {
-            "id": 301,
-            "name": "Pairing Consequent",
-            "interrogation_parameters": {
-              "students_per_group": {
-                "min": 1,
-                "max": 1
-              },
-              "groups_per_interrogation": {
-                "min": 1,
-                "max": 1
-              },
-              "duration_minutes": 60,
-              "take_duration_into_account": false,
-              "periodicity": {
-                "AmountInYear": {
-                  "interrogation_count_in_year": {
-                    "min": 0,
-                    "max": 0
-                  },
-                  "minimum_week_separation": 0
-                }
-              }
-            },
-            "excluded_periods": [
-              172,
-              173
-            ]
           }
         ]
       }
@@ -914,20 +856,6 @@
               109,
               116,
               120
-            ]
-          },
-          {
-            "period_id": 124,
-            "subject_id": 300,
-            "students": [
-              100
-            ]
-          },
-          {
-            "period_id": 124,
-            "subject_id": 301,
-            "students": [
-              100
             ]
           },
           {
@@ -1707,14 +1635,6 @@
                 "cost": 0
               }
             ]
-          },
-          {
-            "subject_id": 300,
-            "slots": []
-          },
-          {
-            "subject_id": 301,
-            "slots": []
           }
         ]
       }
@@ -2114,27 +2034,6 @@
       "minimum_spec_version": 2,
       "needed_entry": true,
       "content": {
-        "Pairings": [
-          {
-            "id": 400,
-            "antecedent": {
-              "subject_id": 300,
-              "should_have": false
-            },
-            "consequent": {
-              "subject_id": 301,
-              "should_have": true
-            },
-            "excluded_periods": [],
-            "soft": false
-          }
-        ]
-      }
-    },
-    {
-      "minimum_spec_version": 2,
-      "needed_entry": true,
-      "content": {
         "Settings": {
           "global": {
             "interrogations_per_week_min": {
@@ -2184,9 +2083,7 @@
             "slot_rotation": {
               "soft": true
             },
-            "avoid_twice_in_a_row": {
-              "soft": true
-            },
+            "avoid_twice_in_a_row": null,
             "year_teacher_rotation": false,
             "period_teacher_rotation": false
           },

@@ -190,6 +190,10 @@ where
     }
 }
 
+fn soft_flag(param: &mem::soft_param::SoftParam<()>) -> format::scalars::SoftFlag {
+    format::scalars::SoftFlag { soft: param.soft }
+}
+
 fn build_general_planning(
     params: &mem::colloscope_params::Parameters,
 ) -> format::general_planning::GeneralPlanning {
@@ -571,9 +575,9 @@ fn build_settings(params: &mem::colloscope_params::Parameters) -> format::settin
 
 fn balancing_options(options: &mem::balancing::BalancingOptions) -> format::balancing::Options {
     format::balancing::Options {
-        teacher_rotation: options.teacher_rotation,
-        slot_rotation: options.slot_rotation,
-        avoid_twice_in_a_row: options.avoid_twice_in_a_row,
+        teacher_rotation: options.teacher_rotation.as_ref().map(soft_flag),
+        slot_rotation: options.slot_rotation.as_ref().map(soft_flag),
+        avoid_twice_in_a_row: options.avoid_twice_in_a_row.as_ref().map(soft_flag),
         year_teacher_rotation: options.year_teacher_rotation,
         period_teacher_rotation: options.period_teacher_rotation,
     }

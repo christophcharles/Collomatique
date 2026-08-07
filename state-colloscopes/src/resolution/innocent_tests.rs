@@ -779,7 +779,7 @@ pub(super) fn build_valid_document() -> (Data, ValidDocument) {
         Op::Balancing(BalancingOp::SetSubject(
             subject,
             Some(BalancingOptions {
-                avoid_twice_in_a_row: false,
+                avoid_twice_in_a_row: None,
                 year_teacher_rotation: true,
                 ..Default::default()
             }),

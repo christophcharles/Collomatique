@@ -637,9 +637,15 @@ pub fn build_rich_data() -> Data {
     apply(
         &mut state,
         Op::Balancing(BalancingOp::SetGlobal(BalancingOptions {
-            teacher_rotation: false,
-            slot_rotation: false,
-            avoid_twice_in_a_row: true,
+            teacher_rotation: Some(SoftParam {
+                soft: true,
+                value: (),
+            }),
+            slot_rotation: None,
+            avoid_twice_in_a_row: Some(SoftParam {
+                soft: false,
+                value: (),
+            }),
             year_teacher_rotation: false,
             period_teacher_rotation: true,
         })),
@@ -650,9 +656,15 @@ pub fn build_rich_data() -> Data {
         Op::Balancing(BalancingOp::SetSubject(
             subject_maths,
             Some(BalancingOptions {
-                teacher_rotation: false,
-                slot_rotation: true,
-                avoid_twice_in_a_row: false,
+                teacher_rotation: None,
+                slot_rotation: Some(SoftParam {
+                    soft: false,
+                    value: (),
+                }),
+                avoid_twice_in_a_row: Some(SoftParam {
+                    soft: true,
+                    value: (),
+                }),
                 year_teacher_rotation: true,
                 period_teacher_rotation: false,
             }),
