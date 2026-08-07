@@ -340,22 +340,19 @@ pub struct IncrementalConfig {
     /// Per-epoch after-incumbent solve time limit handed to the queued `IncrementalStrategy`
     /// (see [`IncrementalStrategy::epoch_incumbent_time_limit`](crate::IncrementalStrategy)).
     /// Independent of [`IncrementalConfig::epoch_time_limit`]; each epoch stops at whichever
-    /// deadline comes first. Does not affect the final reconstruction solve. Defaults to five
-    /// minutes, unlike [`IncrementalStrategy`]'s own unbounded default.
+    /// deadline comes first. Does not affect the final reconstruction solve.
     pub epoch_incumbent_time_limit: collomatique_time::TimeLimit,
 }
 
 impl Default for IncrementalConfig {
     fn default() -> Self {
-        // Match IncrementalStrategy's own defaults, except for the after-incumbent limit: the
-        // conductor is the opinionated user-facing layer, and an epoch that already holds a
-        // feasible solution rarely earns its keep by grinding on. The bare strategy stays neutral.
+        // Match IncrementalStrategy's own defaults.
         Self {
             l1_weight: 1000.0,
-            distance_tolerance: 5.0,
+            distance_tolerance: 10.0,
             epoch_time_limit: collomatique_time::TimeLimit::none(),
-            epoch_incumbent_time_limit: collomatique_time::TimeLimit::minutes(
-                NonZeroU32::new(5).expect("5 is non-zero"),
+            epoch_incumbent_time_limit: collomatique_time::TimeLimit::seconds(
+                NonZeroU32::new(60).expect("60 is non-zero"),
             ),
         }
     }
@@ -1831,23 +1828,24 @@ mod tests {
     }
 
     #[test]
-    fn conductor_caps_each_epoch_five_minutes_past_its_first_solution() {
-        // The conductor is the opinionated layer: its default incremental config carries a
-        // five-minute after-incumbent limit, and hands it to the strategy it builds.
-        let five_minutes =
-            collomatique_time::TimeLimit::minutes(NonZeroU32::new(5).expect("5 is non-zero"));
+    fn conductor_caps_each_epoch_one_minute_past_its_first_solution() {
+        // An epoch that already holds a feasible solution rarely earns its keep by grinding on,
+        // so it gets a minute past its first incumbent. The conductor's default config carries
+        // that limit and hands it to the strategy it builds.
+        let one_minute =
+            collomatique_time::TimeLimit::seconds(NonZeroU32::new(60).expect("60 is non-zero"));
         let cfg = IncrementalConfig::default();
-        assert_eq!(cfg.epoch_incumbent_time_limit, five_minutes);
+        assert_eq!(cfg.epoch_incumbent_time_limit, one_minute);
         assert_eq!(
             conductor(1, true, false, false)
                 .incremental_substrategy(&cfg)
                 .epoch_incumbent_time_limit,
-            five_minutes,
+            one_minute,
         );
-        // The bare strategy stays neutral — no limit unless someone asks for one.
+        // The bare strategy carries the same default, so the conductor adds no opinion here.
         assert_eq!(
             IncrementalStrategy::default().epoch_incumbent_time_limit,
-            collomatique_time::TimeLimit::none(),
+            one_minute,
         );
     }
 
