@@ -138,7 +138,7 @@ impl FactoryComponent for Entry {
             gtk::Button {
                 set_margin_top: 10,
                 adw::ButtonContent {
-                    set_icon_name: "edit-add",
+                    set_icon_name: "list-add-symbolic",
                     set_label: "Ajouter un créneau",
                 },
                 #[watch]
@@ -298,7 +298,7 @@ impl FactoryComponent for Slot {
             set_orientation: gtk::Orientation::Horizontal,
             set_spacing: 5,
             gtk::Button {
-                set_icon_name: "edit-symbolic",
+                set_icon_name: "document-edit-symbolic",
                 add_css_class: "flat",
                 connect_clicked => SlotInput::EditSlotClicked,
                 set_tooltip_text: Some("Modifier le créneau"),
@@ -311,9 +311,13 @@ impl FactoryComponent for Slot {
                 set_xalign: 0.,
                 set_margin_start: 5,
                 set_margin_end: 5,
+                set_ellipsize: gtk::pango::EllipsizeMode::End,
+                set_width_chars: 24,
+                set_max_width_chars: 24,
                 #[watch]
                 set_label: &self.generate_teacher_name(),
-                set_size_request: (200, -1),
+                #[watch]
+                set_tooltip_text: Some(&self.generate_teacher_name()),
             },
             gtk::Separator {
                 set_orientation: gtk::Orientation::Vertical,
@@ -335,9 +339,13 @@ impl FactoryComponent for Slot {
                 set_xalign: 0.,
                 set_margin_start: 5,
                 set_margin_end: 5,
+                set_ellipsize: gtk::pango::EllipsizeMode::End,
+                set_width_chars: 20,
+                set_max_width_chars: 20,
                 #[watch]
                 set_label: &self.data.week_pattern_name,
-                set_size_request: (200, -1),
+                #[watch]
+                set_tooltip_text: Some(&self.data.week_pattern_name),
             },
             gtk::Box {
                 set_hexpand: true,
@@ -353,7 +361,7 @@ impl FactoryComponent for Slot {
                 set_orientation: gtk::Orientation::Vertical,
             },
             gtk::Button {
-                set_icon_name: "go-up",
+                set_icon_name: "go-up-symbolic",
                 add_css_class: "flat",
                 #[watch]
                 set_sensitive: self.index.current_index() != 0,
@@ -361,7 +369,7 @@ impl FactoryComponent for Slot {
                 connect_clicked => SlotInput::MoveUpClicked,
             },
             gtk::Button {
-                set_icon_name: "go-down",
+                set_icon_name: "go-down-symbolic",
                 add_css_class: "flat",
                 #[watch]
                 set_sensitive: self.index.current_index() < self.data.slot_count-1,

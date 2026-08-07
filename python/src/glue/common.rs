@@ -1,7 +1,7 @@
 use super::*;
 use pyo3::types::PyString;
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PersonWithContact {
     #[pyo3(set, get)]
@@ -60,7 +60,7 @@ impl PersonWithContact {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RangeInclusiveU32 {
     #[pyo3(set, get)]

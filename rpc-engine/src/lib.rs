@@ -6,6 +6,47 @@ use collomatique_rpc::{
     SolverResultData, SolverStatus, StrategyMsg, StrategyResultData, StrategyStatus,
 };
 
+#[cfg(test)]
+mod tests;
+
+/// Rate limiter for the solver's progress reports.
+///
+/// Each report is a blocking RPC round trip up to the conductor, and a solve
+/// whose tree search restarts fires tens of thousands of events — around 19600
+/// in the epoch that motivated this. Everything downstream of a report (the
+/// strategies' distance cutoff, the debug view) is fine at 10 Hz.
+///
+/// This throttles reporting only. The solver's own time limits are checked on
+/// every event, inside the solver and above the closure this guards, so they
+/// keep their full resolution.
+struct ProgressThrottle {
+    last_sent: Option<std::time::Instant>,
+}
+
+impl ProgressThrottle {
+    const MIN_INTERVAL: std::time::Duration = std::time::Duration::from_millis(100);
+
+    fn new() -> Self {
+        ProgressThrottle { last_sent: None }
+    }
+
+    /// Whether to report the event happening at `now`.
+    ///
+    /// `fresh_incumbent` must be true exactly when the event brought an
+    /// incumbent that has not been reported yet. A strategy acts on those, so
+    /// they are never dropped, however fast they arrive.
+    fn should_send(&mut self, now: std::time::Instant, fresh_incumbent: bool) -> bool {
+        let due = self
+            .last_sent
+            .is_none_or(|sent| now.duration_since(sent) >= Self::MIN_INTERVAL);
+        if !due && !fresh_incumbent {
+            return false;
+        }
+        self.last_sent = Some(now);
+        true
+    }
+}
+
 pub fn wait_for_init_msg() -> Result<InitMsg, String> {
     let encoded_msg = EncodedMsg::receive().map_err(|e| e.to_string())?;
     encoded_msg
@@ -113,6 +154,11 @@ fn solve_ilp(serialized: SerializedIlpProblem) -> Result<(), anyhow::Error> {
     let mut last_best_bound = 0.0f64;
     let mut last_node_count = 0u64;
 
+    let mut throttle = ProgressThrottle::new();
+    // What we answer on an event we do not report: the parent's last word on
+    // whether to carry on. Before the first round trip that is "carry on".
+    let mut last_control = true;
+
     eprintln!("Solving...");
     // Both time limits are enforced by the solver itself; the callback only reports
     // progress and relays the parent's stop request.
@@ -120,8 +166,14 @@ fn solve_ilp(serialized: SerializedIlpProblem) -> Result<(), anyhow::Error> {
         request.time_limit,
         request.incumbent_time_limit,
         |progress| {
+            // These two feed the final result, so they track every event
+            // whether or not it is reported upstream.
             last_best_bound = progress.best_bound();
             last_node_count = progress.nodes();
+
+            if !throttle.should_send(std::time::Instant::now(), progress.incumbent_is_fresh()) {
+                return last_control;
+            }
 
             let progress_data = SolverProgressData {
                 best_obj: progress.best_objective().map(OrderedFloat),
@@ -141,10 +193,8 @@ fn solve_ilp(serialized: SerializedIlpProblem) -> Result<(), anyhow::Error> {
             };
 
             let response = EncodedMsg::send_rpc(CmdMsg::Solver(SolverMsg::Progress(progress_data)));
-            match response {
-                Ok(ResultMsg::SolverControl(cont)) => cont,
-                _ => false,
-            }
+            last_control = matches!(response, Ok(ResultMsg::SolverControl(true)));
+            last_control
         },
     );
 

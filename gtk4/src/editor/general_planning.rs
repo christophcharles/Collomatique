@@ -142,7 +142,7 @@ impl Component for GeneralPlanning {
                             set_use_markup: true,
                         },
                         gtk::Button {
-                            set_icon_name: "edit-symbolic",
+                            set_icon_name: "document-edit-symbolic",
                             add_css_class: "flat",
                             connect_clicked => GeneralPlanningInput::EditFirstWeekClicked,
                             set_tooltip_text: Some("Modifier"),
@@ -176,7 +176,7 @@ impl Component for GeneralPlanning {
                     set_margin_top: 10,
                     connect_clicked => GeneralPlanningInput::AddPeriodClicked,
                     adw::ButtonContent {
-                        set_icon_name: "edit-add",
+                        set_icon_name: "list-add-symbolic",
                         set_label: "Ajouter une période",
                     },
                 },

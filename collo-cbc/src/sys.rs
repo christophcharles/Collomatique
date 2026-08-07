@@ -21,6 +21,7 @@ pub enum ColloCbcStatus {
 pub enum ColloCbcEventType {
     Solution = 0,
     TreeStatus = 1,
+    Tick = 2,
 }
 
 #[repr(C)]

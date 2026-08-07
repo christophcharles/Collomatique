@@ -97,9 +97,9 @@ impl FactoryComponent for PeriodEntry {
                 gtk::Button {
                     #[watch]
                     set_icon_name: if self.shown {
-                        "go-up"
+                        "go-up-symbolic"
                     } else {
-                        "go-down"
+                        "go-down-symbolic"
                     },
                     add_css_class: "flat",
                     #[watch]

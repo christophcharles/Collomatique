@@ -307,6 +307,170 @@ fn knapsack_problem() -> crate::Problem<String, String> {
         .unwrap()
 }
 
+/// A `Progress` in its initial state, as `solve_with_callback` builds it.
+fn fresh_progress() -> super::Progress<String> {
+    super::Progress {
+        best_objective: None,
+        best_bound: -f64::INFINITY,
+        nodes: 0,
+        solutions: 0,
+        incumbent: None,
+        incumbent_config: None,
+        incumbent_is_fresh: false,
+    }
+}
+
+/// A solution event carrying a reconstructed incumbent over two columns.
+fn reconstructed_event(objective: f64, solution: Vec<f64>) -> collo_cbc::Progress {
+    collo_cbc::Progress {
+        event_type: collo_cbc::EventType::Solution,
+        best_bound: -12.5,
+        node_count: 42,
+        solutions_found: 3,
+        incumbent: collo_cbc::IncumbentEvent::Reconstructed {
+            objective,
+            solution,
+        },
+    }
+}
+
+/// Two columns, `x` at 0 and `y` at 1.
+fn two_col_indices() -> std::collections::HashMap<String, usize> {
+    [("x".to_string(), 0usize), ("y".to_string(), 1usize)]
+        .into_iter()
+        .collect()
+}
+
+#[test]
+fn collo_cbc_progress_tick_carries_state_forward() {
+    use crate::solvers::{
+        ProgressBounds, ProgressIncumbentData, ProgressIncumbentInfo, ProgressStats,
+    };
+
+    let col_indices = two_col_indices();
+    let mut progress = fresh_progress();
+
+    // A real event from the model CBC is searching: it sets everything.
+    progress.update_from(&reconstructed_event(-10.0, vec![1.0, 0.0]), &col_indices);
+
+    // A tick from a nested heuristic sub-MIP. Its numeric fields are zero
+    // placeholders, not measurements — reading them would report a bound of 0,
+    // no nodes and no solutions, which is worse than reporting nothing.
+    progress.update_from(
+        &collo_cbc::Progress {
+            event_type: collo_cbc::EventType::Tick,
+            best_bound: 0.0,
+            node_count: 0,
+            solutions_found: 0,
+            incumbent: collo_cbc::IncumbentEvent::None,
+        },
+        &col_indices,
+    );
+
+    assert_eq!(progress.best_bound(), -12.5);
+    assert_eq!(progress.nodes(), 42);
+    assert_eq!(progress.solutions(), 3);
+    assert_eq!(progress.best_objective(), Some(-10.0));
+    assert_eq!(
+        progress.incumbent_info().map(|info| info.objective),
+        Some(-10.0)
+    );
+
+    let config = progress
+        .incumbent_data()
+        .expect("the incumbent must survive a tick");
+    assert_eq!(config.get("x"), Some(1.0));
+    assert_eq!(config.get("y"), Some(0.0));
+
+    // It survives, but it is not new — a consumer that skips events must not
+    // read the surviving incumbent as one it has to report again.
+    assert!(!progress.incumbent_is_fresh());
+}
+
+#[test]
+fn collo_cbc_progress_incumbent_is_fresh_only_on_its_own_event() {
+    use crate::solvers::{ProgressIncumbentData, ProgressStats};
+
+    let col_indices = two_col_indices();
+    let mut progress = fresh_progress();
+
+    // Before anything at all.
+    assert!(!progress.incumbent_is_fresh());
+
+    // The event that brings an incumbent.
+    progress.update_from(&reconstructed_event(-10.0, vec![1.0, 0.0]), &col_indices);
+    assert!(progress.incumbent_is_fresh());
+
+    // An ordinary tree-status event afterwards. `incumbent_data` keeps handing
+    // the incumbent out — that is its job — but this event did not bring it.
+    progress.update_from(
+        &collo_cbc::Progress {
+            event_type: collo_cbc::EventType::TreeStatus,
+            best_bound: -11.0,
+            node_count: 90,
+            solutions_found: 3,
+            incumbent: collo_cbc::IncumbentEvent::None,
+        },
+        &col_indices,
+    );
+    assert_eq!(progress.nodes(), 90);
+    assert!(progress.incumbent_data().is_some());
+    assert!(!progress.incumbent_is_fresh());
+
+    // A second, better incumbent is fresh again.
+    progress.update_from(&reconstructed_event(-20.0, vec![0.0, 1.0]), &col_indices);
+    assert!(progress.incumbent_is_fresh());
+
+    // An incumbent that could not be mapped back is not a fresh one: there is
+    // nothing new to report.
+    progress.update_from(
+        &collo_cbc::Progress {
+            event_type: collo_cbc::EventType::Solution,
+            best_bound: -11.0,
+            node_count: 95,
+            solutions_found: 4,
+            incumbent: collo_cbc::IncumbentEvent::ReconstructionFailed,
+        },
+        &col_indices,
+    );
+    assert!(!progress.incumbent_is_fresh());
+}
+
+#[test]
+fn collo_cbc_progress_failed_reconstruction_keeps_the_last_incumbent() {
+    use crate::solvers::{ProgressBounds, ProgressIncumbentData, ProgressStats};
+
+    let col_indices = two_col_indices();
+    let mut progress = fresh_progress();
+
+    progress.update_from(&reconstructed_event(-10.0, vec![1.0, 0.0]), &col_indices);
+
+    // An incumbent from a restarted search: it cannot be mapped back, so it is
+    // skipped. Unlike a tick, the event's own bound and counts are real and
+    // must be applied.
+    progress.update_from(
+        &collo_cbc::Progress {
+            event_type: collo_cbc::EventType::Solution,
+            best_bound: -12.0,
+            node_count: 57,
+            solutions_found: 4,
+            incumbent: collo_cbc::IncumbentEvent::ReconstructionFailed,
+        },
+        &col_indices,
+    );
+
+    assert_eq!(progress.best_bound(), -12.0);
+    assert_eq!(progress.nodes(), 57);
+    assert_eq!(progress.solutions(), 4);
+
+    // The last incumbent we could actually map is still the one on offer.
+    assert_eq!(progress.best_objective(), Some(-10.0));
+    let config = progress
+        .incumbent_data()
+        .expect("a failed reconstruction must not drop the last good incumbent");
+    assert_eq!(config.get("x"), Some(1.0));
+}
+
 #[test]
 fn collo_cbc_time_limits_none() {
     use crate::solvers::{IncumbentTimeLimitSolverModel, Solver};

@@ -2,7 +2,7 @@ use super::*;
 
 use std::collections::BTreeSet;
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Parameters {
     #[pyo3(get)]

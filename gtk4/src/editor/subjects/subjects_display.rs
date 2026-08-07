@@ -197,7 +197,7 @@ impl FactoryComponent for Entry {
                     set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
                 },
                 gtk::Button {
-                    set_icon_name: "edit-symbolic",
+                    set_icon_name: "document-edit-symbolic",
                     add_css_class: "flat",
                     set_tooltip_text: Some("Modifier la matière"),
                     connect_clicked => EntryInput::EditClicked,
@@ -206,7 +206,7 @@ impl FactoryComponent for Entry {
                     set_hexpand: true,
                 },
                 gtk::Button {
-                    set_icon_name: "go-up",
+                    set_icon_name: "go-up-symbolic",
                     add_css_class: "flat",
                     #[watch]
                     set_sensitive: self.index.current_index() != 0,
@@ -214,7 +214,7 @@ impl FactoryComponent for Entry {
                     connect_clicked => EntryInput::MoveUpClicked,
                 },
                 gtk::Button {
-                    set_icon_name: "go-down",
+                    set_icon_name: "go-down-symbolic",
                     add_css_class: "flat",
                     #[watch]
                     set_sensitive: self.index.current_index() < self.subject_count-1,

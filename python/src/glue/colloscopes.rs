@@ -7,7 +7,7 @@ use super::slots::SlotId;
 use super::students::StudentId;
 use std::collections::BTreeSet;
 
-#[pyclass(frozen)]
+#[pyclass(frozen, from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Colloscope {
     #[pyo3(get)]
@@ -112,7 +112,7 @@ impl Colloscope {
     }
 }
 
-#[pyclass(frozen)]
+#[pyclass(frozen, from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ColloscopePeriod {
     #[pyo3(get)]
@@ -127,7 +127,7 @@ impl ColloscopePeriod {
     }
 }
 
-#[pyclass(frozen)]
+#[pyclass(frozen, from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ColloscopeSlot {
     #[pyo3(get)]
@@ -142,7 +142,7 @@ impl ColloscopeSlot {
     }
 }
 
-#[pyclass(frozen)]
+#[pyclass(frozen, from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ColloscopeInterrogation {
     #[pyo3(get)]
@@ -157,7 +157,7 @@ impl ColloscopeInterrogation {
     }
 }
 
-#[pyclass(frozen)]
+#[pyclass(frozen, from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ColloscopeGroupList {
     #[pyo3(get)]

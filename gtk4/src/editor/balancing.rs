@@ -68,7 +68,7 @@ impl Component for Balancing {
                         set_margin_all: 5,
                         set_spacing: 5,
                         gtk::Button {
-                            set_icon_name: "edit-symbolic",
+                            set_icon_name: "document-edit-symbolic",
                             add_css_class: "flat",
                             set_tooltip_text: Some("Modifier les paramètres globaux d'équilibrage strict"),
                             connect_clicked => BalancingInput::EditGlobalOptions,
@@ -81,8 +81,10 @@ impl Component for Balancing {
                             set_xalign: 0.,
                             set_margin_start: 5,
                             set_margin_end: 5,
+                            set_ellipsize: gtk::pango::EllipsizeMode::End,
+                            set_width_chars: 20,
+                            set_max_width_chars: 20,
                             set_label: "Paramètres globaux",
-                            set_size_request: (200, -1),
                         },
                         gtk::Separator {
                             set_orientation: gtk::Orientation::Vertical,
@@ -339,7 +341,7 @@ impl FactoryComponent for SubjectEntry {
             set_orientation: gtk::Orientation::Horizontal,
             set_spacing: 5,
             gtk::Button {
-                set_icon_name: "edit-symbolic",
+                set_icon_name: "document-edit-symbolic",
                 add_css_class: "flat",
                 connect_clicked => SubjectEntryInput::EditClicked,
                 #[watch]
@@ -353,9 +355,13 @@ impl FactoryComponent for SubjectEntry {
                 set_xalign: 0.,
                 set_margin_start: 5,
                 set_margin_end: 5,
+                set_ellipsize: gtk::pango::EllipsizeMode::End,
+                set_width_chars: 20,
+                set_max_width_chars: 20,
                 #[watch]
                 set_label: &self.data.subject_name,
-                set_size_request: (200, -1),
+                #[watch]
+                set_tooltip_text: Some(&self.data.subject_name),
             },
             gtk::Separator {
                 set_orientation: gtk::Orientation::Vertical,

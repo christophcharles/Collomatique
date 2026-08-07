@@ -23,7 +23,7 @@ pub(crate) fn get_current_file_state() -> Option<SharedFileState> {
 pub fn initialize() {
     use glue::collomatique;
     pyo3::append_to_inittab!(collomatique);
-    pyo3::prepare_freethreaded_python();
+    Python::initialize();
 }
 
 pub fn run_python_script(
@@ -42,7 +42,7 @@ pub fn run_python_script(
 sys.stdout.flush()
 sys.stderr.flush()",
     )?;
-    let result = Python::with_gil(|py| {
+    let result = Python::attach(|py| {
         py.run(&cscript, None, None)?;
         py.run(&flush_script, None, None)?;
         Ok(())

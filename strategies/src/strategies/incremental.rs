@@ -120,8 +120,8 @@ pub struct IncrementalStrategy {
     /// Time limit on each epoch's solve, counted from that epoch's first feasible incumbent
     /// and independent of [`IncrementalStrategy::epoch_time_limit`]: the epoch stops at
     /// whichever deadline comes first. Each epoch is its own solve, so the clock restarts
-    /// every epoch. [`TimeLimit::none()`](collomatique_time::TimeLimit::none) (the default)
-    /// disables it. The final reconstruction solve is unaffected.
+    /// every epoch. [`TimeLimit::none()`](collomatique_time::TimeLimit::none) disables it; the
+    /// default is one minute. The final reconstruction solve is unaffected.
     pub epoch_incumbent_time_limit: collomatique_time::TimeLimit,
     /// Time limit for the final reconstruction solve.
     pub reconstruction_time_limit: collomatique_time::TimeLimit,
@@ -132,9 +132,11 @@ impl Default for IncrementalStrategy {
     fn default() -> Self {
         IncrementalStrategy {
             l1_weight: 1000.0,
-            distance_tolerance: 5.0,
+            distance_tolerance: 10.0,
             epoch_time_limit: collomatique_time::TimeLimit::none(),
-            epoch_incumbent_time_limit: collomatique_time::TimeLimit::none(),
+            epoch_incumbent_time_limit: collomatique_time::TimeLimit::seconds(
+                std::num::NonZeroU32::new(60).expect("60 is non-zero"),
+            ),
             reconstruction_time_limit: collomatique_time::TimeLimit::none(),
             disable_logging: false,
         }

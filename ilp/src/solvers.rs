@@ -246,4 +246,12 @@ pub trait ProgressIncumbentInfo {
 pub trait ProgressIncumbentData<V: UsableData> {
     /// The variable assignment of the most recent incumbent, if any.
     fn incumbent_data(&self) -> Option<&ConfigData<V>>;
+
+    /// Whether *this* event is the one that brought that incumbent.
+    ///
+    /// [Self::incumbent_data] carries the last incumbent forward across every
+    /// event that has none of its own, so on its own it cannot tell a new
+    /// incumbent from one already seen. A consumer that may skip events — a
+    /// rate limiter, say — needs that difference to know what it must not skip.
+    fn incumbent_is_fresh(&self) -> bool;
 }

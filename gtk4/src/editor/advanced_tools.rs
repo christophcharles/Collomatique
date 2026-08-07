@@ -354,7 +354,7 @@ impl Component for AdvancedTools {
                         #[watch]
                         set_sensitive: model.ilp_info.is_some(),
                         adw::ButtonContent {
-                            set_icon_name: "document-export-symbolic",
+                            set_icon_name: "document-send-symbolic",
                             set_label: "Exporter le problème ILP (MPS)",
                         },
                         connect_clicked => AdvancedToolsInput::ExportMpsClicked,
@@ -367,7 +367,7 @@ impl Component for AdvancedTools {
                         set_margin_end: 10,
                         set_size_request: (-1, 40),
                         adw::ButtonContent {
-                            set_icon_name: "application-x-compress",
+                            set_icon_name: "view-sort-ascending-symbolic",
                             set_label: "Compacter les identifiants",
                         },
                         connect_clicked => AdvancedToolsInput::CompactIdsClicked,

@@ -3,7 +3,7 @@ use std::num::NonZeroU32;
 use super::*;
 use pyo3::types::PyString;
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Settings {
     #[pyo3(set, get)]
@@ -25,7 +25,7 @@ impl From<collomatique_state_colloscopes::settings::Settings> for Settings {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SoftU32 {
     #[pyo3(set, get)]
@@ -65,7 +65,7 @@ impl From<SoftU32> for collomatique_state_colloscopes::settings::SoftParam<u32> 
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SoftNonZeroU32 {
     #[pyo3(set, get)]
@@ -105,7 +105,7 @@ impl From<SoftNonZeroU32> for collomatique_state_colloscopes::settings::SoftPara
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Limits {
     #[pyo3(set, get)]

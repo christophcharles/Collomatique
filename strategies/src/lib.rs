@@ -2232,4 +2232,201 @@ mod tests {
         );
         assert_eq!(status, SolveStatus::Optimal);
     }
+
+    /// Drop guard: fires its channel when dropped. Lets the mock observe that the first Default
+    /// worker's future was actually dropped (i.e. cancelled).
+    struct SendOnDrop(Option<oneshot::Sender<()>>);
+
+    impl Drop for SendOnDrop {
+        fn drop(&mut self) {
+            if let Some(tx) = self.0.take() {
+                let _ = tx.send(());
+            }
+        }
+    }
+
+    /// Backend for the ghost-worker regression test. The warm start finishes immediately with an
+    /// incumbent while the first `Default` worker has produced nothing, so the conductor's
+    /// cold-boot rule restarts Default. The first Default call blocks until cancelled (its drop
+    /// guard then releases the second call), so the replacement can only finish after the
+    /// cancellation went through.
+    struct CancelledDefaultBackend {
+        solution: Vec<f64>,
+        cancelled_tx: Mutex<Option<oneshot::Sender<()>>>,
+        cancelled_rx: Mutex<Option<oneshot::Receiver<()>>>,
+        /// Warm start received by the second (restarted) Default call.
+        restart_warm_start: Mutex<Option<Vec<f64>>>,
+    }
+
+    #[async_trait]
+    impl SolveBackend for CancelledDefaultBackend {
+        async fn solve_with_progress(
+            &self,
+            _desc: &ProblemDesc,
+            _opts: SolveConfig,
+            _on_progress: &(dyn Fn(SolveProgressData) -> bool + Send + Sync),
+            _on_echo: &(dyn Fn(String) + Send + Sync),
+        ) -> Result<RawSolveOutcome, StrategyError> {
+            unreachable!()
+        }
+
+        async fn run_strategy_subprocess(
+            &self,
+            _model_desc: &ModelDesc,
+            strategy: &StrategyKind,
+            warm_start: Option<Vec<f64>>,
+            _payload: StrategyPayloadData,
+            _on_progress: &(dyn Fn(StrategyProgressData) -> bool + Send + Sync),
+            _on_echo: &(dyn Fn(String) + Send + Sync),
+        ) -> Result<RawSolveOutcome, StrategyError> {
+            match strategy {
+                StrategyKind::NoObjective(_) => Ok(RawSolveOutcome {
+                    status: SolveStatus::Optimal,
+                    objective: Some(10.0),
+                    best_bound: None,
+                    solution: Some(self.solution.clone()),
+                }),
+                StrategyKind::Default(_) => {
+                    let tx = self.cancelled_tx.lock().unwrap().take();
+                    match tx {
+                        // First Default: no incumbent, no progress; only ends by cancellation,
+                        // which drops the guard.
+                        Some(tx) => {
+                            let _guard = SendOnDrop(Some(tx));
+                            futures::future::pending::<()>().await;
+                            unreachable!("the first Default worker only ends by cancellation")
+                        }
+                        // Second (restarted) Default: wait for the first one's cancellation, then
+                        // finish so the conductor terminates.
+                        None => {
+                            *self.restart_warm_start.lock().unwrap() = warm_start;
+                            let rx = self
+                                .cancelled_rx
+                                .lock()
+                                .unwrap()
+                                .take()
+                                .expect("Default is restarted exactly once");
+                            let _ = rx.await;
+                            Ok(RawSolveOutcome {
+                                status: SolveStatus::Optimal,
+                                objective: Some(10.0),
+                                best_bound: Some(10.0),
+                                solution: Some(self.solution.clone()),
+                            })
+                        }
+                    }
+                }
+                _ => unreachable!("only NoObjective and Default are enabled in this test"),
+            }
+        }
+    }
+
+    #[test]
+    fn conductor_reports_cancelled_default_slot_idle() {
+        use std::num::NonZeroU32;
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        // Same watchdog pattern as `conductor_launches_fuzzy_on_midrun_incumbent`: a broken cancel
+        // path would leave the first Default pending forever, so `recv_timeout` turns that into a
+        // clean failure instead of a hang.
+        let (done_tx, done_rx) = mpsc::channel();
+        let handle = std::thread::spawn(move || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .build()
+                .expect("current-thread runtime");
+            let result = rt.block_on(async {
+                let model = make_model(vec![(0, Variable::binary()), (1, Variable::binary())]);
+                let (cancelled_tx, cancelled_rx) = oneshot::channel::<()>();
+                let backend = Arc::new(CancelledDefaultBackend {
+                    solution: vec![1.0, 1.0],
+                    cancelled_tx: Mutex::new(Some(cancelled_tx)),
+                    cancelled_rx: Mutex::new(Some(cancelled_rx)),
+                    restart_warm_start: Mutex::new(None),
+                });
+                let ctx = StrategyContext::new(backend.clone());
+                let strategy = ConductorStrategy {
+                    worker_count: NonZeroU32::new(2).unwrap(),
+                    default_config: Some(DefaultConfig::default()),
+                    warm_start_config: Some(WarmStartConfig::default()),
+                    incremental_config: None,
+                    fuzzy_config: None,
+                };
+
+                // Every WorkerAssigned event, in order: (worker, strategy name or None).
+                let assignments: Arc<Mutex<Vec<(u32, Option<&'static str>)>>> =
+                    Arc::new(Mutex::new(Vec::new()));
+                let assignments_cb = assignments.clone();
+                let on_progress = move |p: ConductorProgress<InternalVar<usize, ()>>| {
+                    if let ConductorProgress::WorkerAssigned {
+                        worker_num,
+                        strategy,
+                    } = &p
+                    {
+                        assignments_cb
+                            .lock()
+                            .unwrap()
+                            .push((*worker_num, strategy.as_ref().map(|k| k.name())));
+                    }
+                    true
+                };
+
+                let outcome = strategy
+                    .run_with_callback(
+                        &ctx,
+                        &model,
+                        None,
+                        ConductorPayload::default(),
+                        &on_progress,
+                    )
+                    .await
+                    .unwrap();
+                let assignments = assignments.lock().unwrap().clone();
+                let restart_warm_start = backend.restart_warm_start.lock().unwrap().clone();
+                (outcome.status, assignments, restart_warm_start)
+            });
+            let _ = done_tx.send(result);
+        });
+
+        let (status, assignments, restart_warm_start) = done_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("conductor did not finish in time — was the first Default never cancelled?");
+        handle.join().unwrap();
+
+        assert_eq!(status, SolveStatus::Optimal);
+
+        // The restart happened: Default was assigned twice, on two different slots.
+        let defaults: Vec<(usize, u32)> = assignments
+            .iter()
+            .enumerate()
+            .filter(|(_, (_, s))| *s == Some("default"))
+            .map(|(i, (w, _))| (i, *w))
+            .collect();
+        assert_eq!(
+            defaults.len(),
+            2,
+            "Default should be launched, then relaunched once"
+        );
+        let (_, first_slot) = defaults[0];
+        let (second_idx, second_slot) = defaults[1];
+        assert_ne!(
+            first_slot, second_slot,
+            "the replacement lands on the freed slot"
+        );
+
+        // The replacement started from the incumbent ("restored with the incumbent").
+        assert_eq!(restart_warm_start, Some(vec![1.0, 1.0]));
+
+        // The regression assertion: after the replacement is launched, the cancelled worker's slot
+        // must be reported idle — otherwise the UI keeps showing the killed Default as a live
+        // worker (with fuzzy disabled, nothing ever overwrites the stale panel).
+        let idle_after_restart = assignments
+            .iter()
+            .enumerate()
+            .any(|(i, (w, s))| i > second_idx && *w == first_slot && s.is_none());
+        assert!(
+            idle_after_restart,
+            "cancelled Default slot {first_slot} was never reported idle; assignments: {assignments:?}"
+        );
+    }
 }

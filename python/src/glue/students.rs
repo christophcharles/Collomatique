@@ -3,7 +3,7 @@ use pyo3::types::PyString;
 
 use std::collections::BTreeSet;
 
-#[pyclass(eq, hash, frozen)]
+#[pyclass(eq, hash, frozen, from_py_object)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct StudentId {
     id: collomatique_state_colloscopes::StudentId,
@@ -41,7 +41,7 @@ impl From<StudentId> for collomatique_state_colloscopes::StudentId {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Student {
     #[pyo3(set, get)]

@@ -3,7 +3,7 @@ use std::num::NonZeroU32;
 use super::*;
 use pyo3::types::PyString;
 
-#[pyclass(eq, hash, frozen)]
+#[pyclass(eq, hash, frozen, from_py_object)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct IncompatId {
     id: collomatique_state_colloscopes::IncompatId,
@@ -41,7 +41,7 @@ impl From<IncompatId> for collomatique_state_colloscopes::IncompatId {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Incompat {
     #[pyo3(set, get)]

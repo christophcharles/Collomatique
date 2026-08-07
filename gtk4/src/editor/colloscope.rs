@@ -395,7 +395,7 @@ impl Component for Colloscope {
                                 #[watch]
                                 set_visible: model.has_success(),
                                 gtk::Image {
-                                    set_icon_name: Some("emblem-ok-symbolic"),
+                                    set_icon_name: Some("object-select-symbolic"),
                                 },
                                 gtk::Label {
                                     set_label: "<i><small>Colloscope valide</small></i>",

@@ -114,7 +114,7 @@ impl Component for Teachers {
                     set_margin_top: 10,
                     connect_clicked => TeachersInput::AddTeacherClicked,
                     adw::ButtonContent {
-                        set_icon_name: "edit-add",
+                        set_icon_name: "list-add-symbolic",
                         set_label: "Ajouter un colleur",
                     },
                 },

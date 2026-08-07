@@ -689,7 +689,7 @@ impl Component for EditorPanel {
                         pack_start = &gtk::Box {
                             add_css_class: "linked",
                             gtk::Button {
-                                set_icon_name: "edit-undo",
+                                set_icon_name: "edit-undo-symbolic",
                                 #[watch]
                                 set_sensitive: model.can_undo(),
                                 #[watch]
@@ -697,7 +697,7 @@ impl Component for EditorPanel {
                                 connect_clicked => EditorInput::UndoClicked,
                             },
                             gtk::Button {
-                                set_icon_name: "edit-redo",
+                                set_icon_name: "edit-redo-symbolic",
                                 #[watch]
                                 set_sensitive: model.can_redo(),
                                 #[watch]
@@ -723,7 +723,7 @@ impl Component for EditorPanel {
                                 connect_clicked => EditorInput::SaveClicked,
                             },
                             gtk::Button {
-                                set_icon_name: "document-save-as",
+                                set_icon_name: "document-save-as-symbolic",
                                 set_tooltip_text: Some("Enregistrer sous"),
                                 connect_clicked => EditorInput::SaveAsClicked,
                             },
