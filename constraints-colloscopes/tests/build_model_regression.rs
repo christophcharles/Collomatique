@@ -42,15 +42,15 @@ fn builds_with_a_student_excluded_from_the_automatic_group_list() {
     // (the document comes from a fuzz walk and passes `broken_invariants`), so
     // the builder must handle it too.
     //
-    // FAILS today: `build_student_at_interrogation_in_group` (extras.rs) declares
-    // the per-group variables only for `students_for_group_list`, which drops the
-    // excluded students; `build_student_at_interrogation` then sums over those
-    // variables for every *enrolled* student, without the exclusion check. So the
-    // build panics with
+    // It used to panic with
     // `ExtraError(StudentAtInterrogation { student: 7, slot: 19, week: 0 },
-    //  UndeclaredVariable(Extra(StudentAtInterrogationInGroup { .., group_list: 46, .. })))`
-    // — the slot named is just the first one of subject 13 the builder reaches.
-    // See docs/todos/fixme_excluded_student_extra.md.
+    //  UndeclaredVariable(Extra(StudentAtInterrogationInGroup { .., group_list: 46, .. })))`:
+    // `build_student_at_interrogation_in_group` (extras.rs) declares the per-group
+    // variables only for `students_for_group_list`, which drops the excluded
+    // students, while `build_student_at_interrogation` summed over those variables
+    // for every *enrolled* student, without the exclusion check. The `Automatic`
+    // branch of the latter now makes an excluded student's extra infeasible, the
+    // same way a `Prefilled` list with no group for them already did.
     let (inner, _caveats) = deserialize_data(EXCLUDED_STUDENT).expect("fixture should decode");
     let _ = build_model(&inner.params);
 }

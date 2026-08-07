@@ -433,7 +433,18 @@ fn build_student_at_interrogation(env: &VarEnv) -> MyBundle {
                                 }
                             }
                         }
-                        GroupListFilling::Automatic { .. } => {
+                        GroupListFilling::Automatic { excluded_students } => {
+                            // An excluded student sits in no group of this list
+                            // — `StudentInGroup` is not even declared for them
+                            // (`Var::compute_student_ids`), so this extra gets
+                            // the same treatment as an enrolled student absent
+                            // from a `Prefilled` list, just above.
+                            if excluded_students.contains(&student) {
+                                bundle = bundle
+                                    .and_reified(var, move || vec![IntConstraint::infeasible()])
+                                    .expect("no duplicate extras");
+                                continue;
+                            }
                             let groups: Vec<GroupNum> =
                                 GroupNum::enumerate(env, group_list).collect();
                             bundle = bundle
