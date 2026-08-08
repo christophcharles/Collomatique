@@ -13,7 +13,7 @@ use collomatique_strategies::{
     Solution, SolveStatus, Strategy, StrategyKind, StrategyOutcome, StrategyProgressData,
     VarOrderSerializable,
 };
-use collomatique_subprocesses::StrategySubprocess;
+use collomatique_subprocesses::{EngineExe, StrategySubprocess};
 
 pub mod conductor_config;
 mod error_dialog;
@@ -645,6 +645,7 @@ where
                     };
 
                     let spawn_result = StrategySubprocess::spawn(
+                        &EngineExe::Current,
                         &model,
                         &strategy,
                         None,

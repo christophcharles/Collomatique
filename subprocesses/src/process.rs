@@ -172,7 +172,11 @@ pub struct Process {
 }
 
 impl Process {
-    pub fn spawn_pty<F>(command: &str, args: &[&str], callback: F) -> Result<Self, SpawnError>
+    pub fn spawn_pty<F>(
+        command: &std::ffi::OsStr,
+        args: &[&str],
+        callback: F,
+    ) -> Result<Self, SpawnError>
     where
         F: Fn(ProcessEvent) + Send + 'static,
     {

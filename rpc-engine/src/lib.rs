@@ -241,7 +241,7 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
         Strategy, StrategyContext, StrategyPayload, StrategyProgress, StrategyRequest,
         VarOrderSerializable,
     };
-    use collomatique_subprocesses::SubprocessSolveBackend;
+    use collomatique_subprocesses::{EngineExe, SubprocessSolveBackend};
     use ordered_float::OrderedFloat;
     use std::sync::Arc;
 
@@ -264,7 +264,10 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
     >>::from_data(&request.payload, &var_order)
     .unwrap_or_else(|e| match e {});
 
-    let backend = Arc::new(SubprocessSolveBackend::new());
+    // Nested workers spawned from inside the engine process: `Current` is right even when
+    // this engine was itself launched by explicit path, since `current_exe()` here is the
+    // very binary that was named.
+    let backend = Arc::new(SubprocessSolveBackend::new(EngineExe::Current));
     let strategy_name = request.strategy.name();
     let on_echo: Arc<dyn Fn(String) + Send + Sync> = Arc::new(move |line: String| {
         eprint!("[{strategy_name} strategy] {}", line);

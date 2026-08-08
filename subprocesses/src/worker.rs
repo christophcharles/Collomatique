@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::Mutex;
 
 use collomatique_rpc::{CmdMsg, CompleteCmdMsg, EncodedMsg, InitMsg, ResultMsg, RpcDecodeError};
@@ -13,13 +14,32 @@ pub enum WorkerError {
     NonUtf8Output(usize),
 }
 
+/// Which executable to re-execute as `<exe> --rpc-engine`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum EngineExe {
+    /// The running executable. Correct whenever the host *is* a collomatique binary:
+    /// the GUI, and an engine process spawning nested workers.
+    #[default]
+    Current,
+    /// An explicit path, for a host that is not collomatique — a standalone Python
+    /// interpreter importing the module.
+    Explicit(PathBuf),
+}
+
+impl EngineExe {
+    fn resolve(&self) -> Result<PathBuf, WorkerSpawnError> {
+        match self {
+            EngineExe::Current => std::env::current_exe().map_err(WorkerSpawnError::CurrentExe),
+            EngineExe::Explicit(path) => Ok(path.clone()),
+        }
+    }
+}
+
 /// Failure to spawn a [`Worker`] subprocess.
 #[derive(Debug, thiserror::Error)]
 pub enum WorkerSpawnError {
     #[error("Impossible de déterminer l'exécutable courant : {0}")]
     CurrentExe(#[source] std::io::Error),
-    #[error("Le chemin de l'exécutable contient des caractères non-UTF-8")]
-    NonUtf8ExePath,
     #[error(transparent)]
     Spawn(#[from] SpawnError),
     #[error("Le sous-processus s'est terminé avant l'envoi du message initial")]
@@ -37,7 +57,7 @@ pub enum WorkerEvent {
     Error(WorkerError),
 }
 
-/// Owned RAII handle to an RPC worker subprocess (`<self> --rpc-engine`).
+/// Owned RAII handle to an RPC worker subprocess (`<engine> --rpc-engine`, see [`EngineExe`]).
 ///
 /// A `Worker` owns its backing [`Process`], so dropping it tears the subprocess down
 /// (killing it if still running). It exposes the RPC framing on top of the raw process:
@@ -48,12 +68,15 @@ pub struct Worker {
 }
 
 impl Worker {
-    pub fn spawn<F>(init_msg: InitMsg, callback: F) -> Result<Worker, WorkerSpawnError>
+    pub fn spawn<F>(
+        engine: &EngineExe,
+        init_msg: InitMsg,
+        callback: F,
+    ) -> Result<Worker, WorkerSpawnError>
     where
         F: Fn(WorkerEvent) + Send + 'static,
     {
-        let exe = std::env::current_exe().map_err(WorkerSpawnError::CurrentExe)?;
-        let exe_str = exe.to_str().ok_or(WorkerSpawnError::NonUtf8ExePath)?;
+        let exe = engine.resolve()?;
 
         let current_cmd: Mutex<String> = Mutex::new(String::new());
 
@@ -104,7 +127,7 @@ impl Worker {
             }
         };
 
-        let process = Process::spawn_pty(exe_str, &["--rpc-engine"], rpc_callback)?;
+        let process = Process::spawn_pty(exe.as_os_str(), &["--rpc-engine"], rpc_callback)?;
 
         let encoded = EncodedMsg::from(init_msg);
         process

@@ -12,7 +12,7 @@ use collomatique_strategies::{
 };
 
 use crate::process::StdinWriter;
-use crate::worker::{Worker, WorkerEvent, WorkerSpawnError};
+use crate::worker::{EngineExe, Worker, WorkerEvent, WorkerSpawnError};
 
 #[derive(Debug, Clone)]
 pub struct StrategyResult {
@@ -70,6 +70,7 @@ impl StrategySubprocess {
     }
 
     pub fn spawn<B, E, C, S>(
+        engine: &EngineExe,
         model: &Model<B, E, C>,
         strategy: &S,
         warm_start: Option<ConfigData<InternalVar<B, E>>>,
@@ -106,6 +107,7 @@ impl StrategySubprocess {
             Err(e) => progress_callback(Err(e)),
         };
         Self::spawn_raw(
+            engine,
             model_desc,
             strategy_kind,
             raw_warm_start,
@@ -117,6 +119,7 @@ impl StrategySubprocess {
     }
 
     pub fn spawn_raw(
+        engine: &EngineExe,
         model_desc: ModelDesc,
         strategy: StrategyKind,
         warm_start: Option<Vec<f64>>,
@@ -199,7 +202,7 @@ impl StrategySubprocess {
             _ => {}
         };
 
-        let worker = Worker::spawn(init_msg, callback)?;
+        let worker = Worker::spawn(engine, init_msg, callback)?;
         *stdin_slot.lock().unwrap() = Some(worker.get_stdin_writer());
 
         Ok(StrategySubprocess {

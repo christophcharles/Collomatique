@@ -11,7 +11,7 @@ use collomatique_state::{AppSession, AppState};
 use collomatique_state_colloscopes::Data;
 
 use crate::widgets::debug_view::{DebugView, DebugViewInput};
-use collomatique_subprocesses::{SendError, Worker, WorkerEvent};
+use collomatique_subprocesses::{EngineExe, SendError, Worker, WorkerEvent};
 use std::path::PathBuf;
 
 mod confirm_dialog;
@@ -305,6 +305,7 @@ impl Component for Dialog {
                 };
 
                 let spawn_result = Worker::spawn(
+                    &EngineExe::Current,
                     collomatique_rpc::InitMsg::RunPythonScript(self.script.clone()),
                     callback,
                 );
