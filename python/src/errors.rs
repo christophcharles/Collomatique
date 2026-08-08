@@ -44,3 +44,10 @@ create_exception!(
     SaveError,
     "The document holds an id the file format cannot represent."
 );
+
+create_exception!(
+    collomatique,
+    CaveatedOverwrite,
+    SaveError,
+    "save() with no path on a document that was loaded with caveats."
+);

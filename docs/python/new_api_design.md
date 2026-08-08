@@ -299,10 +299,13 @@ worker-killing `panic!`s:
 - Document-plumbing errors (§9): `NoDocument` (nothing to open), `Cancelled` (the
   user dismissed a dialog), `NotHosted` (a host-only call made standalone),
   `NoOrigin` (`save()` with nowhere to write), `IdCeilingExceeded` (a save the file
-  format cannot represent). `IdCeilingExceeded` carries an instruction rather than
-  just a diagnosis: it names `compacted()` as the way out (§9.5). `NoOrigin` stays
-  generic — a document has an origin or it has not, and nothing tracks how it was
-  produced.
+  format cannot represent), `CaveatedOverwrite` (a bare `save()` back over a file that
+  was loaded with caveats). Both of the last two carry an instruction rather than just
+  a diagnosis: `IdCeilingExceeded` names `compacted()` as the way out (§9.5), and
+  `CaveatedOverwrite` lists what was lost and names `ignore_caveats=True` (§9.2). Both
+  are `SaveError`s, so a script that only cares that the write failed catches one
+  thing. `NoOrigin` stays generic — a document has an origin or it has not, and nothing
+  tracks how it was produced.
 
 ## 7. Quality floor
 
@@ -431,6 +434,33 @@ doc.save()
 The origin is immutable: `doc.save("other.collomatique")` does not re-target a later
 `doc.save()`. Silent re-targeting of the hosted document would be nasty.
 
+**A caveated file is not overwritten behind the script's back.** When `doc.caveats`
+(§9.1) is non-empty, the file held something this build could not read, and the format
+spec is explicit that rewriting drops it. So the no-argument form raises
+`CaveatedOverwrite` — a `SaveError` — and the ways out are named in its message:
+
+```python
+doc.save()                      # raises
+doc.save("copy.collomatique")   # writes; the suspect original survives
+doc.save(doc.source_path)       # writes; the script named the target
+doc.save(ignore_caveats=True)   # writes; deliberate
+```
+
+The rule keys on *no path argument*, not on whether the path equals the origin. Path
+equality is fragile (symlinks, relative paths, hard links) and the GUI does not test it
+either: "Enregistrer" on a caveat-loaded file opens a Save-As dialog defaulting to that
+same file, and a user who picks it overwrites it, because they chose. Naming the path
+from python is the same choice. `save()` with no argument is the one form that writes
+somewhere the script never named, so it is the one that is loud. `ignore_caveats` is
+keyword-only, defaults to `False`, and does nothing when a path is given — accepted
+there so a script can pass it uniformly.
+
+`send_to_host(doc)` is not guarded: it already says it replaces the host's state
+wholesale, and the GUI's validation step is the safety net. A **hosted document carries
+no caveats today** — the handoff carries the `Data`, not the host's caveat set — so a
+script cannot see that the GUI opened its file with caveats. Fixing that needs a
+protocol change and belongs with the hosted milestone.
+
 ### 9.3 Dialogs
 
 The module ships native dialogs, routed through `rfd`:
@@ -513,8 +543,10 @@ this reason the GUI does not compact through an op at all: it replaces the whole
 
 The API settles this with the origin rule, not with a special case:
 
-- `compacted()` **inherits the file path**. So the rescue script above overwrites the
-  file it read, which is what the GUI's "compact and save" does.
+- `compacted()` **inherits the file path**, and with it **the caveats** (§9.1). So the
+  rescue script above overwrites the file it read, which is what the GUI's "compact and
+  save" does — and a caveated file still refuses the bare `.save()`, instead of
+  `clm.load(f).compacted().save()` becoming a laundering route around §9.2's guard.
 - `compacted()` **never inherits the hosted-ness**. A compacted copy of the hosted
   document has `is_hosted == False` and `source_path == None`, so `.save()` raises
   the ordinary `NoOrigin`: this document has nowhere to write. Nothing tracks where a

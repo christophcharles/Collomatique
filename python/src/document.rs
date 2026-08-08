@@ -12,7 +12,7 @@ use collomatique_state::traits::Manager;
 use collomatique_state_colloscopes::Data;
 use collomatique_storage::Caveat;
 
-use crate::errors::{IdCeilingExceeded, LoadError, NoOrigin, SaveError};
+use crate::errors::{CaveatedOverwrite, IdCeilingExceeded, LoadError, NoOrigin, SaveError};
 
 /// An open colloscope document
 ///
@@ -128,13 +128,51 @@ impl Document {
     /// and raises `NoOrigin` when there is none: it is never a silent no-op.
     /// The origin does not move — `save(other)` does not re-target a later
     /// `save()`.
-    #[pyo3(signature = (path=None))]
-    fn save(&self, path: Option<PathBuf>) -> PyResult<()> {
+    ///
+    /// Writing back over a file that was loaded with caveats raises
+    /// `CaveatedOverwrite` instead, because whatever could not be read is
+    /// dropped by the rewrite. The four forms are:
+    ///
+    /// ```python
+    /// doc.save()                      # raises, when doc.caveats is non-empty
+    /// doc.save("copy.collomatique")   # writes; the suspect original survives
+    /// doc.save(doc.source_path)       # writes; the script named the target
+    /// doc.save(ignore_caveats=True)   # writes; deliberate
+    /// ```
+    ///
+    /// The rule keys on *no path argument*, not on whether the path equals the
+    /// origin. Path equality is fragile — symlinks, relative paths, hard links
+    /// — and the GUI does not test it either: its "Enregistrer" on a caveated
+    /// file opens a Save-As dialog defaulting to that same file, and a user who
+    /// picks it overwrites it, because they chose. Naming the path from python
+    /// is that same choice. `save()` with no argument is the one form that
+    /// writes somewhere the script never named, so it is the one that is loud.
+    ///
+    /// `ignore_caveats` does nothing when a path is given, since that form
+    /// never raises; it is accepted there so a script can pass it uniformly.
+    #[pyo3(signature = (path=None, *, ignore_caveats=false))]
+    fn save(&self, path: Option<PathBuf>, ignore_caveats: bool) -> PyResult<()> {
         let target = match path {
             Some(path) => path,
-            None => self.source_path.clone().ok_or_else(|| {
-                NoOrigin::new_err("this document has no origin: pass a path to save()")
-            })?,
+            None => {
+                let origin = self.source_path.clone().ok_or_else(|| {
+                    NoOrigin::new_err("this document has no origin: pass a path to save()")
+                })?;
+                if !ignore_caveats && !self.caveats.is_empty() {
+                    return Err(CaveatedOverwrite::new_err(format!(
+                        "{}: this file was loaded with caveats, so part of it could not be \
+                         read and writing back would drop it ({}); pass a path to write \
+                         elsewhere, or ignore_caveats=True to overwrite it anyway",
+                        origin.display(),
+                        self.caveats
+                            .iter()
+                            .map(|caveat| caveat.to_string())
+                            .collect::<Vec<_>>()
+                            .join("; "),
+                    )));
+                }
+                origin
+            }
         };
 
         let content = collomatique_storage::serialize_data(self.state.get_data().get_inner_data())

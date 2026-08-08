@@ -54,3 +54,27 @@ else:
 
 # A document that was never on disk read nothing, so it lost nothing.
 assert collomatique.new_document().caveats == frozenset()
+
+# Writing back over the file would drop the block that could not be read, and
+# the script never named that file, so it is refused.
+try:
+    doc.save()
+except collomatique.CaveatedOverwrite as error:
+    # The message says what was lost and how to write anyway, rather than
+    # leaving the script author to guess.
+    assert block_name in str(error)
+    assert "ignore_caveats" in str(error)
+else:
+    raise AssertionError("save() over a caveated origin must raise")
+
+assert issubclass(collomatique.CaveatedOverwrite, collomatique.SaveError)
+assert issubclass(collomatique.CaveatedOverwrite, collomatique.Error)
+
+# Every form that names a destination writes, because naming one is a choice.
+doc.save(target)  # somewhere else: the suspect original survives
+doc.save(doc.source_path)  # the origin, but said out loud
+doc.save(ignore_caveats=True)  # the origin, deliberately
+doc.save(target, ignore_caveats=True)  # a no-op flag with a path, but accepted
+
+# None of that made the original file any more readable.
+assert doc.caveats == expected

@@ -178,26 +178,43 @@ fn caveated_file() -> (String, collomatique_settings::Version, u32) {
     (content, newer, spec)
 }
 
-/// A caveated file hands the script what it could not read
+/// A caveated file hands the script what it could not read, and is not
+/// overwritten behind its back
 ///
-/// The script does all the checking, because caveats are a python-facing
+/// The script does most of the checking, because caveats are a python-facing
 /// vocabulary — what matters is that a script can name the caveat it expects
-/// and compare. Rust only builds the file and says which values went into it.
+/// and compare. Rust builds the file, says which values went into it, and then
+/// looks at what the writes the script *did* make left on disk.
 #[test]
 fn a_caveated_file_says_what_it_could_not_read() {
     let dir = workspace("caveats");
     let source = dir.join("caveated.collomatique");
+    let target = dir.join("copy.collomatique");
 
     let (content, newer, spec) = caveated_file();
-    std::fs::write(&source, content).expect("the fixture should be writable");
+    std::fs::write(&source, &content).expect("the fixture should be writable");
 
     run(include_str!("scripts/caveats.py"), |globals| {
         globals.set_item("source", &source)?;
+        globals.set_item("target", &target)?;
         globals.set_item("newer_version", newer.to_string())?;
         globals.set_item("block_name", UNKNOWN_BLOCK)?;
         globals.set_item("spec_version", spec)?;
         Ok(())
     });
+
+    // The script did eventually overwrite the origin on purpose, and the block
+    // this build could not read is gone from the file — which is the loss the
+    // refusal of the bare `save()` was about.
+    let rewritten = std::fs::read_to_string(&source).expect("the script rewrote its origin");
+    assert!(!rewritten.contains(UNKNOWN_BLOCK));
+    let (_inner, caveats) = collomatique_storage::deserialize_data(&rewritten)
+        .expect("the rewritten file should decode");
+    assert!(caveats.is_empty());
+
+    // The copy written elsewhere is the same document, so the same bytes.
+    let copy = std::fs::read_to_string(&target).expect("save(target) wrote the copy");
+    assert_eq!(copy, rewritten);
 
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }

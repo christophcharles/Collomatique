@@ -31,6 +31,10 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
         "IdCeilingExceeded",
         py.get_type::<errors::IdCeilingExceeded>(),
     )?;
+    m.add(
+        "CaveatedOverwrite",
+        py.get_type::<errors::CaveatedOverwrite>(),
+    )?;
 
     caveats::register(m)?;
 
