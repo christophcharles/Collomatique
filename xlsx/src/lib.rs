@@ -1,4 +1,5 @@
 mod colloscope_sheet;
+mod config_conversion;
 mod formats;
 mod per_group_list_sheet;
 mod per_student_groups_sheet;
