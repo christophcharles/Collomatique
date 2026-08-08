@@ -21,6 +21,18 @@ doc.save(target)  # save-as
 # file the document came from.
 assert doc.source_path == pathlib.Path(source)
 
+# This script runs on its own, with no application behind it: there is no
+# document to be handed, and nowhere to send one.
+assert doc.is_hosted is False
+assert collomatique.current_document() is None
+
+try:
+    collomatique.send_to_host(doc)
+except collomatique.NotHosted:
+    pass
+else:
+    raise AssertionError("send_to_host with no application must raise")
+
 blank = collomatique.new_document()
 assert isinstance(blank, collomatique.Document)
 assert blank.source_path is None
@@ -35,6 +47,7 @@ else:
 # Every exception the module raises descends from `collomatique.Error`, so a
 # script that only cares that the call failed has one thing to catch.
 assert issubclass(collomatique.NoOrigin, collomatique.Error)
+assert issubclass(collomatique.NotHosted, collomatique.Error)
 assert issubclass(collomatique.IdCeilingExceeded, collomatique.SaveError)
 
 # A failed write is a `SaveError` rather than an OSError escaping from the

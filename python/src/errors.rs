@@ -32,7 +32,7 @@ create_exception!(
     collomatique,
     SaveError,
     Error,
-    "A document could not be written to a file."
+    "A document could not be written out, to a file or back to the application."
 );
 
 create_exception!(
@@ -54,6 +54,13 @@ create_exception!(
     NothingToUndo,
     Error,
     "undo() or redo() was called with nothing left in that direction."
+);
+
+create_exception!(
+    collomatique,
+    NotHosted,
+    Error,
+    "A call that needs an application to talk to was made by a standalone script."
 );
 
 create_exception!(

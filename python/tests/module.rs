@@ -7,14 +7,23 @@
 //! something useful.
 
 use std::path::{Path, PathBuf};
-use std::sync::Once;
+use std::sync::{Arc, Mutex, Once};
 
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
 use collomatique_python::collomatique;
+use collomatique_state_colloscopes::Data;
 
 static INIT: Once = Once::new();
+
+/// One script at a time, whatever cargo does with its threads
+///
+/// The host a script sees is module-global, as it has to be — a script cannot
+/// be handed one — so two scripts must not overlap: python releases the GIL
+/// every few milliseconds, and a second `Python::attach` would otherwise run
+/// its script in the middle of the first one's, under the first one's host.
+static ONE_SCRIPT_AT_A_TIME: Mutex<()> = Mutex::new(());
 
 /// Registers the module and starts the interpreter, at most once per process
 ///
@@ -30,13 +39,31 @@ fn interpreter() {
     });
 }
 
-/// Runs `script` and hands back the globals it left behind
-///
-/// `fill` populates the namespace the script runs in, which is how a test
-/// hands it paths and other inputs.
+/// Runs `script` on its own, the way a script started from a shell runs
 fn run(script: &str, fill: impl FnOnce(&Bound<'_, PyDict>) -> PyResult<()>) -> Py<PyDict> {
+    run_hosted(script, None, fill)
+}
+
+/// Runs `script`, inside `host` or not, and hands back the globals it left
+///
+/// `fill` populates the namespace the script runs in, which is how a test hands
+/// it paths and other inputs. The host is installed for the run and cleared
+/// afterwards, so the scripts that check there is none still see none.
+fn run_hosted(
+    script: &str,
+    host: Option<Arc<dyn collomatique_python::Host>>,
+    fill: impl FnOnce(&Bound<'_, PyDict>) -> PyResult<()>,
+) -> Py<PyDict> {
+    // A test that panicked left this poisoned; that test has already failed, and
+    // taking the lock anyway keeps the failure to itself.
+    let _one_at_a_time = ONE_SCRIPT_AT_A_TIME
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+
     interpreter();
-    Python::attach(|py| {
+    collomatique_python::set_host(host);
+
+    let globals = Python::attach(|py| {
         let globals = PyDict::new(py);
         fill(&globals).expect("the test inputs should convert to python");
 
@@ -47,7 +74,11 @@ fn run(script: &str, fill: impl FnOnce(&Bound<'_, PyDict>) -> PyResult<()>) -> P
         });
 
         globals.unbind()
-    })
+    });
+
+    collomatique_python::set_host(None);
+
+    globals
 }
 
 /// `collomatique.__version__` is the package version
@@ -311,6 +342,85 @@ fn writes_are_undone_and_redone_one_at_a_time() {
         reload(&target).get_inner_data(),
         reload(&source).get_inner_data()
     );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// The application, for a script that is not really running inside one
+///
+/// It does what the rpc engine does — hands over the document it holds, and
+/// takes whole documents back — and keeps every one of them, so a test can say
+/// what crossed and in which order.
+struct FakeHost {
+    data: Data,
+    sent: Mutex<Vec<Data>>,
+}
+
+impl collomatique_python::Host for FakeHost {
+    fn data(&self) -> Data {
+        self.data.clone()
+    }
+
+    fn send(&self, data: &Data) -> Result<(), String> {
+        self.sent.lock().unwrap().push(data.clone());
+        Ok(())
+    }
+}
+
+/// A hosted script is handed a document, and sends documents back
+///
+/// The comparisons are against whole documents rather than against the date
+/// alone: what crosses is the document, so a send that carried the right date
+/// on the wrong colloscope would be caught. The count is part of the test —
+/// three sends and no fourth — because a send happening on its own is exactly
+/// what `docs/python/new_api_design.md` §9.2 refuses, and the script's undo at
+/// the end would be the one to produce it.
+#[test]
+fn a_hosted_script_is_handed_a_document_and_sends_one_back() {
+    let dir = workspace("hosted");
+    let source = example_copy(&dir, "hosted.collomatique");
+    let other_source = example_copy(&dir, "other.collomatique");
+
+    let monday = chrono::NaiveDate::from_ymd_opt(2026, 9, 7).expect("7 September 2026 is a monday");
+    let other_monday =
+        chrono::NaiveDate::from_ymd_opt(2026, 9, 14).expect("14 September 2026 is a monday");
+
+    let host = Arc::new(FakeHost {
+        data: reload(&source),
+        sent: Mutex::new(Vec::new()),
+    });
+
+    run_hosted(
+        include_str!("scripts/hosted.py"),
+        Some(host.clone()),
+        |globals| {
+            globals.set_item("other_source", &other_source)?;
+            globals.set_item("monday", monday)?;
+            globals.set_item("other_monday", other_monday)?;
+            Ok(())
+        },
+    );
+
+    // What the application would have ended up with, had it applied each send.
+    let hosted_document_dated = |date| {
+        let mut expected = host.data.get_inner_data().clone();
+        expected.params.periods.first_week =
+            Some(collomatique_time::WeekStart::new(date).expect("these dates are mondays"));
+        expected
+    };
+
+    let sent = host.sent.lock().expect("no sender panicked");
+    assert_eq!(sent.len(), 3);
+
+    // `doc.save()` on the hosted document.
+    assert_eq!(sent[0].get_inner_data(), &hosted_document_dated(monday));
+    // A document the script loaded itself, which the application never gave it.
+    assert_eq!(
+        sent[1].get_inner_data(),
+        &hosted_document_dated(other_monday)
+    );
+    // Sending twice is allowed, and this is the one that wins.
+    assert_eq!(sent[2].get_inner_data(), &hosted_document_dated(monday));
 
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }

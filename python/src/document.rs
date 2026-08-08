@@ -36,10 +36,9 @@ enum Origin {
     },
     /// The document the application handed over
     ///
-    /// Nothing builds one yet: `current_document()` is the only constructor
-    /// and it lands with hosted mode. The variant is here now so the enum has
-    /// its final shape and the arms that will need it are already written.
-    #[allow(dead_code)]
+    /// [crate::host::current_document] is the only way to get one: a hosted
+    /// document is the one the application is showing, and there is exactly
+    /// one of those.
     Hosted,
 }
 
@@ -122,6 +121,19 @@ pub fn new_document() -> Document {
 }
 
 impl Document {
+    /// The document the application handed over
+    ///
+    /// It carries no caveats: the handoff carries the `Data` and not the
+    /// application's caveat set, so a script cannot see that the file behind
+    /// it was opened with something missing. Showing that needs a protocol
+    /// change (`docs/python/new_api_design.md` §9.2).
+    pub(crate) fn hosted(data: Data) -> Document {
+        Document {
+            state: AppState::new(data),
+            origin: Origin::Hosted,
+        }
+    }
+
     /// The document as it is now, for the collections to read through
     pub(crate) fn data(&self) -> &Data {
         self.state.get_data()
@@ -185,6 +197,17 @@ impl Document {
     #[getter]
     fn source_path(&self) -> Option<&Path> {
         self.origin.path()
+    }
+
+    /// Whether this is the document the application handed over
+    ///
+    /// True only for what [crate::host::current_document] returned. A copy of
+    /// it is not hosted — not `compacted()`'s, and not one built by loading
+    /// the same file — because being hosted is about which document the
+    /// application is showing, not about what is in it.
+    #[getter]
+    fn is_hosted(&self) -> bool {
+        matches!(self.origin, Origin::Hosted)
     }
 
     /// What could not be read from the file, as a `frozenset` of [Caveat]s
@@ -329,10 +352,12 @@ impl Document {
 
     /// Writes the document out
     ///
-    /// With a path, writes that file. Without one, writes back to the origin,
-    /// and raises `NoOrigin` when there is none: it is never a silent no-op.
-    /// The origin does not move — `save(other)` does not re-target a later
-    /// `save()`.
+    /// With a path, writes that file. Without one, it goes where the document
+    /// came from: back to the application for the hosted document — the same
+    /// thing `send_to_host` does, and just as loud about replacing what the
+    /// application holds — and to its file for a loaded one. A document with
+    /// neither raises `NoOrigin`: it is never a silent no-op. The origin does
+    /// not move — `save(other)` does not re-target a later `save()`.
     ///
     /// Writing back over a file that was loaded with caveats raises
     /// `CaveatedOverwrite` instead, because whatever could not be read is
@@ -356,33 +381,35 @@ impl Document {
     /// `ignore_caveats` does nothing when a path is given, since that form
     /// never raises; it is accepted there so a script can pass it uniformly.
     #[pyo3(signature = (path=None, *, ignore_caveats=false))]
-    fn save(&self, path: Option<PathBuf>, ignore_caveats: bool) -> PyResult<()> {
+    fn save(&self, py: Python<'_>, path: Option<PathBuf>, ignore_caveats: bool) -> PyResult<()> {
         let target = match path {
             Some(path) => path,
-            None => {
-                // `Origin::Hosted` answers `None` here and so shares the
-                // `NoOrigin` arm. Sending a hosted document back to the
-                // application is `docs/python/new_api_design.md` §9.2's job
-                // and lands with the rest of hosted mode.
-                let origin = self.origin.path().ok_or_else(|| {
-                    NoOrigin::new_err("this document has no origin: pass a path to save()")
-                })?;
-                let caveats = self.origin.caveats();
-                if !ignore_caveats && !caveats.is_empty() {
-                    return Err(CaveatedOverwrite::new_err(format!(
-                        "{}: this file was loaded with caveats, so part of it could not be \
-                         read and writing back would drop it ({}); pass a path to write \
-                         elsewhere, or ignore_caveats=True to overwrite it anyway",
-                        origin.display(),
-                        caveats
-                            .iter()
-                            .map(|caveat| caveat.to_string())
-                            .collect::<Vec<_>>()
-                            .join("; "),
-                    )));
+            None => match &self.origin {
+                // The hosted document has no file to write, and `ignore_caveats`
+                // has nothing to say about it: it carries no caveats.
+                Origin::Hosted => return crate::host::send_to_host(py, self),
+                Origin::None => {
+                    return Err(NoOrigin::new_err(
+                        "this document has no origin: pass a path to save()",
+                    ));
                 }
-                origin.to_path_buf()
-            }
+                Origin::File { path, caveats } => {
+                    if !ignore_caveats && !caveats.is_empty() {
+                        return Err(CaveatedOverwrite::new_err(format!(
+                            "{}: this file was loaded with caveats, so part of it could not be \
+                             read and writing back would drop it ({}); pass a path to write \
+                             elsewhere, or ignore_caveats=True to overwrite it anyway",
+                            path.display(),
+                            caveats
+                                .iter()
+                                .map(|caveat| caveat.to_string())
+                                .collect::<Vec<_>>()
+                                .join("; "),
+                        )));
+                    }
+                    path.clone()
+                }
+            },
         };
 
         let content = collomatique_storage::serialize_data(self.state.get_data().get_inner_data())

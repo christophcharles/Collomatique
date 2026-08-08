@@ -398,6 +398,12 @@ cost is that a hosted script which edits and forgets the call does nothing — b
 failure is visible (the GUI says "Aucune modification effectuée"), whereas an implicit
 send fails by pushing something the author did not mean to push.
 
+The engine's automatic send is not removed for this: it stays until `python-old/` goes,
+and goes with it (§13, step 6). It fires on the old module's own shared `AppState`
+having been modified, which a script using this module never touches, so it cannot fire
+for a new-API script — §11 works this through. The two live side by side in the
+meantime, each serving its own module's scripts.
+
 Sending is a **module-level function taking any document**, because its subject is the
 host slot, not the document:
 

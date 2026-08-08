@@ -11,9 +11,11 @@ pub mod caveats;
 pub mod collections;
 pub mod document;
 pub mod errors;
+pub mod host;
 pub mod results;
 
 pub use document::Document;
+pub use host::{Host, set_host};
 
 /// The `collomatique` python module, for registration in an interpreter's inittab.
 #[pymodule]
@@ -31,6 +33,7 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("NoOrigin", py.get_type::<errors::NoOrigin>())?;
     m.add("UpdateError", py.get_type::<errors::UpdateError>())?;
     m.add("NothingToUndo", py.get_type::<errors::NothingToUndo>())?;
+    m.add("NotHosted", py.get_type::<errors::NotHosted>())?;
     m.add(
         "IdCeilingExceeded",
         py.get_type::<errors::IdCeilingExceeded>(),
@@ -42,6 +45,7 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     caveats::register(m)?;
     collections::register(m)?;
+    host::register(m)?;
     results::register(m)?;
 
     m.add_class::<Document>()?;

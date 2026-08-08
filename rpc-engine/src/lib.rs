@@ -332,6 +332,35 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
     Ok(())
 }
 
+/// The application, as a hosted python script sees it
+///
+/// The script edits a copy and hands one back when it decides to; there is no
+/// stream of edits and no merge, so this is the whole document in either
+/// direction. The GUI already accepts `SetData` at any moment and any number of
+/// times, applying each one onto the session it commits at the end of the run,
+/// so a send needs nothing new on the other side of the pipe.
+struct RpcHost {
+    /// What the engine fetched before starting the script
+    ///
+    /// Held rather than re-fetched: the document the script is offered is the
+    /// one the GUI had when the run started, and a second `GetData` mid-run
+    /// would be a different document.
+    data: collomatique_state_colloscopes::Data,
+}
+
+impl collomatique_python_runner::Host for RpcHost {
+    fn data(&self) -> collomatique_state_colloscopes::Data {
+        self.data.clone()
+    }
+
+    fn send(&self, data: &collomatique_state_colloscopes::Data) -> Result<(), String> {
+        let data_stream = InternalDataStream::from(data);
+        EncodedMsg::send_rpc(CmdMsg::SetData(data_stream))
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+}
+
 /// Main RPC Engine function
 ///
 /// Runs the RPC engine through stdin/stdout
@@ -362,14 +391,25 @@ pub fn run_rpc_engine() -> Result<(), anyhow::Error> {
                 ResultMsg::Data(data) => collomatique_state_colloscopes::Data::from(data),
                 _ => return Err(anyhow!("Bad Data packet: {:?}", data_msg)),
             };
+            let host = std::sync::Arc::new(RpcHost { data: data.clone() });
             let app_state = collomatique_state::AppState::new(data);
             let shared = std::sync::Arc::new(std::sync::Mutex::new(app_state));
 
             eprintln!("Running Python script...");
             collomatique_python_runner::initialize();
-            collomatique_python_runner::run_python_script(script, Some(shared.clone()))?;
+            collomatique_python_runner::run_python_script(
+                script,
+                Some(shared.clone()),
+                Some(host),
+            )?;
 
             // Send back if modified
+            //
+            // This is the old module's automatic send: it fires when the state
+            // *it* hands its scripts was modified, which a script using the new
+            // module never touches. It goes with `python-old/`, and until then a
+            // new-API script sends only when it says so
+            // (`docs/python/new_api_design.md` §9.2).
             {
                 use collomatique_state::traits::Manager;
                 let state = shared.lock().unwrap();
