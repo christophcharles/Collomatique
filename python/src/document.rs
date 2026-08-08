@@ -1,13 +1,16 @@
 //! Opening a colloscope file, and writing it back
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use pyo3::prelude::*;
+use pyo3::types::PyFrozenSet;
 
 use collomatique_ops::Desc;
 use collomatique_state::AppState;
 use collomatique_state::traits::Manager;
 use collomatique_state_colloscopes::Data;
+use collomatique_storage::Caveat;
 
 use crate::errors::{IdCeilingExceeded, LoadError, NoOrigin, SaveError};
 
@@ -24,6 +27,15 @@ use crate::errors::{IdCeilingExceeded, LoadError, NoOrigin, SaveError};
 pub struct Document {
     state: AppState<Data, Desc>,
     source_path: Option<PathBuf>,
+    /// What could not be read from the file this document came from
+    ///
+    /// Part of the origin, so like [Document::source_path] it is fixed at
+    /// creation. An `Origin` enum pairing the two — mirroring the GUI's
+    /// `FileName` — would make "caveats with no path" unrepresentable, but
+    /// `docs/python/new_api_design.md` §9.2's hosted origin will reshape this
+    /// field anyway, so the enum belongs there rather than being guessed at
+    /// now.
+    caveats: BTreeSet<Caveat>,
 }
 
 /// Opens a colloscope file
@@ -38,13 +50,20 @@ pub fn load(path: PathBuf) -> PyResult<Document> {
 
     // `deserialize_data` hands back an `InnerData`; its docs are explicit that
     // the caller owns the invariant gate, as `gtk4`'s file loader does too.
-    let (inner_data, _caveats) =
+    let (inner_data, caveats) =
         collomatique_storage::deserialize_data(&content).map_err(|e| fail(&e))?;
     let data = Data::from_inner_data(inner_data).map_err(|e| fail(&e))?;
 
+    // Caveats are handed back, not announced: nothing is printed and no
+    // `warnings.warn` is raised. The GUI shows a modal because a human is
+    // sitting in front of it; a script has nobody, and a library writing to
+    // stderr on its own is a nuisance in a cron job. What was skipped was, by
+    // construction, something this build cannot use anyway — the loss only
+    // happens when the file is written back.
     Ok(Document {
         state: AppState::new(data),
         source_path: Some(path),
+        caveats,
     })
 }
 
@@ -57,6 +76,7 @@ pub fn new_document() -> Document {
     Document {
         state: AppState::new(Data::new()),
         source_path: None,
+        caveats: BTreeSet::new(),
     }
 }
 
@@ -74,6 +94,32 @@ impl Document {
     #[getter]
     fn source_path(&self) -> Option<&Path> {
         self.source_path.as_deref()
+    }
+
+    /// What could not be read from the file, as a `frozenset` of [Caveat]s
+    ///
+    /// Empty for a clean file and for [new_document]. Like the origin it is
+    /// fixed at creation: writing a copy of the document does not make the
+    /// file it came from any more readable, so nothing clears it. (The GUI
+    /// *does* clear its `FileName::CaveatFile` after a save, but that field is
+    /// a save *target*, which is a different thing from an origin.)
+    ///
+    /// Each element says what was dropped; `str()` on one is an english
+    /// sentence, and the classes are in the module, so a script can test for
+    /// the caveat it knows how to handle:
+    ///
+    /// ```python
+    /// if clm.UnknownEntry("colloscope", 3) in doc.caveats:
+    ///     ...
+    /// ```
+    #[getter]
+    fn caveats<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyFrozenSet>> {
+        let caveats = self
+            .caveats
+            .iter()
+            .map(|caveat| crate::caveats::to_python(py, caveat))
+            .collect::<PyResult<Vec<_>>>()?;
+        PyFrozenSet::new(py, &caveats)
     }
 
     /// Writes the document out

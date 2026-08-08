@@ -7,6 +7,7 @@
 
 use pyo3::prelude::*;
 
+pub mod caveats;
 pub mod document;
 pub mod errors;
 
@@ -30,6 +31,8 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
         "IdCeilingExceeded",
         py.get_type::<errors::IdCeilingExceeded>(),
     )?;
+
+    caveats::register(m)?;
 
     m.add_class::<Document>()?;
     m.add_function(wrap_pyfunction!(document::load, m)?)?;

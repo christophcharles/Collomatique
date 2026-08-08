@@ -11,6 +11,9 @@ assert isinstance(doc, collomatique.Document)
 assert isinstance(doc.source_path, pathlib.Path)
 assert doc.source_path == pathlib.Path(source)
 
+# The example is a file this version reads whole, so nothing was dropped.
+assert doc.caveats == frozenset()
+
 doc.save()  # back to the origin
 doc.save(target)  # save-as
 

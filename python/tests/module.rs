@@ -135,3 +135,69 @@ fn a_document_loads_saves_and_remembers_where_it_came_from() {
 
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
+
+/// The name of the block the caveated fixture cannot read
+const UNKNOWN_BLOCK: &str = "YouShouldReallyNeverCallAnEntryThisWay";
+
+/// A document a caveat-free build of this version cannot read whole
+///
+/// Written by hand rather than copied from `examples/`, because that is what
+/// makes it caveated: the header claims a version above this one, and the one
+/// entry claims a spec level this build does not know while declaring itself
+/// unneeded — the two shapes `storage/tests/header_check.rs` and
+/// `storage/tests/general_entries_check.rs` build for the same reason. What is
+/// *in* the document does not matter here; that it decodes with both caveats
+/// does.
+fn caveated_file() -> (String, collomatique_settings::Version, u32) {
+    let current = collomatique_settings::current_version();
+    let newer =
+        collomatique_settings::Version::new(current.major, current.minor + 1, current.patch);
+    let spec = collomatique_storage::CURRENT_SPEC_VERSION + 1;
+
+    let content = format!(
+        r#"{{
+    "header": {{
+        "file_type": "Collomatique",
+        "produced_with_version": "{newer}",
+        "file_content": "Colloscope"
+    }},
+    "entries": [
+        {{
+            "minimum_spec_version": {spec},
+            "needed_entry": false,
+            "content": {{
+                "{UNKNOWN_BLOCK}": {{
+                    "some_data_this_version_cannot_fathom": [42, 43]
+                }}
+            }}
+        }}
+    ]
+}}"#
+    );
+
+    (content, newer, spec)
+}
+
+/// A caveated file hands the script what it could not read
+///
+/// The script does all the checking, because caveats are a python-facing
+/// vocabulary — what matters is that a script can name the caveat it expects
+/// and compare. Rust only builds the file and says which values went into it.
+#[test]
+fn a_caveated_file_says_what_it_could_not_read() {
+    let dir = workspace("caveats");
+    let source = dir.join("caveated.collomatique");
+
+    let (content, newer, spec) = caveated_file();
+    std::fs::write(&source, content).expect("the fixture should be writable");
+
+    run(include_str!("scripts/caveats.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("newer_version", newer.to_string())?;
+        globals.set_item("block_name", UNKNOWN_BLOCK)?;
+        globals.set_item("spec_version", spec)?;
+        Ok(())
+    });
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}

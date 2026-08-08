@@ -342,6 +342,24 @@ Three primitives, all usable in either context:
   unknown entries) on the document.
 - `clm.current_document()` — the hosted document, or `None` when standalone.
 
+The caveats land on `doc.caveats`, a `frozenset` of `Caveat` values — one class per
+kind (`CreatedWithNewerVersion`, `UnknownEntry`), all under a `Caveat` base so
+`isinstance` catches them without listing the kinds. They are values with `==`, a
+`repr` and a `str`, so a script names the one it knows how to handle:
+
+```python
+if clm.UnknownEntry("colloscope", 3) in doc.caveats:
+    ...
+```
+
+`doc.caveats` is empty for a clean file and for `new_document()`, and it is part of
+the origin: it is fixed at load and no save changes it. Loading prints nothing and
+raises no `warnings.warn` — the GUI shows a modal because a human is there, a script
+has nobody, and a library writing to stderr is a nuisance in a cron job. What was
+skipped is by construction something this build cannot use, so a read-only script
+loses nothing by the silence; the loss happens on rewrite, which is where §9.2 puts
+the guard.
+
 Most scripts want the same resolution chain, so it gets a name of its own:
 
 ```python
