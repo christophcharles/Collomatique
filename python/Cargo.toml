@@ -1,0 +1,9 @@
+[package]
+name = "collomatique-python"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+collomatique-settings = { path = "../settings" }
+pyo3.workspace = true

@@ -7,7 +7,9 @@ use pyo3::prelude::*;
 pub use collomatique_python_old::SharedFileState;
 
 pub fn initialize() {
+    use collomatique_python::collomatique;
     use collomatique_python_old::collomatique_old;
+    pyo3::append_to_inittab!(collomatique);
     pyo3::append_to_inittab!(collomatique_old);
     Python::initialize();
 }

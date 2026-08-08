@@ -5,6 +5,7 @@ edition.workspace = true
 authors.workspace = true
 
 [dependencies]
+collomatique-python = { path = "../python" }
 collomatique-python-old = { path = "../python-old" }
 pyo3.workspace = true
 anyhow.workspace = true

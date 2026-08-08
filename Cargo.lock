@@ -470,6 +470,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "collomatique-python"
+version = "0.1.0-alpha.0.99"
+dependencies = [
+ "collomatique-settings",
+ "pyo3",
+]
+
+[[package]]
 name = "collomatique-python-old"
 version = "0.1.0-alpha.0.99"
 dependencies = [
@@ -489,6 +497,7 @@ name = "collomatique-python-runner"
 version = "0.1.0-alpha.0.99"
 dependencies = [
  "anyhow",
+ "collomatique-python",
  "collomatique-python-old",
  "pyo3",
 ]
