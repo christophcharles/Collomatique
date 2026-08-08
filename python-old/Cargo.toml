@@ -1,5 +1,5 @@
 [package]
-name = "collomatique-python"
+name = "collomatique-python-old"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

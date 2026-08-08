@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import collomatique
+import collomatique_old as collomatique
 import xlsxwriter
 
 
