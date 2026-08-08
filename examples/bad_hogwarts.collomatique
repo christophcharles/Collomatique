@@ -2083,9 +2083,7 @@
             "slot_rotation": {
               "soft": true
             },
-            "avoid_twice_in_a_row": {
-              "soft": true
-            },
+            "avoid_twice_in_a_row": null,
             "year_teacher_rotation": false,
             "period_teacher_rotation": false
           },
@@ -2099,9 +2097,7 @@
                 "slot_rotation": {
                   "soft": true
                 },
-                "avoid_twice_in_a_row": {
-                  "soft": true
-                },
+                "avoid_twice_in_a_row": null,
                 "year_teacher_rotation": false,
                 "period_teacher_rotation": false
               }
@@ -2115,9 +2111,7 @@
                 "slot_rotation": {
                   "soft": true
                 },
-                "avoid_twice_in_a_row": {
-                  "soft": true
-                },
+                "avoid_twice_in_a_row": null,
                 "year_teacher_rotation": false,
                 "period_teacher_rotation": false
               }
@@ -2147,9 +2141,7 @@
                 "slot_rotation": {
                   "soft": false
                 },
-                "avoid_twice_in_a_row": {
-                  "soft": true
-                },
+                "avoid_twice_in_a_row": null,
                 "year_teacher_rotation": false,
                 "period_teacher_rotation": false
               }
