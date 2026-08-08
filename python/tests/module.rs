@@ -109,14 +109,8 @@ fn reload(path: &Path) -> collomatique_state_colloscopes::Data {
 #[test]
 fn a_document_loads_saves_and_remembers_where_it_came_from() {
     let dir = workspace("document");
-    let source = dir.join("source.collomatique");
+    let source = example_copy(&dir, "source.collomatique");
     let target = dir.join("target.collomatique");
-
-    let example = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../examples/hogwarts.collomatique")
-        .canonicalize()
-        .expect("the example colloscope should be in the repository");
-    std::fs::copy(&example, &source).expect("the example should be copyable");
 
     run(include_str!("scripts/document.py"), |globals| {
         globals.set_item("source", &source)?;
@@ -138,6 +132,66 @@ fn a_document_loads_saves_and_remembers_where_it_came_from() {
 
 /// The name of the block the caveated fixture cannot read
 const UNKNOWN_BLOCK: &str = "YouShouldReallyNeverCallAnEntryThisWay";
+
+/// A copy of the example colloscope, in `dir`, safe to write over
+///
+/// `doc.save()` writes back to the file the document came from, so a script
+/// must never be handed the file in `examples/`.
+fn example_copy(dir: &Path, name: &str) -> PathBuf {
+    let example = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../examples/hogwarts.collomatique")
+        .canonicalize()
+        .expect("the example colloscope should be in the repository");
+
+    let copy = dir.join(name);
+    std::fs::copy(&example, &copy).expect("the example should be copyable");
+    copy
+}
+
+/// `compacted()` hands back a renumbered copy, and leaves its document alone
+///
+/// The comparison is against the compaction rust does itself: it says the
+/// python side really ran `compact_ids` on the document it was called on, and
+/// wrote *that* out. Whether the example's ids were dense already does not
+/// matter — the two sides agree either way, and the file the original saved is
+/// still the original.
+#[test]
+fn compacting_a_document_writes_a_renumbered_copy() {
+    let dir = workspace("compacted");
+    let source = example_copy(&dir, "source.collomatique");
+    let target = dir.join("compacted.collomatique");
+    let original = dir.join("original.collomatique");
+
+    let caveated_source = dir.join("caveated.collomatique");
+    let (content, _newer, _spec) = caveated_file();
+    std::fs::write(&caveated_source, &content).expect("the fixture should be writable");
+
+    run(include_str!("scripts/compacted.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("target", &target)?;
+        globals.set_item("original", &original)?;
+        globals.set_item("caveated_source", &caveated_source)?;
+        Ok(())
+    });
+
+    let before = reload(&source);
+    let compacted = reload(&target);
+    assert_eq!(
+        compacted.get_inner_data(),
+        &before.get_inner_data().clone().compact_ids()
+    );
+
+    // Compaction copies, so what the document itself saved is unrenumbered.
+    assert_eq!(reload(&original).get_inner_data(), before.get_inner_data());
+
+    // The caveated file refused the bare `save()` of the compacted copy too, so
+    // the block this build cannot read is still in it.
+    let untouched = std::fs::read_to_string(&caveated_source).expect("the fixture is still there");
+    assert_eq!(untouched, content);
+    assert!(untouched.contains(UNKNOWN_BLOCK));
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
 
 /// A document a caveat-free build of this version cannot read whole
 ///

@@ -12,7 +12,7 @@ use collomatique_state::traits::Manager;
 use collomatique_state_colloscopes::Data;
 use collomatique_storage::Caveat;
 
-use crate::errors::{CaveatedOverwrite, IdCeilingExceeded, LoadError, NoOrigin, SaveError};
+use crate::errors::{CaveatedOverwrite, Error, IdCeilingExceeded, LoadError, NoOrigin, SaveError};
 
 /// Where a document came from, and where a bare `save()` writes
 ///
@@ -136,10 +136,10 @@ impl Document {
     ///
     /// Empty for a clean file and for [new_document]. It is part of the
     /// origin, so it is fixed at creation like the path is: writing a copy of
-    /// the document does not make the
-    /// file it came from any more readable, so nothing clears it. (The GUI
-    /// *does* clear its `FileName::CaveatFile` after a save, but that field is
-    /// a save *target*, which is a different thing from an origin.)
+    /// the document does not make the file it came from any more readable, so
+    /// nothing clears it. (The GUI *does* clear its `FileName::CaveatFile`
+    /// after a save, but that field is a save *target*, which is a different
+    /// thing from an origin.)
     ///
     /// Each element says what was dropped; `str()` on one is an english
     /// sentence, and the classes are in the module, so a script can test for
@@ -158,6 +158,57 @@ impl Document {
             .map(|caveat| crate::caveats::to_python(py, caveat))
             .collect::<PyResult<Vec<_>>>()?;
         PyFrozenSet::new(py, &caveats)
+    }
+
+    /// A copy of the document with dense ids and no undo history
+    ///
+    /// The document itself is untouched: the copy is a new document, so
+    /// nothing a script holds is invalidated, and "this clears the undo
+    /// history" is not a warning — a new document simply has none.
+    ///
+    /// This is the way out of `IdCeilingExceeded`. The file format has a
+    /// ceiling on the ids it can write and `save` never renumbers on its own,
+    /// so the rescue is explicit:
+    ///
+    /// ```python
+    /// clm.load("big_ids.collomatique").compacted().save()
+    /// ```
+    ///
+    /// The copy inherits the file it came from, and with it the caveats — the
+    /// script above overwrites the file it read, and a caveated file still
+    /// refuses the bare `save()`, so compaction is not a laundering route
+    /// around that guard.
+    fn compacted(&self) -> PyResult<Document> {
+        let inner_data = self.state.get_data().get_inner_data().clone().compact_ids();
+
+        // Renumbering is injective and monotone, so it repairs nothing and
+        // breaks nothing: a document that satisfied the invariants still does
+        // (`state-colloscopes/src/compact.rs`, pinned by
+        // `state-colloscopes/tests/compact_ids.rs`). The arm is still written
+        // out rather than unwrapped, because §6 says a script never gets a
+        // panic.
+        let data = Data::from_inner_data(inner_data).map_err(|e| {
+            Error::new_err(format!(
+                "compacting the document produced an invalid one: {e}"
+            ))
+        })?;
+
+        Ok(Document {
+            state: AppState::new(data),
+            origin: match &self.origin {
+                Origin::None => Origin::None,
+                Origin::File { path, caveats } => Origin::File {
+                    path: path.clone(),
+                    caveats: caveats.clone(),
+                },
+                // Compaction cannot travel to the host: an `Op::GlobalUpdate`
+                // only pushes the id issuer forward, so the application would
+                // end up with dense ids, an issuer still at its old high-water
+                // mark, and a Ctrl-Z bringing the big ids back. So a compacted
+                // copy of the hosted document is an ordinary origin-less one.
+                Origin::Hosted => Origin::None,
+            },
+        })
     }
 
     /// Writes the document out
