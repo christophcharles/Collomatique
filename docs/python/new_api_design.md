@@ -33,21 +33,27 @@ depend on a running GUI. There are two contexts, one API:
   batch jobs, cron-style automation, and interactive exploration in a Python REPL
   or a Jupyter notebook.
 
-- **GUI-hosted**: the GUI's "run script" feature keeps today's boundary — clone the
-  state, hand it to a worker subprocess, review the result, commit as **one undo
-  slot**. The script sees the same `Document` object, obtained differently:
+- **GUI-hosted**: the GUI's "run script" feature keeps today's boundary — hand a copy
+  of the state to a worker subprocess, let the script work on it, review the result,
+  commit as **one undo slot**. The script sees the same `Document` object, obtained
+  differently:
 
   ```python
   doc = clm.current_document()
   ```
 
-  `current_document()` returns `None` when running standalone; `load()` raises when
-  running hosted (the hosted document is the only one). A script that wants to work
-  in both contexts does:
+  `current_document()` returns `None` when running standalone. `load()` works in
+  **both** contexts: the hosted document is not the only document a script may open.
+  Importing last year's students from another file is an ordinary thing to write.
+  What makes the hosted document special is only *where its changes go*, and that is
+  readable on the document itself:
 
   ```python
-  doc = clm.current_document() or clm.load("2026.collomatique")
+  doc.is_hosted        # bool
+  doc.source_path      # Path, or None
   ```
+
+  Getting the right document in both contexts is §9.1; writing it back is §9.2.
 
 The embedded interpreter stops being the API's foundation and becomes *a runner*.
 
@@ -59,10 +65,12 @@ standalone environment (a `python3.withPackages` with the built module, availabl
 the dev shell) is separate work, and only gates standalone use — the whole API can be
 implemented and used hosted-first.
 
-**No GUI API.** The five RPC dialog primitives of the old API are not part of the new
-one. Scripts that want prompts use `tkinter` (stdlib) directly. This removes the last
-GUI coupling from the API; the script-running environment just needs tkinter
-available (nix side).
+**No UI framework.** The five RPC dialog primitives of the old API are not part of the
+new one: nothing in the API talks to the GUI over RPC to draw something. Scripts that
+want prompts use `tkinter` (stdlib) directly, so the script-running environment needs
+tkinter available (nix side). The one exception is file selection, which every script
+needs and which the module provides itself through `rfd` — a deliberate design change,
+argued in §9.3.
 
 ## 2. The object model: document, handles, values
 
@@ -135,9 +143,9 @@ handle or an id interchangeably.
 
 Ids support `==`, hashing, ordering, and a readable `repr` for logging. Nothing
 else: no `int()`, no constructors, no serialization. Ids are meaningless outside the
-run that produced them — `WeekId` is renumbered on every file load, and
-`compact_ids` renumbers every id kind. Scripts that span runs re-find entities by
-content (name, matching), which is more robust anyway.
+run that produced them — `WeekId` is renumbered on every file load, and compaction
+(§9.5) renumbers every id kind. Scripts that span runs re-find entities by content
+(name, matching), which is more robust anyway.
 
 ## 3. Naming and conventions
 
@@ -266,8 +274,13 @@ with doc.transaction("Import Pronote"):
 
 Backed by `AppSession` (nestable). Outside a transaction, each op is its own undo
 slot with an auto-generated label. Exposed: `doc.undo()`, `doc.redo()`,
-`doc.can_undo`, `doc.can_redo`, `doc.undo_name`, `doc.redo_name`. In hosted mode the
-host additionally wraps the whole run in one session, exactly like today.
+`doc.can_undo`, `doc.can_redo`, `doc.undo_name`, `doc.redo_name`.
+
+A document's undo history is its own and never leaves the script. In hosted mode the
+script works on a copy in the worker process, so `doc.undo()` and a rolled-back
+transaction are invisible to the GUI — only an explicit send (§9.2) crosses. On the
+host side each send lands in one `AppSession` wrapping the whole run, and the user's
+validation commits it as a single undo slot in the real document.
 
 ## 6. Errors
 
@@ -283,6 +296,13 @@ worker-killing `panic!`s:
   conversion errors for invalid value contents (empty strings, bad ranges, sealed
   constructor violations such as a pairing rule whose antecedent equals its
   consequent).
+- Document-plumbing errors (§9): `NoDocument` (nothing to open), `Cancelled` (the
+  user dismissed a dialog), `NotHosted` (a host-only call made standalone),
+  `NoOrigin` (`save()` with nowhere to write), `IdCeilingExceeded` (a save the file
+  format cannot represent). `IdCeilingExceeded` carries an instruction rather than
+  just a diagnosis: it names `compacted()` as the way out (§9.5). `NoOrigin` stays
+  generic — a document has an origin or it has not, and nothing tracks how it was
+  produced.
 
 ## 7. Quality floor
 
@@ -311,19 +331,192 @@ doc.replace_all(tree, "Rebuilt from scratch")   # one GlobalUpdate, one undo slo
 an invalid tree raises with the invariant diagnostics. `DocumentData` is built from
 the same `*Data` dataclasses, so the two interfaces share one vocabulary.
 
-## 9. File, export and maintenance operations
+## 9. Documents, dialogs and maintenance operations
 
-Everything the GUI can do outside the op pipeline:
+### 9.1 Getting a document
 
-- `clm.load(path)` / `doc.save(path)` / `clm.new_document()`. Load surfaces the
-  storage caveats (foreign version, unknown entries) on the document.
+Three primitives, all usable in either context:
+
+- `clm.new_document()` — an empty document, no origin.
+- `clm.load(path)` — open a file. Surfaces the storage caveats (foreign version,
+  unknown entries) on the document.
+- `clm.current_document()` — the hosted document, or `None` when standalone.
+
+Most scripts want the same resolution chain, so it gets a name of its own:
+
+```python
+doc = clm.default_document(sys.argv[1] if len(sys.argv) > 1 else None)
+```
+
+`clm.default_document(path=None, *, dialog=True)` tries, in order: the hosted
+document, then `path`, then a file-open dialog. Host first is the safe order — a
+script run inside the GUI must never quietly start editing a file on disk because a
+stale argument was lying around.
+
+It takes a path, not `sys.argv`, so scripts that use `argparse` keep control of their
+own command line. It *raises* rather than returning `None` when nothing is found:
+cancelling the dialog raises `Cancelled`, and `dialog=False` with no other source
+raises `NoDocument`. Returning `None` would make every script write an `if doc is
+None` check, and forgetting it gives an obscure `AttributeError` twenty lines later.
+`dialog=False` is what a cron job passes, where a dialog would hang forever.
+
+### 9.2 Writing a document out
+
+**The hosted document is not sent back automatically.** Today's engine does that (one
+`SetData` at script exit, when the state was modified — `rpc-engine/src/lib.rs`), but
+only because the old API gives the script no way to say it. Once there is a call,
+automatic becomes harmful: a script that raises halfway pushes its half-finished
+state, and a script that sends deliberately gets a second, unwanted send at exit. The
+cost is that a hosted script which edits and forgets the call does nothing — but that
+failure is visible (the GUI says "Aucune modification effectuée"), whereas an implicit
+send fails by pushing something the author did not mean to push.
+
+Sending is a **module-level function taking any document**, because its subject is the
+host slot, not the document:
+
+```python
+clm.send_to_host(doc)          # raises NotHosted when standalone
+```
+
+Restricting it to the hosted document would buy nothing and would block ordinary
+scripts: building next year's file from a template plus a CSV and dropping it into the
+open GUI, or loading a backup to repair a broken document. No protocol change is
+needed — `SetData` is already accepted at any moment, any number of times, and the
+host applies each one onto the same `AppSession`.
+
+Two semantics, both loud in the docstring:
+
+- **A send replaces the host's whole state.** It is not a merge. Pushing a different
+  file wipes the user's document; the GUI's validation step is the only safety net.
+- **Sending twice is allowed and the last one wins.** That is what makes the
+  send-a-different-document case composable.
+
+Saving is then one method with the ordinary Save / Save As meaning —
+`doc.save(path=None, *, dialog=False)`:
+
+```python
+doc.save(path)     # write that file, whatever the origin
+doc.save()         # write back to the origin
+```
+
+With no argument it dispatches on the origin: hosted → `send_to_host(doc)`; loaded
+from a file → that path; no origin → raises `NoOrigin`, or opens a save dialog when
+called with `dialog=True`. It is never a silent no-op. Together with
+`default_document()` it is the symmetric pair a script needs to work in both contexts:
+
+```python
+doc = clm.default_document(sys.argv[1] if len(sys.argv) > 1 else None)
+...
+doc.save()
+```
+
+The origin is immutable: `doc.save("other.collomatique")` does not re-target a later
+`doc.save()`. Silent re-targeting of the hosted document would be nasty.
+
+### 9.3 Dialogs
+
+The module ships native dialogs, routed through `rfd`:
+
+```python
+clm.dialogs.open_file(title=..., filters=...)   # Path, or None on cancel
+clm.dialogs.save_file(...)
+clm.dialogs.pick_folder(...)
+clm.dialogs.message(text)
+clm.dialogs.confirm(text)                       # True / False
+```
+
+This is a **design change and a new dependency for the `python/` crate** — `rfd` is
+today a `gtk4` dependency only. It is recorded here as a decision, not smuggled in.
+Being already in the lockfile buys only a vetted version and an unsurprised nix side.
+
+The case for it: file selection is the one dialog every script needs; `rfd` is small
+next to a UI framework; on Linux it goes through the XDG portal, so the dialogs are
+native and work inside a sandbox; and it needs no GTK, which is what a plain Python
+interpreter wants. So §1's rule narrows from "no GUI API" to "no UI framework". `rfd`
+gives files, folders and message boxes; it does not give text entry or list choice,
+and those stay `tkinter`'s job.
+
+The downsides, stated plainly:
+
+- A library that can open windows can hang a cron job forever. Dialogs are therefore
+  always an explicit call, never something the API does on its own — which is also
+  why `default_document(dialog=False)` exists.
+- On a headless machine with no portal, the call must surface as an exception rather
+  than block.
+- Dialogs must be called from the main thread (a macOS requirement), and the Rust
+  side must release the GIL while one is open, or the script's other threads freeze.
+- Hosted scripts run in a separate process, so a dialog is a top-level window of its
+  own: not parented to the GUI window, and it may appear behind it. Routing it
+  through RPC would fix that, but would resurrect the RPC dialogs this design
+  deletes. The cosmetic cost is worth paying.
+
+### 9.4 Export
+
 - `doc.export_xlsx(path, config=None)` — `None` uses the document's export config.
-  Requires moving the `ExportConfig → xlsx::Config` conversion out of `gtk4`
-  (§11).
-- MPS export of the built ILP problem (diagnostics) — lives with the solver API.
-- `doc.compact_ids()` — renumbers every id densely. **This invalidates every id and
-  handle the script holds** (they raise on next use) and clears the undo history,
-  matching the GUI's behaviour. The docstring says so loudly.
+  The `ExportConfig → xlsx::Config` conversion moves into the `xlsx` crate (§11.2);
+  no shared crate is needed, since `xlsx` already depends on `state-colloscopes`.
+- `doc.export_mps(path, config)` — writes the built ILP problem for a given solve
+  config, the GUI's advanced-tools export. `config` is the `ColloscopeSolveConfig`
+  of §10, and the ILP model itself never becomes a Python object (§10).
+
+### 9.5 Compaction and the id ceiling
+
+`storage::serialize_data` fails when a document holds an id above the spec-2 format's
+ceiling. Dense renumbering (`InnerData::compact_ids`) is the only way out, and the
+storage crate never renumbers by itself. So `doc.save(path)` can fail for this one
+reason, and it raises `IdCeilingExceeded` naming the way out. The GUI asks the
+question in a dialog; a script cannot be asked, so the error has to carry the
+instruction.
+
+Compaction is **functional**: it returns a new document instead of mutating one.
+
+```python
+doc = clm.load("big_ids.collomatique")
+doc.compacted().save()
+```
+
+`doc.compacted()` returns a fresh `Document` with dense ids and no undo history. The
+original is untouched and stays valid, which is the reason for this shape: the ids and
+handles a script holds are not invalidated — they still belong to the old document —
+and "clears the undo history" stops being a warning, because a new document simply has
+none. The GUI mutates in place instead, but it has a confirmation dialog to carry
+those warnings and a script has nothing.
+
+**Compaction cannot travel to the host.** It would have to arrive as an
+`Op::GlobalUpdate`, whose annotate arm only pushes the id issuer *forward*
+(`IdIssuer::skip_to_id`, `state-colloscopes/src/ops.rs`). It must: an undone
+`GlobalUpdate` restores the old, bigger ids, so the issuer has to stay above
+everything the redo stack still holds. The host would end up with dense ids in its
+current data, an issuer still at its old high-water mark — the next entity added gets
+a big id again — and a history that brings the big ids back on Ctrl-Z. For exactly
+this reason the GUI does not compact through an op at all: it replaces the whole
+`AppState` and destroys the history (`EditorInput::CompactIds` in
+`gtk4/src/editor.rs`).
+
+The API settles this with the origin rule, not with a special case:
+
+- `compacted()` **inherits the file path**. So the rescue script above overwrites the
+  file it read, which is what the GUI's "compact and save" does.
+- `compacted()` **never inherits the hosted-ness**. A compacted copy of the hosted
+  document has `is_hosted == False` and `source_path == None`, so `.save()` raises
+  the ordinary `NoOrigin`: this document has nowhere to write. Nothing tracks where a
+  document came from beyond its origin, and the error says no more than that.
+  Compacting the open document is still an ordinary script:
+
+  ```python
+  clm.current_document().compacted().save("clean.collomatique")
+  ```
+
+Inheriting the hosted-ness would make `.save()` send to the host, and that send would
+look like it worked while the issuer and the history stayed untouched.
+
+`clm.send_to_host(doc.compacted())` stays callable and does what §9.2 says a send
+does: it replaces the host's state wholesale. The compaction simply does not stick.
+Nothing structural distinguishes a compacted payload from an ordinary one — deleting
+the last-added subject also lowers the maximum id, and sending that is entirely
+normal — so there is no check to add, only this note. `send_to_host` is the explicit
+"replace the host's state, I mean it" door, and the accidental path is already closed
+by the origin rule.
 
 ## 10. The solver
 
@@ -338,6 +531,13 @@ dataclasses mirroring the (serde) Rust structs, with the GUI's presets exposed:
   list recompute, anchor weights) mirroring `constraints_colloscopes::SolveConfig`.
 - Group-list generation: `GenerationRequest` (rebuild set, kept lists, canonical
   range) and `ObjectiveWeights`.
+
+**The ILP model is never a Python object.** No handle, no accessor, no introspection.
+The only thing that crosses is `doc.export_mps(path, config)` (§9.4), which writes a
+file. Exposing the problem would pin the internal variable and constraint naming of
+`constraints-colloscopes` as public API, so every rename downstream would break
+scripts. The names inside the MPS file are already a de-facto contract through the
+GUI's own export, but that is a diagnostic file for a solver, not an API.
 
 Execution is subprocess-based, reusing `StrategySubprocess::spawn` — the
 battle-tested path, with hard cancellation and no GIL contention. The API is a run
@@ -371,12 +571,24 @@ Work outside the `python/` crate that this design requires:
 1. **Whole-colloscope install op** — a `ColloscopeUpdateOp` variant (or family
    addition) for "install this colloscope", replacing the raw `Op::GlobalUpdate`
    the GUI currently uses for solve results. The GUI should adopt it too.
-2. **Move `to_xlsx_config` out of `gtk4`** (currently
-   `gtk4/src/editor/export.rs`) into a shared crate so `export_xlsx` is callable
-   from the library.
+2. **Move `to_xlsx_config` into the `xlsx` crate** as
+   `impl From<&export_config::ExportConfig> for Config`; `gtk4` then calls `.into()`.
+   No shared crate is needed: `xlsx` already depends on `state-colloscopes`
+   (`write_xlsx` takes `&InnerData`), and the function has no gtk in it — it sat in
+   `gtk4/src/editor/export.rs` only because `gtk4` was the only caller. The two config
+   types stay separate on purpose: `ExportConfig` keeps its `*_enabled` flags beside
+   the values they gate, which is the GUI's off-state memory, while `xlsx::Config` is
+   the resolved form with `Option<T>`, so a sheet builder cannot read a disabled value
+   by accident.
 3. **Crate split** (§12): extract the executor from the module glue.
 4. **Engine spawn from a non-collomatique host** — `Worker::spawn` must accept an
    explicit executable path instead of always `current_exe()`.
+5. **Explicit hosted handoff** — the `RunPythonScript` path of `rpc-engine` stops
+   sending `SetData` at script exit; the runner exposes the send to the module
+   instead (§9.2). This can wait until `python-old/` retires (§13): the automatic
+   send is conditioned on the old module's shared `AppState` having been modified,
+   which a new-API script never touches, so both behaviours coexist unchanged during
+   the transition.
 
 ## 12. Crate layout
 
@@ -385,7 +597,7 @@ Work outside the `python/` crate that this design requires:
 - `python/` — the new API crate, module name `collomatique`. Builds as rlib (for
   embedding) and cdylib (for the wheel). Ships the value-dataclass `.py` source; in
   embedded mode the runner materializes it (`PyModule::from_code`) so hosted
-  scripts need no filesystem package.
+  scripts need no filesystem package. Takes a new `rfd` dependency for §9.3.
 - `python-runner/` — the executor: interpreter lifecycle, inittab registration of
   *both* modules during the transition, the document handoff to hosted scripts.
   `rpc-engine` depends on this crate only.
@@ -401,11 +613,13 @@ Work outside the `python/` crate that this design requires:
 2. Read surface: document, handles, collections, ids.
 3. Write surface: ops mirror, `OpResult` warnings, transactions, undo. Value
    dataclasses land here.
-4. Coarse door (`snapshot`/`replace_all`) and file/export/maintenance ops (with
+4. Coarse door (`snapshot`/`replace_all`), then the document plumbing of §9:
+   `default_document`, `save`/`send_to_host`, dialogs, export and maintenance (with
    the Rust prerequisites of §11 as they are needed).
 5. Solver (last), including the engine-location mechanism.
-6. Migrate the three contract scripts to the new API (user-validated), retire
-   `python-old/` and its registration.
+6. Migrate the three contract scripts to the new API (user-validated) — they gain an
+   explicit `doc.save()`. Retire `python-old/` and its registration, and with it the
+   automatic send-back (§11.5).
 
 Standalone packaging (wheel + nix environment) can land any time after step 3; no
 step depends on it.
@@ -415,9 +629,10 @@ step depends on it.
 Import-style (write-heavy):
 
 ```python
+import sys
 import collomatique as clm
 
-doc = clm.current_document() or clm.load("2026.collomatique")
+doc = clm.default_document(sys.argv[1] if len(sys.argv) > 1 else None)
 
 with doc.transaction("Import CSV"):
     maths = doc.subjects.add(clm.SubjectData(
@@ -435,7 +650,16 @@ with doc.transaction("Import CSV"):
                                              email=row.email or None))
         doc.assignments.set(period, maths, s, True)
 
-doc.save("2026.collomatique")
+doc.save()      # back to the origin: the host, or the file it came from
+```
+
+Building a document and pushing it into the open GUI:
+
+```python
+doc = clm.load("template.collomatique")
+with doc.transaction("Rentrée 2027"):
+    ...
+clm.send_to_host(doc)      # replaces the GUI's document wholesale
 ```
 
 Export-style (read-heavy):
