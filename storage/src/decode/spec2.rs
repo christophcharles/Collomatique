@@ -117,7 +117,10 @@ fn collect_blocks(
             if entry.needed_entry {
                 return Err(DecodeError::UnknownNeededEntry(version.clone()));
             }
-            caveats.insert(Caveat::UnknownEntries);
+            caveats.insert(Caveat::UnknownEntry {
+                block_name: name.clone(),
+                minimum_spec_version: entry.minimum_spec_version,
+            });
             continue;
         };
 

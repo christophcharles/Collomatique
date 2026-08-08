@@ -22,10 +22,14 @@ impl Dialog {
 
         use collomatique_storage::Caveat;
         list.extend(self.caveats.iter().map(|caveat| match caveat {
-            Caveat::UnknownEntries => {
-                "- Certaines entrées (non-indispensables) n'ont pas pu être décodées".to_string()
-            }
-            Caveat::CreatedWithNewerVersion(version) => format!(
+            Caveat::UnknownEntry {
+                block_name,
+                minimum_spec_version,
+            } => format!(
+                "- L'entrée « {block_name} » n'a pas pu être décodée \
+                 (elle demande la version {minimum_spec_version} du format)"
+            ),
+            Caveat::CreatedWithNewerVersion { version } => format!(
                 "- Fichier généré avec la version {} de Collomatique\n  Il est préférable d'utiliser une version plus récente de Collomatique.",
                 version
             ),
