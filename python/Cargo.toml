@@ -10,7 +10,7 @@ collomatique-state-colloscopes = { path = "../state-colloscopes" }
 collomatique-ops = { path = "../ops" }
 collomatique-rpc = { path = "../rpc" }
 collomatique-time = { path = "../time" }
-pyo3 = { version = "0.29", features = [ "py-clone" ] }
+pyo3 = { workspace = true, features = [ "py-clone" ] }
 anyhow.workspace = true
 chrono.workspace = true
 non-empty-string.workspace = true

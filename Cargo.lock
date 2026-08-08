@@ -485,6 +485,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "collomatique-python-runner"
+version = "0.1.0-alpha.0.99"
+dependencies = [
+ "anyhow",
+ "collomatique-python",
+ "pyo3",
+]
+
+[[package]]
 name = "collomatique-rooms"
 version = "0.1.0-alpha.0.99"
 dependencies = [
@@ -533,7 +542,7 @@ dependencies = [
  "collomatique-constraints-colloscopes",
  "collomatique-ilp",
  "collomatique-ilp-modeler",
- "collomatique-python",
+ "collomatique-python-runner",
  "collomatique-rpc",
  "collomatique-state",
  "collomatique-state-colloscopes",

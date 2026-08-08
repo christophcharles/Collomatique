@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = [ "gtk4", "state", "state-derive", "ilp", "ilp-modeler", "ilp-modeler-derive", "time" , "storage", "state-colloscopes" , "testgen-colloscopes" , "python", "ops", "rpc", "rpc-engine", "constraints-colloscopes", "constraints-groups", "xlsx", "mps", "collo-cbc", "subprocesses", "rooms", "rooms-model", "constraints-rooms", "strategies", "settings"]
+members = [ "gtk4", "state", "state-derive", "ilp", "ilp-modeler", "ilp-modeler-derive", "time" , "storage", "state-colloscopes" , "testgen-colloscopes" , "python", "python-runner", "ops", "rpc", "rpc-engine", "constraints-colloscopes", "constraints-groups", "xlsx", "mps", "collo-cbc", "subprocesses", "rooms", "rooms-model", "constraints-rooms", "strategies", "settings"]
 
 [workspace.package]
 version = "0.1.0-alpha.0.99"
@@ -21,3 +21,4 @@ async-trait = "0.1"
 chrono = "0.4"
 futures = "0.3"
 non-empty-string = "0.2.6"
+pyo3 = "0.29"

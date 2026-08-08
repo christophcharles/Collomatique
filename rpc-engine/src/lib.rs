@@ -363,8 +363,8 @@ pub fn run_rpc_engine() -> Result<(), anyhow::Error> {
             let shared = std::sync::Arc::new(std::sync::Mutex::new(app_state));
 
             eprintln!("Running Python script...");
-            collomatique_python::initialize();
-            collomatique_python::run_python_script(script, Some(shared.clone()))?;
+            collomatique_python_runner::initialize();
+            collomatique_python_runner::run_python_script(script, Some(shared.clone()))?;
 
             // Send back if modified
             {
