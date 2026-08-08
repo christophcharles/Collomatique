@@ -473,7 +473,11 @@ dependencies = [
 name = "collomatique-python"
 version = "0.1.0-alpha.0.99"
 dependencies = [
+ "collomatique-ops",
  "collomatique-settings",
+ "collomatique-state",
+ "collomatique-state-colloscopes",
+ "collomatique-storage",
  "pyo3",
 ]
 

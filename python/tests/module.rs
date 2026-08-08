@@ -6,6 +6,7 @@
 //! script's globals, so the assertions stay here, where a failure says
 //! something useful.
 
+use std::path::{Path, PathBuf};
 use std::sync::Once;
 
 use pyo3::prelude::*;
@@ -71,4 +72,66 @@ fn the_module_reports_the_package_version() {
     });
 
     assert_eq!(version, env!("CARGO_PKG_VERSION"));
+}
+
+/// A private directory for one test to write in, emptied first
+///
+/// The document scripts write files, and `doc.save()` writes back to the file
+/// the document came from — so they must work on a copy, never on anything in
+/// the repository. A per-process, per-test name keeps two runs of the suite out
+/// of each other's way without a `tempfile` dependency.
+fn workspace(name: &str) -> PathBuf {
+    let dir =
+        std::env::temp_dir().join(format!("collomatique-python-{}-{name}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("the temporary directory should be creatable");
+    dir
+}
+
+/// Reads a colloscope file the way the application does
+///
+/// Used on the files the script wrote: it says the output is a colloscope
+/// document and not merely some bytes that happen to be there.
+fn reload(path: &Path) -> collomatique_state_colloscopes::Data {
+    let content = std::fs::read_to_string(path).expect("the script wrote this file");
+    let (inner_data, _caveats) =
+        collomatique_storage::deserialize_data(&content).expect("the written file should decode");
+    collomatique_state_colloscopes::Data::from_inner_data(inner_data)
+        .expect("the written document should satisfy the in-memory invariants")
+}
+
+/// A document survives a load and both shapes of save
+///
+/// The script does the whole trip — open a real colloscope, write it back to
+/// its origin, write it somewhere else, and check what `source_path` says
+/// throughout. Rust checks what landed on disk: the two files it wrote are the
+/// same bytes, and they read back as a document.
+#[test]
+fn a_document_loads_saves_and_remembers_where_it_came_from() {
+    let dir = workspace("document");
+    let source = dir.join("source.collomatique");
+    let target = dir.join("target.collomatique");
+
+    let example = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../examples/hogwarts.collomatique")
+        .canonicalize()
+        .expect("the example colloscope should be in the repository");
+    std::fs::copy(&example, &source).expect("the example should be copyable");
+
+    run(include_str!("scripts/document.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("target", &target)?;
+        Ok(())
+    });
+
+    // `save()` and `save(target)` write the same document, so they write the
+    // same bytes: the destination is the only thing that differs between them.
+    let written = std::fs::read(&source).expect("save() rewrote its origin");
+    let saved_as = std::fs::read(&target).expect("save(target) wrote the target");
+    assert_eq!(written, saved_as);
+
+    let reloaded = reload(&target);
+    assert_eq!(reloaded.get_inner_data(), reload(&source).get_inner_data());
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }

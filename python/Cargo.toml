@@ -5,5 +5,9 @@ edition.workspace = true
 authors.workspace = true
 
 [dependencies]
+collomatique-ops = { path = "../ops" }
 collomatique-settings = { path = "../settings" }
+collomatique-state = { path = "../state" }
+collomatique-state-colloscopes = { path = "../state-colloscopes" }
+collomatique-storage = { path = "../storage" }
 pyo3.workspace = true
