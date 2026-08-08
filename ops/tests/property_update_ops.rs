@@ -55,10 +55,10 @@ use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
 
 use collomatique_ops::{
-    AssignmentsUpdateOp, BalancingUpdateOp, ColloscopeUpdateOp, Desc, ExportConfigUpdateOp,
-    GeneralPlanningUpdateOp, GroupListsUpdateOp, IncompatibilitiesUpdateOp, PairingsUpdateOp,
-    SettingsUpdateOp, SlotPairingsUpdateOp, SlotsUpdateOp, StudentsUpdateOp, SubjectsUpdateOp,
-    TeachersUpdateOp, UpdateOp, WeekPatternsUpdateOp,
+    AssignmentsUpdateOp, BalancingUpdateOp, ColloscopeContents, ColloscopeUpdateOp, Desc,
+    ExportConfigUpdateOp, GeneralPlanningUpdateOp, GroupListsUpdateOp, IncompatibilitiesUpdateOp,
+    PairingsUpdateOp, SettingsUpdateOp, SlotPairingsUpdateOp, SlotsUpdateOp, StudentsUpdateOp,
+    SubjectsUpdateOp, TeachersUpdateOp, UpdateOp, WeekPatternsUpdateOp,
 };
 use collomatique_state::{AppState, traits::Manager};
 use collomatique_state_colloscopes::{
@@ -1071,17 +1071,31 @@ fn gen_colloscope(
     invalid: bool,
 ) -> ColloscopeUpdateOp {
     if invalid {
-        return if rng.random_bool(0.5) {
-            ColloscopeUpdateOp::UpdateColloscopeGroupList(
+        return match rng.random_range(0..3u32) {
+            0 => ColloscopeUpdateOp::UpdateColloscopeGroupList(
                 some_group_list(rng, pools),
                 BTreeMap::from([(unsafe { StudentId::new(dangling(rng)) }, 0)]),
-            )
-        } else {
-            ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+            ),
+            1 => ColloscopeUpdateOp::UpdateColloscopeInterrogation(
                 unsafe { SlotId::new(dangling(rng)) },
                 unsafe { WeekId::new(dangling(rng)) },
                 BTreeSet::from([0]),
-            )
+            ),
+            // The install has residual `panic!` arms of its own, so it needs
+            // its own dangling draws rather than inheriting the argument the
+            // two single-row variants make above.
+            _ => ColloscopeUpdateOp::InstallColloscope(ColloscopeContents {
+                group_lists: BTreeMap::from([(
+                    unsafe { GroupListId::new(dangling(rng)) },
+                    BTreeMap::from([(some_student(rng, pools), 0)]),
+                )]),
+                interrogations: BTreeMap::from([(
+                    (unsafe { SlotId::new(dangling(rng)) }, unsafe {
+                        WeekId::new(dangling(rng))
+                    }),
+                    BTreeSet::from([0]),
+                )]),
+            }),
         };
     }
 
@@ -1096,7 +1110,7 @@ fn gen_colloscope(
         5
     };
 
-    match weighted(rng, &[group_list_w, interrogation_w, 1, 1]) {
+    match weighted(rng, &[group_list_w, interrogation_w, 1, 1, 3]) {
         0 => {
             let group_list_id = pick(rng, &pools.group_list_ids);
             let group_list = inner
@@ -1124,8 +1138,69 @@ fn gen_colloscope(
             ColloscopeUpdateOp::UpdateColloscopeInterrogation(slot_id, week_id, assigned_groups)
         }
         2 => ColloscopeUpdateOp::EraseColloscope,
-        _ => ColloscopeUpdateOp::EraseGroupLists,
+        3 => ColloscopeUpdateOp::EraseGroupLists,
+        _ => ColloscopeUpdateOp::InstallColloscope(gen_install_colloscope(rng, inner, pools)),
     }
+}
+
+/// A whole-colloscope payload for [`ColloscopeUpdateOp::InstallColloscope`].
+///
+/// It starts from what the document already holds rather than from nothing, so
+/// the three cases the install's diff distinguishes — a row it leaves alone, a
+/// row it changes, a row it drops — all come up on their own instead of waiting
+/// on a coincidence between two independent random draws. The rows added on top
+/// are drawn from the live pools, the same way the two single-row arms above
+/// draw theirs, and are just as free to be wrong: a payload the op refuses is a
+/// perfectly good draw.
+///
+/// Empty placement maps and empty group sets come out of this naturally (an
+/// empty student subset, a zero-length group draw), which is what exercises the
+/// payload's "an empty row means no row" reading.
+fn gen_install_colloscope(
+    rng: &mut ChaCha8Rng,
+    inner: &InnerData,
+    pools: &Pools,
+) -> ColloscopeContents {
+    let mut contents = ColloscopeContents::from(&inner.colloscope);
+    contents
+        .group_lists
+        .retain(|_group_list_id, _placements| rng.random_bool(0.7));
+    contents
+        .interrogations
+        .retain(|_coord, _assigned_groups| rng.random_bool(0.7));
+
+    for group_list_id in synth::subset(rng, &pools.group_list_ids, 0.3) {
+        let group_list = inner
+            .params
+            .group_lists
+            .group_list_map
+            .get(&group_list_id)
+            .expect("the group list id comes from the live pool");
+        let group_count = group_list.params().group_names.len() as u32;
+        let mut placements = BTreeMap::new();
+        if group_count > 0 {
+            for student_id in synth::subset(rng, &pools.student_ids, 0.3) {
+                placements.insert(student_id, rng.random_range(0..group_count));
+            }
+        }
+        contents.group_lists.insert(group_list_id, placements);
+    }
+
+    if !pools.slot_ids.is_empty() && !pools.week_ids.is_empty() {
+        for _ in 0..rng.random_range(0..=3u32) {
+            let slot_id = pick(rng, &pools.slot_ids);
+            let week_id = pick(rng, &pools.week_ids);
+            let mut assigned_groups = BTreeSet::new();
+            for _ in 0..rng.random_range(0..=2u32) {
+                assigned_groups.insert(rng.random_range(0..3u32));
+            }
+            contents
+                .interrogations
+                .insert((slot_id, week_id), assigned_groups);
+        }
+    }
+
+    contents
 }
 
 fn gen_export_config(rng: &mut ChaCha8Rng) -> ExportConfigUpdateOp {
