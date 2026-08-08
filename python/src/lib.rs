@@ -8,8 +8,10 @@
 use pyo3::prelude::*;
 
 pub mod caveats;
+pub mod collections;
 pub mod document;
 pub mod errors;
+pub mod results;
 
 pub use document::Document;
 
@@ -27,6 +29,7 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("LoadError", py.get_type::<errors::LoadError>())?;
     m.add("SaveError", py.get_type::<errors::SaveError>())?;
     m.add("NoOrigin", py.get_type::<errors::NoOrigin>())?;
+    m.add("UpdateError", py.get_type::<errors::UpdateError>())?;
     m.add(
         "IdCeilingExceeded",
         py.get_type::<errors::IdCeilingExceeded>(),
@@ -37,6 +40,8 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     )?;
 
     caveats::register(m)?;
+    collections::register(m)?;
+    results::register(m)?;
 
     m.add_class::<Document>()?;
     m.add_function(wrap_pyfunction!(document::load, m)?)?;

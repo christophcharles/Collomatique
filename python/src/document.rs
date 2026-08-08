@@ -6,13 +6,17 @@ use std::path::{Path, PathBuf};
 use pyo3::prelude::*;
 use pyo3::types::PyFrozenSet;
 
-use collomatique_ops::Desc;
+use collomatique_ops::{Desc, UpdateOp};
 use collomatique_state::AppState;
 use collomatique_state::traits::Manager;
 use collomatique_state_colloscopes::Data;
 use collomatique_storage::Caveat;
 
-use crate::errors::{CaveatedOverwrite, Error, IdCeilingExceeded, LoadError, NoOrigin, SaveError};
+use crate::collections::Periods;
+use crate::errors::{
+    CaveatedOverwrite, Error, IdCeilingExceeded, LoadError, NoOrigin, SaveError, UpdateError,
+};
+use crate::results::{OpResult, Warning};
 
 /// Where a document came from, and where a bare `save()` writes
 ///
@@ -116,8 +120,58 @@ pub fn new_document() -> Document {
     }
 }
 
+impl Document {
+    /// The document as it is now, for the collections to read through
+    pub(crate) fn data(&self) -> &Data {
+        self.state.get_data()
+    }
+
+    /// Applies one composite op, and keeps the repairs it had to make
+    ///
+    /// The single door every mutator goes through. It is `dry_apply` rather
+    /// than `apply`: `apply` exists for callers with no way of showing the
+    /// cascade's repairs, and this api has one — every mutator hands them back
+    /// on its [OpResult].
+    pub(crate) fn update(&mut self, py: Python<'_>, op: UpdateOp) -> PyResult<OpResult> {
+        let result = op
+            .dry_apply(&self.state)
+            .map_err(|e| UpdateError::new_err(e.to_string()))?;
+
+        // Rendered here, while `self.state` is still the state the op was
+        // applied to: a warning names material this update may be about to
+        // remove, so the pre-state is the only one it can be read against
+        // (`ops/src/cascade.rs`).
+        let warnings = result
+            .warnings
+            .iter()
+            .map(|warning| {
+                let text = warning.text(self.state.get_data()).map_err(|e| {
+                    Error::new_err(format!(
+                        "a repair named something the document does not hold ({e}); \
+                         this is a bug in collomatique, not something the script did"
+                    ))
+                })?;
+                Py::new(py, Warning::new(text))
+            })
+            .collect::<PyResult<Vec<_>>>()?;
+
+        self.state = result.new_state;
+
+        Ok(OpResult::new(warnings))
+    }
+}
+
 #[pymethods]
 impl Document {
+    /// The periods of the document, and the date the colles start
+    ///
+    /// A view on the document, not a copy: `doc.periods` twice gives two
+    /// objects that read and write the same document.
+    #[getter]
+    fn periods(slf: Py<Self>) -> Periods {
+        Periods::new(slf)
+    }
+
     /// Where this document came from, as a `pathlib.Path`, or `None`
     ///
     /// `None` means the document was never on disk — it came from

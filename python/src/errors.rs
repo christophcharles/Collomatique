@@ -6,6 +6,10 @@
 //! names `Error`, `NoOrigin` and `IdCeilingExceeded`, and leaves the ordinary
 //! ways reading and writing a file fail unnamed — hence [LoadError] and
 //! [SaveError].
+//!
+//! §6's per-family write errors (`SubjectsError`, `TeachersError`, …) will
+//! subclass [UpdateError] when the write surface lands, so a script that
+//! catches the general one keeps catching all of them.
 
 use pyo3::create_exception;
 use pyo3::exceptions::PyException;
@@ -36,6 +40,13 @@ create_exception!(
     NoOrigin,
     Error,
     "save() was called on a document that has nowhere to write."
+);
+
+create_exception!(
+    collomatique,
+    UpdateError,
+    Error,
+    "A write was refused: the document could not be made sense of that way."
 );
 
 create_exception!(

@@ -232,6 +232,44 @@ fn caveated_file() -> (String, collomatique_settings::Version, u32) {
     (content, newer, spec)
 }
 
+/// The date the colles start goes in from python and comes out on disk
+///
+/// The one write this api has so far, so it is also what says the write door
+/// works: the op is applied, the document keeps it, and a save carries it into
+/// the file. The dates travel in as `chrono` values, which is how the script
+/// receives real `datetime.date`s rather than strings it would have to parse.
+#[test]
+fn the_first_week_is_written_read_back_and_cleared() {
+    let dir = workspace("first-week");
+    let source = example_copy(&dir, "source.collomatique");
+    let target = dir.join("dated.collomatique");
+    let cleared_target = dir.join("cleared.collomatique");
+
+    let monday = chrono::NaiveDate::from_ymd_opt(2026, 9, 7).expect("7 September 2026 is a date");
+    let tuesday = monday.succ_opt().expect("the day after exists");
+
+    run(include_str!("scripts/first_week.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("target", &target)?;
+        globals.set_item("cleared_target", &cleared_target)?;
+        globals.set_item("monday", monday)?;
+        globals.set_item("tuesday", tuesday)?;
+        Ok(())
+    });
+
+    let dated = reload(&target);
+    assert_eq!(
+        dated.get_inner_data().params.periods.first_week,
+        Some(collomatique_time::WeekStart::new(monday).expect("7 September 2026 is a monday"))
+    );
+
+    // The refused tuesday left nothing behind, and the clear really cleared.
+    let cleared = reload(&cleared_target);
+    assert_eq!(cleared.get_inner_data().params.periods.first_week, None);
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
 /// A caveated file hands the script what it could not read, and is not
 /// overwritten behind its back
 ///
