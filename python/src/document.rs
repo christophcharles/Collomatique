@@ -14,6 +14,53 @@ use collomatique_storage::Caveat;
 
 use crate::errors::{CaveatedOverwrite, IdCeilingExceeded, LoadError, NoOrigin, SaveError};
 
+/// Where a document came from, and where a bare `save()` writes
+///
+/// Fixed at creation and never changed: `save(path)` writes where it is told
+/// and does not re-target a later `save()`. Pairing the path with its caveats
+/// — mirroring the GUI's `FileName` — makes "caveats with no path"
+/// unrepresentable, and gives the hosted document a slot of its own.
+/// [Origin::Hosted] carries no caveats, because the handoff carries the `Data`
+/// and not the host's caveat set (`docs/python/new_api_design.md` §9.2).
+enum Origin {
+    /// Never on disk and not hosted: `save()` has nowhere to write
+    None,
+    File {
+        path: PathBuf,
+        caveats: BTreeSet<Caveat>,
+    },
+    /// The document the application handed over
+    ///
+    /// Nothing builds one yet: `current_document()` is the only constructor
+    /// and it lands with hosted mode. The variant is here now so the enum has
+    /// its final shape and the arms that will need it are already written.
+    #[allow(dead_code)]
+    Hosted,
+}
+
+impl Origin {
+    /// The file this came from, for [Document::source_path] and for `save()`
+    ///
+    /// `None` for [Origin::Hosted] too: a hosted document was never on disk,
+    /// and `save()` sends it back to the application rather than writing.
+    fn path(&self) -> Option<&Path> {
+        match self {
+            Origin::File { path, .. } => Some(path),
+            Origin::None | Origin::Hosted => None,
+        }
+    }
+
+    /// What could not be read, empty for everything but a file
+    fn caveats(&self) -> &BTreeSet<Caveat> {
+        static EMPTY: BTreeSet<Caveat> = BTreeSet::new();
+
+        match self {
+            Origin::File { caveats, .. } => caveats,
+            Origin::None | Origin::Hosted => &EMPTY,
+        }
+    }
+}
+
 /// An open colloscope document
 ///
 /// The document owns its own state, so two documents in one script share
@@ -26,16 +73,7 @@ use crate::errors::{CaveatedOverwrite, IdCeilingExceeded, LoadError, NoOrigin, S
 #[pyclass(module = "collomatique")]
 pub struct Document {
     state: AppState<Data, Desc>,
-    source_path: Option<PathBuf>,
-    /// What could not be read from the file this document came from
-    ///
-    /// Part of the origin, so like [Document::source_path] it is fixed at
-    /// creation. An `Origin` enum pairing the two — mirroring the GUI's
-    /// `FileName` — would make "caveats with no path" unrepresentable, but
-    /// `docs/python/new_api_design.md` §9.2's hosted origin will reshape this
-    /// field anyway, so the enum belongs there rather than being guessed at
-    /// now.
-    caveats: BTreeSet<Caveat>,
+    origin: Origin,
 }
 
 /// Opens a colloscope file
@@ -62,8 +100,7 @@ pub fn load(path: PathBuf) -> PyResult<Document> {
     // happens when the file is written back.
     Ok(Document {
         state: AppState::new(data),
-        source_path: Some(path),
-        caveats,
+        origin: Origin::File { path, caveats },
     })
 }
 
@@ -75,8 +112,7 @@ pub fn load(path: PathBuf) -> PyResult<Document> {
 pub fn new_document() -> Document {
     Document {
         state: AppState::new(Data::new()),
-        source_path: None,
-        caveats: BTreeSet::new(),
+        origin: Origin::None,
     }
 }
 
@@ -93,13 +129,14 @@ impl Document {
     /// promise and not an implementation detail we happen to inherit.
     #[getter]
     fn source_path(&self) -> Option<&Path> {
-        self.source_path.as_deref()
+        self.origin.path()
     }
 
     /// What could not be read from the file, as a `frozenset` of [Caveat]s
     ///
-    /// Empty for a clean file and for [new_document]. Like the origin it is
-    /// fixed at creation: writing a copy of the document does not make the
+    /// Empty for a clean file and for [new_document]. It is part of the
+    /// origin, so it is fixed at creation like the path is: writing a copy of
+    /// the document does not make the
     /// file it came from any more readable, so nothing clears it. (The GUI
     /// *does* clear its `FileName::CaveatFile` after a save, but that field is
     /// a save *target*, which is a different thing from an origin.)
@@ -115,7 +152,8 @@ impl Document {
     #[getter]
     fn caveats<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyFrozenSet>> {
         let caveats = self
-            .caveats
+            .origin
+            .caveats()
             .iter()
             .map(|caveat| crate::caveats::to_python(py, caveat))
             .collect::<PyResult<Vec<_>>>()?;
@@ -155,23 +193,28 @@ impl Document {
         let target = match path {
             Some(path) => path,
             None => {
-                let origin = self.source_path.clone().ok_or_else(|| {
+                // `Origin::Hosted` answers `None` here and so shares the
+                // `NoOrigin` arm. Sending a hosted document back to the
+                // application is `docs/python/new_api_design.md` §9.2's job
+                // and lands with the rest of hosted mode.
+                let origin = self.origin.path().ok_or_else(|| {
                     NoOrigin::new_err("this document has no origin: pass a path to save()")
                 })?;
-                if !ignore_caveats && !self.caveats.is_empty() {
+                let caveats = self.origin.caveats();
+                if !ignore_caveats && !caveats.is_empty() {
                     return Err(CaveatedOverwrite::new_err(format!(
                         "{}: this file was loaded with caveats, so part of it could not be \
                          read and writing back would drop it ({}); pass a path to write \
                          elsewhere, or ignore_caveats=True to overwrite it anyway",
                         origin.display(),
-                        self.caveats
+                        caveats
                             .iter()
                             .map(|caveat| caveat.to_string())
                             .collect::<Vec<_>>()
                             .join("; "),
                     )));
                 }
-                origin
+                origin.to_path_buf()
             }
         };
 
