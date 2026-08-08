@@ -73,12 +73,6 @@ pub struct Header {
 /// record field.
 pub use semver::Version;
 
-/// Returns the version number of the compiled Collomatique package
-pub fn current_version() -> Version {
-    Version::parse(env!("CARGO_PKG_VERSION"))
-        .expect("CARGO_PKG_VERSION should be a valid semantic version")
-}
-
 /// The `file_type` discriminant
 ///
 /// An unrecognized value parses into [FileType::UnknownFileType] rather

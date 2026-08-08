@@ -1,10 +1,12 @@
-//! Per-user preferences for Collomatique
+//! This installation of Collomatique
 //!
-//! This crate holds the settings that belong to the person running
-//! Collomatique rather than to any colloscope: where they are stored, and the
-//! decisions that depend on them. It deliberately depends on no other
-//! `collomatique-*` crate and on no toolkit, so that a frontend other than the
-//! GTK one asks the same questions and gets the same answers.
+//! This crate holds what is true of the installation rather than of any
+//! colloscope: which build this is, and the settings that belong to the person
+//! running it — where those are stored, and the decisions that depend on them.
+//! The two belong together, since the one preference there is so far is about a
+//! version. It deliberately depends on no other `collomatique-*` crate and on
+//! no toolkit, so that a frontend other than the GTK one asks the same
+//! questions and gets the same answers.
 //!
 //! Everything here is best effort. A preference that cannot be read is treated
 //! as never having been set, and a preference that cannot be written is
@@ -16,6 +18,16 @@ use std::path::PathBuf;
 pub use semver::Version;
 
 pub mod development_warning;
+
+/// Returns the version number of the compiled Collomatique package
+///
+/// Every crate in the workspace carries `version.workspace = true`, so this
+/// crate's own `CARGO_PKG_VERSION` is the whole program's version. Reading it
+/// in a single place is what makes that a fact rather than a coincidence.
+pub fn current_version() -> Version {
+    Version::parse(env!("CARGO_PKG_VERSION"))
+        .expect("CARGO_PKG_VERSION should be a valid semantic version")
+}
 
 /// The per-user configuration directory for Collomatique
 ///

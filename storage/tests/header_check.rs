@@ -115,7 +115,7 @@ fn decode_entry_with_unknown_field() {
 fn decode_more_recent_file() {
     // `Version::new` drops any prerelease, so the built version is a plain
     // release strictly above the current one whatever the package version is.
-    let current = current_version();
+    let current = collomatique_settings::current_version();
     let new_version = Version::new(current.major, current.minor + 1, current.patch);
 
     let content = format!(

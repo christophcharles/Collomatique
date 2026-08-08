@@ -256,7 +256,7 @@ impl Component for AppModel {
         // on its own the day the version becomes a plain release. Whether the
         // warning is due is not a question for the GTK layer: collomatique-settings
         // answers it, so another frontend would get the same answer.
-        let version = collomatique_storage::current_version();
+        let version = collomatique_settings::current_version();
         if collomatique_settings::development_warning::is_due(&version) {
             controllers
                 .development_warning
@@ -635,7 +635,7 @@ impl AppModel {
 }
 
 fn in_dev_tooltip() -> String {
-    let version = collomatique_storage::current_version();
+    let version = collomatique_settings::current_version();
     if collomatique_settings::development_warning::is_development(&version) {
         format!("Version de développement {}", version)
     } else {
@@ -644,6 +644,6 @@ fn in_dev_tooltip() -> String {
 }
 
 fn in_dev_shown() -> bool {
-    let version = collomatique_storage::current_version();
+    let version = collomatique_settings::current_version();
     collomatique_settings::development_warning::is_development(&version)
 }
