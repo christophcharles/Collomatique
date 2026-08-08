@@ -242,7 +242,7 @@ colloscope, export config).
 | GroupLists (6) | `doc.group_lists.add/update/remove`, `.set_association(p, subj, gl_or_None)`, `.duplicate_previous_period(p)`, `.add_generated(entries)` (solver landing) |
 | Settings (3) | `doc.settings.set_global_limits(LimitsData)`, `.set_student_limits(student, LimitsData)`, `.remove_student_limits(student)` |
 | Balancing (3) | `doc.balancing.set_global(BalancingData)`, `.set_subject(subj, BalancingData)`, `.remove_subject(subj)` |
-| Colloscope (4 + 1 new) | `doc.colloscope.set_group_list(gl, {student: group})`, `.set_interrogation(slot, week, groups)`, `.erase()`, `.erase_group_lists()`, `.install(ColloscopeData)` (**new Rust op**, §11) |
+| Colloscope (4 + 1 new) | `doc.colloscope.set_group_list(gl, {student: group})`, `.set_interrogation(slot, week, groups)`, `.erase()`, `.erase_group_lists()`, `.install(ColloscopeData)` (`InstallColloscope`, §11.1) |
 | ExportConfig (11) | `doc.export_config.set_global(...)`, `.set_colloscope_enabled(bool)` / `_config(...)`, `.set_all_groups_enabled/_config`, `.set_prefilled_groups_enabled/_config`, `.set_automatic_groups_enabled/_config`, `.set_per_group_list_enabled/_config` |
 
 No elementary `Op` is exposed. The cascade architecture makes raw elementary access
@@ -453,7 +453,7 @@ The downsides, stated plainly:
 ### 9.4 Export
 
 - `doc.export_xlsx(path, config=None)` — `None` uses the document's export config.
-  The `ExportConfig → xlsx::Config` conversion moves into the `xlsx` crate (§11.2);
+  The `ExportConfig → xlsx::Config` conversion lives in the `xlsx` crate (§11.2);
   no shared crate is needed, since `xlsx` already depends on `state-colloscopes`.
 - `doc.export_mps(path, config)` — writes the built ILP problem for a given solve
   config, the GUI's advanced-tools export. `config` is the `ColloscopeSolveConfig`
@@ -566,29 +566,84 @@ think about it.
 
 ## 11. Rust-side prerequisites
 
-Work outside the `python/` crate that this design requires:
+Work outside the `python/` crate that this design requires. All four have landed;
+nothing here blocks the new crate any more.
 
-1. **Whole-colloscope install op** — a `ColloscopeUpdateOp` variant (or family
-   addition) for "install this colloscope", replacing the raw `Op::GlobalUpdate`
-   the GUI currently uses for solve results. The GUI should adopt it too.
-2. **Move `to_xlsx_config` into the `xlsx` crate** as
-   `impl From<&export_config::ExportConfig> for Config`; `gtk4` then calls `.into()`.
-   No shared crate is needed: `xlsx` already depends on `state-colloscopes`
-   (`write_xlsx` takes `&InnerData`), and the function has no gtk in it — it sat in
-   `gtk4/src/editor/export.rs` only because `gtk4` was the only caller. The two config
-   types stay separate on purpose: `ExportConfig` keeps its `*_enabled` flags beside
-   the values they gate, which is the GUI's off-state memory, while `xlsx::Config` is
-   the resolved form with `Option<T>`, so a sheet builder cannot read a disabled value
-   by accident.
-3. **Crate split** (§12): extract the executor from the module glue.
-4. **Engine spawn from a non-collomatique host** — `Worker::spawn` must accept an
-   explicit executable path instead of always `current_exe()`.
-5. **Explicit hosted handoff** — the `RunPythonScript` path of `rpc-engine` stops
-   sending `SetData` at script exit; the runner exposes the send to the module
-   instead (§9.2). This can wait until `python-old/` retires (§13): the automatic
-   send is conditioned on the old module's shared `AppState` having been modified,
-   which a new-API script never touches, so both behaviours coexist unchanged during
-   the transition.
+1. **Whole-colloscope install op** — done: the op in `ops/` (5ee7ec05), the GUI
+   adopting it (dfe62270). `ColloscopeUpdateOp::InstallColloscope` writes a whole
+   colloscope through the cascade: afterwards the document holds the payload's rows
+   and no others. It is the solver's landing door and the scripting API's
+   `colloscope.install`, so neither reaches for the forced `Op::GlobalUpdate`.
+
+   Two decisions worth remembering. The payload is `ColloscopeContents`, a plain-map
+   twin of the state's `Colloscope` — the state type is two `Table`s and carries no
+   serde, while an `UpdateOp` payload must serialize — with the `From<&Colloscope>`
+   callers that already hold one need; a value built by hand need not be canonical, an
+   empty group set or an empty placement map just means "no row". And the op *carries*
+   a whole colloscope but *lands* as a diff: clears for the dropped rows, writes for
+   the added and changed ones, nothing at all for a row the document already holds.
+   Every elementary op costs a document clone and a whole-model invariant scan, and
+   the case the op is really for is "read a colloscope, change a handful of cells,
+   install it back". `InstallColloscopeError` is its own vocabulary rather than a reuse
+   of the two single-row ones, every variant carrying the ids that locate the offending
+   row.
+
+   On the GUI side this retired `EditorInput::UpdateFullColloscope` and its ad-hoc
+   handler: the generic `UpdateOp` arm now does the dry-apply, the warning dialog and
+   the error dialog. Two user-visible consequences — the undo entry reads « Mettre à
+   jour le colloscope » rather than « Résolution du colloscope » (the op is not
+   solver-specific), and its category is `OpCategory::Colloscope`, so undoing a solve
+   result brings the colloscope panel forward.
+
+2. **`to_xlsx_config` in the `xlsx` crate** — done (273f3e28). It moved out of
+   `gtk4/src/editor/export.rs` into `xlsx/src/config_conversion.rs` as `From` impls;
+   `gtk4`'s `export.rs` keeps only `export_to_xlsx` and its anyhow wrapper. No new
+   dependency was needed: `xlsx` already depends on `state-colloscopes`, since
+   `write_xlsx` takes an `&InnerData`. The two config types stay separate on purpose:
+   `ExportConfig` keeps its `*_enabled` flags beside the values they gate, which is
+   the interface's memory of what was chosen before a section was switched off, while
+   `xlsx::Config` is the resolved form with `Option<T>`, so a sheet builder cannot
+   read a disabled value by accident.
+
+3. **Crate split** (§12) — done (c1a4ce18), with the rename following (fd343b5e).
+   `python-runner/` took `initialize()` and `run_python_script()` unchanged, `python/`
+   kept `glue` and nothing else, and `rpc-engine` now depends on the runner only — it
+   never used anything else from the python crate.
+
+   The seam is the shared file state. The static stays in the module crate, because
+   `glue::current_session()` reads it and the library cannot depend on the runner; the
+   library gained a public setter and the runner drives it around a script run. pyo3
+   moved to the workspace dependencies so the two crates cannot drift onto versions
+   that would only disagree at link time. Then `python/` became `python-old/` (crate
+   `collomatique-python-old`, module `collomatique_old`), freeing the name for the new
+   crate; the three contract scripts import it under an alias, so their bodies keep
+   calling `collomatique.X` unchanged.
+
+4. **Engine spawn from a non-collomatique host** — done (a07e32b1). `Worker::spawn`
+   now names its engine, `EngineExe::Current` or `EngineExe::Explicit(path)`, resolved
+   inside `spawn` so existing call sites grow no error path. It is threaded through
+   `SolverSubprocess::spawn`, `StrategySubprocess::spawn` and `spawn_raw`, and
+   `SubprocessSolveBackend` stores one.
+
+   The decision that keeps this small: nested workers spawned from inside an engine
+   process stay `Current`, because even when that engine was launched by explicit path,
+   `current_exe()` there is the very binary that was named. So the path never travels
+   over RPC and `InitMsg` is unchanged. `Process::spawn_pty` also takes an `&OsStr`
+   command now, which retired `WorkerSpawnError::NonUtf8ExePath` — a path coming from a
+   user's environment is not the same thing as `current_exe()`, and refusing a
+   non-UTF-8 one buys nothing. The `Explicit` arm has no caller yet; the Python solver
+   is the last migration milestone (§13.5).
+
+**No hosted-handoff prerequisite.** An earlier draft listed a fifth item: make the
+`RunPythonScript` path of `rpc-engine` stop sending `SetData` at script exit, and have
+the runner expose the send to the module instead. It is not needed. That send is
+conditioned on the old module's shared `AppState` having been modified (`state.can_undo()`
+in `rpc-engine/src/lib.rs`), and that `Arc<Mutex<AppState>>` is `python-old`'s own
+structure, handed to `run_python_script` as its file state. The new crate has its own
+document and never touches it, so the automatic send cannot fire for a new-API script;
+it disappears with `python-old/` and the `RunPythonScript` glue that feeds it (§13.6).
+The explicit `send_to_host` / `doc.save()` of §9.2 therefore needs nothing removed
+first.
 
 ## 12. Crate layout
 
@@ -619,7 +674,7 @@ Work outside the `python/` crate that this design requires:
 5. Solver (last), including the engine-location mechanism.
 6. Migrate the three contract scripts to the new API (user-validated) — they gain an
    explicit `doc.save()`. Retire `python-old/` and its registration, and with it the
-   automatic send-back (§11.5).
+   engine's automatic send-back (§11).
 
 Standalone packaging (wheel + nix environment) can land any time after step 3; no
 step depends on it.
