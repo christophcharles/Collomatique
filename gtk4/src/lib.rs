@@ -139,6 +139,7 @@ impl Component for AppModel {
             set_default_width: 1280,
             set_default_height: 720,
             set_title: Some("Collomatique"),
+            add_css_class: if in_dev_shown() { "devel" } else { "" },
             gtk::Stack {
                 set_hexpand: true,
                 set_vexpand: true,
@@ -631,4 +632,18 @@ impl AppModel {
             widgets.about_dialog.present(Some(&widgets.root_window));
         }
     }
+}
+
+fn in_dev_tooltip() -> String {
+    let version = collomatique_storage::current_version();
+    if collomatique_settings::development_warning::is_development(&version) {
+        format!("Version de développement {}", version)
+    } else {
+        format!("Version stable {}", version)
+    }
+}
+
+fn in_dev_shown() -> bool {
+    let version = collomatique_storage::current_version();
+    collomatique_settings::development_warning::is_development(&version)
 }

@@ -2,6 +2,7 @@ use adw::prelude::NavigationPageExt;
 use collomatique_state::traits::Manager;
 use gtk::prelude::{ButtonExt, ObjectExt, OrientableExt, WidgetExt};
 use libadwaita::prelude::Cast;
+use relm4::RelmWidgetExt;
 use relm4::prelude::ComponentController;
 use relm4::{Component, ComponentParts, ComponentSender, Controller};
 use relm4::{adw, gtk};
@@ -727,6 +728,11 @@ impl Component for EditorPanel {
                                 set_tooltip_text: Some("Enregistrer sous"),
                                 connect_clicked => EditorInput::SaveAsClicked,
                             },
+                        },
+                        pack_end = &gtk::Image {
+                            set_icon_name: Some("dialog-warning-symbolic"),
+                            set_tooltip: &super::in_dev_tooltip(),
+                            set_visible: super::in_dev_shown(),
                         },
                     },
                     #[wrap(Some)]
