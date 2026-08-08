@@ -14,7 +14,8 @@ use collomatique_storage::Caveat;
 
 use crate::collections::Periods;
 use crate::errors::{
-    CaveatedOverwrite, Error, IdCeilingExceeded, LoadError, NoOrigin, SaveError, UpdateError,
+    CaveatedOverwrite, Error, IdCeilingExceeded, LoadError, NoOrigin, NothingToUndo, SaveError,
+    UpdateError,
 };
 use crate::results::{OpResult, Warning};
 
@@ -212,6 +213,67 @@ impl Document {
             .map(|caveat| crate::caveats::to_python(py, caveat))
             .collect::<PyResult<Vec<_>>>()?;
         PyFrozenSet::new(py, &caveats)
+    }
+
+    /// Takes back the last write
+    ///
+    /// Raises `NothingToUndo` when there is nothing left to take back, rather
+    /// than doing nothing quietly: a script that undoes more than it wrote is
+    /// mistaken about its own document, and silence would hide that.
+    ///
+    /// The history belongs to the document and never leaves the script. In
+    /// hosted mode the script works on a copy, so an undo is invisible to the
+    /// application: only `send_to_host` crosses back, and what it carries is
+    /// the document as it stands, not the way it got there.
+    fn undo(&mut self) -> PyResult<()> {
+        self.state
+            .undo()
+            .map_err(|_| NothingToUndo::new_err("this document has nothing left to undo"))?;
+        Ok(())
+    }
+
+    /// Puts back the last write [Document::undo] took away
+    ///
+    /// Raises `NothingToUndo` when there is nothing to put back. A new write
+    /// empties the redo stack, as it does everywhere else: the history is a
+    /// line, not a tree.
+    fn redo(&mut self) -> PyResult<()> {
+        self.state
+            .redo()
+            .map_err(|_| NothingToUndo::new_err("this document has nothing left to redo"))?;
+        Ok(())
+    }
+
+    /// Whether [Document::undo] would do something rather than raise
+    #[getter]
+    fn can_undo(&self) -> bool {
+        self.state.can_undo()
+    }
+
+    /// Whether [Document::redo] would do something rather than raise
+    #[getter]
+    fn can_redo(&self) -> bool {
+        self.state.can_redo()
+    }
+
+    /// What [Document::undo] would take back, in french, or `None`
+    ///
+    /// The same short label the application shows in its Undo menu — « Changer
+    /// le début des colles » and the like. It is a label for a human to read,
+    /// so a script should not branch on it; `can_undo` is the question with a
+    /// stable answer.
+    ///
+    /// The category the operation also carries is not exposed: it tells the
+    /// GUI which screen to open, which is nothing a script can use.
+    #[getter]
+    fn undo_name(&self) -> Option<String> {
+        self.state.get_undo_name().map(|(_, name)| name.clone())
+    }
+
+    /// What [Document::redo] would put back, in french, or `None`
+    #[getter]
+    fn redo_name(&self) -> Option<String> {
+        self.state.get_redo_name().map(|(_, name)| name.clone())
     }
 
     /// A copy of the document with dense ids and no undo history

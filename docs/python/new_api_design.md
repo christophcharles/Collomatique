@@ -306,6 +306,12 @@ worker-killing `panic!`s:
   are `SaveError`s, so a script that only cares that the write failed catches one
   thing. `NoOrigin` stays generic — a document has an origin or it has not, and nothing
   tracks how it was produced.
+- `NothingToUndo` for `doc.undo()` or `doc.redo()` with nothing left in that
+  direction (§5). One class for both, because it is one question — the history has
+  another step that way, or it has not — and a script that wants to ask rather than
+  catch has `can_undo` / `can_redo`. Raising rather than doing nothing: a script that
+  undoes more than it wrote is mistaken about its own document, and a quiet no-op
+  hides that.
 
 ## 7. Quality floor
 

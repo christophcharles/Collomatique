@@ -270,6 +270,51 @@ fn the_first_week_is_written_read_back_and_cleared() {
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
 
+/// Writes are taken back one at a time, and put back again
+///
+/// The undone document is compared with the file it was loaded from: three
+/// undos do not merely land on a document with the right start date, they land
+/// on the document that was opened. The french labels are handed in from `ops`
+/// rather than spelled out in the script, so this says python shows the
+/// operation's own name.
+#[test]
+fn writes_are_undone_and_redone_one_at_a_time() {
+    let dir = workspace("undo");
+    let source = example_copy(&dir, "source.collomatique");
+    let target = dir.join("undone.collomatique");
+
+    let mondays: Vec<_> = [(2026, 9, 7), (2026, 9, 14), (2026, 9, 21)]
+        .into_iter()
+        .map(|(y, m, d)| {
+            chrono::NaiveDate::from_ymd_opt(y, m, d).expect("these are dates, and mondays")
+        })
+        .collect();
+
+    let label = |op: collomatique_ops::GeneralPlanningUpdateOp| op.get_desc().1;
+    let update_label = label(collomatique_ops::GeneralPlanningUpdateOp::UpdateFirstWeek(
+        collomatique_time::WeekStart::new(mondays[0]).expect("7 September 2026 is a monday"),
+    ));
+    let clear_label = label(collomatique_ops::GeneralPlanningUpdateOp::DeleteFirstWeek);
+
+    run(include_str!("scripts/undo.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("target", &target)?;
+        globals.set_item("first", mondays[0])?;
+        globals.set_item("second", mondays[1])?;
+        globals.set_item("third", mondays[2])?;
+        globals.set_item("update_label", &update_label)?;
+        globals.set_item("clear_label", &clear_label)?;
+        Ok(())
+    });
+
+    assert_eq!(
+        reload(&target).get_inner_data(),
+        reload(&source).get_inner_data()
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
 /// A caveated file hands the script what it could not read, and is not
 /// overwritten behind its back
 ///

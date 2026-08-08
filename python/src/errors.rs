@@ -51,6 +51,13 @@ create_exception!(
 
 create_exception!(
     collomatique,
+    NothingToUndo,
+    Error,
+    "undo() or redo() was called with nothing left in that direction."
+);
+
+create_exception!(
+    collomatique,
     IdCeilingExceeded,
     SaveError,
     "The document holds an id the file format cannot represent."

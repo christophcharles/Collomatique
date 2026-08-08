@@ -30,6 +30,7 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("SaveError", py.get_type::<errors::SaveError>())?;
     m.add("NoOrigin", py.get_type::<errors::NoOrigin>())?;
     m.add("UpdateError", py.get_type::<errors::UpdateError>())?;
+    m.add("NothingToUndo", py.get_type::<errors::NothingToUndo>())?;
     m.add(
         "IdCeilingExceeded",
         py.get_type::<errors::IdCeilingExceeded>(),
