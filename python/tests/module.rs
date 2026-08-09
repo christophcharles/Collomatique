@@ -14,11 +14,11 @@ use std::sync::{Arc, Mutex, Once};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
-use collomatique_ops::rendering::{
-    render_pairing_rule, render_slot_in_subject, render_slot_pairing_rule, render_subject,
-};
 use collomatique_python::{FileRequest, collomatique};
 use collomatique_state_colloscopes::Data;
+use collomatique_ui_text::rendering::{
+    render_pairing_rule, render_slot_in_subject, render_slot_pairing_rule, render_subject,
+};
 
 static INIT: Once = Once::new();
 
@@ -3466,7 +3466,7 @@ fn pairings_document(path: &Path) {
 /// rule as live subject handles with their `should_have` flags, the exclusions
 /// as period handles, the softness.
 ///
-/// The reprs are pinned exactly, against `ops::rendering`'s own notation: the
+/// The reprs are pinned exactly, against `collomatique_ui_text::rendering`'s own notation: the
 /// api names a rule the way the application does, like `group_name`'s
 /// « Groupe N » fallback.
 ///
@@ -3578,7 +3578,7 @@ fn the_pairing_rules_read_back_rule_by_rule() {
     );
 
     // The reprs name the rules the way the application does: the exact
-    // `ops::rendering` notation, quoted the way the other reprs quote names.
+    // `collomatique_ui_text::rendering` notation, quoted the way the other reprs quote names.
     use collomatique_state::ids::Id as _;
     let (first_id, first) = rules[0];
     assert_eq!(
@@ -3609,7 +3609,7 @@ fn the_pairing_rules_read_back_rule_by_rule() {
 /// it with the same document read straight from the model — the two parts of
 /// each rule as live slot handles with their `should_have` flags, the empty
 /// exclusions, the softness. The reprs are pinned exactly against
-/// `ops::rendering`'s notation, like the subject-level rules'.
+/// `collomatique_ui_text::rendering`'s notation, like the subject-level rules'.
 ///
 /// The example carries two slot pairing rules, both strict, both excluding no
 /// period, with a used antecedent and an unused consequent — the shape the

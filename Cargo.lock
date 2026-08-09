@@ -398,6 +398,7 @@ dependencies = [
  "collomatique-strategies",
  "collomatique-subprocesses",
  "collomatique-time",
+ "collomatique-ui-text",
  "collomatique-xlsx",
  "gtk4",
  "libadwaita",
@@ -464,6 +465,7 @@ dependencies = [
  "collomatique-storage",
  "collomatique-testgen-colloscopes",
  "collomatique-time",
+ "collomatique-ui-text",
  "non-empty-string",
  "serde",
  "thiserror 1.0.69",
@@ -480,6 +482,7 @@ dependencies = [
  "collomatique-state-colloscopes",
  "collomatique-storage",
  "collomatique-time",
+ "collomatique-ui-text",
  "pyo3",
  "rfd",
  "tokio",
@@ -683,6 +686,18 @@ dependencies = [
  "chrono",
  "serde",
  "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "collomatique-ui-text"
+version = "0.1.0-alpha.0.99"
+dependencies = [
+ "chrono",
+ "collomatique-state",
+ "collomatique-state-colloscopes",
+ "collomatique-storage",
+ "collomatique-time",
  "thiserror 1.0.69",
 ]
 

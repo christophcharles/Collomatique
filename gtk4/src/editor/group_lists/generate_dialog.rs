@@ -182,7 +182,7 @@ impl Dialog {
                     return None;
                 }
 
-                let period = collomatique_ops::rendering::render_period(
+                let period = collomatique_ui_text::rendering::render_period(
                     &self.params.periods,
                     &self.params.weeks,
                     period_id,

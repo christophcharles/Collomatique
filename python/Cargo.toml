@@ -11,6 +11,8 @@ collomatique-state = { path = "../state" }
 collomatique-state-colloscopes = { path = "../state-colloscopes" }
 collomatique-storage = { path = "../storage" }
 collomatique-time = { path = "../time" }
+# The entity renderers the pairing-rule reprs name a rule with.
+collomatique-ui-text = { path = "../ui-text" }
 chrono.workspace = true
 # `chrono`: `datetime.date` <-> `chrono::NaiveDate`, for the first week of the
 # colles.

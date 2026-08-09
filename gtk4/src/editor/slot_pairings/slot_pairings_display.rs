@@ -266,7 +266,7 @@ impl Rule {
             1 => format!("Désactivée sur la période {}", excluded_period_list[0]),
             _ => format!(
                 "Désactivée sur les périodes {}",
-                collomatique_ops::rendering::join_french(&excluded_period_list)
+                collomatique_ui_text::rendering::join_french(&excluded_period_list)
             ),
         }
     }

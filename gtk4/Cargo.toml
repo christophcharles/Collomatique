@@ -21,6 +21,7 @@ collomatique-xlsx = { path = "../xlsx" }
 collomatique-mps = { path = "../mps" }
 collomatique-strategies = { path = "../strategies" }
 collomatique-subprocesses = { path = "../subprocesses" }
+collomatique-ui-text = { path = "../ui-text" }
 libadwaita = { version = "0.7", features = [ "v1_7" ] }
 gtk4 = { version = "0.9", features = [ "v4_10" ] }
 relm4 = { version = "0.9", features = [ "libadwaita" ] }

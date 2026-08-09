@@ -1534,7 +1534,7 @@ fn warning_lines(
 
 /// Names a run of consecutive weeks — a period, or a block inside a subject.
 ///
-/// Periods are named by [collomatique_ops::rendering::render_period], the
+/// Periods are named by [collomatique_ui_text::rendering::render_period], the
 /// shared vocabulary the warning texts use; this helper survives for the one
 /// caller that has no period to name at all, `subject_params::Block`, whose
 /// blocks are a week succession with no id behind them.

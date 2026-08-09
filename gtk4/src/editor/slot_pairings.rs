@@ -141,10 +141,14 @@ pub struct SlotPairings {
 
 impl SlotPairings {
     /// This whole tab is grouped by subject, so a slot is named without its
-    /// own — exactly [collomatique_ops::rendering::render_slot_in_subject].
+    /// own — exactly [collomatique_ui_text::rendering::render_slot_in_subject].
     fn build_slot_description(&self, slot_id: collomatique_state_colloscopes::SlotId) -> String {
-        collomatique_ops::rendering::render_slot_in_subject(&self.teachers, &self.slots, slot_id)
-            .expect("the slot comes from the document being displayed")
+        collomatique_ui_text::rendering::render_slot_in_subject(
+            &self.teachers,
+            &self.slots,
+            slot_id,
+        )
+        .expect("the slot comes from the document being displayed")
     }
 
     fn ordered_slots_for_subject(

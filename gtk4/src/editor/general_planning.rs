@@ -90,7 +90,7 @@ impl GeneralPlanning {
     /// The period as the shared vocabulary names it, noun-less — the row
     /// factory owns the « Période » in front.
     fn render_period(&self, id: collomatique_state_colloscopes::PeriodId) -> String {
-        collomatique_ops::rendering::render_period(&self.periods, &self.weeks, id)
+        collomatique_ui_text::rendering::render_period(&self.periods, &self.weeks, id)
             .expect("the period comes from the document being displayed")
     }
 
@@ -104,9 +104,12 @@ impl GeneralPlanning {
         };
         weeks
             .map(|(week_id, week)| {
-                let title =
-                    collomatique_ops::rendering::render_week(&self.periods, &self.weeks, *week_id)
-                        .expect("the week comes from the document being displayed");
+                let title = collomatique_ui_text::rendering::render_week(
+                    &self.periods,
+                    &self.weeks,
+                    *week_id,
+                )
+                .expect("the week comes from the document being displayed");
                 (title, week.desc())
             })
             .collect()

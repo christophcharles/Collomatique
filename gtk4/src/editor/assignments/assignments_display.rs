@@ -11,7 +11,7 @@ use std::collections::{BTreeMap, BTreeSet};
 #[derive(Debug, Clone)]
 pub struct PeriodEntryData {
     pub period_id: collomatique_state_colloscopes::PeriodId,
-    /// The period as [collomatique_ops::rendering::render_period] names it.
+    /// The period as [collomatique_ui_text::rendering::render_period] names it.
     pub title: String,
     pub first_week_num: usize,
     pub filtered_subjects: Vec<(

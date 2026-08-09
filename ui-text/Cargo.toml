@@ -1,0 +1,19 @@
+[package]
+name = "collomatique-ui-text"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+collomatique-state-colloscopes = { path = "../state-colloscopes" }
+collomatique-storage = { path = "../storage" }
+collomatique-time = { path = "../time" }
+chrono.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+# Only the rendering tests need it: they build a document through `AppState` to
+# pin the shapes [render_period] can take. `Description` is a `Send + Sync +
+# Clone` trait, so a test-local stand-in for `collomatique_ops`'s `Desc` works
+# and keeps this crate out of a cycle with the crate that depends on it.
+collomatique-state = { path = "../state" }

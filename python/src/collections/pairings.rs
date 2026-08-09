@@ -248,7 +248,7 @@ impl PairingRule {
 
     fn __repr__(&self, py: Python<'_>) -> String {
         let rendered = self.peek(py, |data| {
-            collomatique_ops::rendering::render_pairing_rule(
+            collomatique_ui_text::rendering::render_pairing_rule(
                 &data.params.subjects,
                 &data.params.pairings,
                 self.id,
@@ -380,7 +380,8 @@ impl PairingRuleSide {
                 RuleSide::Antecedent => rule.antecedent(),
                 RuleSide::Consequent => rule.consequent(),
             };
-            collomatique_ops::rendering::render_subject(&data.params.subjects, part.subject_id).ok()
+            collomatique_ui_text::rendering::render_subject(&data.params.subjects, part.subject_id)
+                .ok()
         });
         match name {
             Some(name) => format!(

@@ -150,7 +150,7 @@ impl Component for Subjects {
                                 .periods
                                 .period_ids()
                                 .map(|id| subjects_display::PeriodData {
-                                    title: collomatique_ops::rendering::render_period(
+                                    title: collomatique_ui_text::rendering::render_period(
                                         &self.periods,
                                         &self.weeks,
                                         id,

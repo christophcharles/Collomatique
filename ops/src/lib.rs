@@ -19,11 +19,10 @@ use thiserror::Error;
 pub mod cascade;
 pub use cascade::*;
 
-// Not glob-re-exported: the renderers are a named vocabulary, called as
-// `collomatique_ops::rendering::render_week(…)` — by the warning texts here and
-// by gtk4, so a warning and the UI describe the same entity with the same
-// words.
-pub mod rendering;
+// The entity renderers live in `collomatique-ui-text`, not here: this crate's
+// warning texts, gtk4's panel titles and the python module's reprs all call
+// the same vocabulary, so every user of this crate describes the same entity
+// with the same words.
 
 // Private: the crate's only rendering door for warnings is
 // [cascade::CascadeWarning::text].

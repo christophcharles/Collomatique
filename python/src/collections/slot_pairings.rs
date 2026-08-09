@@ -255,7 +255,7 @@ impl SlotPairingRule {
 
     fn __repr__(&self, py: Python<'_>) -> String {
         let rendered = self.peek(py, |data| {
-            collomatique_ops::rendering::render_slot_pairing_rule(
+            collomatique_ui_text::rendering::render_slot_pairing_rule(
                 &data.params.subjects,
                 &data.params.teachers,
                 &data.params.slots,
@@ -396,7 +396,7 @@ impl SlotPairingRuleSide {
                 RuleSide::Antecedent => rule.antecedent(),
                 RuleSide::Consequent => rule.consequent(),
             };
-            collomatique_ops::rendering::render_slot_in_subject(
+            collomatique_ui_text::rendering::render_slot_in_subject(
                 &data.params.teachers,
                 &data.params.slots,
                 part.slot_id,

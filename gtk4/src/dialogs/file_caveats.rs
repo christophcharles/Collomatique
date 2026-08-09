@@ -20,20 +20,14 @@ impl Dialog {
     fn generate_secondary_text(&self) -> String {
         let mut list = vec!["Certains points nécessitent votre attention.\n".to_string()];
 
-        use collomatique_storage::Caveat;
-        list.extend(self.caveats.iter().map(|caveat| match caveat {
-            Caveat::UnknownEntry {
-                block_name,
-                minimum_spec_version,
-            } => format!(
-                "- L'entrée « {block_name} » n'a pas pu être décodée \
-                 (elle demande la version {minimum_spec_version} du format)"
-            ),
-            Caveat::CreatedWithNewerVersion { version } => format!(
-                "- Fichier généré avec la version {} de Collomatique\n  Il est préférable d'utiliser une version plus récente de Collomatique.",
-                version
-            ),
-        }));
+        // The sentences come from `collomatique-ui-text`, the same ones the
+        // python module's `str()` on a caveat writes; the bullet is this
+        // dialog's own layout.
+        list.extend(
+            self.caveats
+                .iter()
+                .map(|caveat| format!("- {}", collomatique_ui_text::caveats::caveat_text(caveat))),
+        );
 
         list.join("\n")
     }

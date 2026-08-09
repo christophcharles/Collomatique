@@ -483,7 +483,7 @@ impl GroupLists {
             .period_ids()
             .map(|id| {
                 let id = &id;
-                let period = collomatique_ops::rendering::render_period(
+                let period = collomatique_ui_text::rendering::render_period(
                     &self.params.periods,
                     &self.params.weeks,
                     *id,

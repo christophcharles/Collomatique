@@ -365,7 +365,7 @@ impl Dialog {
                 let current_first_week = *acc;
                 *acc += desc.len();
                 Some(PeriodData {
-                    title: collomatique_ops::rendering::render_period(
+                    title: collomatique_ui_text::rendering::render_period(
                         &self.periods,
                         &self.weeks_state,
                         id,
@@ -377,7 +377,7 @@ impl Dialog {
                         .into_iter()
                         .flatten()
                         .map(|(week_id, _week)| {
-                            collomatique_ops::rendering::render_week(
+                            collomatique_ui_text::rendering::render_week(
                                 &self.periods,
                                 &self.weeks_state,
                                 *week_id,
@@ -409,7 +409,7 @@ impl Dialog {
 
 #[derive(Debug, Clone)]
 struct PeriodData {
-    /// The period as [collomatique_ops::rendering::render_period] names it.
+    /// The period as [collomatique_ui_text::rendering::render_period] names it.
     title: String,
     /// One week title per week of the period, in order.
     week_titles: Vec<String>,
@@ -547,7 +547,7 @@ impl PeriodEntry {
 
 #[derive(Debug, Clone)]
 struct WeekData {
-    /// The week as [collomatique_ops::rendering::render_week] names it.
+    /// The week as [collomatique_ui_text::rendering::render_week] names it.
     title: String,
     status_in_period: bool,
     status_in_pattern: bool,

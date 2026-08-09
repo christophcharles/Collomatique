@@ -8,6 +8,10 @@ authors.workspace = true
 collomatique-time = { path = "../time" }
 collomatique-state-colloscopes = { path = "../state-colloscopes" }
 collomatique-state = { path = "../state" }
+# The entity renderers the warning texts call. It pulls `collomatique-storage`
+# in transitively (the caveat sentences sit in the same crate); that is not the
+# cycle the dev-dependency note below is about — storage depends on neither.
+collomatique-ui-text = { path = "../ui-text" }
 thiserror.workspace = true
 serde = { workspace = true, features = ["derive"] }
 chrono.workspace = true

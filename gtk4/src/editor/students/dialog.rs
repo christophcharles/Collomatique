@@ -207,7 +207,7 @@ impl SimpleComponent for Dialog {
                     .periods
                     .period_ids()
                     .map(|id| PeriodData {
-                        title: collomatique_ops::rendering::render_period(
+                        title: collomatique_ui_text::rendering::render_period(
                             &self.periods,
                             &self.weeks,
                             id,
@@ -284,7 +284,7 @@ impl SimpleComponent for Dialog {
 
 #[derive(Debug, Clone)]
 struct PeriodData {
-    /// The period as [collomatique_ops::rendering::render_period] names it.
+    /// The period as [collomatique_ui_text::rendering::render_period] names it.
     title: String,
     enable: bool,
 }
