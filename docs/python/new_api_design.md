@@ -282,6 +282,14 @@ preview §5 mentions above. Outside a transaction, each op is its own undo
 slot with an auto-generated label. Exposed: `doc.undo()`, `doc.redo()`,
 `doc.can_undo`, `doc.can_redo`, `doc.undo_name`, `doc.redo_name`.
 
+Why the stack is in the value and not in the type — `AppSession` nests only in the
+type, so the depth would have to be known at compile time, and `dyn Manager` cannot
+stand in because `ManagerInternal` is `pub(crate)` *and* requires `Clone` — is
+written up in `git show 6a377893:docs/python/transactions.md`, the note this design
+was chosen from. It also records the alternative that was dropped, one session plus
+a counter, and the corner it could not close: an inner block rolling back would take
+the outer block's earlier writes with it.
+
 A document's undo history is its own and never leaves the script. In hosted mode the
 script works on a copy in the worker process, so `doc.undo()` and a rolled-back
 transaction are invisible to the GUI — only an explicit send (§9.2) crosses. On the
