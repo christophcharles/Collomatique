@@ -2382,6 +2382,301 @@ fn the_slots_read_back_with_the_cells_they_can_fill() {
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
 
+/// A document written here rather than copied, holding a sparse assignments
+/// table
+///
+/// The example's table is complete — every subject holds a row on every
+/// period — so the absent-address shape, the empty frozenset of a valid pair
+/// no row is stored for, needs a document of its own: three rows on six
+/// possible pairs, one subject with no row at all, and a second period that
+/// does not repeat the first's rows. It is built as an `InnerData` through the
+/// sealed types' own constructors and passed through `Data::from_inner_data`,
+/// so a fixture that breaks an invariant fails here rather than halfway
+/// through the script (`docs/python/handle_api.md` §6.2).
+fn assignments_document(path: &Path) {
+    use collomatique_state_colloscopes::assignments::Assignments;
+    use collomatique_state_colloscopes::ids::Id as _;
+    use collomatique_state_colloscopes::students::{Student, Students};
+    use collomatique_state_colloscopes::subjects::Subjects;
+    use collomatique_state_colloscopes::{
+        Data, InnerData, PeriodId, StudentId, Subject, SubjectId, SubjectInterrogationParameters,
+        SubjectParameters, SubjectPeriodicity,
+    };
+
+    // Ids nothing else in this document issues: it is written by hand from end
+    // to end, so there is no issuer to keep in step with.
+    let period = |n: u64| unsafe { PeriodId::new(n) };
+    let subject = |n: u64| unsafe { SubjectId::new(n) };
+    let student = |n: u64| unsafe { StudentId::new(n) };
+
+    let periods = vec![period(1), period(2)];
+
+    // The subjects run colles, because a row for a subject that never runs any
+    // would be a document the loader refuses; what those colles look like is
+    // [the_four_periodicities_read_back_value_by_value]'s business rather than
+    // this fixture's. None excludes a period, so every row's period is one the
+    // subject runs on.
+    let named_subject = |name: &str| Subject {
+        parameters: SubjectParameters {
+            name: name.to_owned(),
+            interrogation_parameters: Some(SubjectInterrogationParameters {
+                students_per_group: nonzero_range((2, 3)),
+                groups_per_interrogation: nonzero_range((1, 1)),
+                duration: collomatique_time::NonZeroMinutes::new(60).expect("an hour is a while"),
+                take_duration_into_account: true,
+                periodicity: SubjectPeriodicity::ExactlyPeriodic {
+                    periodicity_in_weeks: NonZeroU32::new(1).expect("one is not zero"),
+                },
+            }),
+        },
+        excluded_periods: BTreeSet::new(),
+    };
+    let subjects = vec![
+        (subject(11), named_subject("Sortilèges")),
+        (subject(12), named_subject("Métamorphose")),
+        (subject(13), named_subject("Potions")),
+    ];
+
+    // No student sits a period out, so every row's students are present on
+    // its period.
+    let students = vec![
+        (
+            student(31),
+            Student {
+                desc: person("Harry", "Potter", None, None),
+                excluded_periods: BTreeSet::new(),
+            },
+        ),
+        (
+            student(32),
+            Student {
+                desc: person("Hermione", "Granger", None, None),
+                excluded_periods: BTreeSet::new(),
+            },
+        ),
+        (
+            student(33),
+            Student {
+                desc: person("Ron", "Weasley", None, None),
+                excluded_periods: BTreeSet::new(),
+            },
+        ),
+        (
+            student(34),
+            Student {
+                desc: person("Neville", "Londubat", None, None),
+                excluded_periods: BTreeSet::new(),
+            },
+        ),
+    ];
+
+    let mut inner_data = InnerData::default();
+    inner_data.params.periods =
+        collomatique_state_colloscopes::periods::Periods::from_ordered_ids(None, periods)
+            .expect("the fixture names each period once");
+    inner_data.params.subjects = Subjects {
+        ordered_subject_list: subjects
+            .try_into()
+            .expect("the fixture names each subject once"),
+    };
+    let student_count = students.len();
+    inner_data.params.students = Students {
+        student_map: students.into_iter().collect(),
+    };
+    assert_eq!(
+        inner_data.params.students.student_map.len(),
+        student_count,
+        "the fixture names each student once"
+    );
+
+    // Three stored rows out of six possible pairs: the first subject on both
+    // periods, the second on the second only, and the third on neither — so
+    // the absent pairs are (1, 12), (1, 13) and (2, 13).
+    inner_data.params.assignments = Assignments {
+        map: [
+            (
+                (period(1), subject(11)),
+                BTreeSet::from([student(31), student(32)]),
+            ),
+            (
+                (period(2), subject(11)),
+                BTreeSet::from([student(31), student(33)]),
+            ),
+            (
+                (period(2), subject(12)),
+                BTreeSet::from([student(33), student(34)]),
+            ),
+        ]
+        .into_iter()
+        .collect(),
+    };
+
+    let data = Data::from_inner_data(inner_data).expect("the fixture should be a valid document");
+    let content = collomatique_storage::serialize_data(data.get_inner_data())
+        .expect("the fixture's ids are far below the file-format ceiling");
+    std::fs::write(path, content).expect("the fixture should be writable");
+}
+
+/// The assignments read back, row by row
+///
+/// The script walks `doc.assignments` and leaves what it saw; rust compares it
+/// with the same document read straight from the model — the stored rows
+/// themselves, and the key order they come in: `params.assignments.iter()`
+/// over the `(PeriodId, SubjectId)` table.
+///
+/// The example's assignments table is complete — every subject holds a row on
+/// every period, eight subjects across three periods — so the absent-address
+/// shape, the empty frozenset of a valid pair no row is stored for, needs a
+/// document of its own: [assignments_document] stores rows on three of its six
+/// pairs. The script does the rest on its own, because it is about what python
+/// sees: the total read, the address that must be a pair, the missing
+/// `len`/`in`/`get`, and the address of another document.
+#[test]
+fn the_assignments_read_back_row_by_row() {
+    let dir = workspace("assignments");
+    let source = dir.join("assignments.collomatique");
+    assignments_document(&source);
+
+    let globals = run(include_str!("scripts/assignments.py"), |globals| {
+        globals.set_item("source", &source)?;
+        Ok(())
+    });
+
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    // The fixture is only worth reading if it has something to say: several
+    // rows, on more than one period, and at least one valid address that
+    // stores no row — the two shapes of a total read.
+    let rows: Vec<_> = params.assignments.iter().collect();
+    let periods: Vec<_> = params.periods.period_ids().collect();
+    let subjects: Vec<_> = params.subjects.ordered_subject_list.keys().collect();
+    assert!(rows.len() > 1);
+    assert!(periods.len() > 1);
+    assert!(subjects.len() > 1);
+    let row_periods: BTreeSet<_> = rows
+        .iter()
+        .map(|(period, _subject, _students)| *period)
+        .collect();
+    assert!(row_periods.len() > 1);
+    let stored: BTreeSet<_> = rows
+        .iter()
+        .map(|(period, subject, _students)| (*period, *subject))
+        .collect();
+    assert!(
+        periods
+            .iter()
+            .flat_map(|period| subjects.iter().map(move |subject| (*period, *subject)))
+            .any(|key| !stored.contains(&key))
+    );
+
+    assert_eq!(
+        global::<Vec<usize>>(&globals, "row_period_indices"),
+        rows.iter()
+            .map(|(period, _subject, _students)| periods
+                .iter()
+                .position(|id| id == period)
+                .expect("a row names a live period"))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<usize>>(&globals, "row_subject_indices"),
+        rows.iter()
+            .map(|(_period, subject, _students)| subjects
+                .iter()
+                .position(|id| id == subject)
+                .expect("a row names a live subject"))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<Vec<String>>>(&globals, "row_student_surnames"),
+        rows.iter()
+            .map(|(_period, _subject, students)| {
+                let mut names: Vec<_> = students
+                    .iter()
+                    .map(|student| {
+                        params
+                            .students
+                            .student_map
+                            .get(student)
+                            .expect("a row names a live student")
+                            .desc
+                            .surname
+                            .clone()
+                    })
+                    .collect();
+                names.sort();
+                names
+            })
+            .collect::<Vec<_>>()
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// A removed subject takes its rows with it, and the address raises
+///
+/// The mutation cannot come from the script — the read surface ships no
+/// removes — so it comes from rust, between the two halves: the subject of
+/// the last stored row, in key order, goes — the very row the script's first
+/// half picked, so the two sides agree on what is doomed. The cascade repairs
+/// the dangling rows away (`ops/src/subjects.rs`), which is what makes the
+/// address dead rather than empty.
+///
+/// The second half pins §3.7's wrinkle: the address is an *argument*, so a
+/// dead one raises `StaleHandleError` where the total read's empty frozenset
+/// would have read as « nobody assigned ». And the survivors read exactly as
+/// before, because what went was the subject, not the table.
+#[test]
+fn a_removed_address_makes_the_assignments_read_raise() {
+    let dir = workspace("assignments-stale");
+    let source = example_copy(&dir, "source.collomatique");
+
+    // The first and the last stored row, in the model's key order — read from
+    // the file rather than from the running document, like the other staleness
+    // tests: ids are stored, so this copy names the same rows the script is
+    // holding. The example's row subjects all repeat, but the first and the
+    // last are different ones — the survivor's subject must not be the
+    // doomed one, or the second stage's survivor read would raise too.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+    let rows: Vec<_> = params.assignments.iter().collect();
+    assert!(rows.len() > 1);
+    let (_doomed_period, doomed, _) = *rows.last().expect("the example has rows");
+    let (_survivor_period, survivor, _) = rows[0];
+    assert_ne!(survivor, doomed);
+
+    run_stages(
+        &[
+            include_str!("scripts/assignments_stale_before.py"),
+            include_str!("scripts/assignments_stale_after.py"),
+        ],
+        |globals| {
+            globals.set_item("source", &source)?;
+            Ok(())
+        },
+        |py, globals| {
+            document_of(globals)
+                .borrow_mut(py)
+                .update(
+                    py,
+                    collomatique_ops::UpdateOp::Subjects(
+                        collomatique_ops::SubjectsUpdateOp::DeleteSubject(doomed),
+                    ),
+                )
+                .expect("a subject of the example is removable");
+        },
+    );
+
+    // What happened to the document is asserted by the second stage's script:
+    // the dead address raises, the survivor reads exactly as before, and the
+    // walk shows the doomed subject's rows and only them gone. That the
+    // removal really clears the rows is the cascade's own contract, pinned by
+    // the ops crate's tests (`ops/src/subjects.rs`).
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
 /// The real `rfd` chooser, on a machine with someone in front of it
 ///
 /// Everything above answers the dialogs itself, so this is the only test that

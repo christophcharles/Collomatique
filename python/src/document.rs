@@ -13,7 +13,8 @@ use collomatique_state_colloscopes::Data;
 use collomatique_storage::Caveat;
 
 use crate::collections::{
-    Periods, Slot, Slots, Students, Subjects, Teachers, Week, WeekPattern, WeekPatterns, Weeks,
+    Assignments, Periods, Slot, Slots, Students, Subjects, Teachers, Week, WeekPattern,
+    WeekPatterns, Weeks,
 };
 use crate::dialogs::FileRequest;
 use crate::errors::{
@@ -403,6 +404,28 @@ impl Document {
     #[getter]
     fn slots(slf: Py<Self>) -> Slots {
         Slots::new(slf)
+    }
+
+    /// Which students take which subject in which period
+    ///
+    /// The junction table, reached through the `(period, subject)` pairs that
+    /// key it:
+    ///
+    /// ```python
+    /// doc.assignments[period, subject]   # frozenset[Student], possibly empty
+    /// for period, subject, students in doc.assignments:
+    ///     ...
+    /// ```
+    ///
+    /// Its reads are total: an absent row is the empty frozenset, never a
+    /// `KeyError`. There is no `len`, no `in`, no `.get` — over a total
+    /// mapping, row count and row membership are statements about the model's
+    /// storage, not about the data. A `period` or `subject` this document does
+    /// not hold raises `StaleHandleError`, because the address was malformed
+    /// before it had an answer.
+    #[getter]
+    fn assignments(slf: Py<Self>) -> Assignments {
+        Assignments::new(slf)
     }
 
     /// Whether a colle can happen in this slot on this week

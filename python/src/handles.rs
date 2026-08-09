@@ -252,7 +252,7 @@ pub(crate) fn no_such(kind: &str, key: &Bound<'_, PyAny>) -> PyErr {
 /// `fallback` is what to call it when even that fails — a key in a mapping, a
 /// mere object in an argument. It exists because an error message must not fail
 /// to be built; reaching it takes an object whose `repr` raises.
-fn shown(obj: &Bound<'_, PyAny>, fallback: &str) -> String {
+pub(crate) fn shown(obj: &Bound<'_, PyAny>, fallback: &str) -> String {
     obj.repr()
         .map(|repr| repr.to_string())
         .unwrap_or_else(|_| fallback.to_owned())

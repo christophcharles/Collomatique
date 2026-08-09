@@ -9,6 +9,7 @@
 //! reads through it every time, so a script can keep one in a variable and see
 //! the writes it makes through it.
 
+pub mod assignments;
 pub mod periods;
 pub mod slots;
 pub mod students;
@@ -17,6 +18,7 @@ pub mod teachers;
 pub mod week_patterns;
 pub mod weeks;
 
+pub use assignments::Assignments;
 pub use periods::{Period, Periods};
 pub use slots::{Slot, Slots};
 pub use students::{Student, Students};
@@ -45,6 +47,7 @@ pub(crate) fn person_name(desc: &PersonWithContact) -> String {
 /// They are registered so `isinstance` and `repr` say something useful, not so
 /// a script can build one: none of them has a constructor.
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<Assignments>()?;
     m.add_class::<Periods>()?;
     m.add_class::<Period>()?;
     m.add_class::<Weeks>()?;
