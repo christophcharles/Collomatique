@@ -6,7 +6,7 @@
 //! script's globals, so the assertions stay here, where a failure says
 //! something useful.
 
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, Once};
@@ -4862,6 +4862,266 @@ fn the_colloscope_reads_back_cell_by_cell() {
     };
     assert!(slots_of(&fixture).is_disjoint(&slots_of(&example)));
     assert!(group_lists_of(&fixture).is_disjoint(&group_lists_of(&example)));
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// A document written here rather than copied, holding a non-default export
+/// configuration
+///
+/// The example's export configuration is essentially the default one, so the
+/// shapes worth reading — every field away from the default, an extra color,
+/// an auto-detected orientation — need a document of their own. The export
+/// configuration is pure value data with no invariants linking it to the rest
+/// of the document, so the fixture is a default `InnerData` with only that
+/// section replaced, passed through `Data::from_inner_data` and written with
+/// `serialize_data` like the colloscope fixture is.
+fn export_config_document(path: &Path) {
+    use collomatique_state_colloscopes::InnerData;
+    use collomatique_state_colloscopes::export_config::{
+        ColloscopeConfig, Color, ExportConfig, GlobalConfig, PageOrientation, PerGroupListConfig,
+        PerStudentGroupsConfig,
+    };
+
+    let inner_data = InnerData {
+        export_config: ExportConfig {
+            global: GlobalConfig {
+                background_color: Color {
+                    red: 1,
+                    green: 2,
+                    blue: 3,
+                },
+                stripes_color_enabled: false,
+                stripes_color: Color {
+                    red: 4,
+                    green: 5,
+                    blue: 6,
+                },
+            },
+            colloscope_enabled: false,
+            all_groups_enabled: false,
+            automatic_groups_enabled: true,
+            prefilled_groups_enabled: true,
+            per_group_list_enabled: false,
+            colloscope_config: ColloscopeConfig {
+                sheet_name: "Feuille".into(),
+                extra_info_column_enabled: false,
+                extra_info_column_name: "Notes".into(),
+                teacher_email_enabled: false,
+                teacher_email: "email".into(),
+                teacher_tel_enabled: true,
+                teacher_tel: "tel".into(),
+                orientation: PageOrientation::Portrait,
+                display_week_dates: false,
+                display_annotations: false,
+                no_interrogation_color: Color {
+                    red: 7,
+                    green: 8,
+                    blue: 9,
+                },
+                annotation_color_enabled: false,
+                annotation_color: Color {
+                    red: 10,
+                    green: 11,
+                    blue: 12,
+                },
+                extra_colors: BTreeMap::from([(
+                    "Vacances".to_owned(),
+                    Color {
+                        red: 13,
+                        green: 14,
+                        blue: 15,
+                    },
+                )]),
+            },
+            // The all-groups sheet reads as `orientation=None` — the
+            // auto-detect case, the shape the script must see as `None` and
+            // nothing else. The two other sheets hold a concrete orientation
+            // each, so both spellings are read back.
+            all_groups_config: PerStudentGroupsConfig {
+                sheet_name: "Tous".into(),
+                orientation: None,
+                show_emails: false,
+                show_tel: true,
+            },
+            automatic_groups_config: PerStudentGroupsConfig {
+                sheet_name: "Auto".into(),
+                orientation: Some(PageOrientation::Portrait),
+                show_emails: false,
+                show_tel: true,
+            },
+            prefilled_groups_config: PerStudentGroupsConfig {
+                sheet_name: "Prérempli".into(),
+                orientation: Some(PageOrientation::Landscape),
+                show_emails: false,
+                show_tel: true,
+            },
+            per_group_list_config: PerGroupListConfig {
+                orientation: PageOrientation::Landscape,
+                show_emails: false,
+                show_tel: true,
+                center_vertically: true,
+            },
+        },
+        ..InnerData::default()
+    };
+
+    let data = Data::from_inner_data(inner_data).expect("the fixture should be a valid document");
+    let content = collomatique_storage::serialize_data(data.get_inner_data())
+        .expect("the fixture's ids are far below the file-format ceiling");
+    std::fs::write(path, content).expect("the fixture should be writable");
+}
+
+/// The export configuration reads back, field by field
+///
+/// The script walks `doc.export_config` and leaves what it saw; rust compares
+/// it with the same document read straight from the model — the five flags,
+/// every field of the four sections, and the extra colors.
+///
+/// The example's export configuration is essentially the default one, so the
+/// non-default shapes need a document of their own: [export_config_document].
+/// The script does the rest on its own, because it is about what python sees:
+/// the `mappingproxy` that refuses assignment, the `orientation=None`
+/// auto-detect case, and the views that compare equal by what they read.
+#[test]
+fn the_export_config_reads_back_field_by_field() {
+    use collomatique_state_colloscopes::export_config::PageOrientation;
+
+    let dir = workspace("export_config");
+    let source = dir.join("export_config.collomatique");
+    export_config_document(&source);
+
+    let globals = run(include_str!("scripts/export_config.py"), |globals| {
+        globals.set_item("source", &source)?;
+        Ok(())
+    });
+
+    let data = reload(&source);
+    let config = &data.get_inner_data().export_config;
+
+    // The fixture is only worth reading if it has something to say: away from
+    // the default on every field, so a partial read cannot pass by accident.
+    assert_ne!(
+        config,
+        &collomatique_state_colloscopes::export_config::ExportConfig::default()
+    );
+
+    let color = |color: &collomatique_state_colloscopes::export_config::Color| {
+        (color.red, color.green, color.blue)
+    };
+    let orientation = |orientation: &PageOrientation| match orientation {
+        PageOrientation::Portrait => "Orientation.PORTRAIT",
+        PageOrientation::Landscape => "Orientation.LANDSCAPE",
+    };
+
+    assert_eq!(
+        global::<(bool, bool, bool, bool, bool)>(&globals, "flags"),
+        (
+            config.colloscope_enabled,
+            config.all_groups_enabled,
+            config.automatic_groups_enabled,
+            config.prefilled_groups_enabled,
+            config.per_group_list_enabled,
+        )
+    );
+
+    assert_eq!(
+        global::<((u8, u8, u8), bool, (u8, u8, u8))>(&globals, "global_reading"),
+        (
+            color(&config.global.background_color),
+            config.global.stripes_color_enabled,
+            color(&config.global.stripes_color),
+        )
+    );
+
+    let colloscope = &config.colloscope_config;
+    assert_eq!(
+        global::<(
+            (String, bool, String),
+            (bool, String, bool, String),
+            (String, bool, bool),
+            (u8, u8, u8),
+            (bool, u8, u8, u8),
+        )>(&globals, "colloscope_reading"),
+        (
+            (
+                colloscope.sheet_name.clone(),
+                colloscope.extra_info_column_enabled,
+                colloscope.extra_info_column_name.clone(),
+            ),
+            (
+                colloscope.teacher_email_enabled,
+                colloscope.teacher_email.clone(),
+                colloscope.teacher_tel_enabled,
+                colloscope.teacher_tel.clone(),
+            ),
+            (
+                orientation(&colloscope.orientation).to_owned(),
+                colloscope.display_week_dates,
+                colloscope.display_annotations,
+            ),
+            color(&colloscope.no_interrogation_color),
+            (
+                colloscope.annotation_color_enabled,
+                colloscope.annotation_color.red,
+                colloscope.annotation_color.green,
+                colloscope.annotation_color.blue,
+            ),
+        )
+    );
+
+    assert_eq!(
+        global::<Vec<(String, (u8, u8, u8))>>(&globals, "extra_colors_items"),
+        colloscope
+            .extra_colors
+            .iter()
+            .map(|(name, c)| (name.clone(), color(c)))
+            .collect::<Vec<_>>()
+    );
+
+    // The three per-student-groups sections, each read the way the script
+    // reads them: sheet name, the orientation's repr (or `None` for the
+    // auto-detected one), and the two booleans.
+    let student_groups = [
+        &config.all_groups_config,
+        &config.automatic_groups_config,
+        &config.prefilled_groups_config,
+    ];
+    let expected_groups = student_groups.map(|section| {
+        (
+            section.sheet_name.clone(),
+            section
+                .orientation
+                .as_ref()
+                .map(orientation)
+                .map(str::to_owned),
+            section.show_emails,
+            section.show_tel,
+        )
+    });
+    assert_eq!(
+        global::<(
+            (String, Option<String>, bool, bool),
+            (String, Option<String>, bool, bool),
+            (String, Option<String>, bool, bool),
+        )>(&globals, "student_groups_readings"),
+        (
+            expected_groups[0].clone(),
+            expected_groups[1].clone(),
+            expected_groups[2].clone(),
+        )
+    );
+
+    let per_group_list = &config.per_group_list_config;
+    assert_eq!(
+        global::<(String, bool, bool, bool)>(&globals, "group_list_reading"),
+        (
+            orientation(&per_group_list.orientation).to_owned(),
+            per_group_list.show_emails,
+            per_group_list.show_tel,
+            per_group_list.center_vertically,
+        )
+    );
 
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }

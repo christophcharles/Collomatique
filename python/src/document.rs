@@ -13,8 +13,9 @@ use collomatique_state_colloscopes::Data;
 use collomatique_storage::Caveat;
 
 use crate::collections::{
-    Assignments, Balancing, Colloscope, GroupLists, Incompats, Pairings, Periods, Settings, Slot,
-    SlotPairings, Slots, Students, Subjects, Teachers, Week, WeekPattern, WeekPatterns, Weeks,
+    Assignments, Balancing, Colloscope, ExportConfig, GroupLists, Incompats, Pairings, Periods,
+    Settings, Slot, SlotPairings, Slots, Students, Subjects, Teachers, Week, WeekPattern,
+    WeekPatterns, Weeks,
 };
 use crate::dialogs::FileRequest;
 use crate::errors::{
@@ -569,6 +570,29 @@ impl Document {
     #[getter]
     fn colloscope(slf: Py<Self>) -> Colloscope {
         Colloscope::new(slf)
+    }
+
+    /// The presentation preferences of the xlsx export
+    ///
+    /// Reached as `doc.export_config`:
+    ///
+    /// ```python
+    /// if doc.export_config.colloscope_enabled:
+    ///     print(doc.export_config.colloscope_config.sheet_name)
+    /// ```
+    ///
+    /// One atom of pure value data, held the way the model holds it: a global
+    /// section, four per-sheet sections, and the enabled flag that gates each
+    /// of them — the flags sit beside the sections, not inside them, because a
+    /// flag is the interface's memory of what was chosen before a section was
+    /// switched off. Everything reads as [Color] and [Orientation] values, the
+    /// whole tree is read-only, and nothing in it can go stale.
+    ///
+    /// [Color]: crate::values::Color
+    /// [Orientation]: crate::values::Orientation
+    #[getter]
+    fn export_config(slf: Py<Self>) -> ExportConfig {
+        ExportConfig::new(slf)
     }
 
     /// Whether a colle can happen in this slot on this week

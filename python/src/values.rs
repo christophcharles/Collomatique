@@ -12,9 +12,10 @@
 //! not apply to a flat immutable value that only ever travels out of rust.
 //!
 //! This module opens with the periodicity family, which is what the subjects
-//! need, [TimeSlot], which the incompatibilities hand out, and the settings
+//! need, [TimeSlot], which the incompatibilities hand out, the settings
 //! vocabulary — [Enforcement] and [Limit] — which the settings and balancing
-//! read surfaces hand out. The rest of §2.6 lands with the collections that
+//! read surfaces hand out, and [Color] and [Orientation], which the export
+//! configuration hands out. The rest of §2.6 lands with the collections that
 //! hand it out.
 
 use std::num::NonZeroU32;
@@ -23,6 +24,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyTuple;
 
+use collomatique_state_colloscopes::export_config::{Color as RawColor, PageOrientation};
 use collomatique_state_colloscopes::settings::SoftParam;
 use collomatique_state_colloscopes::{NonEmptyRangeInclusive, SubjectPeriodicity};
 
@@ -719,6 +721,154 @@ pub(crate) fn nonzero_limit(soft: &SoftParam<NonZeroU32>) -> Limit {
     }
 }
 
+/// Whether an exported sheet is printed tall or wide
+///
+/// The two members are class attributes, like [Weekday]'s days:
+/// `clm.Orientation.PORTRAIT` — pyo3 keeps one object per member, so two reads
+/// of the same orientation are the same object.
+///
+/// `repr` echoes the member's identifier, like [Enforcement]'s does; `str` is
+/// the french word the application's own dropdown shows, « Portrait » or
+/// « Paysage » — the caveat convention, a human word for the human reader.
+#[pyclass(module = "collomatique", frozen, eq, hash, from_py_object)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Orientation {
+    #[pyo3(name = "PORTRAIT")]
+    Portrait,
+    #[pyo3(name = "LANDSCAPE")]
+    Landscape,
+}
+
+/// The orientation as `repr` spells it, the way the class attribute is named
+fn orientation_spelling(orientation: Orientation) -> &'static str {
+    match orientation {
+        Orientation::Portrait => "Orientation.PORTRAIT",
+        Orientation::Landscape => "Orientation.LANDSCAPE",
+    }
+}
+
+#[pymethods]
+impl Orientation {
+    fn __repr__(&self) -> String {
+        orientation_spelling(*self).to_owned()
+    }
+
+    /// The french word the application shows in its orientation dropdown
+    fn __str__(&self) -> &'static str {
+        self.french()
+    }
+}
+
+impl Orientation {
+    /// The python orientation for one model orientation
+    ///
+    /// Written as a match rather than as a `From` impl, so that a new variant
+    /// over there is a compile error here — the same reason the periodicity
+    /// conversion is a match.
+    pub(crate) fn from_model(orientation: &PageOrientation) -> Orientation {
+        match orientation {
+            PageOrientation::Portrait => Orientation::Portrait,
+            PageOrientation::Landscape => Orientation::Landscape,
+        }
+    }
+
+    /// The orientation's french word — « Portrait » or « Paysage »
+    ///
+    /// The word the application's dropdown shows, which is what `str()` hands
+    /// back — the same choice as a [TimeSlot] repr naming its day « Lundi ».
+    pub(crate) fn french(self) -> &'static str {
+        match self {
+            Orientation::Portrait => "Portrait",
+            Orientation::Landscape => "Paysage",
+        }
+    }
+}
+
+/// A color, as its red, green and blue channels
+///
+/// A plain value a script builds and compares — the background of a sheet, the
+/// tint of an annotation cell:
+///
+/// ```python
+/// clm.Color(255, 255, 255)
+/// ```
+///
+/// Construction validates what the model's own channels hold: each of the
+/// three is 0-255, and a channel outside that raises `ValueError`. It opts
+/// into extraction like [Limit], so step 3's dataclasses can hold it in their
+/// fields and pass it back in.
+#[pyclass(module = "collomatique", frozen, eq, hash, from_py_object)]
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct Color {
+    red: u8,
+    green: u8,
+    blue: u8,
+}
+
+/// Checks one channel of a [Color]
+///
+/// Takes an `i64` rather than a `u32`, so that a negative channel reaches this
+/// check instead of failing the conversion first: "0-255, and -1 was given" is
+/// the whole truth, where an `OverflowError` about a negative number would
+/// only be half of it.
+fn channel(what: &str, value: i64) -> PyResult<u8> {
+    u8::try_from(value).map_err(|_| {
+        PyValueError::new_err(format!("a Color's {what} is 0-255, and {value} was given"))
+    })
+}
+
+#[pymethods]
+impl Color {
+    #[new]
+    fn new(red: i64, green: i64, blue: i64) -> PyResult<Color> {
+        Ok(Color {
+            red: channel("red", red)?,
+            green: channel("green", green)?,
+            blue: channel("blue", blue)?,
+        })
+    }
+
+    #[classattr]
+    #[allow(non_upper_case_globals)]
+    const __match_args__: (&'static str, &'static str, &'static str) = ("red", "green", "blue");
+
+    /// How much red the color holds, 0-255
+    #[getter]
+    fn red(&self) -> u8 {
+        self.red
+    }
+
+    /// How much green the color holds, 0-255
+    #[getter]
+    fn green(&self) -> u8 {
+        self.green
+    }
+
+    /// How much blue the color holds, 0-255
+    #[getter]
+    fn blue(&self) -> u8 {
+        self.blue
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "Color(red={}, green={}, blue={})",
+            self.red, self.green, self.blue,
+        )
+    }
+}
+
+impl Color {
+    /// The python color for one model color
+    pub(crate) fn from_model(color: &RawColor) -> Color {
+        Color {
+            red: color.red,
+            green: color.green,
+            blue: color.blue,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::Weekday;
@@ -792,5 +942,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<TimeSlot>()?;
     m.add_class::<Enforcement>()?;
     m.add_class::<Limit>()?;
+    m.add_class::<Color>()?;
+    m.add_class::<Orientation>()?;
     Ok(())
 }
