@@ -11,6 +11,7 @@
 
 pub mod assignments;
 pub mod balancing;
+pub mod colloscope;
 pub mod group_lists;
 pub mod incompats;
 pub mod pairings;
@@ -26,6 +27,7 @@ pub mod weeks;
 
 pub use assignments::Assignments;
 pub use balancing::{Balancing, BalancingOptions};
+pub use colloscope::Colloscope;
 pub use group_lists::{GroupList, GroupLists};
 pub use incompats::{Incompat, Incompats};
 pub use pairings::{PairingRule, PairingRuleSide, Pairings};
@@ -62,6 +64,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Assignments>()?;
     m.add_class::<Balancing>()?;
     m.add_class::<BalancingOptions>()?;
+    m.add_class::<Colloscope>()?;
     m.add_class::<GroupLists>()?;
     m.add_class::<GroupList>()?;
     m.add_class::<Incompats>()?;

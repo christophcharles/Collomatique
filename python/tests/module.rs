@@ -4329,6 +4329,543 @@ fn removing_a_balancing_override_stales_only_the_raw_view() {
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
 
+/// A document written here rather than copied, holding a filled colloscope
+///
+/// The example was never resolved, so its colloscope has nothing to read —
+/// the cells and the placements need a document of their own: two subjects
+/// with slots across two periods, one automatic group list and one prefilled
+/// one, a few stored cells (one of them with several groups), one cell a
+/// resolution could have filled and left empty, one week switched off
+/// entirely, and placements for the automatic list. It is built as an
+/// `InnerData` through the sealed types' own constructors and passed through
+/// `Data::from_inner_data`, so a fixture that breaks an invariant — a cell on
+/// a week the slot's subject does not run, a group number past the
+/// associated list's bound, a placement for an excluded student — fails here
+/// rather than halfway through the script (`docs/python/handle_api.md`
+/// §6.2).
+fn colloscope_document(path: &Path) {
+    use collomatique_state_colloscopes::group_lists::{
+        GroupList, GroupListFilling, GroupListParameters, GroupLists, PrefilledGroup,
+    };
+    use collomatique_state_colloscopes::ids::Id as _;
+    use collomatique_state_colloscopes::slots::{Slot, Slots};
+    use collomatique_state_colloscopes::students::{Student, Students};
+    use collomatique_state_colloscopes::subjects::Subjects;
+    use collomatique_state_colloscopes::teachers::{Teacher, Teachers};
+    use collomatique_state_colloscopes::weeks::{WeekDesc, Weeks};
+    use collomatique_state_colloscopes::{
+        Data, GroupListId, InnerData, PeriodId, SlotId, StudentId, Subject, SubjectId,
+        SubjectInterrogationParameters, SubjectParameters, SubjectPeriodicity, TeacherId, WeekId,
+    };
+
+    // Ids nothing else in this document issues: it is written by hand from
+    // end to end, so there is no issuer to keep in step with. The slots, the
+    // group lists and the students are numbered nowhere near the example's
+    // (137+, 166+ and 100+), so the script's foreign-handle question is a
+    // clean one. The weeks are the decoder's own synthesis in walk order on
+    // the other side, so their numbers have nothing to be disjoint from —
+    // and the script only ever asks about weeks with handles, which name
+    // their document.
+    let period = |n: u64| unsafe { PeriodId::new(n) };
+    let week = |n: u64| unsafe { WeekId::new(n) };
+    let subject = |n: u64| unsafe { SubjectId::new(n) };
+    let teacher = |n: u64| unsafe { TeacherId::new(n) };
+    let slot = |n: u64| unsafe { SlotId::new(n) };
+    let student = |n: u64| unsafe { StudentId::new(n) };
+    let group_list = |n: u64| unsafe { GroupListId::new(n) };
+
+    let periods = vec![period(1), period(2)];
+
+    // Both periods hold colles, except the fixture's last week, which is
+    // switched off entirely — the impossible half of the empty-cell shape.
+    let weeks = vec![
+        (
+            period(1),
+            vec![
+                (week(81), WeekDesc::new(true)),
+                (week(82), WeekDesc::new(true)),
+            ],
+        ),
+        (
+            period(2),
+            vec![
+                (week(83), WeekDesc::new(true)),
+                (week(84), WeekDesc::new(false)),
+            ],
+        ),
+    ];
+
+    // Both subjects run colles and exclude no period, so every cell's
+    // coordinates and every association are live ones.
+    let named_subject = |name: &str| Subject {
+        parameters: SubjectParameters {
+            name: name.to_owned(),
+            interrogation_parameters: Some(SubjectInterrogationParameters {
+                students_per_group: nonzero_range((2, 3)),
+                groups_per_interrogation: nonzero_range((1, 1)),
+                duration: collomatique_time::NonZeroMinutes::new(60).expect("an hour is a while"),
+                take_duration_into_account: true,
+                periodicity: SubjectPeriodicity::ExactlyPeriodic {
+                    periodicity_in_weeks: NonZeroU32::new(1).expect("one is not zero"),
+                },
+            }),
+        },
+        excluded_periods: BTreeSet::new(),
+    };
+    let subjects = vec![
+        (subject(11), named_subject("Sortilèges")),
+        (subject(12), named_subject("Métamorphose")),
+    ];
+
+    let teachers = vec![
+        (
+            teacher(21),
+            Teacher {
+                desc: person("Minerva", "McGonagall", None, None),
+                subjects: BTreeSet::from([subject(11), subject(12)]),
+            },
+        ),
+        (
+            teacher(22),
+            Teacher {
+                desc: person("Severus", "Rogue", None, None),
+                subjects: BTreeSet::from([subject(12)]),
+            },
+        ),
+    ];
+
+    // One subject with two slots, one with a single one. No week pattern on
+    // any of them, so only the weeks' own flags switch cells off — which is
+    // what makes the grid a one-dimensional question here.
+    let slot_start = |weekday, hour, minute| collomatique_time::SlotStart {
+        weekday,
+        start_time: collomatique_time::WholeMinuteTime::new(
+            chrono::NaiveTime::from_hms_opt(hour, minute, 0).expect("a clock time"),
+        )
+        .expect("a whole minute"),
+    };
+    let slots = vec![
+        (
+            subject(11),
+            vec![
+                (
+                    slot(71),
+                    Slot {
+                        subject_id: subject(11),
+                        teacher_id: teacher(21),
+                        start_time: slot_start(
+                            collomatique_time::Weekday(chrono::Weekday::Mon),
+                            9,
+                            0,
+                        ),
+                        extra_info: String::new(),
+                        week_pattern: None,
+                        cost: 0,
+                    },
+                ),
+                (
+                    slot(72),
+                    Slot {
+                        subject_id: subject(11),
+                        teacher_id: teacher(21),
+                        start_time: slot_start(
+                            collomatique_time::Weekday(chrono::Weekday::Tue),
+                            10,
+                            0,
+                        ),
+                        extra_info: String::new(),
+                        week_pattern: None,
+                        cost: -1,
+                    },
+                ),
+            ],
+        ),
+        (
+            subject(12),
+            vec![(
+                slot(73),
+                Slot {
+                    subject_id: subject(12),
+                    teacher_id: teacher(22),
+                    start_time: slot_start(collomatique_time::Weekday(chrono::Weekday::Wed), 14, 0),
+                    extra_info: String::new(),
+                    week_pattern: None,
+                    cost: 0,
+                },
+            )],
+        ),
+    ];
+
+    // No student sits a period out, so every placement's student is present
+    // on every period.
+    let students = vec![
+        (
+            student(31),
+            Student {
+                desc: person("Harry", "Potter", None, None),
+                excluded_periods: BTreeSet::new(),
+            },
+        ),
+        (
+            student(32),
+            Student {
+                desc: person("Hermione", "Granger", None, None),
+                excluded_periods: BTreeSet::new(),
+            },
+        ),
+        (
+            student(33),
+            Student {
+                desc: person("Ron", "Weasley", None, None),
+                excluded_periods: BTreeSet::new(),
+            },
+        ),
+        (
+            student(34),
+            Student {
+                desc: person("Neville", "Londubat", None, None),
+                excluded_periods: BTreeSet::new(),
+            },
+        ),
+    ];
+
+    // The non-empty group name, reached without naming its crate: the field
+    // says what the conversion lands in, so the fixture needs no dependency
+    // of its own to build one.
+    let named = |text: &str| {
+        text.to_owned()
+            .try_into()
+            .expect("the fixture's group names are not empty")
+    };
+
+    // The automatic list the solver filled, with one excluded student — the
+    // list a placements row belongs to. And the prefilled list, which never
+    // appears in the colloscope: its groups are its own.
+    let automatic = GroupList::new(
+        GroupListParameters {
+            name: "Automatique".to_owned(),
+            students_per_group: nonzero_range((1, 2)),
+            group_names: vec![None, None, None],
+        },
+        GroupListFilling::Automatic {
+            excluded_students: BTreeSet::from([student(33)]),
+        },
+    )
+    .expect("an automatic list is always internally consistent");
+
+    let prefilled = GroupList::new(
+        GroupListParameters {
+            name: "Maisons".to_owned(),
+            students_per_group: nonzero_range((2, 3)),
+            group_names: vec![Some(named("Aurore")), None],
+        },
+        GroupListFilling::Prefilled {
+            groups: vec![
+                PrefilledGroup {
+                    students: BTreeSet::from([student(31), student(32)]),
+                },
+                PrefilledGroup {
+                    students: BTreeSet::from([student(34)]),
+                },
+            ],
+        },
+    )
+    .expect("the prefilled groups match the names and share no student");
+
+    let mut inner_data = InnerData::default();
+    inner_data.params.periods =
+        collomatique_state_colloscopes::periods::Periods::from_ordered_ids(None, periods)
+            .expect("the fixture names each period once");
+    inner_data.params.weeks =
+        Weeks::from_period_rows(weeks).expect("the fixture names each week once");
+    inner_data.params.subjects = Subjects {
+        ordered_subject_list: subjects
+            .try_into()
+            .expect("the fixture names each subject once"),
+    };
+    // An id-keyed table takes the last of a duplicated id without a word,
+    // where the ordered lists above refuse one. So the counts are checked by
+    // hand: a fixture that named a teacher or a student twice would otherwise
+    // quietly ship one fewer than the script is about to read.
+    let (teacher_count, student_count) = (teachers.len(), students.len());
+    inner_data.params.teachers = Teachers {
+        teacher_map: teachers.into_iter().collect(),
+    };
+    inner_data.params.students = Students {
+        student_map: students.into_iter().collect(),
+    };
+    assert_eq!(
+        inner_data.params.teachers.teacher_map.len(),
+        teacher_count,
+        "the fixture names each teacher once"
+    );
+    assert_eq!(
+        inner_data.params.students.student_map.len(),
+        student_count,
+        "the fixture names each student once"
+    );
+    inner_data.params.slots =
+        Slots::from_subject_rows(slots).expect("the fixture names each slot once");
+
+    // The automatic list serves every pair a cell stands on, and the
+    // prefilled one serves nothing at all.
+    inner_data.params.group_lists = GroupLists {
+        group_list_map: [(group_list(51), automatic), (group_list(52), prefilled)]
+            .into_iter()
+            .collect(),
+        subjects_associations: [
+            ((period(1), subject(11)), group_list(51)),
+            ((period(2), subject(11)), group_list(51)),
+            ((period(2), subject(12)), group_list(51)),
+        ]
+        .into_iter()
+        .collect(),
+    };
+
+    // The colloscope itself, written through the canonical sparse writers:
+    // four cells on three slots and three weeks — one of them carrying two
+    // groups — and the automatic list filled. Every stored cell is possible:
+    // its subject runs on the week's period, the week holds colles, and the
+    // groups fit the associated list's three. The cell `(slot 71, week 82)`
+    // is possible and left empty, and `(slot 71, week 84)` is impossible —
+    // the two shapes of the single `None` answer.
+    inner_data
+        .colloscope
+        .set_interrogation(slot(71), week(81), BTreeSet::from([0, 2]));
+    inner_data
+        .colloscope
+        .set_interrogation(slot(71), week(83), BTreeSet::from([1]));
+    inner_data
+        .colloscope
+        .set_interrogation(slot(72), week(82), BTreeSet::from([0]));
+    inner_data
+        .colloscope
+        .set_interrogation(slot(73), week(83), BTreeSet::from([2]));
+    inner_data.colloscope.set_group_list(
+        group_list(51),
+        [(student(31), 0), (student(32), 2), (student(34), 1)]
+            .into_iter()
+            .collect(),
+    );
+
+    let data = Data::from_inner_data(inner_data).expect("the fixture should be a valid document");
+    let content = collomatique_storage::serialize_data(data.get_inner_data())
+        .expect("the fixture's ids are far below the file-format ceiling");
+    std::fs::write(path, content).expect("the fixture should be writable");
+}
+
+/// The colloscope reads back, cell by cell
+///
+/// The script walks `doc.colloscope` and leaves what it saw; rust compares it
+/// with the same document read straight from the model — the stored cells
+/// themselves, in key order, and the placements rows, in key order too.
+///
+/// The example was never resolved, so its colloscope has nothing to read —
+/// the cells and the placements need a document of its own:
+/// [colloscope_document]. The script does the rest on its own, because it is
+/// about what python sees: the single `None` of an empty cell, the
+/// placements as a read-only `mappingproxy`, the `None` of a prefilled list,
+/// and the foreign-handle arguments that must raise.
+#[test]
+fn the_colloscope_reads_back_cell_by_cell() {
+    use collomatique_state_colloscopes::ids::Id as _;
+    use collomatique_state_colloscopes::{GroupListId, SlotId};
+
+    let dir = workspace("colloscope");
+    let source = dir.join("colloscope.collomatique");
+    colloscope_document(&source);
+    let other_source = example_copy(&dir, "other.collomatique");
+
+    let globals = run(include_str!("scripts/colloscope.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("other_source", &other_source)?;
+        Ok(())
+    });
+
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+    let colloscope = &data.get_inner_data().colloscope;
+
+    // The fixture is only worth reading if it has something to say: several
+    // cells, on more than one slot and more than one week, one of them with
+    // several groups — and placements for the automatic list.
+    let cells: Vec<_> = colloscope.iter().collect();
+    let placements: Vec<_> = colloscope.group_lists_iter().collect();
+    assert!(cells.len() > 1);
+    assert!(
+        cells
+            .iter()
+            .map(|((slot, _week), _groups)| slot)
+            .collect::<BTreeSet<_>>()
+            .len()
+            > 1
+    );
+    assert!(
+        cells
+            .iter()
+            .map(|((_slot, week), _groups)| week)
+            .collect::<BTreeSet<_>>()
+            .len()
+            > 1
+    );
+    assert!(cells.iter().any(|(_key, groups)| groups.len() > 1));
+    assert_eq!(placements.len(), 1, "the fixture fills exactly one list");
+
+    // The cells, named by the positions a script reads them in: the slot's
+    // position within its subject, the week's global index, and the sorted
+    // group numbers.
+    let week_ids: Vec<_> = params.week_ids().collect();
+    let expected_cells: Vec<(usize, usize, Vec<u32>)> = cells
+        .iter()
+        .map(|((slot, week), groups)| {
+            let slot_index = params
+                .slots
+                .find_slot_subject_and_position(*slot)
+                .expect("a stored cell names a live slot")
+                .1;
+            let week_index = week_ids
+                .iter()
+                .position(|id| id == week)
+                .expect("a stored cell names a live week");
+            (slot_index, week_index, groups.iter().copied().collect())
+        })
+        .collect();
+    assert_eq!(
+        global::<Vec<(usize, usize, Vec<u32>)>>(&globals, "cell_reads"),
+        expected_cells
+    );
+
+    // Every stored cell is one the model could have accepted — a fixture that
+    // shipped a cell the resolver could never have produced would make the
+    // script's grid promises vacuous.
+    assert!(
+        cells
+            .iter()
+            .all(|((slot, week), _groups)| { params.is_interrogation_possible(*slot, *week) })
+    );
+
+    // The two empty shapes the script read: the possible cell nobody filled,
+    // and the week that is switched off entirely. The slot id is the
+    // fixture's own, which the file keeps; the week ids are not stored in the
+    // file — the decoder re-synthesizes them in walk order — so the reloaded
+    // document's own walk names the second and the last week.
+    let slot71 = unsafe { SlotId::new(71) };
+    let week82 = week_ids[1];
+    let week84 = *week_ids.last().expect("the fixture has weeks");
+    assert!(params.is_interrogation_possible(slot71, week82));
+    assert!(!params.is_interrogation_possible(slot71, week84));
+    assert!(colloscope.interrogation(slot71, week82).is_none());
+    assert!(colloscope.interrogation(slot71, week84).is_none());
+    assert_eq!(
+        global::<(Option<Vec<u32>>, Option<Vec<u32>>)>(&globals, "empty_cell_reads"),
+        (None, None)
+    );
+
+    // The placements, read from the model the way the script reads them from
+    // python: student by surname, group by number.
+    let gl51 = unsafe { GroupListId::new(51) };
+    let placed = colloscope
+        .group_list(gl51)
+        .expect("the fixture fills its automatic list");
+    let mut expected_placements: Vec<(String, u32)> = placed
+        .iter()
+        .map(|(student, group)| {
+            (
+                params
+                    .students
+                    .student_map
+                    .get(student)
+                    .expect("a placement names a live student")
+                    .desc
+                    .surname
+                    .clone(),
+                *group,
+            )
+        })
+        .collect();
+    expected_placements.sort();
+    assert_eq!(
+        global::<Vec<(String, u32)>>(&globals, "placement_items"),
+        expected_placements
+    );
+
+    // The stored rows, in key order, each named the way the script names
+    // them: the list's position in `doc.group_lists`, and the placements.
+    let list_ids: Vec<_> = params.group_lists.group_list_map.keys().collect();
+    let mut expected_rows: Vec<(usize, Vec<(String, u32)>)> = placements
+        .iter()
+        .map(|(group_list, placed)| {
+            let index = list_ids
+                .iter()
+                .position(|id| id == group_list)
+                .expect("a stored row names a live group list");
+            let mut items: Vec<(String, u32)> = placed
+                .iter()
+                .map(|(student, group)| {
+                    (
+                        params
+                            .students
+                            .student_map
+                            .get(student)
+                            .expect("a placement names a live student")
+                            .desc
+                            .surname
+                            .clone(),
+                        *group,
+                    )
+                })
+                .collect();
+            items.sort();
+            (index, items)
+        })
+        .collect();
+    expected_rows.sort_by_key(|(index, _)| *index);
+    assert_eq!(
+        global::<Vec<(usize, Vec<(String, u32)>)>>(&globals, "group_list_rows"),
+        expected_rows
+    );
+
+    // The script's foreign-handle question rests on the two documents not
+    // sharing the ids of the kinds it asks about. The weeks are the decoder's
+    // own synthesis in walk order, so they have nothing to be disjoint from —
+    // and the script only ever asks about weeks with handles, which name
+    // their document.
+    let fixture = reload(&source);
+    let example = reload(&other_source);
+    // The model keeps no single slot table to read ids from, so the walk the
+    // `doc.slots` view makes is composed here too: each subject, then its own
+    // slots.
+    let slots_of = |data: &Data| -> BTreeSet<_> {
+        data.get_inner_data()
+            .params
+            .subjects
+            .ordered_subject_list
+            .keys()
+            .flat_map(|subject| {
+                data.get_inner_data()
+                    .params
+                    .slots
+                    .slots_for_subject(subject)
+                    .into_iter()
+                    .flatten()
+                    .map(|(slot, _desc)| *slot)
+            })
+            .collect()
+    };
+    let group_lists_of = |data: &Data| -> BTreeSet<_> {
+        data.get_inner_data()
+            .params
+            .group_lists
+            .group_list_map
+            .keys()
+            .collect()
+    };
+    assert!(slots_of(&fixture).is_disjoint(&slots_of(&example)));
+    assert!(group_lists_of(&fixture).is_disjoint(&group_lists_of(&example)));
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
 /// The real `rfd` chooser, on a machine with someone in front of it
 ///
 /// Everything above answers the dialogs itself, so this is the only test that

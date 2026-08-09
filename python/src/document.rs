@@ -13,8 +13,8 @@ use collomatique_state_colloscopes::Data;
 use collomatique_storage::Caveat;
 
 use crate::collections::{
-    Assignments, Balancing, GroupLists, Incompats, Pairings, Periods, Settings, Slot, SlotPairings,
-    Slots, Students, Subjects, Teachers, Week, WeekPattern, WeekPatterns, Weeks,
+    Assignments, Balancing, Colloscope, GroupLists, Incompats, Pairings, Periods, Settings, Slot,
+    SlotPairings, Slots, Students, Subjects, Teachers, Week, WeekPattern, WeekPatterns, Weeks,
 };
 use crate::dialogs::FileRequest;
 use crate::errors::{
@@ -541,6 +541,34 @@ impl Document {
     #[getter]
     fn balancing(slf: Py<Self>) -> Balancing {
         Balancing::new(slf)
+    }
+
+    /// What a resolution found: the cells and the group lists it filled
+    ///
+    /// Reached as `doc.colloscope`:
+    ///
+    /// ```python
+    /// groups = doc.colloscope.interrogation(slot, week)   # frozenset[int] | None
+    /// for slot, week, groups in doc.colloscope.interrogations():
+    ///     ...
+    /// placements = doc.colloscope.group_list(group_list)  # Mapping[Student, int] | None
+    /// ```
+    ///
+    /// The result of the last resolution, in two sparse tables: which group
+    /// numbers sit in which `(slot, week)` cell — numbers, because a group
+    /// number names a group of the list the cell's subject uses on that
+    /// week's period, the hop being `doc.group_lists.association_for` — and
+    /// how each automatic group list was filled. An absent cell is `None`,
+    /// the one thing an empty table and a missing one have in common;
+    /// whether a cell *could* hold anything is `is_interrogation_possible`'s
+    /// question, so the two reads pair.
+    ///
+    /// The view is read-only: nothing here mutates, and the placements
+    /// mappings cannot be written to. All of that is the write surface of
+    /// step 3.
+    #[getter]
+    fn colloscope(slf: Py<Self>) -> Colloscope {
+        Colloscope::new(slf)
     }
 
     /// Whether a colle can happen in this slot on this week
