@@ -103,6 +103,27 @@ by_handle = {student: student.surname for student in student_list}
 assert len(by_handle) == len(student_list)
 assert by_handle[students[student_list[0].id]] == student_list[0].surname
 
+# A person is never equal to something that is not one — that is an answer and
+# not an error, so `!=` against a stranger is simply true. A name is the reading
+# a script is likeliest to have in hand instead of the handle, and it is a
+# stranger like any other. A teacher and a student are strangers to each other
+# too, which the end of this script says for the teacher; here the student says
+# it. Neither kind orders: the document holds no rank for people.
+assert teacher_list[0] != 3
+assert teacher_list[0] != "Rogue"
+assert teacher_list[0] != None  # noqa: E711 — `is not` would not call `__eq__`
+assert student_list[0] != 3
+assert student_list[0] != "Potter"
+assert not (student_list[0] == teacher_list[0])
+assert student_list[0] != None  # noqa: E711 — `is not` would not call `__eq__`
+for people in (teacher_list, student_list):
+    try:
+        people[0] < people[1]
+    except TypeError:
+        pass
+    else:
+        raise AssertionError("ordering two handles must raise")
+
 for collection in (teachers, students):
     assert 3 not in collection
     assert collection.get(3) is None

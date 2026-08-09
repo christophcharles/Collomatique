@@ -33,6 +33,13 @@ assert again == period_list[0]
 assert hash(again) == hash(period_list[0])
 assert len({again, period_list[0]}) == 1
 
+# A period is never equal to something that is not one — that is an answer and
+# not an error, so `!=` against a stranger is simply true. A handle of another
+# kind is a stranger too, which the weeks say once they are in scope, below.
+assert period_list[0] != 3
+assert period_list[0] != "Premier trimestre"
+assert period_list[0] != None  # noqa: E711 — `is not` would not call `__eq__`
+
 # Handles identify; they do not order. Ids are the things that order.
 try:
     period_list[0] < period_list[1]
@@ -86,6 +93,20 @@ for week in week_list:
     assert weeks[week] == week
     assert week.id in weeks
     assert week in weeks
+
+# A week answers the same way about a stranger, and a period is one of them: the
+# two kinds come out of the same document and may well carry the same id, but a
+# week is not the period it runs in. Nor do weeks order, any more than periods do.
+assert week_list[0] != 3
+assert week_list[0] != "Vacances"
+assert not (week_list[0] == period_list[0])
+assert week_list[0] != None  # noqa: E711 — `is not` would not call `__eq__`
+try:
+    week_list[0] < week_list[1]
+except TypeError:
+    pass
+else:
+    raise AssertionError("ordering two handles must raise")
 
 # The global order *is* the concatenation of the periods' own weeks, taken in
 # display order — that is what makes `week.index` a global index.

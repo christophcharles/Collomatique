@@ -22,6 +22,20 @@ for subject in subject_list:
     assert subject.id in subjects
     assert subject in subjects
 
+# A subject is never equal to something that is not one — that is an answer and
+# not an error, so `!=` against a stranger is simply true. A handle of another
+# kind is a stranger too, which the periods say at the end of this script.
+# Handles identify; they do not order, which is what ids are for.
+assert subject_list[0] != 3
+assert subject_list[0] != "Sortilèges"
+assert subject_list[0] != None  # noqa: E711 — `is not` would not call `__eq__`
+try:
+    subject_list[0] < subject_list[1]
+except TypeError:
+    pass
+else:
+    raise AssertionError("ordering two handles must raise")
+
 assert 3 not in subjects
 assert subjects.get(3) is None
 try:
@@ -95,6 +109,20 @@ assert again is not first.interrogation
 assert again == first.interrogation
 assert hash(again) == hash(first.interrogation)
 assert again != with_colles[1].interrogation
+
+# And a view is never equal to something that is not one — not even the subject
+# it was read out of, which is the handle standing nearest to it. It does not
+# order either: it names a subject's colles, and that is not a position.
+assert again != 3
+assert again != "Sortilèges"
+assert not (again == first)
+assert again != None  # noqa: E711 — `is not` would not call `__eq__`
+try:
+    again < with_colles[1].interrogation
+except TypeError:
+    pass
+else:
+    raise AssertionError("ordering two views must raise")
 
 try:
     collomatique.Interrogation()
