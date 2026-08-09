@@ -22,3 +22,9 @@ chrono = "0.4"
 futures = "0.3"
 non-empty-string = "0.2.6"
 pyo3 = "0.29"
+# `rfd`: the features are the point of this entry, not the version. `xdg-portal`
+# keeps GTK3 and its C headers out of the build, and `tokio` is the runtime
+# `ashpd` — and through it `zbus` — expects to be spawned onto. Cargo unifies
+# features across the workspace, so a crate asking for `async-std` here would
+# hand every other crate a `zbus` with both runtimes turned on.
+rfd = { version = "0.15", default-features = false, features = [ "xdg-portal", "tokio" ] }

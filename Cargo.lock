@@ -481,6 +481,8 @@ dependencies = [
  "collomatique-storage",
  "collomatique-time",
  "pyo3",
+ "rfd",
+ "tokio",
 ]
 
 [[package]]
