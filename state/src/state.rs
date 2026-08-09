@@ -1,6 +1,6 @@
 //! State module
 //!
-//! Contains the definition of [AppState] and [AppSession].
+//! Contains the definition of [AppState], [AppSession] and [SessionStack].
 //! These are the principal interface for maintaining the
 //! state of a file in the application.
 
@@ -162,6 +162,141 @@ impl<T: traits::Manager, D: Description> traits::private::ManagerInternal for Ap
         &mut self,
     ) -> &mut ModificationHistory<<T::Data as InMemoryData>::AnnotatedOperation, D> {
         &mut self.session_history
+    }
+}
+
+/// A manager with a stack of open sessions
+///
+/// [AppSession] nests, but only in the *type*: each nesting is another layer of
+/// type, so a caller must know when it is compiled how deep it will go. A
+/// caller whose depth is decided when it runs — a script opening
+/// `with doc.transaction(...)` inside another one — needs the recursion in the
+/// value instead, which is what this is.
+///
+/// It is a [traits::Manager] itself, and the manager it behaves as is always
+/// the innermost open session: writes, [traits::Manager::undo] and
+/// [traits::Manager::redo] land there, and [SessionStack::commit] folds it into
+/// the level below as a single slot.
+#[derive(Debug, Clone)]
+pub struct SessionStack<T: InMemoryData, D: Description> {
+    /// Absent only between the `take` and the put-back inside the three
+    /// methods that move it; never absent between calls.
+    node: Option<Node<T, D>>,
+}
+
+/// One level of a [SessionStack]
+#[derive(Debug, Clone)]
+enum Node<T: InMemoryData, D: Description> {
+    /// No session open: the document and its own history
+    Base(AppState<T, D>),
+    /// One open session, over everything below it
+    Nested(Box<AppSession<SessionStack<T, D>, D>>),
+}
+
+const NODE_PRESENT: &str = "the node is only absent while a SessionStack method moves it";
+
+impl<T: InMemoryData, D: Description> SessionStack<T, D> {
+    /// A stack with no session open, over `data`
+    pub fn new(data: T) -> Self {
+        SessionStack {
+            node: Some(Node::Base(AppState::new(data))),
+        }
+    }
+
+    /// Opens a session
+    ///
+    /// From here on, writes land in it, and [traits::Manager::undo] reaches
+    /// back no further than this point.
+    pub fn begin(&mut self) {
+        let below = SessionStack {
+            node: Some(self.take_node()),
+        };
+        self.node = Some(Node::Nested(Box::new(AppSession::new(below))));
+    }
+
+    /// Closes the innermost session, folding everything it did into the level
+    /// below as one slot described by `desc`
+    ///
+    /// Returns `false`, and does nothing at all, when no session is open.
+    pub fn commit(&mut self, desc: D) -> bool {
+        match self.take_node() {
+            base @ Node::Base(_) => {
+                self.node = Some(base);
+                false
+            }
+            Node::Nested(session) => {
+                self.node = session.commit(desc).node;
+                true
+            }
+        }
+    }
+
+    /// Closes the innermost session, unwinding everything it did
+    ///
+    /// Returns `false`, and does nothing at all, when no session is open.
+    pub fn cancel(&mut self) -> bool {
+        match self.take_node() {
+            base @ Node::Base(_) => {
+                self.node = Some(base);
+                false
+            }
+            Node::Nested(session) => {
+                self.node = session.cancel().node;
+                true
+            }
+        }
+    }
+
+    /// How many sessions are open
+    pub fn depth(&self) -> usize {
+        let mut depth = 0;
+        let mut level = self;
+        loop {
+            match level.node.as_ref().expect(NODE_PRESENT) {
+                Node::Base(_) => return depth,
+                Node::Nested(session) => {
+                    depth += 1;
+                    level = &session.op_manager;
+                }
+            }
+        }
+    }
+
+    fn take_node(&mut self) -> Node<T, D> {
+        self.node.take().expect(NODE_PRESENT)
+    }
+}
+
+impl<T: InMemoryData, D: Description> traits::private::ManagerInternal for SessionStack<T, D> {
+    type Data = T;
+    type Desc = D;
+
+    fn get_in_memory_data(&self) -> &Self::Data {
+        match self.node.as_ref().expect(NODE_PRESENT) {
+            Node::Base(state) => state.get_in_memory_data(),
+            Node::Nested(session) => session.get_in_memory_data(),
+        }
+    }
+    fn get_in_memory_data_mut(&mut self) -> &mut Self::Data {
+        match self.node.as_mut().expect(NODE_PRESENT) {
+            Node::Base(state) => state.get_in_memory_data_mut(),
+            Node::Nested(session) => session.get_in_memory_data_mut(),
+        }
+    }
+
+    fn get_modification_history(&self) -> &ModificationHistory<T::AnnotatedOperation, D> {
+        match self.node.as_ref().expect(NODE_PRESENT) {
+            Node::Base(state) => state.get_modification_history(),
+            Node::Nested(session) => session.get_modification_history(),
+        }
+    }
+    fn get_modification_history_mut(
+        &mut self,
+    ) -> &mut ModificationHistory<T::AnnotatedOperation, D> {
+        match self.node.as_mut().expect(NODE_PRESENT) {
+            Node::Base(state) => state.get_modification_history_mut(),
+            Node::Nested(session) => session.get_modification_history_mut(),
+        }
     }
 }
 

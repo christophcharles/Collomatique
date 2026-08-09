@@ -34,6 +34,6 @@ pub use ids::Id;
 pub use join::{Join, Joinable, Lookup};
 pub use partial_order::{ContentIdentity, ContentOrd};
 pub use refs::References;
-pub use state::{AppSession, AppState};
+pub use state::{AppSession, AppState, SessionStack};
 pub use tables::{Key, OrderedKey, OrderedTable, Table};
 pub use traits::{ApplyError, Description, InMemoryData, Operation};
