@@ -12,8 +12,10 @@
 //! not apply to a flat immutable value that only ever travels out of rust.
 //!
 //! This module opens with the periodicity family, which is what the subjects
-//! need, and [TimeSlot], which the incompatibilities hand out. The rest of
-//! §2.6 lands with the collections that hand it out.
+//! need, [TimeSlot], which the incompatibilities hand out, and the settings
+//! vocabulary — [Enforcement] and [Limit] — which the settings and balancing
+//! read surfaces hand out. The rest of §2.6 lands with the collections that
+//! hand it out.
 
 use std::num::NonZeroU32;
 
@@ -21,6 +23,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyTuple;
 
+use collomatique_state_colloscopes::settings::SoftParam;
 use collomatique_state_colloscopes::{NonEmptyRangeInclusive, SubjectPeriodicity};
 
 /// A day of the week
@@ -593,6 +596,129 @@ impl TimeSlot {
     }
 }
 
+/// Whether a goal is an objective or a hard constraint
+///
+/// One vocabulary for every `SoftParam` in the model
+/// (`docs/python/handle_api.md` §2.6): a limit or a balancing goal is either
+/// `OBJECTIVE` — the solver optimizes for it — or `STRICT` — a hard constraint.
+/// `None` where the goal is not pursued at all is spelled by the read itself,
+/// as an absent optional, never by a third member.
+///
+/// The two members are class attributes, like [Weekday]'s days:
+/// `clm.Enforcement.STRICT` — pyo3 keeps one object per member, so two reads
+/// of the same enforcement are the same object.
+#[pyclass(module = "collomatique", frozen, eq, hash, from_py_object)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Enforcement {
+    #[pyo3(name = "OBJECTIVE")]
+    Objective,
+    #[pyo3(name = "STRICT")]
+    Strict,
+}
+
+/// The enforcement as the repr spells it, the way the class attribute is named
+fn enforcement_spelling(enforcement: Enforcement) -> &'static str {
+    match enforcement {
+        Enforcement::Objective => "Enforcement.OBJECTIVE",
+        Enforcement::Strict => "Enforcement.STRICT",
+    }
+}
+
+impl std::fmt::Display for Enforcement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(enforcement_spelling(*self))
+    }
+}
+
+#[pymethods]
+impl Enforcement {
+    fn __repr__(&self) -> String {
+        enforcement_spelling(*self).to_owned()
+    }
+}
+
+impl Enforcement {
+    /// The python enforcement for one model `soft` flag
+    pub(crate) fn from_model(soft: bool) -> Enforcement {
+        if soft {
+            Enforcement::Objective
+        } else {
+            Enforcement::Strict
+        }
+    }
+}
+
+/// One limit on a student's interrogations
+///
+/// A field of the settings [Limits] view (`docs/python/handle_api.md` §3.13): a
+/// count and whether the count is an objective for the solver or a hard
+/// constraint.
+///
+/// ```python
+/// clm.Limit(3, clm.Enforcement.STRICT)
+/// ```
+///
+/// The value is a plain count, and nothing about the range is checked at
+/// construction: the model's per-week fields take zero, and the at-least-one
+/// rule on `max_interrogations_per_day` is the model's own, enforced where the
+/// model stores that field — step 3 refuses a zero there, not here.
+///
+/// [Limits]: crate::collections::settings::Limits
+#[pyclass(module = "collomatique", frozen, eq, hash, from_py_object)]
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct Limit {
+    value: u32,
+    enforcement: Enforcement,
+}
+
+#[pymethods]
+impl Limit {
+    #[new]
+    fn new(value: u32, enforcement: Enforcement) -> Limit {
+        Limit { value, enforcement }
+    }
+
+    #[classattr]
+    #[allow(non_upper_case_globals)]
+    const __match_args__: (&'static str, &'static str) = ("value", "enforcement");
+
+    /// The count the limit sets
+    #[getter]
+    fn value(&self) -> u32 {
+        self.value
+    }
+
+    /// Whether the count is an objective or a hard constraint
+    #[getter]
+    fn enforcement(&self) -> Enforcement {
+        self.enforcement
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "Limit(value={}, enforcement={})",
+            self.value,
+            enforcement_spelling(self.enforcement),
+        )
+    }
+}
+
+/// The python limit for one model limit whose count is a plain int
+pub(crate) fn limit(soft: &SoftParam<u32>) -> Limit {
+    Limit {
+        value: soft.value,
+        enforcement: Enforcement::from_model(soft.soft),
+    }
+}
+
+/// The same, for a count the model stores as at least one
+pub(crate) fn nonzero_limit(soft: &SoftParam<NonZeroU32>) -> Limit {
+    Limit {
+        value: soft.value.get(),
+        enforcement: Enforcement::from_model(soft.soft),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::Weekday;
@@ -664,5 +790,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<CountInYear>()?;
     m.add_class::<CustomBlocks>()?;
     m.add_class::<TimeSlot>()?;
+    m.add_class::<Enforcement>()?;
+    m.add_class::<Limit>()?;
     Ok(())
 }

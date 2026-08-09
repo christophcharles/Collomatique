@@ -13,8 +13,8 @@ use collomatique_state_colloscopes::Data;
 use collomatique_storage::Caveat;
 
 use crate::collections::{
-    Assignments, GroupLists, Incompats, Pairings, Periods, Slot, SlotPairings, Slots, Students,
-    Subjects, Teachers, Week, WeekPattern, WeekPatterns, Weeks,
+    Assignments, Balancing, GroupLists, Incompats, Pairings, Periods, Settings, Slot, SlotPairings,
+    Slots, Students, Subjects, Teachers, Week, WeekPattern, WeekPatterns, Weeks,
 };
 use crate::dialogs::FileRequest;
 use crate::errors::{
@@ -502,6 +502,45 @@ impl Document {
     #[getter]
     fn slot_pairings(slf: Py<Self>) -> SlotPairings {
         SlotPairings::new(slf)
+    }
+
+    /// The limits the resolution is held to, global and per student
+    ///
+    /// Reached as `doc.settings`:
+    ///
+    /// ```python
+    /// limits = doc.settings.limits_for(student)
+    /// ```
+    ///
+    /// One global entry plus sparse per-student overrides, with the whole-entry
+    /// resolution kept in the model: `limits_for` hands back the student's
+    /// override verbatim when there is one, the global entry otherwise — a
+    /// `None` field in an override *disables* the corresponding global limit,
+    /// it does not inherit it. The [Limits] views read the current state on
+    /// every access; a resolved view tracks an override appearing or
+    /// vanishing, and an override view goes stale with its entry.
+    #[getter]
+    fn settings(slf: Py<Self>) -> Settings {
+        Settings::new(slf)
+    }
+
+    /// How the resolution balances the interrogations, global and per subject
+    ///
+    /// Reached as `doc.balancing`:
+    ///
+    /// ```python
+    /// if doc.balancing.options_for(subject).teacher_rotation == clm.Enforcement.STRICT:
+    ///     ...
+    /// ```
+    ///
+    /// The structural twin of `doc.settings`: one global entry plus sparse
+    /// per-subject overrides, whole-entry resolution in the model, and
+    /// [BalancingOptions] views reading the current state — the rotation goals
+    /// as `Enforcement | None` (`None` = not pursued, `OBJECTIVE` = optimize
+    /// for it, `STRICT` = a hard constraint) and the two fairness switches.
+    #[getter]
+    fn balancing(slf: Py<Self>) -> Balancing {
+        Balancing::new(slf)
     }
 
     /// Whether a colle can happen in this slot on this week

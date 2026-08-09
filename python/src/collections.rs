@@ -10,10 +10,12 @@
 //! the writes it makes through it.
 
 pub mod assignments;
+pub mod balancing;
 pub mod group_lists;
 pub mod incompats;
 pub mod pairings;
 pub mod periods;
+pub mod settings;
 pub mod slot_pairings;
 pub mod slots;
 pub mod students;
@@ -23,10 +25,12 @@ pub mod week_patterns;
 pub mod weeks;
 
 pub use assignments::Assignments;
+pub use balancing::{Balancing, BalancingOptions};
 pub use group_lists::{GroupList, GroupLists};
 pub use incompats::{Incompat, Incompats};
 pub use pairings::{PairingRule, PairingRuleSide, Pairings};
 pub use periods::{Period, Periods};
+pub use settings::{Limits, Settings};
 pub use slot_pairings::{SlotPairingRule, SlotPairingRuleSide, SlotPairings};
 pub use slots::{Slot, Slots};
 pub use students::{Student, Students};
@@ -56,6 +60,8 @@ pub(crate) fn person_name(desc: &PersonWithContact) -> String {
 /// a script can build one: none of them has a constructor.
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Assignments>()?;
+    m.add_class::<Balancing>()?;
+    m.add_class::<BalancingOptions>()?;
     m.add_class::<GroupLists>()?;
     m.add_class::<GroupList>()?;
     m.add_class::<Incompats>()?;
@@ -65,6 +71,8 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PairingRuleSide>()?;
     m.add_class::<Periods>()?;
     m.add_class::<Period>()?;
+    m.add_class::<Settings>()?;
+    m.add_class::<Limits>()?;
     m.add_class::<SlotPairings>()?;
     m.add_class::<SlotPairingRule>()?;
     m.add_class::<SlotPairingRuleSide>()?;

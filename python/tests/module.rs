@@ -3848,6 +3848,487 @@ fn a_removed_slot_pairing_rule_takes_its_sides_with_it() {
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
 
+/// The settings read back, entry by entry
+///
+/// The script walks `doc.settings` and leaves what it saw; rust compares it
+/// with the same document read straight from the model — the global entry,
+/// Hermione's override (whose every field is set) and the resolved view over
+/// her, Harry's resolved view inheriting the global entry, and the stored
+/// rows in id order.
+///
+/// The example is worth reading here because it holds exactly one override
+/// and one student without one, which is the whole resolution shape. What it
+/// does not hold is an override with a `None` field masking a set global
+/// limit — that is
+/// [an_override_appearing_and_vanishing_tracks_through_limits_for]'s story,
+/// whose masking entry is installed between stages.
+#[test]
+fn the_settings_read_back_entry_by_entry() {
+    let dir = workspace("settings");
+    let source = example_copy(&dir, "source.collomatique");
+
+    let globals = run(include_str!("scripts/settings.py"), |globals| {
+        globals.set_item("source", &source)?;
+        Ok(())
+    });
+
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+    let settings = &params.settings;
+
+    let global_limits = &settings.global;
+    let global_min = global_limits
+        .interrogations_per_week_min
+        .as_ref()
+        .expect("the global entry sets a minimum");
+    let global_max = global_limits
+        .interrogations_per_week_max
+        .as_ref()
+        .expect("the global entry sets a maximum");
+    let global_day = global_limits
+        .max_interrogations_per_day
+        .as_ref()
+        .expect("the global entry sets a per-day limit");
+
+    assert_eq!(
+        global::<Vec<u32>>(&globals, "global_values"),
+        vec![global_min.value, global_max.value, global_day.value.get()]
+    );
+    assert_eq!(
+        global::<Vec<bool>>(&globals, "global_strict"),
+        vec![!global_min.soft, !global_max.soft, !global_day.soft]
+    );
+    assert_eq!(
+        global::<String>(&globals, "global_repr"),
+        format!(
+            "<Limits (global) interrogations_per_week_min={} interrogations_per_week_max={} \
+             max_interrogations_per_day={}>",
+            global_min.value,
+            global_max.value,
+            global_day.value.get(),
+        )
+    );
+
+    // Hermione is the one student with an override; her resolved limits are
+    // the override entry itself, and so is the stored row.
+    let hermione = params
+        .students
+        .student_map
+        .iter()
+        .find(|(_id, student)| student.desc.surname == "Granger")
+        .expect("the example has Hermione")
+        .0;
+    let override_limits = settings
+        .students
+        .get(&hermione)
+        .expect("Hermione has an override");
+    let values_of = |limits: &collomatique_state_colloscopes::settings::Limits| {
+        vec![
+            limits
+                .interrogations_per_week_min
+                .as_ref()
+                .expect("the entry sets a minimum")
+                .value,
+            limits
+                .interrogations_per_week_max
+                .as_ref()
+                .expect("the entry sets a maximum")
+                .value,
+            limits
+                .max_interrogations_per_day
+                .as_ref()
+                .expect("the entry sets a per-day limit")
+                .value
+                .get(),
+        ]
+    };
+    let strict_of = |limits: &collomatique_state_colloscopes::settings::Limits| {
+        vec![
+            !limits
+                .interrogations_per_week_min
+                .as_ref()
+                .expect("the entry sets a minimum")
+                .soft,
+            !limits
+                .interrogations_per_week_max
+                .as_ref()
+                .expect("the entry sets a maximum")
+                .soft,
+            !limits
+                .max_interrogations_per_day
+                .as_ref()
+                .expect("the entry sets a per-day limit")
+                .soft,
+        ]
+    };
+    assert_eq!(
+        global::<Vec<u32>>(&globals, "hermione_values"),
+        values_of(override_limits)
+    );
+    assert_eq!(
+        global::<Vec<bool>>(&globals, "hermione_strict"),
+        strict_of(override_limits)
+    );
+    assert_eq!(
+        global::<Vec<u32>>(&globals, "override_values"),
+        values_of(override_limits)
+    );
+    use collomatique_state::ids::Id as _;
+    assert_eq!(
+        global::<String>(&globals, "hermione_repr"),
+        format!(
+            "<Limits #{} {} {} {}>",
+            hermione.inner(),
+            repr_limit(
+                override_limits
+                    .interrogations_per_week_min
+                    .as_ref()
+                    .expect("set"),
+                "interrogations_per_week_min",
+            ),
+            repr_limit(
+                override_limits
+                    .interrogations_per_week_max
+                    .as_ref()
+                    .expect("set"),
+                "interrogations_per_week_max",
+            ),
+            repr_nonzero_limit(
+                override_limits
+                    .max_interrogations_per_day
+                    .as_ref()
+                    .expect("set"),
+                "max_interrogations_per_day",
+            ),
+        )
+    );
+
+    // Harry inherits the global entry: no row of his own, and the model's own
+    // resolution answer.
+    let harry = params
+        .students
+        .student_map
+        .iter()
+        .find(|(_id, student)| student.desc.surname == "Potter")
+        .expect("the example has Harry")
+        .0;
+    assert!(settings.students.get(&harry).is_none());
+    assert_eq!(
+        global::<Vec<u32>>(&globals, "harry_values"),
+        values_of(settings.limits_for(harry))
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// A limit as its repr writes it — the word is the attribute name, so the two
+/// shapes are written out rather than given a helper that could drift apart.
+fn repr_limit(
+    soft: &collomatique_state_colloscopes::settings::SoftParam<u32>,
+    word: &str,
+) -> String {
+    format!("{word}={}", soft.value)
+}
+
+/// The same, for a count the model stores non-zero
+fn repr_nonzero_limit(
+    soft: &collomatique_state_colloscopes::settings::SoftParam<std::num::NonZeroU32>,
+    word: &str,
+) -> String {
+    format!("{word}={}", soft.value)
+}
+
+/// The balancing read back, entry by entry
+///
+/// The script walks `doc.balancing` and leaves what it saw; rust compares it
+/// with the same document read straight from the model — the global entry,
+/// Métamorphose's override (which hardens a rotation the global entry does not
+/// pursue at all, the whole-entry verbatim rule), a subject inheriting the
+/// global entry, and the stored rows in id order.
+///
+/// The example is worth reading here because the three states of a rotation
+/// goal — not pursued, objective, strict — all appear across its entries.
+#[test]
+fn the_balancing_read_back_entry_by_entry() {
+    let dir = workspace("balancing");
+    let source = example_copy(&dir, "source.collomatique");
+
+    let globals = run(include_str!("scripts/balancing.py"), |globals| {
+        globals.set_item("source", &source)?;
+        Ok(())
+    });
+
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+    let balancing = &params.balancing;
+    let subjects = &params.subjects;
+
+    let global_options = &balancing.global;
+    let enforcement = |soft: bool| if soft { "OBJECTIVE" } else { "STRICT" };
+    assert_eq!(
+        global::<Vec<bool>>(&globals, "global_rotation_objectives"),
+        vec![
+            global_options
+                .teacher_rotation
+                .as_ref()
+                .expect("pursued")
+                .soft,
+            global_options.slot_rotation.as_ref().expect("pursued").soft,
+        ]
+    );
+    assert_eq!(
+        global::<Vec<bool>>(&globals, "global_bools"),
+        vec![
+            global_options.year_teacher_rotation,
+            global_options.period_teacher_rotation
+        ]
+    );
+    assert_eq!(
+        global::<String>(&globals, "global_repr"),
+        format!(
+            "<BalancingOptions (global) teacher_rotation=Enforcement.{} \
+             slot_rotation=Enforcement.{} avoid_twice_in_a_row=None \
+             year_teacher_rotation={} period_teacher_rotation={}>",
+            enforcement(
+                global_options
+                    .teacher_rotation
+                    .as_ref()
+                    .expect("pursued")
+                    .soft
+            ),
+            enforcement(global_options.slot_rotation.as_ref().expect("pursued").soft),
+            global_options.year_teacher_rotation,
+            global_options.period_teacher_rotation,
+        )
+    );
+
+    // Métamorphose's override wins verbatim: its avoid_twice_in_a_row is
+    // strict where the global entry does not pursue the goal at all, and its
+    // year switch is on where the global one is off.
+    let metamorphose = subjects
+        .ordered_subject_list
+        .iter()
+        .find(|(_id, subject)| subject.parameters.name == "Métamorphose")
+        .expect("the example has Métamorphose")
+        .0;
+    let options = balancing.options_for(metamorphose);
+    let objective = |soft: &Option<collomatique_state_colloscopes::settings::SoftParam<()>>| {
+        soft.as_ref().is_some_and(|soft| soft.soft)
+    };
+    assert_eq!(
+        global::<Vec<bool>>(&globals, "metamorphose_objectives"),
+        vec![
+            objective(&options.teacher_rotation),
+            objective(&options.slot_rotation),
+            objective(&options.avoid_twice_in_a_row),
+        ]
+    );
+    assert_eq!(
+        global::<Vec<bool>>(&globals, "metamorphose_bools"),
+        vec![
+            options.year_teacher_rotation,
+            options.period_teacher_rotation
+        ]
+    );
+    use collomatique_state::ids::Id as _;
+    assert_eq!(
+        global::<String>(&globals, "metamorphose_repr"),
+        format!(
+            "<BalancingOptions #{} teacher_rotation=Enforcement.{} \
+             slot_rotation=Enforcement.{} avoid_twice_in_a_row=Enforcement.{} \
+             year_teacher_rotation={} period_teacher_rotation={}>",
+            metamorphose.inner(),
+            enforcement(options.teacher_rotation.as_ref().expect("pursued").soft),
+            enforcement(options.slot_rotation.as_ref().expect("pursued").soft),
+            enforcement(options.avoid_twice_in_a_row.as_ref().expect("pursued").soft),
+            options.year_teacher_rotation,
+            options.period_teacher_rotation,
+        )
+    );
+
+    // The stored rows, in id order: the overridden subjects named as the
+    // application names them.
+    assert_eq!(
+        global::<Vec<String>>(&globals, "override_subject_names"),
+        balancing
+            .subjects
+            .keys()
+            .map(|subject| subjects
+                .find_subject(subject)
+                .expect("an overridden subject is a live one")
+                .parameters
+                .name
+                .clone())
+            .collect::<Vec<_>>()
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// An override appearing and vanishing tracks through a held `limits_for` view
+///
+/// The mutation cannot come from the script — the read surface ships no writes
+/// — so it comes from rust, between the three halves: an override for Harry is
+/// installed and then removed. The same [Limits] view the first half held must
+/// follow both changes — reading the override while it stands, its `None`
+/// fields masking the set global limits (the verbatim whole-entry rule the
+/// model's own tests pin), and falling back to the global entry when it is
+/// gone. The raw view minted while the override stood is bound to its entry,
+/// so it dies with it, loudly.
+#[test]
+fn an_override_appearing_and_vanishing_tracks_through_limits_for() {
+    let dir = workspace("settings-stale");
+    let source = example_copy(&dir, "source.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same student the script is holding.
+    let harry = reload(&source)
+        .get_inner_data()
+        .params
+        .students
+        .student_map
+        .iter()
+        .find(|(_id, student)| student.desc.surname == "Potter")
+        .expect("the example has Harry")
+        .0;
+
+    // The whole-entry override installed between the first two stages: a
+    // minimum of four a week, objective rather than strict, and the two other
+    // fields unset — which is the point, they must disable the set global
+    // limits rather than inherit them.
+    let override_limits = collomatique_state_colloscopes::settings::Limits {
+        interrogations_per_week_min: Some(collomatique_state_colloscopes::settings::SoftParam {
+            soft: true,
+            value: 4,
+        }),
+        interrogations_per_week_max: None,
+        max_interrogations_per_day: None,
+    };
+
+    let mut stage = 0;
+    run_stages(
+        &[
+            include_str!("scripts/settings_stale_before.py"),
+            include_str!("scripts/settings_stale_override.py"),
+            include_str!("scripts/settings_stale_after.py"),
+        ],
+        |globals| {
+            globals.set_item("source", &source)?;
+            Ok(())
+        },
+        |py, globals| {
+            let op = match stage {
+                0 => collomatique_ops::SettingsUpdateOp::UpdateStudentLimits(
+                    harry,
+                    override_limits.clone(),
+                ),
+                _ => collomatique_ops::SettingsUpdateOp::RemoveStudentLimits(harry),
+            };
+            stage += 1;
+
+            document_of(globals)
+                .borrow_mut(py)
+                .update(py, collomatique_ops::UpdateOp::Settings(op))
+                .expect("Harry's override is settable and removable");
+        },
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// Removing a student takes the limits views of them down with it
+///
+/// The mutation comes from rust, between the two halves: Hermione goes, and
+/// the cascade takes her override with her. Both views the first half held —
+/// the resolved one, bound to the student, and the raw one, bound to the
+/// entry — must say so loudly, and a fresh ask about the dead student is a
+/// stale argument, not the model's forgiving answer.
+#[test]
+fn removing_a_student_takes_its_limits_views_with_it() {
+    let dir = workspace("settings-student-gone");
+    let source = example_copy(&dir, "source.collomatique");
+
+    let hermione = reload(&source)
+        .get_inner_data()
+        .params
+        .students
+        .student_map
+        .iter()
+        .find(|(_id, student)| student.desc.surname == "Granger")
+        .expect("the example has Hermione")
+        .0;
+
+    run_stages(
+        &[
+            include_str!("scripts/settings_student_gone_before.py"),
+            include_str!("scripts/settings_student_gone_after.py"),
+        ],
+        |globals| {
+            globals.set_item("source", &source)?;
+            Ok(())
+        },
+        |py, globals| {
+            document_of(globals)
+                .borrow_mut(py)
+                .update(
+                    py,
+                    collomatique_ops::UpdateOp::Students(
+                        collomatique_ops::StudentsUpdateOp::DeleteStudent(hermione),
+                    ),
+                )
+                .expect("Hermione is removable");
+        },
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// Removing a balancing override stales only the raw view
+///
+/// The mutation comes from rust, between the two halves: Métamorphose's
+/// balancing override goes. The resolved view the first half held re-resolves
+/// to the global entry — `options_for` is live in the strong sense, like
+/// `limits_for` — while the raw view dies with its entry, loudly.
+#[test]
+fn removing_a_balancing_override_stales_only_the_raw_view() {
+    let dir = workspace("balancing-stale");
+    let source = example_copy(&dir, "source.collomatique");
+
+    let metamorphose = reload(&source)
+        .get_inner_data()
+        .params
+        .subjects
+        .ordered_subject_list
+        .iter()
+        .find(|(_id, subject)| subject.parameters.name == "Métamorphose")
+        .expect("the example has Métamorphose")
+        .0;
+
+    run_stages(
+        &[
+            include_str!("scripts/balancing_stale_before.py"),
+            include_str!("scripts/balancing_stale_after.py"),
+        ],
+        |globals| {
+            globals.set_item("source", &source)?;
+            Ok(())
+        },
+        |py, globals| {
+            document_of(globals)
+                .borrow_mut(py)
+                .update(
+                    py,
+                    collomatique_ops::UpdateOp::Balancing(
+                        collomatique_ops::BalancingUpdateOp::RemoveSubjectOptions(metamorphose),
+                    ),
+                )
+                .expect("Métamorphose's balancing override is removable");
+        },
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
 /// The real `rfd` chooser, on a machine with someone in front of it
 ///
 /// Everything above answers the dialogs itself, so this is the only test that
