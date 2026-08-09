@@ -311,7 +311,8 @@ worker-killing `panic!`s:
   constructor violations such as a pairing rule whose antecedent equals its
   consequent).
 - Document-plumbing errors (§9): `NoDocument` (nothing to open), `Cancelled` (the
-  user dismissed a dialog), `NotHosted` (a host-only call made standalone),
+  user dismissed a dialog), `DialogUnavailable` (a dialog asked for on a machine that
+  cannot show one, §9.3), `NotHosted` (a host-only call made standalone),
   `NoOrigin` (`save()` with nowhere to write), `IdCeilingExceeded` (a save the file
   format cannot represent), `CaveatedOverwrite` (a bare `save()` back over a file that
   was loaded with caveats). Both of the last two carry an instruction rather than just
@@ -495,8 +496,6 @@ The module ships native dialogs, routed through `rfd`:
 clm.dialogs.open_file(title=..., filters=...)   # Path, or None on cancel
 clm.dialogs.save_file(...)
 clm.dialogs.pick_folder(...)
-clm.dialogs.message(text)
-clm.dialogs.confirm(text)                       # True / False
 ```
 
 This is a **design change and a new dependency for the `python/` crate** — `rfd` is
@@ -506,9 +505,18 @@ Being already in the lockfile buys only a vetted version and an unsurprised nix 
 The case for it: file selection is the one dialog every script needs; `rfd` is small
 next to a UI framework; on Linux it goes through the XDG portal, so the dialogs are
 native and work inside a sandbox; and it needs no GTK, which is what a plain Python
-interpreter wants. So §1's rule narrows from "no GUI API" to "no UI framework". `rfd`
-gives files, folders and message boxes; it does not give text entry or list choice,
-and those stay `tkinter`'s job.
+interpreter wants. So §1's rule narrows from "no GUI API" to "no UI framework".
+
+What it buys is **files and folders, and nothing else**. Message boxes looked free —
+the crate has a `MessageDialog` — and they are not: under the portal backend `rfd`
+draws one by spawning `zenity`, an external binary a sandboxed run has no reason to
+hold, and when it cannot be spawned `rfd` logs and answers `Cancel`. A `confirm()`
+would then quietly say no and a `message()` would quietly show nothing, and two calls
+that lie are worse than two calls that are not there. So message boxes join text entry
+and list choice as `tkinter`'s job. The file dialogs are what the dependency is for
+anyway, and they are clean: they go through the portal proper (`ashpd`), and touch
+`zenity` only as a fallback for a portal request that itself errored — a session with
+a portal never gets there.
 
 The downsides, stated plainly:
 
@@ -516,7 +524,12 @@ The downsides, stated plainly:
   always an explicit call, never something the API does on its own — which is also
   why `default_document(dialog=False)` exists.
 - On a headless machine with no portal, the call must surface as an exception rather
-  than block.
+  than block — `DialogUnavailable`. It cannot be done by reading what `rfd` gives back:
+  a portal that is not there comes back as `None`, which is exactly what a user
+  pressing Cancel looks like. So the question is asked *before* the dialog, off the
+  session's environment — `WAYLAND_DISPLAY`, `DISPLAY`, `DBUS_SESSION_BUS_ADDRESS`, any
+  one of them being enough, since a desktop that autolaunches its bus sets no address
+  while the cron job this guards against has none of the three.
 - Dialogs must be called from the main thread (a macOS requirement), and the Rust
   side must release the GIL while one is open, or the script's other threads freeze.
 - Hosted scripts run in a separate process, so a dialog is a top-level window of its
