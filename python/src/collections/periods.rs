@@ -45,10 +45,8 @@ impl Periods {
     /// The period an id or a handle names, when this document still holds it
     fn resolve(&self, py: Python<'_>, key: &Bound<'_, PyAny>) -> Option<RawPeriodId> {
         let id = named::<Period>(&self.doc, key)?;
-        self.with_data(py, |data| {
-            data.params.periods.find_period_position(id).is_some()
-        })
-        .then_some(id)
+        self.with_data(py, |data| Period::exists(data, id))
+            .then_some(id)
     }
 }
 
@@ -189,6 +187,10 @@ impl Handle for Period {
 
     fn raw_id(&self) -> RawPeriodId {
         self.id
+    }
+
+    fn exists(data: &InnerData, id: RawPeriodId) -> bool {
+        data.params.periods.find_period_position(id).is_some()
     }
 }
 

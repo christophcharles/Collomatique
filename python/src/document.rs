@@ -12,7 +12,9 @@ use collomatique_state::traits::Manager;
 use collomatique_state_colloscopes::Data;
 use collomatique_storage::Caveat;
 
-use crate::collections::{Periods, Students, Subjects, Teachers, Weeks};
+use crate::collections::{
+    Periods, Students, Subjects, Teachers, Week, WeekPattern, WeekPatterns, Weeks,
+};
 use crate::dialogs::FileRequest;
 use crate::errors::{
     Cancelled, CaveatedOverwrite, Error, IdCeilingExceeded, LoadError, NoDocument, NoOrigin,
@@ -333,6 +335,62 @@ impl Document {
     #[getter]
     fn students(slf: Py<Self>) -> Students {
         Students::new(slf)
+    }
+
+    /// The week patterns of the document, in id order
+    ///
+    /// A pattern is « les semaines paires » — the set of weeks a slot carrying
+    /// it does *not* hold its colles on. Whether a week ends up carrying an
+    /// interrogation is `is_week_active`'s question, since the week has a say of
+    /// its own.
+    #[getter]
+    fn week_patterns(slf: Py<Self>) -> WeekPatterns {
+        WeekPatterns::new(slf)
+    }
+
+    /// Whether colles can happen on this week, under this pattern
+    ///
+    /// ```python
+    /// weeks = [week for week in doc.weeks if doc.is_week_active(week, pattern)]
+    /// ```
+    ///
+    /// Two things switch a week off, and this is where they are put back
+    /// together: the week's own `interrogations` flag — the week of the
+    /// « Rentrée » holds no colles for anyone — and the pattern's exception set,
+    /// which switches off the weeks that pattern names on top of that. Neither
+    /// handle can answer alone, so the question lives on the document.
+    ///
+    /// `pattern=None` asks about no pattern at all, which is what a slot without
+    /// one means: only the week's own flag counts. Both arguments take a handle
+    /// or an id, as every argument of this api does.
+    ///
+    /// A `week` or a `pattern` this document does not hold raises
+    /// `StaleHandleError` rather than answering `False`: the model shrugs a
+    /// forgiving `false` at a week it never heard of, and a script that asked
+    /// about a removed week would read that as « no colles that week » when what
+    /// happened is that it lost track of its own document.
+    #[pyo3(signature = (week, pattern=None))]
+    fn is_week_active(
+        slf: Py<Self>,
+        py: Python<'_>,
+        week: &Bound<'_, PyAny>,
+        pattern: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<bool> {
+        let week_id = crate::handles::argument::<Week>(&slf, week)?;
+        let pattern_id = pattern
+            .map(|pattern| crate::handles::argument::<WeekPattern>(&slf, pattern))
+            .transpose()?;
+
+        // The model's own definition, and not a second copy of it: the gui grid
+        // and the constraints layer ask `Parameters::is_week_active` the same
+        // question, and an api that answered differently would be wrong about
+        // the document it is showing.
+        let doc = slf.borrow(py);
+        Ok(doc
+            .data()
+            .get_inner_data()
+            .params
+            .is_week_active(week_id, pattern_id))
     }
 
     /// Groups every write in a block into one undo slot

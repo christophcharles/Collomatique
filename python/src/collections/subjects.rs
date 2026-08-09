@@ -41,10 +41,8 @@ impl Subjects {
     /// The subject an id or a handle names, when this document still holds it
     fn resolve(&self, py: Python<'_>, key: &Bound<'_, PyAny>) -> Option<RawSubjectId> {
         let id = named::<Subject>(&self.doc, key)?;
-        self.with_data(py, |data| {
-            data.params.subjects.find_subject_position(id).is_some()
-        })
-        .then_some(id)
+        self.with_data(py, |data| Subject::exists(data, id))
+            .then_some(id)
     }
 }
 
@@ -121,6 +119,10 @@ impl Handle for Subject {
 
     fn raw_id(&self) -> RawSubjectId {
         self.id
+    }
+
+    fn exists(data: &InnerData, id: RawSubjectId) -> bool {
+        data.params.subjects.find_subject_position(id).is_some()
     }
 }
 
@@ -252,6 +254,19 @@ impl Handle for Interrogation {
 
     fn raw_id(&self) -> RawSubjectId {
         self.id
+    }
+
+    /// Whether the subject this view is about still holds interrogations
+    ///
+    /// What the view *views*, and not merely whether the subject is there: the
+    /// two are the sub-view's two ways of dying, and both mean it has nothing
+    /// left to read. [Interrogation::read] is what tells them apart, since a
+    /// script meeting the error wants to know which happened.
+    fn exists(data: &InnerData, id: RawSubjectId) -> bool {
+        data.params
+            .subjects
+            .find_subject(id)
+            .is_some_and(|subject| subject.parameters.interrogation_parameters.is_some())
     }
 }
 

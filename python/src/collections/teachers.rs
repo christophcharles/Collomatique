@@ -43,7 +43,7 @@ impl Teachers {
     /// The teacher an id or a handle names, when this document still holds them
     fn resolve(&self, py: Python<'_>, key: &Bound<'_, PyAny>) -> Option<RawTeacherId> {
         let id = named::<Teacher>(&self.doc, key)?;
-        self.with_data(py, |data| data.params.teachers.teacher_map.contains(&id))
+        self.with_data(py, |data| Teacher::exists(data, id))
             .then_some(id)
     }
 }
@@ -124,6 +124,10 @@ impl Handle for Teacher {
 
     fn raw_id(&self) -> RawTeacherId {
         self.id
+    }
+
+    fn exists(data: &InnerData, id: RawTeacherId) -> bool {
+        data.params.teachers.teacher_map.contains(&id)
     }
 }
 

@@ -45,7 +45,7 @@ impl Weeks {
     /// The week an id or a handle names, when this document still holds it
     fn resolve(&self, py: Python<'_>, key: &Bound<'_, PyAny>) -> Option<RawWeekId> {
         let id = named::<Week>(&self.doc, key)?;
-        self.with_data(py, |data| data.params.weeks.find_week(id).is_some())
+        self.with_data(py, |data| Week::exists(data, id))
             .then_some(id)
     }
 }
@@ -119,6 +119,10 @@ impl Handle for Week {
 
     fn raw_id(&self) -> RawWeekId {
         self.id
+    }
+
+    fn exists(data: &InnerData, id: RawWeekId) -> bool {
+        data.params.weeks.find_week(id).is_some()
     }
 }
 

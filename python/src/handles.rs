@@ -11,7 +11,7 @@
 //! or a handle interchangeably.
 
 use pyo3::PyClass;
-use pyo3::exceptions::PyKeyError;
+use pyo3::exceptions::{PyKeyError, PyTypeError};
 use pyo3::prelude::*;
 use pyo3::pyclass::boolean_struct::True;
 
@@ -52,6 +52,16 @@ pub(crate) trait Handle: Sized {
 
     /// The id this handle is bound to
     fn raw_id(&self) -> RawId<Self>;
+
+    /// Whether a document still holds the entity an id names
+    ///
+    /// The liveness question, asked without a handle because both of the places
+    /// that ask it have only an id: a collection's `resolve`, on its way to the
+    /// mapping conventions, and [argument], on its way to `StaleHandleError`.
+    /// It lives on the trait so that the two cannot answer differently — the
+    /// whole point of §2.4 is that they differ in what they *do* about the
+    /// answer, not in what the answer is.
+    fn exists(data: &InnerData, id: RawId<Self>) -> bool;
 
     /// Borrows the document, reads through it, and lets go
     ///
@@ -143,18 +153,109 @@ where
     None
 }
 
+/// The entity an id-or-handle *argument* names, or the refusal §2.4 calls for
+///
+/// This is the other lookup convention. A mapping position answers `KeyError` /
+/// `None` / `False`, because asking a lookup is legitimate; an argument that
+/// names nothing raises `StaleHandleError` instead, because the question was
+/// malformed before it had an answer. The model's own forgiving replies — its
+/// `is_week_active` says `false` for a week it does not hold — are deliberately
+/// not mirrored: a script passing a dead reference is mistaken about its own
+/// document, and `false` would hide that.
+///
+/// The whole rule sits here: the kind, the document, and the liveness. The
+/// liveness question is [Handle::exists], the same one a collection's `resolve`
+/// asks, so the two conventions can never disagree about what is in the
+/// document — only about what to do when nothing is. It borrows the document to
+/// ask, so an argument is checked before the read it guards rather than inside
+/// one.
+///
+/// Anything that is neither an id nor a handle of the kind wanted is a
+/// `TypeError`: it was never a reference to this document at all.
+pub(crate) fn argument<H>(doc: &Py<Document>, obj: &Bound<'_, PyAny>) -> PyResult<RawId<H>>
+where
+    H: Handle + PyClass<Frozen = True> + Sync,
+    H::IdClass: PyClass<Frozen = True> + Sync,
+{
+    let id = if let Ok(id) = obj.cast::<H::IdClass>() {
+        id.get().raw()
+    } else if let Ok(handle) = obj.cast::<H>() {
+        let handle = handle.get();
+
+        // A handle carries its document, so one bound to another document names
+        // nothing here whatever its id says (§2.1) — and its id must not be
+        // borrowed to ask about this document, since the number may well be
+        // somebody else's here.
+        if !std::ptr::eq(handle.document().as_ptr(), doc.as_ptr()) {
+            return Err(somebody_elses::<H>(handle.raw_id()));
+        }
+        handle.raw_id()
+    } else {
+        return Err(PyTypeError::new_err(format!(
+            "a {} argument takes a {} or a {}, and {} is neither",
+            H::NOUN,
+            H::CLASS,
+            <H::IdClass as IdClass>::CLASS,
+            shown(obj, "that object"),
+        )));
+    };
+
+    let held = {
+        let doc = doc.borrow(obj.py());
+        H::exists(doc.data().get_inner_data(), id)
+    };
+
+    held.then_some(id).ok_or_else(|| not_here::<H>(id))
+}
+
+/// What an argument this document does not hold raises
+fn not_here<H: Handle>(id: RawId<H>) -> PyErr {
+    StaleHandleError::new_err(format!(
+        "this {} argument names nothing here: {} {} is not in this document",
+        H::CLASS,
+        H::NOUN,
+        H::IdClass::text(id),
+    ))
+}
+
+/// What an argument that is another document's handle raises
+///
+/// A different failure from [not_here], and it must say so: two documents hand
+/// out ids that coincide (§2.1), so the id in the message may perfectly well
+/// name something here — something else. Claiming it is "not in this document"
+/// would be the one falsehood available, and it would send a script looking for
+/// a removal that never happened.
+fn somebody_elses<H: Handle>(id: RawId<H>) -> PyErr {
+    StaleHandleError::new_err(format!(
+        "this {} argument belongs to another document: {} {} is that document's, \
+         and an id names nothing outside the one that handed it out",
+        H::CLASS,
+        H::NOUN,
+        H::IdClass::text(id),
+    ))
+}
+
 /// What `collection[x]` raises when `x` names nothing in the document
 ///
 /// A mapping position follows python's mapping protocol (§2.4): asking a lookup
 /// is legitimate, so the mapping vocabulary is the right answer. The key is
 /// shown as python would print it, whatever it turned out to be.
 pub(crate) fn no_such(kind: &str, key: &Bound<'_, PyAny>) -> PyErr {
-    let named = key
-        .repr()
-        .map(|repr| repr.to_string())
-        .unwrap_or_else(|_| "that key".to_owned());
+    PyKeyError::new_err(format!(
+        "{} names no {kind} in this document",
+        shown(key, "that key")
+    ))
+}
 
-    PyKeyError::new_err(format!("{named} names no {kind} in this document"))
+/// An object as python would print it, for the messages that name what was given
+///
+/// `fallback` is what to call it when even that fails — a key in a mapping, a
+/// mere object in an argument. It exists because an error message must not fail
+/// to be built; reaching it takes an object whose `repr` raises.
+fn shown(obj: &Bound<'_, PyAny>, fallback: &str) -> String {
+    obj.repr()
+        .map(|repr| repr.to_string())
+        .unwrap_or_else(|_| fallback.to_owned())
 }
 
 /// A string as python would print it, for the reprs that name an entity

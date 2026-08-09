@@ -13,12 +13,14 @@ pub mod periods;
 pub mod students;
 pub mod subjects;
 pub mod teachers;
+pub mod week_patterns;
 pub mod weeks;
 
 pub use periods::{Period, Periods};
 pub use students::{Student, Students};
 pub use subjects::{Interrogation, Subject, Subjects};
 pub use teachers::{Teacher, Teachers};
+pub use week_patterns::{WeekPattern, WeekPatterns};
 pub use weeks::{Week, Weeks};
 
 use pyo3::prelude::*;
@@ -52,5 +54,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Teacher>()?;
     m.add_class::<Students>()?;
     m.add_class::<Student>()?;
+    m.add_class::<WeekPatterns>()?;
+    m.add_class::<WeekPattern>()?;
     Ok(())
 }

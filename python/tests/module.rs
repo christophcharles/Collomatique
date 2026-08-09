@@ -1862,6 +1862,337 @@ fn a_person_who_shared_nothing_reads_as_none() {
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
 
+/// The week patterns read back, with the weeks they switch off
+///
+/// The script walks `doc.week_patterns` and leaves what it saw; rust compares it
+/// with the same document read straight from the model — the names, the
+/// exception sets read as global week positions, and the whole activity grid:
+/// every week of the document against every pattern of it, `None` included.
+///
+/// The grid is the headline. `doc.is_week_active` must answer what
+/// `Parameters::is_week_active` answers, because that is the one definition the
+/// gui grid and the constraints layer read too — an api that merged the week's
+/// flag with the pattern's set its own way would be describing a different
+/// document. So the expected values are computed from the model rather than
+/// written out, and the assertions above them say the example really exercises
+/// the merge: weeks of both flags, patterns that exclude something, and a
+/// pattern that switches off a week which holds no colles anyway.
+#[test]
+fn the_week_patterns_read_back_with_the_weeks_they_switch_off() {
+    let dir = workspace("week-patterns");
+    let source = example_copy(&dir, "source.collomatique");
+
+    let globals = run(include_str!("scripts/week_patterns.py"), |globals| {
+        globals.set_item("source", &source)?;
+        Ok(())
+    });
+
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    // In id order, which is the order the table iterates in and the order the
+    // script says it saw.
+    let patterns: Vec<_> = params
+        .week_patterns
+        .week_pattern_map
+        .iter()
+        .map(|(id, pattern)| (id, pattern.clone()))
+        .collect();
+    let walk: Vec<_> = params.walk_weeks().collect();
+
+    // The example is only worth reading if it has something to say: several
+    // patterns, exception sets with something in them, weeks of both flags, and
+    // — the case the model is explicit about — a pattern excluding a week that
+    // holds no interrogations anyway.
+    assert!(patterns.len() > 1);
+    assert!(
+        patterns
+            .iter()
+            .all(|(_id, pattern)| !pattern.excluded_weeks.is_empty())
+    );
+    assert!(walk.iter().any(|(_p, _id, week)| week.interrogations));
+    assert!(walk.iter().any(|(_p, _id, week)| !week.interrogations));
+    assert!(patterns.iter().any(|(_id, pattern)| {
+        walk.iter().any(|(_p, week_id, week)| {
+            !week.interrogations && pattern.excluded_weeks.contains(week_id)
+        })
+    }));
+
+    assert_eq!(
+        global::<Vec<String>>(&globals, "pattern_names"),
+        patterns
+            .iter()
+            .map(|(_id, pattern)| pattern.name.clone())
+            .collect::<Vec<_>>()
+    );
+
+    // The exception sets, read through the global positions of the weeks in them
+    // — a week named by its place in the document's own walk.
+    let position = |week: &collomatique_state_colloscopes::WeekId| {
+        walk.iter()
+            .position(|(_p, id, _week)| id == week)
+            .expect("an excluded week is a live one")
+    };
+    assert_eq!(
+        global::<Vec<Vec<usize>>>(&globals, "pattern_excluded_week_indices"),
+        patterns
+            .iter()
+            .map(|(_id, pattern)| {
+                let mut indices: Vec<_> = pattern.excluded_weeks.iter().map(position).collect();
+                indices.sort();
+                indices
+            })
+            .collect::<Vec<_>>()
+    );
+
+    // One row per week, one column per pattern, and a first column for the
+    // pattern-less question a slot without one asks.
+    let columns: Vec<Option<_>> = std::iter::once(None)
+        .chain(patterns.iter().map(|(id, _pattern)| Some(*id)))
+        .collect();
+    let expected: Vec<Vec<bool>> = walk
+        .iter()
+        .map(|(_p, week, _desc)| {
+            columns
+                .iter()
+                .map(|pattern| params.is_week_active(*week, *pattern))
+                .collect()
+        })
+        .collect();
+
+    // A grid of all-the-same would compare equal without pinning anything: the
+    // weeks must disagree among themselves, and a pattern must disagree with the
+    // pattern-less column.
+    assert!(expected.iter().any(|row| row[0]));
+    assert!(expected.iter().any(|row| !row[0]));
+    assert!(
+        expected
+            .iter()
+            .any(|row| row.iter().any(|answer| *answer != row[0]))
+    );
+
+    assert_eq!(global::<Vec<Vec<bool>>>(&globals, "activity"), expected);
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// A document written here rather than copied, holding the patterns the example
+/// has not got
+///
+/// The example's two patterns both exclude every other week, both have a name,
+/// and neither is empty — so the three ends of what a pattern can be (excluding
+/// nothing, excluding everything, and having no name at all) need a document of
+/// their own. Its weeks carry both flags, so that a `False` answer can be told
+/// apart by its reason.
+///
+/// It is built as an `InnerData` through the sealed types' own constructors and
+/// passed through `Data::from_inner_data`, so a fixture that breaks an invariant
+/// fails here rather than halfway through the script
+/// (`docs/python/handle_api.md` §6.2).
+fn week_pattern_document(path: &Path) {
+    use collomatique_state_colloscopes::ids::Id as _;
+    use collomatique_state_colloscopes::week_patterns::{WeekPattern, WeekPatterns};
+    use collomatique_state_colloscopes::weeks::{WeekDesc, Weeks};
+    use collomatique_state_colloscopes::{Data, InnerData, PeriodId, WeekId, WeekPatternId};
+
+    // Ids nothing else in this document issues: it is written by hand from end
+    // to end, so there is no issuer to keep in step with. The patterns are
+    // numbered nowhere near the example's, since the script holds ids of both
+    // documents at once.
+    let period = |n: u64| unsafe { PeriodId::new(n) };
+    let week = |n: u64| unsafe { WeekId::new(n) };
+    let pattern = |n: u64| unsafe { WeekPatternId::new(n) };
+
+    let periods = vec![period(1), period(2)];
+    let weeks = vec![
+        (
+            period(1),
+            vec![
+                (week(11), WeekDesc::new(true)),
+                (week(12), WeekDesc::new(false)),
+                (week(13), WeekDesc::new(true)),
+            ],
+        ),
+        (
+            period(2),
+            vec![
+                (week(14), WeekDesc::new(true)),
+                (week(15), WeekDesc::new(true)),
+                (week(16), WeekDesc::new(false)),
+            ],
+        ),
+    ];
+
+    let patterns = vec![
+        (
+            pattern(41),
+            WeekPattern {
+                name: "Toutes les semaines".to_owned(),
+                excluded_weeks: BTreeSet::new(),
+            },
+        ),
+        (
+            pattern(42),
+            WeekPattern {
+                name: "Semaines paires".to_owned(),
+                // The odd positions of the walk: one of them holds colles, and
+                // two of them hold none anyway — so the set says something about
+                // a week the flag has already settled.
+                excluded_weeks: BTreeSet::from([week(12), week(14), week(16)]),
+            },
+        ),
+        (
+            pattern(43),
+            WeekPattern {
+                // A pattern the user never named. The model types the field as a
+                // plain `String`, so this reads as `""` and not as `None`.
+                name: String::new(),
+                excluded_weeks: BTreeSet::from([week(11)]),
+            },
+        ),
+        (
+            pattern(44),
+            WeekPattern {
+                name: "Aucune semaine".to_owned(),
+                excluded_weeks: (11..=16).map(week).collect(),
+            },
+        ),
+    ];
+
+    let mut inner_data = InnerData::default();
+    inner_data.params.periods =
+        collomatique_state_colloscopes::periods::Periods::from_ordered_ids(None, periods)
+            .expect("the fixture names each period once");
+    inner_data.params.weeks =
+        Weeks::from_period_rows(weeks).expect("the fixture names each week once");
+    // An id-keyed table takes the last of a duplicated id without a word, so the
+    // count is checked by hand: a fixture that named a pattern twice would
+    // otherwise quietly ship one fewer than the script is about to read.
+    let pattern_count = patterns.len();
+    inner_data.params.week_patterns = WeekPatterns {
+        week_pattern_map: patterns.into_iter().collect(),
+    };
+    assert_eq!(
+        inner_data.params.week_patterns.week_pattern_map.len(),
+        pattern_count,
+        "the fixture names each pattern once"
+    );
+
+    let data = Data::from_inner_data(inner_data).expect("the fixture should be a valid document");
+    let content = collomatique_storage::serialize_data(data.get_inner_data())
+        .expect("the fixture's ids are far below the file-format ceiling");
+    std::fs::write(path, content).expect("the fixture should be writable");
+}
+
+/// A pattern that excludes nothing, one that excludes everything, and one with
+/// no name
+///
+/// Everything here is the script's, because it is all python-facing: the sets
+/// that are frozen and may be empty or whole, the `""` of a nameless pattern,
+/// and the grid a script can write out by hand because the document was built
+/// for it. Rust's half is that document, plus the disjointness the script's last
+/// question rests on.
+///
+/// The example comes along as a second document, because the two number their
+/// patterns nowhere near each other: that is what lets the script hold an id
+/// that is a perfectly good `WeekPatternId` and still names nothing where it is
+/// asked — a lookup and an argument, side by side, answering the two different
+/// ways §2.4 says they must.
+#[test]
+fn a_pattern_excludes_no_week_every_week_or_the_ones_it_names() {
+    let dir = workspace("exclusions");
+    let source = dir.join("exclusions.collomatique");
+    week_pattern_document(&source);
+    let other_source = example_copy(&dir, "other.collomatique");
+
+    let pattern_ids = |data: &Data| -> BTreeSet<_> {
+        data.get_inner_data()
+            .params
+            .week_patterns
+            .week_pattern_map
+            .keys()
+            .collect()
+    };
+
+    let fixture = reload(&source);
+    let example = reload(&other_source);
+    assert!(pattern_ids(&fixture).is_disjoint(&pattern_ids(&example)));
+
+    run(include_str!("scripts/exclusions.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("other_source", &other_source)?;
+        Ok(())
+    });
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// A removed pattern and a removed week make the predicate raise, not shrug
+///
+/// The mutations cannot come from the script — the read surface ships no removes
+/// — so they come from rust, between the two halves: one week pattern goes, and
+/// one whole period goes with every week in it.
+///
+/// The point is the divergence §2.4 asks for. The model is forgiving about a
+/// reference it cannot resolve: `is_week_active` answers `false` for a week it
+/// does not hold, and treats a pattern it does not hold as excluding nothing.
+/// Those are the two answers pinned here on the model's side — and the script's
+/// side is that python gives neither, because an argument naming nothing was
+/// malformed before it had an answer.
+#[test]
+fn a_removed_week_or_pattern_makes_is_week_active_raise() {
+    use collomatique_state_colloscopes::ids::Id as _;
+    use collomatique_state_colloscopes::{WeekId, WeekPatternId};
+
+    let dir = workspace("pattern-stale");
+    let source = dir.join("exclusions.collomatique");
+    week_pattern_document(&source);
+
+    // What the model says about a reference it cannot resolve. The ids are made
+    // up on purpose: a document that never held them is exactly the position the
+    // script is in once its own are removed.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+    let live_week = params.week_ids().next().expect("the fixture has weeks");
+    assert!(!params.is_week_active(unsafe { WeekId::new(9_001) }, None));
+    assert!(params.is_week_active(live_week, Some(unsafe { WeekPatternId::new(9_002) })));
+
+    run_stages(
+        &[
+            include_str!("scripts/pattern_alive.py"),
+            include_str!("scripts/pattern_gone.py"),
+        ],
+        |globals| {
+            globals.set_item("source", &source)?;
+            Ok(())
+        },
+        |py, globals| {
+            let doc = document_of(globals);
+
+            // « Semaines paires », then the second period and its three weeks.
+            // The ids are the fixture's own, which the file keeps.
+            for op in [
+                collomatique_ops::UpdateOp::WeekPatterns(
+                    collomatique_ops::WeekPatternsUpdateOp::DeleteWeekPattern(unsafe {
+                        WeekPatternId::new(42)
+                    }),
+                ),
+                collomatique_ops::UpdateOp::GeneralPlanning(
+                    collomatique_ops::GeneralPlanningUpdateOp::DeletePeriodAndWeeks(unsafe {
+                        collomatique_state_colloscopes::PeriodId::new(2)
+                    }),
+                ),
+            ] {
+                doc.borrow_mut(py)
+                    .update(py, op)
+                    .expect("the fixture's second period and pattern are removable");
+            }
+        },
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
 /// The real `rfd` chooser, on a machine with someone in front of it
 ///
 /// Everything above answers the dialogs itself, so this is the only test that
