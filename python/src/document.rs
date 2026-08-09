@@ -12,7 +12,7 @@ use collomatique_state::traits::Manager;
 use collomatique_state_colloscopes::Data;
 use collomatique_storage::Caveat;
 
-use crate::collections::{Periods, Subjects, Weeks};
+use crate::collections::{Periods, Students, Subjects, Teachers, Weeks};
 use crate::dialogs::FileRequest;
 use crate::errors::{
     Cancelled, CaveatedOverwrite, Error, IdCeilingExceeded, LoadError, NoDocument, NoOrigin,
@@ -313,6 +313,26 @@ impl Document {
     #[getter]
     fn subjects(slf: Py<Self>) -> Subjects {
         Subjects::new(slf)
+    }
+
+    /// The teachers of the document, in id order
+    ///
+    /// The model keeps no display order for them — the application sorts them
+    /// by name as it shows them — so there is no `.index` to read here, and no
+    /// user order to iterate in.
+    #[getter]
+    fn teachers(slf: Py<Self>) -> Teachers {
+        Teachers::new(slf)
+    }
+
+    /// The students of the document, in id order
+    ///
+    /// In id order for the reason the teachers are. What a student carries is
+    /// their card and the periods they sit out; which subjects they take is
+    /// kept apart from them, in a junction table keyed by period and subject.
+    #[getter]
+    fn students(slf: Py<Self>) -> Students {
+        Students::new(slf)
     }
 
     /// Groups every write in a block into one undo slot

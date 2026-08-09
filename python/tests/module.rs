@@ -1459,6 +1459,409 @@ fn switching_a_subject_off_then_removing_it_stales_the_view_then_the_handle() {
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
 
+/// What python reads for a field the model types as an optional non-empty string
+///
+/// Written against `Display` rather than against the string type itself, so the
+/// test file needs no dependency on the crate that type comes from: what is
+/// being compared is the text, which is all python ever sees of it.
+fn optional_text<T: std::fmt::Display>(value: &Option<T>) -> Option<String> {
+    value.as_ref().map(|text| text.to_string())
+}
+
+/// The teachers and the students read back, person by person
+///
+/// The script walks `doc.teachers` and `doc.students` and leaves what it saw;
+/// rust compares it with the same document read straight from the model — every
+/// field of the card the two entities share, the subjects a teacher interrogates
+/// in, and the id order the two collections iterate in.
+///
+/// The example is worth reading here because it carries teachers who shared a
+/// number and teachers who did not, and students of both shapes too. What it
+/// does not carry is anyone who shared neither, a teacher who interrogates in
+/// nothing, or a student sitting a period out — those are
+/// [a_person_who_shared_nothing_reads_as_none]'s document.
+#[test]
+fn the_teachers_and_the_students_read_back_person_by_person() {
+    let dir = workspace("people");
+    let source = example_copy(&dir, "source.collomatique");
+
+    let globals = run(include_str!("scripts/people.py"), |globals| {
+        globals.set_item("source", &source)?;
+        Ok(())
+    });
+
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    // In id order, which is the order the two tables iterate in and the order
+    // the script says it saw.
+    let teachers: Vec<_> = params
+        .teachers
+        .teacher_map
+        .iter()
+        .map(|(_id, teacher)| teacher.clone())
+        .collect();
+    let students: Vec<_> = params
+        .students
+        .student_map
+        .iter()
+        .map(|(_id, student)| student.clone())
+        .collect();
+
+    // The example is only worth reading if it has something to say: several of
+    // each, and both contact shapes among them.
+    assert!(teachers.len() > 1);
+    assert!(students.len() > 1);
+    assert!(teachers.iter().any(|teacher| teacher.desc.tel.is_none()));
+    assert!(teachers.iter().any(|teacher| teacher.desc.tel.is_some()));
+    assert!(students.iter().any(|student| student.desc.email.is_none()));
+    assert!(students.iter().any(|student| student.desc.email.is_some()));
+
+    assert_eq!(
+        global::<Vec<String>>(&globals, "teacher_surnames"),
+        teachers
+            .iter()
+            .map(|teacher| teacher.desc.surname.clone())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<String>>(&globals, "teacher_firstnames"),
+        teachers
+            .iter()
+            .map(|teacher| teacher.desc.firstname.clone())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<Option<String>>>(&globals, "teacher_tels"),
+        teachers
+            .iter()
+            .map(|teacher| optional_text(&teacher.desc.tel))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<Option<String>>>(&globals, "teacher_emails"),
+        teachers
+            .iter()
+            .map(|teacher| optional_text(&teacher.desc.email))
+            .collect::<Vec<_>>()
+    );
+
+    assert_eq!(
+        global::<Vec<String>>(&globals, "student_surnames"),
+        students
+            .iter()
+            .map(|student| student.desc.surname.clone())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<String>>(&globals, "student_firstnames"),
+        students
+            .iter()
+            .map(|student| student.desc.firstname.clone())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<Option<String>>>(&globals, "student_tels"),
+        students
+            .iter()
+            .map(|student| optional_text(&student.desc.tel))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<Option<String>>>(&globals, "student_emails"),
+        students
+            .iter()
+            .map(|student| optional_text(&student.desc.email))
+            .collect::<Vec<_>>()
+    );
+
+    // The subjects a teacher interrogates in, read through the display positions
+    // the handles in them answer with — a subject named by its place in the user
+    // order.
+    let subject_ids: Vec<_> = params.subjects.ordered_subject_list.keys().collect();
+    assert_eq!(
+        global::<Vec<Vec<usize>>>(&globals, "teacher_subject_indices"),
+        teachers
+            .iter()
+            .map(|teacher| {
+                let mut indices: Vec<_> = teacher
+                    .subjects
+                    .iter()
+                    .map(|subject| {
+                        subject_ids
+                            .iter()
+                            .position(|id| id == subject)
+                            .expect("a teacher's subject is a live one")
+                    })
+                    .collect();
+                indices.sort();
+                indices
+            })
+            .collect::<Vec<_>>()
+    );
+
+    // Every student of the example sits every period, so all this says is that
+    // python saw the sets empty — which is worth saying, since an exclusion set
+    // read from the wrong student would show up here. The sets with something in
+    // them are [a_person_who_shared_nothing_reads_as_none]'s document, and its
+    // script is where they are read one by one.
+    assert!(
+        students
+            .iter()
+            .all(|student| student.excluded_periods.is_empty())
+    );
+    assert_eq!(
+        global::<Vec<Vec<usize>>>(&globals, "student_excluded_period_indices"),
+        vec![Vec::<usize>::new(); students.len()]
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// One person of the contact fixture, with the card the model keeps for them
+///
+/// The tel and the email are handed in as plain strings and become the model's
+/// optional non-empty ones here, so the fixture reads as the four shapes it is
+/// meant to be: both, one, the other, neither.
+fn person(
+    firstname: &str,
+    surname: &str,
+    tel: Option<&str>,
+    email: Option<&str>,
+) -> collomatique_state_colloscopes::PersonWithContact {
+    // The model's optional non-empty string, reached without naming its crate:
+    // the field says what the conversion lands in, so the fixture needs no
+    // dependency of its own to build one.
+    let contact = |text: Option<&str>| {
+        text.map(|text| {
+            text.to_owned()
+                .try_into()
+                .expect("the fixture's contact details are not empty")
+        })
+    };
+
+    collomatique_state_colloscopes::PersonWithContact {
+        surname: surname.to_owned(),
+        firstname: firstname.to_owned(),
+        tel: contact(tel),
+        email: contact(email),
+    }
+}
+
+/// A document written here rather than copied, holding every contact shape
+///
+/// The example has nobody who shared neither a number nor an email, no teacher
+/// who interrogates in nothing, and no student sitting a period out — so the
+/// four shapes of a card and the two extremes of a set need a document of their
+/// own. It is built as an `InnerData` through the sealed types' own constructors
+/// and passed through `Data::from_inner_data`, so a fixture that breaks an
+/// invariant fails here rather than halfway through the script
+/// (`docs/python/handle_api.md` §6.2).
+fn contact_document(path: &Path) {
+    use collomatique_state_colloscopes::ids::Id as _;
+    use collomatique_state_colloscopes::students::{Student, Students};
+    use collomatique_state_colloscopes::subjects::Subjects;
+    use collomatique_state_colloscopes::teachers::{Teacher, Teachers};
+    use collomatique_state_colloscopes::{
+        Data, InnerData, PeriodId, StudentId, Subject, SubjectId, SubjectInterrogationParameters,
+        SubjectParameters, SubjectPeriodicity, TeacherId,
+    };
+
+    // Ids nothing else in this document issues: it is written by hand from end
+    // to end, so there is no issuer to keep in step with.
+    let period = |n: u64| unsafe { PeriodId::new(n) };
+    let subject = |n: u64| unsafe { SubjectId::new(n) };
+    let periods = vec![period(1), period(2)];
+
+    // The subjects are here for the teachers to name. They run colles because a
+    // teacher may only interrogate in a subject that has some, and what those
+    // colles look like is [the_four_periodicities_read_back_value_by_value]'s
+    // business rather than this fixture's — so the two share every parameter.
+    let named_subject = |name: &str| Subject {
+        parameters: SubjectParameters {
+            name: name.to_owned(),
+            interrogation_parameters: Some(SubjectInterrogationParameters {
+                students_per_group: nonzero_range((2, 3)),
+                groups_per_interrogation: nonzero_range((1, 1)),
+                duration: collomatique_time::NonZeroMinutes::new(60).expect("an hour is a while"),
+                take_duration_into_account: true,
+                periodicity: SubjectPeriodicity::ExactlyPeriodic {
+                    periodicity_in_weeks: NonZeroU32::new(1).expect("one is not zero"),
+                },
+            }),
+        },
+        excluded_periods: BTreeSet::new(),
+    };
+    let subjects = vec![
+        (subject(11), named_subject("Sortilèges")),
+        (subject(12), named_subject("Métamorphose")),
+    ];
+
+    // Both contact details, one, the other, neither — and, on the way, a teacher
+    // who interrogates in two subjects, ones who interrogate in one, and one who
+    // interrogates in nothing.
+    let teachers = vec![
+        (
+            unsafe { TeacherId::new(21) },
+            Teacher {
+                desc: person(
+                    "Minerva",
+                    "McGonagall",
+                    Some("0700000021"),
+                    Some("mcgonagall@poudlard.fr"),
+                ),
+                subjects: BTreeSet::from([subject(11), subject(12)]),
+            },
+        ),
+        (
+            unsafe { TeacherId::new(22) },
+            Teacher {
+                desc: person("Severus", "Rogue", Some("0700000022"), None),
+                subjects: BTreeSet::from([subject(11)]),
+            },
+        ),
+        (
+            unsafe { TeacherId::new(23) },
+            Teacher {
+                desc: person("Pomona", "Chourave", None, Some("chourave@poudlard.fr")),
+                subjects: BTreeSet::from([subject(12)]),
+            },
+        ),
+        (
+            unsafe { TeacherId::new(24) },
+            Teacher {
+                desc: person("Cuthbert", "Binns", None, None),
+                subjects: BTreeSet::new(),
+            },
+        ),
+    ];
+
+    // The same four shapes, with the exclusion sets running from empty to whole.
+    let students = vec![
+        (
+            unsafe { StudentId::new(31) },
+            Student {
+                desc: person(
+                    "Harry",
+                    "Potter",
+                    Some("0601020304"),
+                    Some("harry.potter@poudlard.fr"),
+                ),
+                excluded_periods: BTreeSet::new(),
+            },
+        ),
+        (
+            unsafe { StudentId::new(32) },
+            Student {
+                desc: person("Hermione", "Granger", Some("0605060708"), None),
+                excluded_periods: BTreeSet::from([period(1)]),
+            },
+        ),
+        (
+            unsafe { StudentId::new(33) },
+            Student {
+                desc: person("Ron", "Weasley", None, Some("ron.weasley@poudlard.fr")),
+                excluded_periods: BTreeSet::from([period(2)]),
+            },
+        ),
+        (
+            unsafe { StudentId::new(34) },
+            Student {
+                desc: person("Neville", "Londubat", None, None),
+                excluded_periods: BTreeSet::from([period(1), period(2)]),
+            },
+        ),
+    ];
+
+    let mut inner_data = InnerData::default();
+    inner_data.params.periods =
+        collomatique_state_colloscopes::periods::Periods::from_ordered_ids(None, periods)
+            .expect("the fixture names each period once");
+    inner_data.params.subjects = Subjects {
+        ordered_subject_list: subjects
+            .try_into()
+            .expect("the fixture names each subject once"),
+    };
+    // An id-keyed table takes the last of a duplicated id without a word, where
+    // the ordered lists above refuse one. So the count is checked by hand: a
+    // fixture that named a teacher twice would otherwise quietly ship one fewer
+    // person than the script is about to read.
+    let (teacher_count, student_count) = (teachers.len(), students.len());
+    inner_data.params.teachers = Teachers {
+        teacher_map: teachers.into_iter().collect(),
+    };
+    inner_data.params.students = Students {
+        student_map: students.into_iter().collect(),
+    };
+    assert_eq!(
+        inner_data.params.teachers.teacher_map.len(),
+        teacher_count,
+        "the fixture names each teacher once"
+    );
+    assert_eq!(
+        inner_data.params.students.student_map.len(),
+        student_count,
+        "the fixture names each student once"
+    );
+
+    let data = Data::from_inner_data(inner_data).expect("the fixture should be a valid document");
+    let content = collomatique_storage::serialize_data(data.get_inner_data())
+        .expect("the fixture's ids are far below the file-format ceiling");
+    std::fs::write(path, content).expect("the fixture should be writable");
+}
+
+/// A person who shared no number and no email reads as `None`, not as `""`
+///
+/// Everything here is the script's, because it is all python-facing: the four
+/// shapes a card can have, the sets that are frozen and may be empty, and the
+/// handles inside them that read this document rather than carrying names copied
+/// out of it. Rust's half is the document — the example shares at least one
+/// contact detail for everyone, gives every teacher a subject and excludes no
+/// student from a period, so the missing shapes are written here.
+///
+/// The example comes along as a second document, because the two number their
+/// people nowhere near each other: that is what lets the script hold an id that
+/// is a perfectly good one and still names nothing where it is asked. Rust
+/// checks the two id spaces really are disjoint, since the whole question the
+/// script asks rests on it.
+#[test]
+fn a_person_who_shared_nothing_reads_as_none() {
+    let dir = workspace("contacts");
+    let source = dir.join("contacts.collomatique");
+    contact_document(&source);
+    let other_source = example_copy(&dir, "other.collomatique");
+
+    let teacher_ids = |data: &Data| -> BTreeSet<_> {
+        data.get_inner_data()
+            .params
+            .teachers
+            .teacher_map
+            .keys()
+            .collect()
+    };
+    let student_ids = |data: &Data| -> BTreeSet<_> {
+        data.get_inner_data()
+            .params
+            .students
+            .student_map
+            .keys()
+            .collect()
+    };
+
+    let fixture = reload(&source);
+    let example = reload(&other_source);
+    assert!(teacher_ids(&fixture).is_disjoint(&teacher_ids(&example)));
+    assert!(student_ids(&fixture).is_disjoint(&student_ids(&example)));
+
+    run(include_str!("scripts/contacts.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("other_source", &other_source)?;
+        Ok(())
+    });
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
 /// The real `rfd` chooser, on a machine with someone in front of it
 ///
 /// Everything above answers the dialogs itself, so this is the only test that
