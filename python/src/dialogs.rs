@@ -239,6 +239,22 @@ fn show<T>(dialog: impl FnOnce() -> T) -> Result<T, String> {
     Ok(dialog())
 }
 
+/// Puts an open dialog on the screen, for a caller inside this crate
+///
+/// The same door [open_file] goes through, so a chooser the module opens on a
+/// script's behalf — [crate::document::default_document]'s — behaves exactly
+/// like one the script asked for itself, down to the sentence a machine with no
+/// desktop answers with.
+pub(crate) fn ask_open(py: Python<'_>, request: &FileRequest) -> PyResult<Option<PathBuf>> {
+    let dialogs = backend();
+
+    // The GIL goes back while the dialog is up: it is open for as long as the
+    // user takes to answer, and holding it would freeze every other thread the
+    // script started.
+    py.detach(|| dialogs.open_file(request))
+        .map_err(DialogUnavailable::new_err)
+}
+
 /// Asks the user for a file to read, and hands back its path
 ///
 /// Returns `None` when the dialog was cancelled — the ordinary way out, and not
@@ -263,13 +279,8 @@ pub fn open_file(
     directory: Option<PathBuf>,
 ) -> PyResult<Option<PathBuf>> {
     let request = FileRequest::new(title, filters, directory, None)?;
-    let dialogs = backend();
 
-    // The GIL goes back while the dialog is up: it is open for as long as the
-    // user takes to answer, and holding it would freeze every other thread the
-    // script started.
-    py.detach(|| dialogs.open_file(&request))
-        .map_err(DialogUnavailable::new_err)
+    ask_open(py, &request)
 }
 
 /// Asks the user where to write, and hands back the path

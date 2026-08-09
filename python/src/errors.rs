@@ -65,6 +65,20 @@ create_exception!(
 
 create_exception!(
     collomatique,
+    NoDocument,
+    Error,
+    "There was no document to open, and nothing left to try."
+);
+
+create_exception!(
+    collomatique,
+    Cancelled,
+    Error,
+    "The user dismissed a dialog rather than answering it."
+);
+
+create_exception!(
+    collomatique,
     DialogUnavailable,
     Error,
     "A dialog was asked for on a machine that cannot show one."

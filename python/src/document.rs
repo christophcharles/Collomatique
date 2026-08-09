@@ -13,9 +13,10 @@ use collomatique_state_colloscopes::Data;
 use collomatique_storage::Caveat;
 
 use crate::collections::Periods;
+use crate::dialogs::FileRequest;
 use crate::errors::{
-    CaveatedOverwrite, Error, IdCeilingExceeded, LoadError, NoOrigin, NothingToUndo, SaveError,
-    UpdateError,
+    Cancelled, CaveatedOverwrite, Error, IdCeilingExceeded, LoadError, NoDocument, NoOrigin,
+    NothingToUndo, SaveError, UpdateError,
 };
 use crate::results::{OpResult, Warning};
 use crate::transaction::Transaction;
@@ -118,6 +119,79 @@ pub fn new_document() -> Document {
     Document {
         state: SessionStack::new(Data::new()),
         origin: Origin::None,
+    }
+}
+
+/// The document a script should be working on
+///
+/// Almost every script wants the same three things tried in the same order, so
+/// the chain has a name of its own: the document the application is hosting,
+/// then `path`, then a file chooser.
+///
+/// ```python
+/// doc = clm.default_document(sys.argv[1] if len(sys.argv) > 1 else None)
+/// ```
+///
+/// The host comes first, and not merely first among equals: a script run inside
+/// collomatique must never quietly start editing a file on disk because a stale
+/// argument was lying around. It takes a path rather than reading `sys.argv`
+/// itself, so a script using `argparse` keeps control of its own command line.
+///
+/// It raises rather than handing back `None` when there is nothing to open —
+/// `Cancelled` for a chooser the user dismissed, `NoDocument` when `dialog` is
+/// false and there was no other source. `None` would make every script write an
+/// `if doc is None`, and forgetting it gives an obscure `AttributeError` twenty
+/// lines further down.
+///
+/// `dialog=False` is what a cron job passes, where a chooser nobody is watching
+/// would wait forever. A machine that cannot show one at all raises
+/// `DialogUnavailable` instead, which is the more precise answer: there *was*
+/// somewhere left to look.
+///
+/// A `path` that will not load is an error and not an invitation to the
+/// chooser. The chain is a list of sources, not a retry loop: a script that
+/// named a file and got the name wrong wants to hear so.
+#[pyfunction]
+#[pyo3(signature = (path=None, *, dialog=true))]
+pub fn default_document(
+    py: Python<'_>,
+    path: Option<PathBuf>,
+    dialog: bool,
+) -> PyResult<Py<Document>> {
+    if let Some(doc) = crate::host::current_document(py)? {
+        return Ok(doc);
+    }
+
+    if let Some(path) = path {
+        return Py::new(py, load(path)?);
+    }
+
+    if !dialog {
+        return Err(NoDocument::new_err(
+            "there is no document to work on: this script is not running inside \
+             collomatique, no path was given, and dialog=False forbids asking for one",
+        ));
+    }
+
+    // The words the application's own Open dialog uses
+    // (`gtk4/src/tools/open_save.rs`), because a user who meets both should
+    // meet the same ones.
+    let request = FileRequest {
+        title: Some("Ouvrir".to_owned()),
+        filters: vec![
+            (
+                "Fichiers collomatique (*.collomatique)".to_owned(),
+                vec!["collomatique".to_owned()],
+            ),
+            ("Tous les fichiers".to_owned(), vec!["*".to_owned()]),
+        ],
+        directory: None,
+        file_name: None,
+    };
+
+    match crate::dialogs::ask_open(py, &request)? {
+        Some(chosen) => Py::new(py, load(chosen)?),
+        None => Err(Cancelled::new_err("no document was chosen to work on")),
     }
 }
 

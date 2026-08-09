@@ -38,6 +38,8 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("UpdateError", py.get_type::<errors::UpdateError>())?;
     m.add("NothingToUndo", py.get_type::<errors::NothingToUndo>())?;
     m.add("NotHosted", py.get_type::<errors::NotHosted>())?;
+    m.add("NoDocument", py.get_type::<errors::NoDocument>())?;
+    m.add("Cancelled", py.get_type::<errors::Cancelled>())?;
     m.add(
         "DialogUnavailable",
         py.get_type::<errors::DialogUnavailable>(),
@@ -63,6 +65,7 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Transaction>()?;
     m.add_function(wrap_pyfunction!(document::load, m)?)?;
     m.add_function(wrap_pyfunction!(document::new_document, m)?)?;
+    m.add_function(wrap_pyfunction!(document::default_document, m)?)?;
 
     Ok(())
 }

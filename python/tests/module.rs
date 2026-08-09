@@ -54,6 +54,16 @@ fn run_hosted(
     run_in(script, host, None, fill)
 }
 
+/// Runs `script` inside `host`, with `dialogs` answering its file choosers
+fn run_hosted_with_dialogs(
+    script: &str,
+    host: Option<Arc<dyn collomatique_python::Host>>,
+    dialogs: Arc<dyn collomatique_python::Dialogs>,
+    fill: impl FnOnce(&Bound<'_, PyDict>) -> PyResult<()>,
+) -> Py<PyDict> {
+    run_in(script, host, Some(dialogs), fill)
+}
+
 /// Runs `script` with `dialogs` answering its file choosers
 fn run_with_dialogs(
     script: &str,
@@ -704,6 +714,88 @@ fn a_script_asks_for_a_file_a_folder_and_a_place_to_write() {
     assert!(bare.filters.is_empty());
 }
 
+/// The default document is the hosted one, then a path, then a chooser
+///
+/// Two runs, because the first link of the chain needs an application and the
+/// rest need none, and the host is installed around a whole run rather than
+/// around a call. The hosted run is where the order can actually go wrong: the
+/// script is handed a real colloscope path as well, the stale argument the
+/// order exists to ignore, and a desktop with no answer for anything — so a
+/// chooser opened there fails the test instead of passing it quietly.
+#[test]
+fn the_default_document_is_the_hosted_one_then_a_path_then_a_dialog() {
+    let dir = workspace("default-document");
+    let source = example_copy(&dir, "source.collomatique");
+    let other_source = example_copy(&dir, "other.collomatique");
+    let chosen = example_copy(&dir, "chosen.collomatique");
+    let missing = dir.join("nothing-here.collomatique");
+    let refusal = "this machine has no desktop to draw on";
+
+    let unused = Arc::new(FakeDialogs::answering([]));
+    let host = Arc::new(FakeHost {
+        data: reload(&source),
+        sent: Mutex::new(Vec::new()),
+    });
+
+    run_hosted_with_dialogs(
+        include_str!("scripts/default_document_hosted.py"),
+        Some(host.clone()),
+        unused.clone(),
+        |globals| {
+            globals.set_item("other_source", &other_source)?;
+            Ok(())
+        },
+    );
+
+    assert!(unused.asked.lock().expect("no dialog panicked").is_empty());
+    // Nothing crossed back, either: this opens a document, it does not send one.
+    assert!(host.sent.lock().expect("no sender panicked").is_empty());
+
+    // One per chooser the standalone script gets as far as opening.
+    let dialogs = Arc::new(FakeDialogs::answering([
+        Ok(Some(chosen.clone())),
+        Ok(None),
+        Err(refusal.to_owned()),
+    ]));
+
+    run_with_dialogs(
+        include_str!("scripts/default_document.py"),
+        dialogs.clone(),
+        |globals| {
+            globals.set_item("source", &source)?;
+            globals.set_item("chosen", &chosen)?;
+            globals.set_item("missing", &missing)?;
+            globals.set_item("refusal", refusal)?;
+            Ok(())
+        },
+    );
+
+    // Three, and no fourth: neither the path nor `dialog=False` asked for one.
+    let asked = dialogs.asked.lock().expect("no dialog panicked");
+    let kinds: Vec<_> = asked.iter().map(|(dialog, _)| dialog).collect();
+    assert_eq!(kinds, [&Dialog::Open, &Dialog::Open, &Dialog::Open]);
+
+    // What the module asked the desktop for, which is the half no script can
+    // see. The words are the application's own (`gtk4/src/tools/open_save.rs`),
+    // because a user who meets both should meet the same ones.
+    let (_, request) = &asked[0];
+    assert_eq!(request.title.as_deref(), Some("Ouvrir"));
+    assert_eq!(
+        filters_of(request),
+        [
+            (
+                "Fichiers collomatique (*.collomatique)",
+                vec!["collomatique"]
+            ),
+            ("Tous les fichiers", vec!["*"]),
+        ]
+    );
+    assert_eq!(request.directory, None);
+    assert_eq!(request.file_name, None);
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
 /// The real `rfd` chooser, on a machine with someone in front of it
 ///
 /// Everything above answers the dialogs itself, so this is the only test that
@@ -711,16 +803,17 @@ fn a_script_asks_for_a_file_a_folder_and_a_place_to_write() {
 /// onto, and that the portal hands a path back. It cannot be answered by a test
 /// runner, hence the `#[ignore]`.
 ///
-/// It asks for all three in a row on purpose. A per-dialog runtime shows the
-/// first chooser and then hangs on the second, because the connection `ashpd`
-/// caches outlives the runtime that was driving it — one dialog would have said
-/// everything was fine.
+/// It asks for them one after another on purpose. A per-dialog runtime shows
+/// the first chooser and then hangs on the second, because the connection
+/// `ashpd` caches outlives the runtime that was driving it — one dialog would
+/// have said everything was fine. The last of them is `default_document`'s, the
+/// one the module opens on the script's behalf.
 #[test]
-#[ignore = "opens three real file choosers: run with --ignored --nocapture, and answer them"]
+#[ignore = "opens four real file choosers: run with --ignored --nocapture, and answer them"]
 fn real_file_choosers_open_one_after_another() {
     let globals = run(include_str!("scripts/real_dialog.py"), |_| Ok(()));
 
-    for name in ["opened", "saved", "folder"] {
+    for name in ["opened", "saved", "folder", "document_path"] {
         let chosen: Option<PathBuf> = Python::attach(|py| {
             globals
                 .bind(py)
