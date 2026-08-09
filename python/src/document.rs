@@ -600,9 +600,10 @@ impl Document {
     /// after a save, but that field is a save *target*, which is a different
     /// thing from an origin.)
     ///
-    /// Each element says what was dropped; `str()` on one is an english
-    /// sentence, and the classes are in the module, so a script can test for
-    /// the caveat it knows how to handle:
+    /// Each element says what was dropped; `str()` on one is a french sentence,
+    /// the same one the application's caveat dialog writes, and the classes
+    /// are in the module, so a script can test for the caveat it knows how to
+    /// handle:
     ///
     /// ```python
     /// if clm.UnknownEntry("colloscope", 3) in doc.caveats:
@@ -783,7 +784,7 @@ impl Document {
                             path.display(),
                             caveats
                                 .iter()
-                                .map(|caveat| caveat.to_string())
+                                .map(collomatique_ui_text::caveats::caveat_text)
                                 .collect::<Vec<_>>()
                                 .join("; "),
                         )));

@@ -79,9 +79,9 @@ impl CreatedWithNewerVersion {
         format!("CreatedWithNewerVersion(version={:?})", self.version())
     }
 
-    /// The english sentence `collomatique_storage` writes for this caveat
+    /// The french sentence the application writes for this caveat
     fn __str__(&self) -> String {
-        self.to_storage().to_string()
+        collomatique_ui_text::caveats::caveat_text(&self.to_storage())
     }
 }
 
@@ -121,9 +121,9 @@ impl UnknownEntry {
         )
     }
 
-    /// The english sentence `collomatique_storage` writes for this caveat
+    /// The french sentence the application writes for this caveat
     fn __str__(&self) -> String {
-        self.to_storage().to_string()
+        collomatique_ui_text::caveats::caveat_text(&self.to_storage())
     }
 }
 

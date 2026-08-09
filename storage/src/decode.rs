@@ -270,25 +270,6 @@ pub enum Caveat {
     },
 }
 
-impl std::fmt::Display for Caveat {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Caveat::CreatedWithNewerVersion { version } => write!(
-                f,
-                "the file was written by Collomatique {version}, which is newer than this one"
-            ),
-            Caveat::UnknownEntry {
-                block_name,
-                minimum_spec_version,
-            } => write!(
-                f,
-                "the block \"{block_name}\" needs file-format spec version \
-                 {minimum_spec_version}, which this version does not support; it was skipped"
-            ),
-        }
-    }
-}
-
 pub(crate) fn check_header(
     header: &Header,
     caveats: &mut BTreeSet<Caveat>,
