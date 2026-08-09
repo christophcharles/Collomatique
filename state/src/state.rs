@@ -314,6 +314,10 @@ mod tests {
         AppState::new(FakeData::new(value))
     }
 
+    fn new_stack(value: i64) -> SessionStack<FakeData, &'static str> {
+        SessionStack::new(FakeData::new(value))
+    }
+
     #[test]
     fn max_history_size_is_wired_to_history() {
         let mut state =
@@ -454,5 +458,147 @@ mod tests {
         state.undo().expect("one op to undo");
         assert_eq!(state.get_data().value, 0);
         assert!(!state.can_undo());
+    }
+
+    #[test]
+    fn stack_with_no_session_open_is_the_plain_document() {
+        let mut stack = new_stack(0);
+        assert_eq!(stack.depth(), 0);
+
+        stack.apply(set(0, 1), "set to 1").expect("valid op");
+        stack.apply(set(1, 2), "set to 2").expect("valid op");
+        assert_eq!(stack.get_data().value, 2);
+
+        stack.undo().expect("one op to undo");
+        assert_eq!(stack.get_data().value, 1);
+        stack.redo().expect("one op to redo");
+        assert_eq!(stack.get_data().value, 2);
+
+        // Closing what was never opened does nothing at all
+        assert!(!stack.commit("nothing"));
+        assert!(!stack.cancel());
+        assert_eq!(stack.depth(), 0);
+        assert_eq!(stack.get_data().value, 2);
+        assert_eq!(stack.get_undo_name(), Some(&"set to 2"));
+        assert!(!stack.can_redo());
+    }
+
+    #[test]
+    fn commit_folds_the_session_into_one_slot_below() {
+        let mut stack = new_stack(0);
+
+        stack.begin();
+        assert_eq!(stack.depth(), 1);
+        stack.apply(set(0, 1), "set to 1").expect("valid op");
+        stack.apply(set(1, 2), "set to 2").expect("valid op");
+        stack.apply(set(2, 3), "set to 3").expect("valid op");
+
+        assert!(stack.commit("batch"));
+        assert_eq!(stack.depth(), 0);
+        assert_eq!(stack.get_data().value, 3);
+        assert_eq!(stack.get_undo_name(), Some(&"batch"));
+
+        // One undo cancels the three writes at once
+        stack.undo().expect("one op to undo");
+        assert_eq!(stack.get_data().value, 0);
+        assert!(!stack.can_undo());
+
+        stack.redo().expect("one op to redo");
+        assert_eq!(stack.get_data().value, 3);
+    }
+
+    #[test]
+    fn cancel_unwinds_the_session_and_leaves_the_level_below_alone() {
+        let mut stack = new_stack(0);
+        stack.apply(set(0, 1), "set to 1").expect("valid op");
+
+        stack.begin();
+        stack.apply(set(1, 2), "set to 2").expect("valid op");
+        stack.apply(set(2, 3), "set to 3").expect("valid op");
+
+        assert!(stack.cancel());
+        assert_eq!(stack.depth(), 0);
+        assert_eq!(stack.get_data().value, 1);
+        assert_eq!(stack.get_undo_name(), Some(&"set to 1"));
+        assert!(!stack.can_redo());
+    }
+
+    #[test]
+    fn an_inner_cancel_keeps_what_the_outer_session_did() {
+        // The corner a single session with a counter cannot do: an inner block
+        // that rolls back takes its own writes only, and the outer one keeps
+        // everything it did before.
+        let mut stack = new_stack(0);
+
+        stack.begin();
+        stack.apply(set(0, 1), "set to 1").expect("valid op");
+
+        stack.begin();
+        stack.apply(set(1, 2), "set to 2").expect("valid op");
+        assert!(stack.cancel());
+
+        assert_eq!(stack.depth(), 1);
+        assert_eq!(stack.get_data().value, 1);
+
+        assert!(stack.commit("outer"));
+        assert_eq!(stack.depth(), 0);
+        assert_eq!(stack.get_data().value, 1);
+        assert_eq!(stack.get_undo_name(), Some(&"outer"));
+
+        stack.undo().expect("one op to undo");
+        assert_eq!(stack.get_data().value, 0);
+    }
+
+    #[test]
+    fn depth_counts_the_open_sessions() {
+        let mut stack = new_stack(0);
+
+        stack.begin();
+        stack.begin();
+        stack.begin();
+        assert_eq!(stack.depth(), 3);
+
+        assert!(stack.commit("innermost"));
+        assert_eq!(stack.depth(), 2);
+        assert!(stack.cancel());
+        assert_eq!(stack.depth(), 1);
+        assert!(stack.cancel());
+        assert_eq!(stack.depth(), 0);
+    }
+
+    #[test]
+    fn undo_inside_a_session_stops_at_its_start() {
+        let mut stack = new_stack(0);
+        stack.apply(set(0, 1), "set to 1").expect("valid op");
+
+        stack.begin();
+        stack.apply(set(1, 2), "set to 2").expect("valid op");
+
+        stack.undo().expect("one op to undo");
+        assert_eq!(stack.get_data().value, 1);
+
+        // The write made before the session is out of reach from inside it
+        assert_eq!(stack.undo(), Err(HistoryError::HistoryDepleted));
+        assert_eq!(stack.get_data().value, 1);
+    }
+
+    #[test]
+    fn a_write_lands_in_the_innermost_session() {
+        let mut stack = new_stack(0);
+
+        stack.begin();
+        stack.apply(set(0, 1), "set to 1").expect("valid op");
+        stack.begin();
+        stack.apply(set(1, 2), "set to 2").expect("valid op");
+        assert_eq!(stack.depth(), 2);
+
+        // Only the innermost session's write goes
+        assert!(stack.cancel());
+        assert_eq!(stack.get_data().value, 1);
+
+        // ... and the outer one still holds its own, undoable from inside it
+        assert_eq!(stack.get_undo_name(), Some(&"set to 1"));
+        stack.undo().expect("one op to undo");
+        assert_eq!(stack.get_data().value, 0);
     }
 }
