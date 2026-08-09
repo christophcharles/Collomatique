@@ -115,6 +115,78 @@ fn run_in(
     globals
 }
 
+/// Runs several scripts in one namespace, with rust doing something between them
+///
+/// The read surface ships no removes, so a script cannot make an entity go away
+/// on its own — and staleness is exactly what happens when one does. So the
+/// mutation happens here, between two stages: the first stage leaves in the
+/// globals the handles it wants to outlive it, `between` applies a real
+/// `UpdateOp` to the document it opened, and the next stage says what has become
+/// of them.
+///
+/// `between` runs before every stage but the first, so a two-element `scripts`
+/// makes it run once.
+fn run_stages(
+    scripts: &[&str],
+    fill: impl FnOnce(&Bound<'_, PyDict>) -> PyResult<()>,
+    mut between: impl FnMut(Python<'_>, &Bound<'_, PyDict>),
+) -> Py<PyDict> {
+    // A test that panicked left this poisoned; that test has already failed, and
+    // taking the lock anyway keeps the failure to itself.
+    let _one_at_a_time = ONE_SCRIPT_AT_A_TIME
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+
+    interpreter();
+    collomatique_python::set_host(None);
+    collomatique_python::set_dialogs(None);
+
+    Python::attach(|py| {
+        let globals = PyDict::new(py);
+        fill(&globals).expect("the test inputs should convert to python");
+
+        for (stage, script) in scripts.iter().enumerate() {
+            if stage > 0 {
+                between(py, &globals);
+            }
+
+            let script = std::ffi::CString::new(*script).expect("the script has no interior nul");
+            py.run(&script, Some(&globals), None).unwrap_or_else(|e| {
+                e.print(py);
+                panic!("stage {stage} should run")
+            });
+        }
+
+        globals.unbind()
+    })
+}
+
+/// The document a stage left in its globals
+fn document_of(globals: &Bound<'_, PyDict>) -> Py<collomatique_python::Document> {
+    globals
+        .get_item("doc")
+        .expect("looking up a global should not fail")
+        .expect("the stage before this one leaves the document it opened")
+        .extract()
+        .expect("`doc` is a collomatique document")
+}
+
+/// One global, extracted into the rust shape the test compares against
+fn global<T>(globals: &Py<PyDict>, name: &str) -> T
+where
+    T: for<'a, 'py> FromPyObject<'a, 'py>,
+{
+    Python::attach(|py| {
+        globals
+            .bind(py)
+            .get_item(name)
+            .expect("looking up a global should not fail")
+            .unwrap_or_else(|| panic!("the script sets `{name}`"))
+            .extract()
+            .unwrap_or_else(|_| panic!("`{name}` should convert to what the test compares it with"))
+    })
+}
+
 /// `collomatique.__version__` is the package version
 ///
 /// The two sides of the comparison do not come from the same crate:
@@ -792,6 +864,210 @@ fn the_default_document_is_the_hosted_one_then_a_path_then_a_dialog() {
     );
     assert_eq!(request.directory, None);
     assert_eq!(request.file_name, None);
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// The calendar reads back period by period and week by week
+///
+/// The script walks `doc.periods` and `doc.weeks` and leaves what it saw; rust
+/// compares it with the same document read straight from the model. What is
+/// pinned is both the values — the annotations, the interrogation flags, the
+/// dates — and the two orders they come in: periods in display order, weeks in
+/// the model's own global walk.
+///
+/// The script does the rest on its own, because it is about what python sees:
+/// the collection protocol, indexing by id and by handle alike, the handle that
+/// has no constructor and no setters, and the handle of another document that
+/// names nothing here.
+#[test]
+fn the_calendar_reads_back_period_by_period_and_week_by_week() {
+    let dir = workspace("calendar");
+    let source = example_copy(&dir, "source.collomatique");
+
+    let globals = run(include_str!("scripts/calendar.py"), |globals| {
+        globals.set_item("source", &source)?;
+        Ok(())
+    });
+
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    let period_ids: Vec<_> = params.periods.period_ids().collect();
+    let walk: Vec<_> = params.walk_weeks().collect();
+
+    // The example is only worth reading if it has something to say: several
+    // periods, several weeks each, and annotations that are sometimes absent.
+    assert!(period_ids.len() > 1);
+    assert!(walk.len() > period_ids.len());
+
+    assert_eq!(
+        global::<Vec<usize>>(&globals, "period_indices"),
+        (0..period_ids.len()).collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<usize>>(&globals, "weeks_per_period"),
+        period_ids
+            .iter()
+            .map(|period| params.weeks.week_count_for_period(*period).unwrap_or(0))
+            .collect::<Vec<_>>()
+    );
+
+    assert_eq!(
+        global::<Vec<usize>>(&globals, "week_indices"),
+        (0..walk.len()).collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<bool>>(&globals, "week_interrogations"),
+        walk.iter()
+            .map(|(_period, _id, week)| week.interrogations)
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<Option<String>>>(&globals, "week_annotations"),
+        walk.iter()
+            .map(|(_period, _id, week)| week.annotation.as_ref().map(|text| text.to_string()))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<usize>>(&globals, "week_period_indices"),
+        walk.iter()
+            .map(|(period, _id, _week)| period_ids
+                .iter()
+                .position(|id| id == period)
+                .expect("a walked week names a live period"))
+            .collect::<Vec<_>>()
+    );
+
+    // The dates are the export's own: consecutive weeks from the start date, in
+    // global order (`xlsx/src/lib.rs`, `generate_week_dates_title`).
+    let first_week = *params
+        .periods
+        .first_week
+        .as_ref()
+        .expect("the example starts on a date")
+        .monday();
+    assert_eq!(
+        global::<Vec<chrono::NaiveDate>>(&globals, "week_mondays"),
+        (0..walk.len())
+            .map(|index| first_week
+                .checked_add_days(chrono::Days::new(7 * index as u64))
+                .expect("the example's weeks are datable"))
+            .collect::<Vec<_>>()
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// An id compares, hashes, orders and prints, and does nothing else
+///
+/// Most of this is the script's, because opacity is a statement about what
+/// python *cannot* do: build one, turn one into a number, order one against
+/// another kind. Rust checks the one thing a script cannot see for itself —
+/// that the repr names the number the document really holds.
+#[test]
+fn ids_compare_hash_and_order_but_do_nothing_else() {
+    use collomatique_state_colloscopes::ids::Id as _;
+
+    let dir = workspace("ids");
+    let source = example_copy(&dir, "source.collomatique");
+
+    let globals = run(include_str!("scripts/ids.py"), |globals| {
+        globals.set_item("source", &source)?;
+        Ok(())
+    });
+
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    let period = params
+        .periods
+        .period_ids()
+        .next()
+        .expect("the example has periods");
+    let week = params.week_ids().next().expect("the example has weeks");
+
+    assert_eq!(
+        global::<String>(&globals, "period_id_repr"),
+        format!("<PeriodId {}>", period.inner())
+    );
+    assert_eq!(
+        global::<String>(&globals, "week_id_repr"),
+        format!("<WeekId {}>", week.inner())
+    );
+
+    // The eleven kinds land together, and the script refused to build any of
+    // them: the read surface hands ids out, it does not take them in.
+    let names = global::<Vec<String>>(&globals, "id_class_names");
+    assert_eq!(
+        names.iter().map(String::as_str).collect::<Vec<_>>(),
+        [
+            "PeriodId",
+            "WeekId",
+            "SubjectId",
+            "TeacherId",
+            "StudentId",
+            "WeekPatternId",
+            "SlotId",
+            "IncompatId",
+            "GroupListId",
+            "PairingRuleId",
+            "SlotPairingRuleId",
+        ]
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// A removed period takes its handles down with it, loudly
+///
+/// The mutation cannot come from the script — the read surface ships no removes
+/// — so it comes from rust, between the two halves: `DeletePeriodAndWeeks` kills
+/// a period and every week in it in one blow, which is what makes both handle
+/// kinds stale at once.
+///
+/// The second half is where the whole of §2.2 is pinned: `.id`, `==` and `hash`
+/// keep working because they never read the state, every reading attribute
+/// raises `StaleHandleError`, the repr says `(stale)` instead of raising, and
+/// the mapping conventions answer `None` / `False` / `KeyError`. The walk
+/// started before the removal is in there too, for the promise that iteration
+/// snapshots ids and mints handles as it goes.
+#[test]
+fn a_removed_period_makes_its_handles_stale() {
+    let dir = workspace("stale");
+    let source = example_copy(&dir, "source.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same period the script is holding.
+    let doomed = reload(&source)
+        .get_inner_data()
+        .params
+        .periods
+        .period_ids()
+        .last()
+        .expect("the example has periods");
+
+    run_stages(
+        &[
+            include_str!("scripts/stale_before.py"),
+            include_str!("scripts/stale_after.py"),
+        ],
+        |globals| {
+            globals.set_item("source", &source)?;
+            Ok(())
+        },
+        |py, globals| {
+            let doc = document_of(globals);
+            doc.borrow_mut(py)
+                .update(
+                    py,
+                    collomatique_ops::UpdateOp::GeneralPlanning(
+                        collomatique_ops::GeneralPlanningUpdateOp::DeletePeriodAndWeeks(doomed),
+                    ),
+                )
+                .expect("the last period of the example is removable");
+        },
+    );
 
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }

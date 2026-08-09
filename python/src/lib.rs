@@ -12,7 +12,9 @@ pub mod collections;
 pub mod dialogs;
 pub mod document;
 pub mod errors;
+pub mod handles;
 pub mod host;
+pub mod ids;
 pub mod results;
 pub mod transaction;
 
@@ -37,6 +39,10 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("NoOrigin", py.get_type::<errors::NoOrigin>())?;
     m.add("UpdateError", py.get_type::<errors::UpdateError>())?;
     m.add("NothingToUndo", py.get_type::<errors::NothingToUndo>())?;
+    m.add(
+        "StaleHandleError",
+        py.get_type::<errors::StaleHandleError>(),
+    )?;
     m.add("NotHosted", py.get_type::<errors::NotHosted>())?;
     m.add("NoDocument", py.get_type::<errors::NoDocument>())?;
     m.add("Cancelled", py.get_type::<errors::Cancelled>())?;
@@ -57,6 +63,7 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     collections::register(m)?;
     dialogs::register(m)?;
     host::register(m)?;
+    ids::register(m)?;
     results::register(m)?;
 
     m.add_class::<Document>()?;

@@ -10,16 +10,21 @@
 //! the writes it makes through it.
 
 pub mod periods;
+pub mod weeks;
 
-pub use periods::Periods;
+pub use periods::{Period, Periods};
+pub use weeks::{Week, Weeks};
 
 use pyo3::prelude::*;
 
-/// Adds the collection classes to the module
+/// Adds the collection classes and their handles to the module
 ///
 /// They are registered so `isinstance` and `repr` say something useful, not so
 /// a script can build one: none of them has a constructor.
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Periods>()?;
+    m.add_class::<Period>()?;
+    m.add_class::<Weeks>()?;
+    m.add_class::<Week>()?;
     Ok(())
 }

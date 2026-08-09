@@ -86,6 +86,13 @@ create_exception!(
 
 create_exception!(
     collomatique,
+    StaleHandleError,
+    Error,
+    "A handle was read after the entity it names left the document."
+);
+
+create_exception!(
+    collomatique,
     IdCeilingExceeded,
     SaveError,
     "The document holds an id the file format cannot represent."

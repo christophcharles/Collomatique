@@ -12,7 +12,7 @@ use collomatique_state::traits::Manager;
 use collomatique_state_colloscopes::Data;
 use collomatique_storage::Caveat;
 
-use crate::collections::Periods;
+use crate::collections::{Periods, Weeks};
 use crate::dialogs::FileRequest;
 use crate::errors::{
     Cancelled, CaveatedOverwrite, Error, IdCeilingExceeded, LoadError, NoDocument, NoOrigin,
@@ -220,7 +220,12 @@ impl Document {
     /// than `apply`: `apply` exists for callers with no way of showing the
     /// cascade's repairs, and this api has one — every mutator hands them back
     /// on its [OpResult].
-    pub(crate) fn update(&mut self, py: Python<'_>, op: UpdateOp) -> PyResult<OpResult> {
+    ///
+    /// Public on the rust side, and python-facing only through the mutators
+    /// that call it: the ops layer holds every write, but the python surface
+    /// publishes them one family at a time. The tests use it directly, because
+    /// staleness needs a removal the read surface cannot make yet.
+    pub fn update(&mut self, py: Python<'_>, op: UpdateOp) -> PyResult<OpResult> {
         let result = op
             .dry_apply(&self.state)
             .map_err(|e| UpdateError::new_err(e.to_string()))?;
@@ -290,6 +295,15 @@ impl Document {
     #[getter]
     fn periods(slf: Py<Self>) -> Periods {
         Periods::new(slf)
+    }
+
+    /// Every week of the document, in global week order
+    ///
+    /// Period display order, then position within the period — the order
+    /// `week.index` counts in. The weeks of one period alone are `period.weeks`.
+    #[getter]
+    fn weeks(slf: Py<Self>) -> Weeks {
+        Weeks::new(slf)
     }
 
     /// Groups every write in a block into one undo slot
