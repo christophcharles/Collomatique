@@ -440,7 +440,7 @@ Two semantics, both loud in the docstring:
   send-a-different-document case composable.
 
 Saving is then one method with the ordinary Save / Save As meaning —
-`doc.save(path=None, *, dialog=False)`:
+`doc.save(path=None, *, ignore_caveats=False)`:
 
 ```python
 doc.save(path)     # write that file, whatever the origin
@@ -448,8 +448,12 @@ doc.save()         # write back to the origin
 ```
 
 With no argument it dispatches on the origin: hosted → `send_to_host(doc)`; loaded
-from a file → that path; no origin → raises `NoOrigin`, or opens a save dialog when
-called with `dialog=True`. It is never a silent no-op. Together with
+from a file → that path; no origin → raises `NoOrigin`. It is never a silent no-op,
+and it never opens a dialog of its own: a save that is silent on one document and puts
+a chooser up on the next is a call a script cannot reason about, and the one it would
+block on is the one where the whole run's work is already in memory. A script that
+does want to be asked has `clm.dialogs.save_file()` and a path to hand to `save`.
+Together with
 `default_document()` it is the symmetric pair a script needs to work in both contexts:
 
 ```python
