@@ -376,8 +376,10 @@ Whether a subject *runs* in a period is not this table's question —
 
 ### 3.8 `doc.slots` — and the `Slot` handle
 
-Iterates all slots in subject-then-position order (the only global order the
-model has). Per-subject access is `subject.slots`.
+Iterates all slots in subject-then-position **user order** — the model keeps no
+single global slots order, so the walk composes the two user orders it does
+keep: the subjects in `doc.subjects`' order, each followed by its own slots in
+theirs. Per-subject access is `subject.slots`.
 
 | attribute | type | reads |
 |---|---|---|

@@ -4,7 +4,7 @@ import collomatique
 # its sub-view already did.
 assert len(doc.subjects) == subject_count_before - 1
 
-for attribute in ("index", "name", "interrogation", "excluded_periods"):
+for attribute in ("index", "name", "interrogation", "excluded_periods", "slots"):
     try:
         getattr(doomed, attribute)
     except collomatique.StaleHandleError as error:

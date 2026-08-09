@@ -13,7 +13,7 @@ use collomatique_state_colloscopes::Data;
 use collomatique_storage::Caveat;
 
 use crate::collections::{
-    Periods, Students, Subjects, Teachers, Week, WeekPattern, WeekPatterns, Weeks,
+    Periods, Slot, Slots, Students, Subjects, Teachers, Week, WeekPattern, WeekPatterns, Weeks,
 };
 use crate::dialogs::FileRequest;
 use crate::errors::{
@@ -391,6 +391,59 @@ impl Document {
             .get_inner_data()
             .params
             .is_week_active(week_id, pattern_id))
+    }
+
+    /// Every slot of the document, in subject-then-position order
+    ///
+    /// The subjects in the order `doc.subjects` shows them, each followed by its
+    /// own slots in theirs — so this walk is `doc.subjects` and `subject.slots`
+    /// laid end to end, and the two never disagree. The slots of one subject
+    /// alone are `subject.slots`, and `slot.index` is the position in that
+    /// shorter list.
+    #[getter]
+    fn slots(slf: Py<Self>) -> Slots {
+        Slots::new(slf)
+    }
+
+    /// Whether a colle can happen in this slot on this week
+    ///
+    /// ```python
+    /// cells = [week for week in doc.weeks if doc.is_interrogation_possible(slot, week)]
+    /// ```
+    ///
+    /// True exactly when the application would draw that cell in its grid.
+    /// Three things have to hold at once: the slot's subject runs colles, it
+    /// does not skip that week's period, and the week is active under the slot's
+    /// pattern. No handle can answer alone — the question joins slots, subjects,
+    /// periods and patterns — so it lives on the document, next to
+    /// `is_week_active`.
+    ///
+    /// Both arguments take a handle or an id. A `slot` or a `week` this document
+    /// does not hold raises `StaleHandleError` rather than answering `False`,
+    /// for the reason `is_week_active` gives: the model shrugs a forgiving
+    /// `false` at a reference it never heard of, and a script would read that as
+    /// « no colle there » when what happened is that it lost track of its own
+    /// document.
+    fn is_interrogation_possible(
+        slf: Py<Self>,
+        py: Python<'_>,
+        slot: &Bound<'_, PyAny>,
+        week: &Bound<'_, PyAny>,
+    ) -> PyResult<bool> {
+        let slot_id = crate::handles::argument::<Slot>(&slf, slot)?;
+        let week_id = crate::handles::argument::<Week>(&slf, week)?;
+
+        // The model's own definition, and not a second copy of it: the gui grid,
+        // the constraints layer and the storage decoder all ask
+        // `Parameters::is_interrogation_possible` the same question, and an api
+        // that answered differently would be wrong about the document it is
+        // showing.
+        let doc = slf.borrow(py);
+        Ok(doc
+            .data()
+            .get_inner_data()
+            .params
+            .is_interrogation_possible(slot_id, week_id))
     }
 
     /// Groups every write in a block into one undo slot

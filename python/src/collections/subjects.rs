@@ -3,15 +3,20 @@
 //! Reached as `doc.subjects`. A subject carries a name, the periods it does not
 //! run in, and — when it holds interrogations at all — a whole set of parameters
 //! for them, which is the [Interrogation] sub-view.
+//!
+//! The slots those colles happen in belong to the subject too, but the model
+//! keeps them in a table of their own, so they live in
+//! [crate::collections::slots] and are reached here as `subject.slots`.
 
 use pyo3::prelude::*;
-use pyo3::types::{PyAny, PyFrozenSet};
+use pyo3::types::{PyAny, PyFrozenSet, PyTuple};
 
 use collomatique_state_colloscopes::SubjectId as RawSubjectId;
 use collomatique_state_colloscopes::{InnerData, SubjectInterrogationParameters};
 
 use crate::Document;
 use crate::collections::periods::Period;
+use crate::collections::slots::Slot;
 use crate::errors::StaleHandleError;
 use crate::handles::{Handle, handle_iterator, named, no_such, quoted};
 use crate::ids::{IdClass, SubjectId};
@@ -191,6 +196,38 @@ impl Subject {
             .map(|period_id| Period::mint(self.doc.clone_ref(py), period_id))
             .collect();
         PyFrozenSet::new(py, periods)
+    }
+
+    /// This subject's slots, as a tuple of [Slot], in their order
+    ///
+    /// The order is the subject's own, which is the only one the model keeps for
+    /// slots: `slot.index` is the position in this tuple. A subject with no
+    /// slots reads as an empty tuple, colles or no colles.
+    ///
+    /// A snapshot, built when it is asked for. The handles in it stay live.
+    #[getter]
+    fn slots<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+        let ids = self.read(py, |data| {
+            // Asked first, and on its own: the slot table has no row for a
+            // subject without slots, so "no row" must not be read as "no
+            // subject" — one is an empty tuple and the other is staleness.
+            data.params.subjects.find_subject(self.id)?;
+            Some(
+                data.params
+                    .slots
+                    .slots_for_subject(self.id)
+                    .into_iter()
+                    .flatten()
+                    .map(|(slot_id, _slot)| *slot_id)
+                    .collect::<Vec<_>>(),
+            )
+        })?;
+
+        let slots: Vec<_> = ids
+            .into_iter()
+            .map(|slot_id| Slot::mint(self.doc.clone_ref(py), slot_id))
+            .collect();
+        PyTuple::new(py, slots)
     }
 
     /// Whether two handles name the same subject of the same document

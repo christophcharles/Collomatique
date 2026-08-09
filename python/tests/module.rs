@@ -2193,6 +2193,195 @@ fn a_removed_week_or_pattern_makes_is_week_active_raise() {
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
 
+/// The english name of a day, for the mapping the script builds from the members
+///
+/// The script cannot read a day's name off the class — the members are plain
+/// class attributes, not an `enum.Enum` — so it names them itself, and this is
+/// the other half of that dictionary. Written as a match so that the seven are
+/// spelled out on both sides.
+fn weekday_name(weekday: collomatique_time::Weekday) -> &'static str {
+    match weekday.into_inner() {
+        chrono::Weekday::Mon => "monday",
+        chrono::Weekday::Tue => "tuesday",
+        chrono::Weekday::Wed => "wednesday",
+        chrono::Weekday::Thu => "thursday",
+        chrono::Weekday::Fri => "friday",
+        chrono::Weekday::Sat => "saturday",
+        chrono::Weekday::Sun => "sunday",
+    }
+}
+
+/// The slots read back, and the cells they can hold a colle in
+///
+/// The script walks `doc.slots` and leaves what it saw; rust compares it with
+/// the same document read straight from the model — every field of a slot, the
+/// order the walk comes in, and the whole possibility grid: every slot of the
+/// document against every week of it.
+///
+/// The grid is the headline. `doc.is_interrogation_possible` must answer what
+/// `Parameters::is_interrogation_possible` answers, because that is the one
+/// definition the gui grid, the constraints layer and the file decoder read too
+/// — an api that joined the slot, the subject and the pattern its own way would
+/// be describing a different document. So the expected values are computed from
+/// the model rather than written out, and the assertions above them say the
+/// example really exercises the join.
+///
+/// The two orders are pinned side by side: the walk is the subjects in user
+/// order, each followed by its own slots, and `.index` counts inside the
+/// subject. The example is worth reading for that because at least one of its
+/// subjects keeps its slots in an order that is not their ids'.
+#[test]
+fn the_slots_read_back_with_the_cells_they_can_fill() {
+    let dir = workspace("slots");
+    let source = example_copy(&dir, "source.collomatique");
+
+    let globals = run(include_str!("scripts/slots.py"), |globals| {
+        globals.set_item("source", &source)?;
+        Ok(())
+    });
+
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    // The walk the api promises: the subjects in user order — the one
+    // `ordered_subject_list` keeps, which is the one `doc.subjects` walks —
+    // each followed by its slots in theirs. This is the order the script says
+    // it saw.
+    let walk: Vec<_> = params
+        .subjects
+        .ordered_subject_list
+        .keys()
+        .flat_map(|subject_id| {
+            params
+                .slots
+                .slots_for_subject(subject_id)
+                .into_iter()
+                .flatten()
+        })
+        .map(|(slot_id, slot)| (*slot_id, slot.clone()))
+        .collect();
+    let week_ids: Vec<_> = params.week_ids().collect();
+
+    // The example is only worth reading if it has something to say: several
+    // subjects with slots, a subject whose slots are not in id order, patterns
+    // both carried and absent, and costs that are not all the same.
+    let subjects_with_slots: Vec<_> = params.slots.subjects_with_slots().collect();
+    assert!(subjects_with_slots.len() > 1);
+    assert!(subjects_with_slots.iter().any(|subject| {
+        let ids: Vec<_> = params
+            .slots
+            .slots_for_subject(*subject)
+            .expect("a subject with slots has an ordering row")
+            .map(|(slot_id, _slot)| *slot_id)
+            .collect();
+        let mut sorted = ids.clone();
+        sorted.sort();
+        ids != sorted
+    }));
+    assert!(walk.iter().any(|(_id, slot)| slot.week_pattern.is_some()));
+    assert!(walk.iter().any(|(_id, slot)| slot.week_pattern.is_none()));
+    assert!(walk.iter().any(|(_id, slot)| slot.cost != walk[0].1.cost));
+
+    assert_eq!(
+        global::<Vec<usize>>(&globals, "slot_indices"),
+        walk.iter()
+            .map(|(slot_id, _slot)| params
+                .slots
+                .find_slot_subject_and_position(*slot_id)
+                .expect("a walked slot is a live one")
+                .1)
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<usize>>(&globals, "slot_subject_indices"),
+        walk.iter()
+            .map(|(_slot_id, slot)| params
+                .subjects
+                .find_subject_position(slot.subject_id)
+                .expect("a slot names a live subject"))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<String>>(&globals, "slot_teacher_surnames"),
+        walk.iter()
+            .map(|(_slot_id, slot)| params
+                .teachers
+                .teacher_map
+                .get(&slot.teacher_id)
+                .expect("a slot names a live teacher")
+                .desc
+                .surname
+                .clone())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<String>>(&globals, "slot_weekdays"),
+        walk.iter()
+            .map(|(_slot_id, slot)| weekday_name(slot.start_time.weekday).to_owned())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<chrono::NaiveTime>>(&globals, "slot_start_times"),
+        walk.iter()
+            .map(|(_slot_id, slot)| *slot.start_time.start_time.inner())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<String>>(&globals, "slot_extra_info"),
+        walk.iter()
+            .map(|(_slot_id, slot)| slot.extra_info.clone())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<i32>>(&globals, "slot_costs"),
+        walk.iter()
+            .map(|(_slot_id, slot)| slot.cost)
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<Option<String>>>(&globals, "slot_pattern_names"),
+        walk.iter()
+            .map(|(_slot_id, slot)| {
+                slot.week_pattern.map(|pattern_id| {
+                    params
+                        .week_patterns
+                        .week_pattern_map
+                        .get(&pattern_id)
+                        .expect("a slot names a live pattern")
+                        .name
+                        .clone()
+                })
+            })
+            .collect::<Vec<_>>()
+    );
+
+    // One row per slot, one column per week of the document.
+    let expected: Vec<Vec<bool>> = walk
+        .iter()
+        .map(|(slot_id, _slot)| {
+            week_ids
+                .iter()
+                .map(|week| params.is_interrogation_possible(*slot_id, *week))
+                .collect()
+        })
+        .collect();
+
+    // A grid of all-the-same would compare equal without pinning anything: the
+    // weeks must disagree among themselves, and two slots must disagree about
+    // some week — which is the pattern half of the join doing something.
+    assert!(expected.iter().any(|row| row.iter().any(|answer| *answer)));
+    assert!(expected.iter().any(|row| row.iter().any(|answer| !*answer)));
+    assert!(expected.iter().any(|row| {
+        row.iter()
+            .zip(&expected[0])
+            .any(|(here, first)| here != first)
+    }));
+
+    assert_eq!(global::<Vec<Vec<bool>>>(&globals, "possibility"), expected);
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
 /// The real `rfd` chooser, on a machine with someone in front of it
 ///
 /// Everything above answers the dialogs itself, so this is the only test that

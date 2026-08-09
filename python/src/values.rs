@@ -22,6 +22,73 @@ use pyo3::types::PyTuple;
 
 use collomatique_state_colloscopes::{NonEmptyRangeInclusive, SubjectPeriodicity};
 
+/// A day of the week
+///
+/// The seven days are class attributes — `clm.Weekday.MONDAY` — and a read hands
+/// back the member itself: pyo3 keeps one object per day, so two thursdays read
+/// out of a document are the same object and even `is` compares them correctly.
+/// `eq` and `hash` are declared all the same, so that a script comparing two days
+/// keeps its answer if that ever stops being true.
+///
+/// The days are in the model's own order, monday first, which is the order the
+/// application draws its grid in.
+// The days are only ever read out of a document, so nothing extracts one back
+// from python yet; the write surface is what will want that.
+#[pyclass(module = "collomatique", frozen, eq, hash, skip_from_py_object)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Weekday {
+    #[pyo3(name = "MONDAY")]
+    Monday,
+    #[pyo3(name = "TUESDAY")]
+    Tuesday,
+    #[pyo3(name = "WEDNESDAY")]
+    Wednesday,
+    #[pyo3(name = "THURSDAY")]
+    Thursday,
+    #[pyo3(name = "FRIDAY")]
+    Friday,
+    #[pyo3(name = "SATURDAY")]
+    Saturday,
+    #[pyo3(name = "SUNDAY")]
+    Sunday,
+}
+
+impl Weekday {
+    /// The python day for one model day
+    ///
+    /// Written as a match rather than as arithmetic on the day number, so that
+    /// nothing here depends on which end of the week the underlying calendar
+    /// counts from.
+    pub(crate) fn from_model(weekday: collomatique_time::Weekday) -> Weekday {
+        match weekday.into_inner() {
+            chrono::Weekday::Mon => Weekday::Monday,
+            chrono::Weekday::Tue => Weekday::Tuesday,
+            chrono::Weekday::Wed => Weekday::Wednesday,
+            chrono::Weekday::Thu => Weekday::Thursday,
+            chrono::Weekday::Fri => Weekday::Friday,
+            chrono::Weekday::Sat => Weekday::Saturday,
+            chrono::Weekday::Sun => Weekday::Sunday,
+        }
+    }
+
+    /// The day's english name, for the reprs that name a day
+    ///
+    /// The model's own `Display` is french, since the application it was written
+    /// for is; the reprs of this api are english throughout, so the names are
+    /// spelled out again here rather than borrowed.
+    pub(crate) fn english(self) -> &'static str {
+        match self {
+            Weekday::Monday => "Monday",
+            Weekday::Tuesday => "Tuesday",
+            Weekday::Wednesday => "Wednesday",
+            Weekday::Thursday => "Thursday",
+            Weekday::Friday => "Friday",
+            Weekday::Saturday => "Saturday",
+            Weekday::Sunday => "Sunday",
+        }
+    }
+}
+
 /// A `(min, max)` pair, inclusive at both ends
 ///
 /// The model's `NonEmptyRangeInclusive` never leaks as a class: a range reads as
@@ -409,8 +476,42 @@ pub(crate) fn periodicity(py: Python<'_>, periodicity: &SubjectPeriodicity) -> P
     })
 }
 
+#[cfg(test)]
+mod tests {
+    use super::Weekday;
+
+    /// Every day converts to its own member, and to no other
+    ///
+    /// The documents the scripts read only ever run colles from monday to
+    /// friday, so a saturday swapped with a sunday would slip through them. The
+    /// seven pairs are written out here, where no fixture is needed.
+    #[test]
+    fn every_day_converts_to_its_own_member() {
+        let days = [
+            (chrono::Weekday::Mon, Weekday::Monday, "monday"),
+            (chrono::Weekday::Tue, Weekday::Tuesday, "tuesday"),
+            (chrono::Weekday::Wed, Weekday::Wednesday, "wednesday"),
+            (chrono::Weekday::Thu, Weekday::Thursday, "thursday"),
+            (chrono::Weekday::Fri, Weekday::Friday, "friday"),
+            (chrono::Weekday::Sat, Weekday::Saturday, "saturday"),
+            (chrono::Weekday::Sun, Weekday::Sunday, "sunday"),
+        ];
+
+        for (model, expected, name) in days {
+            let converted = Weekday::from_model(collomatique_time::Weekday(model));
+            assert!(converted == expected, "{name} should convert to itself");
+            assert_eq!(
+                converted.english().to_lowercase(),
+                name,
+                "{name} should be named after itself"
+            );
+        }
+    }
+}
+
 /// Adds the leaf value classes to the module
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<Weekday>()?;
     m.add_class::<WeekBlock>()?;
     m.add_class::<Periodicity>()?;
     m.add_class::<EveryNWeeks>()?;

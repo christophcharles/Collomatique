@@ -10,6 +10,7 @@
 //! the writes it makes through it.
 
 pub mod periods;
+pub mod slots;
 pub mod students;
 pub mod subjects;
 pub mod teachers;
@@ -17,6 +18,7 @@ pub mod week_patterns;
 pub mod weeks;
 
 pub use periods::{Period, Periods};
+pub use slots::{Slot, Slots};
 pub use students::{Student, Students};
 pub use subjects::{Interrogation, Subject, Subjects};
 pub use teachers::{Teacher, Teachers};
@@ -56,5 +58,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Student>()?;
     m.add_class::<WeekPatterns>()?;
     m.add_class::<WeekPattern>()?;
+    m.add_class::<Slots>()?;
+    m.add_class::<Slot>()?;
     Ok(())
 }
