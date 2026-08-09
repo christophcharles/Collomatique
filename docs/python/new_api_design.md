@@ -296,6 +296,27 @@ transaction are invisible to the GUI — only an explicit send (§9.2) crosses. 
 host side each send lands in one `AppSession` wrapping the whole run, and the user's
 validation commits it as a single undo slot in the real document.
 
+### Arguments are resolved before the borrow, not inside it
+
+Every mutator here takes entities as arguments — `doc.subjects.update(s, data)`,
+`doc.settings.remove_student_limits(student)` — and each of those goes through the
+read surface's argument check (`handles::argument`, `docs/python/handle_api.md`
+§2.4), which refuses a wrong kind, a handle of another document, and a reference
+this document no longer holds. That check borrows the document to ask.
+
+A mutator borrows it too, mutably: either by hand (`self.doc.borrow_mut(py)`) or by
+being a `&mut self` method, in which case pyo3 holds the `PyRefMut` for the whole
+call. `Py<Document>` is a `RefCell`, so the two borrows cannot overlap — and
+`Py::borrow` has no error path for that, it *panics*. pyo3 turns the panic into a
+`PanicException` at the boundary, which is exactly the worker-killing panic §6
+exists to eliminate, and it would replace the clean `StaleHandleError` the argument
+check was built to raise.
+
+So a mutator resolves all of its arguments first, and only then takes the mutable
+borrow. That is the order the work wants anyway: an op built from a dead id would be
+refused further down, by a layer that knows nothing about handles and cannot say
+which argument was wrong.
+
 ## 6. Errors
 
 A typed exception hierarchy replaces the old mix of `PyValueError` strings and
