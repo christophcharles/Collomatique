@@ -7,7 +7,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyFrozenSet;
 
 use collomatique_ops::{Desc, UpdateOp};
-use collomatique_state::AppState;
+use collomatique_state::SessionStack;
 use collomatique_state::traits::Manager;
 use collomatique_state_colloscopes::Data;
 use collomatique_storage::Caveat;
@@ -18,6 +18,7 @@ use crate::errors::{
     UpdateError,
 };
 use crate::results::{OpResult, Warning};
+use crate::transaction::Transaction;
 
 /// Where a document came from, and where a bare `save()` writes
 ///
@@ -76,7 +77,7 @@ impl Origin {
 /// one, so `collomatique.Document()` raises `TypeError`.
 #[pyclass(module = "collomatique")]
 pub struct Document {
-    state: AppState<Data, Desc>,
+    state: SessionStack<Data, Desc>,
     origin: Origin,
 }
 
@@ -103,7 +104,7 @@ pub fn load(path: PathBuf) -> PyResult<Document> {
     // construction, something this build cannot use anyway — the loss only
     // happens when the file is written back.
     Ok(Document {
-        state: AppState::new(data),
+        state: SessionStack::new(data),
         origin: Origin::File { path, caveats },
     })
 }
@@ -115,7 +116,7 @@ pub fn load(path: PathBuf) -> PyResult<Document> {
 #[pyfunction]
 pub fn new_document() -> Document {
     Document {
-        state: AppState::new(Data::new()),
+        state: SessionStack::new(Data::new()),
         origin: Origin::None,
     }
 }
@@ -129,7 +130,7 @@ impl Document {
     /// change (`docs/python/new_api_design.md` §9.2).
     pub(crate) fn hosted(data: Data) -> Document {
         Document {
-            state: AppState::new(data),
+            state: SessionStack::new(data),
             origin: Origin::Hosted,
         }
     }
@@ -172,6 +173,38 @@ impl Document {
 
         Ok(OpResult::new(warnings))
     }
+
+    /// Opens a transaction on the document
+    ///
+    /// [Transaction] is the only caller: a session that nothing holds is a
+    /// session nothing can close, so opening one is not part of the python
+    /// surface.
+    pub(crate) fn begin_transaction(&mut self) {
+        self.state.begin();
+    }
+
+    /// Closes the innermost transaction, keeping what it wrote as one step
+    pub(crate) fn commit_transaction(&mut self, desc: Desc) {
+        let committed = self.state.commit(desc);
+        debug_assert!(
+            committed,
+            "a Transaction only ever closes a session it opened"
+        );
+    }
+
+    /// Closes the innermost transaction, unwinding everything it wrote
+    pub(crate) fn cancel_transaction(&mut self) {
+        let cancelled = self.state.cancel();
+        debug_assert!(
+            cancelled,
+            "a Transaction only ever closes a session it opened"
+        );
+    }
+
+    /// How many transactions are open, for the innermost-first guard
+    pub(crate) fn transaction_depth(&self) -> usize {
+        self.state.depth()
+    }
 }
 
 #[pymethods]
@@ -183,6 +216,27 @@ impl Document {
     #[getter]
     fn periods(slf: Py<Self>) -> Periods {
         Periods::new(slf)
+    }
+
+    /// Groups every write in a block into one undo slot
+    ///
+    /// ```python
+    /// with doc.transaction("Import Pronote"):
+    ///     ...
+    /// ```
+    ///
+    /// The block leaving normally commits everything it wrote as a single step
+    /// named `label`; an exception rolls the whole block back and propagates.
+    ///
+    /// Blocks nest, and really nest: an inner block that rolls back takes only
+    /// its own writes with it, so a helper that opens a transaction is safe to
+    /// call from inside another one. Inside a block, `undo()` reaches back no
+    /// further than the block's start.
+    ///
+    /// The object it returns does nothing until it is entered, and a `with` is
+    /// the only sensible way to enter one.
+    fn transaction(slf: Py<Self>, label: String) -> Transaction {
+        Transaction::new(slf, label)
     }
 
     /// Where this document came from, as a `pathlib.Path`, or `None`
@@ -333,7 +387,7 @@ impl Document {
         })?;
 
         Ok(Document {
-            state: AppState::new(data),
+            state: SessionStack::new(data),
             origin: match &self.origin {
                 Origin::None => Origin::None,
                 Origin::File { path, caveats } => Origin::File {

@@ -272,7 +272,13 @@ with doc.transaction("Import Pronote"):
                            # exception → everything rolled back
 ```
 
-Backed by `AppSession` (nestable). Outside a transaction, each op is its own undo
+Backed by a stack of `AppSession`s in `state/` (`SessionStack`), so blocks really
+nest: an inner block that rolls back takes only its own writes, and an outer block
+that catches the exception keeps everything it did before. Writes, `undo()` and
+`redo()` land in the innermost open block, and committing it folds it into the one
+below as a single slot. `with doc.transaction(...) as t:` binds the transaction, and
+`t.cancel()` rolls back at once and makes leaving the block do nothing — that is the
+preview §5 mentions above. Outside a transaction, each op is its own undo
 slot with an auto-generated label. Exposed: `doc.undo()`, `doc.redo()`,
 `doc.can_undo`, `doc.can_redo`, `doc.undo_name`, `doc.redo_name`.
 

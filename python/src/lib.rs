@@ -13,9 +13,11 @@ pub mod document;
 pub mod errors;
 pub mod host;
 pub mod results;
+pub mod transaction;
 
 pub use document::Document;
 pub use host::{Host, set_host};
+pub use transaction::Transaction;
 
 /// The `collomatique` python module, for registration in an interpreter's inittab.
 #[pymodule]
@@ -49,6 +51,9 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     results::register(m)?;
 
     m.add_class::<Document>()?;
+    // Registered so `isinstance` and `repr` say something useful, like the
+    // collection views are; `doc.transaction(...)` is the only way to build one.
+    m.add_class::<Transaction>()?;
     m.add_function(wrap_pyfunction!(document::load, m)?)?;
     m.add_function(wrap_pyfunction!(document::new_document, m)?)?;
 
