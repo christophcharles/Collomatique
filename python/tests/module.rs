@@ -2677,6 +2677,127 @@ fn a_removed_address_makes_the_assignments_read_raise() {
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
 
+/// The incompatibilities read back, window by window
+///
+/// The script walks `doc.incompats` and leaves what it saw; rust compares it
+/// with the same document read straight from the model — the names, the
+/// subjects, and every busy window of every incompatibility: the day, the time
+/// and the duration of the model's `SlotWithDuration`. The windows also pin the
+/// read half of the `TimeSlot` value: the `from_model` conversion of §2.6.
+///
+/// The example carries six incompatibilities across two subjects, one with a
+/// single busy window, all bound to no week pattern — enough to pin the walk,
+/// every field, and the `None` shape of `week_pattern`. An incompatibility
+/// that carries a pattern stays out of this commit's tests: no fixture has
+/// one, and the `Some` shape needs a synthetic document, which commit 13
+/// builds.
+#[test]
+fn the_incompats_read_back_slot_by_slot() {
+    let dir = workspace("incompats");
+    let source = example_copy(&dir, "source.collomatique");
+
+    let globals = run(include_str!("scripts/incompats.py"), |globals| {
+        globals.set_item("source", &source)?;
+        Ok(())
+    });
+
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    // The example is only worth reading if it has something to say: several
+    // incompatibilities, on more than one subject, one of them with more than
+    // a single busy window — and all of them without a week pattern, which is
+    // the shape the script's `None` assertions stand on.
+    let incompats: Vec<_> = params.incompats.incompat_map.iter().collect();
+    assert_eq!(
+        incompats.len(),
+        6,
+        "the example holds six incompatibilities"
+    );
+    let subjects: BTreeSet<_> = incompats
+        .iter()
+        .map(|(_id, incompat)| incompat.subject_id)
+        .collect();
+    assert!(subjects.len() > 1);
+    assert!(
+        incompats
+            .iter()
+            .any(|(_id, incompat)| incompat.slots.len() > 1)
+    );
+    assert!(
+        incompats
+            .iter()
+            .all(|(_id, incompat)| incompat.week_pattern_id.is_none())
+    );
+
+    assert_eq!(
+        global::<Vec<String>>(&globals, "incompat_names"),
+        incompats
+            .iter()
+            .map(|(_id, incompat)| incompat.name.clone())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<String>>(&globals, "incompat_subject_names"),
+        incompats
+            .iter()
+            .map(|(_id, incompat)| params
+                .subjects
+                .ordered_subject_list
+                .get(&incompat.subject_id)
+                .expect("an incompat names a live subject")
+                .parameters
+                .name
+                .clone())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<Vec<(String, chrono::NaiveTime, u32)>>>(&globals, "incompat_slots"),
+        incompats
+            .iter()
+            .map(|(_id, incompat)| incompat
+                .slots
+                .iter()
+                .map(|slot| (
+                    weekday_name(slot.start().weekday).to_owned(),
+                    *slot.start().start_time.inner(),
+                    slot.duration().get().get(),
+                ))
+                .collect::<Vec<_>>())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<u32>>(&globals, "minimum_free_slots"),
+        incompats
+            .iter()
+            .map(|(_id, incompat)| incompat.minimum_free_slots.get())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<bool>>(&globals, "week_pattern_present"),
+        incompats
+            .iter()
+            .map(|(_id, incompat)| incompat.week_pattern_id.is_some())
+            .collect::<Vec<_>>()
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// Constructing a `TimeSlot` validates what the model's own window type does
+///
+/// The whole point of a leaf value (§2.6): a script names the window it
+/// expects and compares it, and a window the model would refuse to build
+/// refuses to exist here too. The script builds the valid shapes — the plain
+/// window, and the one ending exactly at midnight, which the model's
+/// `SlotWithDuration::new` accepts — and asks for each refusal the model
+/// knows: a zero-minute duration, a start time with seconds or microseconds,
+/// and a window that crosses midnight into the next day.
+#[test]
+fn a_time_slot_refuses_what_the_model_refuses() {
+    run(include_str!("scripts/time_slot.py"), |_| Ok(()));
+}
+
 /// The real `rfd` chooser, on a machine with someone in front of it
 ///
 /// Everything above answers the dialogs itself, so this is the only test that

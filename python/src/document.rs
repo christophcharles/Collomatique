@@ -13,7 +13,7 @@ use collomatique_state_colloscopes::Data;
 use collomatique_storage::Caveat;
 
 use crate::collections::{
-    Assignments, Periods, Slot, Slots, Students, Subjects, Teachers, Week, WeekPattern,
+    Assignments, Incompats, Periods, Slot, Slots, Students, Subjects, Teachers, Week, WeekPattern,
     WeekPatterns, Weeks,
 };
 use crate::dialogs::FileRequest;
@@ -426,6 +426,25 @@ impl Document {
     #[getter]
     fn assignments(slf: Py<Self>) -> Assignments {
         Assignments::new(slf)
+    }
+
+    /// The schedule incompatibilities of the document
+    ///
+    /// Reached as `doc.incompats`, in id order:
+    ///
+    /// ```python
+    /// for incompat in doc.incompats:
+    ///     for slot in incompat.slots:
+    ///         ...
+    /// ```
+    ///
+    /// An incompatibility says when the students of a subject may be
+    /// unavailable: the busy windows of its list, at least `minimum_free_slots`
+    /// of which must stay free. The subject is deliberately not required to run
+    /// colles of its own.
+    #[getter]
+    fn incompats(slf: Py<Self>) -> Incompats {
+        Incompats::new(slf)
     }
 
     /// Whether a colle can happen in this slot on this week

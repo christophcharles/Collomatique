@@ -12,7 +12,8 @@
 //! not apply to a flat immutable value that only ever travels out of rust.
 //!
 //! This module opens with the periodicity family, which is what the subjects
-//! need. The rest of §2.6 lands with the collections that hand it out.
+//! need, and [TimeSlot], which the incompatibilities hand out. The rest of
+//! §2.6 lands with the collections that hand it out.
 
 use std::num::NonZeroU32;
 
@@ -32,9 +33,9 @@ use collomatique_state_colloscopes::{NonEmptyRangeInclusive, SubjectPeriodicity}
 ///
 /// The days are in the model's own order, monday first, which is the order the
 /// application draws its grid in.
-// The days are only ever read out of a document, so nothing extracts one back
-// from python yet; the write surface is what will want that.
-#[pyclass(module = "collomatique", frozen, eq, hash, skip_from_py_object)]
+// The days travel both ways already: a read hands the member out, and a
+// [TimeSlot]'s construction takes one back in.
+#[pyclass(module = "collomatique", frozen, eq, hash, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Weekday {
     #[pyo3(name = "MONDAY")]
@@ -68,6 +69,24 @@ impl Weekday {
             chrono::Weekday::Fri => Weekday::Friday,
             chrono::Weekday::Sat => Weekday::Saturday,
             chrono::Weekday::Sun => Weekday::Sunday,
+        }
+    }
+
+    /// The model day for one python day
+    ///
+    /// The reverse of [from_model], written as a match for the same reason: a
+    /// new day over there is a compile error here. A leaf value's construction
+    /// is the first thing that takes a day back in; the write surface will be
+    /// the second.
+    pub(crate) fn to_model(self) -> collomatique_time::Weekday {
+        match self {
+            Weekday::Monday => collomatique_time::Weekday(chrono::Weekday::Mon),
+            Weekday::Tuesday => collomatique_time::Weekday(chrono::Weekday::Tue),
+            Weekday::Wednesday => collomatique_time::Weekday(chrono::Weekday::Wed),
+            Weekday::Thursday => collomatique_time::Weekday(chrono::Weekday::Thu),
+            Weekday::Friday => collomatique_time::Weekday(chrono::Weekday::Fri),
+            Weekday::Saturday => collomatique_time::Weekday(chrono::Weekday::Sat),
+            Weekday::Sunday => collomatique_time::Weekday(chrono::Weekday::Sun),
         }
     }
 
@@ -476,6 +495,112 @@ pub(crate) fn periodicity(py: Python<'_>, periodicity: &SubjectPeriodicity) -> P
     })
 }
 
+/// A busy window: a day, a start time and a duration
+///
+/// The slots of an incompatibility (`docs/python/handle_api.md` §3.9) read as
+/// these values — « monday 12:00, one hour » — and a script that wants to name
+/// the same window back builds one:
+///
+/// ```python
+/// clm.TimeSlot(clm.Weekday.MONDAY, datetime.time(12, 0), 60)
+/// ```
+///
+/// Construction validates what `SlotWithDuration::new` validates
+/// (`collomatique_time`, the model's own type for this shape): the start time
+/// must be a whole minute, the duration at least one minute, and the window
+/// must not cross midnight into the next day — a window ending exactly at
+/// midnight is fine. A window that refuses to exist raises `ValueError`.
+///
+/// It opts into extraction like [WeekBlock]: step 3's dataclasses will hold
+/// these values in their fields, and the write surface will pass them back in.
+#[pyclass(module = "collomatique", frozen, eq, hash, from_py_object)]
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct TimeSlot {
+    weekday: Weekday,
+    start_time: chrono::NaiveTime,
+    duration: NonZeroU32,
+}
+
+#[pymethods]
+impl TimeSlot {
+    #[new]
+    fn new(weekday: Weekday, start_time: chrono::NaiveTime, duration: u32) -> PyResult<TimeSlot> {
+        // The model's own three checks, in the model's own order: a whole
+        // minute to start, at least one minute of duration, and no crossing of
+        // the midnight boundary.
+        let start_time = collomatique_time::WholeMinuteTime::new(start_time).ok_or_else(|| {
+            PyValueError::new_err(
+                "a TimeSlot's start_time must be a whole minute, with no seconds \
+                     or microseconds",
+            )
+        })?;
+        let duration = at_least_one("a TimeSlot's duration", duration)?;
+        let start = collomatique_time::SlotStart {
+            weekday: weekday.to_model(),
+            start_time,
+        };
+        let _ = collomatique_time::SlotWithDuration::new(
+            start,
+            collomatique_time::NonZeroMinutes::from(duration),
+        )
+        .ok_or_else(|| {
+            PyValueError::new_err("a TimeSlot cannot cross midnight into the next day")
+        })?;
+
+        Ok(TimeSlot {
+            weekday,
+            start_time: *start_time.inner(),
+            duration,
+        })
+    }
+
+    #[classattr]
+    #[allow(non_upper_case_globals)]
+    const __match_args__: (&'static str, &'static str, &'static str) =
+        ("weekday", "start_time", "duration");
+
+    /// The day of the week this window falls on
+    #[getter]
+    fn weekday(&self) -> Weekday {
+        self.weekday
+    }
+
+    /// The time of day the window starts, as a `datetime.time`
+    ///
+    /// Whole minutes: the model stores the time with minute precision, so the
+    /// seconds and the microseconds are always zero.
+    #[getter]
+    fn start_time(&self) -> chrono::NaiveTime {
+        self.start_time
+    }
+
+    /// How long the window lasts, in minutes, at least one
+    #[getter]
+    fn duration(&self) -> u32 {
+        self.duration.get()
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "TimeSlot(weekday={}, start_time={}, duration={})",
+            self.weekday.english(),
+            self.start_time.format("%H:%M"),
+            self.duration.get(),
+        )
+    }
+}
+
+impl TimeSlot {
+    /// The python window for one model window
+    pub(crate) fn from_model(slot: &collomatique_time::SlotWithDuration) -> TimeSlot {
+        TimeSlot {
+            weekday: Weekday::from_model(slot.start().weekday),
+            start_time: *slot.start().start_time.inner(),
+            duration: slot.duration().get(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::Weekday;
@@ -507,6 +632,32 @@ mod tests {
             );
         }
     }
+
+    /// Every day converts back to its own model day, and to no other
+    ///
+    /// The reverse of the conversion above, pinned the same way: a [TimeSlot]'s
+    /// construction is the first thing that asks for it, and a day swapped for
+    /// its neighbour would make a window validate on the wrong day.
+    #[test]
+    fn every_day_converts_back_to_its_own_member() {
+        let days = [
+            (Weekday::Monday, chrono::Weekday::Mon, "monday"),
+            (Weekday::Tuesday, chrono::Weekday::Tue, "tuesday"),
+            (Weekday::Wednesday, chrono::Weekday::Wed, "wednesday"),
+            (Weekday::Thursday, chrono::Weekday::Thu, "thursday"),
+            (Weekday::Friday, chrono::Weekday::Fri, "friday"),
+            (Weekday::Saturday, chrono::Weekday::Sat, "saturday"),
+            (Weekday::Sunday, chrono::Weekday::Sun, "sunday"),
+        ];
+
+        for (day, expected, name) in days {
+            let converted = day.to_model();
+            assert!(
+                converted.into_inner() == expected,
+                "{name} should convert to itself"
+            );
+        }
+    }
 }
 
 /// Adds the leaf value classes to the module
@@ -518,5 +669,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<OncePerBlock>()?;
     m.add_class::<CountInYear>()?;
     m.add_class::<CustomBlocks>()?;
+    m.add_class::<TimeSlot>()?;
     Ok(())
 }
