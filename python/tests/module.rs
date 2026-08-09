@@ -6,7 +6,8 @@
 //! script's globals, so the assertions stay here, where a failure says
 //! something useful.
 
-use std::collections::VecDeque;
+use std::collections::{BTreeSet, VecDeque};
+use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, Once};
 
@@ -1066,6 +1067,392 @@ fn a_removed_period_makes_its_handles_stale() {
                     ),
                 )
                 .expect("the last period of the example is removable");
+        },
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// The subjects read back, with their interrogation parameters
+///
+/// The script walks `doc.subjects` and leaves what it saw; rust compares it with
+/// the same document read straight from the model — the names and the user order
+/// they come in, and every field of the interrogation parameters for the
+/// subjects that hold them.
+///
+/// The example is worth reading here because it carries both shapes: subjects
+/// that run colles, and two that only take up room in the timetable and answer
+/// `None`. What it does not carry is any subject skipping a period, or three of
+/// the four periodicities — those are
+/// [the_four_periodicities_read_back_value_by_value]'s document.
+#[test]
+fn the_subjects_read_back_with_their_interrogations() {
+    let dir = workspace("subjects");
+    let source = example_copy(&dir, "source.collomatique");
+
+    let globals = run(include_str!("scripts/subjects.py"), |globals| {
+        globals.set_item("source", &source)?;
+        Ok(())
+    });
+
+    let data = reload(&source);
+    let subjects: Vec<_> = data
+        .get_inner_data()
+        .params
+        .subjects
+        .ordered_subject_list
+        .iter()
+        .map(|(_id, subject)| subject.clone())
+        .collect();
+
+    // The example is only worth reading if it has something to say: several
+    // subjects, and both shapes among them.
+    assert!(subjects.len() > 1);
+    let with_colles: Vec<_> = subjects
+        .iter()
+        .filter_map(|subject| subject.parameters.interrogation_parameters.as_ref())
+        .collect();
+    assert!(!with_colles.is_empty());
+    assert!(with_colles.len() < subjects.len());
+
+    assert_eq!(
+        global::<Vec<usize>>(&globals, "subject_indices"),
+        (0..subjects.len()).collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<String>>(&globals, "subject_names"),
+        subjects
+            .iter()
+            .map(|subject| subject.parameters.name.clone())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<bool>>(&globals, "interrogation_present"),
+        subjects
+            .iter()
+            .map(|subject| subject.parameters.interrogation_parameters.is_some())
+            .collect::<Vec<_>>()
+    );
+
+    let bounds = |range: &collomatique_state_colloscopes::NonEmptyRangeInclusive<NonZeroU32>| {
+        (range.start().get(), range.end().get())
+    };
+    assert_eq!(
+        global::<Vec<(u32, u32)>>(&globals, "students_per_group"),
+        with_colles
+            .iter()
+            .map(|params| bounds(&params.students_per_group))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<(u32, u32)>>(&globals, "groups_per_interrogation"),
+        with_colles
+            .iter()
+            .map(|params| bounds(&params.groups_per_interrogation))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<u32>>(&globals, "durations"),
+        with_colles
+            .iter()
+            .map(|params| params.duration.get().get())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<bool>>(&globals, "take_duration_into_account"),
+        with_colles
+            .iter()
+            .map(|params| params.take_duration_into_account)
+            .collect::<Vec<_>>()
+    );
+
+    // Which class each periodicity became. The example only ever uses two of the
+    // four, which is why the other two need a document of their own.
+    let expected_classes: Vec<_> = with_colles
+        .iter()
+        .map(|params| {
+            use collomatique_state_colloscopes::SubjectPeriodicity as Model;
+            match params.periodicity {
+                Model::ExactlyPeriodic { .. } => "EveryNWeeks",
+                Model::OnceForEveryBlockOfWeeks { .. } => "OncePerBlock",
+                Model::AmountInYear { .. } => "CountInYear",
+                Model::AmountForEveryArbitraryBlock { .. } => "CustomBlocks",
+            }
+        })
+        .collect();
+    assert_eq!(
+        global::<Vec<String>>(&globals, "periodicity_class_names"),
+        expected_classes
+    );
+
+    let period_ids: Vec<_> = data.get_inner_data().params.periods.period_ids().collect();
+    assert_eq!(
+        global::<Vec<Vec<usize>>>(&globals, "excluded_period_indices"),
+        subjects
+            .iter()
+            .map(|subject| {
+                let mut indices: Vec<_> = subject
+                    .excluded_periods
+                    .iter()
+                    .map(|period| {
+                        period_ids
+                            .iter()
+                            .position(|id| id == period)
+                            .expect("an excluded period is a live one")
+                    })
+                    .collect();
+                indices.sort();
+                indices
+            })
+            .collect::<Vec<_>>()
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// A `(min, max)` the model stores as a range that counts from one
+fn nonzero_range(
+    (min, max): (u32, u32),
+) -> collomatique_state_colloscopes::NonEmptyRangeInclusive<NonZeroU32> {
+    let bound = |value: u32| NonZeroU32::new(value).expect("the fixtures count from one");
+    collomatique_state_colloscopes::NonEmptyRangeInclusive::new(bound(min)..=bound(max))
+        .expect("the fixtures' ranges are non-empty")
+}
+
+/// A `(min, max)` the model stores as a range that may start at zero
+fn plain_range(
+    (min, max): (u32, u32),
+) -> collomatique_state_colloscopes::NonEmptyRangeInclusive<u32> {
+    collomatique_state_colloscopes::NonEmptyRangeInclusive::new(min..=max)
+        .expect("the fixtures' ranges are non-empty")
+}
+
+/// One subject of the periodicity fixture
+///
+/// It takes every field rather than starting from a default, because the point
+/// of the fixture is that no two subjects share a value: a conversion reading the
+/// wrong field would still line up on a document built out of defaults.
+fn periodicity_subject(
+    name: &str,
+    students_per_group: (u32, u32),
+    groups_per_interrogation: (u32, u32),
+    duration: u32,
+    take_duration_into_account: bool,
+    periodicity: collomatique_state_colloscopes::SubjectPeriodicity,
+    excluded_periods: BTreeSet<collomatique_state_colloscopes::PeriodId>,
+) -> collomatique_state_colloscopes::Subject {
+    use collomatique_state_colloscopes::{
+        Subject, SubjectInterrogationParameters, SubjectParameters,
+    };
+
+    Subject {
+        parameters: SubjectParameters {
+            name: name.to_owned(),
+            interrogation_parameters: Some(SubjectInterrogationParameters {
+                students_per_group: nonzero_range(students_per_group),
+                groups_per_interrogation: nonzero_range(groups_per_interrogation),
+                duration: collomatique_time::NonZeroMinutes::new(duration)
+                    .expect("the fixtures' interrogations last a while"),
+                take_duration_into_account,
+                periodicity,
+            }),
+        },
+        excluded_periods,
+    }
+}
+
+/// A document written here rather than copied, holding all four periodicities
+///
+/// The example uses two of the four and excludes no period from any subject, so
+/// the fourfold read needs a document of its own. It is built as an `InnerData`
+/// through the sealed types' own constructors and passed through
+/// `Data::from_inner_data`, so a fixture that breaks an invariant fails here
+/// rather than halfway through the script
+/// (`docs/python/handle_api.md` §6.2).
+fn periodicity_document(path: &Path) {
+    use collomatique_state_colloscopes::ids::Id as _;
+    use collomatique_state_colloscopes::subjects::{Subjects, WeekBlock};
+    use collomatique_state_colloscopes::{
+        Data, InnerData, PeriodId, SubjectId, SubjectPeriodicity,
+    };
+
+    // Ids nothing else in this document issues: it is written by hand from end
+    // to end, so there is no issuer to keep in step with.
+    let period = |n: u64| unsafe { PeriodId::new(n) };
+    let periods = vec![period(1), period(2)];
+
+    let subjects = vec![
+        (
+            unsafe { SubjectId::new(11) },
+            periodicity_subject(
+                "Périodique",
+                (1, 1),
+                (2, 4),
+                45,
+                false,
+                SubjectPeriodicity::ExactlyPeriodic {
+                    periodicity_in_weeks: NonZeroU32::new(3).expect("three is not zero"),
+                },
+                BTreeSet::new(),
+            ),
+        ),
+        (
+            unsafe { SubjectId::new(12) },
+            periodicity_subject(
+                "Par bloc",
+                (2, 3),
+                (1, 1),
+                60,
+                true,
+                SubjectPeriodicity::OnceForEveryBlockOfWeeks {
+                    weeks_per_block: NonZeroU32::new(4).expect("four is not zero"),
+                    minimum_week_separation: NonZeroU32::new(2).expect("two is not zero"),
+                },
+                // The one subject that skips a period, so the frozenset of
+                // handles has something in it.
+                BTreeSet::from([period(2)]),
+            ),
+        ),
+        (
+            unsafe { SubjectId::new(13) },
+            periodicity_subject(
+                "Dans l'année",
+                (3, 3),
+                (1, 2),
+                30,
+                true,
+                SubjectPeriodicity::AmountInYear {
+                    interrogation_count_in_year: plain_range((2, 5)),
+                    minimum_week_separation: 0,
+                },
+                BTreeSet::new(),
+            ),
+        ),
+        (
+            unsafe { SubjectId::new(14) },
+            periodicity_subject(
+                "Blocs sur mesure",
+                (2, 2),
+                (1, 1),
+                90,
+                false,
+                SubjectPeriodicity::AmountForEveryArbitraryBlock {
+                    blocks: vec![
+                        WeekBlock {
+                            delay_in_weeks: 0,
+                            size_in_weeks: NonZeroU32::new(2).expect("two is not zero"),
+                            interrogation_count_in_block: plain_range((1, 1)),
+                        },
+                        WeekBlock {
+                            delay_in_weeks: 3,
+                            size_in_weeks: NonZeroU32::new(4).expect("four is not zero"),
+                            interrogation_count_in_block: plain_range((0, 2)),
+                        },
+                    ],
+                    minimum_week_separation: 1,
+                },
+                BTreeSet::new(),
+            ),
+        ),
+    ];
+
+    let mut inner_data = InnerData::default();
+    inner_data.params.periods =
+        collomatique_state_colloscopes::periods::Periods::from_ordered_ids(None, periods)
+            .expect("the fixture names each period once");
+    inner_data.params.subjects = Subjects {
+        ordered_subject_list: subjects
+            .try_into()
+            .expect("the fixture names each subject once"),
+    };
+
+    let data = Data::from_inner_data(inner_data).expect("the fixture should be a valid document");
+    let content = collomatique_storage::serialize_data(data.get_inner_data())
+        .expect("the fixture's ids are far below the file-format ceiling");
+    std::fs::write(path, content).expect("the fixture should be writable");
+}
+
+/// The four periodicities read back, value by value
+///
+/// Everything here is the script's, because it is all python-facing: the four
+/// classes, the ranges that are plain tuples, the leaf values a script builds to
+/// compare against, and the `ValueError` construction raises on what the model
+/// would refuse. Rust's half is the document — the example holds two of the four
+/// periodicities and excludes no period, so the other two and the exclusion are
+/// written here.
+#[test]
+fn the_four_periodicities_read_back_value_by_value() {
+    let dir = workspace("periodicities");
+    let source = dir.join("periodicities.collomatique");
+    periodicity_document(&source);
+
+    run(include_str!("scripts/periodicities.py"), |globals| {
+        globals.set_item("source", &source)?;
+        Ok(())
+    });
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// A subject's colles go, then the subject does, and each takes its own view down
+///
+/// Three stages, two mutations, because the `Interrogation` sub-view has two
+/// ways of dying and they mean different things: the subject stopped holding
+/// interrogations, or the subject is gone. The first leaves the handle perfectly
+/// alive — `subject.interrogation` simply answers `None` from then on — and only
+/// the second takes it with it.
+///
+/// The mutations come from rust: the read surface ships no writes of its own, so
+/// the ops layer applies them between the stages.
+#[test]
+fn switching_a_subject_off_then_removing_it_stales_the_view_then_the_handle() {
+    let dir = workspace("subject-stale");
+    let source = example_copy(&dir, "source.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same subject the script is holding. The
+    // last one that runs colles, so what is removed sits after the survivor and
+    // nothing renumbers under it.
+    let data = reload(&source);
+    let (doomed, doomed_params) = data
+        .get_inner_data()
+        .params
+        .subjects
+        .ordered_subject_list
+        .iter()
+        .filter(|(_id, subject)| subject.parameters.interrogation_parameters.is_some())
+        .map(|(id, subject)| (id, subject.parameters.clone()))
+        .last()
+        .expect("the example has subjects that run colles");
+
+    let mut without_colles = doomed_params;
+    without_colles.interrogation_parameters = None;
+
+    let mut stage = 0;
+    run_stages(
+        &[
+            include_str!("scripts/subject_alive.py"),
+            include_str!("scripts/subject_without_colles.py"),
+            include_str!("scripts/subject_gone.py"),
+        ],
+        |globals| {
+            globals.set_item("source", &source)?;
+            Ok(())
+        },
+        |py, globals| {
+            let op = match stage {
+                0 => collomatique_ops::SubjectsUpdateOp::UpdateSubject(
+                    doomed,
+                    without_colles.clone(),
+                ),
+                _ => collomatique_ops::SubjectsUpdateOp::DeleteSubject(doomed),
+            };
+            stage += 1;
+
+            document_of(globals)
+                .borrow_mut(py)
+                .update(py, collomatique_ops::UpdateOp::Subjects(op))
+                .expect("the example's last subject with colles is removable");
         },
     );
 

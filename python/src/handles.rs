@@ -157,6 +157,19 @@ pub(crate) fn no_such(kind: &str, key: &Bound<'_, PyAny>) -> PyErr {
     PyKeyError::new_err(format!("{named} names no {kind} in this document"))
 }
 
+/// A string as python would print it, for the reprs that name an entity
+///
+/// `<Subject #3 'Maths'>` — python's own quoting, so a name holding a quote of
+/// its own comes out readable rather than merely escaped the rust way. The
+/// fallback exists because a repr never raises; reaching it takes a python that
+/// cannot repr one of its own strings.
+pub(crate) fn quoted(py: Python<'_>, text: &str) -> String {
+    pyo3::types::PyString::new(py, text)
+        .repr()
+        .map(|repr| repr.to_string())
+        .unwrap_or_else(|_| format!("{text:?}"))
+}
+
 /// Declares a collection's iterator class
 ///
 /// Iteration snapshots the ids when it starts, in the collection's order, and

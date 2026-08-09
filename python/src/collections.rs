@@ -10,9 +10,11 @@
 //! the writes it makes through it.
 
 pub mod periods;
+pub mod subjects;
 pub mod weeks;
 
 pub use periods::{Period, Periods};
+pub use subjects::{Interrogation, Subject, Subjects};
 pub use weeks::{Week, Weeks};
 
 use pyo3::prelude::*;
@@ -26,5 +28,8 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Period>()?;
     m.add_class::<Weeks>()?;
     m.add_class::<Week>()?;
+    m.add_class::<Subjects>()?;
+    m.add_class::<Subject>()?;
+    m.add_class::<Interrogation>()?;
     Ok(())
 }

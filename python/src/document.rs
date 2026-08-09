@@ -12,7 +12,7 @@ use collomatique_state::traits::Manager;
 use collomatique_state_colloscopes::Data;
 use collomatique_storage::Caveat;
 
-use crate::collections::{Periods, Weeks};
+use crate::collections::{Periods, Subjects, Weeks};
 use crate::dialogs::FileRequest;
 use crate::errors::{
     Cancelled, CaveatedOverwrite, Error, IdCeilingExceeded, LoadError, NoDocument, NoOrigin,
@@ -304,6 +304,15 @@ impl Document {
     #[getter]
     fn weeks(slf: Py<Self>) -> Weeks {
         Weeks::new(slf)
+    }
+
+    /// The subjects of the document, in user order
+    ///
+    /// The order the application shows them in, which is data of its own:
+    /// `subject.index` is the position in it.
+    #[getter]
+    fn subjects(slf: Py<Self>) -> Subjects {
+        Subjects::new(slf)
     }
 
     /// Groups every write in a block into one undo slot

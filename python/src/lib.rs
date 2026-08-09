@@ -17,6 +17,7 @@ pub mod host;
 pub mod ids;
 pub mod results;
 pub mod transaction;
+pub mod values;
 
 pub use dialogs::{Dialogs, FileRequest, set_dialogs};
 pub use document::Document;
@@ -65,6 +66,7 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     host::register(m)?;
     ids::register(m)?;
     results::register(m)?;
+    values::register(m)?;
 
     m.add_class::<Document>()?;
     // Registered so `isinstance` and `repr` say something useful, like the
