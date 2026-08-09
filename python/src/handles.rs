@@ -114,13 +114,14 @@ pub(crate) trait Handle: Sized {
     ///
     /// `what` is what the handle could read about itself, or `None` when it is
     /// stale; a repr is for logging, and logging a dead handle is exactly when
-    /// it matters that it says so.
+    /// it matters that it says so. The dead marker is french, like the rest of
+    /// the module's rendered text.
     fn repr_text(&self, what: Option<String>) -> String {
         use collomatique_state::ids::Id as _;
 
         match what {
             Some(what) => format!("<{} #{} {what}>", Self::CLASS, self.raw_id().inner()),
-            None => format!("<{} #{} (stale)>", Self::CLASS, self.raw_id().inner()),
+            None => format!("<{} #{} (périmé)>", Self::CLASS, self.raw_id().inner()),
         }
     }
 }

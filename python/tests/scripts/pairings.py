@@ -118,4 +118,4 @@ first_side_repr = repr(rule_list[0].antecedent)
 assert first_repr.startswith("<PairingRule #")
 assert "⟹" in first_repr
 assert first_side_repr.startswith("<PairingRuleSide #")
-assert "(antecedent)" in first_side_repr
+assert "(antécédent)" in first_side_repr

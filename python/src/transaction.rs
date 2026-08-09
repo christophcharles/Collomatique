@@ -25,12 +25,12 @@ enum Stage {
 }
 
 impl Stage {
-    /// What [Transaction::__repr__] shows
+    /// What [Transaction::__repr__] shows, in french
     fn name(&self) -> &'static str {
         match self {
-            Stage::Fresh => "not entered",
-            Stage::Open { .. } => "open",
-            Stage::Closed => "closed",
+            Stage::Fresh => "non entrée",
+            Stage::Open { .. } => "ouverte",
+            Stage::Closed => "fermée",
         }
     }
 }

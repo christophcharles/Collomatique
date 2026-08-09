@@ -39,9 +39,9 @@ assert len({doomed_antecedent, doomed_consequent}) == 2
 
 # Neither repr raises, and both say so.
 assert repr(doomed).startswith("<PairingRule #")
-assert repr(doomed).endswith("(stale)>")
+assert repr(doomed).endswith("(périmé)>")
 assert repr(doomed_antecedent).startswith("<PairingRuleSide #")
-assert repr(doomed_antecedent).endswith("(stale)>")
+assert repr(doomed_antecedent).endswith("(périmé)>")
 
 # The mapping conventions, for both an id and a handle that name nothing.
 assert doc.pairings.get(doomed_id) is None

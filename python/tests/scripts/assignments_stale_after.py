@@ -16,7 +16,7 @@ else:
 # The stale handle the address named says so: `.id`, `==` and `hash` never
 # touch the state and keep working, and the repr names the death instead of
 # raising.
-assert "(stale)" in repr(doomed_subject)
+assert "(périmé)" in repr(doomed_subject)
 assert doomed_subject == doomed_subject
 assert hash(doomed_subject) == hash(doomed_subject)
 

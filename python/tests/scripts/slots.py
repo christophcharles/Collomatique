@@ -201,13 +201,21 @@ except collomatique.StaleHandleError as error:
 else:
     raise AssertionError("a slot argument of another document must raise")
 
-# The reprs name the slot the way a log wants to read it: the day and the time,
-# english like the rest of the api's reprs. (The application names a slot
-# « jeudi 13h00 », but a repr that spelled the time that way would be the only
-# french thing in the module's reprs.)
-assert repr(slot_list[0]).startswith("<Slot #")
+# The reprs name the slot the way the application does: the day in french —
+# « Jeudi » — and the time.
+first_repr = repr(slot_list[0])
+assert first_repr.startswith("<Slot #")
+assert {
+    collomatique.Weekday.MONDAY: "Lundi",
+    collomatique.Weekday.TUESDAY: "Mardi",
+    collomatique.Weekday.WEDNESDAY: "Mercredi",
+    collomatique.Weekday.THURSDAY: "Jeudi",
+    collomatique.Weekday.FRIDAY: "Vendredi",
+    collomatique.Weekday.SATURDAY: "Samedi",
+    collomatique.Weekday.SUNDAY: "Dimanche",
+}[slot_list[0].weekday] in first_repr
 assert (
     "%02d:%02d" % (slot_start_times[0].hour, slot_start_times[0].minute)
-    in repr(slot_list[0])
+    in first_repr
 )
 assert repr(slots) == "<collomatique.Slots count=%d>" % len(slot_list)

@@ -103,8 +103,10 @@ always sees the current state, through undo, redo and transactions alike.
   not blow up when an entity dies.
 - Ordering handles raises `TypeError`. Ids order; handles identify.
 - `repr` reads the current state when it can and never raises:
-  `<Subject #3 'Maths'>` alive, `<Subject #3 (stale)>` dead. Reprs exist for
-  logging, and logging a dead handle is exactly when it matters.
+  `<Subject #3 'Maths'>` alive, `<Subject #3 (périmé)>` dead. Reprs exist for
+  logging, and logging a dead handle is exactly when it matters. The rendered
+  words of every repr are french, like the rest of the module's text; the
+  class names and the attribute names stay english.
 - `.id` returns the id — the one attribute that works on a stale handle, since
   it does not read the state.
 
@@ -718,7 +720,7 @@ ships no removes. The ops layer has them all, so the harness grows one helper:
 one namespace and calls a Rust closure between stages. Stage 1 leaves a handle
 in the globals; the closure extracts the `Py<Document>` and applies a real
 `UpdateOp` remove through `Document::update`; stage 2 asserts
-`StaleHandleError` on attribute access, `repr` saying `(stale)`, `==`/`hash`
+`StaleHandleError` on attribute access, `repr` saying `(périmé)`, `==`/`hash`
 still working, and the mapping conventions (`get` → `None`, `in` → `False`,
 `[...]` → `KeyError`). This is the mechanism's proper pin, and each later
 commit reuses it for its own entity kind where the staleness has structure

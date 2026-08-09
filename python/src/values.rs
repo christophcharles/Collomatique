@@ -90,21 +90,13 @@ impl Weekday {
         }
     }
 
-    /// The day's english name, for the reprs that name a day
+    /// The day's french name, capitalized — « Lundi »
     ///
-    /// The model's own `Display` is french, since the application it was written
-    /// for is; the reprs of this api are english throughout, so the names are
-    /// spelled out again here rather than borrowed.
-    pub(crate) fn english(self) -> &'static str {
-        match self {
-            Weekday::Monday => "Monday",
-            Weekday::Tuesday => "Tuesday",
-            Weekday::Wednesday => "Wednesday",
-            Weekday::Thursday => "Thursday",
-            Weekday::Friday => "Friday",
-            Weekday::Saturday => "Saturday",
-            Weekday::Sunday => "Sunday",
-        }
+    /// The model's own `capitalize` (`collomatique_time`) is what the
+    /// application displays, so the reprs that name a day use the same word
+    /// the user reads there.
+    pub(crate) fn french(self) -> &'static str {
+        self.to_model().capitalize()
     }
 }
 
@@ -583,7 +575,7 @@ impl TimeSlot {
     fn __repr__(&self) -> String {
         format!(
             "TimeSlot(weekday={}, start_time={}, duration={})",
-            self.weekday.english(),
+            self.weekday.french(),
             self.start_time.format("%H:%M"),
             self.duration.get(),
         )
@@ -609,24 +601,26 @@ mod tests {
     ///
     /// The documents the scripts read only ever run colles from monday to
     /// friday, so a saturday swapped with a sunday would slip through them. The
-    /// seven pairs are written out here, where no fixture is needed.
+    /// seven pairs are written out here, where no fixture is needed. The french
+    /// name pinned is the model's own capitalized one, which is what a repr
+    /// shows.
     #[test]
     fn every_day_converts_to_its_own_member() {
         let days = [
-            (chrono::Weekday::Mon, Weekday::Monday, "monday"),
-            (chrono::Weekday::Tue, Weekday::Tuesday, "tuesday"),
-            (chrono::Weekday::Wed, Weekday::Wednesday, "wednesday"),
-            (chrono::Weekday::Thu, Weekday::Thursday, "thursday"),
-            (chrono::Weekday::Fri, Weekday::Friday, "friday"),
-            (chrono::Weekday::Sat, Weekday::Saturday, "saturday"),
-            (chrono::Weekday::Sun, Weekday::Sunday, "sunday"),
+            (chrono::Weekday::Mon, Weekday::Monday, "Lundi"),
+            (chrono::Weekday::Tue, Weekday::Tuesday, "Mardi"),
+            (chrono::Weekday::Wed, Weekday::Wednesday, "Mercredi"),
+            (chrono::Weekday::Thu, Weekday::Thursday, "Jeudi"),
+            (chrono::Weekday::Fri, Weekday::Friday, "Vendredi"),
+            (chrono::Weekday::Sat, Weekday::Saturday, "Samedi"),
+            (chrono::Weekday::Sun, Weekday::Sunday, "Dimanche"),
         ];
 
         for (model, expected, name) in days {
             let converted = Weekday::from_model(collomatique_time::Weekday(model));
             assert!(converted == expected, "{name} should convert to itself");
             assert_eq!(
-                converted.english().to_lowercase(),
+                converted.french(),
                 name,
                 "{name} should be named after itself"
             );
@@ -641,13 +635,13 @@ mod tests {
     #[test]
     fn every_day_converts_back_to_its_own_member() {
         let days = [
-            (Weekday::Monday, chrono::Weekday::Mon, "monday"),
-            (Weekday::Tuesday, chrono::Weekday::Tue, "tuesday"),
-            (Weekday::Wednesday, chrono::Weekday::Wed, "wednesday"),
-            (Weekday::Thursday, chrono::Weekday::Thu, "thursday"),
-            (Weekday::Friday, chrono::Weekday::Fri, "friday"),
-            (Weekday::Saturday, chrono::Weekday::Sat, "saturday"),
-            (Weekday::Sunday, chrono::Weekday::Sun, "sunday"),
+            (Weekday::Monday, chrono::Weekday::Mon, "Lundi"),
+            (Weekday::Tuesday, chrono::Weekday::Tue, "Mardi"),
+            (Weekday::Wednesday, chrono::Weekday::Wed, "Mercredi"),
+            (Weekday::Thursday, chrono::Weekday::Thu, "Jeudi"),
+            (Weekday::Friday, chrono::Weekday::Fri, "Vendredi"),
+            (Weekday::Saturday, chrono::Weekday::Sat, "Samedi"),
+            (Weekday::Sunday, chrono::Weekday::Sun, "Dimanche"),
         ];
 
         for (day, expected, name) in days {

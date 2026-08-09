@@ -39,9 +39,9 @@ for attribute in ("period", "index", "interrogations", "annotation", "monday"):
 # A repr never raises — logging a dead handle is exactly when it matters — and
 # it says the handle is dead.
 assert repr(doomed).startswith("<Period #")
-assert repr(doomed).endswith("(stale)>")
+assert repr(doomed).endswith("(périmé)>")
 assert repr(doomed_weeks[0]).startswith("<Week #")
-assert repr(doomed_weeks[0]).endswith("(stale)>")
+assert repr(doomed_weeks[0]).endswith("(périmé)>")
 
 # The mapping conventions, for both an id and a handle that name nothing.
 assert doc.periods.get(doomed_id) is None

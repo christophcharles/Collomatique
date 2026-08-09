@@ -298,14 +298,13 @@ impl Slot {
     }
 
     fn __repr__(&self, py: Python<'_>) -> String {
-        // Spelled out here rather than taken from the model's own `Display`,
-        // which is french: the reprs of this api are english throughout, and one
-        // handle printing « jeudi 13h00 » among them would read as an accident.
+        // The day is the model's own capitalized french name — « Jeudi » — the
+        // same word the application displays.
         let start = self.peek(py, |data| {
             data.params.slots.find_slot(self.id).map(|slot| {
                 format!(
                     "{} {}",
-                    Weekday::from_model(slot.start_time.weekday).english(),
+                    slot.start_time.weekday.capitalize(),
                     slot.start_time.start_time.inner().format("%H:%M"),
                 )
             })

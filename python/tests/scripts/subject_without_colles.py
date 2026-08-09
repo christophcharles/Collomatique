@@ -31,7 +31,7 @@ for attribute in (
 
 # A repr never raises, and says the view is dead.
 assert repr(doomed_view).startswith("<Interrogation #")
-assert repr(doomed_view).endswith("(stale)>")
+assert repr(doomed_view).endswith("(périmé)>")
 
 # What still works, because it never reads the state.
 assert doomed_view == doomed_view

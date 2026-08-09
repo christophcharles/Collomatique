@@ -56,8 +56,8 @@ match monday_noon:
     case _:
         raise AssertionError("TimeSlot should match on its three arguments")
 
-# The repr names the fields, english like the rest of the module's reprs.
-assert repr(monday_noon) == "TimeSlot(weekday=Monday, start_time=12:00, duration=60)"
+# The repr names the day the way the application does — « Lundi ».
+assert repr(monday_noon) == "TimeSlot(weekday=Lundi, start_time=12:00, duration=60)"
 
 # Construction validates what the model validates, and says so with `ValueError`
 # rather than building a window the document could never hold: a zero-minute

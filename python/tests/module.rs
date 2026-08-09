@@ -1032,7 +1032,7 @@ fn ids_compare_hash_and_order_but_do_nothing_else() {
 ///
 /// The second half is where the whole of §2.2 is pinned: `.id`, `==` and `hash`
 /// keep working because they never read the state, every reading attribute
-/// raises `StaleHandleError`, the repr says `(stale)` instead of raising, and
+/// raises `StaleHandleError`, the repr says `(périmé)` instead of raising, and
 /// the mapping conventions answer `None` / `False` / `KeyError`. The walk
 /// started before the removal is in there too, for the promise that iteration
 /// snapshots ids and mints handles as it goes.
@@ -3593,7 +3593,7 @@ fn the_pairing_rules_read_back_rule_by_rule() {
     assert_eq!(
         global::<String>(&globals, "first_side_repr"),
         format!(
-            "<PairingRuleSide #{} (antecedent) '{}'>",
+            "<PairingRuleSide #{} (antécédent) '{}'>",
             first_id.inner(),
             render_subject(&params.subjects, first.antecedent().subject_id)
                 .expect("the first rule's antecedent subject is live"),
@@ -3739,7 +3739,7 @@ fn the_slot_pairing_rules_read_back_rule_by_rule() {
     assert_eq!(
         global::<String>(&globals, "first_side_repr"),
         format!(
-            "<SlotPairingRuleSide #{} (antecedent) '{}'>",
+            "<SlotPairingRuleSide #{} (antécédent) '{}'>",
             first_id.inner(),
             render_slot_in_subject(&params.teachers, &params.slots, first.antecedent().slot_id)
                 .expect("the first rule's antecedent slot is live"),

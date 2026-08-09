@@ -272,7 +272,7 @@ impl PairingRule {
 /// the rule is marked *for* that subject's interrogation.
 ///
 /// The repr names the side and the subject it is about, the way the reprs of
-/// the handles name their entity; a view whose rule is gone prints `(stale)`.
+/// the handles name their entity; a view whose rule is gone prints `(périmé)`.
 #[pyclass(module = "collomatique", frozen)]
 pub struct PairingRuleSide {
     doc: Py<Document>,
@@ -390,15 +390,15 @@ impl PairingRuleSide {
                 side_word(self.side),
                 quoted(py, &name),
             ),
-            None => format!("<PairingRuleSide #{} (stale)>", self.id.inner()),
+            None => format!("<PairingRuleSide #{} (périmé)>", self.id.inner()),
         }
     }
 }
 
-/// The side as words, for the repr — « (antecedent) 'Sortilèges' »
+/// The side as words, for the repr — « (antécédent) 'Sortilèges' »
 fn side_word(side: RuleSide) -> &'static str {
     match side {
-        RuleSide::Antecedent => "antecedent",
-        RuleSide::Consequent => "consequent",
+        RuleSide::Antecedent => "antécédent",
+        RuleSide::Consequent => "conséquent",
     }
 }

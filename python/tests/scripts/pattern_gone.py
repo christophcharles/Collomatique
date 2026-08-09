@@ -27,7 +27,7 @@ for attribute in ("name", "excluded_weeks"):
 # A repr never raises — logging a dead handle is exactly when it matters — and it
 # says the handle is dead.
 assert repr(doomed).startswith("<WeekPattern #")
-assert repr(doomed).endswith("(stale)>")
+assert repr(doomed).endswith("(périmé)>")
 
 # The mapping conventions, for both an id and a handle that name nothing.
 assert doc.week_patterns.get(doomed_id) is None

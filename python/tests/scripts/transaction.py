@@ -108,7 +108,7 @@ with doc.transaction("preview") as t:
     t.cancel()
     assert doc.periods.first_week == start
     assert doc.can_undo is False
-    assert "(closed)" in repr(t)
+    assert "(fermée)" in repr(t)
 
     # The block keeps running, and this write is outside the transaction.
     doc.periods.set_first_week(second)
@@ -190,7 +190,7 @@ assert doc.can_undo is False
 
 never = doc.transaction("never entered")
 assert "never entered" in repr(never)
-assert "(not entered)" in repr(never)
+assert "(non entrée)" in repr(never)
 
 # It holds no block, so there is nothing to cancel — and saying so is better
 # than doing nothing quietly, which would hide a script that lost its place.
@@ -247,7 +247,7 @@ with empty:
 
 assert doc.can_undo is True
 assert doc.undo_name == empty_label
-assert "(closed)" in repr(empty)
+assert "(fermée)" in repr(empty)
 
 doc.undo()
 assert doc.periods.first_week == start

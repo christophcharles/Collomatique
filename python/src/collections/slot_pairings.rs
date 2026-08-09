@@ -281,7 +281,7 @@ impl SlotPairingRule {
 /// has that slot used.
 ///
 /// The repr names the side and the slot it is about, the way the application's
-/// own slot descriptions do; a view whose rule is gone prints `(stale)`.
+/// own slot descriptions do; a view whose rule is gone prints `(périmé)`.
 #[pyclass(module = "collomatique", frozen)]
 pub struct SlotPairingRuleSide {
     doc: Py<Document>,
@@ -410,16 +410,16 @@ impl SlotPairingRuleSide {
                 side_word(self.side),
                 quoted(py, &description),
             ),
-            None => format!("<SlotPairingRuleSide #{} (stale)>", self.id.inner()),
+            None => format!("<SlotPairingRuleSide #{} (périmé)>", self.id.inner()),
         }
     }
 }
 
-/// The side as words, for the repr — « (antecedent) 'Séverus Rogue - Lundi
+/// The side as words, for the repr — « (antécédent) 'Séverus Rogue - Lundi
 /// 14h00' »
 fn side_word(side: RuleSide) -> &'static str {
     match side {
-        RuleSide::Antecedent => "antecedent",
-        RuleSide::Consequent => "consequent",
+        RuleSide::Antecedent => "antécédent",
+        RuleSide::Consequent => "conséquent",
     }
 }

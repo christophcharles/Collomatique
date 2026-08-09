@@ -26,8 +26,8 @@ else:
 
 # Neither repr raises, and both say so.
 assert repr(doomed).startswith("<Subject #")
-assert repr(doomed).endswith("(stale)>")
-assert repr(doomed_view).endswith("(stale)>")
+assert repr(doomed).endswith("(périmé)>")
+assert repr(doomed_view).endswith("(périmé)>")
 
 # The id, `==` and `hash` never read the state, so they outlive the subject.
 assert doomed.id == doomed_id
