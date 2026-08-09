@@ -65,6 +65,13 @@ create_exception!(
 
 create_exception!(
     collomatique,
+    DialogUnavailable,
+    Error,
+    "A dialog was asked for on a machine that cannot show one."
+);
+
+create_exception!(
+    collomatique,
     IdCeilingExceeded,
     SaveError,
     "The document holds an id the file format cannot represent."

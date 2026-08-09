@@ -6,13 +6,14 @@
 //! script's globals, so the assertions stay here, where a failure says
 //! something useful.
 
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, Once};
 
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
-use collomatique_python::collomatique;
+use collomatique_python::{FileRequest, collomatique};
 use collomatique_state_colloscopes::Data;
 
 static INIT: Once = Once::new();
@@ -41,17 +42,38 @@ fn interpreter() {
 
 /// Runs `script` on its own, the way a script started from a shell runs
 fn run(script: &str, fill: impl FnOnce(&Bound<'_, PyDict>) -> PyResult<()>) -> Py<PyDict> {
-    run_hosted(script, None, fill)
+    run_in(script, None, None, fill)
 }
 
-/// Runs `script`, inside `host` or not, and hands back the globals it left
-///
-/// `fill` populates the namespace the script runs in, which is how a test hands
-/// it paths and other inputs. The host is installed for the run and cleared
-/// afterwards, so the scripts that check there is none still see none.
+/// Runs `script` inside `host`, as the gui's script editor does
 fn run_hosted(
     script: &str,
     host: Option<Arc<dyn collomatique_python::Host>>,
+    fill: impl FnOnce(&Bound<'_, PyDict>) -> PyResult<()>,
+) -> Py<PyDict> {
+    run_in(script, host, None, fill)
+}
+
+/// Runs `script` with `dialogs` answering its file choosers
+fn run_with_dialogs(
+    script: &str,
+    dialogs: Arc<dyn collomatique_python::Dialogs>,
+    fill: impl FnOnce(&Bound<'_, PyDict>) -> PyResult<()>,
+) -> Py<PyDict> {
+    run_in(script, None, Some(dialogs), fill)
+}
+
+/// Runs `script` in whatever surroundings it needs, and hands back the globals
+/// it left
+///
+/// `fill` populates the namespace the script runs in, which is how a test hands
+/// it paths and other inputs. The host and the dialogs are installed for the run
+/// and cleared afterwards, so the scripts that check there is no host still see
+/// none, and the one script that wants a real `rfd` still gets one.
+fn run_in(
+    script: &str,
+    host: Option<Arc<dyn collomatique_python::Host>>,
+    dialogs: Option<Arc<dyn collomatique_python::Dialogs>>,
     fill: impl FnOnce(&Bound<'_, PyDict>) -> PyResult<()>,
 ) -> Py<PyDict> {
     // A test that panicked left this poisoned; that test has already failed, and
@@ -62,6 +84,7 @@ fn run_hosted(
 
     interpreter();
     collomatique_python::set_host(host);
+    collomatique_python::set_dialogs(dialogs);
 
     let globals = Python::attach(|py| {
         let globals = PyDict::new(py);
@@ -77,6 +100,7 @@ fn run_hosted(
     });
 
     collomatique_python::set_host(None);
+    collomatique_python::set_dialogs(None);
 
     globals
 }
@@ -521,4 +545,194 @@ fn a_caveated_file_says_what_it_could_not_read() {
     assert_eq!(copy, rewritten);
 
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// Which of the three dialogs a script asked for
+#[derive(Debug, PartialEq, Eq)]
+enum Dialog {
+    Open,
+    Save,
+    Folder,
+}
+
+/// The desktop, for a test that cannot click a file chooser
+///
+/// It answers from a list written in the test, one entry per call and in order,
+/// and keeps every request — so the test says both what the script was given
+/// and what reached the backend on the way.
+struct FakeDialogs {
+    answers: Mutex<VecDeque<Result<Option<PathBuf>, String>>>,
+    asked: Mutex<Vec<(Dialog, FileRequest)>>,
+}
+
+impl FakeDialogs {
+    fn answering(
+        answers: impl IntoIterator<Item = Result<Option<PathBuf>, String>>,
+    ) -> FakeDialogs {
+        FakeDialogs {
+            answers: Mutex::new(answers.into_iter().collect()),
+            asked: Mutex::new(Vec::new()),
+        }
+    }
+
+    fn answer(&self, dialog: Dialog, request: &FileRequest) -> Result<Option<PathBuf>, String> {
+        self.asked.lock().unwrap().push((dialog, request.clone()));
+        self.answers
+            .lock()
+            .unwrap()
+            .pop_front()
+            .expect("the script should ask for exactly the dialogs the test answers")
+    }
+}
+
+impl collomatique_python::Dialogs for FakeDialogs {
+    fn open_file(&self, request: &FileRequest) -> Result<Option<PathBuf>, String> {
+        self.answer(Dialog::Open, request)
+    }
+
+    fn save_file(&self, request: &FileRequest) -> Result<Option<PathBuf>, String> {
+        self.answer(Dialog::Save, request)
+    }
+
+    fn pick_folder(&self, request: &FileRequest) -> Result<Option<PathBuf>, String> {
+        self.answer(Dialog::Folder, request)
+    }
+}
+
+/// The filters of a request, in a shape a test can write down
+fn filters_of(request: &FileRequest) -> Vec<(&str, Vec<&str>)> {
+    request
+        .filters
+        .iter()
+        .map(|(description, extensions)| {
+            (
+                description.as_str(),
+                extensions.iter().map(String::as_str).collect(),
+            )
+        })
+        .collect()
+}
+
+/// A script asks for files and folders, and is told what was chosen
+///
+/// The script checks what it was handed — a `pathlib.Path`, a `None` for a
+/// cancel, a `DialogUnavailable` for a machine that cannot show one — and rust
+/// checks what reached the backend, which is the half no script can see: that
+/// the title, the directory and the file name travel, and that the three ways
+/// of writing an extension all arrive as the bare one.
+///
+/// The paths are made up rather than created: nothing here touches the disk, and
+/// the fake desktop hands back whatever it is told to.
+#[test]
+fn a_script_asks_for_a_file_a_folder_and_a_place_to_write() {
+    let start_dir = std::env::temp_dir();
+    let chosen_file = start_dir.join("élèves.csv");
+    let saved_file = start_dir.join("sortie.csv");
+    let chosen_folder = start_dir.join("exports");
+    let refusal = "this machine has no desktop to draw on";
+
+    // One per call the script makes, in order. The call that raises `ValueError`
+    // is not among them: it is refused before the backend hears about it, which
+    // is what the count below says.
+    let dialogs = Arc::new(FakeDialogs::answering([
+        Ok(Some(chosen_file.clone())),
+        Ok(Some(saved_file.clone())),
+        Ok(Some(chosen_folder.clone())),
+        Ok(None),
+        Err(refusal.to_owned()),
+        Ok(None),
+    ]));
+
+    run_with_dialogs(
+        include_str!("scripts/dialogs.py"),
+        dialogs.clone(),
+        |globals| {
+            globals.set_item("start_dir", &start_dir)?;
+            globals.set_item("chosen_file", &chosen_file)?;
+            globals.set_item("saved_file", &saved_file)?;
+            globals.set_item("chosen_folder", &chosen_folder)?;
+            globals.set_item("refusal", refusal)?;
+            Ok(())
+        },
+    );
+
+    let asked = dialogs.asked.lock().expect("no dialog panicked");
+    let kinds: Vec<_> = asked.iter().map(|(dialog, _)| dialog).collect();
+    assert_eq!(
+        kinds,
+        [
+            &Dialog::Open,
+            &Dialog::Save,
+            &Dialog::Folder,
+            &Dialog::Open,
+            &Dialog::Open,
+            &Dialog::Folder
+        ]
+    );
+
+    // The whole of what an open dialog takes, `*.collomatique` included.
+    let (_, open) = &asked[0];
+    assert_eq!(open.title.as_deref(), Some("Ouvrir la liste des élèves"));
+    assert_eq!(
+        filters_of(open),
+        [
+            ("Fichiers collomatique", vec!["collomatique"]),
+            ("Tous les fichiers", vec!["*"]),
+        ]
+    );
+    assert_eq!(open.directory.as_deref(), Some(start_dir.as_path()));
+    assert_eq!(open.file_name, None);
+
+    // The name a save starts from, and the three spellings of one extension.
+    let (_, save) = &asked[1];
+    assert_eq!(save.file_name.as_deref(), Some("sortie.csv"));
+    assert_eq!(filters_of(save), [("Tableur", vec!["csv", "csv", "xlsx"])]);
+    assert_eq!(save.directory.as_deref(), Some(start_dir.as_path()));
+
+    // A folder has nothing to filter by, so the request carries no filter even
+    // though the same struct has room for one.
+    let (_, folder) = &asked[2];
+    assert_eq!(folder.title.as_deref(), Some("Choisir un dossier"));
+    assert_eq!(folder.directory.as_deref(), Some(start_dir.as_path()));
+    assert!(folder.filters.is_empty());
+
+    // The bare call asks for nothing in particular.
+    let (_, bare) = &asked[5];
+    assert_eq!(bare.title, None);
+    assert_eq!(bare.directory, None);
+    assert_eq!(bare.file_name, None);
+    assert!(bare.filters.is_empty());
+}
+
+/// The real `rfd` chooser, on a machine with someone in front of it
+///
+/// Everything above answers the dialogs itself, so this is the only test that
+/// says the `rfd` side works at all — that the runtime it builds is one `zbus`
+/// can spawn onto, and that the portal hands a path back. It cannot be answered
+/// by a test runner, hence the `#[ignore]`.
+#[test]
+#[ignore = "opens a real file chooser: run with --ignored --nocapture, and answer it"]
+fn a_real_file_chooser_opens() {
+    let globals = run(include_str!("scripts/real_dialog.py"), |_| Ok(()));
+
+    let chosen: Option<PathBuf> = Python::attach(|py| {
+        globals
+            .bind(py)
+            .get_item("chosen")
+            .expect("looking up a global should not fail")
+            .expect("the script sets `chosen`")
+            .extract()
+            .expect("a dialog answers with a path or with nothing")
+    });
+
+    // Cancelling is a perfectly good answer, and the only one available on a
+    // machine where the chooser cannot be reached. What must not happen is a
+    // path that is not a file.
+    match chosen {
+        Some(path) => {
+            println!("the dialog answered with {}", path.display());
+            assert!(path.is_file(), "the chooser handed back an existing file");
+        }
+        None => println!("the dialog was cancelled"),
+    }
 }
