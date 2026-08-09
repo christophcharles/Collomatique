@@ -170,6 +170,17 @@ Consistency *of the public API* is the rule:
 - Enumerations (`Weekday`, periodicity kinds, …) are Python `enum`/dataclass unions
   with working `==` (the old API's `Weekday == Weekday.Monday` identity-comparison
   trap is gone).
+- **Rendered text is French.** Everything the module writes for a human to
+  read is a French sentence or word: the warning texts, `str()` on a caveat
+  (the same sentence the GUI's caveat dialog shows), the `group_name`
+  fallback « Groupe N », and the words inside `repr`s — a dead handle prints
+  `(périmé)`, a slot names its day « Jeudi », a pairing side is
+  `(antécédent)`. A `repr` exists to be read in a log, and the log's reader
+  speaks the application's language. Identifiers are the exception and stay
+  English: class and attribute names (`Subject`, `weekday`, `MONDAY`), and
+  repr shapes that only echo them (`<Subject #3>`, `count=4`, `index=0`).
+  Exception messages are English — they are for the script author, not for
+  the end user.
 
 ## 4. The read surface
 
@@ -352,7 +363,8 @@ worker-killing `panic!`s:
 ## 7. Quality floor
 
 - `.pyi` type stubs for the whole module; `collomatique.__version__`.
-- `eq`/`repr` on everything user-visible.
+- `eq`/`repr` on everything user-visible — the reprs' rendered words are French,
+  per §3.
 - Round-trip tests pinning dataclass ↔ Rust payload correspondence (this also
   retires the old API's read-back corruption bug, where
   `SubjectInterrogationParameters` filled `groups_per_interrogation` from
@@ -390,7 +402,8 @@ Three primitives, all usable in either context:
 The caveats land on `doc.caveats`, a `frozenset` of `Caveat` values — one class per
 kind (`CreatedWithNewerVersion`, `UnknownEntry`), all under a `Caveat` base so
 `isinstance` catches them without listing the kinds. They are values with `==`, a
-`repr` and a `str`, so a script names the one it knows how to handle:
+`repr` and a `str` — the `str` being the same French sentence the GUI's caveat
+dialog writes (§3) — so a script names the one it knows how to handle:
 
 ```python
 if clm.UnknownEntry("colloscope", 3) in doc.caveats:

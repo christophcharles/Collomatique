@@ -105,8 +105,9 @@ always sees the current state, through undo, redo and transactions alike.
 - `repr` reads the current state when it can and never raises:
   `<Subject #3 'Maths'>` alive, `<Subject #3 (périmé)>` dead. Reprs exist for
   logging, and logging a dead handle is exactly when it matters. The rendered
-  words of every repr are french, like the rest of the module's text; the
-  class names and the attribute names stay english.
+  words of every repr are french, like the module's other rendered text (the
+  warning sentences, the caveat `str`s — §3 of the design); the class names,
+  the attribute names and the id spelling stay english.
 - `.id` returns the id — the one attribute that works on a stale handle, since
   it does not read the state.
 
