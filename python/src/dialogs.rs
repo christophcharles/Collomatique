@@ -183,6 +183,34 @@ fn session_available() -> bool {
         .any(|name| std::env::var_os(name).is_some_and(|value| !value.is_empty()))
 }
 
+/// The runtime every dialog in this process runs on
+///
+/// One for the process, and not one per dialog, because the bus outlives the
+/// dialog: `ashpd` keeps the session connection it opens in a global
+/// `OnceLock`, and that connection's socket task was spawned onto whatever
+/// runtime was in context when it was made. Drop that runtime at the end of the
+/// first dialog and the connection is still cached but no longer driven, so the
+/// second dialog waits on it forever.
+///
+/// The failure is remembered along with the runtime: a runtime that could not be
+/// built will not build a moment later either, and the sentence is the same one.
+#[cfg(all(unix, not(target_os = "macos")))]
+fn runtime() -> Result<&'static tokio::runtime::Runtime, String> {
+    static RUNTIME: std::sync::OnceLock<Result<tokio::runtime::Runtime, String>> =
+        std::sync::OnceLock::new();
+
+    RUNTIME
+        .get_or_init(|| {
+            tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(1)
+                .enable_all()
+                .build()
+                .map_err(|e| format!("the dialog has no runtime to reach the desktop over: {e}"))
+        })
+        .as_ref()
+        .map_err(|e| e.clone())
+}
+
 /// Shows a dialog, with whatever the platform needs standing around it
 ///
 /// `rfd`'s synchronous calls block on `zbus` under the portal, and `zbus`
@@ -190,10 +218,6 @@ fn session_available() -> bool {
 /// the dialog brings its own. Multi-thread and not current-thread: the blocking
 /// happens on *this* thread, so the tasks it spawns need a worker of their own
 /// or nothing ever drives them.
-///
-/// Built per call rather than kept in a static, because a dialog is a
-/// human-speed event and a static would leave a thread standing for the life of
-/// every process that ever imported the module.
 #[cfg(all(unix, not(target_os = "macos")))]
 fn show<T>(dialog: impl FnOnce() -> T) -> Result<T, String> {
     if !session_available() {
@@ -204,12 +228,7 @@ fn show<T>(dialog: impl FnOnce() -> T) -> Result<T, String> {
         );
     }
 
-    let runtime = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(1)
-        .enable_all()
-        .build()
-        .map_err(|e| format!("the dialog has no runtime to reach the desktop over: {e}"))?;
-    let _entered = runtime.enter();
+    let _entered = runtime()?.enter();
 
     Ok(dialog())
 }

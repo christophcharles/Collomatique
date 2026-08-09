@@ -707,32 +707,35 @@ fn a_script_asks_for_a_file_a_folder_and_a_place_to_write() {
 /// The real `rfd` chooser, on a machine with someone in front of it
 ///
 /// Everything above answers the dialogs itself, so this is the only test that
-/// says the `rfd` side works at all — that the runtime it builds is one `zbus`
-/// can spawn onto, and that the portal hands a path back. It cannot be answered
-/// by a test runner, hence the `#[ignore]`.
+/// says the `rfd` side works at all — that the runtime is one `zbus` can spawn
+/// onto, and that the portal hands a path back. It cannot be answered by a test
+/// runner, hence the `#[ignore]`.
+///
+/// It asks for all three in a row on purpose. A per-dialog runtime shows the
+/// first chooser and then hangs on the second, because the connection `ashpd`
+/// caches outlives the runtime that was driving it — one dialog would have said
+/// everything was fine.
 #[test]
-#[ignore = "opens a real file chooser: run with --ignored --nocapture, and answer it"]
-fn a_real_file_chooser_opens() {
+#[ignore = "opens three real file choosers: run with --ignored --nocapture, and answer them"]
+fn real_file_choosers_open_one_after_another() {
     let globals = run(include_str!("scripts/real_dialog.py"), |_| Ok(()));
 
-    let chosen: Option<PathBuf> = Python::attach(|py| {
-        globals
-            .bind(py)
-            .get_item("chosen")
-            .expect("looking up a global should not fail")
-            .expect("the script sets `chosen`")
-            .extract()
-            .expect("a dialog answers with a path or with nothing")
-    });
+    for name in ["opened", "saved", "folder"] {
+        let chosen: Option<PathBuf> = Python::attach(|py| {
+            globals
+                .bind(py)
+                .get_item(name)
+                .expect("looking up a global should not fail")
+                .expect("the script sets one global per dialog")
+                .extract()
+                .expect("a dialog answers with a path or with nothing")
+        });
 
-    // Cancelling is a perfectly good answer, and the only one available on a
-    // machine where the chooser cannot be reached. What must not happen is a
-    // path that is not a file.
-    match chosen {
-        Some(path) => {
-            println!("the dialog answered with {}", path.display());
-            assert!(path.is_file(), "the chooser handed back an existing file");
+        // Cancelling is a perfectly good answer, and the only one available on a
+        // machine where the chooser cannot be reached.
+        match chosen {
+            Some(path) => println!("{name}: {}", path.display()),
+            None => println!("{name}: cancelled"),
         }
-        None => println!("the dialog was cancelled"),
     }
 }
