@@ -14,6 +14,9 @@ use std::sync::{Arc, Mutex, Once};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
+use collomatique_ops::rendering::{
+    render_pairing_rule, render_slot_in_subject, render_slot_pairing_rule, render_subject,
+};
 use collomatique_python::{FileRequest, collomatique};
 use collomatique_state_colloscopes::Data;
 
@@ -3337,6 +3340,509 @@ fn the_two_filling_shapes_read_side_by_side() {
     assert!(
         rows.iter()
             .any(|((_period, _subject), group_list)| **group_list != *automatic_id)
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// A document written here rather than copied, holding pairing rules
+///
+/// The example has no subject pairing rules at all — its only pairings are the
+/// two slot ones — so the shapes a rule can take need a document of their own:
+/// one soft rule with a period excluded and one strict rule excluding nothing,
+/// covering both `should_have` polarities on each side. It is built as an
+/// `InnerData` through the sealed types' own constructors — `PairingRule::new`
+/// enforces the one value-internal invariant (distinct subjects in the two
+/// parts) — and passed through `Data::from_inner_data`, so a fixture that
+/// breaks an invariant fails here rather than halfway through the script
+/// (`docs/python/handle_api.md` §6.2).
+fn pairings_document(path: &Path) {
+    use collomatique_state_colloscopes::ids::Id as _;
+    use collomatique_state_colloscopes::pairings::{PairingRule, Pairings, RulePart};
+    use collomatique_state_colloscopes::subjects::Subjects;
+    use collomatique_state_colloscopes::{
+        Data, InnerData, PairingRuleId, PeriodId, Subject, SubjectId,
+        SubjectInterrogationParameters, SubjectParameters, SubjectPeriodicity,
+    };
+
+    // Ids nothing else in this document issues: it is written by hand from end
+    // to end, so there is no issuer to keep in step with.
+    let period = |n: u64| unsafe { PeriodId::new(n) };
+    let subject = |n: u64| unsafe { SubjectId::new(n) };
+    let periods = vec![period(1), period(2)];
+
+    // Both subjects run colles — a rule naming a subject without
+    // interrogations is vacuous, and the invariant gate says so — and none
+    // excludes a period, so every exclusion the fixture stores is a live one.
+    let named_subject = |name: &str| Subject {
+        parameters: SubjectParameters {
+            name: name.to_owned(),
+            interrogation_parameters: Some(SubjectInterrogationParameters {
+                students_per_group: nonzero_range((2, 3)),
+                groups_per_interrogation: nonzero_range((1, 1)),
+                duration: collomatique_time::NonZeroMinutes::new(60).expect("an hour is a while"),
+                take_duration_into_account: true,
+                periodicity: SubjectPeriodicity::ExactlyPeriodic {
+                    periodicity_in_weeks: NonZeroU32::new(1).expect("one is not zero"),
+                },
+            }),
+        },
+        excluded_periods: BTreeSet::new(),
+    };
+    let subjects = vec![
+        (subject(11), named_subject("Sortilèges")),
+        (subject(12), named_subject("Métamorphose")),
+    ];
+
+    // Both `should_have` polarities on each side, soft both ways, one rule
+    // excluding a period and one excluding none.
+    let rules = vec![
+        (
+            unsafe { PairingRuleId::new(61) },
+            PairingRule::new(
+                RulePart {
+                    subject_id: subject(11),
+                    should_have: true,
+                },
+                RulePart {
+                    subject_id: subject(12),
+                    should_have: false,
+                },
+                BTreeSet::from([period(2)]),
+                true,
+            )
+            .expect("the antecedent and the consequent name different subjects"),
+        ),
+        (
+            unsafe { PairingRuleId::new(62) },
+            PairingRule::new(
+                RulePart {
+                    subject_id: subject(12),
+                    should_have: false,
+                },
+                RulePart {
+                    subject_id: subject(11),
+                    should_have: true,
+                },
+                BTreeSet::new(),
+                false,
+            )
+            .expect("the antecedent and the consequent name different subjects"),
+        ),
+    ];
+
+    let mut inner_data = InnerData::default();
+    inner_data.params.periods =
+        collomatique_state_colloscopes::periods::Periods::from_ordered_ids(None, periods)
+            .expect("the fixture names each period once");
+    inner_data.params.subjects = Subjects {
+        ordered_subject_list: subjects
+            .try_into()
+            .expect("the fixture names each subject once"),
+    };
+    // An id-keyed table takes the last of a duplicated id without a word, so
+    // the count is checked by hand: a fixture that named a rule twice would
+    // otherwise quietly ship one fewer than the script is about to read.
+    let rule_count = rules.len();
+    inner_data.params.pairings = Pairings {
+        pairing_rule_map: rules.into_iter().collect(),
+    };
+    assert_eq!(
+        inner_data.params.pairings.pairing_rule_map.len(),
+        rule_count,
+        "the fixture names each pairing rule once"
+    );
+
+    let data = Data::from_inner_data(inner_data).expect("the fixture should be a valid document");
+    let content = collomatique_storage::serialize_data(data.get_inner_data())
+        .expect("the fixture's ids are far below the file-format ceiling");
+    std::fs::write(path, content).expect("the fixture should be writable");
+}
+
+/// The pairing rules read back, rule by rule
+///
+/// The script walks `doc.pairings` and leaves what it saw; rust compares it
+/// with the same document read straight from the model — the two parts of each
+/// rule as live subject handles with their `should_have` flags, the exclusions
+/// as period handles, the softness.
+///
+/// The reprs are pinned exactly, against `ops::rendering`'s own notation: the
+/// api names a rule the way the application does, like `group_name`'s
+/// « Groupe N » fallback.
+///
+/// The example has no subject pairing rules at all — its only pairings are the
+/// two slot ones, which are [the_slot_pairing_rules_read_back_rule_by_rule]'s
+/// document — so this reads [pairings_document], whose two rules cover both
+/// `should_have` polarities on each side, both softness values, and one
+/// exclusion set.
+#[test]
+fn the_pairing_rules_read_back_rule_by_rule() {
+    let dir = workspace("pairings");
+    let source = dir.join("pairings.collomatique");
+    pairings_document(&source);
+
+    let globals = run(include_str!("scripts/pairings.py"), |globals| {
+        globals.set_item("source", &source)?;
+        Ok(())
+    });
+
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    // The fixture is only worth reading if it has something to say: two rules,
+    // both polarities on each side, soft both ways, one exclusion set empty
+    // and one not.
+    let rules: Vec<_> = params.pairings.pairing_rule_map.iter().collect();
+    assert_eq!(rules.len(), 2);
+    assert!(rules.iter().any(|(_id, rule)| rule.soft()));
+    assert!(rules.iter().any(|(_id, rule)| !rule.soft()));
+    assert!(
+        rules
+            .iter()
+            .any(|(_id, rule)| rule.excluded_periods().is_empty())
+    );
+    assert!(
+        rules
+            .iter()
+            .any(|(_id, rule)| !rule.excluded_periods().is_empty())
+    );
+
+    let subject_name = |id: &collomatique_state_colloscopes::SubjectId| {
+        params
+            .subjects
+            .ordered_subject_list
+            .get(id)
+            .expect("a rule names a live subject")
+            .parameters
+            .name
+            .clone()
+    };
+    assert_eq!(
+        global::<Vec<String>>(&globals, "antecedent_subject_names"),
+        rules
+            .iter()
+            .map(|(_id, rule)| subject_name(&rule.antecedent().subject_id))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<String>>(&globals, "consequent_subject_names"),
+        rules
+            .iter()
+            .map(|(_id, rule)| subject_name(&rule.consequent().subject_id))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<bool>>(&globals, "antecedent_should_have"),
+        rules
+            .iter()
+            .map(|(_id, rule)| rule.antecedent().should_have)
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<bool>>(&globals, "consequent_should_have"),
+        rules
+            .iter()
+            .map(|(_id, rule)| rule.consequent().should_have)
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<bool>>(&globals, "softs"),
+        rules
+            .iter()
+            .map(|(_id, rule)| rule.soft())
+            .collect::<Vec<_>>()
+    );
+
+    // The exclusions, read through the display positions of the periods in
+    // them — a period named by its place in the document's own order.
+    let period_ids: Vec<_> = params.periods.period_ids().collect();
+    assert_eq!(
+        global::<Vec<Vec<usize>>>(&globals, "excluded_period_indices"),
+        rules
+            .iter()
+            .map(|(_id, rule)| {
+                let mut indices: Vec<_> = rule
+                    .excluded_periods()
+                    .iter()
+                    .map(|period| {
+                        period_ids
+                            .iter()
+                            .position(|id| id == period)
+                            .expect("an excluded period is a live one")
+                    })
+                    .collect();
+                indices.sort();
+                indices
+            })
+            .collect::<Vec<_>>()
+    );
+
+    // The reprs name the rules the way the application does: the exact
+    // `ops::rendering` notation, quoted the way the other reprs quote names.
+    use collomatique_state::ids::Id as _;
+    let (first_id, first) = rules[0];
+    assert_eq!(
+        global::<String>(&globals, "first_repr"),
+        format!(
+            "<PairingRule #{} '{}'>",
+            first_id.inner(),
+            render_pairing_rule(&params.subjects, &params.pairings, first_id)
+                .expect("the first rule's subjects are live"),
+        )
+    );
+    assert_eq!(
+        global::<String>(&globals, "first_side_repr"),
+        format!(
+            "<PairingRuleSide #{} (antecedent) '{}'>",
+            first_id.inner(),
+            render_subject(&params.subjects, first.antecedent().subject_id)
+                .expect("the first rule's antecedent subject is live"),
+        )
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// The slot pairing rules read back, rule by rule
+///
+/// The script walks `doc.slot_pairings` and leaves what it saw; rust compares
+/// it with the same document read straight from the model — the two parts of
+/// each rule as live slot handles with their `should_have` flags, the empty
+/// exclusions, the softness. The reprs are pinned exactly against
+/// `ops::rendering`'s notation, like the subject-level rules'.
+///
+/// The example carries two slot pairing rules, both strict, both excluding no
+/// period, with a used antecedent and an unused consequent — the shape the
+/// script's assertions stand on. What it does not carry is a subject pairing
+/// rule, which is why [the_pairing_rules_read_back_rule_by_rule] reads a
+/// document of its own.
+#[test]
+fn the_slot_pairing_rules_read_back_rule_by_rule() {
+    let dir = workspace("slot-pairings");
+    let source = example_copy(&dir, "source.collomatique");
+
+    let globals = run(include_str!("scripts/slot_pairings.py"), |globals| {
+        globals.set_item("source", &source)?;
+        Ok(())
+    });
+
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    // The example is only worth reading if it has something to say: two rules,
+    // both strict, both excluding no period, a used antecedent against an
+    // unused consequent.
+    let rules: Vec<_> = params.slot_pairings.slot_pairing_rule_map.iter().collect();
+    assert_eq!(rules.len(), 2, "the example holds two slot pairing rules");
+    assert!(rules.iter().all(|(_id, rule)| !rule.soft()));
+    assert!(
+        rules
+            .iter()
+            .all(|(_id, rule)| rule.excluded_periods().is_empty())
+    );
+    assert!(
+        rules
+            .iter()
+            .all(|(_id, rule)| rule.antecedent().should_have)
+    );
+    assert!(
+        rules
+            .iter()
+            .all(|(_id, rule)| !rule.consequent().should_have)
+    );
+
+    assert_eq!(
+        global::<Vec<bool>>(&globals, "antecedent_should_have"),
+        rules
+            .iter()
+            .map(|(_id, rule)| rule.antecedent().should_have)
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<bool>>(&globals, "consequent_should_have"),
+        rules
+            .iter()
+            .map(|(_id, rule)| rule.consequent().should_have)
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<bool>>(&globals, "softs"),
+        rules
+            .iter()
+            .map(|(_id, rule)| rule.soft())
+            .collect::<Vec<_>>()
+    );
+
+    // The antecedent slots, named by their start time — that is what pins the
+    // part to a slot of the document rather than to a number that happens to
+    // be there.
+    let start_time = |id: collomatique_state_colloscopes::SlotId| {
+        *params
+            .slots
+            .find_slot(id)
+            .expect("a rule names a live slot")
+            .start_time
+            .start_time
+            .inner()
+    };
+    assert_eq!(
+        global::<Vec<chrono::NaiveTime>>(&globals, "antecedent_slot_start_times"),
+        rules
+            .iter()
+            .map(|(_id, rule)| start_time(rule.antecedent().slot_id))
+            .collect::<Vec<_>>()
+    );
+
+    // Both slots of a rule belong to one subject, and the rule is read under
+    // that subject's name.
+    let subject_name = |id: &collomatique_state_colloscopes::SubjectId| {
+        params
+            .subjects
+            .ordered_subject_list
+            .get(id)
+            .expect("a rule names a live subject")
+            .parameters
+            .name
+            .clone()
+    };
+    assert_eq!(
+        global::<Vec<String>>(&globals, "rule_subject_names"),
+        rules
+            .iter()
+            .map(|(_id, rule)| {
+                let (subject_id, _slot) = params
+                    .slots
+                    .find_slot_with_subject(rule.antecedent().slot_id)
+                    .expect("a rule names a live slot");
+                subject_name(&subject_id)
+            })
+            .collect::<Vec<_>>()
+    );
+
+    use collomatique_state::ids::Id as _;
+    let (first_id, first) = rules[0];
+    assert_eq!(
+        global::<String>(&globals, "first_repr"),
+        format!(
+            "<SlotPairingRule #{} '{}'>",
+            first_id.inner(),
+            render_slot_pairing_rule(
+                &params.subjects,
+                &params.teachers,
+                &params.slots,
+                &params.slot_pairings,
+                first_id,
+            )
+            .expect("the first rule's slots are live"),
+        )
+    );
+    assert_eq!(
+        global::<String>(&globals, "first_side_repr"),
+        format!(
+            "<SlotPairingRuleSide #{} (antecedent) '{}'>",
+            first_id.inner(),
+            render_slot_in_subject(&params.teachers, &params.slots, first.antecedent().slot_id)
+                .expect("the first rule's antecedent slot is live"),
+        )
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// A removed pairing rule takes its handle and both its sides down, loudly
+///
+/// The mutation cannot come from the script — the read surface ships no removes
+/// — so it comes from rust, between the two halves: the fixture's first rule
+/// goes, and what the script's first half held of it — the handle and the two
+/// side views — must all say so.
+///
+/// The second half is where the side views' contract is pinned: they are bound
+/// to `(document, rule_id, side)`, so their `==` and `hash` keep working and
+/// stay distinct once the rule is gone, while every reading attribute raises.
+#[test]
+fn a_removed_pairing_rule_takes_its_sides_with_it() {
+    let dir = workspace("pairings-stale");
+    let source = dir.join("pairings.collomatique");
+    pairings_document(&source);
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same rule the script is holding.
+    let doomed = reload(&source)
+        .get_inner_data()
+        .params
+        .pairings
+        .pairing_rule_map
+        .keys()
+        .next()
+        .expect("the fixture has pairing rules");
+
+    run_stages(
+        &[
+            include_str!("scripts/pairings_stale_before.py"),
+            include_str!("scripts/pairings_stale_after.py"),
+        ],
+        |globals| {
+            globals.set_item("source", &source)?;
+            Ok(())
+        },
+        |py, globals| {
+            document_of(globals)
+                .borrow_mut(py)
+                .update(
+                    py,
+                    collomatique_ops::UpdateOp::Pairings(
+                        collomatique_ops::PairingsUpdateOp::DeletePairingRule(doomed),
+                    ),
+                )
+                .expect("the fixture's first pairing rule is removable");
+        },
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// A removed slot pairing rule takes its handle and both its sides down, loudly
+///
+/// The mutation cannot come from the script — the read surface ships no removes
+/// — so it comes from rust, between the two halves: the example's second slot
+/// pairing rule goes, and what the script's first half held of it — the handle
+/// and the two side views — must all say so.
+#[test]
+fn a_removed_slot_pairing_rule_takes_its_sides_with_it() {
+    let dir = workspace("slot-pairings-stale");
+    let source = example_copy(&dir, "source.collomatique");
+
+    // The second of the example's two slot pairing rules, read from the file:
+    // ids are stored, so this copy names the same rule the script is holding.
+    let doomed = reload(&source)
+        .get_inner_data()
+        .params
+        .slot_pairings
+        .slot_pairing_rule_map
+        .keys()
+        .nth(1)
+        .expect("the example holds two slot pairing rules");
+
+    run_stages(
+        &[
+            include_str!("scripts/slot_pairings_stale_before.py"),
+            include_str!("scripts/slot_pairings_stale_after.py"),
+        ],
+        |globals| {
+            globals.set_item("source", &source)?;
+            Ok(())
+        },
+        |py, globals| {
+            document_of(globals)
+                .borrow_mut(py)
+                .update(
+                    py,
+                    collomatique_ops::UpdateOp::SlotPairings(
+                        collomatique_ops::SlotPairingsUpdateOp::DeleteSlotPairingRule(doomed),
+                    ),
+                )
+                .expect("the example's second slot pairing rule is removable");
+        },
     );
 
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");

@@ -271,6 +271,18 @@ pub(crate) fn quoted(py: Python<'_>, text: &str) -> String {
         .unwrap_or_else(|_| format!("{text:?}"))
 }
 
+/// Which end of a pairing rule a side sub-view is bound to
+///
+/// `rule.antecedent` and `rule.consequent` hand out the two side sub-views of
+/// §3.11 / §3.12 (`docs/python/handle_api.md`). The side is part of the view's
+/// identity — a view is bound to `(document, rule_id, side)` — so the two ends
+/// of one rule never compare equal, and each keeps its own place in a dict.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum RuleSide {
+    Antecedent,
+    Consequent,
+}
+
 /// Declares a collection's iterator class
 ///
 /// Iteration snapshots the ids when it starts, in the collection's order, and

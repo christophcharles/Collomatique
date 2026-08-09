@@ -13,8 +13,8 @@ use collomatique_state_colloscopes::Data;
 use collomatique_storage::Caveat;
 
 use crate::collections::{
-    Assignments, GroupLists, Incompats, Periods, Slot, Slots, Students, Subjects, Teachers, Week,
-    WeekPattern, WeekPatterns, Weeks,
+    Assignments, GroupLists, Incompats, Pairings, Periods, Slot, SlotPairings, Slots, Students,
+    Subjects, Teachers, Week, WeekPattern, WeekPatterns, Weeks,
 };
 use crate::dialogs::FileRequest;
 use crate::errors::{
@@ -465,6 +465,43 @@ impl Document {
     #[getter]
     fn group_lists(slf: Py<Self>) -> GroupLists {
         GroupLists::new(slf)
+    }
+
+    /// The pairing rules of the document, in id order
+    ///
+    /// Reached as `doc.pairings`:
+    ///
+    /// ```python
+    /// for rule in doc.pairings:
+    ///     if rule.soft:
+    ///         ...
+    /// ```
+    ///
+    /// A pairing rule is an implication between two subjects: a student who
+    /// `should_have` the antecedent subject's interrogation in a week should
+    /// (or should not) have the consequent's that week. The two ends are the
+    /// `rule.antecedent` / `rule.consequent` sub-views, which go stale with
+    /// the rule.
+    #[getter]
+    fn pairings(slf: Py<Self>) -> Pairings {
+        Pairings::new(slf)
+    }
+
+    /// The slot pairing rules of the document, in id order
+    ///
+    /// Reached as `doc.slot_pairings`:
+    ///
+    /// ```python
+    /// for rule in doc.slot_pairings:
+    ///     print(rule.antecedent.slot.teacher.surname)
+    /// ```
+    ///
+    /// The slots' version of a pairing rule: if the antecedent slot is used in
+    /// a week, the consequent slot must also be used — or not. Both slots of a
+    /// rule belong to the same subject.
+    #[getter]
+    fn slot_pairings(slf: Py<Self>) -> SlotPairings {
+        SlotPairings::new(slf)
     }
 
     /// Whether a colle can happen in this slot on this week
