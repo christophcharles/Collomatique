@@ -2798,6 +2798,550 @@ fn a_time_slot_refuses_what_the_model_refuses() {
     run(include_str!("scripts/time_slot.py"), |_| Ok(()));
 }
 
+/// A document written here rather than copied, holding both group-list shapes
+///
+/// The example has only prefilled lists and only unnamed groups, so the
+/// automatic shape — `.groups = None`, a real exclusion set — and the named
+/// half of `group_name` need a document of their own: one automatic list with
+/// non-empty exclusions, one prefilled list whose groups carry names, and
+/// associations reaching both. It is built as an `InnerData` through the
+/// sealed types' own constructors — `GroupList::new` enforces the two
+/// value-internal invariants (prefill count matching the names, no student in
+/// two groups) — and passed through `Data::from_inner_data`, so a fixture that
+/// breaks an invariant fails here rather than halfway through the script
+/// (`docs/python/handle_api.md` §6.2).
+fn group_lists_document(path: &Path) {
+    use collomatique_state_colloscopes::group_lists::{
+        GroupList, GroupListFilling, GroupListParameters, GroupLists, PrefilledGroup,
+    };
+    use collomatique_state_colloscopes::ids::Id as _;
+    use collomatique_state_colloscopes::students::{Student, Students};
+    use collomatique_state_colloscopes::subjects::Subjects;
+    use collomatique_state_colloscopes::{
+        Data, GroupListId, InnerData, PeriodId, StudentId, Subject, SubjectId,
+        SubjectInterrogationParameters, SubjectParameters, SubjectPeriodicity,
+    };
+
+    // Ids nothing else in this document issues: it is written by hand from end
+    // to end, so there is no issuer to keep in step with.
+    let period = |n: u64| unsafe { PeriodId::new(n) };
+    let subject = |n: u64| unsafe { SubjectId::new(n) };
+    let student = |n: u64| unsafe { StudentId::new(n) };
+    let group_list = |n: u64| unsafe { GroupListId::new(n) };
+
+    let periods = vec![period(1), period(2)];
+
+    // Both subjects run colles and exclude no period, so every association the
+    // fixture stores is one the loader accepts.
+    let named_subject = |name: &str| Subject {
+        parameters: SubjectParameters {
+            name: name.to_owned(),
+            interrogation_parameters: Some(SubjectInterrogationParameters {
+                students_per_group: nonzero_range((2, 3)),
+                groups_per_interrogation: nonzero_range((1, 1)),
+                duration: collomatique_time::NonZeroMinutes::new(60).expect("an hour is a while"),
+                take_duration_into_account: true,
+                periodicity: SubjectPeriodicity::ExactlyPeriodic {
+                    periodicity_in_weeks: NonZeroU32::new(1).expect("one is not zero"),
+                },
+            }),
+        },
+        excluded_periods: BTreeSet::new(),
+    };
+    let subjects = vec![
+        (subject(11), named_subject("Sortilèges")),
+        (subject(12), named_subject("Métamorphose")),
+    ];
+
+    let students = vec![
+        (
+            student(31),
+            Student {
+                desc: person("Harry", "Potter", None, None),
+                excluded_periods: BTreeSet::new(),
+            },
+        ),
+        (
+            student(32),
+            Student {
+                desc: person("Hermione", "Granger", None, None),
+                excluded_periods: BTreeSet::new(),
+            },
+        ),
+        (
+            student(33),
+            Student {
+                desc: person("Ron", "Weasley", None, None),
+                excluded_periods: BTreeSet::new(),
+            },
+        ),
+        (
+            student(34),
+            Student {
+                desc: person("Neville", "Londubat", None, None),
+                excluded_periods: BTreeSet::new(),
+            },
+        ),
+        (
+            student(35),
+            Student {
+                desc: person("Luna", "Lovegood", None, None),
+                excluded_periods: BTreeSet::new(),
+            },
+        ),
+    ];
+
+    // The non-empty group name, reached without naming its crate: the field
+    // says what the conversion lands in, so the fixture needs no dependency of
+    // its own to build one.
+    let named = |text: &str| {
+        text.to_owned()
+            .try_into()
+            .expect("the fixture's group names are not empty")
+    };
+
+    // The automatic list, with one excluded student — the shape the example
+    // never shows.
+    let automatic = GroupList::new(
+        GroupListParameters {
+            name: "Automatique".to_owned(),
+            students_per_group: nonzero_range((1, 2)),
+            group_names: vec![None, None, None, None],
+        },
+        GroupListFilling::Automatic {
+            excluded_students: BTreeSet::from([student(33)]),
+        },
+    )
+    .expect("an automatic list is always internally consistent");
+
+    // The prefilled list with named groups — the shape the example never
+    // shows. Ron sits alone in the unnamed middle group, and Luna in no group
+    // at all, which is a prefilled list's privilege.
+    let prefilled = GroupList::new(
+        GroupListParameters {
+            name: "Maisons".to_owned(),
+            students_per_group: nonzero_range((2, 3)),
+            group_names: vec![Some(named("Aurore")), None, Some(named("Serdaigle"))],
+        },
+        GroupListFilling::Prefilled {
+            groups: vec![
+                PrefilledGroup {
+                    students: BTreeSet::from([student(31), student(32)]),
+                },
+                PrefilledGroup {
+                    students: BTreeSet::from([student(33)]),
+                },
+                PrefilledGroup {
+                    students: BTreeSet::from([student(34)]),
+                },
+            ],
+        },
+    )
+    .expect("the prefilled groups match the names and share no student");
+
+    let mut inner_data = InnerData::default();
+    inner_data.params.periods =
+        collomatique_state_colloscopes::periods::Periods::from_ordered_ids(None, periods)
+            .expect("the fixture names each period once");
+    inner_data.params.subjects = Subjects {
+        ordered_subject_list: subjects
+            .try_into()
+            .expect("the fixture names each subject once"),
+    };
+    let student_count = students.len();
+    inner_data.params.students = Students {
+        student_map: students.into_iter().collect(),
+    };
+    assert_eq!(
+        inner_data.params.students.student_map.len(),
+        student_count,
+        "the fixture names each student once"
+    );
+
+    // Three associations on four possible pairs: the automatic list serves
+    // two of them and the prefilled one the third, so the hop is pinned on
+    // both shapes and the pair (1, 12) stays unassociated.
+    inner_data.params.group_lists = GroupLists {
+        group_list_map: [(group_list(51), automatic), (group_list(52), prefilled)]
+            .into_iter()
+            .collect(),
+        subjects_associations: [
+            ((period(1), subject(11)), group_list(51)),
+            ((period(2), subject(11)), group_list(52)),
+            ((period(2), subject(12)), group_list(51)),
+        ]
+        .into_iter()
+        .collect(),
+    };
+
+    let data = Data::from_inner_data(inner_data).expect("the fixture should be a valid document");
+    let content = collomatique_storage::serialize_data(data.get_inner_data())
+        .expect("the fixture's ids are far below the file-format ceiling");
+    std::fs::write(path, content).expect("the fixture should be writable");
+}
+
+/// The group lists read back, list by list
+///
+/// The script walks `doc.group_lists` and leaves what it saw; rust compares it
+/// with the same document read straight from the model — the names, the
+/// ranges, the raw group names, and the prefilled groups themselves, one
+/// frozenset per group with the students the file puts in them.
+///
+/// The example carries two prefilled lists with every group unnamed and
+/// eighteen associations across three periods and eight subjects, which pins
+/// the collection protocol, the « Groupe N » fallback of `group_name`, and
+/// both association reads — the total `association_for`, with an absent pair
+/// and a foreign reference among its answers, and the stored rows of
+/// `associations()`, in key order. What it cannot show — the automatic shape
+/// and a named group — is
+/// [the_two_filling_shapes_read_side_by_side]'s document.
+#[test]
+fn the_group_lists_read_back_list_by_list() {
+    let dir = workspace("group-lists");
+    let source = example_copy(&dir, "source.collomatique");
+
+    let globals = run(include_str!("scripts/group_lists.py"), |globals| {
+        globals.set_item("source", &source)?;
+        Ok(())
+    });
+
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    // The example is only worth reading if it has something to say: several
+    // group lists, all prefilled and all unnamed (which is what makes the
+    // fallback run all the way down), and an absent pair among its
+    // associations.
+    let lists: Vec<_> = params.group_lists.group_list_map.iter().collect();
+    assert!(lists.len() > 1);
+    assert!(
+        lists
+            .iter()
+            .all(|(_id, group_list)| group_list.is_prefilled())
+    );
+    assert!(lists.iter().all(|(_id, group_list)| {
+        group_list
+            .params()
+            .group_names
+            .iter()
+            .all(|name| name.is_none())
+    }));
+    let rows: Vec<_> = params.group_lists.subjects_associations.iter().collect();
+    let periods: Vec<_> = params.periods.period_ids().collect();
+    let subjects: Vec<_> = params.subjects.ordered_subject_list.keys().collect();
+    let stored: BTreeSet<_> = rows
+        .iter()
+        .map(|((period, subject), _group_list)| (*period, *subject))
+        .collect();
+    assert!(
+        periods
+            .iter()
+            .flat_map(|period| subjects.iter().map(move |subject| (*period, *subject)))
+            .any(|key| !stored.contains(&key))
+    );
+
+    let bounds = |range: &collomatique_state_colloscopes::NonEmptyRangeInclusive<NonZeroU32>| {
+        (range.start().get(), range.end().get())
+    };
+    assert_eq!(
+        global::<Vec<String>>(&globals, "gl_names"),
+        lists
+            .iter()
+            .map(|(_id, group_list)| group_list.params().name.clone())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<(u32, u32)>>(&globals, "gl_students_per_group"),
+        lists
+            .iter()
+            .map(|(_id, group_list)| bounds(&group_list.params().students_per_group))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<usize>>(&globals, "gl_group_counts"),
+        lists
+            .iter()
+            .map(|(_id, group_list)| group_list.params().group_names.len())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<Vec<Option<String>>>>(&globals, "gl_group_names"),
+        lists
+            .iter()
+            .map(|(_id, group_list)| group_list
+                .params()
+                .group_names
+                .iter()
+                .map(|name| name.as_ref().map(|name| name.to_string()))
+                .collect::<Vec<_>>())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<bool>>(&globals, "gl_is_prefilled"),
+        lists
+            .iter()
+            .map(|(_id, group_list)| group_list.is_prefilled())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<Vec<Vec<String>>>>(&globals, "gl_group_members"),
+        lists
+            .iter()
+            .map(|(_id, group_list)| match group_list.filling() {
+                collomatique_state_colloscopes::group_lists::GroupListFilling::Prefilled {
+                    groups,
+                } => groups
+                    .iter()
+                    .map(|group| {
+                        let mut names: Vec<_> = group
+                            .students
+                            .iter()
+                            .map(|student| {
+                                params
+                                    .students
+                                    .student_map
+                                    .get(student)
+                                    .expect("a prefilled group names a live student")
+                                    .desc
+                                    .surname
+                                    .clone()
+                            })
+                            .collect();
+                        names.sort();
+                        names
+                    })
+                    .collect(),
+                collomatique_state_colloscopes::group_lists::GroupListFilling::Automatic {
+                    ..
+                } => Vec::new(),
+            })
+            .collect::<Vec<_>>()
+    );
+
+    // The fallback is the application's own — « Groupe 3 » for the third
+    // group, the number always showing (`gtk4/src/editor/colloscope.rs`) —
+    // and the repr names the list with the id the file really holds.
+    use collomatique_state::ids::Id as _;
+    let (first_id, first) = lists[0];
+    assert_eq!(
+        global::<String>(&globals, "first_repr"),
+        format!(
+            "<GroupList #{} '{}'>",
+            first_id.inner(),
+            first.params().name
+        )
+    );
+    assert_eq!(
+        global::<Vec<String>>(&globals, "fallback_names"),
+        lists
+            .iter()
+            .flat_map(|(_id, group_list)| {
+                group_list
+                    .params()
+                    .group_names
+                    .iter()
+                    .enumerate()
+                    .map(|(index, name)| match name {
+                        Some(name) => name.to_string(),
+                        None => format!("Groupe {}", index + 1),
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>()
+    );
+
+    assert_eq!(
+        global::<Vec<usize>>(&globals, "row_period_indices"),
+        rows.iter()
+            .map(|((period, _subject), _group_list)| periods
+                .iter()
+                .position(|id| id == period)
+                .expect("a row names a live period"))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<usize>>(&globals, "row_subject_indices"),
+        rows.iter()
+            .map(|((_period, subject), _group_list)| subjects
+                .iter()
+                .position(|id| id == subject)
+                .expect("a row names a live subject"))
+            .collect::<Vec<_>>()
+    );
+    let list_ids: Vec<_> = params.group_lists.group_list_map.keys().collect();
+    assert_eq!(
+        global::<Vec<usize>>(&globals, "row_group_positions"),
+        rows.iter()
+            .map(|((_period, _subject), group_list)| list_ids
+                .iter()
+                .position(|id| id == *group_list)
+                .expect("a row names a live group list"))
+            .collect::<Vec<_>>()
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// The two filling shapes read side by side
+///
+/// The script reads [group_lists_document]'s two lists and leaves what it saw;
+/// rust compares it with the same document read straight from the model. What
+/// is pinned is the `None`-for-inapplicable rule — an automatic list answers
+/// `.groups = None` and a real exclusion set, a prefilled one the groups and
+/// `.excluded_students = None` — and the named half of `group_name`, which the
+/// example's all-unnamed lists cannot show. The associations reach both
+/// shapes, because the hop is not prefilled-only.
+#[test]
+fn the_two_filling_shapes_read_side_by_side() {
+    let dir = workspace("group-lists-filling");
+    let source = dir.join("filling.collomatique");
+    group_lists_document(&source);
+
+    let globals = run(include_str!("scripts/group_lists_filling.py"), |globals| {
+        globals.set_item("source", &source)?;
+        Ok(())
+    });
+
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    let lists: Vec<_> = params.group_lists.group_list_map.iter().collect();
+    assert_eq!(lists.len(), 2);
+    let (automatic_id, automatic) = lists
+        .iter()
+        .find(|(_id, group_list)| !group_list.is_prefilled())
+        .expect("the fixture holds an automatic list");
+    let (_prefilled_id, prefilled) = lists
+        .iter()
+        .find(|(_id, group_list)| group_list.is_prefilled())
+        .expect("the fixture holds a prefilled list");
+
+    // The automatic list's exclusions, read from the model the way the script
+    // reads them from python: the set, sorted by surname.
+    let excluded: std::collections::BTreeSet<_> = match automatic.filling() {
+        collomatique_state_colloscopes::group_lists::GroupListFilling::Automatic {
+            excluded_students,
+        } => excluded_students.clone(),
+        collomatique_state_colloscopes::group_lists::GroupListFilling::Prefilled { .. } => {
+            unreachable!("the list was picked as automatic")
+        }
+    };
+    let mut expected_excluded: Vec<_> = excluded
+        .iter()
+        .map(|student| {
+            params
+                .students
+                .student_map
+                .get(student)
+                .expect("an excluded student is a live one")
+                .desc
+                .surname
+                .clone()
+        })
+        .collect();
+    expected_excluded.sort();
+    assert_eq!(
+        global::<Vec<String>>(&globals, "excluded_surnames"),
+        expected_excluded
+    );
+
+    // The prefilled groups, one frozenset per group, in group order.
+    let expected_members: Vec<Vec<String>> = match prefilled.filling() {
+        collomatique_state_colloscopes::group_lists::GroupListFilling::Prefilled { groups } => {
+            groups
+                .iter()
+                .map(|group| {
+                    let mut names: Vec<_> = group
+                        .students
+                        .iter()
+                        .map(|student| {
+                            params
+                                .students
+                                .student_map
+                                .get(student)
+                                .expect("a prefilled group names a live student")
+                                .desc
+                                .surname
+                                .clone()
+                        })
+                        .collect();
+                    names.sort();
+                    names
+                })
+                .collect()
+        }
+        collomatique_state_colloscopes::group_lists::GroupListFilling::Automatic { .. } => {
+            unreachable!("the list was picked as prefilled")
+        }
+    };
+    assert_eq!(
+        global::<Vec<Vec<String>>>(&globals, "prefilled_members"),
+        expected_members
+    );
+
+    // group_name reads the stored name where there is one, and the fallback
+    // where there is none — the exact strings, in group order.
+    assert_eq!(
+        global::<Vec<String>>(&globals, "shown_names"),
+        prefilled
+            .params()
+            .group_names
+            .iter()
+            .enumerate()
+            .map(|(index, name)| match name {
+                Some(name) => name.to_string(),
+                None => format!("Groupe {}", index + 1),
+            })
+            .collect::<Vec<_>>()
+    );
+
+    // The two lists' own fields.
+    assert_eq!(
+        global::<String>(&globals, "automatic_name"),
+        automatic.params().name.clone()
+    );
+    assert_eq!(
+        global::<String>(&globals, "prefilled_name"),
+        prefilled.params().name.clone()
+    );
+    let bounds = |range: &collomatique_state_colloscopes::NonEmptyRangeInclusive<NonZeroU32>| {
+        (range.start().get(), range.end().get())
+    };
+    assert_eq!(
+        global::<(u32, u32)>(&globals, "automatic_students_per_group"),
+        bounds(&automatic.params().students_per_group)
+    );
+    assert_eq!(
+        global::<(u32, u32)>(&globals, "prefilled_students_per_group"),
+        bounds(&prefilled.params().students_per_group)
+    );
+    assert_eq!(
+        global::<usize>(&globals, "automatic_group_count"),
+        automatic.params().group_names.len()
+    );
+    assert_eq!(
+        global::<usize>(&globals, "prefilled_group_count"),
+        prefilled.params().group_names.len()
+    );
+
+    // Three associations on four possible pairs, both shapes served — the
+    // count is the fixture's own, and it is what the script's
+    // both-kinds-are-served assertions stand on.
+    let rows: Vec<_> = params.group_lists.subjects_associations.iter().collect();
+    assert_eq!(rows.len(), 3);
+    assert_eq!(global::<usize>(&globals, "row_count"), rows.len());
+    assert!(
+        rows.iter()
+            .any(|((_period, _subject), group_list)| **group_list == *automatic_id)
+    );
+    assert!(
+        rows.iter()
+            .any(|((_period, _subject), group_list)| **group_list != *automatic_id)
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
 /// The real `rfd` chooser, on a machine with someone in front of it
 ///
 /// Everything above answers the dialogs itself, so this is the only test that

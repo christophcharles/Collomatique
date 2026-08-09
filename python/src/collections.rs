@@ -10,6 +10,7 @@
 //! the writes it makes through it.
 
 pub mod assignments;
+pub mod group_lists;
 pub mod incompats;
 pub mod periods;
 pub mod slots;
@@ -20,6 +21,7 @@ pub mod week_patterns;
 pub mod weeks;
 
 pub use assignments::Assignments;
+pub use group_lists::{GroupList, GroupLists};
 pub use incompats::{Incompat, Incompats};
 pub use periods::{Period, Periods};
 pub use slots::{Slot, Slots};
@@ -50,6 +52,8 @@ pub(crate) fn person_name(desc: &PersonWithContact) -> String {
 /// a script can build one: none of them has a constructor.
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Assignments>()?;
+    m.add_class::<GroupLists>()?;
+    m.add_class::<GroupList>()?;
     m.add_class::<Incompats>()?;
     m.add_class::<Incompat>()?;
     m.add_class::<Periods>()?;

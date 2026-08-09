@@ -13,8 +13,8 @@ use collomatique_state_colloscopes::Data;
 use collomatique_storage::Caveat;
 
 use crate::collections::{
-    Assignments, Incompats, Periods, Slot, Slots, Students, Subjects, Teachers, Week, WeekPattern,
-    WeekPatterns, Weeks,
+    Assignments, GroupLists, Incompats, Periods, Slot, Slots, Students, Subjects, Teachers, Week,
+    WeekPattern, WeekPatterns, Weeks,
 };
 use crate::dialogs::FileRequest;
 use crate::errors::{
@@ -445,6 +445,26 @@ impl Document {
     #[getter]
     fn incompats(slf: Py<Self>) -> Incompats {
         Incompats::new(slf)
+    }
+
+    /// The group lists of the document, and which subjects they serve
+    ///
+    /// Reached as `doc.group_lists`, in id order:
+    ///
+    /// ```python
+    /// for group_list in doc.group_lists:
+    ///     for number in range(group_list.group_count):
+    ///         print(group_list.group_name(number))
+    /// ```
+    ///
+    /// A group list is either prefilled — its groups are fixed sets of students
+    /// — or automatic, filled by the solver, whose placements live in the
+    /// colloscope. The `(period, subject) → group list` hop a colloscope cell
+    /// needs is here too: `association_for`, and `associations()` for the whole
+    /// table.
+    #[getter]
+    fn group_lists(slf: Py<Self>) -> GroupLists {
+        GroupLists::new(slf)
     }
 
     /// Whether a colle can happen in this slot on this week
