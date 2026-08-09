@@ -346,6 +346,63 @@ fn writes_are_undone_and_redone_one_at_a_time() {
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
 
+/// A block of writes is one step, and blocks really nest
+///
+/// The headline is the nesting: an inner block that rolls back takes only its
+/// own writes, and the outer block that catches the exception keeps everything
+/// it did before. The script checks that, and the seven other behaviours a
+/// transaction has — the single slot, the rollback on an exception, `cancel()`,
+/// the four refusals, the transaction that is never entered, `undo()` stopping
+/// at the block's start, and the empty block's named step.
+///
+/// The labels are handed in from rust: the block names so that what the history
+/// shows is the name it was opened with, and `update_label` from `ops` so that
+/// a write made *outside* a block is seen to keep the operation's own name.
+///
+/// The final comparison is with the file the script opened, the way `undo.py`'s
+/// is: the rollbacks land on the document that was loaded, not merely on one
+/// carrying the right start date.
+#[test]
+fn a_transaction_makes_a_block_of_writes_one_step() {
+    let dir = workspace("transaction");
+    let source = example_copy(&dir, "source.collomatique");
+    let target = dir.join("rolled-back.collomatique");
+
+    let mondays: Vec<_> = [(2026, 9, 7), (2026, 9, 14), (2026, 9, 21), (2026, 9, 28)]
+        .into_iter()
+        .map(|(y, m, d)| {
+            chrono::NaiveDate::from_ymd_opt(y, m, d).expect("these are dates, and mondays")
+        })
+        .collect();
+
+    let update_label = collomatique_ops::GeneralPlanningUpdateOp::UpdateFirstWeek(
+        collomatique_time::WeekStart::new(mondays[0]).expect("7 September 2026 is a monday"),
+    )
+    .get_desc()
+    .1;
+
+    run(include_str!("scripts/transaction.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("target", &target)?;
+        globals.set_item("first", mondays[0])?;
+        globals.set_item("second", mondays[1])?;
+        globals.set_item("third", mondays[2])?;
+        globals.set_item("fourth", mondays[3])?;
+        globals.set_item("batch_label", "Import Pronote")?;
+        globals.set_item("outer_label", "Outer block")?;
+        globals.set_item("empty_label", "Nothing at all")?;
+        globals.set_item("update_label", &update_label)?;
+        Ok(())
+    });
+
+    assert_eq!(
+        reload(&target).get_inner_data(),
+        reload(&source).get_inner_data()
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
 /// The application, for a script that is not really running inside one
 ///
 /// It does what the rpc engine does — hands over the document it holds, and
