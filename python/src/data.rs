@@ -22,13 +22,13 @@ use pyo3::types::{PyDict, PySet};
 
 use collomatique_state_colloscopes::{
     NonEmptyRangeInclusive, PersonWithContact, SubjectInterrogationParameters, SubjectPeriodicity,
-    students, subjects, teachers,
+    slots, students, subjects, teachers, week_patterns,
 };
 
 use crate::Document;
-use crate::collections::{Period, Subject};
+use crate::collections::{Period, Subject, Teacher, Week, WeekPattern};
 use crate::handles::{Handle, RawId, argument, shown};
-use crate::ids::{IdClass, PeriodId, SubjectId};
+use crate::ids::{IdClass, PeriodId, SubjectId, TeacherId, WeekId, WeekPatternId};
 use crate::values;
 
 /// The dataclasses, as `data.py` writes them
@@ -284,6 +284,117 @@ fn periodicity(site: Site<'_>, name: &str, obj: &Bound<'_, PyAny>) -> PyResult<S
     })
 }
 
+/// A field holding one of the seven days
+///
+/// The days are leaf values of `values.rs`, so there is nothing to refuse here
+/// but an object that is not a day at all — the seven members are the only
+/// things that ever cast to one.
+fn weekday(
+    site: Site<'_>,
+    name: &str,
+    obj: &Bound<'_, PyAny>,
+) -> PyResult<collomatique_time::Weekday> {
+    let value = field(site, name, obj)?;
+    let day: values::Weekday = value.extract().map_err(|_| {
+        PyTypeError::new_err(format!(
+            "{} is a Weekday, and {} is not one",
+            site.field(name),
+            shown(&value, "that value"),
+        ))
+    })?;
+
+    Ok(day.to_model())
+}
+
+/// A field the model stores as a time of day, with minute precision
+///
+/// The refusal is the model's own rule, in the words [values::TimeSlot]'s
+/// constructor already uses for the same one: python's `datetime.time` counts
+/// microseconds, and the model does not, so a time carrying any is not a time
+/// this document can hold rather than one it would round.
+fn whole_minute(
+    site: Site<'_>,
+    name: &str,
+    obj: &Bound<'_, PyAny>,
+) -> PyResult<collomatique_time::WholeMinuteTime> {
+    let value = field(site, name, obj)?;
+    let time: chrono::NaiveTime = value.extract().map_err(|_| {
+        PyTypeError::new_err(format!(
+            "{} is a time of day, and {} is not one",
+            site.field(name),
+            shown(&value, "that value"),
+        ))
+    })?;
+
+    collomatique_time::WholeMinuteTime::new(time).ok_or_else(|| {
+        PyValueError::new_err(format!(
+            "{} is a whole minute, with no seconds or microseconds",
+            site.field(name),
+        ))
+    })
+}
+
+/// A field the model types as a plain signed count
+///
+/// The slot's cost is the one field of this shape: zero leaves the solver
+/// alone, a positive number tells it to avoid the slot and a negative one to
+/// favour it. So every whole number means something, and nothing is refused
+/// but a value that is not one.
+fn cost(site: Site<'_>, name: &str, obj: &Bound<'_, PyAny>) -> PyResult<i32> {
+    let value = field(site, name, obj)?;
+    value.extract().map_err(|_| {
+        PyTypeError::new_err(format!(
+            "{} is a whole number, and {} is not one",
+            site.field(name),
+            shown(&value, "that value"),
+        ))
+    })
+}
+
+/// A field naming one entity
+///
+/// The single one's version of [entity_set], and it defers to the same
+/// [crate::handles::argument]: a handle and an id are interchangeable, a handle
+/// of another document is refused, and an id this document no longer holds is
+/// refused. The message is `argument`'s own, so a script meets the same
+/// sentence wherever it passes a dead reference.
+fn entity<H>(
+    doc: &Py<Document>,
+    site: Site<'_>,
+    name: &str,
+    obj: &Bound<'_, PyAny>,
+) -> PyResult<RawId<H>>
+where
+    H: Handle + PyClass<Frozen = True> + Sync,
+    H::IdClass: PyClass<Frozen = True> + Sync,
+{
+    let value = field(site, name, obj)?;
+    argument::<H>(doc, &value)
+}
+
+/// A field naming one entity, or naming none
+///
+/// `None` is a value here rather than an absence: a slot with no week pattern
+/// is one that runs every week, which is a state the model holds and not a
+/// field left unfilled.
+fn optional_entity<H>(
+    doc: &Py<Document>,
+    site: Site<'_>,
+    name: &str,
+    obj: &Bound<'_, PyAny>,
+) -> PyResult<Option<RawId<H>>>
+where
+    H: Handle + PyClass<Frozen = True> + Sync,
+    H::IdClass: PyClass<Frozen = True> + Sync,
+{
+    let value = field(site, name, obj)?;
+    if value.is_none() {
+        return Ok(None);
+    }
+
+    argument::<H>(doc, &value).map(Some)
+}
+
 /// A field naming a set of entities
 ///
 /// Anything iterable is accepted — a set, a list, a generator — and every item
@@ -528,6 +639,92 @@ impl Value for SubjectData {
                     .map(|id| PeriodId::wrap(*id)),
             )?,
         )?;
+
+        class(py, Self::CLASS)?.call((), Some(&kwargs))
+    }
+}
+
+/// One week pattern — a name, and the weeks it switches off
+pub struct WeekPatternData;
+
+impl Value for WeekPatternData {
+    type Model = week_patterns::WeekPattern;
+
+    const CLASS: &'static str = "WeekPatternData";
+
+    fn from_py(doc: &Py<Document>, obj: &Bound<'_, PyAny>) -> PyResult<week_patterns::WeekPattern> {
+        let site = Site::whole(Self::CLASS);
+
+        Ok(week_patterns::WeekPattern {
+            name: plain_text(site, "name", obj)?,
+            excluded_weeks: entity_set::<Week>(doc, site, "excluded_weeks", obj)?,
+        })
+    }
+
+    fn to_py<'py>(
+        py: Python<'py>,
+        pattern: &week_patterns::WeekPattern,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("name", &pattern.name)?;
+        kwargs.set_item(
+            "excluded_weeks",
+            PySet::new(
+                py,
+                pattern.excluded_weeks.iter().map(|id| WeekId::wrap(*id)),
+            )?,
+        )?;
+
+        class(py, Self::CLASS)?.call((), Some(&kwargs))
+    }
+}
+
+/// One slot — a subject, a teacher, when it happens, and which weeks it runs on
+///
+/// The model packs the day and the time into a `SlotStart`, because the pair is
+/// what its own time crate has a type for. Python flattens it, the way the
+/// handle already shows it: `d.weekday` and `d.start_time` sit side by side.
+pub struct SlotData;
+
+impl Value for SlotData {
+    /// The **entity**, `values.md` §2.0: the add op overwrites the subject with
+    /// a separate argument of its own and the update op refuses a slot whose
+    /// subject changed, so no slot op really carries the field. It is here all
+    /// the same, because `doc.snapshot()` would otherwise lose which subject
+    /// each slot belongs to, and it is the ops mirror that says loudly what it
+    /// cannot carry.
+    type Model = slots::Slot;
+
+    const CLASS: &'static str = "SlotData";
+
+    fn from_py(doc: &Py<Document>, obj: &Bound<'_, PyAny>) -> PyResult<slots::Slot> {
+        let site = Site::whole(Self::CLASS);
+
+        Ok(slots::Slot {
+            subject_id: entity::<Subject>(doc, site, "subject", obj)?,
+            teacher_id: entity::<Teacher>(doc, site, "teacher", obj)?,
+            start_time: collomatique_time::SlotStart {
+                weekday: weekday(site, "weekday", obj)?,
+                start_time: whole_minute(site, "start_time", obj)?,
+            },
+            extra_info: plain_text(site, "extra_info", obj)?,
+            week_pattern: optional_entity::<WeekPattern>(doc, site, "week_pattern", obj)?,
+            cost: cost(site, "cost", obj)?,
+        })
+    }
+
+    fn to_py<'py>(py: Python<'py>, slot: &slots::Slot) -> PyResult<Bound<'py, PyAny>> {
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("subject", SubjectId::wrap(slot.subject_id))?;
+        kwargs.set_item("teacher", TeacherId::wrap(slot.teacher_id))?;
+        kwargs.set_item(
+            "weekday",
+            values::Weekday::from_model(slot.start_time.weekday),
+        )?;
+        kwargs.set_item("start_time", *slot.start_time.start_time.inner())?;
+        kwargs.set_item("extra_info", &slot.extra_info)?;
+        kwargs.set_item("week_pattern", slot.week_pattern.map(WeekPatternId::wrap))?;
+        kwargs.set_item("cost", slot.cost)?;
 
         class(py, Self::CLASS)?.call((), Some(&kwargs))
     }

@@ -196,6 +196,32 @@ impl WeekPattern {
         crate::refs::week_pattern_references(py, self)
     }
 
+    /// This pattern, detached — a `WeekPatternData` holding what the handle
+    /// shows
+    ///
+    /// A fresh object every call: two calls give two values that compare equal
+    /// and share nothing. The excluded weeks come out as `WeekId`s rather than
+    /// as handles, because a value holding handles would carry this document
+    /// around with it and keep it alive (`docs/python/values.md` §2.3).
+    ///
+    /// A stale handle raises `StaleHandleError` like every other read.
+    fn to_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        use crate::data::Value as _;
+
+        // Copied out of the borrow before anything python-facing happens:
+        // building the value calls into python, and doing that under the
+        // document's borrow is how a nested borrow becomes a `PanicException`.
+        let pattern = self.read(py, |data| {
+            data.params
+                .week_patterns
+                .week_pattern_map
+                .get(&self.id)
+                .cloned()
+        })?;
+
+        crate::data::WeekPatternData::to_py(py, &pattern)
+    }
+
     /// Whether two handles name the same pattern of the same document
     ///
     /// Never reads the state, so it keeps working once the pattern is gone — a

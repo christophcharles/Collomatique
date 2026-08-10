@@ -14,7 +14,9 @@ use std::sync::{Arc, Mutex, Once};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
-use collomatique_python::data::{InterrogationData, StudentData, SubjectData, TeacherData};
+use collomatique_python::data::{
+    InterrogationData, SlotData, StudentData, SubjectData, TeacherData, WeekPatternData,
+};
 use collomatique_python::{FileRequest, collomatique};
 use collomatique_state_colloscopes::Data;
 use collomatique_ui_text::rendering::{
@@ -3208,6 +3210,523 @@ fn the_slots_read_back_with_the_cells_they_can_fill() {
     }));
 
     assert_eq!(global::<Vec<Vec<bool>>>(&globals, "possibility"), expected);
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// The pattern and slot values go out through `to_data()` and come back in
+/// unchanged
+///
+/// The headline is the round trip: what each handle handed the script,
+/// extracted again, is the pattern and the slot the document holds — every
+/// field of each, in one comparison per collection. The same fields as python
+/// saw them ride beside it, so that a conversion wrong in both directions at
+/// once cannot cancel itself out; the entities among them are named by their
+/// place in the walk they belong to, since an id means nothing written down.
+///
+/// The rest is the other kinds this milestone's tests are made of: values
+/// written out by hand, entity fields taking a handle and an id alike, and the
+/// refusals with the sentence each one raises. Neither model type has a
+/// `Default`, so there is no default to pin here — what §2.5 of the design
+/// asks for is a pin per class whose model has one.
+#[test]
+fn the_pattern_and_slot_values_carry_the_start_time_out_and_back() {
+    let dir = workspace("slot-values");
+    let source = example_copy(&dir, "source.collomatique");
+
+    let globals = run(include_str!("scripts/slot_data.py"), |globals| {
+        globals.set_item("source", &source)?;
+        Ok(())
+    });
+
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    // In id order for the patterns, and in the subjects-then-position walk for
+    // the slots: the two orders `doc.week_patterns` and `doc.slots` promise,
+    // which are the orders the script says it saw.
+    let patterns: Vec<_> = params
+        .week_patterns
+        .week_pattern_map
+        .iter()
+        .map(|(id, pattern)| (id, pattern.clone()))
+        .collect();
+    let walk: Vec<_> = params
+        .subjects
+        .ordered_subject_list
+        .keys()
+        .flat_map(|subject_id| {
+            params
+                .slots
+                .slots_for_subject(subject_id)
+                .into_iter()
+                .flatten()
+        })
+        .map(|(_slot_id, slot)| slot.clone())
+        .collect();
+    let week_walk: Vec<_> = params.week_ids().collect();
+
+    // The example is only worth reading if it has something to say: several
+    // patterns, every one of them switching something off, and slots of both
+    // shapes — some carrying a pattern and some not — with costs that are not
+    // all the same.
+    assert!(patterns.len() > 1);
+    assert!(
+        patterns
+            .iter()
+            .all(|(_id, pattern)| !pattern.excluded_weeks.is_empty())
+    );
+    assert!(walk.iter().any(|slot| slot.week_pattern.is_some()));
+    assert!(walk.iter().any(|slot| slot.week_pattern.is_none()));
+    assert!(walk.iter().any(|slot| slot.cost != walk[0].cost));
+
+    // Out and back, whole.
+    assert_eq!(
+        extracted_all::<WeekPatternData>(&globals, "pattern_values"),
+        patterns
+            .iter()
+            .map(|(_id, pattern)| pattern.clone())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(extracted_all::<SlotData>(&globals, "slot_values"), walk);
+
+    // And the same fields as python saw them.
+    let week_position = |week: &collomatique_state_colloscopes::WeekId| {
+        week_walk
+            .iter()
+            .position(|id| id == week)
+            .expect("an excluded week is a live one")
+    };
+    assert_eq!(
+        global::<Vec<String>>(&globals, "value_pattern_names"),
+        patterns
+            .iter()
+            .map(|(_id, pattern)| pattern.name.clone())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<Vec<usize>>>(&globals, "value_excluded_week_indices"),
+        patterns
+            .iter()
+            .map(|(_id, pattern)| {
+                let mut indices: Vec<_> =
+                    pattern.excluded_weeks.iter().map(week_position).collect();
+                indices.sort();
+                indices
+            })
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<usize>>(&globals, "value_subject_indices"),
+        walk.iter()
+            .map(|slot| params
+                .subjects
+                .find_subject_position(slot.subject_id)
+                .expect("a slot names a live subject"))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<String>>(&globals, "value_teacher_surnames"),
+        walk.iter()
+            .map(|slot| params
+                .teachers
+                .teacher_map
+                .get(&slot.teacher_id)
+                .expect("a slot names a live teacher")
+                .desc
+                .surname
+                .clone())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<String>>(&globals, "value_weekdays"),
+        walk.iter()
+            .map(|slot| weekday_name(slot.start_time.weekday).to_owned())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<chrono::NaiveTime>>(&globals, "value_start_times"),
+        walk.iter()
+            .map(|slot| *slot.start_time.start_time.inner())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<String>>(&globals, "value_extra_info"),
+        walk.iter()
+            .map(|slot| slot.extra_info.clone())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<Option<usize>>>(&globals, "value_pattern_indices"),
+        walk.iter()
+            .map(|slot| slot.week_pattern.map(|pattern_id| patterns
+                .iter()
+                .position(|(id, _pattern)| *id == pattern_id)
+                .expect("a slot names a live pattern")))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<i32>>(&globals, "value_costs"),
+        walk.iter().map(|slot| slot.cost).collect::<Vec<_>>()
+    );
+
+    // Built by hand: the value the script wrote out is the pattern expected of
+    // it, whether the week was named by handle, by id, or in a list.
+    let first_week = *week_walk.first().expect("the example has weeks");
+    let even_weeks = collomatique_state_colloscopes::week_patterns::WeekPattern {
+        name: "Semaines paires".to_owned(),
+        excluded_weeks: BTreeSet::from([first_week]),
+    };
+    for name in ["pattern_by_handle", "pattern_by_id", "pattern_by_list"] {
+        assert_eq!(extracted::<WeekPatternData>(&globals, name), even_weeks);
+    }
+
+    // A pattern that excludes nothing and was never named: both ends of what a
+    // pattern can be, and neither of them a value the boundary refuses.
+    assert_eq!(
+        extracted::<WeekPatternData>(&globals, "bare_pattern"),
+        collomatique_state_colloscopes::week_patterns::WeekPattern {
+            name: String::new(),
+            excluded_weeks: BTreeSet::new(),
+        }
+    );
+
+    // A slot written out from end to end, so that no field can pass by being
+    // left at the value the model would have put there anyway — and written
+    // twice, once naming its three entities by handle and once by id.
+    let first_subject = params
+        .subjects
+        .ordered_subject_list
+        .keys()
+        .next()
+        .expect("the example has subjects");
+    let first_teacher = params
+        .teachers
+        .teacher_map
+        .keys()
+        .next()
+        .expect("the example has teachers");
+    let first_pattern = patterns.first().expect("the example has patterns").0;
+    let at = |hour: u32, minute: u32| {
+        collomatique_time::WholeMinuteTime::new(
+            chrono::NaiveTime::from_hms_opt(hour, minute, 0).expect("a real time of day"),
+        )
+        .expect("a whole minute")
+    };
+    let written_out = collomatique_state_colloscopes::slots::Slot {
+        subject_id: first_subject,
+        teacher_id: first_teacher,
+        start_time: collomatique_time::SlotStart {
+            weekday: collomatique_time::Weekday(chrono::Weekday::Thu),
+            start_time: at(14, 0),
+        },
+        extra_info: "Salle 12".to_owned(),
+        week_pattern: Some(first_pattern),
+        cost: -3,
+    };
+    for name in ["slot_by_handle", "slot_by_id"] {
+        assert_eq!(extracted::<SlotData>(&globals, name), written_out);
+    }
+
+    // And one carrying nothing but the four fields a slot cannot do without:
+    // no extra info, every week, and no cost.
+    assert_eq!(
+        extracted::<SlotData>(&globals, "bare_slot"),
+        collomatique_state_colloscopes::slots::Slot {
+            subject_id: first_subject,
+            teacher_id: first_teacher,
+            start_time: collomatique_time::SlotStart {
+                weekday: collomatique_time::Weekday(chrono::Weekday::Mon),
+                start_time: at(8, 0),
+            },
+            extra_info: String::new(),
+            week_pattern: None,
+            cost: 0,
+        }
+    );
+
+    // The refusals, each with the sentence it raises: the class the script
+    // wrote down, the field, and what was given.
+    assert_eq!(
+        refused::<WeekPatternData>(&globals, "not_a_pattern_name"),
+        (
+            "TypeError".to_owned(),
+            "a WeekPatternData's name is a string, and 3 is not one".to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<SlotData>(&globals, "not_a_weekday"),
+        (
+            "TypeError".to_owned(),
+            "a SlotData's weekday is a Weekday, and 3 is not one".to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<SlotData>(&globals, "not_a_time"),
+        (
+            "TypeError".to_owned(),
+            "a SlotData's start_time is a time of day, and '8h00' is not one".to_owned(),
+        )
+    );
+
+    // The model's own precision, refused in the model's own words: a
+    // `datetime.time` counts microseconds and the document does not, so a time
+    // carrying either is not one this document can hold.
+    for name in ["seconds_in_the_time", "microseconds_in_the_time"] {
+        assert_eq!(
+            refused::<SlotData>(&globals, name),
+            (
+                "ValueError".to_owned(),
+                "a SlotData's start_time is a whole minute, with no seconds or microseconds"
+                    .to_owned(),
+            )
+        );
+    }
+
+    assert_eq!(
+        refused::<SlotData>(&globals, "not_an_extra_info"),
+        (
+            "TypeError".to_owned(),
+            "a SlotData's extra_info is a string, and 3 is not one".to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<SlotData>(&globals, "not_a_cost"),
+        (
+            "TypeError".to_owned(),
+            "a SlotData's cost is a whole number, and 'cher' is not one".to_owned(),
+        )
+    );
+
+    // A field naming an entity refuses with `argument`'s own sentence, so a
+    // script meets the same words here as anywhere else it passes something
+    // that was never a reference to this document.
+    assert_eq!(
+        refused::<SlotData>(&globals, "not_a_subject"),
+        (
+            "TypeError".to_owned(),
+            "a subject argument takes a Subject or a SubjectId, and 3 is neither".to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<SlotData>(&globals, "not_a_pattern"),
+        (
+            "TypeError".to_owned(),
+            "a week pattern argument takes a WeekPattern or a WeekPatternId, \
+             and 'Semaines paires' is neither"
+                .to_owned(),
+        )
+    );
+
+    // A handle of another document names nothing here — the same refusal every
+    // method of this api already makes.
+    let (kind, _message) = refused::<SlotData>(&globals, "foreign_teacher");
+    assert_eq!(kind, "StaleHandleError");
+    let (kind, _message) = refused::<WeekPatternData>(&globals, "foreign_week");
+    assert_eq!(kind, "StaleHandleError");
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// A pattern value carries the empty set, the whole one, and the missing name
+///
+/// The example cannot say this: all of its patterns carry a name and all of
+/// them switch something off. So this is
+/// [a_pattern_excludes_no_week_every_week_or_the_ones_it_names]'s document
+/// again — the one built for the three ends of what a pattern can be — read
+/// through `to_data()` this time, and written back in from python.
+#[test]
+fn the_pattern_values_carry_the_empty_set_and_the_whole_one() {
+    let dir = workspace("pattern-values");
+    let source = dir.join("exclusions.collomatique");
+    week_pattern_document(&source);
+
+    let globals = run(include_str!("scripts/pattern_data.py"), |globals| {
+        globals.set_item("source", &source)?;
+        Ok(())
+    });
+
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    let patterns: Vec<_> = params
+        .week_patterns
+        .week_pattern_map
+        .iter()
+        .map(|(_id, pattern)| pattern.clone())
+        .collect();
+    let week_walk: Vec<_> = params.week_ids().collect();
+
+    // The fixture is worth reading here for exactly the three shapes the
+    // example has not got.
+    assert!(
+        patterns
+            .iter()
+            .any(|pattern| pattern.excluded_weeks.is_empty())
+    );
+    assert!(
+        patterns
+            .iter()
+            .any(|pattern| pattern.excluded_weeks.len() == week_walk.len())
+    );
+    assert!(patterns.iter().any(|pattern| pattern.name.is_empty()));
+
+    assert_eq!(
+        extracted_all::<WeekPatternData>(&globals, "pattern_values"),
+        patterns
+    );
+    assert_eq!(
+        global::<Vec<String>>(&globals, "value_names"),
+        patterns
+            .iter()
+            .map(|pattern| pattern.name.clone())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<Vec<usize>>>(&globals, "value_excluded_week_indices"),
+        patterns
+            .iter()
+            .map(|pattern| {
+                let mut indices: Vec<_> = pattern
+                    .excluded_weeks
+                    .iter()
+                    .map(|week| {
+                        week_walk
+                            .iter()
+                            .position(|id| id == week)
+                            .expect("an excluded week is a live one")
+                    })
+                    .collect();
+                indices.sort();
+                indices
+            })
+            .collect::<Vec<_>>()
+    );
+
+    // The same two ends, written out in python rather than read out of the
+    // document.
+    assert_eq!(
+        extracted::<WeekPatternData>(&globals, "excluding_nothing"),
+        collomatique_state_colloscopes::week_patterns::WeekPattern {
+            name: "Toutes les semaines".to_owned(),
+            excluded_weeks: BTreeSet::new(),
+        }
+    );
+    assert_eq!(
+        extracted::<WeekPatternData>(&globals, "excluding_everything"),
+        collomatique_state_colloscopes::week_patterns::WeekPattern {
+            name: "Aucune semaine".to_owned(),
+            excluded_weeks: week_walk.iter().copied().collect(),
+        }
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// A removed slot, pattern and week stale the values that name them
+///
+/// Three removals between the two stages, because there are three failures to
+/// tell apart: a `Slot` handle whose slot is gone refuses the read `to_data()`
+/// is, a `WeekPattern` handle does the same, and a value holding a dead
+/// reference — a pattern in a `SlotData`, a week in a `WeekPatternData` — names
+/// nothing and is refused on extraction. The slot that survives keeps working
+/// and its value still names its own subject.
+///
+/// The mutations come from rust: the write surface does not exist yet, and this
+/// is what `run_stages` is for.
+#[test]
+fn a_removed_pattern_or_week_stales_the_slot_values_that_name_it() {
+    let dir = workspace("slot-values-stale");
+    let source = example_copy(&dir, "source.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same entities the script is holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    // The same three ends the script picks: the last slot of the walk, the last
+    // pattern in id order, and the last period with every week in it.
+    let doomed_slot = params
+        .subjects
+        .ordered_subject_list
+        .keys()
+        .flat_map(|subject_id| {
+            params
+                .slots
+                .slots_for_subject(subject_id)
+                .into_iter()
+                .flatten()
+        })
+        .map(|(slot_id, _slot)| *slot_id)
+        .last()
+        .expect("the example has slots");
+    let doomed_pattern = params
+        .week_patterns
+        .week_pattern_map
+        .keys()
+        .last()
+        .expect("the example has week patterns");
+    let doomed_period = params
+        .periods
+        .period_ids()
+        .last()
+        .expect("the example has periods");
+
+    let globals = run_stages(
+        &[
+            include_str!("scripts/slot_data_stale_before.py"),
+            include_str!("scripts/slot_data_stale_after.py"),
+        ],
+        |globals| {
+            globals.set_item("source", &source)?;
+            Ok(())
+        },
+        // Two scripts, so this runs once — and it makes all three changes,
+        // because the failures they cause are the halves of one test.
+        |py, globals| {
+            let doc = document_of(globals);
+            let apply = |op| {
+                doc.borrow_mut(py)
+                    .update(py, op)
+                    .expect("the example takes these three changes");
+            };
+
+            apply(collomatique_ops::UpdateOp::Slots(
+                collomatique_ops::SlotsUpdateOp::DeleteSlot(doomed_slot),
+            ));
+            apply(collomatique_ops::UpdateOp::WeekPatterns(
+                collomatique_ops::WeekPatternsUpdateOp::DeleteWeekPattern(doomed_pattern),
+            ));
+            apply(collomatique_ops::UpdateOp::GeneralPlanning(
+                collomatique_ops::GeneralPlanningUpdateOp::DeletePeriodAndWeeks(doomed_period),
+            ));
+        },
+    );
+
+    // The values naming the dead pattern no longer name anything, and it makes
+    // no difference whether the script wrote the handle or the id.
+    for name in [
+        "naming_the_dead_pattern_by_handle",
+        "naming_the_dead_pattern_by_id",
+    ] {
+        let (kind, _message) = refused::<SlotData>(&globals, name);
+        assert_eq!(kind, "StaleHandleError", "`{name}` should be refused");
+    }
+    let (kind, _message) = refused::<WeekPatternData>(&globals, "naming_the_dead_week");
+    assert_eq!(kind, "StaleHandleError");
+
+    // And the ones naming only what survived still extract — the slot that
+    // carries no pattern at all had nothing to lose here.
+    assert_eq!(
+        extracted::<SlotData>(&globals, "naming_no_pattern").week_pattern,
+        None
+    );
+    assert_eq!(
+        extracted::<WeekPatternData>(&globals, "naming_the_living_week")
+            .excluded_weeks
+            .len(),
+        1
+    );
 
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }

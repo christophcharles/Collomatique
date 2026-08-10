@@ -30,13 +30,30 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collomatique import Period, PeriodId, Periodicity, Subject, SubjectId
+    import datetime
+
+    from collomatique import (
+        Period,
+        PeriodId,
+        Periodicity,
+        Subject,
+        SubjectId,
+        Teacher,
+        TeacherId,
+        Week,
+        WeekId,
+        Weekday,
+        WeekPattern,
+        WeekPatternId,
+    )
 
 __all__ = [
     "TeacherData",
     "StudentData",
     "SubjectData",
     "InterrogationData",
+    "WeekPatternData",
+    "SlotData",
 ]
 
 
@@ -189,3 +206,82 @@ class SubjectData:
     name: str
     interrogation: InterrogationData | None = field(default_factory=InterrogationData)
     excluded_periods: set[Period | PeriodId] = field(default_factory=set)
+
+
+@dataclass
+class WeekPatternData:
+    """A week pattern, detached from the document.
+
+    `doc.week_patterns[...].to_data()` hands one back, and the pattern mutators
+    will take one:
+
+        clm.WeekPatternData("Semaines paires", excluded_weeks={w1, w3})
+
+    A pattern is stored as the weeks it *switches off*, and that is the whole of
+    it: every week not in `excluded_weeks` is one the pattern leaves alone. So a
+    pattern whose set is empty excludes nothing, which is an ordinary pattern
+    and not an unfinished one.
+
+    `name` is a plain string, the empty one included: the model types it that
+    way, so a pattern the user never named reads as `""` rather than as `None`.
+
+    `excluded_weeks` takes `Week` handles and `WeekId`s interchangeably, and
+    `to_data()` fills it with ids.
+
+    A week that runs no interrogations of its own may perfectly well be in the
+    set. The model keeps the two apart, so that switching such a week back on
+    brings back the pattern it had.
+    """
+
+    name: str
+    excluded_weeks: set[Week | WeekId] = field(default_factory=set)
+
+
+@dataclass
+class SlotData:
+    """A slot, detached from the document.
+
+    `doc.slots[...].to_data()` hands one back, and the slot mutators will take
+    one:
+
+        clm.SlotData(maths, snape, clm.Weekday.THURSDAY, datetime.time(14, 0))
+
+    `subject` is the subject whose colles this slot carries. It is a field of
+    the value rather than a separate argument, so `doc.slots.add(d)` reads it
+    off the value like every other collection's add. It cannot be *changed*
+    afterwards: the model files a slot under its subject in the list that gives
+    it its position, so `doc.slots.update` refuses a value naming a different
+    one instead of dropping the field. A read-modify-write never meets that,
+    since `to_data()` fills the field with the slot's own subject.
+
+    `subject`, `teacher` and `week_pattern` take handles and ids
+    interchangeably, and `to_data()` fills them with ids.
+
+    `weekday` is one of the seven `Weekday` values, and `start_time` a
+    `datetime.time` falling on a whole minute — the model stores the time with
+    minute precision, so one carrying seconds is refused when the value is used.
+    Neither has an honest default: a slot that does not say when it happens is
+    not a slot.
+
+    A slot has no duration of its own. The subject fixes it, so the length of a
+    colle is that subject's `interrogation.duration`.
+
+    `extra_info` is what the export prints beside the slot — a room number, and
+    the like. A plain string, the empty one included.
+
+    `week_pattern` says which weeks this slot really runs on. `None` means every
+    week: the slot carries no pattern of its own, so only the weeks' own flags
+    switch it off.
+
+    `cost` is what using this slot costs the solver. Zero leaves it alone, a
+    positive cost tells the solver to avoid the slot, a negative one to favour
+    it.
+    """
+
+    subject: Subject | SubjectId
+    teacher: Teacher | TeacherId
+    weekday: Weekday
+    start_time: datetime.time
+    extra_info: str = ""
+    week_pattern: WeekPattern | WeekPatternId | None = None
+    cost: int = 0

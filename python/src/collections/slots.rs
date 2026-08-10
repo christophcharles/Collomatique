@@ -291,6 +291,31 @@ impl Slot {
         crate::refs::slot_references(py, self)
     }
 
+    /// This slot, detached — a `SlotData` holding what the handle shows
+    ///
+    /// A fresh object every call. The subject, the teacher and the pattern come
+    /// out as ids rather than as handles, because a value holding handles would
+    /// carry this document around with it and keep it alive
+    /// (`docs/python/values.md` §2.3).
+    ///
+    /// The subject is in the value although no slot op really carries it: what
+    /// `to_data()` hands back is the slot, whole, which is what makes
+    /// `doc.snapshot()` buildable out of these classes (§2.0). It also means a
+    /// read-modify-write never trips over the field that cannot change —
+    /// `slot.to_data()` fills it with this slot's own subject.
+    ///
+    /// A stale handle raises `StaleHandleError` like every other read.
+    fn to_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        use crate::data::Value as _;
+
+        // Copied out of the borrow before anything python-facing happens:
+        // building the value calls into python, and doing that under the
+        // document's borrow is how a nested borrow becomes a `PanicException`.
+        let slot = self.read(py, |data| data.params.slots.find_slot(self.id).cloned())?;
+
+        crate::data::SlotData::to_py(py, &slot)
+    }
+
     /// Whether two handles name the same slot of the same document
     ///
     /// Never reads the state, so it keeps working once the slot is gone — a dict
