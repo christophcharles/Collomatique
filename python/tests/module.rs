@@ -14,6 +14,7 @@ use std::sync::{Arc, Mutex, Once};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
+use collomatique_python::data::{StudentData, TeacherData};
 use collomatique_python::{FileRequest, collomatique};
 use collomatique_state_colloscopes::Data;
 use collomatique_ui_text::rendering::{
@@ -188,6 +189,92 @@ where
             .unwrap_or_else(|| panic!("the script sets `{name}`"))
             .extract()
             .unwrap_or_else(|_| panic!("`{name}` should convert to what the test compares it with"))
+    })
+}
+
+/// One value a script built, extracted the way a mutator will extract it
+///
+/// The inbound half of the boundary has no python-facing caller until the ops
+/// mirror lands, so the test drives the door the mirror will drive:
+/// `Value::from_py`, against the document the script left in its globals.
+fn extracted<V: collomatique_python::data::Value>(globals: &Py<PyDict>, name: &str) -> V::Model {
+    Python::attach(|py| {
+        let globals = globals.bind(py);
+        let doc = document_of(globals);
+        let value = globals
+            .get_item(name)
+            .expect("looking up a global should not fail")
+            .unwrap_or_else(|| panic!("the script sets `{name}`"));
+
+        V::from_py(&doc, &value).unwrap_or_else(|e| {
+            e.print(py);
+            panic!("`{name}` should extract")
+        })
+    })
+}
+
+/// The values one global holds, each extracted
+///
+/// A list of values is what a walk over a collection leaves behind, so this is
+/// the shape most of the round trip is written in.
+fn extracted_all<V: collomatique_python::data::Value>(
+    globals: &Py<PyDict>,
+    name: &str,
+) -> Vec<V::Model> {
+    Python::attach(|py| {
+        let globals = globals.bind(py);
+        let doc = document_of(globals);
+        let values = globals
+            .get_item(name)
+            .expect("looking up a global should not fail")
+            .unwrap_or_else(|| panic!("the script sets `{name}`"));
+
+        values
+            .try_iter()
+            .unwrap_or_else(|_| panic!("`{name}` is a list of values"))
+            .map(|value| {
+                V::from_py(&doc, &value.expect("iterating a list should not fail")).unwrap_or_else(
+                    |e| {
+                        e.print(py);
+                        panic!("every value in `{name}` should extract")
+                    },
+                )
+            })
+            .collect()
+    })
+}
+
+/// How extracting one value the script built was refused
+///
+/// The exception's class name and its message, both of them: the refusals of
+/// §2.4 are `ValueError`s that name the class and the field, and a test that
+/// only checked the class would not notice a message naming the wrong field.
+fn refused<V: collomatique_python::data::Value>(
+    globals: &Py<PyDict>,
+    name: &str,
+) -> (String, String)
+where
+    V::Model: std::fmt::Debug,
+{
+    Python::attach(|py| {
+        let globals = globals.bind(py);
+        let doc = document_of(globals);
+        let value = globals
+            .get_item(name)
+            .expect("looking up a global should not fail")
+            .unwrap_or_else(|| panic!("the script sets `{name}`"));
+
+        let error =
+            V::from_py(&doc, &value).expect_err("this value is one the boundary must refuse");
+
+        (
+            error
+                .get_type(py)
+                .name()
+                .expect("an exception class has a name")
+                .to_string(),
+            error.value(py).to_string(),
+        )
     })
 }
 
@@ -1861,6 +1948,325 @@ fn a_person_who_shared_nothing_reads_as_none() {
         globals.set_item("other_source", &other_source)?;
         Ok(())
     });
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// The people values go out through `to_data()` and come back in unchanged
+///
+/// The headline is the round trip: what each handle handed the script,
+/// extracted again, is the teacher the document holds — every field, in one
+/// comparison. Beside it the same fields are compared as python saw them, so
+/// that a conversion wrong in both directions at once cannot cancel itself out.
+///
+/// The rest is the other four kinds this milestone's tests are made of: a value
+/// written out by hand, the defaults pinned against the model's own, the
+/// refusals with the sentence each one raises, and the entity field taking a
+/// handle and an id alike.
+#[test]
+fn the_people_values_carry_the_card_out_and_back() {
+    let dir = workspace("people-values");
+    let source = example_copy(&dir, "source.collomatique");
+
+    let globals = run(include_str!("scripts/people_data.py"), |globals| {
+        globals.set_item("source", &source)?;
+        Ok(())
+    });
+
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    let teachers: Vec<_> = params
+        .teachers
+        .teacher_map
+        .iter()
+        .map(|(_id, teacher)| teacher.clone())
+        .collect();
+    let students: Vec<_> = params
+        .students
+        .student_map
+        .iter()
+        .map(|(_id, student)| student.clone())
+        .collect();
+
+    // Out and back, whole.
+    assert_eq!(
+        extracted_all::<TeacherData>(&globals, "teacher_values"),
+        teachers
+    );
+    assert_eq!(
+        extracted_all::<StudentData>(&globals, "student_values"),
+        students
+    );
+
+    // And the same fields as python saw them.
+    assert_eq!(
+        global::<Vec<String>>(&globals, "value_firstnames"),
+        teachers
+            .iter()
+            .map(|teacher| teacher.desc.firstname.clone())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<String>>(&globals, "value_surnames"),
+        teachers
+            .iter()
+            .map(|teacher| teacher.desc.surname.clone())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<Option<String>>>(&globals, "value_tels"),
+        teachers
+            .iter()
+            .map(|teacher| optional_text(&teacher.desc.tel))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<Option<String>>>(&globals, "value_emails"),
+        teachers
+            .iter()
+            .map(|teacher| optional_text(&teacher.desc.email))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<Option<String>>>(&globals, "student_value_tels"),
+        students
+            .iter()
+            .map(|student| optional_text(&student.desc.tel))
+            .collect::<Vec<_>>()
+    );
+
+    // The example is only worth reading if it has something to say: an empty
+    // firstname, a teacher with no number, a teacher with one.
+    assert!(
+        teachers
+            .iter()
+            .any(|teacher| teacher.desc.firstname.is_empty())
+    );
+    assert!(teachers.iter().any(|teacher| teacher.desc.tel.is_none()));
+    assert!(teachers.iter().any(|teacher| teacher.desc.tel.is_some()));
+
+    // Built by hand: the value the script wrote out is the teacher expected of
+    // it, whether the subject was named by handle, by id, or in a list.
+    let first_subject = params
+        .subjects
+        .ordered_subject_list
+        .keys()
+        .next()
+        .expect("the example has subjects");
+    let noether = collomatique_state_colloscopes::teachers::Teacher {
+        desc: person("Emmy", "Noether", None, Some("noether@lycee.fr")),
+        subjects: BTreeSet::from([first_subject]),
+    };
+    assert_eq!(extracted::<TeacherData>(&globals, "by_handle"), noether);
+    assert_eq!(extracted::<TeacherData>(&globals, "by_id"), noether);
+    assert_eq!(extracted::<TeacherData>(&globals, "by_list"), noether);
+
+    // The defaults, pinned against the model's own: with the two required
+    // fields set to what the model's empty card holds, the whole value is the
+    // model's own `Default`. This is the assertion that stops the python-side
+    // defaults drifting from the rust ones.
+    assert_eq!(
+        extracted::<TeacherData>(&globals, "bare_teacher"),
+        collomatique_state_colloscopes::teachers::Teacher::default()
+    );
+    assert_eq!(
+        extracted::<StudentData>(&globals, "bare_student"),
+        collomatique_state_colloscopes::students::Student::default()
+    );
+
+    // The refusals, each with the sentence it raises. `''` is not `None`
+    // wherever the model types the field as an optional non-empty string, and
+    // the message names the class and the field so a script knows which line to
+    // look at.
+    assert_eq!(
+        refused::<TeacherData>(&globals, "empty_tel"),
+        (
+            "ValueError".to_owned(),
+            "a TeacherData's tel is a non-empty string or None, and '' is neither".to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<TeacherData>(&globals, "empty_email"),
+        (
+            "ValueError".to_owned(),
+            "a TeacherData's email is a non-empty string or None, and '' is neither".to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<StudentData>(&globals, "empty_student_tel"),
+        (
+            "ValueError".to_owned(),
+            "a StudentData's tel is a non-empty string or None, and '' is neither".to_owned(),
+        )
+    );
+
+    // A field that is not the kind it says it is fails before anything else
+    // does, and says which field it was.
+    let (kind, message) = refused::<TeacherData>(&globals, "not_a_name");
+    assert_eq!(kind, "TypeError");
+    assert_eq!(
+        message,
+        "a TeacherData's firstname is a string, and 3 is not one"
+    );
+
+    // A handle of another document names nothing here — the same refusal every
+    // method of this api already makes.
+    let (kind, _message) = refused::<TeacherData>(&globals, "foreign_subject");
+    assert_eq!(kind, "StaleHandleError");
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// A person who shared nothing, and a set that runs from empty to whole
+///
+/// The example gives everybody at least one contact detail, every teacher a
+/// subject, and no student a period to sit out, so the shapes at the two ends
+/// need the fixture `a_person_who_shared_nothing_reads_as_none` already builds.
+/// What this pins is that the sets carry what the model holds — the round trip
+/// through `from_py` says so field by field — and that an empty one is a set
+/// rather than a `None`.
+#[test]
+fn a_value_carries_the_empty_sets_and_the_missing_contacts() {
+    let dir = workspace("people-values-contacts");
+    let source = dir.join("contacts.collomatique");
+    contact_document(&source);
+
+    let globals = run(include_str!("scripts/people_data_contacts.py"), |globals| {
+        globals.set_item("source", &source)?;
+        Ok(())
+    });
+
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    let teachers: Vec<_> = params
+        .teachers
+        .teacher_map
+        .iter()
+        .map(|(_id, teacher)| teacher.clone())
+        .collect();
+    let students: Vec<_> = params
+        .students
+        .student_map
+        .iter()
+        .map(|(_id, student)| student.clone())
+        .collect();
+
+    assert_eq!(
+        extracted_all::<TeacherData>(&globals, "teacher_values"),
+        teachers
+    );
+    assert_eq!(
+        extracted_all::<StudentData>(&globals, "student_values"),
+        students
+    );
+
+    assert_eq!(
+        global::<Vec<usize>>(&globals, "subject_counts"),
+        teachers
+            .iter()
+            .map(|teacher| teacher.subjects.len())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<usize>>(&globals, "excluded_counts"),
+        students
+            .iter()
+            .map(|student| student.excluded_periods.len())
+            .collect::<Vec<_>>()
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// A removed subject stales the values that name it, and a removed teacher
+/// stales `to_data()`
+///
+/// Two different failures, so two different removals. A value holds an id, and
+/// an id whose entity is gone names nothing: extracting such a value raises
+/// `StaleHandleError`, whether the script wrote the handle or the id, and it is
+/// the same refusal every method of this api already makes. `to_data()` is a
+/// read, so a dead handle refuses it like any other read.
+///
+/// The removals come from rust: the write surface does not exist yet, and this
+/// is what `run_stages` is for.
+#[test]
+fn a_removed_entity_stales_the_values_that_name_it() {
+    let dir = workspace("people-values-stale");
+    let source = example_copy(&dir, "source.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same entities the script is holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    let subject_ids: Vec<_> = params.subjects.ordered_subject_list.keys().collect();
+    let teachers: Vec<_> = params.teachers.teacher_map.iter().collect();
+
+    // A subject at least one teacher interrogates in, and a teacher who does
+    // not — so the survivor the script looks at is not the one being removed.
+    let (doomed_subject_index, doomed_subject) = subject_ids
+        .iter()
+        .enumerate()
+        .map(|(index, id)| (index, *id))
+        .find(|(_index, id)| {
+            teachers
+                .iter()
+                .any(|(_teacher_id, teacher)| teacher.subjects.contains(id))
+        })
+        .expect("some teacher of the example interrogates in some subject");
+    let (doomed_teacher_index, doomed_teacher) = teachers
+        .iter()
+        .enumerate()
+        .find(|(_index, (_id, teacher))| !teacher.subjects.contains(&doomed_subject))
+        .map(|(index, (id, _teacher))| (index, *id))
+        .expect("some teacher of the example does not interrogate in that subject");
+
+    let globals = run_stages(
+        &[
+            include_str!("scripts/people_data_stale_before.py"),
+            include_str!("scripts/people_data_stale_after.py"),
+        ],
+        |globals| {
+            globals.set_item("source", &source)?;
+            globals.set_item("doomed_subject_index", doomed_subject_index)?;
+            globals.set_item("doomed_teacher_index", doomed_teacher_index)?;
+            Ok(())
+        },
+        // Two scripts, so this runs once — and it makes both removals, because
+        // the two failures they cause are the two halves of one test.
+        |py, globals| {
+            let doc = document_of(globals);
+            doc.borrow_mut(py)
+                .update(
+                    py,
+                    collomatique_ops::UpdateOp::Subjects(
+                        collomatique_ops::SubjectsUpdateOp::DeleteSubject(doomed_subject),
+                    ),
+                )
+                .expect("a subject of the example is removable");
+            doc.borrow_mut(py)
+                .update(
+                    py,
+                    collomatique_ops::UpdateOp::Teachers(
+                        collomatique_ops::TeachersUpdateOp::DeleteTeacher(doomed_teacher),
+                    ),
+                )
+                .expect("a teacher of the example is removable");
+        },
+    );
+
+    // The two values naming the dead subject no longer name anything, and it
+    // makes no difference whether the script wrote the handle or the id.
+    for name in ["naming_the_dead_by_handle", "naming_the_dead_by_id"] {
+        let (kind, _message) = refused::<TeacherData>(&globals, name);
+        assert_eq!(kind, "StaleHandleError", "`{name}` should be refused");
+    }
+
+    // And the one naming a subject that survived still extracts.
+    let still_good = extracted::<TeacherData>(&globals, "naming_the_living");
+    assert_eq!(still_good.subjects.len(), 1);
 
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }

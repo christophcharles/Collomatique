@@ -230,6 +230,24 @@ impl Student {
         crate::refs::student_references(py, self)
     }
 
+    /// This student, detached — a `StudentData` holding what the handle shows
+    ///
+    /// A fresh object every call, with the excluded periods as `PeriodId`s
+    /// rather than as handles, for the reason [Teacher::to_data] gives.
+    ///
+    /// A stale handle raises `StaleHandleError` like every other read.
+    ///
+    /// [Teacher::to_data]: crate::collections::Teacher::to_data
+    fn to_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        use crate::data::Value as _;
+
+        let student = self.read(py, |data| {
+            data.params.students.student_map.get(&self.id).cloned()
+        })?;
+
+        crate::data::StudentData::to_py(py, &student)
+    }
+
     /// Whether two handles name the same student of the same document
     ///
     /// Never reads the state, so it keeps working once the student is gone — a

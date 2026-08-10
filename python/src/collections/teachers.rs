@@ -227,6 +227,29 @@ impl Teacher {
         crate::refs::teacher_references(py, self)
     }
 
+    /// This teacher, detached — a `TeacherData` holding what the handle shows
+    ///
+    /// A fresh object every call: two calls give two values that compare equal
+    /// and share nothing, and writing to one changes nothing anywhere. The
+    /// subjects come out as `SubjectId`s rather than as handles, because a value
+    /// holding handles would carry this document around with it and keep it
+    /// alive (`docs/python/values.md` §2.3).
+    ///
+    /// A stale handle raises `StaleHandleError` like every other read.
+    fn to_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        use crate::data::Value as _;
+
+        // Copied out of the borrow before anything python-facing happens.
+        // Building the value calls into python — the dataclass's own
+        // `__init__` — and doing that while the document is borrowed is how a
+        // nested borrow becomes a `PanicException`.
+        let teacher = self.read(py, |data| {
+            data.params.teachers.teacher_map.get(&self.id).cloned()
+        })?;
+
+        crate::data::TeacherData::to_py(py, &teacher)
+    }
+
     /// Whether two handles name the same teacher of the same document
     ///
     /// Never reads the state, so it keeps working once the teacher is gone — a

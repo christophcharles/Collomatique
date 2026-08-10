@@ -9,6 +9,7 @@ use pyo3::prelude::*;
 
 pub mod caveats;
 pub mod collections;
+pub mod data;
 pub mod dialogs;
 pub mod document;
 pub mod errors;
@@ -63,6 +64,7 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     caveats::register(m)?;
     collections::register(m)?;
+    data::register(m)?;
     dialogs::register(m)?;
     host::register(m)?;
     ids::register(m)?;
