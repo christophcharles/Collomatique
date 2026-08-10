@@ -38,6 +38,8 @@ if TYPE_CHECKING:
         Period,
         PeriodId,
         Periodicity,
+        Slot,
+        SlotId,
         Subject,
         SubjectId,
         Teacher,
@@ -59,6 +61,10 @@ __all__ = [
     "SlotData",
     "IncompatData",
     "GroupListData",
+    "PairingRuleSideData",
+    "PairingRuleData",
+    "SlotPairingRuleSideData",
+    "SlotPairingRuleData",
 ]
 
 
@@ -410,3 +416,118 @@ class GroupListData:
     students_per_group: tuple[int, int] = (2, 3)
     group_names: list[str | None] = field(default_factory=_sixteen_unnamed)
     filling: Filling = field(default_factory=_automatic_filling)
+
+
+@dataclass
+class PairingRuleSideData:
+    """One end of a pairing rule, detached from the document.
+
+    `rule.antecedent.to_data()` and `rule.consequent.to_data()` hand one back,
+    and a `PairingRuleData` holds one of each:
+
+        clm.PairingRuleSideData(maths)
+        clm.PairingRuleSideData(maths, should_have=False)
+
+    `subject` is the subject this end of the rule is about. It takes a
+    `Subject` handle or a `SubjectId`, like every other place in this API
+    that names an entity; `to_data()` fills it with an id, so that a value
+    carries no document around with it.
+
+    `should_have` is whether a student marked for the rule is marked *for*
+    this subject's interrogation, or marked off it. `True` is the neutral
+    spelling, the one the application itself starts a new rule with.
+    """
+
+    subject: Subject | SubjectId
+    should_have: bool = True
+
+
+@dataclass
+class PairingRuleData:
+    """A pairing rule, detached from the document.
+
+    `doc.pairings[...].to_data()` hands one back, and the pairing rule
+    mutators will take one:
+
+        clm.PairingRuleData(clm.PairingRuleSideData(maths),
+                            clm.PairingRuleSideData(physics))
+
+    The rule is an implication between two subjects: a student who satisfies
+    the `antecedent` in a week — who `should_have` its subject's
+    interrogation, or not — must also satisfy the `consequent`.
+
+    The two ends are plain values, not leaves, so they are written as well as
+    read: `d.antecedent.should_have = False` is a real mutation of a detached
+    builder, and the same line on a frozen leaf would write to a temporary
+    that is thrown away.
+
+    `excluded_periods` is the set of periods the rule does not apply to. It
+    takes `Period` handles and `PeriodId`s interchangeably, and `to_data()`
+    fills it with ids.
+
+    `soft` says whether the rule is an objective for the solver to optimize
+    rather than a constraint it must enforce. `False` is the strict spelling,
+    the one the application itself starts a new rule with.
+
+    A rule whose two ends name the same subject is meaningless — an
+    implication from a subject to itself — and it is refused when the value
+    is used, by the model's own constructor, whose message is the one a
+    script meets.
+    """
+
+    antecedent: PairingRuleSideData
+    consequent: PairingRuleSideData
+    excluded_periods: set[Period | PeriodId] = field(default_factory=set)
+    soft: bool = False
+
+
+@dataclass
+class SlotPairingRuleSideData:
+    """One end of a slot pairing rule, detached from the document.
+
+    `rule.antecedent.to_data()` and `rule.consequent.to_data()` hand one
+    back, and a `SlotPairingRuleData` holds one of each:
+
+        clm.SlotPairingRuleSideData(first_slot)
+        clm.SlotPairingRuleSideData(first_slot, should_have=False)
+
+    The same card as `PairingRuleSideData`, with a slot in place of a subject:
+    the rule is an implication between two slots, and this end says which slot
+    it is about and whether a week marked for the rule has that slot used.
+
+    `slot` takes a `Slot` handle or a `SlotId`, and `to_data()` fills it with
+    an id. `should_have` defaults to `True`, the spelling the application
+    itself starts a new rule with.
+    """
+
+    slot: Slot | SlotId
+    should_have: bool = True
+
+
+@dataclass
+class SlotPairingRuleData:
+    """A slot pairing rule, detached from the document.
+
+    `doc.slot_pairings[...].to_data()` hands one back, and the slot pairing
+    rule mutators will take one:
+
+        clm.SlotPairingRuleData(clm.SlotPairingRuleSideData(first_slot),
+                                clm.SlotPairingRuleSideData(second_slot))
+
+    The rule is the slots' version of a pairing rule: if the `antecedent`
+    slot is used in a week, the `consequent` slot must also be used — or not.
+
+    `excluded_periods` and `soft` behave exactly as they do on a
+    `PairingRuleData`, and for the same reasons.
+
+    A rule whose two ends name the same slot is meaningless — an implication
+    from a slot to itself — and it is refused when the value is used, by the
+    model's own constructor, whose message is the one a script meets. That
+    both slots belong to the same subject is a statement about the document,
+    and it is the write that refuses it, not this class.
+    """
+
+    antecedent: SlotPairingRuleSideData
+    consequent: SlotPairingRuleSideData
+    excluded_periods: set[Period | PeriodId] = field(default_factory=set)
+    soft: bool = False

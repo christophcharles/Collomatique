@@ -239,6 +239,28 @@ impl PairingRule {
         crate::refs::never_referenced::<Self>(py, self)
     }
 
+    /// This pairing rule, detached — a `PairingRuleData` holding what the
+    /// handle shows
+    ///
+    /// A fresh object every call. The two ends come out as the matching side
+    /// values, their subjects as ids rather than as handles, since a value
+    /// holding handles would carry this document around with it and keep it
+    /// alive (`docs/python/values.md` §2.3).
+    ///
+    /// A stale handle raises `StaleHandleError` like every other read.
+    fn to_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        use crate::data::Value as _;
+
+        // Copied out of the borrow before anything python-facing happens:
+        // building the value calls into python, and doing that under the
+        // document's borrow is how a nested borrow becomes a `PanicException`.
+        let rule = self.read(py, |data| {
+            data.params.pairings.pairing_rule_map.get(&self.id).cloned()
+        })?;
+
+        crate::data::PairingRuleData::to_py(py, &rule)
+    }
+
     /// Whether two handles name the same pairing rule of the same document
     ///
     /// Never reads the state, so it keeps working once the rule is gone — a
@@ -350,6 +372,25 @@ impl PairingRuleSide {
     #[getter]
     fn should_have(&self, py: Python<'_>) -> PyResult<bool> {
         self.read(py, |part| part.should_have)
+    }
+
+    /// This side of the rule, detached — a `PairingRuleSideData` holding what
+    /// the view shows
+    ///
+    /// A fresh object every call. The subject comes out as an id rather than
+    /// as a handle, since a value holding handles would carry this document
+    /// around with it and keep it alive (`docs/python/values.md` §2.3).
+    ///
+    /// A stale view raises `StaleHandleError` like every other read.
+    fn to_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        use crate::data::Value as _;
+
+        // Copied out of the borrow before anything python-facing happens:
+        // building the value calls into python, and doing that under the
+        // document's borrow is how a nested borrow becomes a `PanicException`.
+        let part = self.read(py, |part| part.clone())?;
+
+        crate::data::PairingRuleSideData::to_py(py, &part)
     }
 
     /// Whether two views are about the same end of the same rule of the same

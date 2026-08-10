@@ -15,8 +15,9 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
 use collomatique_python::data::{
-    GroupListData, IncompatData, InterrogationData, SlotData, StudentData, SubjectData,
-    TeacherData, WeekPatternData,
+    GroupListData, IncompatData, InterrogationData, PairingRuleData, PairingRuleSideData, SlotData,
+    SlotPairingRuleData, SlotPairingRuleSideData, StudentData, SubjectData, TeacherData,
+    WeekPatternData,
 };
 use collomatique_python::{FileRequest, collomatique};
 use collomatique_state_colloscopes::Data;
@@ -5854,6 +5855,618 @@ fn a_removed_slot_pairing_rule_takes_its_sides_with_it() {
                 )
                 .expect("the example's second slot pairing rule is removable");
         },
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// The pairing rules come back detached, out and back
+///
+/// The script walks `doc.pairings` and leaves what it saw; rust compares it
+/// with the same document read straight from the model — the whole rule, and
+/// the same fields as python saw them. The fixture the read surface built for
+/// the two rules carries this test: both `should_have` polarities on each
+/// side, soft both ways, one rule excluding a period and one excluding none,
+/// which the example (no subject pairing rules at all) cannot show.
+#[test]
+fn the_pairing_rules_come_back_detached() {
+    use collomatique_state_colloscopes::pairings::{PairingRule, RulePart};
+
+    let dir = workspace("pairing-rule-data");
+    let source = dir.join("pairings.collomatique");
+    pairings_document(&source);
+
+    let globals = run(include_str!("scripts/pairing_rule_data.py"), |globals| {
+        globals.set_item("source", &source)?;
+        Ok(())
+    });
+
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    // The fixture is only worth reading if it has something to say: two rules,
+    // both polarities on each side, soft both ways, one exclusion set empty
+    // and one not.
+    let rules: Vec<_> = params
+        .pairings
+        .pairing_rule_map
+        .iter()
+        .map(|(id, rule)| (id, rule.clone()))
+        .collect();
+    assert_eq!(rules.len(), 2);
+    assert!(rules.iter().any(|(_id, rule)| rule.soft()));
+    assert!(rules.iter().any(|(_id, rule)| !rule.soft()));
+
+    // Out and back, whole — the rules, and the ends of them on their own.
+    assert_eq!(
+        extracted_all::<PairingRuleData>(&globals, "rule_values"),
+        rules
+            .iter()
+            .map(|(_id, rule)| rule.clone())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        extracted_all::<PairingRuleSideData>(&globals, "side_values"),
+        rules
+            .iter()
+            .flat_map(|(_id, rule)| [rule.antecedent().clone(), rule.consequent().clone()])
+            .collect::<Vec<_>>()
+    );
+
+    // And the same fields as python saw them.
+    assert_eq!(
+        global::<Vec<bool>>(&globals, "rule_softs"),
+        rules
+            .iter()
+            .map(|(_id, rule)| rule.soft())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<(bool, bool)>>(&globals, "side_should_haves"),
+        rules
+            .iter()
+            .map(|(_id, rule)| (rule.antecedent().should_have, rule.consequent().should_have,))
+            .collect::<Vec<_>>()
+    );
+
+    let subject_name = |id: &collomatique_state_colloscopes::SubjectId| {
+        params
+            .subjects
+            .ordered_subject_list
+            .get(id)
+            .expect("a rule names a live subject")
+            .parameters
+            .name
+            .clone()
+    };
+    assert_eq!(
+        global::<Vec<String>>(&globals, "antecedent_subject_names"),
+        rules
+            .iter()
+            .map(|(_id, rule)| subject_name(&rule.antecedent().subject_id))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<String>>(&globals, "consequent_subject_names"),
+        rules
+            .iter()
+            .map(|(_id, rule)| subject_name(&rule.consequent().subject_id))
+            .collect::<Vec<_>>()
+    );
+
+    // The exclusions, read through the display positions of the periods in
+    // them — a period named by its place in the document's own order.
+    let period_ids: Vec<_> = params.periods.period_ids().collect();
+    assert_eq!(
+        global::<Vec<Vec<usize>>>(&globals, "excluded_period_indices"),
+        rules
+            .iter()
+            .map(|(_id, rule)| {
+                let mut indices: Vec<_> = rule
+                    .excluded_periods()
+                    .iter()
+                    .map(|period| {
+                        period_ids
+                            .iter()
+                            .position(|id| id == period)
+                            .expect("an excluded period is a live one")
+                    })
+                    .collect();
+                indices.sort();
+                indices
+            })
+            .collect::<Vec<_>>()
+    );
+
+    // Built by hand: the value the script wrote out is the rule expected of
+    // it, whether the subjects were named by handle or by id.
+    use collomatique_state::ids::Id as _;
+    let subject = |n: u64| unsafe { collomatique_state_colloscopes::SubjectId::new(n) };
+    let period = |n: u64| unsafe { collomatique_state_colloscopes::PeriodId::new(n) };
+    let expected_strict = PairingRule::new(
+        RulePart {
+            subject_id: subject(11),
+            should_have: true,
+        },
+        RulePart {
+            subject_id: subject(12),
+            should_have: false,
+        },
+        BTreeSet::new(),
+        false,
+    )
+    .expect("the hand-built rule is internally consistent");
+    for name in ["by_handle", "by_id"] {
+        assert_eq!(
+            extracted::<PairingRuleData>(&globals, name),
+            expected_strict
+        );
+    }
+
+    // The soft rule with a period excluded, named entirely by id — reproducing
+    // the fixture's own rule, so that rust can compare it whole.
+    assert_eq!(
+        extracted::<PairingRuleData>(&globals, "soft_by_id"),
+        PairingRule::new(
+            RulePart {
+                subject_id: subject(11),
+                should_have: true,
+            },
+            RulePart {
+                subject_id: subject(12),
+                should_have: false,
+            },
+            BTreeSet::from([period(2)]),
+            true,
+        )
+        .expect("the hand-built rule is internally consistent")
+    );
+
+    // The defaults: `should_have` True on each side, no exclusion, strict —
+    // the spellings the application itself starts a new rule with. The model
+    // has no `Default` for the rule, so these are written out and re-read
+    // rather than pinned.
+    assert_eq!(
+        extracted::<PairingRuleData>(&globals, "defaults"),
+        PairingRule::new(
+            RulePart {
+                subject_id: subject(11),
+                should_have: true,
+            },
+            RulePart {
+                subject_id: subject(12),
+                should_have: true,
+            },
+            BTreeSet::new(),
+            false,
+        )
+        .expect("the hand-built rule is internally consistent")
+    );
+
+    // The refusals, each with the sentence it raises: the class the script
+    // wrote down, the field, and what was given.
+    assert_eq!(
+        refused::<PairingRuleData>(&globals, "not_a_subject"),
+        (
+            "TypeError".to_owned(),
+            "a subject argument takes a Subject or a SubjectId, and 3 is neither".to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<PairingRuleData>(&globals, "not_a_side"),
+        (
+            "TypeError".to_owned(),
+            "a PairingRuleData is expected here, and 'Aurore' has no antecedent.subject".to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<PairingRuleData>(&globals, "not_a_side_flag"),
+        (
+            "TypeError".to_owned(),
+            "a PairingRuleData's antecedent.should_have is True or False, and 1 is neither"
+                .to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<PairingRuleData>(&globals, "not_a_rule_flag"),
+        (
+            "TypeError".to_owned(),
+            "a PairingRuleData's soft is True or False, and 1 is neither".to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<PairingRuleData>(&globals, "not_a_periods_set"),
+        (
+            "TypeError".to_owned(),
+            "a PairingRuleData's excluded_periods is a set of entities, and 3 cannot be \
+             iterated over"
+                .to_owned(),
+        )
+    );
+
+    // The sealed-constructor violation, in the model's own words.
+    assert_eq!(
+        refused::<PairingRuleData>(&globals, "same_subject_twice"),
+        (
+            "ValueError".to_owned(),
+            format!(
+                "antecedent and consequent subjects are the same ({:?})",
+                subject(11),
+            ),
+        )
+    );
+
+    // A handle of another document names nothing here — the same refusal every
+    // method of this api already makes.
+    let (kind, _message) = refused::<PairingRuleData>(&globals, "foreign_rule");
+    assert_eq!(kind, "StaleHandleError");
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// The slot pairing rules come back detached, out and back
+///
+/// The script walks `doc.slot_pairings` and leaves what it saw; rust compares
+/// it with the same document read straight from the model. The example
+/// carries two slot pairing rules, both strict, both excluding no period,
+/// with a used antecedent and an unused consequent; the soft-with-exclusion
+/// shape it does not carry is built by hand.
+#[test]
+fn the_slot_pairing_rules_come_back_detached() {
+    use collomatique_state_colloscopes::slot_pairings::{SlotPairingRule, SlotRulePart};
+
+    let dir = workspace("slot-pairing-rule-data");
+    let source = example_copy(&dir, "source.collomatique");
+
+    let globals = run(
+        include_str!("scripts/slot_pairing_rule_data.py"),
+        |globals| {
+            globals.set_item("source", &source)?;
+            Ok(())
+        },
+    );
+
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    // The example is only worth reading if it has something to say: two rules,
+    // both strict, both excluding no period, a used antecedent against an
+    // unused consequent.
+    let rules: Vec<_> = params
+        .slot_pairings
+        .slot_pairing_rule_map
+        .iter()
+        .map(|(id, rule)| (id, rule.clone()))
+        .collect();
+    assert_eq!(rules.len(), 2);
+    assert!(rules.iter().all(|(_id, rule)| !rule.soft()));
+    assert!(
+        rules
+            .iter()
+            .all(|(_id, rule)| rule.excluded_periods().is_empty())
+    );
+    assert!(
+        rules
+            .iter()
+            .all(|(_id, rule)| rule.antecedent().should_have)
+    );
+    assert!(
+        rules
+            .iter()
+            .all(|(_id, rule)| !rule.consequent().should_have)
+    );
+
+    // Out and back, whole — the rules, and the ends of them on their own.
+    assert_eq!(
+        extracted_all::<SlotPairingRuleData>(&globals, "rule_values"),
+        rules
+            .iter()
+            .map(|(_id, rule)| rule.clone())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        extracted_all::<SlotPairingRuleSideData>(&globals, "side_values"),
+        rules
+            .iter()
+            .flat_map(|(_id, rule)| [rule.antecedent().clone(), rule.consequent().clone()])
+            .collect::<Vec<_>>()
+    );
+
+    // And the same fields as python saw them.
+    assert_eq!(
+        global::<Vec<bool>>(&globals, "rule_softs"),
+        rules
+            .iter()
+            .map(|(_id, rule)| rule.soft())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<(bool, bool)>>(&globals, "side_should_haves"),
+        rules
+            .iter()
+            .map(|(_id, rule)| (rule.antecedent().should_have, rule.consequent().should_have,))
+            .collect::<Vec<_>>()
+    );
+
+    // The slots, named by their start time — that is what pins the part to a
+    // slot of the document rather than to a number that happens to be there.
+    let start_time = |id: collomatique_state_colloscopes::SlotId| {
+        *params
+            .slots
+            .find_slot(id)
+            .expect("a rule names a live slot")
+            .start_time
+            .start_time
+            .inner()
+    };
+    assert_eq!(
+        global::<Vec<chrono::NaiveTime>>(&globals, "antecedent_slot_start_times"),
+        rules
+            .iter()
+            .map(|(_id, rule)| start_time(rule.antecedent().slot_id))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<chrono::NaiveTime>>(&globals, "consequent_slot_start_times"),
+        rules
+            .iter()
+            .map(|(_id, rule)| start_time(rule.consequent().slot_id))
+            .collect::<Vec<_>>()
+    );
+
+    // Both slots of a rule belong to one subject, and the rule is read under
+    // that subject's name.
+    let subject_name = |id: &collomatique_state_colloscopes::SubjectId| {
+        params
+            .subjects
+            .ordered_subject_list
+            .get(id)
+            .expect("a rule names a live subject")
+            .parameters
+            .name
+            .clone()
+    };
+    assert_eq!(
+        global::<Vec<String>>(&globals, "rule_subject_names"),
+        rules
+            .iter()
+            .map(|(_id, rule)| {
+                let (subject_id, _slot) = params
+                    .slots
+                    .find_slot_with_subject(rule.antecedent().slot_id)
+                    .expect("a rule names a live slot");
+                subject_name(&subject_id)
+            })
+            .collect::<Vec<_>>()
+    );
+
+    // Built by hand: the value the script wrote out is the rule expected of
+    // it, whether the slots were named by handle or by id — reproducing the
+    // example's first rule.
+    let first = &rules[0].1;
+    let expected_first = first.clone();
+    for name in ["by_handle", "by_id"] {
+        assert_eq!(
+            extracted::<SlotPairingRuleData>(&globals, name),
+            expected_first
+        );
+    }
+
+    // The shape the example does not carry — a soft rule with a period
+    // excluded — written out and re-read whole.
+    let first_period = params
+        .periods
+        .period_ids()
+        .next()
+        .expect("the example has periods");
+    assert_eq!(
+        extracted::<SlotPairingRuleData>(&globals, "soft_with_exclusion"),
+        SlotPairingRule::new(
+            SlotRulePart {
+                slot_id: first.antecedent().slot_id,
+                should_have: true,
+            },
+            SlotRulePart {
+                slot_id: first.consequent().slot_id,
+                should_have: false,
+            },
+            BTreeSet::from([first_period]),
+            true,
+        )
+        .expect("the hand-built rule is internally consistent")
+    );
+
+    // The defaults: `should_have` True on each side, no exclusion, strict —
+    // the spellings the application itself starts a new rule with.
+    assert_eq!(
+        extracted::<SlotPairingRuleData>(&globals, "defaults"),
+        SlotPairingRule::new(
+            SlotRulePart {
+                slot_id: first.antecedent().slot_id,
+                should_have: true,
+            },
+            SlotRulePart {
+                slot_id: first.consequent().slot_id,
+                should_have: true,
+            },
+            BTreeSet::new(),
+            false,
+        )
+        .expect("the hand-built rule is internally consistent")
+    );
+
+    // The refusals, each with the sentence it raises.
+    assert_eq!(
+        refused::<SlotPairingRuleData>(&globals, "not_a_slot"),
+        (
+            "TypeError".to_owned(),
+            "a slot argument takes a Slot or a SlotId, and 3 is neither".to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<SlotPairingRuleData>(&globals, "not_a_side"),
+        (
+            "TypeError".to_owned(),
+            "a SlotPairingRuleData is expected here, and 'Aurore' has no antecedent.slot"
+                .to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<SlotPairingRuleData>(&globals, "not_a_side_flag"),
+        (
+            "TypeError".to_owned(),
+            "a SlotPairingRuleData's antecedent.should_have is True or False, and 1 is neither"
+                .to_owned(),
+        )
+    );
+
+    // The sealed-constructor violation, in the model's own words.
+    assert_eq!(
+        refused::<SlotPairingRuleData>(&globals, "same_slot_twice"),
+        (
+            "ValueError".to_owned(),
+            format!(
+                "antecedent and consequent slots are the same ({:?})",
+                first.antecedent().slot_id,
+            ),
+        )
+    );
+
+    // A handle of another document names nothing here — the same refusal every
+    // method of this api already makes.
+    let (kind, _message) = refused::<SlotPairingRuleData>(&globals, "foreign_rule");
+    assert_eq!(kind, "StaleHandleError");
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// A removed pairing rule stales the values that name it
+///
+/// Stale is loud on the value surface like everywhere else: `to_data()`
+/// through a dead handle raises, and through a dead side view too — the ends
+/// go with their rule. The value itself is untouched: nothing in it names the
+/// rule, so the same value still extracts after the removal. The read surface
+/// ships no removes, so the `UpdateOp` lands between the two stages.
+#[test]
+fn a_removed_pairing_rule_stales_the_values_that_name_it() {
+    let dir = workspace("pairing-rule-data-stale");
+    let source = dir.join("pairings.collomatique");
+    pairings_document(&source);
+
+    // Read from the file rather than from the running document: ids are
+    // stored, so the copy rust reads names the same entity the script is
+    // holding.
+    let data = reload(&source);
+    let doomed = data
+        .get_inner_data()
+        .params
+        .pairings
+        .pairing_rule_map
+        .keys()
+        .last()
+        .expect("the fixture has pairing rules");
+    let expected = data
+        .get_inner_data()
+        .params
+        .pairings
+        .pairing_rule_map
+        .get(&doomed)
+        .cloned()
+        .expect("the doomed rule exists before the stage");
+
+    let globals = run_stages(
+        &[
+            include_str!("scripts/pairing_rule_data_stale_before.py"),
+            include_str!("scripts/pairing_rule_data_stale_after.py"),
+        ],
+        |globals| {
+            globals.set_item("source", &source)?;
+            Ok(())
+        },
+        // One stage in the middle, so this runs once — and it makes the one
+        // change the two halves of this test stand on.
+        |py, globals| {
+            let doc = document_of(globals);
+            doc.borrow_mut(py)
+                .update(
+                    py,
+                    collomatique_ops::UpdateOp::Pairings(
+                        collomatique_ops::PairingsUpdateOp::DeletePairingRule(doomed),
+                    ),
+                )
+                .expect("the fixture takes the removal");
+        },
+    );
+
+    // The value built before the removal is untouched, and still extracts to
+    // the rule the file used to hold — the subjects and periods it names all
+    // survived.
+    assert_eq!(
+        extracted::<PairingRuleData>(&globals, "doomed_value"),
+        expected
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// A removed slot pairing rule stales the values that name it
+///
+/// The slots' twin of [a_removed_pairing_rule_stales_the_values_that_name_it]:
+/// `to_data()` through a dead handle raises, and through a dead side view
+/// too, while the value built before the removal still extracts — the slots
+/// it names all survive.
+#[test]
+fn a_removed_slot_pairing_rule_stales_the_values_that_name_it() {
+    let dir = workspace("slot-pairing-rule-data-stale");
+    let source = example_copy(&dir, "source.collomatique");
+
+    // The second of the example's two slot pairing rules, read from the file:
+    // ids are stored, so this copy names the same rule the script is holding.
+    let data = reload(&source);
+    let doomed = data
+        .get_inner_data()
+        .params
+        .slot_pairings
+        .slot_pairing_rule_map
+        .keys()
+        .nth(1)
+        .expect("the example holds two slot pairing rules");
+    let expected = data
+        .get_inner_data()
+        .params
+        .slot_pairings
+        .slot_pairing_rule_map
+        .get(&doomed)
+        .cloned()
+        .expect("the doomed rule exists before the stage");
+
+    let globals = run_stages(
+        &[
+            include_str!("scripts/slot_pairing_rule_data_stale_before.py"),
+            include_str!("scripts/slot_pairing_rule_data_stale_after.py"),
+        ],
+        |globals| {
+            globals.set_item("source", &source)?;
+            Ok(())
+        },
+        |py, globals| {
+            document_of(globals)
+                .borrow_mut(py)
+                .update(
+                    py,
+                    collomatique_ops::UpdateOp::SlotPairings(
+                        collomatique_ops::SlotPairingsUpdateOp::DeleteSlotPairingRule(doomed),
+                    ),
+                )
+                .expect("the example's second slot pairing rule is removable");
+        },
+    );
+
+    // The value built before the removal is untouched, and still extracts to
+    // the rule the file used to hold — the slots it names all survived.
+    assert_eq!(
+        extracted::<SlotPairingRuleData>(&globals, "doomed_value"),
+        expected
     );
 
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");

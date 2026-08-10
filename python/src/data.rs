@@ -22,13 +22,16 @@ use pyo3::types::{PyDict, PyFrozenSet, PyList, PySet, PyTuple};
 
 use collomatique_state_colloscopes::{
     NonEmptyRangeInclusive, PersonWithContact, SubjectInterrogationParameters, SubjectPeriodicity,
-    group_lists, incompats, slots, students, subjects, teachers, week_patterns,
+    group_lists, incompats, pairings, slot_pairings, slots, students, subjects, teachers,
+    week_patterns,
 };
 
 use crate::Document;
-use crate::collections::{Period, Student, Subject, Teacher, Week, WeekPattern};
+use crate::collections::{Period, Slot, Student, Subject, Teacher, Week, WeekPattern};
 use crate::handles::{Handle, RawId, argument, shown};
-use crate::ids::{IdClass, PeriodId, StudentId, SubjectId, TeacherId, WeekId, WeekPatternId};
+use crate::ids::{
+    IdClass, PeriodId, SlotId, StudentId, SubjectId, TeacherId, WeekId, WeekPatternId,
+};
 use crate::values;
 
 /// The dataclasses, as `data.py` writes them
@@ -1051,6 +1054,204 @@ impl Value for GroupListData {
             )?,
         )?;
         kwargs.set_item("filling", filling_to_py(py, group_list.filling())?)?;
+
+        class(py, Self::CLASS)?.call((), Some(&kwargs))
+    }
+}
+
+/// One end of a pairing rule, read at the site the script wrote it
+///
+/// Split out of [PairingRuleSideData::from_py] because a `PairingRuleData`
+/// holds two of these and reads them at sites of their own: what a script
+/// wrote there is a `PairingRuleData`, so that is the class a refusal names —
+/// « a PairingRuleData's antecedent.subject ».
+fn rule_side(
+    doc: &Py<Document>,
+    site: Site<'_>,
+    obj: &Bound<'_, PyAny>,
+) -> PyResult<pairings::RulePart> {
+    // The fields are read in the order they are declared in the dataclass, so
+    // the first bad one is the one a refusal names.
+    Ok(pairings::RulePart {
+        subject_id: entity::<Subject>(doc, site, "subject", obj)?,
+        should_have: flag(site, "should_have", obj)?,
+    })
+}
+
+/// One end of a pairing rule, and the python value for it
+pub struct PairingRuleSideData;
+
+impl Value for PairingRuleSideData {
+    type Model = pairings::RulePart;
+
+    const CLASS: &'static str = "PairingRuleSideData";
+
+    fn from_py(doc: &Py<Document>, obj: &Bound<'_, PyAny>) -> PyResult<pairings::RulePart> {
+        rule_side(doc, Site::whole(Self::CLASS), obj)
+    }
+
+    fn to_py<'py>(py: Python<'py>, part: &pairings::RulePart) -> PyResult<Bound<'py, PyAny>> {
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("subject", SubjectId::wrap(part.subject_id))?;
+        kwargs.set_item("should_have", part.should_have)?;
+
+        class(py, Self::CLASS)?.call((), Some(&kwargs))
+    }
+}
+
+/// One pairing rule — two sides, the periods it skips, and the softness
+///
+/// The model's rule is sealed, with the one value-internal invariant — the
+/// two ends must name different subjects, since an implication from a subject
+/// to itself is meaningless — enforced by `PairingRule::new`. The boundary
+/// calls it, so its message is the one a script meets. That both subjects
+/// hold interrogations is a statement about the document, and it stays with
+/// the write.
+pub struct PairingRuleData;
+
+impl Value for PairingRuleData {
+    /// The **entity**, and the op payload too: the pairing rule ops carry the
+    /// whole sealed `PairingRule`, so §2.0 of the design says nothing new
+    /// here.
+    type Model = pairings::PairingRule;
+
+    const CLASS: &'static str = "PairingRuleData";
+
+    fn from_py(doc: &Py<Document>, obj: &Bound<'_, PyAny>) -> PyResult<pairings::PairingRule> {
+        let site = Site::whole(Self::CLASS);
+
+        // The fields are read in the order they are declared in the
+        // dataclass, so the first bad one is the one a refusal names. The
+        // one value-internal invariant — distinct subjects in the two parts —
+        // is the model's own, and its message is the one a script meets.
+        let antecedent = field(site, "antecedent", obj)?;
+        let antecedent = rule_side(doc, site.inside("antecedent"), &antecedent)?;
+        let consequent = field(site, "consequent", obj)?;
+        let consequent = rule_side(doc, site.inside("consequent"), &consequent)?;
+        let excluded_periods = entity_set::<Period>(doc, site, "excluded_periods", obj)?;
+        let soft = flag(site, "soft", obj)?;
+
+        pairings::PairingRule::new(antecedent, consequent, excluded_periods, soft)
+            .map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    fn to_py<'py>(py: Python<'py>, rule: &pairings::PairingRule) -> PyResult<Bound<'py, PyAny>> {
+        let kwargs = PyDict::new(py);
+        kwargs.set_item(
+            "antecedent",
+            PairingRuleSideData::to_py(py, rule.antecedent())?,
+        )?;
+        kwargs.set_item(
+            "consequent",
+            PairingRuleSideData::to_py(py, rule.consequent())?,
+        )?;
+        kwargs.set_item(
+            "excluded_periods",
+            PySet::new(
+                py,
+                rule.excluded_periods().iter().map(|id| PeriodId::wrap(*id)),
+            )?,
+        )?;
+        kwargs.set_item("soft", rule.soft())?;
+
+        class(py, Self::CLASS)?.call((), Some(&kwargs))
+    }
+}
+
+/// One end of a slot pairing rule, read at the site the script wrote it
+///
+/// The slots' twin of [rule_side], with a slot in place of a subject.
+fn slot_rule_side(
+    doc: &Py<Document>,
+    site: Site<'_>,
+    obj: &Bound<'_, PyAny>,
+) -> PyResult<slot_pairings::SlotRulePart> {
+    Ok(slot_pairings::SlotRulePart {
+        slot_id: entity::<Slot>(doc, site, "slot", obj)?,
+        should_have: flag(site, "should_have", obj)?,
+    })
+}
+
+/// One end of a slot pairing rule, and the python value for it
+pub struct SlotPairingRuleSideData;
+
+impl Value for SlotPairingRuleSideData {
+    type Model = slot_pairings::SlotRulePart;
+
+    const CLASS: &'static str = "SlotPairingRuleSideData";
+
+    fn from_py(
+        doc: &Py<Document>,
+        obj: &Bound<'_, PyAny>,
+    ) -> PyResult<slot_pairings::SlotRulePart> {
+        slot_rule_side(doc, Site::whole(Self::CLASS), obj)
+    }
+
+    fn to_py<'py>(
+        py: Python<'py>,
+        part: &slot_pairings::SlotRulePart,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("slot", SlotId::wrap(part.slot_id))?;
+        kwargs.set_item("should_have", part.should_have)?;
+
+        class(py, Self::CLASS)?.call((), Some(&kwargs))
+    }
+}
+
+/// One slot pairing rule — two sides, the periods it skips, and the softness
+///
+/// The slots' twin of [PairingRuleData], sealed the same way: the two ends
+/// must name different slots, and that both slots belong to one subject is a
+/// statement about the document that stays with the write.
+pub struct SlotPairingRuleData;
+
+impl Value for SlotPairingRuleData {
+    /// The **entity**, and the op payload too: the slot pairing rule ops
+    /// carry the whole sealed `SlotPairingRule`, so §2.0 of the design says
+    /// nothing new here.
+    type Model = slot_pairings::SlotPairingRule;
+
+    const CLASS: &'static str = "SlotPairingRuleData";
+
+    fn from_py(
+        doc: &Py<Document>,
+        obj: &Bound<'_, PyAny>,
+    ) -> PyResult<slot_pairings::SlotPairingRule> {
+        let site = Site::whole(Self::CLASS);
+
+        let antecedent = field(site, "antecedent", obj)?;
+        let antecedent = slot_rule_side(doc, site.inside("antecedent"), &antecedent)?;
+        let consequent = field(site, "consequent", obj)?;
+        let consequent = slot_rule_side(doc, site.inside("consequent"), &consequent)?;
+        let excluded_periods = entity_set::<Period>(doc, site, "excluded_periods", obj)?;
+        let soft = flag(site, "soft", obj)?;
+
+        slot_pairings::SlotPairingRule::new(antecedent, consequent, excluded_periods, soft)
+            .map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    fn to_py<'py>(
+        py: Python<'py>,
+        rule: &slot_pairings::SlotPairingRule,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let kwargs = PyDict::new(py);
+        kwargs.set_item(
+            "antecedent",
+            SlotPairingRuleSideData::to_py(py, rule.antecedent())?,
+        )?;
+        kwargs.set_item(
+            "consequent",
+            SlotPairingRuleSideData::to_py(py, rule.consequent())?,
+        )?;
+        kwargs.set_item(
+            "excluded_periods",
+            PySet::new(
+                py,
+                rule.excluded_periods().iter().map(|id| PeriodId::wrap(*id)),
+            )?,
+        )?;
+        kwargs.set_item("soft", rule.soft())?;
 
         class(py, Self::CLASS)?.call((), Some(&kwargs))
     }
