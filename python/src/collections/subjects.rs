@@ -239,6 +239,32 @@ impl Subject {
         crate::refs::subject_references(py, self)
     }
 
+    /// This subject, detached — a `SubjectData` holding what the handle shows
+    ///
+    /// A fresh object every call, and a whole one: the interrogation parameters
+    /// come out as an `InterrogationData` of their own — or as `None` for a
+    /// subject that holds no colles — and the excluded periods as `PeriodId`s,
+    /// because a value holding handles would carry this document around with it
+    /// (`docs/python/values.md` §2.3).
+    ///
+    /// The exclusions are in the value although no subject op carries them:
+    /// what `to_data()` hands back is the subject, whole, which is what makes
+    /// `doc.snapshot()` buildable out of these classes (§2.0).
+    ///
+    /// A stale handle raises `StaleHandleError` like every other read.
+    fn to_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        use crate::data::Value as _;
+
+        // Copied out of the borrow before anything python-facing happens:
+        // building the value calls into python, and doing that under the
+        // document's borrow is how a nested borrow becomes a `PanicException`.
+        let subject = self.read(py, |data| {
+            data.params.subjects.find_subject(self.id).cloned()
+        })?;
+
+        crate::data::SubjectData::to_py(py, &subject)
+    }
+
     /// Whether two handles name the same subject of the same document
     ///
     /// Never reads the state, so it keeps working once the subject is gone — a
@@ -388,6 +414,21 @@ impl Interrogation {
     fn periodicity(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let periodicity = self.read(py, |params| params.periodicity.clone())?;
         values::periodicity(py, &periodicity)
+    }
+
+    /// These parameters, detached — an `InterrogationData` holding what the
+    /// view shows
+    ///
+    /// A fresh object every call. The view's two ways of dying are the two ways
+    /// this raises `StaleHandleError`, each with its own message: the subject
+    /// was removed, or it stopped holding colles.
+    fn to_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        use crate::data::Value as _;
+
+        // Out of the borrow first, for the same reason as everywhere else.
+        let params = self.read(py, |params| params.clone())?;
+
+        crate::data::InterrogationData::to_py(py, &params)
     }
 
     /// Whether two views are about the same subject of the same document

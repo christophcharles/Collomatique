@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex, Once};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
-use collomatique_python::data::{StudentData, TeacherData};
+use collomatique_python::data::{InterrogationData, StudentData, SubjectData, TeacherData};
 use collomatique_python::{FileRequest, collomatique};
 use collomatique_state_colloscopes::Data;
 use collomatique_ui_text::rendering::{
@@ -1545,6 +1545,427 @@ fn switching_a_subject_off_then_removing_it_stales_the_view_then_the_handle() {
                 .expect("the example's last subject with colles is removable");
         },
     );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// The subject values go out through `to_data()` and come back in unchanged
+///
+/// The headline is the round trip: what each handle handed the script,
+/// extracted again, is the subject the document holds — the name, the whole
+/// interrogation record and the exclusions, in one comparison. The sub-view's
+/// own values ride beside it, and so do the same fields as python saw them, so
+/// that a conversion wrong in both directions at once cannot cancel itself out.
+///
+/// The rest is the other kinds this milestone's tests are made of: values
+/// written out by hand, the defaults pinned against the model's own, and the
+/// refusals with the sentence each one raises. The example carries both shapes
+/// — subjects that run colles and two that do not — which is what makes the
+/// `None` half of `interrogation` a real case here.
+#[test]
+fn the_subject_values_carry_the_interrogation_out_and_back() {
+    let dir = workspace("subject-values");
+    let source = example_copy(&dir, "source.collomatique");
+
+    let globals = run(include_str!("scripts/subject_data.py"), |globals| {
+        globals.set_item("source", &source)?;
+        Ok(())
+    });
+
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    let subjects: Vec<_> = params
+        .subjects
+        .ordered_subject_list
+        .iter()
+        .map(|(_id, subject)| subject.clone())
+        .collect();
+    let with_colles: Vec<_> = subjects
+        .iter()
+        .filter_map(|subject| subject.parameters.interrogation_parameters.clone())
+        .collect();
+
+    // The example is only worth reading if it has something to say: both
+    // shapes among the subjects, and nothing here relying on that by accident.
+    assert!(!with_colles.is_empty());
+    assert!(with_colles.len() < subjects.len());
+
+    // Out and back, whole.
+    assert_eq!(
+        extracted_all::<SubjectData>(&globals, "subject_values"),
+        subjects
+    );
+    assert_eq!(
+        extracted_all::<InterrogationData>(&globals, "interrogation_values"),
+        with_colles
+    );
+
+    // And the same fields as python saw them.
+    assert_eq!(
+        global::<Vec<String>>(&globals, "value_names"),
+        subjects
+            .iter()
+            .map(|subject| subject.parameters.name.clone())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<bool>>(&globals, "value_holds_colles"),
+        subjects
+            .iter()
+            .map(|subject| subject.parameters.interrogation_parameters.is_some())
+            .collect::<Vec<_>>()
+    );
+    let bounds = |range: &collomatique_state_colloscopes::NonEmptyRangeInclusive<NonZeroU32>| {
+        (range.start().get(), range.end().get())
+    };
+    assert_eq!(
+        global::<Vec<(u32, u32)>>(&globals, "value_students_per_group"),
+        with_colles
+            .iter()
+            .map(|params| bounds(&params.students_per_group))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<(u32, u32)>>(&globals, "value_groups_per_interrogation"),
+        with_colles
+            .iter()
+            .map(|params| bounds(&params.groups_per_interrogation))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<u32>>(&globals, "value_durations"),
+        with_colles
+            .iter()
+            .map(|params| params.duration.get().get())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<bool>>(&globals, "value_take_duration"),
+        with_colles
+            .iter()
+            .map(|params| params.take_duration_into_account)
+            .collect::<Vec<_>>()
+    );
+
+    // Built by hand: the value the script wrote out is the subject expected of
+    // it, whether the period was named by handle, by id, or in a list. Nothing
+    // but the name and the exclusion is given, so the interrogation record that
+    // comes out is the model's own default.
+    let first_period = params
+        .periods
+        .period_ids()
+        .next()
+        .expect("the example has periods");
+    let spe_maths = collomatique_state_colloscopes::Subject {
+        parameters: collomatique_state_colloscopes::SubjectParameters {
+            name: "Spé maths".to_owned(),
+            ..Default::default()
+        },
+        excluded_periods: BTreeSet::from([first_period]),
+    };
+    for name in ["by_handle", "by_id", "by_list"] {
+        assert_eq!(extracted::<SubjectData>(&globals, name), spe_maths);
+    }
+
+    // One written out from end to end, so that no field can pass by being left
+    // at the value the model would have put there anyway.
+    assert_eq!(
+        extracted::<SubjectData>(&globals, "written_out"),
+        periodicity_subject(
+            "Options",
+            (1, 2),
+            (2, 2),
+            90,
+            false,
+            collomatique_state_colloscopes::SubjectPeriodicity::AmountInYear {
+                interrogation_count_in_year: plain_range((0, 4)),
+                minimum_week_separation: 3,
+            },
+            BTreeSet::from([first_period]),
+        )
+    );
+
+    // And the subject that holds no colles at all, which is what an explicit
+    // `interrogation=None` means.
+    assert_eq!(
+        extracted::<SubjectData>(&globals, "no_colles"),
+        collomatique_state_colloscopes::Subject {
+            parameters: collomatique_state_colloscopes::SubjectParameters {
+                name: "Quidditch".to_owned(),
+                interrogation_parameters: None,
+            },
+            excluded_periods: BTreeSet::new(),
+        }
+    );
+
+    // The defaults, pinned against the model's own: with the one required field
+    // set to what the model's empty subject holds, the whole value is the
+    // model's `Default` — colles included, since that is what it holds. These
+    // are the assertions that stop the python-side defaults drifting from the
+    // rust ones.
+    assert_eq!(
+        extracted::<SubjectData>(&globals, "bare_subject"),
+        collomatique_state_colloscopes::Subject::default()
+    );
+    assert_eq!(
+        extracted::<InterrogationData>(&globals, "bare_interrogation"),
+        collomatique_state_colloscopes::SubjectInterrogationParameters::default()
+    );
+
+    // The refusals, each with the sentence it raises. The class a message names
+    // is the one the script wrote down, and the field is the path from it — a
+    // duration nested in a subject is named through the subject.
+    assert_eq!(
+        refused::<SubjectData>(&globals, "zero_duration"),
+        (
+            "ValueError".to_owned(),
+            "a SubjectData's interrogation.duration is at least 1, and 0 was given".to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<SubjectData>(&globals, "inverted_range"),
+        (
+            "ValueError".to_owned(),
+            "a SubjectData's interrogation.students_per_group is a (min, max) range, \
+             and 3 is above 2"
+                .to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<SubjectData>(&globals, "empty_group"),
+        (
+            "ValueError".to_owned(),
+            "a SubjectData's interrogation.students_per_group counts from 1 at both ends, \
+             and 0 was given"
+                .to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<SubjectData>(&globals, "not_a_periodicity"),
+        (
+            "TypeError".to_owned(),
+            "a SubjectData's interrogation.periodicity is a Periodicity, and 3 is not one"
+                .to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<SubjectData>(&globals, "not_a_name"),
+        (
+            "TypeError".to_owned(),
+            "a SubjectData's name is a string, and 3 is not one".to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<SubjectData>(&globals, "not_an_interrogation"),
+        (
+            "TypeError".to_owned(),
+            "a SubjectData is expected here, and 3 has no interrogation.students_per_group"
+                .to_owned(),
+        )
+    );
+
+    // The same field, refused on the class handed over whole: what the script
+    // wrote there is an `InterrogationData`, so that is what the message names
+    // — and english gets its article right.
+    assert_eq!(
+        refused::<InterrogationData>(&globals, "bare_zero_duration"),
+        (
+            "ValueError".to_owned(),
+            "an InterrogationData's duration is at least 1, and 0 was given".to_owned(),
+        )
+    );
+
+    // A handle of another document names nothing here — the same refusal every
+    // method of this api already makes.
+    let (kind, _message) = refused::<SubjectData>(&globals, "foreign_period");
+    assert_eq!(kind, "StaleHandleError");
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// All four periodicities travel back in, and the exclusion with them
+///
+/// The example holds two of the four kinds and excludes no period from any
+/// subject, so this is
+/// [the_four_periodicities_read_back_value_by_value]'s document again — the one
+/// place where `SubjectData.excluded_periods`, the field §2.0 of the design is
+/// about, has something in it to carry.
+///
+/// Both halves are here: the round trip, which says a periodicity read out of a
+/// document goes back in as the same one, and four values written from scratch
+/// in python, which says a script can build each kind without ever having read
+/// one.
+#[test]
+fn the_subject_values_carry_all_four_periodicities() {
+    let dir = workspace("subject-values-periodicities");
+    let source = dir.join("periodicities.collomatique");
+    periodicity_document(&source);
+
+    let globals = run(
+        include_str!("scripts/subject_data_periodicities.py"),
+        |globals| {
+            globals.set_item("source", &source)?;
+            Ok(())
+        },
+    );
+
+    let data = reload(&source);
+    let subjects: Vec<_> = data
+        .get_inner_data()
+        .params
+        .subjects
+        .ordered_subject_list
+        .iter()
+        .map(|(_id, subject)| subject.clone())
+        .collect();
+
+    // The fixture is worth reading here because no two of its subjects share a
+    // periodicity, and one of them skips a period.
+    assert_eq!(subjects.len(), 4);
+    assert!(
+        subjects
+            .iter()
+            .any(|subject| !subject.excluded_periods.is_empty())
+    );
+
+    assert_eq!(
+        extracted_all::<SubjectData>(&globals, "subject_values"),
+        subjects
+    );
+
+    // The four written out by hand carry the same periodicities the document
+    // holds, which is what says the conversion in is a conversion and not a
+    // copy of the object that came out.
+    let periodicities: Vec<_> = subjects
+        .iter()
+        .map(|subject| {
+            subject
+                .parameters
+                .interrogation_parameters
+                .as_ref()
+                .expect("every subject of the fixture holds colles")
+                .periodicity
+                .clone()
+        })
+        .collect();
+    assert_eq!(
+        extracted_all::<InterrogationData>(&globals, "hand_built")
+            .into_iter()
+            .map(|params| params.periodicity)
+            .collect::<Vec<_>>(),
+        periodicities
+    );
+
+    // A block list may be empty, as it may in the model — a subject nobody is
+    // ever interrogated in, which is odd rather than wrong.
+    assert_eq!(
+        extracted::<InterrogationData>(&globals, "no_block").periodicity,
+        collomatique_state_colloscopes::SubjectPeriodicity::AmountForEveryArbitraryBlock {
+            blocks: Vec::new(),
+            minimum_week_separation: 0,
+        }
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// A removed period stales the values that name it, and the two deaths of a
+/// sub-view each stale its `to_data()`
+///
+/// Three removals between the two stages, because there are three failures to
+/// tell apart: a value holding a dead period's id names nothing and is refused
+/// on extraction; a `Subject` handle whose subject is gone refuses the read
+/// `to_data()` is; and an `Interrogation` sub-view refuses it in each of its
+/// own two ways — the subject removed, and the subject merely no longer holding
+/// colles. The last one is the case where the *subject's* value keeps working
+/// and answers `None`.
+///
+/// The mutations come from rust: the write surface does not exist yet, and this
+/// is what `run_stages` is for.
+#[test]
+fn a_removed_period_stales_the_subject_values_that_name_it() {
+    let dir = workspace("subject-values-stale");
+    let source = example_copy(&dir, "source.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same entities the script is holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    let with_colles: Vec<_> = params
+        .subjects
+        .ordered_subject_list
+        .iter()
+        .filter(|(_id, subject)| subject.parameters.interrogation_parameters.is_some())
+        .map(|(id, subject)| (id, subject.parameters.clone()))
+        .collect();
+    assert!(
+        with_colles.len() > 1,
+        "the two subjects this test kills differently must not be the same one"
+    );
+
+    // The last one that runs colles is removed, and the first one keeps its
+    // place while losing its colles.
+    let doomed_index = with_colles.len() - 1;
+    let switched_off_index = 0;
+    let doomed = with_colles[doomed_index].0;
+    let mut without_colles = with_colles[switched_off_index].1.clone();
+    without_colles.interrogation_parameters = None;
+    let switched_off = with_colles[switched_off_index].0;
+
+    let doomed_period = params
+        .periods
+        .period_ids()
+        .last()
+        .expect("the example has periods");
+
+    let globals = run_stages(
+        &[
+            include_str!("scripts/subject_data_stale_before.py"),
+            include_str!("scripts/subject_data_stale_after.py"),
+        ],
+        |globals| {
+            globals.set_item("source", &source)?;
+            globals.set_item("doomed_index", doomed_index)?;
+            globals.set_item("switched_off_index", switched_off_index)?;
+            Ok(())
+        },
+        // Two scripts, so this runs once — and it makes all three changes,
+        // because the failures they cause are the halves of one test.
+        |py, globals| {
+            let doc = document_of(globals);
+            let apply = |op| {
+                doc.borrow_mut(py)
+                    .update(py, op)
+                    .expect("the example takes these three changes");
+            };
+
+            apply(collomatique_ops::UpdateOp::Subjects(
+                collomatique_ops::SubjectsUpdateOp::DeleteSubject(doomed),
+            ));
+            apply(collomatique_ops::UpdateOp::Subjects(
+                collomatique_ops::SubjectsUpdateOp::UpdateSubject(
+                    switched_off,
+                    without_colles.clone(),
+                ),
+            ));
+            apply(collomatique_ops::UpdateOp::GeneralPlanning(
+                collomatique_ops::GeneralPlanningUpdateOp::DeletePeriodAndWeeks(doomed_period),
+            ));
+        },
+    );
+
+    // The two values naming the dead period no longer name anything, and it
+    // makes no difference whether the script wrote the handle or the id.
+    for name in ["naming_the_dead_by_handle", "naming_the_dead_by_id"] {
+        let (kind, _message) = refused::<SubjectData>(&globals, name);
+        assert_eq!(kind, "StaleHandleError", "`{name}` should be refused");
+    }
+
+    // And the one naming a period that survived still extracts.
+    let still_good = extracted::<SubjectData>(&globals, "naming_the_living");
+    assert_eq!(still_good.excluded_periods.len(), 1);
 
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }

@@ -140,9 +140,31 @@ fn checked_range(what: &str, bounds: Range) -> PyResult<Range> {
 }
 
 /// Checks a count the model stores as "at least one"
-fn at_least_one(what: &str, value: u32) -> PyResult<NonZeroU32> {
+pub(crate) fn at_least_one(what: &str, value: u32) -> PyResult<NonZeroU32> {
     NonZeroU32::new(value)
         .ok_or_else(|| PyValueError::new_err(format!("{what} is at least 1, and 0 was given")))
+}
+
+/// Builds the range a model field holds out of a `(min, max)` a script wrote
+///
+/// The reverse of [nonzero_range], and the same two checks the leaf values make
+/// on their own ranges — the order matters, so that `(5, 2)` is told it is
+/// inverted rather than told about a bound it never got to.
+pub(crate) fn nonzero_bounds(
+    what: &str,
+    bounds: Range,
+) -> PyResult<NonEmptyRangeInclusive<NonZeroU32>> {
+    let (min, max) = checked_range(what, bounds)?;
+    let bound = |value: u32| {
+        NonZeroU32::new(value).ok_or_else(|| {
+            PyValueError::new_err(format!(
+                "{what} counts from 1 at both ends, and 0 was given"
+            ))
+        })
+    };
+
+    Ok(NonEmptyRangeInclusive::new(bound(min)?..=bound(max)?)
+        .expect("a range checked just above is not empty"))
 }
 
 /// One block of a custom periodicity
@@ -219,6 +241,29 @@ impl WeekBlock {
             count: range(&block.interrogation_count_in_block),
         }
     }
+
+    /// The model block for one python block
+    ///
+    /// Nothing can be refused here: a block was born whole, so its count was
+    /// checked when it was built, which is the whole difference between a leaf
+    /// value and a dataclass (`docs/python/values.md` §1).
+    fn to_model(&self) -> collomatique_state_colloscopes::subjects::WeekBlock {
+        collomatique_state_colloscopes::subjects::WeekBlock {
+            delay_in_weeks: self.delay_in_weeks,
+            size_in_weeks: self.size_in_weeks,
+            interrogation_count_in_block: model_range(self.count),
+        }
+    }
+}
+
+/// The range a leaf value's `(min, max)` names
+///
+/// Only ever called on a range a constructor already checked, which is why it
+/// has no error to report.
+fn model_range(bounds: Range) -> NonEmptyRangeInclusive<u32> {
+    let (min, max) = bounds;
+    NonEmptyRangeInclusive::new(min..=max)
+        .expect("a leaf value's range was checked when it was built")
 }
 
 /// How often a subject's interrogations come round
@@ -490,6 +535,48 @@ pub(crate) fn periodicity(py: Python<'_>, periodicity: &SubjectPeriodicity) -> P
         )?
         .into_any(),
     })
+}
+
+/// The model periodicity one python value names, when it is one of the four
+///
+/// The reverse of [periodicity], and the first leaf value of this module to
+/// travel back *in*: a `SubjectData`'s interrogation parameters hold one. The
+/// four kinds are told apart by their class, which is what `isinstance` asks
+/// too — none of them is subclassable, so anything that casts really is one.
+///
+/// Nothing here can be refused: every field was checked when the value was
+/// built. `None` is the one answer this can give, and it means the object is
+/// not a periodicity at all; the caller is what knows the field it was reading
+/// and can say so.
+pub(crate) fn model_periodicity(obj: &Bound<'_, PyAny>) -> Option<SubjectPeriodicity> {
+    if let Ok(value) = obj.cast::<EveryNWeeks>() {
+        return Some(SubjectPeriodicity::ExactlyPeriodic {
+            periodicity_in_weeks: value.get().n,
+        });
+    }
+    if let Ok(value) = obj.cast::<OncePerBlock>() {
+        let value = value.get();
+        return Some(SubjectPeriodicity::OnceForEveryBlockOfWeeks {
+            weeks_per_block: value.weeks_per_block,
+            minimum_week_separation: value.minimum_week_separation,
+        });
+    }
+    if let Ok(value) = obj.cast::<CountInYear>() {
+        let value = value.get();
+        return Some(SubjectPeriodicity::AmountInYear {
+            interrogation_count_in_year: model_range(value.count),
+            minimum_week_separation: value.minimum_week_separation,
+        });
+    }
+    if let Ok(value) = obj.cast::<CustomBlocks>() {
+        let value = value.get();
+        return Some(SubjectPeriodicity::AmountForEveryArbitraryBlock {
+            blocks: value.blocks.iter().map(WeekBlock::to_model).collect(),
+            minimum_week_separation: value.minimum_week_separation,
+        });
+    }
+
+    None
 }
 
 /// A busy window: a day, a start time and a duration

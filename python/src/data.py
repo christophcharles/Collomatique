@@ -30,12 +30,29 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collomatique import Period, PeriodId, Subject, SubjectId
+    from collomatique import Period, PeriodId, Periodicity, Subject, SubjectId
 
 __all__ = [
     "TeacherData",
     "StudentData",
+    "SubjectData",
+    "InterrogationData",
 ]
+
+
+def _every_other_week() -> Periodicity:
+    """The periodicity a new `InterrogationData` comes with.
+
+    A function rather than a value, because there is no value to write here:
+    `EveryNWeeks` is one of the rust classes, and this file is compiled while
+    `collomatique` is still initializing, so nothing of it can be imported at
+    that moment. A `default_factory` runs when a value is built instead, which
+    is long after the module is whole.
+    """
+
+    import collomatique
+
+    return collomatique.EveryNWeeks(2)
 
 
 @dataclass
@@ -101,4 +118,74 @@ class StudentData:
     surname: str
     tel: str | None = None
     email: str | None = None
+    excluded_periods: set[Period | PeriodId] = field(default_factory=set)
+
+
+@dataclass
+class InterrogationData:
+    """How one subject's interrogations are laid out, detached from the document.
+
+    `subject.interrogation.to_data()` hands one back, and a `SubjectData` holds
+    one:
+
+        clm.SubjectData("Maths", interrogation=clm.InterrogationData(
+            duration=30, periodicity=clm.EveryNWeeks(1)))
+
+    Every field has the model's own default, so `clm.InterrogationData()` is
+    exactly what the application creates when a user switches a subject's colles
+    on. It is written before `SubjectData` here for the same reason: that class
+    holds one of these as its own default.
+
+    `students_per_group` and `groups_per_interrogation` are `(min, max)` pairs,
+    inclusive at both ends and counting from one — a group with no student in it
+    and an interrogation with no group in it are not things the model can hold.
+
+    `duration` is a whole number of minutes, at least one. `periodicity` is one
+    of the four `Periodicity` values — `EveryNWeeks`, `OncePerBlock`,
+    `CountInYear`, `CustomBlocks` — which check themselves when they are built,
+    so nothing is left for this class to refuse.
+    """
+
+    students_per_group: tuple[int, int] = (2, 3)
+    groups_per_interrogation: tuple[int, int] = (1, 1)
+    duration: int = 60
+    take_duration_into_account: bool = True
+    periodicity: Periodicity = field(default_factory=_every_other_week)
+
+
+@dataclass
+class SubjectData:
+    """A subject, detached from the document.
+
+    `doc.subjects[...].to_data()` hands one back, and the subject mutators will
+    take one:
+
+        clm.SubjectData("Spé maths")
+
+    That line creates a subject that **holds colles**, with the application's
+    own default parameters, because `interrogation` defaults to a fresh
+    `InterrogationData`. The subject that holds none is the exception, and it is
+    spelled out:
+
+        clm.SubjectData("Quidditch", interrogation=None)
+
+    `name` is a plain string, the empty one included: the model types it that
+    way.
+
+    `excluded_periods` is the set of periods this subject does not run in. It
+    takes `Period` handles and `PeriodId`s interchangeably, and `to_data()`
+    fills it with ids.
+
+    That field is here because a subject really holds it — `doc.snapshot()`
+    would lose which subjects skip which periods otherwise. No subject op
+    carries it, though, so rather than throwing it away quietly the two subject
+    mutators refuse: `add` when it is not empty, `update` when it differs from
+    what the document holds. What moves it is
+    `doc.subjects.set_period_status(subject, period, active)`, and adding a
+    subject that skips a period is therefore two calls, which a transaction
+    makes one undo step.
+    """
+
+    name: str
+    interrogation: InterrogationData | None = field(default_factory=InterrogationData)
     excluded_periods: set[Period | PeriodId] = field(default_factory=set)

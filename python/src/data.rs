@@ -12,6 +12,7 @@
 
 use std::collections::BTreeSet;
 use std::ffi::CString;
+use std::num::NonZeroU32;
 
 use pyo3::PyClass;
 use pyo3::exceptions::{PyAttributeError, PyTypeError, PyValueError};
@@ -19,12 +20,16 @@ use pyo3::prelude::*;
 use pyo3::pyclass::boolean_struct::True;
 use pyo3::types::{PyDict, PySet};
 
-use collomatique_state_colloscopes::{PersonWithContact, students, teachers};
+use collomatique_state_colloscopes::{
+    NonEmptyRangeInclusive, PersonWithContact, SubjectInterrogationParameters, SubjectPeriodicity,
+    students, subjects, teachers,
+};
 
 use crate::Document;
 use crate::collections::{Period, Subject};
 use crate::handles::{Handle, RawId, argument, shown};
 use crate::ids::{IdClass, PeriodId, SubjectId};
+use crate::values;
 
 /// The dataclasses, as `data.py` writes them
 const DATA_PY: &str = include_str!("data.py");
@@ -76,6 +81,64 @@ fn class<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
     py.import(MODULE)?.getattr(name)
 }
 
+/// Where a value being read sits, for the sentence a refusal carries
+///
+/// A message names the line the script has in front of it. When a script hands
+/// over a `SubjectData`, that is the class it wrote and the field it wrote is
+/// `interrogation.duration` — even though what is being read at that moment is
+/// an `InterrogationData` of its own. One level of nesting is all the values of
+/// `docs/python/values.md` have: what nests holds leaves.
+#[derive(Clone, Copy)]
+struct Site<'a> {
+    /// The class a script wrote down
+    class: &'a str,
+    /// The field of it this value sits in, when it sits in one
+    nested_in: Option<&'a str>,
+}
+
+impl<'a> Site<'a> {
+    /// The site of a value a script handed over whole
+    fn whole(class: &'a str) -> Site<'a> {
+        Site {
+            class,
+            nested_in: None,
+        }
+    }
+
+    /// The site of a value that is itself one field of this one
+    fn inside(self, name: &'a str) -> Site<'a> {
+        Site {
+            class: self.class,
+            nested_in: Some(name),
+        }
+    }
+
+    /// The class, with the article english wants in front of it
+    ///
+    /// Every class name here is an ascii identifier, so its first letter
+    /// settles the question — « an InterrogationData », « a SubjectData ».
+    fn expected(&self) -> String {
+        let article = match self.class.chars().next() {
+            Some('A' | 'E' | 'I' | 'O' | 'U') => "an",
+            _ => "a",
+        };
+        format!("{article} {}", self.class)
+    }
+
+    /// The path from the class a script wrote down to one field read here
+    fn path(&self, name: &str) -> String {
+        match self.nested_in {
+            Some(outer) => format!("{outer}.{name}"),
+            None => name.to_owned(),
+        }
+    }
+
+    /// How a message names one field read here
+    fn field(&self, name: &str) -> String {
+        format!("{}'s {}", self.expected(), self.path(name))
+    }
+}
+
 /// One field of a value, by attribute access
 ///
 /// Never `cast::<T>()`. A value is a *python* object, so anything carrying the
@@ -84,12 +147,14 @@ fn class<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
 /// refused is an object that does not have the field at all, and the refusal
 /// names the class that was expected, the way an argument of the wrong kind
 /// already does.
-fn field<'py>(class: &str, name: &str, obj: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+fn field<'py>(site: Site<'_>, name: &str, obj: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     obj.getattr(name).map_err(|e| {
         if e.is_instance_of::<PyAttributeError>(obj.py()) {
             PyTypeError::new_err(format!(
-                "a {class} is expected here, and {} has no {name}",
+                "{} is expected here, and {} has no {}",
+                site.expected(),
                 shown(obj, "that object"),
+                site.path(name),
             ))
         } else {
             e
@@ -101,11 +166,12 @@ fn field<'py>(class: &str, name: &str, obj: &Bound<'py, PyAny>) -> PyResult<Boun
 ///
 /// The empty string is a value here, not an absence: the model types
 /// `PersonWithContact::surname` as a `String`, so python mirrors it.
-fn plain_text(class: &str, name: &str, obj: &Bound<'_, PyAny>) -> PyResult<String> {
-    let value = field(class, name, obj)?;
+fn plain_text(site: Site<'_>, name: &str, obj: &Bound<'_, PyAny>) -> PyResult<String> {
+    let value = field(site, name, obj)?;
     value.extract().map_err(|_| {
         PyTypeError::new_err(format!(
-            "a {class}'s {name} is a string, and {} is not one",
+            "{} is a string, and {} is not one",
+            site.field(name),
             shown(&value, "that value"),
         ))
     })
@@ -121,25 +187,99 @@ fn plain_text(class: &str, name: &str, obj: &Bound<'_, PyAny>) -> PyResult<Strin
 /// This is where `''` is refused, which is the whole difference between this
 /// helper and [plain_text].
 fn optional_text<T: TryFrom<String>>(
-    class: &str,
+    site: Site<'_>,
     name: &str,
     obj: &Bound<'_, PyAny>,
 ) -> PyResult<Option<T>> {
-    let value = field(class, name, obj)?;
+    let value = field(site, name, obj)?;
     if value.is_none() {
         return Ok(None);
     }
 
     let text: String = value.extract().map_err(|_| {
         PyTypeError::new_err(format!(
-            "a {class}'s {name} is a string or None, and {} is neither",
+            "{} is a string or None, and {} is neither",
+            site.field(name),
             shown(&value, "that value"),
         ))
     })?;
 
     T::try_from(text).map(Some).map_err(|_| {
         PyValueError::new_err(format!(
-            "a {class}'s {name} is a non-empty string or None, and '' is neither"
+            "{} is a non-empty string or None, and '' is neither",
+            site.field(name),
+        ))
+    })
+}
+
+/// A field the model types as a `bool`
+///
+/// Strictly a `bool`: an int that happens to be truthy is refused, the way
+/// every other field refuses a value of the wrong kind rather than guessing.
+fn flag(site: Site<'_>, name: &str, obj: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let value = field(site, name, obj)?;
+    value.extract().map_err(|_| {
+        PyTypeError::new_err(format!(
+            "{} is True or False, and {} is neither",
+            site.field(name),
+            shown(&value, "that value"),
+        ))
+    })
+}
+
+/// A field the model counts in whole minutes, at least one
+fn minutes(
+    site: Site<'_>,
+    name: &str,
+    obj: &Bound<'_, PyAny>,
+) -> PyResult<collomatique_time::NonZeroMinutes> {
+    let value = field(site, name, obj)?;
+    let count: u32 = value.extract().map_err(|_| {
+        PyTypeError::new_err(format!(
+            "{} is a number of minutes, and {} is not one",
+            site.field(name),
+            shown(&value, "that value"),
+        ))
+    })?;
+
+    Ok(collomatique_time::NonZeroMinutes::from(
+        values::at_least_one(&site.field(name), count)?,
+    ))
+}
+
+/// A `(min, max)` field the model counts from one
+///
+/// The checks are `values.rs`'s own, so a range written in a dataclass is
+/// refused for the same reasons and in the same words as one written in a leaf
+/// value.
+fn nonzero_range(
+    site: Site<'_>,
+    name: &str,
+    obj: &Bound<'_, PyAny>,
+) -> PyResult<NonEmptyRangeInclusive<NonZeroU32>> {
+    let value = field(site, name, obj)?;
+    let bounds: values::Range = value.extract().map_err(|_| {
+        PyTypeError::new_err(format!(
+            "{} is a (min, max) pair of counts, and {} is not one",
+            site.field(name),
+            shown(&value, "that value"),
+        ))
+    })?;
+
+    values::nonzero_bounds(&site.field(name), bounds)
+}
+
+/// A field holding one of the four periodicities
+///
+/// The leaf values check themselves when they are built, so there is nothing
+/// left to refuse here but an object that is not a periodicity at all.
+fn periodicity(site: Site<'_>, name: &str, obj: &Bound<'_, PyAny>) -> PyResult<SubjectPeriodicity> {
+    let value = field(site, name, obj)?;
+    values::model_periodicity(&value).ok_or_else(|| {
+        PyTypeError::new_err(format!(
+            "{} is a Periodicity, and {} is not one",
+            site.field(name),
+            shown(&value, "that value"),
         ))
     })
 }
@@ -153,7 +293,7 @@ fn optional_text<T: TryFrom<String>>(
 /// meets the same sentence wherever it passes a dead reference.
 fn entity_set<H>(
     doc: &Py<Document>,
-    class: &str,
+    site: Site<'_>,
     name: &str,
     obj: &Bound<'_, PyAny>,
 ) -> PyResult<BTreeSet<RawId<H>>>
@@ -161,10 +301,11 @@ where
     H: Handle + PyClass<Frozen = True> + Sync,
     H::IdClass: PyClass<Frozen = True> + Sync,
 {
-    let value = field(class, name, obj)?;
+    let value = field(site, name, obj)?;
     let items = value.try_iter().map_err(|_| {
         PyTypeError::new_err(format!(
-            "a {class}'s {name} is a set of entities, and {} cannot be iterated over",
+            "{} is a set of entities, and {} cannot be iterated over",
+            site.field(name),
             shown(&value, "that value"),
         ))
     })?;
@@ -178,12 +319,12 @@ where
 /// is the one named — rust evaluates a struct literal's fields in the order they
 /// are written, which is why `firstname` comes first here although the model
 /// declares `surname` first.
-fn person(class: &str, obj: &Bound<'_, PyAny>) -> PyResult<PersonWithContact> {
+fn person(site: Site<'_>, obj: &Bound<'_, PyAny>) -> PyResult<PersonWithContact> {
     Ok(PersonWithContact {
-        firstname: plain_text(class, "firstname", obj)?,
-        surname: plain_text(class, "surname", obj)?,
-        tel: optional_text(class, "tel", obj)?,
-        email: optional_text(class, "email", obj)?,
+        firstname: plain_text(site, "firstname", obj)?,
+        surname: plain_text(site, "surname", obj)?,
+        tel: optional_text(site, "tel", obj)?,
+        email: optional_text(site, "email", obj)?,
     })
 }
 
@@ -206,9 +347,11 @@ impl Value for TeacherData {
     const CLASS: &'static str = "TeacherData";
 
     fn from_py(doc: &Py<Document>, obj: &Bound<'_, PyAny>) -> PyResult<teachers::Teacher> {
+        let site = Site::whole(Self::CLASS);
+
         Ok(teachers::Teacher {
-            desc: person(Self::CLASS, obj)?,
-            subjects: entity_set::<Subject>(doc, Self::CLASS, "subjects", obj)?,
+            desc: person(site, obj)?,
+            subjects: entity_set::<Subject>(doc, site, "subjects", obj)?,
         })
     }
 
@@ -232,9 +375,11 @@ impl Value for StudentData {
     const CLASS: &'static str = "StudentData";
 
     fn from_py(doc: &Py<Document>, obj: &Bound<'_, PyAny>) -> PyResult<students::Student> {
+        let site = Site::whole(Self::CLASS);
+
         Ok(students::Student {
-            desc: person(Self::CLASS, obj)?,
-            excluded_periods: entity_set::<Period>(doc, Self::CLASS, "excluded_periods", obj)?,
+            desc: person(site, obj)?,
+            excluded_periods: entity_set::<Period>(doc, site, "excluded_periods", obj)?,
         })
     }
 
@@ -245,6 +390,139 @@ impl Value for StudentData {
             PySet::new(
                 py,
                 student
+                    .excluded_periods
+                    .iter()
+                    .map(|id| PeriodId::wrap(*id)),
+            )?,
+        )?;
+
+        class(py, Self::CLASS)?.call((), Some(&kwargs))
+    }
+}
+
+/// The interrogation parameters, read at the site the script wrote them
+///
+/// Split out of [InterrogationData::from_py] because a `SubjectData` holds one
+/// of these and reads it at a site of its own: what a script wrote there is a
+/// `SubjectData`, so that is the class a refusal names — « a SubjectData's
+/// interrogation.duration ».
+fn interrogation(
+    site: Site<'_>,
+    obj: &Bound<'_, PyAny>,
+) -> PyResult<SubjectInterrogationParameters> {
+    Ok(SubjectInterrogationParameters {
+        students_per_group: nonzero_range(site, "students_per_group", obj)?,
+        groups_per_interrogation: nonzero_range(site, "groups_per_interrogation", obj)?,
+        duration: minutes(site, "duration", obj)?,
+        take_duration_into_account: flag(site, "take_duration_into_account", obj)?,
+        periodicity: periodicity(site, "periodicity", obj)?,
+    })
+}
+
+/// The same parameters, as the keyword arguments a value is built from
+fn interrogation_kwargs<'py>(
+    py: Python<'py>,
+    params: &SubjectInterrogationParameters,
+) -> PyResult<Bound<'py, PyDict>> {
+    let kwargs = PyDict::new(py);
+    kwargs.set_item(
+        "students_per_group",
+        values::nonzero_range(&params.students_per_group),
+    )?;
+    kwargs.set_item(
+        "groups_per_interrogation",
+        values::nonzero_range(&params.groups_per_interrogation),
+    )?;
+    kwargs.set_item("duration", params.duration.get().get())?;
+    kwargs.set_item(
+        "take_duration_into_account",
+        params.take_duration_into_account,
+    )?;
+    kwargs.set_item("periodicity", values::periodicity(py, &params.periodicity)?)?;
+    Ok(kwargs)
+}
+
+/// How one subject's interrogations are laid out
+pub struct InterrogationData;
+
+impl Value for InterrogationData {
+    type Model = SubjectInterrogationParameters;
+
+    const CLASS: &'static str = "InterrogationData";
+
+    /// Names no entity, so the document goes unused here — the one asymmetry
+    /// §2.2 of the design accepts, since two shapes for one boundary would be
+    /// worse than one shape carrying an argument it sometimes ignores.
+    fn from_py(
+        _doc: &Py<Document>,
+        obj: &Bound<'_, PyAny>,
+    ) -> PyResult<SubjectInterrogationParameters> {
+        interrogation(Site::whole(Self::CLASS), obj)
+    }
+
+    fn to_py<'py>(
+        py: Python<'py>,
+        params: &SubjectInterrogationParameters,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let kwargs = interrogation_kwargs(py, params)?;
+
+        class(py, Self::CLASS)?.call((), Some(&kwargs))
+    }
+}
+
+/// One subject — a name, how its colles run, and the periods it sits out
+///
+/// The model splits the id-free parameters from the `#[fk]` exclusions, because
+/// its reference walk visits only the second. Python has no such walk, so the
+/// value is flat: `d.name` and `d.excluded_periods` sit side by side, the way
+/// the handle already shows them.
+pub struct SubjectData;
+
+impl Value for SubjectData {
+    /// The **entity**, `values.md` §2.0: the subject ops take the `parameters`
+    /// half alone, and it is the ops mirror that takes it out and refuses to
+    /// discard the exclusions quietly.
+    type Model = subjects::Subject;
+
+    const CLASS: &'static str = "SubjectData";
+
+    fn from_py(doc: &Py<Document>, obj: &Bound<'_, PyAny>) -> PyResult<subjects::Subject> {
+        let site = Site::whole(Self::CLASS);
+
+        let name = plain_text(site, "name", obj)?;
+        let value = field(site, "interrogation", obj)?;
+        let interrogation_parameters = if value.is_none() {
+            // The subject that holds no colles at all — the quidditch practice
+            // that sits in the timetable without ever being one.
+            None
+        } else {
+            Some(interrogation(site.inside("interrogation"), &value)?)
+        };
+
+        Ok(subjects::Subject {
+            parameters: subjects::SubjectParameters {
+                name,
+                interrogation_parameters,
+            },
+            excluded_periods: entity_set::<Period>(doc, site, "excluded_periods", obj)?,
+        })
+    }
+
+    fn to_py<'py>(py: Python<'py>, subject: &subjects::Subject) -> PyResult<Bound<'py, PyAny>> {
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("name", &subject.parameters.name)?;
+        kwargs.set_item(
+            "interrogation",
+            match &subject.parameters.interrogation_parameters {
+                Some(params) => InterrogationData::to_py(py, params)?,
+                None => py.None().into_bound(py),
+            },
+        )?;
+        kwargs.set_item(
+            "excluded_periods",
+            PySet::new(
+                py,
+                subject
                     .excluded_periods
                     .iter()
                     .map(|id| PeriodId::wrap(*id)),
