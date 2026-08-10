@@ -6,7 +6,7 @@
 //! junction table of its own, keyed by period and subject.
 
 use pyo3::prelude::*;
-use pyo3::types::{PyAny, PyFrozenSet};
+use pyo3::types::{PyAny, PyFrozenSet, PyTuple};
 
 use collomatique_state_colloscopes::InnerData;
 use collomatique_state_colloscopes::StudentId as RawStudentId;
@@ -219,6 +219,15 @@ impl Student {
             .map(|period_id| Period::mint(self.doc.clone_ref(py), period_id))
             .collect();
         PyFrozenSet::new(py, periods)
+    }
+
+    /// What points at this student — every site whose coordinates name it, as a
+    /// tuple of `RefSite` values, in the registry's walk order. An empty tuple
+    /// means nothing points here.
+    ///
+    /// A stale handle raises `StaleHandleError` like every other read.
+    fn referenced_by(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+        crate::refs::student_references(py, self)
     }
 
     /// Whether two handles name the same student of the same document

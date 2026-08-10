@@ -239,6 +239,17 @@ impl Period {
         )
     }
 
+    /// What points at this period — every site whose coordinates name it, as a
+    /// tuple of `RefSite` values, in the registry's walk order. An empty tuple
+    /// means nothing points here.
+    ///
+    /// The one reverse door of the read surface: it is the question to ask
+    /// before a remove. A stale handle raises `StaleHandleError` like every
+    /// other read.
+    fn referenced_by(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+        crate::refs::period_references(py, self)
+    }
+
     /// Whether two handles name the same period of the same document
     ///
     /// Never reads the state, so it keeps working once the period is gone — a

@@ -423,6 +423,15 @@ impl GroupList {
             .unwrap_or_else(|| format!("Groupe {}", index + 1)))
     }
 
+    /// What points at this group list — every site whose coordinates name it, as
+    /// a tuple of `RefSite` values, in the registry's walk order. An empty tuple
+    /// means nothing points here.
+    ///
+    /// A stale handle raises `StaleHandleError` like every other read.
+    fn referenced_by(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+        crate::refs::group_list_references(py, self)
+    }
+
     /// Whether two handles name the same group list of the same document
     ///
     /// Never reads the state, so it keeps working once the group list is gone —

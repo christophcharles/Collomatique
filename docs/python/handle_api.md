@@ -603,10 +603,12 @@ sites = subject.referenced_by()   # tuple[RefSite, ...], in the registry's walk 
 
 It rides `InnerData::references_to_*` and answers the question a script asks
 before a remove: *what will a cascade touch?* An empty tuple means nothing
-points here. `Incompat`, `PairingRule` and `SlotPairingRule` are never the
-target of a reference (the registry has no site vocabulary for them), so their
-`referenced_by()` is always `()` — present for uniformity, and documented as
-constantly empty.
+points here. A stale handle raises `StaleHandleError` like any other read —
+including for the three kinds below, whose answer is otherwise always `()`.
+`Incompat`, `PairingRule` and `SlotPairingRule` are never the target of a
+reference (the registry has no site vocabulary for them), so their
+`referenced_by()` is always `()` while the handle is alive — present for
+uniformity, and documented as constantly empty.
 
 A site is a frozen value class under an abstract base `RefSite`, carrying **the
 full coordinates of the referring place** as handle attributes — target
@@ -644,8 +646,9 @@ The vocabulary, one class per referring place:
 | `ColloscopeInterrogation` | `.slot`, `.week` | a colloscope interrogation cell |
 | `ColloscopeGroupListRow` | `.group_list` | a colloscope placements row (key or a placed student) |
 
-Each is constructible from handles (or ids), with `==`/`hash`/`repr` and
-`__match_args__`, so a script writes
+Each is constructible from the handles of its place — and only from handles: a
+bare id cannot name a document, and a site carries none of its own — with
+`==`/`hash`/`repr` and `__match_args__`, so a script writes
 `clm.SlotTeacher(slot) in teacher.referenced_by()` or matches on the class.
 Like the Rust registry, the unit is the id *occurrence*: a subject referenced
 by an assignments row yields one `AssignmentRow` site, and each student in that

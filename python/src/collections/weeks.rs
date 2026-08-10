@@ -7,7 +7,7 @@
 
 use chrono::{Days, NaiveDate};
 use pyo3::prelude::*;
-use pyo3::types::PyAny;
+use pyo3::types::{PyAny, PyTuple};
 
 use collomatique_state_colloscopes::InnerData;
 use collomatique_state_colloscopes::WeekId as RawWeekId;
@@ -220,6 +220,15 @@ impl Week {
                     "week {index} of this document falls past the last date there is"
                 ))
             })
+    }
+
+    /// What points at this week — every site whose coordinates name it, as a
+    /// tuple of `RefSite` values, in the registry's walk order. An empty tuple
+    /// means nothing points here.
+    ///
+    /// A stale handle raises `StaleHandleError` like every other read.
+    fn referenced_by(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+        crate::refs::week_references(py, self)
     }
 
     /// Whether two handles name the same week of the same document

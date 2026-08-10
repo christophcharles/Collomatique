@@ -15,6 +15,7 @@ pub mod errors;
 pub mod handles;
 pub mod host;
 pub mod ids;
+pub mod refs;
 pub mod results;
 pub mod transaction;
 pub mod values;
@@ -65,6 +66,7 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     dialogs::register(m)?;
     host::register(m)?;
     ids::register(m)?;
+    refs::register(m)?;
     results::register(m)?;
     values::register(m)?;
 

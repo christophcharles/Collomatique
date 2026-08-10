@@ -230,6 +230,14 @@ impl Incompat {
         Ok(pattern_id.map(|pattern_id| WeekPattern::mint(self.doc.clone_ref(py), pattern_id)))
     }
 
+    /// Nothing can point at an incompatibility: the reference registry has no
+    /// site vocabulary for the kind, so the answer is always the empty tuple
+    /// while the handle is alive. A stale handle raises `StaleHandleError` like
+    /// every other read.
+    fn referenced_by(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+        crate::refs::never_referenced::<Self>(py, self)
+    }
+
     /// Whether two handles name the same incompatibility of the same document
     ///
     /// Never reads the state, so it keeps working once the incompatibility is

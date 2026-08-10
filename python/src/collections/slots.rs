@@ -16,7 +16,7 @@
 //! `is_interrogation_possible` puts the three together.
 
 use pyo3::prelude::*;
-use pyo3::types::PyAny;
+use pyo3::types::{PyAny, PyTuple};
 
 use collomatique_state_colloscopes::InnerData;
 use collomatique_state_colloscopes::SlotId as RawSlotId;
@@ -280,6 +280,15 @@ impl Slot {
         self.read(py, |data| {
             data.params.slots.find_slot(self.id).map(|slot| slot.cost)
         })
+    }
+
+    /// What points at this slot — every site whose coordinates name it, as a
+    /// tuple of `RefSite` values, in the registry's walk order. An empty tuple
+    /// means nothing points here.
+    ///
+    /// A stale handle raises `StaleHandleError` like every other read.
+    fn referenced_by(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+        crate::refs::slot_references(py, self)
     }
 
     /// Whether two handles name the same slot of the same document

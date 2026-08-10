@@ -5162,3 +5162,903 @@ fn real_file_choosers_open_one_after_another() {
         }
     }
 }
+
+/// A document written here rather than copied, holding at least one edge of
+/// every site class
+///
+/// `referenced_by` needs a document where every reference the registry walks
+/// appears at least once: exclusions on every kind that has them, an
+/// assignments row and an association, teachers with subjects, slots with a
+/// subject, a teacher and a week pattern, an incompatibility, pairing rules on
+/// both levels, settings and balancing overrides, both group-list fillings,
+/// and a filled colloscope. The example covers some of these and not the
+/// others — subject pairing rules, overrides and a colloscope are its known
+/// holes — so the fixture is built as an `InnerData` through the sealed types'
+/// own constructors and passed through `Data::from_inner_data`, so a fixture
+/// that breaks an invariant fails here rather than halfway through the script
+/// (`docs/python/handle_api.md` §6.2).
+fn refs_document(path: &Path) {
+    use collomatique_state_colloscopes::assignments::Assignments;
+    use collomatique_state_colloscopes::balancing::{Balancing, BalancingOptions};
+    use collomatique_state_colloscopes::group_lists::{
+        GroupList, GroupListFilling, GroupListParameters, GroupLists, PrefilledGroup,
+    };
+    use collomatique_state_colloscopes::ids::Id as _;
+    use collomatique_state_colloscopes::incompats::{Incompatibility, Incompats};
+    use collomatique_state_colloscopes::pairings::{PairingRule, Pairings, RulePart};
+    use collomatique_state_colloscopes::settings::{Limits, Settings, SoftParam};
+    use collomatique_state_colloscopes::slot_pairings::{
+        SlotPairingRule, SlotPairings, SlotRulePart,
+    };
+    use collomatique_state_colloscopes::slots::{Slot, Slots};
+    use collomatique_state_colloscopes::students::{Student, Students};
+    use collomatique_state_colloscopes::subjects::Subjects;
+    use collomatique_state_colloscopes::teachers::{Teacher, Teachers};
+    use collomatique_state_colloscopes::week_patterns::{WeekPattern, WeekPatterns};
+    use collomatique_state_colloscopes::weeks::{WeekDesc, Weeks};
+    use collomatique_state_colloscopes::{
+        Data, GroupListId, IncompatId, InnerData, PairingRuleId, PeriodId, SlotId,
+        SlotPairingRuleId, StudentId, Subject, SubjectId, SubjectInterrogationParameters,
+        SubjectParameters, SubjectPeriodicity, TeacherId, WeekId, WeekPatternId,
+    };
+
+    // Ids nothing else in this document issues: it is written by hand from end
+    // to end, so there is no issuer to keep in step with. The weeks are the
+    // decoder's own synthesis in walk order on the other side, so their
+    // numbers have nothing to be disjoint from — and the script only ever asks
+    // about weeks with handles, which name their document.
+    let period = |n: u64| unsafe { PeriodId::new(n) };
+    let week = |n: u64| unsafe { WeekId::new(n) };
+    let subject = |n: u64| unsafe { SubjectId::new(n) };
+    let teacher = |n: u64| unsafe { TeacherId::new(n) };
+    let slot = |n: u64| unsafe { SlotId::new(n) };
+    let student = |n: u64| unsafe { StudentId::new(n) };
+    let group_list = |n: u64| unsafe { GroupListId::new(n) };
+    let week_pattern = |n: u64| unsafe { WeekPatternId::new(n) };
+    let incompat = |n: u64| unsafe { IncompatId::new(n) };
+    let pairing_rule = |n: u64| unsafe { PairingRuleId::new(n) };
+    let slot_pairing_rule = |n: u64| unsafe { SlotPairingRuleId::new(n) };
+
+    let periods = vec![period(1), period(2)];
+
+    // Both periods hold colles, except the fixture's last week, which is
+    // switched off entirely. The week pattern's single exclusion names that
+    // switched-off week, so it cannot trip any stored cell.
+    let weeks = vec![
+        (
+            period(1),
+            vec![
+                (week(81), WeekDesc::new(true)),
+                (week(82), WeekDesc::new(true)),
+            ],
+        ),
+        (
+            period(2),
+            vec![
+                (week(83), WeekDesc::new(true)),
+                (week(84), WeekDesc::new(false)),
+            ],
+        ),
+    ];
+
+    // The first subject excludes the second period — the exclusion site — and
+    // runs nothing there, so every row, association and cell the fixture
+    // stores keeps off that pair.
+    let subject_with = |name: &str, excluded_periods: BTreeSet<PeriodId>| Subject {
+        parameters: SubjectParameters {
+            name: name.to_owned(),
+            interrogation_parameters: Some(SubjectInterrogationParameters {
+                students_per_group: nonzero_range((2, 3)),
+                groups_per_interrogation: nonzero_range((1, 1)),
+                duration: collomatique_time::NonZeroMinutes::new(60).expect("an hour is a while"),
+                take_duration_into_account: true,
+                periodicity: SubjectPeriodicity::ExactlyPeriodic {
+                    periodicity_in_weeks: NonZeroU32::new(1).expect("one is not zero"),
+                },
+            }),
+        },
+        excluded_periods,
+    };
+    let subjects = vec![
+        (
+            subject(11),
+            subject_with("Sortilèges", BTreeSet::from([period(2)])),
+        ),
+        (subject(12), subject_with("Métamorphose", BTreeSet::new())),
+    ];
+
+    let teachers = vec![
+        (
+            teacher(21),
+            Teacher {
+                desc: person("Minerva", "McGonagall", None, None),
+                subjects: BTreeSet::from([subject(11), subject(12)]),
+            },
+        ),
+        (
+            teacher(22),
+            Teacher {
+                desc: person("Severus", "Rogue", None, None),
+                subjects: BTreeSet::from([subject(12)]),
+            },
+        ),
+    ];
+
+    // The second slot follows the week pattern — the slot sides of the two
+    // pattern sites.
+    let slot_start = |weekday, hour, minute| collomatique_time::SlotStart {
+        weekday,
+        start_time: collomatique_time::WholeMinuteTime::new(
+            chrono::NaiveTime::from_hms_opt(hour, minute, 0).expect("a clock time"),
+        )
+        .expect("a whole minute"),
+    };
+    let slots = vec![
+        (
+            subject(11),
+            vec![
+                (
+                    slot(71),
+                    Slot {
+                        subject_id: subject(11),
+                        teacher_id: teacher(21),
+                        start_time: slot_start(
+                            collomatique_time::Weekday(chrono::Weekday::Mon),
+                            9,
+                            0,
+                        ),
+                        extra_info: String::new(),
+                        week_pattern: None,
+                        cost: 0,
+                    },
+                ),
+                (
+                    slot(72),
+                    Slot {
+                        subject_id: subject(11),
+                        teacher_id: teacher(21),
+                        start_time: slot_start(
+                            collomatique_time::Weekday(chrono::Weekday::Tue),
+                            10,
+                            0,
+                        ),
+                        extra_info: String::new(),
+                        week_pattern: Some(week_pattern(41)),
+                        cost: -1,
+                    },
+                ),
+            ],
+        ),
+        (
+            subject(12),
+            vec![(
+                slot(73),
+                Slot {
+                    subject_id: subject(12),
+                    teacher_id: teacher(22),
+                    start_time: slot_start(collomatique_time::Weekday(chrono::Weekday::Wed), 14, 0),
+                    extra_info: String::new(),
+                    week_pattern: None,
+                    cost: 0,
+                },
+            )],
+        ),
+    ];
+
+    // Ron sits the second period out — the student exclusion site. He is
+    // neither assigned nor placed anywhere, so the exclusion trips nothing.
+    let students = vec![
+        (
+            student(31),
+            Student {
+                desc: person("Harry", "Potter", None, None),
+                excluded_periods: BTreeSet::new(),
+            },
+        ),
+        (
+            student(32),
+            Student {
+                desc: person("Hermione", "Granger", None, None),
+                excluded_periods: BTreeSet::new(),
+            },
+        ),
+        (
+            student(33),
+            Student {
+                desc: person("Ron", "Weasley", None, None),
+                excluded_periods: BTreeSet::from([period(2)]),
+            },
+        ),
+        (
+            student(34),
+            Student {
+                desc: person("Neville", "Londubat", None, None),
+                excluded_periods: BTreeSet::new(),
+            },
+        ),
+    ];
+
+    let week_patterns = vec![(
+        week_pattern(41),
+        WeekPattern {
+            name: "Semaine B".to_owned(),
+            excluded_weeks: BTreeSet::from([week(84)]),
+        },
+    )];
+
+    // The incompatibility's busy window runs the hour before the first slot of
+    // its subject, on the same day — an edge both ends of the pattern sites.
+    let window = |day: chrono::Weekday, hour, minute| {
+        collomatique_time::SlotWithDuration::new(
+            slot_start(collomatique_time::Weekday(day), hour, minute),
+            collomatique_time::NonZeroMinutes::from(
+                NonZeroU32::new(60).expect("an hour is a while"),
+            ),
+        )
+        .expect("the window stays inside the day")
+    };
+    let incompats = vec![(
+        incompat(91),
+        Incompatibility {
+            subject_id: subject(11),
+            name: "Cours de potions".to_owned(),
+            slots: vec![window(chrono::Weekday::Mon, 8, 0)],
+            minimum_free_slots: NonZeroU32::new(1).expect("at least one"),
+            week_pattern_id: Some(week_pattern(41)),
+        },
+    )];
+
+    // Both rule families exclude the first period, and a rule whose antecedent
+    // and consequent name different entities — the two value-internal
+    // invariants the sealed constructors enforce.
+    let rules = vec![(
+        pairing_rule(101),
+        PairingRule::new(
+            RulePart {
+                subject_id: subject(11),
+                should_have: true,
+            },
+            RulePart {
+                subject_id: subject(12),
+                should_have: false,
+            },
+            BTreeSet::from([period(1)]),
+            true,
+        )
+        .expect("the antecedent and the consequent name different subjects"),
+    )];
+
+    let slot_rules = vec![(
+        slot_pairing_rule(111),
+        SlotPairingRule::new(
+            SlotRulePart {
+                slot_id: slot(71),
+                should_have: true,
+            },
+            SlotRulePart {
+                slot_id: slot(72),
+                should_have: false,
+            },
+            BTreeSet::from([period(1)]),
+            false,
+        )
+        .expect("the antecedent and the consequent name different slots"),
+    )];
+
+    // The automatic list the solver filled, with one excluded student — the
+    // student the exclusion site comes from — and the prefilled list whose
+    // groups hold students.
+    let named = |text: &str| {
+        text.to_owned()
+            .try_into()
+            .expect("the fixture's group names are not empty")
+    };
+    let automatic = GroupList::new(
+        GroupListParameters {
+            name: "Automatique".to_owned(),
+            students_per_group: nonzero_range((1, 2)),
+            group_names: vec![None, None, None],
+        },
+        GroupListFilling::Automatic {
+            excluded_students: BTreeSet::from([student(33)]),
+        },
+    )
+    .expect("an automatic list is always internally consistent");
+
+    let prefilled = GroupList::new(
+        GroupListParameters {
+            name: "Maisons".to_owned(),
+            students_per_group: nonzero_range((2, 3)),
+            group_names: vec![Some(named("Aurore")), None],
+        },
+        GroupListFilling::Prefilled {
+            groups: vec![
+                PrefilledGroup {
+                    students: BTreeSet::from([student(31), student(32)]),
+                },
+                PrefilledGroup {
+                    students: BTreeSet::from([student(34)]),
+                },
+            ],
+        },
+    )
+    .expect("the prefilled groups match the names and share no student");
+
+    let mut inner_data = InnerData::default();
+    inner_data.params.periods =
+        collomatique_state_colloscopes::periods::Periods::from_ordered_ids(None, periods)
+            .expect("the fixture names each period once");
+    inner_data.params.weeks =
+        Weeks::from_period_rows(weeks).expect("the fixture names each week once");
+    inner_data.params.subjects = Subjects {
+        ordered_subject_list: subjects
+            .try_into()
+            .expect("the fixture names each subject once"),
+    };
+    // An id-keyed table takes the last of a duplicated id without a word,
+    // where the ordered lists above refuse one. So the counts are checked by
+    // hand: a fixture that named an entity twice would otherwise quietly ship
+    // one fewer than the script is about to read.
+    let (teacher_count, student_count) = (teachers.len(), students.len());
+    inner_data.params.teachers = Teachers {
+        teacher_map: teachers.into_iter().collect(),
+    };
+    inner_data.params.students = Students {
+        student_map: students.into_iter().collect(),
+    };
+    assert_eq!(
+        inner_data.params.teachers.teacher_map.len(),
+        teacher_count,
+        "the fixture names each teacher once"
+    );
+    assert_eq!(
+        inner_data.params.students.student_map.len(),
+        student_count,
+        "the fixture names each student once"
+    );
+    inner_data.params.slots =
+        Slots::from_subject_rows(slots).expect("the fixture names each slot once");
+    inner_data.params.week_patterns = WeekPatterns {
+        week_pattern_map: week_patterns.into_iter().collect(),
+    };
+    inner_data.params.incompats = Incompats {
+        incompat_map: incompats.into_iter().collect(),
+    };
+    let (rule_count, slot_rule_count) = (rules.len(), slot_rules.len());
+    inner_data.params.pairings = Pairings {
+        pairing_rule_map: rules.into_iter().collect(),
+    };
+    inner_data.params.slot_pairings = SlotPairings {
+        slot_pairing_rule_map: slot_rules.into_iter().collect(),
+    };
+    assert_eq!(
+        inner_data.params.pairings.pairing_rule_map.len(),
+        rule_count,
+        "the fixture names each pairing rule once"
+    );
+    assert_eq!(
+        inner_data.params.slot_pairings.slot_pairing_rule_map.len(),
+        slot_rule_count,
+        "the fixture names each slot pairing rule once"
+    );
+    // The automatic list serves the association pair on the first subject,
+    // and the pair on the second subject's period — the three sides of the
+    // association site.
+    inner_data.params.group_lists = GroupLists {
+        group_list_map: [(group_list(51), automatic), (group_list(52), prefilled)]
+            .into_iter()
+            .collect(),
+        subjects_associations: [
+            ((period(1), subject(11)), group_list(51)),
+            ((period(2), subject(12)), group_list(51)),
+        ]
+        .into_iter()
+        .collect(),
+    };
+    inner_data.params.assignments = Assignments {
+        map: [
+            (
+                (period(1), subject(11)),
+                BTreeSet::from([student(31), student(32)]),
+            ),
+            ((period(2), subject(12)), BTreeSet::from([student(34)])),
+        ]
+        .into_iter()
+        .collect(),
+    };
+    // Hermione carries the settings override; Métamorphose the balancing one.
+    inner_data.params.settings = Settings {
+        global: Limits::default(),
+        students: [(
+            student(32),
+            Limits {
+                interrogations_per_week_min: Some(SoftParam {
+                    soft: true,
+                    value: 1,
+                }),
+                interrogations_per_week_max: Some(SoftParam {
+                    soft: false,
+                    value: 4,
+                }),
+                max_interrogations_per_day: Some(SoftParam {
+                    soft: false,
+                    value: NonZeroU32::new(2).expect("two interrogations"),
+                }),
+            },
+        )]
+        .into_iter()
+        .collect(),
+    };
+    inner_data.params.balancing = Balancing {
+        global: BalancingOptions::default(),
+        subjects: [(
+            subject(12),
+            BalancingOptions {
+                teacher_rotation: Some(SoftParam {
+                    soft: true,
+                    value: (),
+                }),
+                slot_rotation: None,
+                avoid_twice_in_a_row: Some(SoftParam {
+                    soft: false,
+                    value: (),
+                }),
+                year_teacher_rotation: true,
+                period_teacher_rotation: false,
+            },
+        )]
+        .into_iter()
+        .collect(),
+    };
+
+    // The colloscope itself, written through the canonical sparse writers:
+    // three cells on three slots and three weeks — one of them carrying two
+    // groups — and the automatic list filled. Every stored cell is possible:
+    // the subject owning it runs on the week's period, the week holds colles,
+    // and the pattern's exclusion is the switched-off week.
+    inner_data
+        .colloscope
+        .set_interrogation(slot(71), week(81), BTreeSet::from([0, 2]));
+    inner_data
+        .colloscope
+        .set_interrogation(slot(72), week(82), BTreeSet::from([0]));
+    inner_data
+        .colloscope
+        .set_interrogation(slot(73), week(83), BTreeSet::from([2]));
+    inner_data.colloscope.set_group_list(
+        group_list(51),
+        [(student(31), 0), (student(32), 2), (student(34), 1)]
+            .into_iter()
+            .collect(),
+    );
+
+    let data = Data::from_inner_data(inner_data).expect("the fixture should be a valid document");
+    let content = collomatique_storage::serialize_data(data.get_inner_data())
+        .expect("the fixture's ids are far below the file-format ceiling");
+    std::fs::write(path, content).expect("the fixture should be writable");
+}
+
+/// What points at an entity reads back, place by place
+///
+/// The script walks `referenced_by()` on every entity of every referencable
+/// kind and leaves what it saw; rust compares it with `references_to_*` mapped
+/// through the same conversion — each site named by its class and its
+/// coordinates, in the positions the script reads them in. The three kinds the
+/// registry never targets are answered `()` by the script itself.
+///
+/// The example has no subject pairing rules, no overrides and no colloscope,
+/// so the fixture — [refs_document] — is the document under test.
+#[test]
+fn what_points_at_an_entity() {
+    use collomatique_state_colloscopes::refs::{
+        GroupListRefSite, PeriodRefSite, SlotRefSite, StudentRefSite, SubjectRefSite,
+        TeacherRefSite, WeekPatternRefSite, WeekRefSite,
+    };
+
+    let dir = workspace("refs");
+    let source = dir.join("refs.collomatique");
+    refs_document(&source);
+    let other_source = example_copy(&dir, "other.collomatique");
+
+    let globals = run(include_str!("scripts/refs.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("other_source", &other_source)?;
+        Ok(())
+    });
+
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    // A coordinate's place in its own collection, the number the script reads
+    // as `.index` or as the position of `enumerate` — the only way an opaque
+    // id crosses the boundary.
+    fn position<T: PartialEq>(ids: &[T], id: &T) -> usize {
+        ids.iter()
+            .position(|x| x == id)
+            .expect("a site names a live entity")
+    }
+
+    let period_ids: Vec<_> = params.periods.period_ids().collect();
+    let week_ids: Vec<_> = params.week_ids().collect();
+    let subject_ids: Vec<_> = params.subjects.ordered_subject_list.keys().collect();
+    let teacher_ids: Vec<_> = params.teachers.teacher_map.keys().collect();
+    let student_ids: Vec<_> = params.students.student_map.keys().collect();
+    let week_pattern_ids: Vec<_> = params.week_patterns.week_pattern_map.keys().collect();
+    let incompat_ids: Vec<_> = params.incompats.incompat_map.keys().collect();
+    let group_list_ids: Vec<_> = params.group_lists.group_list_map.keys().collect();
+    let pairing_rule_ids: Vec<_> = params.pairings.pairing_rule_map.keys().collect();
+    let slot_pairing_rule_ids: Vec<_> = params.slot_pairings.slot_pairing_rule_map.keys().collect();
+    // The model keeps no single slot table to read ids from, so the walk the
+    // `doc.slots` view makes is composed here too: each subject, then its own
+    // slots.
+    let slot_ids: Vec<_> = subject_ids
+        .iter()
+        .flat_map(|subject| {
+            params
+                .slots
+                .slots_for_subject(*subject)
+                .into_iter()
+                .flatten()
+                .map(|(slot, _desc)| *slot)
+        })
+        .collect();
+
+    // The fixture is only worth reading if every site class has at least one
+    // edge to read; the twenty-four names collected below are that check.
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    let mut compare = |name: &str, expected: Vec<Vec<(String, Vec<usize>)>>| {
+        assert_eq!(
+            global::<Vec<Vec<(String, Vec<usize>)>>>(&globals, name),
+            expected,
+            "{name}"
+        );
+        for row in &expected {
+            for (class, _coords) in row {
+                seen.insert(class.clone());
+            }
+        }
+    };
+
+    let expected_periods: Vec<Vec<(String, Vec<usize>)>> = period_ids
+        .iter()
+        .map(|&id| {
+            data.get_inner_data()
+                .references_to_period(id)
+                .iter()
+                .map(|site| match site {
+                    PeriodRefSite::WeekPeriodFk(week) => {
+                        ("WeekPeriod", vec![position(&week_ids, week)])
+                    }
+                    PeriodRefSite::SubjectExcludedPeriods(subject) => (
+                        "SubjectExcludedPeriod",
+                        vec![position(&subject_ids, subject)],
+                    ),
+                    PeriodRefSite::StudentExcludedPeriods(student) => (
+                        "StudentExcludedPeriod",
+                        vec![position(&student_ids, student)],
+                    ),
+                    PeriodRefSite::PairingRuleExcludedPeriods(rule) => (
+                        "PairingRuleExcludedPeriod",
+                        vec![position(&pairing_rule_ids, rule)],
+                    ),
+                    PeriodRefSite::SlotPairingRuleExcludedPeriods(rule) => (
+                        "SlotPairingRuleExcludedPeriod",
+                        vec![position(&slot_pairing_rule_ids, rule)],
+                    ),
+                    PeriodRefSite::AssignmentsKey { subject } => (
+                        "AssignmentRow",
+                        vec![position(&period_ids, &id), position(&subject_ids, subject)],
+                    ),
+                    PeriodRefSite::AssociationEntry { subject } => (
+                        "GroupListAssociation",
+                        vec![position(&period_ids, &id), position(&subject_ids, subject)],
+                    ),
+                })
+                .map(|(class, coords)| (class.to_owned(), coords))
+                .collect()
+        })
+        .collect();
+
+    let expected_weeks: Vec<Vec<(String, Vec<usize>)>> = week_ids
+        .iter()
+        .map(|&id| {
+            data.get_inner_data()
+                .references_to_week(id)
+                .iter()
+                .map(|site| match site {
+                    WeekRefSite::WeekPatternExcludedWeek(week_pattern) => (
+                        "WeekPatternExcludedWeek",
+                        vec![position(&week_pattern_ids, week_pattern)],
+                    ),
+                    WeekRefSite::ColloscopeInterrogation { slot } => (
+                        "ColloscopeInterrogation",
+                        vec![position(&slot_ids, slot), position(&week_ids, &id)],
+                    ),
+                })
+                .map(|(class, coords)| (class.to_owned(), coords))
+                .collect()
+        })
+        .collect();
+
+    let expected_subjects: Vec<Vec<(String, Vec<usize>)>> = subject_ids
+        .iter()
+        .map(|&id| {
+            data.get_inner_data()
+                .references_to_subject(id)
+                .iter()
+                .map(|site| match site {
+                    SubjectRefSite::TeacherSubjects(teacher) => {
+                        ("TeacherSubject", vec![position(&teacher_ids, teacher)])
+                    }
+                    SubjectRefSite::SlotSubject(slot) => {
+                        ("SlotSubject", vec![position(&slot_ids, slot)])
+                    }
+                    SubjectRefSite::IncompatSubject(incompat) => {
+                        ("IncompatSubject", vec![position(&incompat_ids, incompat)])
+                    }
+                    SubjectRefSite::PairingRuleAntecedent(rule) => (
+                        "PairingRuleAntecedent",
+                        vec![position(&pairing_rule_ids, rule)],
+                    ),
+                    SubjectRefSite::PairingRuleConsequent(rule) => (
+                        "PairingRuleConsequent",
+                        vec![position(&pairing_rule_ids, rule)],
+                    ),
+                    SubjectRefSite::BalancingSubjectKey => {
+                        ("BalancingOverride", vec![position(&subject_ids, &id)])
+                    }
+                    SubjectRefSite::AssignmentsKey { period } => (
+                        "AssignmentRow",
+                        vec![position(&period_ids, period), position(&subject_ids, &id)],
+                    ),
+                    SubjectRefSite::AssociationEntry { period } => (
+                        "GroupListAssociation",
+                        vec![position(&period_ids, period), position(&subject_ids, &id)],
+                    ),
+                })
+                .map(|(class, coords)| (class.to_owned(), coords))
+                .collect()
+        })
+        .collect();
+
+    let expected_teachers: Vec<Vec<(String, Vec<usize>)>> = teacher_ids
+        .iter()
+        .map(|&id| {
+            data.get_inner_data()
+                .references_to_teacher(id)
+                .iter()
+                .map(|site| match site {
+                    TeacherRefSite::SlotTeacher(slot) => {
+                        ("SlotTeacher", vec![position(&slot_ids, slot)])
+                    }
+                })
+                .map(|(class, coords)| (class.to_owned(), coords))
+                .collect()
+        })
+        .collect();
+
+    let expected_students: Vec<Vec<(String, Vec<usize>)>> = student_ids
+        .iter()
+        .map(|&id| {
+            data.get_inner_data()
+                .references_to_student(id)
+                .iter()
+                .map(|site| match site {
+                    StudentRefSite::GroupListPrefilledStudent(group_list) => (
+                        "GroupListPrefilledStudent",
+                        vec![position(&group_list_ids, group_list)],
+                    ),
+                    StudentRefSite::GroupListExcludedStudent(group_list) => (
+                        "GroupListExcludedStudent",
+                        vec![position(&group_list_ids, group_list)],
+                    ),
+                    StudentRefSite::SettingsStudentKey => {
+                        ("SettingsOverride", vec![position(&student_ids, &id)])
+                    }
+                    StudentRefSite::AssignmentsStudent { period, subject } => (
+                        "AssignmentRow",
+                        vec![
+                            position(&period_ids, period),
+                            position(&subject_ids, subject),
+                        ],
+                    ),
+                    StudentRefSite::ColloscopeGroupListStudent(group_list) => (
+                        "ColloscopeGroupListRow",
+                        vec![position(&group_list_ids, group_list)],
+                    ),
+                })
+                .map(|(class, coords)| (class.to_owned(), coords))
+                .collect()
+        })
+        .collect();
+
+    let expected_week_patterns: Vec<Vec<(String, Vec<usize>)>> = week_pattern_ids
+        .iter()
+        .map(|&id| {
+            data.get_inner_data()
+                .references_to_week_pattern(id)
+                .iter()
+                .map(|site| match site {
+                    WeekPatternRefSite::SlotWeekPattern(slot) => {
+                        ("SlotWeekPattern", vec![position(&slot_ids, slot)])
+                    }
+                    WeekPatternRefSite::IncompatWeekPattern(incompat) => (
+                        "IncompatWeekPattern",
+                        vec![position(&incompat_ids, incompat)],
+                    ),
+                })
+                .map(|(class, coords)| (class.to_owned(), coords))
+                .collect()
+        })
+        .collect();
+
+    let expected_slots: Vec<Vec<(String, Vec<usize>)>> = slot_ids
+        .iter()
+        .map(|&id| {
+            data.get_inner_data()
+                .references_to_slot(id)
+                .iter()
+                .map(|site| match site {
+                    SlotRefSite::SlotPairingRuleAntecedent(rule) => (
+                        "SlotPairingRuleAntecedent",
+                        vec![position(&slot_pairing_rule_ids, rule)],
+                    ),
+                    SlotRefSite::SlotPairingRuleConsequent(rule) => (
+                        "SlotPairingRuleConsequent",
+                        vec![position(&slot_pairing_rule_ids, rule)],
+                    ),
+                    SlotRefSite::ColloscopeInterrogation { week } => (
+                        "ColloscopeInterrogation",
+                        vec![position(&slot_ids, &id), position(&week_ids, week)],
+                    ),
+                })
+                .map(|(class, coords)| (class.to_owned(), coords))
+                .collect()
+        })
+        .collect();
+
+    let expected_group_lists: Vec<Vec<(String, Vec<usize>)>> = group_list_ids
+        .iter()
+        .map(|&id| {
+            data.get_inner_data()
+                .references_to_group_list(id)
+                .iter()
+                .map(|site| match site {
+                    GroupListRefSite::AssociationEntry { period, subject } => (
+                        "GroupListAssociation",
+                        vec![
+                            position(&period_ids, period),
+                            position(&subject_ids, subject),
+                        ],
+                    ),
+                    GroupListRefSite::ColloscopeGroupListKey => (
+                        "ColloscopeGroupListRow",
+                        vec![position(&group_list_ids, &id)],
+                    ),
+                })
+                .map(|(class, coords)| (class.to_owned(), coords))
+                .collect()
+        })
+        .collect();
+
+    compare("period_refs", expected_periods);
+    compare("week_refs", expected_weeks);
+    compare("subject_refs", expected_subjects);
+    compare("teacher_refs", expected_teachers);
+    compare("student_refs", expected_students);
+    compare("week_pattern_refs", expected_week_patterns);
+    compare("slot_refs", expected_slots);
+    compare("group_list_refs", expected_group_lists);
+
+    assert_eq!(
+        seen.len(),
+        24,
+        "the fixture holds at least one edge of every site class"
+    );
+    assert!(global::<bool>(&globals, "never_referenced"));
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// A removed entity makes its `referenced_by` raise
+///
+/// Stale is loud on the reverse door like everywhere else: once the entity is
+/// gone, `referenced_by()` raises `StaleHandleError` — including for the three
+/// kinds whose alive answer is always `()`. The read surface ships no removes,
+/// so the four `UpdateOp`s land between two stages, on the [refs_document]
+/// fixture, whose last subject carries the colloscope cells, the association
+/// and the balancing override the cascade has to take with it.
+#[test]
+fn a_removed_entity_makes_its_referenced_by_raise() {
+    let dir = workspace("refs-stale");
+    let source = dir.join("refs.collomatique");
+    refs_document(&source);
+
+    // Read from the file rather than from the running document: ids are
+    // stored, so the copy rust reads names the same entities the script is
+    // holding. The doomed subject is removed last: the pairing rule and the
+    // slot pairing rule that reference it (and that the cascade would
+    // otherwise take down with it) are gone first.
+    let fixture = reload(&source);
+    let inner = fixture.get_inner_data();
+    let doomed_subject = inner
+        .params
+        .subjects
+        .ordered_subject_list
+        .keys()
+        .last()
+        .expect("the fixture has subjects");
+    let doomed_incompat = inner
+        .params
+        .incompats
+        .incompat_map
+        .keys()
+        .next()
+        .expect("the fixture has an incompatibility");
+    let doomed_rule = inner
+        .params
+        .pairings
+        .pairing_rule_map
+        .keys()
+        .next()
+        .expect("the fixture has a pairing rule");
+    let doomed_slot_rule = inner
+        .params
+        .slot_pairings
+        .slot_pairing_rule_map
+        .keys()
+        .next()
+        .expect("the fixture has a slot pairing rule");
+
+    run_stages(
+        &[
+            include_str!("scripts/refs_stale_before.py"),
+            include_str!("scripts/refs_stale_after.py"),
+        ],
+        |globals| {
+            globals.set_item("source", &source)?;
+            Ok(())
+        },
+        |py, globals| {
+            let doc = document_of(globals);
+            doc.borrow_mut(py)
+                .update(
+                    py,
+                    collomatique_ops::UpdateOp::Pairings(
+                        collomatique_ops::PairingsUpdateOp::DeletePairingRule(doomed_rule),
+                    ),
+                )
+                .expect("the pairing rule is removable");
+            doc.borrow_mut(py)
+                .update(
+                    py,
+                    collomatique_ops::UpdateOp::SlotPairings(
+                        collomatique_ops::SlotPairingsUpdateOp::DeleteSlotPairingRule(
+                            doomed_slot_rule,
+                        ),
+                    ),
+                )
+                .expect("the slot pairing rule is removable");
+            doc.borrow_mut(py)
+                .update(
+                    py,
+                    collomatique_ops::UpdateOp::Incompatibilities(
+                        collomatique_ops::IncompatibilitiesUpdateOp::DeleteIncompat(
+                            doomed_incompat,
+                        ),
+                    ),
+                )
+                .expect("the incompatibility is removable");
+            doc.borrow_mut(py)
+                .update(
+                    py,
+                    collomatique_ops::UpdateOp::Subjects(
+                        collomatique_ops::SubjectsUpdateOp::DeleteSubject(doomed_subject),
+                    ),
+                )
+                .expect("the subject is removable");
+        },
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}

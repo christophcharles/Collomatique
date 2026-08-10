@@ -13,7 +13,7 @@
 //! flag. The periods a rule does not apply to are its `.excluded_periods`.
 
 use pyo3::prelude::*;
-use pyo3::types::{PyAny, PyFrozenSet};
+use pyo3::types::{PyAny, PyFrozenSet, PyTuple};
 
 use collomatique_state_colloscopes::InnerData;
 use collomatique_state_colloscopes::PairingRuleId as RawPairingRuleId;
@@ -229,6 +229,14 @@ impl PairingRule {
                 .get(&self.id)
                 .map(|rule| rule.soft())
         })
+    }
+
+    /// Nothing can point at a pairing rule: the reference registry has no site
+    /// vocabulary for the kind, so the answer is always the empty tuple while
+    /// the handle is alive. A stale handle raises `StaleHandleError` like every
+    /// other read.
+    fn referenced_by(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+        crate::refs::never_referenced::<Self>(py, self)
     }
 
     /// Whether two handles name the same pairing rule of the same document

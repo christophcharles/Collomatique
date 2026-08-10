@@ -5,7 +5,7 @@
 //! in.
 
 use pyo3::prelude::*;
-use pyo3::types::{PyAny, PyFrozenSet};
+use pyo3::types::{PyAny, PyFrozenSet, PyTuple};
 
 use collomatique_state_colloscopes::InnerData;
 use collomatique_state_colloscopes::TeacherId as RawTeacherId;
@@ -216,6 +216,15 @@ impl Teacher {
             .map(|subject_id| Subject::mint(self.doc.clone_ref(py), subject_id))
             .collect();
         PyFrozenSet::new(py, subjects)
+    }
+
+    /// What points at this teacher — every site whose coordinates name it, as a
+    /// tuple of `RefSite` values, in the registry's walk order. An empty tuple
+    /// means nothing points here.
+    ///
+    /// A stale handle raises `StaleHandleError` like every other read.
+    fn referenced_by(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+        crate::refs::teacher_references(py, self)
     }
 
     /// Whether two handles name the same teacher of the same document
