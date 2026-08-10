@@ -1,6 +1,6 @@
 //! What points at an entity
 //!
-//! `docs/python/handle_api.md` §4: `referenced_by()`, the one reverse door a
+//! `referenced_by()`, the one reverse door a
 //! script asks before a remove — *what will a cascade touch?* It rides
 //! `InnerData::references_to_*` (the reference registry of
 //! `state-colloscopes/src/refs.rs`) and hands the sites back as frozen value

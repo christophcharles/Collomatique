@@ -1,6 +1,6 @@
 //! The opaque ids — one class per id kind
 //!
-//! `docs/python/handle_api.md` §2.1: an id compares and hashes, orders against
+//! An id compares and hashes, orders against
 //! its own kind, prints readably, and does nothing else. There is no
 //! constructor, no `int()` and no serialization — an id is a token the document
 //! handed out, not a number a script writes down.

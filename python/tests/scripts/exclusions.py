@@ -68,7 +68,7 @@ assert not any(doc.is_week_active(week, never) for week in weeks)
 # `other_source` is a copy of the example, whose patterns are numbered nowhere
 # near this document's. An id knows no document, so an id from over there is a
 # perfectly good `WeekPatternId` that names nothing here — and this is where the
-# two conventions of `docs/python/handle_api.md` §2.4 part company. A lookup is a
+# two lookup conventions part company. A lookup is a
 # legitimate question and answers in python's mapping vocabulary:
 other = collomatique.load(other_source)
 other_pattern = list(other.week_patterns)[0]

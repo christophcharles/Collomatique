@@ -1,13 +1,13 @@
 //! The export configuration of a document
 //!
-//! Reached as `doc.export_config` (§3.15 of `docs/python/handle_api.md`): the
+//! Reached as `doc.export_config`: the
 //! presentation preferences of the xlsx export, held the way the model holds
 //! them — one atom of value data: a global section, four per-sheet sections,
 //! and the enabled flag that gates each of them. The flags sit *beside* the
 //! sections they gate, not inside them: a flag is the interface's memory of
 //! what was chosen before a section was switched off.
 //!
-//! Everything reads as [Color] and [Orientation] values (§2.6), and nothing
+//! Everything reads as [Color] and [Orientation] values, and nothing
 //! here can go stale: the whole configuration is one atom, replaced wholesale
 //! — there is nothing to remove from under a view — so every view below is
 //! bound to the document alone and reads the current state on every access.
@@ -132,7 +132,7 @@ impl ExportConfig {
 
 /// The settings shared by every sheet of the export
 ///
-/// A live sub-view (`docs/python/handle_api.md` §1), bound to `(document,)`
+/// A live sub-view, bound to `(document,)`
 /// alone: it reads the current state on every access, and nothing can go
 /// stale — the whole configuration is one atom of value data. A view is
 /// identified by its document, so two accesses of the same configuration
@@ -342,8 +342,8 @@ impl ExportColloscopeConfig {
 /// values
 ///
 /// A fresh dict keyed by the labels the model stores, wrapped in
-/// `types.MappingProxyType` — the read-only mapping of §2.5
-/// (`docs/python/handle_api.md`): the proxy cannot be written through, and the
+/// `types.MappingProxyType` — a read-only mapping: the proxy cannot be written
+/// through, and the
 /// dict under it is unreachable, so there is nothing to mutate by accident.
 fn extra_colors_mapping<'py>(
     py: Python<'py>,

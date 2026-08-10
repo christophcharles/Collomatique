@@ -267,8 +267,8 @@ impl Subject {
 
 /// How one subject's interrogations are laid out
 ///
-/// A sub-view, which is a handle in everything but the `.id`
-/// (`docs/python/handle_api.md` §1): it is bound to its subject, reads the
+/// A sub-view, which is a handle in everything but the `.id`: it is bound to
+/// its subject, reads the
 /// current state on every access, and goes stale with it. `subject.interrogation`
 /// asked again always answers the current truth.
 ///

@@ -213,19 +213,42 @@ Conventions:
   Indexing is by id/handle: `doc.subjects[sid]`; `.get(id)` returns `None` instead
   of raising.
 - **Sparse reads are total.** A missing junction row reads as empty:
-  `doc.assignments[pid, sid]` returns a (possibly empty) frozenset of `StudentId`,
-  never a `KeyError` for a valid address. The canonical-absent property of the
-  model is preserved automatically on write because everything goes through ops.
+  `doc.assignments[pid, sid]` returns a (possibly empty) frozenset of `Student`
+  handles, never a `KeyError` for a valid address. The canonical-absent
+  property of the model is preserved automatically on write because everything
+  goes through ops.
+- **Reads name entities with handles, uniformly.** A read that names an entity
+  hands back a handle, never an id: the students of a row, the association of a
+  `(period, subject)` pair (`doc.group_lists.association_for(period, subject)`
+  → a `GroupList` handle or `None`), the members of every set. A handle is
+  strictly more useful — the id is one attribute away — and membership tests
+  still work, since handles hash and compare by `(document, id)`.
+- **Two lookup conventions.** A mapping position answers in python's mapping
+  vocabulary: `collection[x]` raises `KeyError` when `x` names nothing,
+  `collection.get(x)` returns `None`, `x in collection` returns `False` —
+  asking a lookup is legitimate. Everywhere else — an id-or-handle *argument*
+  to a method (`doc.is_week_active(week)`, `doc.assignments[p, s]`'s address,
+  `doc.colloscope.interrogation(slot, week)`) — a dead reference raises
+  `StaleHandleError`; the model's own forgiving answers are not mirrored,
+  because the question was malformed before it had an answer. (One wrinkle:
+  `doc.assignments[p, s]` is spelled as an indexing, but its address follows
+  the *argument* convention — its reads are total, so `KeyError` could never
+  mean "no row".)
 - The colloscope reads mirror its two sparse tables:
   `doc.colloscope.interrogation(slot, week)` → frozenset of group indices or
   `None`; iteration over existing cells; `doc.colloscope.group_list(gl)` → mapping
   student → group index. Group numbers are indices into the associated group
   list's `group_names` — the `(period, subject) → group_list` hop is exposed as a
-  helper (`doc.group_lists.association_for(period, subject)`).
+  helper (`doc.group_lists.association_for(period, subject)`). Naming a group is
+  `gl.group_name(i)`, which always returns a string: the stored name, or the
+  GUI's own fallback « Groupe n » (1-based) for an unnamed group; the raw names,
+  `None` included, are on `.group_names`.
 - Derived predicates the model already provides are exposed:
   `doc.is_week_active(week, pattern)`, `doc.is_interrogation_possible(slot, week)`,
   `doc.settings.limits_for(student)`, `doc.balancing.options_for(subject)` (the
-  whole-entry override semantics stay in Rust).
+  whole-entry override semantics stay in Rust). Their entity arguments follow
+  the argument convention above: a dead `week`, `pattern` or `slot` raises
+  `StaleHandleError` rather than echoing the model's forgiving `false`.
 - Reverse lookups ride the existing reference registry:
   `handle.referenced_by()` returns the sites that point at the entity
   (`InnerData::references_to_*`).
@@ -311,9 +334,9 @@ validation commits it as a single undo slot in the real document.
 
 Every mutator here takes entities as arguments — `doc.subjects.update(s, data)`,
 `doc.settings.remove_student_limits(student)` — and each of those goes through the
-read surface's argument check (`handles::argument`, `docs/python/handle_api.md`
-§2.4), which refuses a wrong kind, a handle of another document, and a reference
-this document no longer holds. That check borrows the document to ask.
+read surface's argument check (`handles::argument`, §4's argument convention),
+which refuses a wrong kind, a handle of another document, and a reference this
+document no longer holds. That check borrows the document to ask.
 
 A mutator borrows it too, mutably: either by hand (`self.doc.borrow_mut(py)`) or by
 being a `&mut self` method, in which case pyo3 holds the `PyRefMut` for the whole
@@ -792,7 +815,11 @@ first.
    `scripts/examples/custom_export_xlsx.py`) get their one-line import change in
    the same change; the user runs them as the acceptance test (the §7 contract of
    the state-consolidation record).
-2. Read surface: document, handles, collections, ids.
+2. Read surface: document, handles, collections, ids — **done**, in thirteen
+   commits, the last being the reference registry (`04888a59`). The design it
+   was built from, collection by collection, is in
+   `git show 04888a59:docs/python/handle_api.md`; the refinements it recorded
+   over this document's §2 and §4 are folded in above.
 3. Write surface: ops mirror, `OpResult` warnings, transactions, undo. Value
    dataclasses land here.
 4. Coarse door (`snapshot`/`replace_all`), then the document plumbing of §9:

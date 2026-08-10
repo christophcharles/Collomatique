@@ -3,12 +3,12 @@
 //! Reached as `doc.assignments`. The model stores assignments as a sparse
 //! table keyed by `(period, subject)`: a row exists exactly when at least one
 //! student is assigned, and the canonical form is invisible from python — an
-//! absent row *is* the empty frozenset (§3.7 of `docs/python/handle_api.md`).
+//! absent row *is* the empty frozenset.
 //!
 //! Because the reads are total, this is not a mapping: there is no `len`, no
 //! `in`, no `.get` — row count and row membership are statements about the
 //! model's storage, not about the data. And the address arguments follow the
-//! *argument* convention (§2.4): a `period` or `subject` this document does
+//! *argument* convention: a `period` or `subject` this document does
 //! not hold raises `StaleHandleError`, because `KeyError` could never mean
 //! "no row" — the only failure a read can have is a bad address, and a bad
 //! address is a stale reference.
@@ -53,7 +53,7 @@ impl Assignments {
         f(doc.data().get_inner_data())
     }
 
-    /// The stored rows, as a snapshot of their ids (§2.5)
+    /// The stored rows, as a snapshot of their ids
     ///
     /// The single definition of what iteration yields: `params.assignments.iter()`
     /// in the model's key order. Collected once when the iteration starts, so a
@@ -82,9 +82,9 @@ impl Assignments {
     ///
     /// A `period` or `subject` this document does not hold raises
     /// `StaleHandleError` rather than answering, because the address was
-    /// malformed before it had an answer (§2.4's argument convention, reached
+    /// malformed before it had an answer (the argument convention, reached
     /// through the indexing spelling — the one deliberate wrinkle of that
-    /// section).
+    /// convention).
     fn __getitem__<'py>(
         &self,
         py: Python<'py>,
@@ -132,7 +132,7 @@ impl Assignments {
 ///
 /// A row is a triple: the `Period` and `Subject` handles of the key, and the
 /// assigned students as a frozenset of `Student` handles. The ids were
-/// snapshotted when the iteration started (§2.5), so a removal in the middle
+/// snapshotted when the iteration started, so a removal in the middle
 /// leaves the ids standing and the handles minted for a dead entity raise
 /// `StaleHandleError` on the first read.
 #[pyclass]
@@ -188,7 +188,7 @@ impl AssignmentIter {
 /// is an address: a bare key, a pair of another length, or a list are all
 /// `TypeError`, because the address is written in python and python's spelling
 /// of a pair is the tuple. What the two elements name is the caller's
-/// question — [argument] answers it, with the §2.4 conventions.
+/// question — [argument] answers it, with the two lookup conventions.
 struct Address;
 
 impl Address {

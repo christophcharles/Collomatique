@@ -2,8 +2,8 @@
 //!
 //! Reached as `doc.group_lists`. A group list is either *prefilled* — its
 //! groups are fixed sets of students — or *automatic*, filled by the solver,
-//! whose placements then live in the colloscope (§3.14 of
-//! `docs/python/handle_api.md`). The two shapes read differently, and the
+//! whose placements then live in the colloscope. The two shapes read
+//! differently, and the
 //! `None`-for-inapplicable rule keeps a script from ever reading an empty set
 //! where the question did not apply.
 //!
@@ -160,7 +160,7 @@ handle_iterator! {
 ///
 /// A row is a triple: the `Period` and `Subject` handles of the key, and the
 /// `GroupList` handle the pair is associated to. The ids were snapshotted when
-/// the iteration started (§2.5 of `docs/python/handle_api.md`), so a removal in
+/// the iteration started, so a removal in
 /// the middle leaves the ids standing and the handles minted for a dead entity
 /// raise `StaleHandleError` on the first read.
 #[pyclass]
@@ -463,7 +463,7 @@ impl GroupList {
 ///
 /// Both the prefilled groups of a list and its excluded students read this way,
 /// which is why it takes the ids as a plain iterator: a `frozenset` is a
-/// snapshot of the membership at call time (§2.5 of `docs/python/handle_api.md`),
+/// snapshot of the membership at call time,
 /// and the handles in it stay live.
 fn students_frozenset<'py>(
     py: Python<'py>,

@@ -1,7 +1,7 @@
 //! What every handle class is built out of
 //!
 //! A handle is a live, read-only view bound to `(document, id)` and holding
-//! nothing else (`docs/python/handle_api.md` §2.2). Every attribute access
+//! nothing else. Every attribute access
 //! borrows the document, resolves the id, reads and lets go, so a handle read
 //! always sees the current state — through undo, redo and transactions alike.
 //!
@@ -59,8 +59,8 @@ pub(crate) trait Handle: Sized {
     /// that ask it have only an id: a collection's `resolve`, on its way to the
     /// mapping conventions, and [argument], on its way to `StaleHandleError`.
     /// It lives on the trait so that the two cannot answer differently — the
-    /// whole point of §2.4 is that they differ in what they *do* about the
-    /// answer, not in what the answer is.
+    /// whole point of the two lookup conventions is that they differ in what
+    /// they *do* about the answer, not in what the answer is.
     fn exists(data: &InnerData, id: RawId<Self>) -> bool;
 
     /// Borrows the document, reads through it, and lets go
@@ -130,13 +130,13 @@ pub(crate) trait Handle: Sized {
 ///
 /// An id resolves on its own say-so: it carries no document, so the only thing
 /// to do with it is to look it up here. A handle carries its document, so a
-/// handle bound to *another* one names nothing here, whatever its id says
-/// (§2.1) — which is what makes `x in c` and `c[x]` answer `False` / `KeyError`
+/// handle bound to *another* one names nothing here, whatever its id says —
+/// which is what makes `x in c` and `c[x]` answer `False` / `KeyError`
 /// for a foreign handle.
 ///
 /// The answer says only that the script named an id of the right kind. Whether
 /// the document still holds it is the caller's question, and the two lookup
-/// conventions of §2.4 differ in exactly what they do about it.
+/// conventions differ in exactly what they do about it.
 pub(crate) fn named<H>(doc: &Py<Document>, obj: &Bound<'_, PyAny>) -> Option<RawId<H>>
 where
     H: Handle + PyClass<Frozen = True> + Sync,
@@ -154,7 +154,8 @@ where
     None
 }
 
-/// The entity an id-or-handle *argument* names, or the refusal §2.4 calls for
+/// The entity an id-or-handle *argument* names, or the refusal the argument
+/// convention calls for
 ///
 /// This is the other lookup convention. A mapping position answers `KeyError` /
 /// `None` / `False`, because asking a lookup is legitimate; an argument that
@@ -184,7 +185,7 @@ where
         let handle = handle.get();
 
         // A handle carries its document, so one bound to another document names
-        // nothing here whatever its id says (§2.1) — and its id must not be
+        // nothing here whatever its id says — and its id must not be
         // borrowed to ask about this document, since the number may well be
         // somebody else's here.
         if !std::ptr::eq(handle.document().as_ptr(), doc.as_ptr()) {
@@ -222,7 +223,7 @@ fn not_here<H: Handle>(id: RawId<H>) -> PyErr {
 /// What an argument that is another document's handle raises
 ///
 /// A different failure from [not_here], and it must say so: two documents hand
-/// out ids that coincide (§2.1), so the id in the message may perfectly well
+/// out ids that coincide, so the id in the message may perfectly well
 /// name something here — something else. Claiming it is "not in this document"
 /// would be the one falsehood available, and it would send a script looking for
 /// a removal that never happened.
@@ -238,8 +239,8 @@ fn somebody_elses<H: Handle>(id: RawId<H>) -> PyErr {
 
 /// What `collection[x]` raises when `x` names nothing in the document
 ///
-/// A mapping position follows python's mapping protocol (§2.4): asking a lookup
-/// is legitimate, so the mapping vocabulary is the right answer. The key is
+/// A mapping position follows python's mapping protocol: asking a lookup is
+/// legitimate, so the mapping vocabulary is the right answer. The key is
 /// shown as python would print it, whatever it turned out to be.
 pub(crate) fn no_such(kind: &str, key: &Bound<'_, PyAny>) -> PyErr {
     PyKeyError::new_err(format!(
@@ -275,7 +276,7 @@ pub(crate) fn quoted(py: Python<'_>, text: &str) -> String {
 /// Which end of a pairing rule a side sub-view is bound to
 ///
 /// `rule.antecedent` and `rule.consequent` hand out the two side sub-views of
-/// §3.11 / §3.12 (`docs/python/handle_api.md`). The side is part of the view's
+/// a pairing rule and of a slot pairing rule. The side is part of the view's
 /// identity — a view is bound to `(document, rule_id, side)` — so the two ends
 /// of one rule never compare equal, and each keeps its own place in a dict.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -287,7 +288,7 @@ pub(crate) enum RuleSide {
 /// Declares a collection's iterator class
 ///
 /// Iteration snapshots the ids when it starts, in the collection's order, and
-/// mints the handles as the loop asks for them (§2.5). Removing an entity
+/// mints the handles as the loop asks for them. Removing an entity
 /// mid-iteration is therefore safe and loud: the loop still sees the id, and
 /// the handle minted for it raises `StaleHandleError` on the first read.
 ///

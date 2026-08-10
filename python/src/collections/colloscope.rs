@@ -1,6 +1,6 @@
 //! The colloscope of a document
 //!
-//! Reached as `doc.colloscope` (§3.14 of `docs/python/handle_api.md`): the
+//! Reached as `doc.colloscope`: the
 //! result of a resolution, stored in two sparse tables. The interrogation
 //! table says which group numbers sit in which `(slot, week)` cell — numbers,
 //! not students, because a group number names a group of the list the cell's
@@ -57,7 +57,7 @@ impl Colloscope {
         f(doc.data().get_inner_data())
     }
 
-    /// The stored interrogation cells, as a snapshot of their contents (§2.5)
+    /// The stored interrogation cells, as a snapshot of their contents
     ///
     /// The single definition of what iteration yields: `colloscope.iter()` in
     /// the model's key order. Collected once when the iteration starts, so a
@@ -72,7 +72,7 @@ impl Colloscope {
         })
     }
 
-    /// The stored placements rows, as a snapshot of their contents (§2.5)
+    /// The stored placements rows, as a snapshot of their contents
     fn placements(&self, py: Python<'_>) -> Vec<(RawGroupListId, BTreeMap<RawStudentId, u32>)> {
         self.with_data(py, |data| {
             data.colloscope
@@ -103,7 +103,7 @@ impl Colloscope {
     ///
     /// Both arguments take a handle or an id. A `slot` or a `week` this
     /// document does not hold raises `StaleHandleError` rather than answering:
-    /// the cell was malformed before it had an answer (§2.4's argument
+    /// the cell was malformed before it had an answer (the argument
     /// convention).
     fn interrogation<'py>(
         &self,
@@ -180,8 +180,8 @@ impl Colloscope {
 /// The placements of one group list, as a read-only mapping of live handles
 ///
 /// A fresh dict keyed by the [Student] handles the model placed, wrapped in
-/// `types.MappingProxyType` — the read-only mapping of §2.5
-/// (`docs/python/handle_api.md`): the proxy cannot be written through, and
+/// `types.MappingProxyType` — a read-only mapping: the proxy cannot be written
+/// through, and
 /// the dict under it is unreachable, so there is nothing to mutate by
 /// accident. The handles in it stay live.
 fn placements_mapping<'py>(
@@ -202,8 +202,8 @@ fn placements_mapping<'py>(
 ///
 /// A cell is a triple: the `Slot` and `Week` handles of the coordinates, and
 /// the assigned group numbers as a frozenset of ints. The ids and the groups
-/// were snapshotted when the iteration started (§2.5 of
-/// `docs/python/handle_api.md`), so a removal in the middle leaves them
+/// were snapshotted when the iteration started, so a removal in the middle
+/// leaves them
 /// standing and the handles minted for a dead entity raise `StaleHandleError`
 /// on the first read.
 #[pyclass]
@@ -250,7 +250,7 @@ impl ColloscopeInterrogationIter {
 ///
 /// A row is a pair: the `GroupList` handle that was filled, and the
 /// placements as a read-only mapping of [Student] to group number. The ids
-/// and the placements were snapshotted when the iteration started (§2.5), so
+/// and the placements were snapshotted when the iteration started, so
 /// a removal in the middle leaves them standing and the handles minted for a
 /// dead entity raise `StaleHandleError` on the first read.
 #[pyclass]

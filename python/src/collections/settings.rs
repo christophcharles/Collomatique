@@ -1,6 +1,6 @@
 //! The settings of a document
 //!
-//! Reached as `doc.settings` (§3.13 of `docs/python/handle_api.md`): the
+//! Reached as `doc.settings`: the
 //! limits imposed on the resolution, as one global entry plus sparse
 //! per-student overrides. The two are whole entries — an override replaces the
 //! global entry **verbatim**, a `None` field in it disabling the corresponding
@@ -147,8 +147,8 @@ pub(crate) enum LimitsKind {
 
 /// The limits a student's interrogation schedule is held to
 ///
-/// A live sub-view, which is a handle in everything but the `.id`
-/// (`docs/python/handle_api.md` §1): it is bound to `(document, kind)`, reads
+/// A live sub-view, which is a handle in everything but the `.id`: it is
+/// bound to `(document, kind)`, reads
 /// the current state on every access, and goes stale with what it is bound to.
 /// The three ways to get one — `doc.settings.global_limits`, `limits_for(s)`
 /// and `override_for(s)` — differ in exactly that: a global view never goes

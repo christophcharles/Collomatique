@@ -1,6 +1,6 @@
 //! The values a read hands back that are not entities
 //!
-//! `docs/python/handle_api.md` §2.6: small immutable classes for data the model
+//! Small immutable classes for data the model
 //! stores inline — no id, no place in a collection, nothing to go stale. They
 //! are constructible, so a script names the value it expects and compares it
 //! rather than picking it apart field by field, and construction validates what
@@ -15,8 +15,8 @@
 //! need, [TimeSlot], which the incompatibilities hand out, the settings
 //! vocabulary — [Enforcement] and [Limit] — which the settings and balancing
 //! read surfaces hand out, and [Color] and [Orientation], which the export
-//! configuration hands out. The rest of §2.6 lands with the collections that
-//! hand it out.
+//! configuration hands out. The rest of the vocabulary lands with the
+//! collections that hand it out.
 
 use std::num::NonZeroU32;
 
@@ -494,7 +494,7 @@ pub(crate) fn periodicity(py: Python<'_>, periodicity: &SubjectPeriodicity) -> P
 
 /// A busy window: a day, a start time and a duration
 ///
-/// The slots of an incompatibility (`docs/python/handle_api.md` §3.9) read as
+/// The slots of an incompatibility read as
 /// these values — « monday 12:00, one hour » — and a script that wants to name
 /// the same window back builds one:
 ///
@@ -600,8 +600,8 @@ impl TimeSlot {
 
 /// Whether a goal is an objective or a hard constraint
 ///
-/// One vocabulary for every `SoftParam` in the model
-/// (`docs/python/handle_api.md` §2.6): a limit or a balancing goal is either
+/// One vocabulary for every `SoftParam` in the model:
+/// a limit or a balancing goal is either
 /// `OBJECTIVE` — the solver optimizes for it — or `STRICT` — a hard constraint.
 /// `None` where the goal is not pursued at all is spelled by the read itself,
 /// as an absent optional, never by a third member.
@@ -652,7 +652,7 @@ impl Enforcement {
 
 /// One limit on a student's interrogations
 ///
-/// A field of the settings [Limits] view (`docs/python/handle_api.md` §3.13): a
+/// A field of the settings [Limits] view: a
 /// count and whether the count is an objective for the solver or a hard
 /// constraint.
 ///

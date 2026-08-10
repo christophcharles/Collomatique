@@ -1271,7 +1271,7 @@ fn periodicity_subject(
 /// through the sealed types' own constructors and passed through
 /// `Data::from_inner_data`, so a fixture that breaks an invariant fails here
 /// rather than halfway through the script
-/// (`docs/python/handle_api.md` §6.2).
+///.
 fn periodicity_document(path: &Path) {
     use collomatique_state_colloscopes::ids::Id as _;
     use collomatique_state_colloscopes::subjects::{Subjects, WeekBlock};
@@ -1659,7 +1659,7 @@ fn person(
 /// own. It is built as an `InnerData` through the sealed types' own constructors
 /// and passed through `Data::from_inner_data`, so a fixture that breaks an
 /// invariant fails here rather than halfway through the script
-/// (`docs/python/handle_api.md` §6.2).
+///.
 fn contact_document(path: &Path) {
     use collomatique_state_colloscopes::ids::Id as _;
     use collomatique_state_colloscopes::students::{Student, Students};
@@ -1991,7 +1991,7 @@ fn the_week_patterns_read_back_with_the_weeks_they_switch_off() {
 /// It is built as an `InnerData` through the sealed types' own constructors and
 /// passed through `Data::from_inner_data`, so a fixture that breaks an invariant
 /// fails here rather than halfway through the script
-/// (`docs/python/handle_api.md` §6.2).
+///.
 fn week_pattern_document(path: &Path) {
     use collomatique_state_colloscopes::ids::Id as _;
     use collomatique_state_colloscopes::week_patterns::{WeekPattern, WeekPatterns};
@@ -2395,7 +2395,7 @@ fn the_slots_read_back_with_the_cells_they_can_fill() {
 /// does not repeat the first's rows. It is built as an `InnerData` through the
 /// sealed types' own constructors and passed through `Data::from_inner_data`,
 /// so a fixture that breaks an invariant fails here rather than halfway
-/// through the script (`docs/python/handle_api.md` §6.2).
+/// through the script.
 fn assignments_document(path: &Path) {
     use collomatique_state_colloscopes::assignments::Assignments;
     use collomatique_state_colloscopes::ids::Id as _;
@@ -2812,7 +2812,7 @@ fn a_time_slot_refuses_what_the_model_refuses() {
 /// value-internal invariants (prefill count matching the names, no student in
 /// two groups) — and passed through `Data::from_inner_data`, so a fixture that
 /// breaks an invariant fails here rather than halfway through the script
-/// (`docs/python/handle_api.md` §6.2).
+///.
 fn group_lists_document(path: &Path) {
     use collomatique_state_colloscopes::group_lists::{
         GroupList, GroupListFilling, GroupListParameters, GroupLists, PrefilledGroup,
@@ -3355,7 +3355,7 @@ fn the_two_filling_shapes_read_side_by_side() {
 /// enforces the one value-internal invariant (distinct subjects in the two
 /// parts) — and passed through `Data::from_inner_data`, so a fixture that
 /// breaks an invariant fails here rather than halfway through the script
-/// (`docs/python/handle_api.md` §6.2).
+///.
 fn pairings_document(path: &Path) {
     use collomatique_state_colloscopes::ids::Id as _;
     use collomatique_state_colloscopes::pairings::{PairingRule, Pairings, RulePart};
@@ -4341,8 +4341,7 @@ fn removing_a_balancing_override_stales_only_the_raw_view() {
 /// `Data::from_inner_data`, so a fixture that breaks an invariant — a cell on
 /// a week the slot's subject does not run, a group number past the
 /// associated list's bound, a placement for an excluded student — fails here
-/// rather than halfway through the script (`docs/python/handle_api.md`
-/// §6.2).
+/// rather than halfway through the script.
 fn colloscope_document(path: &Path) {
     use collomatique_state_colloscopes::group_lists::{
         GroupList, GroupListFilling, GroupListParameters, GroupLists, PrefilledGroup,
@@ -5176,7 +5175,7 @@ fn real_file_choosers_open_one_after_another() {
 /// holes — so the fixture is built as an `InnerData` through the sealed types'
 /// own constructors and passed through `Data::from_inner_data`, so a fixture
 /// that breaks an invariant fails here rather than halfway through the script
-/// (`docs/python/handle_api.md` §6.2).
+///.
 fn refs_document(path: &Path) {
     use collomatique_state_colloscopes::assignments::Assignments;
     use collomatique_state_colloscopes::balancing::{Balancing, BalancingOptions};

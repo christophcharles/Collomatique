@@ -1,6 +1,6 @@
 //! The balancing of a document
 //!
-//! Reached as `doc.balancing` (§3.13 of `docs/python/handle_api.md`): how the
+//! Reached as `doc.balancing`: how the
 //! resolution is asked to balance interrogations — rotation of teachers and of
 //! slots, and fairness over the year and within a period — as one global entry
 //! plus sparse per-subject overrides. The two are whole entries, exactly like
@@ -161,8 +161,8 @@ pub(crate) enum BalancingKind {
 
 /// The balancing options one subject's interrogations are scheduled under
 ///
-/// A live sub-view, which is a handle in everything but the `.id`
-/// (`docs/python/handle_api.md` §1): it is bound to `(document, kind)`, reads
+/// A live sub-view, which is a handle in everything but the `.id`: it is
+/// bound to `(document, kind)`, reads
 /// the current state on every access, and goes stale with what it is bound to.
 /// The three ways to get one — `doc.balancing.global_options`, `options_for(s)`
 /// and `override_for(s)` — differ in exactly that: a global view never goes

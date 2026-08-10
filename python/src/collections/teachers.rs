@@ -101,7 +101,7 @@ handle_iterator! {
 /// The model keeps the name and the contact details in a card of their own, one
 /// it shares with the students. Python flattens it onto the handle, because a
 /// card that holds four fields and nothing else is a level of nesting a script
-/// would only ever type through (`docs/python/handle_api.md` §3.4).
+/// would only ever type through.
 #[pyclass(module = "collomatique", frozen)]
 pub struct Teacher {
     doc: Py<Document>,

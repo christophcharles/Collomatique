@@ -3,7 +3,7 @@
 //! Reached as `doc.pairings`. A pairing rule is an implication between two
 //! subjects: if a student is marked to have the antecedent subject's
 //! interrogation in a week, they are also marked to have — or not to have —
-//! the consequent's that week (§3.11 of `docs/python/handle_api.md`). The two
+//! the consequent's that week. The two
 //! ends are the [PairingRuleSide] sub-views, which are handles in everything
 //! but the `.id`: bound to `(document, rule_id, side)`, they read the current
 //! state and go stale with their rule.
@@ -269,8 +269,8 @@ impl PairingRule {
 
 /// One end of a pairing rule
 ///
-/// A sub-view, which is a handle in everything but the `.id`
-/// (`docs/python/handle_api.md` §1): it is bound to `(document, rule_id,
+/// A sub-view, which is a handle in everything but the `.id`: it is bound to
+/// `(document, rule_id,
 /// side)`, reads the current state on every access, and goes stale with its
 /// rule. `rule.antecedent` and `rule.consequent` are the only ways to get one,
 /// and asking the rule again always answers the current truth.

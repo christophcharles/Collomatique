@@ -102,7 +102,7 @@ handle_iterator! {
 /// The name and the contact details are flattened onto the handle, the way they
 /// are on a [Teacher]: the model keeps them in a card the two entities share,
 /// and a card of four fields is a level of nesting a script would only ever type
-/// through (`docs/python/handle_api.md` §3.5).
+/// through.
 ///
 /// [Teacher]: crate::collections::Teacher
 #[pyclass(module = "collomatique", frozen)]

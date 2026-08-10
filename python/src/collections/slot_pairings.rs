@@ -1,7 +1,7 @@
 //! The slot pairing rules of a document
 //!
 //! Reached as `doc.slot_pairings`. A slot pairing rule is the slots' version of
-//! a pairing rule (§3.12 of `docs/python/handle_api.md`): if a slot is used in
+//! a pairing rule: if a slot is used in
 //! a week, the other slot must also be used — or not used. Both slots always
 //! belong to the same subject (a document that paired slots of two subjects is
 //! not a legal one), which is how the repr names the rule: the subject once,
@@ -278,8 +278,8 @@ impl SlotPairingRule {
 
 /// One end of a slot pairing rule
 ///
-/// A sub-view, which is a handle in everything but the `.id`
-/// (`docs/python/handle_api.md` §1): it is bound to `(document, rule_id,
+/// A sub-view, which is a handle in everything but the `.id`: it is bound to
+/// `(document, rule_id,
 /// side)`, reads the current state on every access, and goes stale with its
 /// rule. `rule.antecedent` and `rule.consequent` are the only ways to get one,
 /// and asking the rule again always answers the current truth.
